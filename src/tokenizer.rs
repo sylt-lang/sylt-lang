@@ -1,7 +1,7 @@
 use std::fs;
 use logos::{Logos, Span};
 
-#[derive(Logos, Debug, PartialEq)]
+#[derive(Logos, Debug, PartialEq, Clone)]
 pub enum Token {
     #[regex(r"[[:alpha:]][[:alnum:]]*", |lex| lex.slice().to_string())]
     Identifier(String),
@@ -94,11 +94,15 @@ pub enum Token {
     #[regex(r"[ \t\r]", logos::skip)]
     Whitespace,
 
+    EOF,
+
     #[error]
     Error,
 }
 
-pub fn file_to_tokens(filename: &str) -> Vec<(Token, Span)> {
+pub type PlacedToken = (Token, Span);
+pub type TokenStream = Vec<PlacedToken>;
+pub fn file_to_tokens(filename: &str) -> TokenStream {
     let content = fs::read_to_string(filename).unwrap();
     let lexer = Token::lexer(&content);
     lexer.spanned().collect()

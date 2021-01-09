@@ -112,6 +112,26 @@ impl VM {
                 }
 
                 Op::Mul => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    match (a, b) {
+                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b * a)),
+                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b * a)),
+                        _ => unimplemented!("Cannot mul '{:?}' and '{:?}'.", a, b),
+                    }
+                }
+
+                Op::Div => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    match (a, b) {
+                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b / a)),
+                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b / a)),
+                        _ => unimplemented!("Cannot mul '{:?}' and '{:?}'.", a, b),
+                    }
+                }
+
+                Op::Mul => {
                     todo!();
                 }
 
