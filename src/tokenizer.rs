@@ -3,7 +3,7 @@ use logos::{Logos, Span};
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 pub enum Token {
-    #[regex(r"[[:alpha:]][[:alnum:]]*", |lex| lex.slice().to_string())]
+    #[regex(r"[A-Za-z_][A-Za-z0-9_]*", |lex| lex.slice().to_string())]
     Identifier(String),
 
     #[regex(r#""[^"]*""#, |lex| lex.slice().to_string())]
@@ -118,4 +118,71 @@ pub fn file_to_tokens(filename: &str) -> TokenStream {
     let content = fs::read_to_string(filename).unwrap();
     let lexer = Token::lexer(&content);
     lexer.spanned().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Token;
+    use logos::Logos;
+
+    fn lex(s: &str) -> Vec<Token> {
+        Token::lexer(s).collect()
+    }
+
+    fn lex_once(s: &str) -> Token {
+        let mut lexer = Token::lexer(s);
+        let res = lexer.next().unwrap();
+        assert_eq!(lexer.next(), None);
+        res
+    }
+
+    #[test]
+    fn test_lex_once_affirm() {
+        lex_once("1");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_lex_panic() {
+        lex_once("1 2");
+    }
+
+    #[test]
+    fn number() {
+        assert_eq!(lex_once("1"), Token::Int(1));
+        assert_eq!(lex_once("1.1"), Token::Float(1.1));
+        assert_eq!(lex_once("123"), Token::Int(123));
+        assert_eq!(lex_once(".1"), Token::Float(0.1));
+        assert_eq!(lex_once("1."), Token::Float(1.0));
+    }
+
+    #[test]
+    fn identifiers() {
+        let ident_cmp = |s| assert_eq!(lex_once(s), Token::Identifier(String::from(s)));
+        ident_cmp("a");
+        ident_cmp("aaaaaaaa");
+        ident_cmp("a1");
+        ident_cmp("a_");
+        ident_cmp("_a");
+        ident_cmp("__");
+    }
+
+    #[test]
+    fn whitespace() {
+        lex_once("1 ");
+        lex_once(" 1");
+        lex_once(" 1 ");
+
+        assert_eq!(lex("1 2").len(), 2);
+        assert_eq!(lex("1\t2").len(), 2);
+        assert_eq!(lex("1             2").len(), 2);
+        assert_eq!(lex("\t1   \t  \t\t     2\t").len(), 2);
+    }
+
+    #[test]
+    fn comment() {
+        lex_once("// a\n1");
+        assert_eq!(lex("1// a\n2").len(), 2);
+        assert_eq!(lex("1\n// a\n2").len(), 3); // newline is also a token
+    }
 }
