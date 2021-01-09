@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+
+use crate::tokenizer::PlacedToken;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Value {
@@ -34,27 +38,38 @@ pub enum Op {
 #[derive(Debug)]
 pub struct Block {
     name: String,
+    filename: String,
     ops: Vec<Op>,
+    last_line_offset: Option<usize>,
+    line_offsets: HashMap<usize, usize>,
 }
 
 impl Block {
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: &str, filename: &str) -> Self {
         Self {
             name: String::from(name),
+            filename: String::from(filename),
             ops: Vec::new(),
+            last_line_offset: None,
+            line_offsets: HashMap::new(),
         }
     }
 
-    pub fn add(&mut self, op: Op) -> usize {
+    pub fn add(&mut self, op: Op, token_position: Option<usize>) -> usize {
         let len = self.ops.len();
+        if token_position != self.last_line_offset {
+            if let Some(token_position) = token_position {
+                self.line_offsets.insert(len, token_position);
+            }
+        }
         self.ops.push(op);
         len
     }
 
-    pub fn add_from(&mut self, ops: &[Op]) -> usize {
+    pub fn add_from(&mut self, ops: &[Op], token_position: Option<usize>) -> usize {
         let len = self.ops.len();
         for op in ops {
-            self.add(*op);
+            self.add(*op, token_position);
         }
         len
     }
@@ -66,6 +81,19 @@ pub struct VM {
 
     block: Block,
     ip: usize,
+}
+
+#[derive(Debug)]
+pub enum VMErrorKind {
+    TypeError(Value, Value),
+    AssertFailed(Value, Value),
+}
+
+#[derive(Debug)]
+pub struct VMError {
+    kind: VMErrorKind,
+    token: PlacedToken,
+    message: String,
 }
 
 pub fn run_block(block: Block) {
@@ -89,7 +117,7 @@ impl VM {
         self.stack.get(self.stack.len() - amount)
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> Result<(), VMError>{
         const PRINT_WHILE_RUNNING: bool = true;
         const PRINT_BLOCK: bool = true;
 
@@ -211,7 +239,7 @@ impl VM {
                 }
 
                 Op::Return => {
-                    return;
+                    return Ok(());
                 }
             }
             self.ip += 1;

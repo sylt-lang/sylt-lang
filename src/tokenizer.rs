@@ -119,6 +119,12 @@ pub type TokenStream = Vec<PlacedToken>;
 pub fn file_to_tokens(filename: &str) -> TokenStream {
     let content = fs::read_to_string(filename).unwrap();
     let lexer = Token::lexer(&content);
+    let mut line = 1;
+    for (c_idx, c) in content.chars().enumerate() {
+        if c == '\n' {
+            line += 1;
+        }
+    }
     lexer.spanned().collect()
 }
 

@@ -183,8 +183,8 @@ impl Compiler {
         }
     }
 
-    pub fn compile(&mut self, name: &str) -> Block {
-        let mut block = Block::new(name);
+    pub fn compile(&mut self, name: &str, filename: &str) -> Block {
+        let mut block = Block::new(name, filename);
 
         loop {
             if self.peek() == Token::EOF {
@@ -204,6 +204,6 @@ impl Compiler {
     }
 }
 
-pub fn compile(name: &str, tokens: TokenStream) -> Block {
-    Compiler::new(tokens).compile(name)
+pub fn compile(name: &str, filename: &str, tokens: TokenStream) -> Block {
+    Compiler::new(tokens).compile(name, filename)
 }
