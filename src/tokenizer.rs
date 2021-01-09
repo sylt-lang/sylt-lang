@@ -1,5 +1,5 @@
 use std::fs;
-use logos::Logos;
+use logos::{Logos, Span};
 
 #[derive(Logos, Debug, PartialEq)]
 pub enum Token {
@@ -25,6 +25,10 @@ pub enum Token {
     In,
     #[token("loop")]
     Loop,
+
+    // TODO(ed): Remove
+    #[token("print")]
+    Print,
 
     #[token("+")]
     Plus,
@@ -94,8 +98,8 @@ pub enum Token {
     Error,
 }
 
-pub fn file_to_tokens(filename: &str) -> Vec<Token> {
+pub fn file_to_tokens(filename: &str) -> Vec<(Token, Span)> {
     let content = fs::read_to_string(filename).unwrap();
     let lexer = Token::lexer(&content);
-    lexer.collect()
+    lexer.spanned().collect()
 }
