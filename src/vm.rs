@@ -21,9 +21,11 @@ pub enum Op {
     Or,
     Not,
 
-    Equal, // ==
-    Less, // <
+    Equal,   // ==
+    Less,    // <
     Greater, // >
+
+    AssertEqual,
 
     Print,
     Return,
@@ -81,6 +83,10 @@ impl VM {
     fn pop_twice(&mut self) -> (Value, Value) {
         let (a, b) = (self.stack.pop().unwrap(), self.stack.pop().unwrap());
         (b, a)
+    }
+
+    fn _peek_up(&self, amount: usize) -> Option<&Value> {
+        self.stack.get(self.stack.len() - amount)
     }
 
     pub fn run(&mut self) {
@@ -190,6 +196,14 @@ impl VM {
                         Value::Bool(a) => self.stack.push(Value::Bool(!a)),
                         a => unimplemented!("Cannot 'not' {:?}", a),
                     }
+                }
+
+                Op::AssertEqual => {
+                    let (a, b) = self.pop_twice();
+                    if a != b {
+                        println!("Assert failed for '{:?}' and '{:?}'", a, b);
+                    }
+                    self.stack.push(Value::Bool(a == b));
                 }
 
                 Op::Print => {

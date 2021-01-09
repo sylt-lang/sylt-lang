@@ -8,10 +8,11 @@ struct Compiler {
 
 //TODO rustify
 const PREC_NO: u64 = 0;
-const PREC_BOOL: u64 = 1;
-const PREC_COMP: u64 = 2;
-const PREC_TERM: u64 = 3;
-const PREC_FACTOR: u64 = 4;
+const PREC_ASSERT: u64 = 1;
+const PREC_BOOL: u64 = 2;
+const PREC_COMP: u64 = 3;
+const PREC_TERM: u64 = 4;
+const PREC_FACTOR: u64 = 5;
 
 impl Compiler {
     pub fn new(tokens: TokenStream) -> Self {
@@ -56,6 +57,8 @@ impl Compiler {
 
             Token::And | Token::Or => PREC_BOOL,
 
+            Token::AssertEqual => PREC_ASSERT,
+
             _ => PREC_NO,
         }
     }
@@ -83,6 +86,7 @@ impl Compiler {
                 | Token::Plus
                 | Token::Slash
                 | Token::Star
+                | Token::AssertEqual
                 => self.binary(block),
 
             Token::EqualEqual
@@ -140,6 +144,7 @@ impl Compiler {
             Token::Minus => Op::Sub,
             Token::Star => Op::Mul,
             Token::Slash => Op::Div,
+            Token::AssertEqual => Op::AssertEqual,
             _ => { self.error("Illegal operator"); }
         };
         block.add(op);

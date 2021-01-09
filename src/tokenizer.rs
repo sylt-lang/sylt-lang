@@ -61,6 +61,8 @@ pub enum Token {
     EqualEqual,
     #[token("!=")]
     NotEqual,
+    #[token("<=>")]
+    AssertEqual,
 
     #[token("(")]
     LeftParen,
@@ -137,13 +139,13 @@ mod tests {
     }
 
     #[test]
-    fn test_lex_once_affirm() {
+    fn test_lex_once() {
         lex_once("1");
     }
 
     #[test]
     #[should_panic]
-    fn test_lex_panic() {
+    fn test_lex_once_panic() {
         lex_once("1 2");
     }
 
