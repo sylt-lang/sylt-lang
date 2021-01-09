@@ -1,87 +1,101 @@
-use std::{env, fs};
+use std::fs;
+use logos::Logos;
 
-#[derive(Debug)]
-pub enum TokenKind {
-    Identifier(String), String(String), Float(f64), Int(i64), Bool(bool),
+#[derive(Logos, Debug, PartialEq)]
+pub enum Token {
+    #[regex(r"[[:alpha:]][[:alnum:]]*", |lex| lex.slice().to_string())]
+    Identifier(String),
 
-    If, For, In, Loop,
+    #[regex(r#""[^"]*""#, |lex| lex.slice().to_string())]
+    String(String),
 
-    Plus, Minus, Star, Slash,
-    PlusPlus, MinusMinus,
-    PlusEqual, MinusEqual, StarEqual, SlashEqual,
+    #[regex(r"[\d]+\.[\d]*|[\d]*\.[\d]+", |lex| lex.slice().parse(), priority=2)]
+    Float(f64),
+    #[regex(r"[\d]+", |lex| lex.slice().parse())]
+    Int(i64),
 
-    Colon, ColonColon,
-    Equal, EqualEqual,
+    #[regex(r"true|false", |lex| lex.slice().parse(), priority=2)]
+    Bool(bool),
 
-    LeftParen, RightParen,
+    #[token("if")]
+    If,
+    #[token("for")]
+    For,
+    #[token("in")]
+    In,
+    #[token("loop")]
+    Loop,
 
-    LeftBracket, RightBracket,
+    #[token("+")]
+    Plus,
+    #[token("++")]
+    PlusPlus,
+    #[token("-")]
+    Minus,
+    #[token("--")]
+    MinusMinus,
+    #[token("*")]
+    Star,
+    #[token("/")]
+    Slash,
+    #[token("+=")]
+    PlusEqual,
+    #[token("-=")]
+    MinusEqual,
+    #[token("*=")]
+    StarEqual,
+    #[token("/=")]
+    SlashEqual,
 
-    LeftBrace, RightBrace,
+    #[token(":")]
+    Colon,
+    #[token("::")]
+    ColonColon,
+    #[token("=")]
+    Equal,
+    #[token("==")]
+    EqualEqual,
 
-    Greater, Less,
-    GreaterEqual, LessEqual,
+    #[token("(")]
+    LeftParen,
+    #[token(")")]
+    RightParen,
 
+    #[token("[")]
+    LeftBracket,
+    #[token("]")]
+    RightBracket,
+
+    #[token("{")]
+    LeftBrace,
+    #[token("}")]
+    RightBrace,
+
+    #[token(">")]
+    Greater,
+    #[token(">=")]
+    GreaterEqual,
+    #[token("<")]
+    Less,
+    #[token("<=")]
+    LessEqual,
+
+    #[token(".")]
+    Dot,
+    #[token("->")]
     Arrow,
+    #[token("\n")]
     Newline,
 
+    #[regex(r"[ \t\r]", logos::skip)]
+    Whitespace,
+
+    #[error]
     Error,
-    EOF,
-}
-
-#[derive(Debug)]
-pub struct Token <'a> {
-    kind: TokenKind,
-
-    row: i32,
-    col: i32,
-    filename: &'a str,
-}
-
-use std::iter::Peekable;
-use std::str::Chars;
-
-fn parse_number(c: char, chars: &mut Peekable<Chars>) -> TokenKind {
-    let mut number = String::from(c);
-    loop {
-        if let Some(c) = chars.peek() {
-            match *c {
-                '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8'| '9' | '.' => {}
-                _ => { break; }
-            }
-        }
-        number.push(chars.next().unwrap());
-    }
-    if number.contains(".") {
-        return TokenKind::Float(number.parse::<f64>().unwrap());
-    } else {
-        return TokenKind::Int(number.parse::<i64>().unwrap());
-    }
 }
 
 pub fn file_to_tokens(filename: &str) -> Vec<Token> {
     let content = fs::read_to_string(filename).unwrap();
-
-    let mut tokens = Vec::new();
-
-    let mut row = 1;
-    let mut col = 0;
-
-    let mut chars = content.chars().peekable();
-    while let Some(c) = chars.next() {
-        let mut kind = match c {
-            '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8'| '9' | '.' => {
-                parse_number(c, &mut chars)
-            }
-            _ => {
-                TokenKind::Error
-            }
-        };
-
-        tokens.push(Token{kind, row, col, filename});
-    }
-
-    tokens.push(Token{kind: TokenKind::EOF, row, col, filename});
-
-    return tokens;
+    let lexer = Token::lexer(&content);
+    lexer.collect()
 }
