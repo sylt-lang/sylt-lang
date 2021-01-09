@@ -91,6 +91,9 @@ pub enum Token {
     #[token("\n")]
     Newline,
 
+    #[regex(r"//[^\n]*\n", logos::skip)]
+    Comment,
+
     #[regex(r"[ \t\r]", logos::skip)]
     Whitespace,
 
