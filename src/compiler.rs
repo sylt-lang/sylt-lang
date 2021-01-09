@@ -23,7 +23,7 @@ impl Compiler {
     }
 
     fn error(&self, msg: &str) -> ! {
-        println!("ERROR: {} range {:?}", msg, self.tokens[self.curr].1);
+        println!("ERROR: {} line {:?}", msg, self.line());
         panic!();
     }
 
@@ -60,6 +60,13 @@ impl Compiler {
             Token::AssertEqual => PREC_ASSERT,
 
             _ => PREC_NO,
+        }
+    }
+
+    fn line(&self) -> Option<usize> {
+        match self.tokens.get(self.curr) {
+            Some((_, line)) => Some(*line),
+            None => None,
         }
     }
 
@@ -109,7 +116,7 @@ impl Compiler {
             Token::Bool(b) => { Value::Bool(b) }
             _ => { self.error("Invalid value.") }
         };
-        block.add(Op::Constant(value));
+        block.add(Op::Constant(value), self.line());
     }
 
     fn grouping(&mut self, block: &mut Block) {
@@ -131,7 +138,7 @@ impl Compiler {
             _ => self.error("Invalid unary operator"),
         };
         self.value(block);
-        block.add(op);
+        block.add(op, self.line());
     }
 
     fn binary(&mut self, block: &mut Block) {
@@ -147,7 +154,7 @@ impl Compiler {
             Token::AssertEqual => Op::AssertEqual,
             _ => { self.error("Illegal operator"); }
         };
-        block.add(op);
+        block.add(op, self.line());
     }
 
     fn comparison(&mut self, block: &mut Block) {
@@ -163,7 +170,7 @@ impl Compiler {
             Token::GreaterEqual => &[Op::Less, Op::Not],
             _ => { self.error("Illegal comparison operator"); }
         };
-        block.add_from(op);
+        block.add_from(op, self.line());
     }
 
     fn expression(&mut self, block: &mut Block) {
@@ -192,13 +199,13 @@ impl Compiler {
             }
 
             self.expression(&mut block);
-            block.add(Op::Print);
+            block.add(Op::Print, self.line());
 
             if self.eat() != Token::Newline {
                 self.error("Invalid expression");
             }
         }
-        block.add(Op::Return);
+        block.add(Op::Return, self.line());
 
         block
     }

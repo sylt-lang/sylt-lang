@@ -117,6 +117,19 @@ impl VM {
         self.stack.get(self.stack.len() - amount)
     }
 
+    fn print_error(&self) {
+        let find_line = || {
+            for i in (0..=self.ip).rev() {
+                if let Some(line) = self.block.line_offsets.get(&i) {
+                    return *line;
+                }
+            }
+            return 0;
+        };
+
+        println!("RUNTIME ERROR OR LINE: {}", find_line());
+    }
+
     pub fn run(&mut self) -> Result<(), VMError>{
         const PRINT_WHILE_RUNNING: bool = true;
         const PRINT_BLOCK: bool = true;
@@ -229,6 +242,7 @@ impl VM {
                 Op::AssertEqual => {
                     let (a, b) = self.pop_twice();
                     if a != b {
+                        self.print_error();
                         println!("Assert failed for '{:?}' and '{:?}'", a, b);
                     }
                     self.stack.push(Value::Bool(a == b));

@@ -1,5 +1,5 @@
 use std::fs;
-use logos::{Logos, Span};
+use logos::Logos;
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 pub enum Token {
@@ -114,18 +114,34 @@ pub enum Token {
     Error,
 }
 
-pub type PlacedToken = (Token, Span);
+pub type PlacedToken = (Token, usize);
 pub type TokenStream = Vec<PlacedToken>;
+
 pub fn file_to_tokens(filename: &str) -> TokenStream {
     let content = fs::read_to_string(filename).unwrap();
     let lexer = Token::lexer(&content);
-    let mut line = 1;
+
+    let mut placed_tokens = lexer.spanned().peekable();
+
+    let mut lined_tokens = Vec::new();
+    let mut line: usize = 1;
     for (c_idx, c) in content.chars().enumerate() {
+        if let Some((kind, t_range)) = placed_tokens.peek() {
+            if t_range.start == c_idx {
+                let kind = kind.clone();
+                placed_tokens.next();
+                lined_tokens.push((kind, line));
+            }
+        } else {
+            break;
+        }
+
         if c == '\n' {
             line += 1;
         }
     }
-    lexer.spanned().collect()
+
+    lined_tokens
 }
 
 #[cfg(test)]
