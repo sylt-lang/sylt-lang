@@ -6,9 +6,11 @@ struct Compiler {
     tokens: TokenStream,
 }
 
+//TODO rustify
 const PREC_NO: u64 = 0;
-const PREC_TERM: u64 = 1;
-const PREC_FACTOR: u64 = 2;
+const PREC_COMP: u64 = 1;
+const PREC_TERM: u64 = 2;
+const PREC_FACTOR: u64 = 3;
 
 impl Compiler {
     pub fn new(tokens: TokenStream) -> Self {
@@ -45,6 +47,8 @@ impl Compiler {
             Token::Star => PREC_FACTOR,
             Token::Slash => PREC_FACTOR,
 
+            Token::EqualEqual => PREC_COMP,
+
             _ => PREC_NO,
         }
     }
@@ -71,6 +75,8 @@ impl Compiler {
             Token::Slash => self.binary(block),
             Token::Star  => self.binary(block),
 
+            Token::EqualEqual => self.binary(block),
+
             _ => { return false; },
         }
         return true;
@@ -87,13 +93,13 @@ impl Compiler {
 
     fn grouping(&mut self, block: &mut Block) {
         if Token::LeftParen != self.eat() {
-            self.error("Expected left parentasis around expression.");
+            self.error("Expected left parenthesis around expression.");
         }
 
         self.expression(block);
 
         if Token::RightParen != self.eat() {
-            self.error("Expected closing parentasis after expression.");
+            self.error("Expected closing parenthesis after expression.");
         }
     }
 
@@ -115,6 +121,7 @@ impl Compiler {
             Token::Minus => Op::Sub,
             Token::Star => Op::Mul,
             Token::Slash => Op::Div,
+            Token::EqualEqual => Op::CompEq,
             _ => { self.error("Illegal operator"); }
         };
         block.add(op);

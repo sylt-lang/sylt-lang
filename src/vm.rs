@@ -1,5 +1,5 @@
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Value {
     Float(f64),
     Int(i64),
@@ -16,6 +16,8 @@ pub enum Op {
     Mul,
     Div,
     Neg,
+
+    CompEq,
 
     Print,
     Return,
@@ -143,12 +145,10 @@ impl VM {
                     }
                 }
 
-                Op::Mul => {
-                    todo!();
-                }
-
-                Op::Div => {
-                    todo!();
+                Op::CompEq => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    self.stack.push(Value::Bool(a == b));
                 }
 
                 Op::Print => {
