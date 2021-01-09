@@ -8,9 +8,10 @@ struct Compiler {
 
 //TODO rustify
 const PREC_NO: u64 = 0;
-const PREC_COMP: u64 = 1;
-const PREC_TERM: u64 = 2;
-const PREC_FACTOR: u64 = 3;
+const PREC_BOOL: u64 = 1;
+const PREC_COMP: u64 = 2;
+const PREC_TERM: u64 = 3;
+const PREC_FACTOR: u64 = 4;
 
 impl Compiler {
     pub fn new(tokens: TokenStream) -> Self {
@@ -41,13 +42,19 @@ impl Compiler {
 
     fn precedence(&self, token: Token) -> u64 {
         match token {
-            Token::Minus => PREC_TERM,
-            Token::Plus => PREC_TERM,
+            Token::Star | Token::Slash => PREC_FACTOR,
 
-            Token::Star => PREC_FACTOR,
-            Token::Slash => PREC_FACTOR,
+            Token::Minus | Token::Plus => PREC_TERM,
 
-            Token::EqualEqual => PREC_COMP,
+            Token::EqualEqual
+                | Token::Greater
+                | Token::GreaterEqual
+                | Token::Less
+                | Token::LessEqual
+                | Token::NotEqual
+                => PREC_COMP,
+
+            Token::And | Token::Or => PREC_BOOL,
 
             _ => PREC_NO,
         }
@@ -60,6 +67,9 @@ impl Compiler {
 
             Token::Float(_) => self.value(block),
             Token::Int(_) => self.value(block),
+            Token::Bool(_) => self.value(block),
+
+            Token::Not => self.unary(block),
 
             _ => { return false; },
         }
@@ -69,13 +79,19 @@ impl Compiler {
 
     fn infix(&mut self, token: Token, block: &mut Block) -> bool {
         match token {
-            Token::Minus => self.binary(block),
-            Token::Plus  => self.binary(block),
+            Token::Minus
+                | Token::Plus
+                | Token::Slash
+                | Token::Star
+                => self.binary(block),
 
-            Token::Slash => self.binary(block),
-            Token::Star  => self.binary(block),
-
-            Token::EqualEqual => self.binary(block),
+            Token::EqualEqual
+                | Token::Greater
+                | Token::GreaterEqual
+                | Token::Less
+                | Token::LessEqual
+                | Token::NotEqual
+                => self.comparison(block),
 
             _ => { return false; },
         }
@@ -85,7 +101,8 @@ impl Compiler {
     fn value(&mut self, block: &mut Block) {
         let value = match self.eat() {
             Token::Float(f) => { Value::Float(f) },
-            Token::Int(f) => { Value::Int(f) }
+            Token::Int(i) => { Value::Int(i) }
+            Token::Bool(b) => { Value::Bool(b) }
             _ => { self.error("Invalid value.") }
         };
         block.add(Op::Constant(value));
@@ -104,11 +121,13 @@ impl Compiler {
     }
 
     fn unary(&mut self, block: &mut Block) {
-        if Token::Minus != self.eat() {
-            self.error("Expected minus at start of negation.");
-        }
+        let op = match self.eat() {
+            Token::Minus => Op::Neg,
+            Token::Not => Op::Not,
+            _ => self.error("Invalid unary operator"),
+        };
         self.value(block);
-        block.add(Op::Neg);
+        block.add(op);
     }
 
     fn binary(&mut self, block: &mut Block) {
@@ -121,10 +140,25 @@ impl Compiler {
             Token::Minus => Op::Sub,
             Token::Star => Op::Mul,
             Token::Slash => Op::Div,
-            Token::EqualEqual => Op::CompEq,
             _ => { self.error("Illegal operator"); }
         };
         block.add(op);
+    }
+
+    fn comparison(&mut self, block: &mut Block) {
+        let op = self.eat();
+        self.parse_precedence(block, self.precedence(op.clone()) + 1);
+
+        let op: &[Op] = match op {
+            Token::EqualEqual => &[Op::Equal],
+            Token::Less => &[Op::Less],
+            Token::Greater => &[Op::Greater],
+            Token::NotEqual => &[Op::Equal, Op::Not],
+            Token::LessEqual => &[Op::Greater, Op::Not],
+            Token::GreaterEqual => &[Op::Less, Op::Not],
+            _ => { self.error("Illegal comparison operator"); }
+        };
+        block.add_from(op);
     }
 
     fn expression(&mut self, block: &mut Block) {

@@ -59,6 +59,8 @@ pub enum Token {
     Equal,
     #[token("==")]
     EqualEqual,
+    #[token("!=")]
+    NotEqual,
 
     #[token("(")]
     LeftParen,
@@ -83,6 +85,13 @@ pub enum Token {
     Less,
     #[token("<=")]
     LessEqual,
+
+    #[token("&&")]
+    And,
+    #[token("||")]
+    Or,
+    #[token("!")]
+    Not,
 
     #[token(".")]
     Dot,

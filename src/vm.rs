@@ -1,12 +1,12 @@
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Value {
     Float(f64),
     Int(i64),
     Bool(bool),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Op {
     Pop,
     Constant(Value),
@@ -17,7 +17,13 @@ pub enum Op {
     Div,
     Neg,
 
-    CompEq,
+    And,
+    Or,
+    Not,
+
+    Equal, // ==
+    Less, // <
+    Greater, // >
 
     Print,
     Return,
@@ -38,8 +44,17 @@ impl Block {
     }
 
     pub fn add(&mut self, op: Op) -> usize {
+        let len = self.ops.len();
         self.ops.push(op);
-        self.ops.len()
+        len
+    }
+
+    pub fn add_from(&mut self, ops: &[Op]) -> usize {
+        let len = self.ops.len();
+        for op in ops {
+            self.add(*op);
+        }
+        len
     }
 }
 
@@ -63,6 +78,11 @@ pub fn run_block(block: Block) {
 }
 
 impl VM {
+    fn pop_twice(&mut self) -> (Value, Value) {
+        let (a, b) = (self.stack.pop().unwrap(), self.stack.pop().unwrap());
+        (b, a)
+    }
+
     pub fn run(&mut self) {
         const PRINT_WHILE_RUNNING: bool = true;
         const PRINT_BLOCK: bool = true;
@@ -76,7 +96,6 @@ impl VM {
         }
 
         loop {
-
             if PRINT_WHILE_RUNNING {
                 print!("    [");
                 for s in self.stack.iter() {
@@ -106,49 +125,71 @@ impl VM {
                 }
 
                 Op::Add => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-                    match (a, b) {
+                    match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b + a)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b + a)),
-                        _ => unimplemented!("Cannot add '{:?}' and '{:?}'.", a, b),
+                        (a, b) => unimplemented!("Cannot add '{:?}' and '{:?}'.", a, b),
                     }
                 }
 
                 Op::Sub => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-                    match (a, b) {
+                    match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b - a)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b - a)),
-                        _ => unimplemented!("Cannot sub '{:?}' and '{:?}'.", a, b),
+                        (a, b) => unimplemented!("Cannot sub '{:?}' and '{:?}'.", a, b),
                     }
                 }
 
                 Op::Mul => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-                    match (a, b) {
+                    match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b * a)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b * a)),
-                        _ => unimplemented!("Cannot mul '{:?}' and '{:?}'.", a, b),
+                        (a, b) => unimplemented!("Cannot mul '{:?}' and '{:?}'.", a, b),
                     }
                 }
 
                 Op::Div => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-                    match (a, b) {
+                    match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b / a)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b / a)),
-                        _ => unimplemented!("Cannot mul '{:?}' and '{:?}'.", a, b),
+                        (a, b) => unimplemented!("Cannot mul '{:?}' and '{:?}'.", a, b),
                     }
                 }
 
-                Op::CompEq => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
+                Op::Equal => {
+                    let (a, b) = self.pop_twice();
                     self.stack.push(Value::Bool(a == b));
+                }
+
+                Op::Less => {
+                    let (a, b) = self.pop_twice();
+                    self.stack.push(Value::Bool(a < b));
+                }
+
+                Op::Greater => {
+                    let (a, b) = self.pop_twice();
+                    self.stack.push(Value::Bool(a > b));
+                }
+
+                Op::And => {
+                    match self.pop_twice() {
+                        (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a && b)),
+                        (a, b) => unimplemented!("Cannot 'and' {:?} and {:?}", a, b),
+                    }
+                }
+
+                Op::Or => {
+                    match self.pop_twice() {
+                        (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a || b)),
+                        (a, b) => unimplemented!("Cannot 'or' {:?} and {:?}", a, b),
+                    }
+                }
+
+                Op::Not => {
+                    match self.stack.pop().unwrap() {
+                        Value::Bool(a) => self.stack.push(Value::Bool(!a)),
+                        a => unimplemented!("Cannot 'not' {:?}", a),
+                    }
                 }
 
                 Op::Print => {
@@ -159,7 +200,6 @@ impl VM {
                     return;
                 }
             }
-
             self.ip += 1;
         }
     }
