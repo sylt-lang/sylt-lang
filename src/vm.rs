@@ -10,6 +10,10 @@ pub enum Value {
 pub enum Op {
     Pop,
     Constant(Value),
+    Add,
+    Sub,
+    Mul,
+    Div,
     Print,
     Return,
 }
@@ -87,8 +91,36 @@ impl VM {
                     self.stack.push(value);
                 }
 
+                Op::Add => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    match (a, b) {
+                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b + a)),
+                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b + a)),
+                        _ => unimplemented!("Cannot add '{:?}' and '{:?}'.", a, b),
+                    }
+                }
+
+                Op::Sub => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    match (a, b) {
+                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b - a)),
+                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b - a)),
+                        _ => unimplemented!("Cannot sub '{:?}' and '{:?}'.", a, b),
+                    }
+                }
+
+                Op::Mul => {
+                    todo!();
+                }
+
+                Op::Div => {
+                    todo!();
+                }
+
                 Op::Print => {
-                    println!("PRINT: {:?}", self.stack[0]);
+                    println!("PRINT: {:?}", self.stack.pop());
                 }
 
                 Op::Return => {
