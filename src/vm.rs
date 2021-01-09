@@ -10,10 +10,13 @@ pub enum Value {
 pub enum Op {
     Pop,
     Constant(Value),
+
     Add,
     Sub,
     Mul,
     Div,
+    Neg,
+
     Print,
     Return,
 }
@@ -89,6 +92,15 @@ impl VM {
 
                 Op::Constant(value) => {
                     self.stack.push(value);
+                }
+
+                Op::Neg => {
+                    let a = self.stack.pop().unwrap();
+                    match a {
+                        Value::Float(a) => self.stack.push(Value::Float(-a)),
+                        Value::Int(a) => self.stack.push(Value::Int(-a)),
+                        _ => unimplemented!("Cannot negate '{:?}'.", a),
+                    }
                 }
 
                 Op::Add => {
