@@ -1,15 +1,16 @@
 use std::fmt;
 use std::path::PathBuf;
 use crate::vm::{Op, Value};
+use crate::tokenizer::Token;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ErrorKind {
     TypeError(Op, Vec<Value>),
     AssertFailed(Value, Value),
-    SyntaxError(usize),
+    SyntaxError(usize, Token),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Error {
     pub kind: ErrorKind,
     pub file: PathBuf,
@@ -29,8 +30,8 @@ impl fmt::Display for ErrorKind {
             ErrorKind::AssertFailed(a, b) => {
                 write!(f, "Assertion failed, {:?} != {:?}.", a, b)
             }
-            ErrorKind::SyntaxError(line) => {
-                write!(f, "Syntax error on line {}", line)
+            ErrorKind::SyntaxError(line, token) => {
+                write!(f, "Syntax error on line {} at token {:?}", line, token)
             }
         }
     }

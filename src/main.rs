@@ -9,8 +9,11 @@ use error::Error;
 
 fn main() {
     let file = file_from_args().unwrap_or_else(|| Path::new("tests/simple.tdy").to_owned());
-    if let Err(err) = run_file(&file) {
-        println!("{}", err);
+    if let Err(errs) = run_file(&file) {
+        for err in errs.iter() {
+            println!("{}", err);
+        }
+        println!(" {} errors occured.", errs.len());
     }
 }
 
@@ -18,10 +21,13 @@ fn file_from_args() -> Option<PathBuf> {
     std::env::args().skip(1).map(|s| Path::new(&s).to_owned()).find(|p| p.is_file())
 }
 
-fn run_file(path: &Path) -> Result<(), Error> {
+fn run_file(path: &Path) -> Result<(), Vec<Error>> {
     let tokens = tokenizer::file_to_tokens(path);
-    let block = compiler::compile("main", path, tokens);  // path -> str might fail
-    vm::run_block(block)
+    match compiler::compile("main", path, tokens) {
+        Ok(block) => vm::run_block(block).or_else(|e| Err(vec![e])),
+        Err(errors) => Err(errors),
+    }
+
 }
 
 #[cfg(test)]

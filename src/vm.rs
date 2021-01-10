@@ -49,7 +49,7 @@ pub struct Block {
     name: String,
     file: PathBuf,
     ops: Vec<Op>,
-    last_line_offset: Option<usize>,
+    last_line_offset: usize,
     line_offsets: HashMap<usize, usize>,
 }
 
@@ -59,23 +59,22 @@ impl Block {
             name: String::from(name),
             file: file.to_owned(),
             ops: Vec::new(),
-            last_line_offset: None,
+            last_line_offset: 0,
             line_offsets: HashMap::new(),
         }
     }
 
-    pub fn add(&mut self, op: Op, token_position: Option<usize>) -> usize {
+    pub fn add(&mut self, op: Op, token_position: usize) -> usize {
         let len = self.ops.len();
         if token_position != self.last_line_offset {
-            if let Some(token_position) = token_position {
-                self.line_offsets.insert(len, token_position);
-            }
+            self.line_offsets.insert(len, token_position);
+            self.last_line_offset = token_position;
         }
         self.ops.push(op);
         len
     }
 
-    pub fn add_from(&mut self, ops: &[Op], token_position: Option<usize>) -> usize {
+    pub fn add_from(&mut self, ops: &[Op], token_position: usize) -> usize {
         let len = self.ops.len();
         for op in ops {
             self.add(*op, token_position);

@@ -22,15 +22,15 @@ macro_rules! nextable_enum {
 }
 
 macro_rules! error {
-    ( $thing:expr, $msg:expr) => {
-        $thing.error(ErrorKind::SyntaxError($thing.line().unwrap()), Some(String::from($msg)))
+    ($thing:expr, $msg:expr) => {
+        $thing.error(ErrorKind::SyntaxError($thing.line(), $thing.peek()), Some(String::from($msg)))
     };
 }
 
 macro_rules! expect {
     ($thing:expr, $exp:pat, $msg:expr) => {
         match $thing.peek() {
-            $exp => $thing.eat(),
+            $exp => { $thing.eat(); },
             _ => error!($thing, $msg),
         }
     };
@@ -65,19 +65,28 @@ impl Compiler {
     }
 
     fn clear_panic(&mut self) {
-        self.panic = false;
+        if self.panic {
+            self.panic = false;
+
+            while match self.peek() {
+                Token::EOF | Token::Newline => false,
+                _ => true,
+            } {
+                self.eat();
+            }
+            self.eat();
+        }
     }
 
-    fn error(&mut self, kind: ErrorKind, message: Option<String>) -> ! {
-        if self.panic { panic!(); }
+    fn error(&mut self, kind: ErrorKind, message: Option<String>) {
+        if self.panic { return }
         self.panic = true;
         self.errors.push(Error {
             kind: kind,
             file: self.current_file.clone(),
-            line: self.line().unwrap(),
+            line: self.line(),
             message: message,
         });
-        panic!();
     }
 
     fn peek(&self) -> Token {
@@ -116,10 +125,11 @@ impl Compiler {
         }
     }
 
-    fn line(&self) -> Option<usize> {
-        match self.tokens.get(self.curr) {
-            Some((_, line)) => Some(*line),
-            None => None,
+    fn line(&self) -> usize {
+        if self.curr < self.tokens.len() {
+            self.tokens[self.curr].1
+        } else {
+            self.tokens[self.tokens.len() - 1].1
         }
     }
 
@@ -165,7 +175,7 @@ impl Compiler {
             Token::Float(f) => { Value::Float(f) },
             Token::Int(i) => { Value::Int(i) }
             Token::Bool(b) => { Value::Bool(b) }
-            _ => { error!(self, "Cannot parse value.") }
+            _ => { error!(self, "Cannot parse value."); Value::Bool(false) }
         };
         block.add(Op::Constant(value), self.line());
     }
@@ -182,7 +192,7 @@ impl Compiler {
         let op = match self.eat() {
             Token::Minus => Op::Neg,
             Token::Not => Op::Not,
-            _ => error!(self, "Invalid unary operator"),
+            _ => { error!(self, "Invalid unary operator"); Op::Neg },
         };
         self.parse_precedence(block, Prec::Factor);
         block.add(op, self.line());
@@ -205,7 +215,7 @@ impl Compiler {
             Token::NotEqual => &[Op::Equal, Op::Not],
             Token::LessEqual => &[Op::Greater, Op::Not],
             Token::GreaterEqual => &[Op::Less, Op::Not],
-            _ => { error!(self, "Illegal operator"); }
+            _ => { error!(self, "Illegal operator"); &[] }
         };
         block.add_from(op, self.line());
     }
@@ -227,6 +237,8 @@ impl Compiler {
     }
 
     fn statement(&mut self, block: &mut Block) {
+        self.clear_panic();
+
         match self.peek() {
             Token::Print => {
                 self.eat();
@@ -237,29 +249,28 @@ impl Compiler {
 
             _ => {
                 self.expression(block);
-                block.add(Op::Pop, None);
+                block.add(Op::Pop, self.line());
                 expect!(self, Token::Newline, "Expect newline after expression.");
             }
         }
     }
 
-    pub fn compile(&mut self, name: &str, file: &Path) -> Block {
+    pub fn compile(&mut self, name: &str, file: &Path) -> Result<Block, Vec<Error>> {
         let mut block = Block::new(name, file);
 
-        loop {
-            if self.peek() == Token::EOF {
-                break;
-            }
-
+        while self.peek() != Token::EOF {
             self.statement(&mut block);
-
         }
         block.add(Op::Return, self.line());
 
-        block
+        if self.errors.is_empty() {
+            Ok(block)
+        } else {
+            Err(self.errors.clone())
+        }
     }
 }
 
-pub fn compile(name: &str, file: &Path, tokens: TokenStream) -> Block {
+pub fn compile(name: &str, file: &Path, tokens: TokenStream) -> Result<Block, Vec<Error>> {
     Compiler::new(file, tokens).compile(name, file)
 }
