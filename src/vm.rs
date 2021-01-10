@@ -1,6 +1,16 @@
-use std::collections::HashMap;
-use std::fmt;
 use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+
+use crate::error::{Error, ErrorKind};
+
+macro_rules! error {
+    ( $thing:expr, $kind:expr) => {
+        return Err($thing.error($kind, None));
+    };
+    ( $thing:expr, $kind:expr, $msg:expr) => {
+        return Err($thing.error($kind, Some($msg)));
+    };
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Value {
@@ -82,47 +92,6 @@ pub struct VM {
     ip: usize,
 }
 
-#[derive(Debug)]
-pub enum VMErrorKind {
-    TypeError(Op, Vec<Value>),
-    AssertFailed(Value, Value),
-}
-
-#[derive(Debug)]
-pub struct Error {
-    kind: VMErrorKind,
-    file: PathBuf,
-    line: usize,
-    message: Option<String>,
-}
-
-impl fmt::Display for VMErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            VMErrorKind::TypeError(op, values) => {
-                let values = values
-                    .iter()
-                    .fold(String::new(), |a, v| { format!("{}, {:?}", a, v) });
-                write!(f, "Cannot apply {:?} to values {}", op, values)
-            }
-            VMErrorKind::AssertFailed(a, b) => {
-                write!(f, "Assertion failed, {:?} != {:?}.", a, b)
-            }
-        }
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let message = match &self.message {
-            Some(s) => format!("\n{}", s),
-            None => String::from(""),
-        };
-        write!(f, "{:?}:{} [Runtime Error] {}{}", self.file, self.line, self.kind, message)
-    }
-}
-
-
 pub fn run_block(block: Block) -> Result<(), Error> {
     let mut vm = VM {
         stack: Vec::new(),
@@ -132,15 +101,6 @@ pub fn run_block(block: Block) -> Result<(), Error> {
     };
 
     vm.run()
-}
-
-macro_rules! error {
-    ( $vm:expr, $kind:expr) => {
-        return Err($vm.error($kind, None));
-    };
-    ( $vm:expr, $kind:expr, $msg:expr) => {
-        return Err($vm.error($kind, Some($msg)));
-    };
 }
 
 impl VM {
@@ -153,7 +113,7 @@ impl VM {
         self.stack.get(self.stack.len() - amount)
     }
 
-    fn error(&self, kind: VMErrorKind, message: Option<String>) -> Error {
+    fn error(&self, kind: ErrorKind, message: Option<String>) -> Error {
         let find_line = || {
             for i in (0..=self.ip).rev() {
                 if let Some(line) = self.block.line_offsets.get(&i) {
@@ -208,7 +168,7 @@ impl VM {
                     match self.stack.pop().unwrap() {
                         Value::Float(a) => self.stack.push(Value::Float(-a)),
                         Value::Int(a) => self.stack.push(Value::Int(-a)),
-                        a => error!(self, VMErrorKind::TypeError(op, vec![a])),
+                        a => error!(self, ErrorKind::TypeError(op, vec![a])),
                     }
                 }
 
@@ -216,7 +176,7 @@ impl VM {
                     match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b + a)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b + a)),
-                        (a, b) => error!(self, VMErrorKind::TypeError(op, vec![a, b])),
+                        (a, b) => error!(self, ErrorKind::TypeError(op, vec![a, b])),
                     }
                 }
 
@@ -224,7 +184,7 @@ impl VM {
                     match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b - a)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b - a)),
-                        (a, b) => error!(self, VMErrorKind::TypeError(op, vec![a, b])),
+                        (a, b) => error!(self, ErrorKind::TypeError(op, vec![a, b])),
                     }
                 }
 
@@ -232,7 +192,7 @@ impl VM {
                     match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b * a)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b * a)),
-                        (a, b) => error!(self, VMErrorKind::TypeError(op, vec![a, b])),
+                        (a, b) => error!(self, ErrorKind::TypeError(op, vec![a, b])),
                     }
                 }
 
@@ -240,7 +200,7 @@ impl VM {
                     match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b / a)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b / a)),
-                        (a, b) => error!(self, VMErrorKind::TypeError(op, vec![a, b])),
+                        (a, b) => error!(self, ErrorKind::TypeError(op, vec![a, b])),
                     }
                 }
 
@@ -262,28 +222,28 @@ impl VM {
                 Op::And => {
                     match self.pop_twice() {
                         (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a && b)),
-                        (a, b) => error!(self, VMErrorKind::TypeError(op, vec![a, b])),
+                        (a, b) => error!(self, ErrorKind::TypeError(op, vec![a, b])),
                     }
                 }
 
                 Op::Or => {
                     match self.pop_twice() {
                         (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a || b)),
-                        (a, b) => error!(self, VMErrorKind::TypeError(op, vec![a, b])),
+                        (a, b) => error!(self, ErrorKind::TypeError(op, vec![a, b])),
                     }
                 }
 
                 Op::Not => {
                     match self.stack.pop().unwrap() {
                         Value::Bool(a) => self.stack.push(Value::Bool(!a)),
-                        a => error!(self, VMErrorKind::TypeError(op, vec![a])),
+                        a => error!(self, ErrorKind::TypeError(op, vec![a])),
                     }
                 }
 
                 Op::AssertEqual => {
                     let (a, b) = self.pop_twice();
                     if a != b {
-                        error!(self, VMErrorKind::AssertFailed(a, b));
+                        error!(self, ErrorKind::AssertFailed(a, b));
                     }
                     self.stack.push(Value::Bool(a == b));
                 }

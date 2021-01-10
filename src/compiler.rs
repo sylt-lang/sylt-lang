@@ -1,15 +1,11 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::tokenizer::{Token, TokenStream};
 use crate::vm::{Value, Block, Op};
-
-struct Compiler {
-    curr: usize,
-    tokens: TokenStream,
-}
+use crate::error::{Error, ErrorKind};
 
 macro_rules! nextable_enum {
-    ( $name:ident, $( $thing:ident ),* ) => {
+    ( $name:ident { $( $thing:ident ),* } ) => {
         #[derive(PartialEq, PartialOrd, Clone, Copy, Debug)]
         enum $name {
             $( $thing, )*
@@ -25,25 +21,62 @@ macro_rules! nextable_enum {
     };
 }
 
-nextable_enum!(Prec,
+macro_rules! error {
+    ( $thing:expr, $msg:expr) => {
+        $thing.error(ErrorKind::SyntaxError($thing.line().unwrap()), Some(String::from($msg)))
+    };
+}
+
+macro_rules! expect {
+    ($thing:expr, $exp:pat, $msg:expr) => {
+        match $thing.peek() {
+            $exp => $thing.eat(),
+            _ => error!($thing, $msg),
+        }
+    };
+}
+
+nextable_enum!(Prec {
     No,
     Assert,
     Bool,
     Comp,
     Term,
     Factor
-);
+});
+
+struct Compiler {
+    curr: usize,
+    tokens: TokenStream,
+    current_file: PathBuf,
+    panic: bool,
+    errors: Vec<Error>,
+}
 
 impl Compiler {
-    pub fn new(tokens: TokenStream) -> Self {
+    pub fn new(current_file: &Path, tokens: TokenStream) -> Self {
         Self {
             curr: 0,
             tokens,
+            current_file: PathBuf::from(current_file),
+            panic: false,
+            errors: vec![],
         }
     }
 
-    fn error(&self, msg: &str) -> ! {
-        println!("ERROR: {} line {:?}", msg, self.line());
+    fn clear_panic(&mut self) {
+        self.panic = false;
+    }
+
+    fn error(&mut self, kind: ErrorKind, message: Option<String>) -> ! {
+        if self.panic { panic!(); }
+        self.panic = true;
+        self.errors.push(Error {
+            kind: kind,
+            file: self.current_file.clone(),
+            line: self.line().unwrap(),
+            message: message,
+        });
         panic!();
     }
 
@@ -132,28 +165,24 @@ impl Compiler {
             Token::Float(f) => { Value::Float(f) },
             Token::Int(i) => { Value::Int(i) }
             Token::Bool(b) => { Value::Bool(b) }
-            _ => { self.error("Invalid value.") }
+            _ => { error!(self, "Cannot parse value.") }
         };
         block.add(Op::Constant(value), self.line());
     }
 
     fn grouping(&mut self, block: &mut Block) {
-        if Token::LeftParen != self.eat() {
-            self.error("Expected left parenthesis around expression.");
-        }
+        expect!(self, Token::LeftParen, "Expected '(' around expression.");
 
         self.expression(block);
 
-        if Token::RightParen != self.eat() {
-            self.error("Expected closing parenthesis after expression.");
-        }
+        expect!(self, Token::RightParen, "Expected ')' around expression.");
     }
 
     fn unary(&mut self, block: &mut Block) {
         let op = match self.eat() {
             Token::Minus => Op::Neg,
             Token::Not => Op::Not,
-            _ => self.error("Invalid unary operator"),
+            _ => error!(self, "Invalid unary operator"),
         };
         self.parse_precedence(block, Prec::Factor);
         block.add(op, self.line());
@@ -176,7 +205,7 @@ impl Compiler {
             Token::NotEqual => &[Op::Equal, Op::Not],
             Token::LessEqual => &[Op::Greater, Op::Not],
             Token::GreaterEqual => &[Op::Less, Op::Not],
-            _ => { self.error("Illegal operator"); }
+            _ => { error!(self, "Illegal operator"); }
         };
         block.add_from(op, self.line());
     }
@@ -186,9 +215,8 @@ impl Compiler {
     }
 
     fn parse_precedence(&mut self, block: &mut Block, precedence: Prec) {
-        println!("-- {:?}", self.peek());
         if !self.prefix(self.peek(), block) {
-            self.error("Expected expression.");
+            error!(self, "Invalid expression.");
         }
 
         while precedence <= self.precedence(self.peek()) {
@@ -204,17 +232,13 @@ impl Compiler {
                 self.eat();
                 self.expression(block);
                 block.add(Op::Print, self.line());
-                if self.eat() != Token::Newline {
-                    self.error("Expect newline after expression.");
-                }
+                expect!(self, Token::Newline, "Expect newline after expression.");
             },
 
             _ => {
                 self.expression(block);
-                if self.eat() != Token::Newline {
-                    self.error("Expect newline after expression.");
-                }
                 block.add(Op::Pop, None);
+                expect!(self, Token::Newline, "Expect newline after expression.");
             }
         }
     }
@@ -237,5 +261,5 @@ impl Compiler {
 }
 
 pub fn compile(name: &str, file: &Path, tokens: TokenStream) -> Block {
-    Compiler::new(tokens).compile(name, file)
+    Compiler::new(file, tokens).compile(name, file)
 }
