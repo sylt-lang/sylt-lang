@@ -1,4 +1,7 @@
-1 + 1 <=> 2
-// asdlkjasl
-print 1 + 3
-// OwO
+// 1 + 1 <=> 2
+// // asdlkjasl
+// print 1 + 3
+// // OwO
+a int := 1
+print a
+print a + a + a

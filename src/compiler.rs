@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::convert::TryFrom;
 
 use crate::tokenizer::{Token, TokenStream};
 use crate::vm::{Value, Block, Op};
@@ -45,10 +46,38 @@ nextable_enum!(Prec {
     Factor
 });
 
+enum Type {
+    UnkownType,
+    Int,
+    Float,
+    Bool,
+}
+
+impl TryFrom<&str> for Type {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "int" => Ok(Type::Int),
+            "float" => Ok(Type::Float),
+            "bool" => Ok(Type::Bool),
+            _ => Err(()),
+        }
+    }
+}
+
+struct Variable {
+    name: String,
+    typ: Type,
+}
+
 struct Compiler {
     curr: usize,
     tokens: TokenStream,
     current_file: PathBuf,
+
+    stack: Vec<Variable>,
+
     panic: bool,
     errors: Vec<Error>,
 }
@@ -59,6 +88,9 @@ impl Compiler {
             curr: 0,
             tokens,
             current_file: PathBuf::from(current_file),
+
+            stack: vec![],
+
             panic: false,
             errors: vec![],
         }
@@ -90,11 +122,20 @@ impl Compiler {
     }
 
     fn peek(&self) -> Token {
-        if self.tokens.len() <= self.curr {
+        self.peek_at(0)
+    }
+
+    fn peek_at(&self, at: usize) -> Token {
+        if self.tokens.len() <= self.curr + at {
             crate::tokenizer::Token::EOF
         } else {
-            self.tokens[self.curr].0.clone()
+            self.tokens[self.curr + at].0.clone()
         }
+    }
+
+    // TODO(ed): Const generics
+    fn peek_four(&self) -> (Token, Token, Token, Token) {
+        (self.peek_at(0), self.peek_at(1), self.peek_at(2), self.peek_at(3))
     }
 
     fn eat(&mut self) -> Token {
@@ -135,6 +176,7 @@ impl Compiler {
 
     fn prefix(&mut self, token: Token, block: &mut Block) -> bool {
         match token {
+            Token::Identifier(_) => self.variable_expression(block),
             Token::LeftParen => self.grouping(block),
             Token::Minus => self.unary(block),
 
@@ -236,16 +278,68 @@ impl Compiler {
         }
     }
 
+    fn find_local(&self, name: &str, block: &Block) -> Option<usize> {
+        self.stack.iter()
+                  .rev()
+                  .enumerate()
+                  .find_map(|x| if x.1.name == name { Some(x.0) } else { None} )
+    }
+
+    fn variable_expression(&mut self, block: &mut Block) {
+        let name = match self.eat() {
+            Token::Identifier(name) => name,
+            _ => unreachable!(),
+        };
+        if let Some(id) = self.find_local(&name, block) {
+            block.add(Op::ReadLocal(id), self.line());
+        } else {
+            error!(self, format!("Using undefined variable {}.", name));
+        }
+    }
+
+    fn define_variable(&mut self, name: &str, typ: Type, block: &mut Block) {
+
+        if self.find_local(&name, block).is_some() {
+            error!(self, format!("Multiple definitions of {}.", name));
+            return;
+        }
+
+        self.expression(block);
+
+        self.stack.push(Variable { name: String::from(name), typ });
+
+        // block.add(Op::Assign(self.stack.len() - 1), self.line());
+    }
+
     fn statement(&mut self, block: &mut Block) {
         self.clear_panic();
 
-        match self.peek() {
-            Token::Print => {
+        match self.peek_four() {
+            (Token::Print, _, _, _) => {
                 self.eat();
                 self.expression(block);
                 block.add(Op::Print, self.line());
                 expect!(self, Token::Newline, "Expect newline after expression.");
             },
+
+            (Token::Identifier(name), Token::Identifier(typ), Token::ColonEqual, _) => {
+                self.eat();
+                self.eat();
+                self.eat();
+                if let Ok(typ) = Type::try_from(typ.as_ref()) {
+                    self.define_variable(&name, typ, block);
+                } else {
+                    error!(self, format!("Failed to parse type '{}'.", typ));
+                }
+                expect!(self, Token::Newline, "Expect newline after expression.");
+            }
+
+            (Token::Identifier(name), Token::ColonEqual, _, _) => {
+                self.eat();
+                self.eat();
+                self.define_variable(&name, Type::UnkownType, block);
+                expect!(self, Token::Newline, "Expect newline after expression.");
+            }
 
             _ => {
                 self.expression(block);

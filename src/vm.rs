@@ -40,6 +40,10 @@ pub enum Op {
 
     AssertEqual,
 
+    ReadLocal(usize),
+    Assign(usize),
+
+
     Print,
     Return,
 }
@@ -245,6 +249,14 @@ impl VM {
                         error!(self, ErrorKind::AssertFailed(a, b));
                     }
                     self.stack.push(Value::Bool(a == b));
+                }
+
+                Op::ReadLocal(slot) => {
+                    self.stack.push(self.stack[slot]);
+                }
+
+                Op::Assign(slot) => {
+                    self.stack[slot] = self.stack.pop().unwrap();
                 }
 
                 Op::Print => {
