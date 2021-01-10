@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::tokenizer::{Token, TokenStream};
 use crate::vm::{Value, Block, Op};
 
@@ -196,8 +198,8 @@ impl Compiler {
         }
     }
 
-    pub fn compile(&mut self, name: &str, filename: &str) -> Block {
-        let mut block = Block::new(name, filename);
+    pub fn compile(&mut self, name: &str, file: &Path) -> Block {
+        let mut block = Block::new(name, file);
 
         loop {
             if self.peek() == Token::EOF {
@@ -217,6 +219,6 @@ impl Compiler {
     }
 }
 
-pub fn compile(name: &str, filename: &str, tokens: TokenStream) -> Block {
-    Compiler::new(tokens).compile(name, filename)
+pub fn compile(name: &str, file: &Path, tokens: TokenStream) -> Block {
+    Compiler::new(tokens).compile(name, file)
 }

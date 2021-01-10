@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Value {
@@ -36,17 +37,17 @@ pub enum Op {
 #[derive(Debug)]
 pub struct Block {
     name: String,
-    filename: String,
+    file: PathBuf,
     ops: Vec<Op>,
     last_line_offset: Option<usize>,
     line_offsets: HashMap<usize, usize>,
 }
 
 impl Block {
-    pub fn new(name: &str, filename: &str) -> Self {
+    pub fn new(name: &str, file: &Path) -> Self {
         Self {
             name: String::from(name),
-            filename: String::from(filename),
+            file: file.to_owned(),
             ops: Vec::new(),
             last_line_offset: None,
             line_offsets: HashMap::new(),
@@ -90,7 +91,7 @@ pub enum VMErrorKind {
 #[derive(Debug)]
 pub struct VMError {
     kind: VMErrorKind,
-    filename: String,
+    file: PathBuf,
     line: usize,
     message: Option<String>,
 }
@@ -117,7 +118,7 @@ impl fmt::Display for VMError {
             Some(s) => format!("\n{}", s),
             None => String::from(""),
         };
-        write!(f, "{}:{} [Runtime Error] {}{}", self.filename, self.line, self.kind, message)
+        write!(f, "{:?}:{} [Runtime Error] {}{}", self.file, self.line, self.kind, message)
     }
 }
 
@@ -164,7 +165,7 @@ impl VM {
 
         VMError {
             kind,
-            filename: self.block.filename.clone(),
+            file: self.block.file.clone(),
             line: find_line(),
             message,
         }

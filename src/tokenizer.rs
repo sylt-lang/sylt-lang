@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 use logos::Logos;
 
 #[derive(Logos, Debug, PartialEq, Clone)]
@@ -117,8 +118,8 @@ pub enum Token {
 pub type PlacedToken = (Token, usize);
 pub type TokenStream = Vec<PlacedToken>;
 
-pub fn file_to_tokens(filename: &str) -> TokenStream {
-    let content = fs::read_to_string(filename).unwrap();
+pub fn file_to_tokens(file: &Path) -> TokenStream {
+    let content = fs::read_to_string(file).unwrap();
     let lexer = Token::lexer(&content);
 
     let mut placed_tokens = lexer.spanned().peekable();
