@@ -6,13 +6,31 @@ struct Compiler {
     tokens: TokenStream,
 }
 
-//TODO rustify
-const PREC_NO: u64 = 0;
-const PREC_ASSERT: u64 = 1;
-const PREC_BOOL: u64 = 2;
-const PREC_COMP: u64 = 3;
-const PREC_TERM: u64 = 4;
-const PREC_FACTOR: u64 = 5;
+macro_rules! nextable_enum {
+    ( $name:ident, $( $thing:ident ),* ) => {
+        #[derive(PartialEq, PartialOrd, Clone, Copy, Debug)]
+        enum $name {
+            $( $thing, )*
+        }
+
+        impl $name {
+            pub fn next(&self) -> Self {
+                *[$( $name::$thing, )*].iter()
+                    .find(|x| { x > &self })
+                    .unwrap_or(self)
+            }
+        }
+    };
+}
+
+nextable_enum!(Prec,
+    No,
+    Assert,
+    Bool,
+    Comp,
+    Term,
+    Factor
+);
 
 impl Compiler {
     pub fn new(tokens: TokenStream) -> Self {
@@ -41,11 +59,11 @@ impl Compiler {
         t
     }
 
-    fn precedence(&self, token: Token) -> u64 {
+    fn precedence(&self, token: Token) -> Prec {
         match token {
-            Token::Star | Token::Slash => PREC_FACTOR,
+            Token::Star | Token::Slash => Prec::Factor,
 
-            Token::Minus | Token::Plus => PREC_TERM,
+            Token::Minus | Token::Plus => Prec::Term,
 
             Token::EqualEqual
                 | Token::Greater
@@ -53,13 +71,13 @@ impl Compiler {
                 | Token::Less
                 | Token::LessEqual
                 | Token::NotEqual
-                => PREC_COMP,
+                => Prec::Comp,
 
-            Token::And | Token::Or => PREC_BOOL,
+            Token::And | Token::Or => Prec::Bool,
 
-            Token::AssertEqual => PREC_ASSERT,
+            Token::AssertEqual => Prec::Assert,
 
-            _ => PREC_NO,
+            _ => Prec::No,
         }
     }
 
@@ -94,15 +112,13 @@ impl Compiler {
                 | Token::Slash
                 | Token::Star
                 | Token::AssertEqual
-                => self.binary(block),
-
-            Token::EqualEqual
+                | Token::EqualEqual
                 | Token::Greater
                 | Token::GreaterEqual
                 | Token::Less
                 | Token::LessEqual
                 | Token::NotEqual
-                => self.comparison(block),
+                => self.binary(block),
 
             _ => { return false; },
         }
@@ -144,40 +160,30 @@ impl Compiler {
     fn binary(&mut self, block: &mut Block) {
         let op = self.eat();
 
-        self.parse_precedence(block, self.precedence(op.clone()) + 1);
-
-        let op = match op {
-            Token::Plus => Op::Add,
-            Token::Minus => Op::Sub,
-            Token::Star => Op::Mul,
-            Token::Slash => Op::Div,
-            Token::AssertEqual => Op::AssertEqual,
-            _ => { self.error("Illegal operator"); }
-        };
-        block.add(op, self.line());
-    }
-
-    fn comparison(&mut self, block: &mut Block) {
-        let op = self.eat();
-        self.parse_precedence(block, self.precedence(op.clone()) + 1);
+        self.parse_precedence(block, self.precedence(op.clone()).next());
 
         let op: &[Op] = match op {
+            Token::Plus => &[Op::Add],
+            Token::Minus => &[Op::Sub],
+            Token::Star => &[Op::Mul],
+            Token::Slash => &[Op::Div],
+            Token::AssertEqual => &[Op::AssertEqual],
             Token::EqualEqual => &[Op::Equal],
             Token::Less => &[Op::Less],
             Token::Greater => &[Op::Greater],
             Token::NotEqual => &[Op::Equal, Op::Not],
             Token::LessEqual => &[Op::Greater, Op::Not],
             Token::GreaterEqual => &[Op::Less, Op::Not],
-            _ => { self.error("Illegal comparison operator"); }
+            _ => { self.error("Illegal operator"); }
         };
         block.add_from(op, self.line());
     }
 
     fn expression(&mut self, block: &mut Block) {
-        self.parse_precedence(block, PREC_NO);
+        self.parse_precedence(block, Prec::No);
     }
 
-    fn parse_precedence(&mut self, block: &mut Block, precedence: u64) {
+    fn parse_precedence(&mut self, block: &mut Block, precedence: Prec) {
         println!("-- {:?}", self.peek());
         if !self.prefix(self.peek(), block) {
             self.error("Expected expression.");
