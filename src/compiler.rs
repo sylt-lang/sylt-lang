@@ -198,6 +198,27 @@ impl Compiler {
         }
     }
 
+    fn statement(&mut self, block: &mut Block) {
+        match self.peek() {
+            Token::Print => {
+                self.eat();
+                self.expression(block);
+                block.add(Op::Print, self.line());
+                if self.eat() != Token::Newline {
+                    self.error("Expect newline after expression.");
+                }
+            },
+
+            _ => {
+                self.expression(block);
+                if self.eat() != Token::Newline {
+                    self.error("Expect newline after expression.");
+                }
+                block.add(Op::Pop, None);
+            }
+        }
+    }
+
     pub fn compile(&mut self, name: &str, file: &Path) -> Block {
         let mut block = Block::new(name, file);
 
@@ -206,12 +227,8 @@ impl Compiler {
                 break;
             }
 
-            self.expression(&mut block);
-            block.add(Op::Print, self.line());
+            self.statement(&mut block);
 
-            if self.eat() != Token::Newline {
-                self.error("Invalid expression");
-            }
         }
         block.add(Op::Return, self.line());
 
