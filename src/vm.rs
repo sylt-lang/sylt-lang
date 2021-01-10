@@ -113,7 +113,11 @@ impl fmt::Display for VMErrorKind {
 
 impl fmt::Display for VMError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{} [Runtime Error] {}", self.filename, self.line, self.kind)
+        let message = match &self.message {
+            Some(s) => format!("\n{}", s),
+            None => String::from(""),
+        };
+        write!(f, "{}:{} [Runtime Error] {}{}", self.filename, self.line, self.kind, message)
     }
 }
 
