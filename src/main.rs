@@ -20,5 +20,15 @@ fn run_file(path: &Path) -> Result<(), vm::VMError> {
     let block = compiler::compile("main", path, tokens);  // path -> str might fail
     vm::run_block(block)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::run_file;
+    use std::path::Path;
+
+    #[test]
+    fn order_of_operations() {
+        let file = Path::new("tests/order-of-operations.tdy");
+        assert!(run_file(&file).is_ok());
     }
 }
