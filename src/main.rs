@@ -12,5 +12,7 @@ fn main() {
 
     let block = compiler::compile("main", file, tokens);
 
-    vm::run_block(block);
+    if let Err(err) = vm::run_block(block) {
+        println!("{}", err);
+    }
 }

@@ -1,7 +1,5 @@
 use std::collections::HashMap;
-
-use crate::tokenizer::PlacedToken;
-
+use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Value {
@@ -85,18 +83,42 @@ pub struct VM {
 
 #[derive(Debug)]
 pub enum VMErrorKind {
-    TypeError(Value, Value),
+    TypeError(Op, Vec<Value>),
     AssertFailed(Value, Value),
 }
 
 #[derive(Debug)]
 pub struct VMError {
     kind: VMErrorKind,
-    token: PlacedToken,
-    message: String,
+    filename: String,
+    line: usize,
+    message: Option<String>,
 }
 
-pub fn run_block(block: Block) {
+impl fmt::Display for VMErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VMErrorKind::TypeError(op, values) => {
+                let values = values
+                    .iter()
+                    .fold(String::new(), |a, v| { format!("{}, {:?}", a, v) });
+                write!(f, "Cannot apply {:?} to values {}", op, values)
+            }
+            VMErrorKind::AssertFailed(a, b) => {
+                write!(f, "Assertion failed, {:?} != {:?}.", a, b)
+            }
+        }
+    }
+}
+
+impl fmt::Display for VMError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{} [Runtime Error] {}", self.filename, self.line, self.kind)
+    }
+}
+
+
+pub fn run_block(block: Block) -> Result<(), VMError> {
     let mut vm = VM {
         stack: Vec::new(),
 
@@ -104,7 +126,16 @@ pub fn run_block(block: Block) {
         ip: 0,
     };
 
-    vm.run();
+    vm.run()
+}
+
+macro_rules! error {
+    ( $vm:expr, $kind:expr) => {
+        return Err($vm.error($kind, None));
+    };
+    ( $vm:expr, $kind:expr, $msg:expr) => {
+        return Err($vm.error($kind, Some($msg)));
+    };
 }
 
 impl VM {
@@ -117,7 +148,7 @@ impl VM {
         self.stack.get(self.stack.len() - amount)
     }
 
-    fn print_error(&self) {
+    fn error(&self, kind: VMErrorKind, message: Option<String>) -> VMError {
         let find_line = || {
             for i in (0..=self.ip).rev() {
                 if let Some(line) = self.block.line_offsets.get(&i) {
@@ -127,7 +158,12 @@ impl VM {
             return 0;
         };
 
-        println!("RUNTIME ERROR OR LINE: {}", find_line());
+        VMError {
+            kind,
+            filename: self.block.filename.clone(),
+            line: find_line(),
+            message,
+        }
     }
 
     pub fn run(&mut self) -> Result<(), VMError>{
@@ -153,7 +189,8 @@ impl VM {
                 println!("{:?}", self.block.ops[self.ip]);
             }
 
-            match self.block.ops[self.ip] {
+            let op = self.block.ops[self.ip];
+            match op {
                 Op::Pop => {
                     self.stack.pop();
                 }
@@ -163,11 +200,10 @@ impl VM {
                 }
 
                 Op::Neg => {
-                    let a = self.stack.pop().unwrap();
-                    match a {
+                    match self.stack.pop().unwrap() {
                         Value::Float(a) => self.stack.push(Value::Float(-a)),
                         Value::Int(a) => self.stack.push(Value::Int(-a)),
-                        _ => unimplemented!("Cannot negate '{:?}'.", a),
+                        a => error!(self, VMErrorKind::TypeError(op, vec![a])),
                     }
                 }
 
@@ -175,7 +211,7 @@ impl VM {
                     match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b + a)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b + a)),
-                        (a, b) => unimplemented!("Cannot add '{:?}' and '{:?}'.", a, b),
+                        (a, b) => error!(self, VMErrorKind::TypeError(op, vec![a, b])),
                     }
                 }
 
@@ -183,7 +219,7 @@ impl VM {
                     match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b - a)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b - a)),
-                        (a, b) => unimplemented!("Cannot sub '{:?}' and '{:?}'.", a, b),
+                        (a, b) => error!(self, VMErrorKind::TypeError(op, vec![a, b])),
                     }
                 }
 
@@ -191,7 +227,7 @@ impl VM {
                     match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b * a)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b * a)),
-                        (a, b) => unimplemented!("Cannot mul '{:?}' and '{:?}'.", a, b),
+                        (a, b) => error!(self, VMErrorKind::TypeError(op, vec![a, b])),
                     }
                 }
 
@@ -199,7 +235,7 @@ impl VM {
                     match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b / a)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b / a)),
-                        (a, b) => unimplemented!("Cannot mul '{:?}' and '{:?}'.", a, b),
+                        (a, b) => error!(self, VMErrorKind::TypeError(op, vec![a, b])),
                     }
                 }
 
@@ -221,29 +257,28 @@ impl VM {
                 Op::And => {
                     match self.pop_twice() {
                         (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a && b)),
-                        (a, b) => unimplemented!("Cannot 'and' {:?} and {:?}", a, b),
+                        (a, b) => error!(self, VMErrorKind::TypeError(op, vec![a, b])),
                     }
                 }
 
                 Op::Or => {
                     match self.pop_twice() {
                         (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a || b)),
-                        (a, b) => unimplemented!("Cannot 'or' {:?} and {:?}", a, b),
+                        (a, b) => error!(self, VMErrorKind::TypeError(op, vec![a, b])),
                     }
                 }
 
                 Op::Not => {
                     match self.stack.pop().unwrap() {
                         Value::Bool(a) => self.stack.push(Value::Bool(!a)),
-                        a => unimplemented!("Cannot 'not' {:?}", a),
+                        a => error!(self, VMErrorKind::TypeError(op, vec![a])),
                     }
                 }
 
                 Op::AssertEqual => {
                     let (a, b) = self.pop_twice();
                     if a != b {
-                        self.print_error();
-                        println!("Assert failed for '{:?}' and '{:?}'", a, b);
+                        error!(self, VMErrorKind::AssertFailed(a, b));
                     }
                     self.stack.push(Value::Bool(a == b));
                 }
