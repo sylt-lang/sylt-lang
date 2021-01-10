@@ -15,7 +15,7 @@ fn file_from_args() -> Option<PathBuf> {
     std::env::args().skip(1).map(|s| Path::new(&s).to_owned()).find(|p| p.is_file())
 }
 
-fn run_file(path: &Path) -> Result<(), vm::VMError> {
+fn run_file(path: &Path) -> Result<(), vm::Error> {
     let tokens = tokenizer::file_to_tokens(path);
     let block = compiler::compile("main", path, tokens);  // path -> str might fail
     vm::run_block(block)

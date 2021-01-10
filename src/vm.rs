@@ -89,7 +89,7 @@ pub enum VMErrorKind {
 }
 
 #[derive(Debug)]
-pub struct VMError {
+pub struct Error {
     kind: VMErrorKind,
     file: PathBuf,
     line: usize,
@@ -112,7 +112,7 @@ impl fmt::Display for VMErrorKind {
     }
 }
 
-impl fmt::Display for VMError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let message = match &self.message {
             Some(s) => format!("\n{}", s),
@@ -123,7 +123,7 @@ impl fmt::Display for VMError {
 }
 
 
-pub fn run_block(block: Block) -> Result<(), VMError> {
+pub fn run_block(block: Block) -> Result<(), Error> {
     let mut vm = VM {
         stack: Vec::new(),
 
@@ -153,7 +153,7 @@ impl VM {
         self.stack.get(self.stack.len() - amount)
     }
 
-    fn error(&self, kind: VMErrorKind, message: Option<String>) -> VMError {
+    fn error(&self, kind: VMErrorKind, message: Option<String>) -> Error {
         let find_line = || {
             for i in (0..=self.ip).rev() {
                 if let Some(line) = self.block.line_offsets.get(&i) {
@@ -163,7 +163,7 @@ impl VM {
             return 0;
         };
 
-        VMError {
+        Error {
             kind,
             file: self.block.file.clone(),
             line: find_line(),
@@ -171,7 +171,7 @@ impl VM {
         }
     }
 
-    pub fn run(&mut self) -> Result<(), VMError>{
+    pub fn run(&mut self) -> Result<(), Error>{
         const PRINT_WHILE_RUNNING: bool = true;
         const PRINT_BLOCK: bool = true;
 
