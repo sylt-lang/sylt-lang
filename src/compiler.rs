@@ -153,7 +153,7 @@ impl Compiler {
             Token::Not => Op::Not,
             _ => self.error("Invalid unary operator"),
         };
-        self.value(block);
+        self.parse_precedence(block, Prec::Factor);
         block.add(op, self.line());
     }
 
