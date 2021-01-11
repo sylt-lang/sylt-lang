@@ -7,6 +7,8 @@ use crate::tokenizer::Token;
 pub enum ErrorKind {
     TypeError(Op, Vec<Value>),
     AssertFailed(Value, Value),
+    InvalidProgram,
+
     SyntaxError(usize, Token),
 }
 
@@ -32,6 +34,9 @@ impl fmt::Display for ErrorKind {
             }
             ErrorKind::SyntaxError(line, token) => {
                 write!(f, "Syntax error on line {} at token {:?}", line, token)
+            }
+            ErrorKind::InvalidProgram => {
+                write!(f, "[!!!] Invalid program")
             }
         }
     }

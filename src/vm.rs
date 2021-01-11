@@ -21,6 +21,8 @@ pub enum Value {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Op {
+    Illegal,
+
     Pop,
     Constant(Value),
 
@@ -33,6 +35,9 @@ pub enum Op {
     And,
     Or,
     Not,
+
+    Jmp(usize),
+    JmpFalse(usize),
 
     Equal,   // ==
     Less,    // <
@@ -69,7 +74,7 @@ impl Block {
     }
 
     pub fn add(&mut self, op: Op, token_position: usize) -> usize {
-        let len = self.ops.len();
+        let len = self.curr();
         if token_position != self.last_line_offset {
             self.line_offsets.insert(len, token_position);
             self.last_line_offset = token_position;
@@ -79,11 +84,19 @@ impl Block {
     }
 
     pub fn add_from(&mut self, ops: &[Op], token_position: usize) -> usize {
-        let len = self.ops.len();
+        let len = self.curr();
         for op in ops {
             self.add(*op, token_position);
         }
         len
+    }
+
+    pub fn curr(&self) -> usize {
+        self.ops.len()
+    }
+
+    pub fn patch(&mut self, op: Op, pos: usize) {
+        self.ops[pos] = op;
     }
 }
 
@@ -135,7 +148,7 @@ impl VM {
     }
 
     pub fn run(&mut self) -> Result<(), Error>{
-        const PRINT_WHILE_RUNNING: bool = false;
+        const PRINT_WHILE_RUNNING: bool = true;
         const PRINT_BLOCK: bool = true;
 
         if PRINT_BLOCK {
@@ -159,6 +172,10 @@ impl VM {
 
             let op = self.block.ops[self.ip];
             match op {
+                Op::Illegal => {
+                    error!(self, ErrorKind::InvalidProgram);
+                }
+
                 Op::Pop => {
                     self.stack.pop();
                 }
@@ -240,6 +257,18 @@ impl VM {
                     match self.stack.pop().unwrap() {
                         Value::Bool(a) => self.stack.push(Value::Bool(!a)),
                         a => error!(self, ErrorKind::TypeError(op, vec![a])),
+                    }
+                }
+
+                Op::Jmp(line) => {
+                    self.ip = line;
+                    continue;
+                }
+
+                Op::JmpFalse(line) => {
+                    if Some(Value::Bool(false)) == self.stack.pop() {
+                        self.ip = line;
+                        continue;
                     }
                 }
 

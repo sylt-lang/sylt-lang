@@ -380,6 +380,14 @@ impl Compiler {
                 self.assign(&name, block);
             }
 
+            (Token::If, _, _, _) => {
+                self.eat();
+                self.expression(block);
+                let jump = block.add(Op::Illegal, self.line());
+                self.scope(block);
+                block.patch(Op::JmpFalse(block.curr()), jump);
+            }
+
             (Token::LeftBrace, _, _, _) => {
                 self.scope(block);
             }
