@@ -205,6 +205,7 @@ impl VM {
                     match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b + a)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b + a)),
+                        (Value::String(a), Value::String(b)) => self.stack.push(Value::String(format!("{}{}", a, b))),
                         (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
                     }
                 }
