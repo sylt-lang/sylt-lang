@@ -1,0 +1,53 @@
+ - [x] Better error messages
+ - [x] Rustify the thingy 
+ - [x] Return errors from runtime
+---[-]-REPR----
+ - [x] Pass files
+
+ - [?] Globals
+ - [x] Variables
+ - [x] Scoping
+ - [ ] Jumps
+    -  [ ] Type annotations
+ - [ ] If
+ - [ ] Listor
+ - [ ] For
+ - [ ] Prepass, for typeing
+ - [ ] Typing
+ - [ ] Functions
+
+
+global_names = {"name" => idx}
+gloabls [(type var1), (type var2), (type var3)...]
+
+==== q.tdy ====
+use z
+// Is this a closure? Yes.
+f := () -> {
+   print a
+}
+
+f := () -> {
+}
+
+<Var> <Typ>
+
+a int := a + 1
+a int := 3
+a := 3
+
+let <Var>:<Typ>
+
+a : int = 123
+a := z.a
+
+==== z.tdy ====
+use q  // Will we need imports? Yes.
+
+q.f()  // What does this print? 123. q has a different scope.
+
+g := () -> {
+    print a
+}
+
+a := q.a  // Compilation error

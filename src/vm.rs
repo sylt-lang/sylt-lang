@@ -135,7 +135,7 @@ impl VM {
     }
 
     pub fn run(&mut self) -> Result<(), Error>{
-        const PRINT_WHILE_RUNNING: bool = true;
+        const PRINT_WHILE_RUNNING: bool = false;
         const PRINT_BLOCK: bool = true;
 
         if PRINT_BLOCK {

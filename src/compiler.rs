@@ -31,8 +31,8 @@ macro_rules! error {
 macro_rules! expect {
     ($thing:expr, $exp:pat, $msg:expr) => {
         match $thing.peek() {
-            $exp => { $thing.eat(); },
-            _ => error!($thing, $msg),
+            $exp => { $thing.eat(); true },
+            _ => { error!($thing, $msg); false } ,
         }
     };
 }
@@ -46,7 +46,9 @@ nextable_enum!(Prec {
     Factor
 });
 
+#[derive(Copy, Clone)]
 enum Type {
+    NoType,
     UnkownType,
     Int,
     Float,
@@ -69,6 +71,7 @@ impl TryFrom<&str> for Type {
 struct Variable {
     name: String,
     typ: Type,
+    level: usize,
 }
 
 struct Compiler {
@@ -76,6 +79,7 @@ struct Compiler {
     tokens: TokenStream,
     current_file: PathBuf,
 
+    level: usize,
     stack: Vec<Variable>,
 
     panic: bool,
@@ -89,6 +93,7 @@ impl Compiler {
             tokens,
             current_file: PathBuf::from(current_file),
 
+            level: 0,
             stack: vec![],
 
             panic: false,
@@ -278,43 +283,68 @@ impl Compiler {
         }
     }
 
-    fn find_local(&self, name: &str, block: &Block) -> Option<usize> {
+    fn find_local(&self, name: &str, block: &Block) -> Option<(usize, Type, usize)> {
         self.stack.iter()
-                  .rev()
                   .enumerate()
-                  .find_map(|x| if x.1.name == name { Some(x.0) } else { None} )
+                  .rev()
+                  .find_map(|x| if x.1.name == name { Some((x.0, x.1.typ, x.1.level)) } else { None} )
     }
 
     fn variable_expression(&mut self, block: &mut Block) {
         let name = match self.eat() {
             Token::Identifier(name) => name,
-            _ => unreachable!(),
+            __ => unreachable!(),
         };
-        if let Some(id) = self.find_local(&name, block) {
-            block.add(Op::ReadLocal(id), self.line());
+        if let Some((slot, _, _)) = self.find_local(&name, block) {
+            block.add(Op::ReadLocal(slot), self.line());
         } else {
             error!(self, format!("Using undefined variable {}.", name));
         }
     }
 
     fn define_variable(&mut self, name: &str, typ: Type, block: &mut Block) {
-        if self.find_local(&name, block).is_some() {
-            error!(self, format!("Multiple definitions of {}.", name));
-            return;
+        if let Some((_, _, level)) = self.find_local(&name, block) {
+            if level == self.level {
+                error!(self, format!("Multiple definitions of {} in this block.", name));
+                return;
+            }
         }
 
         self.expression(block);
 
-        self.stack.push(Variable { name: String::from(name), typ });
+        self.stack.push(Variable { name: String::from(name), level: self.level, typ });
     }
 
     fn assign(&mut self, name: &str, block: &mut Block) {
-        if let Some(slot) = self.find_local(&name, block) {
+        if let Some((slot, _, _)) = self.find_local(&name, block) {
             self.expression(block);
             block.add(Op::Assign(slot), self.line());
         } else {
             error!(self, format!("Using undefined variable {}.", name));
         }
+    }
+
+    fn scope(&mut self, block: &mut Block) {
+        if !expect!(self, Token::LeftBrace, "Expected '{' at start of block.") {
+            return;
+        }
+
+        self.level += 1;
+        let h = self.stack.len();
+
+        while !matches!(self.peek(), Token::RightBrace | Token::EOF) {
+            self.statement(block);
+        }
+
+        self.level -= 1;
+
+        for _ in h..self.stack.len() {
+            block.add(Op::Pop, self.line());
+        }
+
+        self.stack.truncate(h);
+
+        expect!(self, Token::RightBrace, "Expected '}' at end of block.");
     }
 
     fn statement(&mut self, block: &mut Block) {
@@ -348,6 +378,10 @@ impl Compiler {
                 self.eat();
                 self.eat();
                 self.assign(&name, block);
+            }
+
+            (Token::LeftBrace, _, _, _) => {
+                self.scope(block);
             }
 
             (Token::Newline, _, _, _) => {}
