@@ -40,4 +40,10 @@ mod tests {
         let file = Path::new("tests/order-of-operations.tdy");
         assert!(run_file(&file).is_ok());
     }
+
+    #[test]
+    fn variables() {
+        let file = Path::new("tests/variables.tdy");
+        assert!(run_file(&file).is_ok());
+    }
 }
