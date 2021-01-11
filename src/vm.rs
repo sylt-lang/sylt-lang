@@ -44,6 +44,7 @@ pub enum Op {
     Greater, // >
 
     AssertEqual,
+    Unreachable,
 
     ReadLocal(usize),
     Assign(usize),
@@ -148,7 +149,7 @@ impl VM {
     }
 
     pub fn run(&mut self) -> Result<(), Error>{
-        const PRINT_WHILE_RUNNING: bool = true;
+        const PRINT_WHILE_RUNNING: bool = false;
         const PRINT_BLOCK: bool = true;
 
         if PRINT_BLOCK {
@@ -174,6 +175,10 @@ impl VM {
             match op {
                 Op::Illegal => {
                     error!(self, ErrorKind::InvalidProgram);
+                }
+
+                Op::Unreachable => {
+                    error!(self, ErrorKind::Unreachable);
                 }
 
                 Op::Pop => {

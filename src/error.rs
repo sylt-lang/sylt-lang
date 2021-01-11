@@ -8,6 +8,7 @@ pub enum ErrorKind {
     TypeError(Op, Vec<Value>),
     AssertFailed(Value, Value),
     InvalidProgram,
+    Unreachable,
 
     SyntaxError(usize, Token),
 }
@@ -34,6 +35,9 @@ impl fmt::Display for ErrorKind {
             }
             ErrorKind::SyntaxError(line, token) => {
                 write!(f, "Syntax error on line {} at token {:?}", line, token)
+            }
+            ErrorKind::Unreachable => {
+                write!(f, "Reached unreachable code.")
             }
             ErrorKind::InvalidProgram => {
                 write!(f, "[!!!] Invalid program")

@@ -354,10 +354,11 @@ impl Compiler {
         self.scope(block);
 
         if Token::Else == self.peek() {
+            self.eat();
+
             let else_jmp = block.add(Op::Illegal, self.line());
             block.patch(Op::JmpFalse(block.curr()), jump);
 
-            self.eat();
             match self.peek() {
                 Token::If => self.if_statment(block),
                 Token::LeftBrace => self.scope(block),
@@ -405,6 +406,11 @@ impl Compiler {
 
             (Token::If, _, _, _) => {
                 self.if_statment(block);
+            }
+
+            (Token::Unreachable, _, _, _) => {
+                self.eat();
+                block.add(Op::Unreachable, self.line());
             }
 
             (Token::LeftBrace, _, _, _) => {
