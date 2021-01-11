@@ -53,6 +53,7 @@ enum Type {
     Int,
     Float,
     Bool,
+    String,
 }
 
 impl TryFrom<&str> for Type {
@@ -63,6 +64,7 @@ impl TryFrom<&str> for Type {
             "int" => Ok(Type::Int),
             "float" => Ok(Type::Float),
             "bool" => Ok(Type::Bool),
+            "str" => Ok(Type::String),
             _ => Err(()),
         }
     }
@@ -188,6 +190,7 @@ impl Compiler {
             Token::Float(_) => self.value(block),
             Token::Int(_) => self.value(block),
             Token::Bool(_) => self.value(block),
+            Token::String(_) => self.value(block),
 
             Token::Not => self.unary(block),
 
@@ -222,6 +225,7 @@ impl Compiler {
             Token::Float(f) => { Value::Float(f) },
             Token::Int(i) => { Value::Int(i) }
             Token::Bool(b) => { Value::Bool(b) }
+            Token::String(s) => { Value::String(s.clone()) }
             _ => { error!(self, "Cannot parse value."); Value::Bool(false) }
         };
         block.add(Op::Constant(value), self.line());
