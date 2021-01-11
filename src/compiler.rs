@@ -298,7 +298,6 @@ impl Compiler {
     }
 
     fn define_variable(&mut self, name: &str, typ: Type, block: &mut Block) {
-
         if self.find_local(&name, block).is_some() {
             error!(self, format!("Multiple definitions of {}.", name));
             return;
@@ -307,8 +306,15 @@ impl Compiler {
         self.expression(block);
 
         self.stack.push(Variable { name: String::from(name), typ });
+    }
 
-        // block.add(Op::Assign(self.stack.len() - 1), self.line());
+    fn assign(&mut self, name: &str, block: &mut Block) {
+        if let Some(slot) = self.find_local(&name, block) {
+            self.expression(block);
+            block.add(Op::Assign(slot), self.line());
+        } else {
+            error!(self, format!("Using undefined variable {}.", name));
+        }
     }
 
     fn statement(&mut self, block: &mut Block) {
@@ -319,7 +325,6 @@ impl Compiler {
                 self.eat();
                 self.expression(block);
                 block.add(Op::Print, self.line());
-                expect!(self, Token::Newline, "Expect newline after expression.");
             },
 
             (Token::Identifier(name), Token::Identifier(typ), Token::ColonEqual, _) => {
@@ -331,22 +336,28 @@ impl Compiler {
                 } else {
                     error!(self, format!("Failed to parse type '{}'.", typ));
                 }
-                expect!(self, Token::Newline, "Expect newline after expression.");
             }
 
             (Token::Identifier(name), Token::ColonEqual, _, _) => {
                 self.eat();
                 self.eat();
                 self.define_variable(&name, Type::UnkownType, block);
-                expect!(self, Token::Newline, "Expect newline after expression.");
             }
+
+            (Token::Identifier(name), Token::Equal, _, _) => {
+                self.eat();
+                self.eat();
+                self.assign(&name, block);
+            }
+
+            (Token::Newline, _, _, _) => {}
 
             _ => {
                 self.expression(block);
                 block.add(Op::Pop, self.line());
-                expect!(self, Token::Newline, "Expect newline after expression.");
             }
         }
+        expect!(self, Token::Newline, "Expect newline after expression.");
     }
 
     pub fn compile(&mut self, name: &str, file: &Path) -> Result<Block, Vec<Error>> {
