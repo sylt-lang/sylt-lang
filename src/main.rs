@@ -27,13 +27,27 @@ fn run_file(path: &Path) -> Result<(), Vec<Error>> {
         Ok(block) => vm::run_block(block).or_else(|e| Err(vec![e])),
         Err(errors) => Err(errors),
     }
-
 }
 
 #[cfg(test)]
 mod tests {
     use super::run_file;
+    use crate::error::{Error, ErrorKind};
     use std::path::Path;
+
+    #[test]
+    fn unreachable_token() {
+        let file = Path::new("tests/unreachable.tdy");
+        assert!(matches!(
+            run_file(&file).unwrap_err().as_slice(),
+            &[Error {
+                kind: ErrorKind::Unreachable,
+                file: _,
+                line: _,
+                message: _,
+            }]
+        ));
+    }
 
     macro_rules! test_file {
         ($fn:ident, $path:literal) => {
@@ -44,7 +58,6 @@ mod tests {
             }
         };
     }
-
     test_file!(order_of_operations, "tests/order-of-operations.tdy");
     test_file!(variables, "tests/variables.tdy");
     test_file!(scoping, "tests/scoping.tdy");
