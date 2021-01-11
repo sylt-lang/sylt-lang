@@ -35,15 +35,16 @@ mod tests {
     use super::run_file;
     use std::path::Path;
 
-    #[test]
-    fn order_of_operations() {
-        let file = Path::new("tests/order-of-operations.tdy");
-        assert!(run_file(&file).is_ok());
+    macro_rules! test_file {
+        ($fn:ident, $path:literal) => {
+            #[test]
+            fn $fn() {
+                let file = Path::new($path);
+                assert!(run_file(&file).is_ok());
+            }
+        };
     }
 
-    #[test]
-    fn variables() {
-        let file = Path::new("tests/variables.tdy");
-        assert!(run_file(&file).is_ok());
-    }
+    test_file!(order_of_operations, "tests/order-of-operations.tdy");
+    test_file!(variables, "tests/variables.tdy");
 }
