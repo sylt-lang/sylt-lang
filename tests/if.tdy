@@ -1,0 +1,29 @@
+a int := 0
+res int := 0
+
+if 1 == 2 {
+    <!>
+}
+
+a = 1
+if a == 0 {
+    <!>
+}
+
+a = 1
+res = 0
+if a == 1 {
+    res = 1
+}
+res <=> 1
+
+a = 1
+res = 0
+if a == 0 {
+    <!>
+} else if a == 1 {
+    res = 1
+} else {
+    <!>
+}
+res <=> 1

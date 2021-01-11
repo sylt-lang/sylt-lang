@@ -76,4 +76,5 @@ mod tests {
     test_file!(order_of_operations, "tests/order-of-operations.tdy");
     test_file!(variables, "tests/variables.tdy");
     test_file!(scoping, "tests/scoping.tdy");
+    test_file!(ifs, "tests/if.tdy");
 }
