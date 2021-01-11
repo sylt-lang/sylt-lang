@@ -6,6 +6,7 @@ mod vm;
 mod compiler;
 
 use error::Error;
+use tokenizer::TokenStream;
 
 fn main() {
     let file = file_from_args().unwrap_or_else(|| Path::new("tests/simple.tdy").to_owned());
@@ -22,7 +23,14 @@ fn file_from_args() -> Option<PathBuf> {
 }
 
 fn run_file(path: &Path) -> Result<(), Vec<Error>> {
-    let tokens = tokenizer::file_to_tokens(path);
+    run(tokenizer::file_to_tokens(path), path)
+}
+
+fn run_string(s: &str) -> Result<(), Vec<Error>> {
+    run(tokenizer::string_to_tokens(s), Path::new("builtin"))
+}
+
+fn run(tokens: TokenStream, path: &Path) -> Result<(), Vec<Error>> {
     match compiler::compile("main", path, tokens) {
         Ok(block) => vm::run_block(block).or_else(|e| Err(vec![e])),
         Err(errors) => Err(errors),
@@ -31,22 +39,29 @@ fn run_file(path: &Path) -> Result<(), Vec<Error>> {
 
 #[cfg(test)]
 mod tests {
-    use super::run_file;
+    use super::{run_file, run_string};
     use crate::error::{Error, ErrorKind};
     use std::path::Path;
 
+    macro_rules! assert_errs {
+        ($result:expr, [ $( $kind:pat ),* ]) => {
+            println!("{} => {:?}", stringify!($result), $result);
+            assert!(matches!(
+                $result.unwrap_err().as_slice(),
+                &[$(Error {
+                    kind: $kind,
+                    file: _,
+                    line: _,
+                    message: _,
+                },
+                )*]
+            ))
+        };
+    }
+
     #[test]
     fn unreachable_token() {
-        let file = Path::new("tests/unreachable.tdy");
-        assert!(matches!(
-            run_file(&file).unwrap_err().as_slice(),
-            &[Error {
-                kind: ErrorKind::Unreachable,
-                file: _,
-                line: _,
-                message: _,
-            }]
-        ));
+        assert_errs!(run_string("<!>\n"), [ErrorKind::Unreachable]);
     }
 
     macro_rules! test_file {

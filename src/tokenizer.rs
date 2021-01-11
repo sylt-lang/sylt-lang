@@ -125,8 +125,7 @@ pub enum Token {
 pub type PlacedToken = (Token, usize);
 pub type TokenStream = Vec<PlacedToken>;
 
-pub fn file_to_tokens(file: &Path) -> TokenStream {
-    let content = fs::read_to_string(file).unwrap();
+pub fn string_to_tokens(content: &str) -> TokenStream {
     let lexer = Token::lexer(&content);
 
     let mut placed_tokens = lexer.spanned().peekable();
@@ -150,6 +149,10 @@ pub fn file_to_tokens(file: &Path) -> TokenStream {
     }
 
     lined_tokens
+}
+
+pub fn file_to_tokens(file: &Path) -> TokenStream {
+    string_to_tokens(&fs::read_to_string(file).unwrap())
 }
 
 #[cfg(test)]
