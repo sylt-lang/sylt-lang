@@ -20,6 +20,8 @@ pub enum Token {
 
     #[token("if")]
     If,
+    #[token("else")]
+    Else,
     #[token("for")]
     For,
     #[token("in")]
@@ -64,8 +66,11 @@ pub enum Token {
     EqualEqual,
     #[token("!=")]
     NotEqual,
+
     #[token("<=>")]
     AssertEqual,
+    #[token("<!>")]
+    Unreachable,
 
     #[token("(")]
     LeftParen,

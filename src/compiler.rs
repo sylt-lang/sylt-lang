@@ -347,6 +347,29 @@ impl Compiler {
         expect!(self, Token::RightBrace, "Expected '}' at end of block.");
     }
 
+    fn if_statment(&mut self, block: &mut Block) {
+        expect!(self, Token::If, "Expected 'if' at start of if-statement.");
+        self.expression(block);
+        let jump = block.add(Op::Illegal, self.line());
+        self.scope(block);
+
+        if Token::Else == self.peek() {
+            let else_jmp = block.add(Op::Illegal, self.line());
+            block.patch(Op::JmpFalse(block.curr()), jump);
+
+            self.eat();
+            match self.peek() {
+                Token::If => self.if_statment(block),
+                Token::LeftBrace => self.scope(block),
+                _ => error!(self, "Epected 'if' or '{' after else."),
+            }
+            block.patch(Op::Jmp(block.curr()), else_jmp);
+        } else {
+            block.patch(Op::JmpFalse(block.curr()), jump);
+        }
+
+    }
+
     fn statement(&mut self, block: &mut Block) {
         self.clear_panic();
 
@@ -381,11 +404,7 @@ impl Compiler {
             }
 
             (Token::If, _, _, _) => {
-                self.eat();
-                self.expression(block);
-                let jump = block.add(Op::Illegal, self.line());
-                self.scope(block);
-                block.patch(Op::JmpFalse(block.curr()), jump);
+                self.if_statment(block);
             }
 
             (Token::LeftBrace, _, _, _) => {

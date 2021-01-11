@@ -13,19 +13,12 @@
 // print d
 // print c
 
-a int := 0
-b int := 3
-{
-    a int := a + 1
-    print a
-
-    {
-        b int := 2
-        print b
-    }
-    print b
+a int := 2
+if a == 0 {
+    print 0
+} else if a == 1 {
+    print 1
+} else {
+    print 2
 }
-a = 4
-print a
-
 // 1, 2, 3, 4
