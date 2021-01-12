@@ -128,8 +128,10 @@ pub fn run_block(block: Block) -> Result<(), Error> {
 
 impl VM {
     fn pop_twice(&mut self) -> (Value, Value) {
-        let (a, b) = (self.stack.pop().unwrap(), self.stack.pop().unwrap());
-        (b, a)
+        let len = self.stack.len();
+        let res = (self.stack[len-2].clone(), self.stack[len-1].clone());
+        self.stack.truncate(len - 2);
+        res
     }
 
     fn _peek_up(&self, amount: usize) -> Option<&Value> {
