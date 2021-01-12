@@ -378,14 +378,20 @@ impl Compiler {
     fn statement(&mut self, block: &mut Block) {
         self.clear_panic();
 
+        macro_rules! tokens {
+            ($( $token:pat ),*) => {
+                ($( $token , )* ..)
+            };
+        }
+
         match self.peek_four() {
-            (Token::Print, _, _, _) => {
+            tokens!(Token::Print) => {
                 self.eat();
                 self.expression(block);
                 block.add(Op::Print, self.line());
             },
 
-            (Token::Identifier(name), Token::Identifier(typ), Token::ColonEqual, _) => {
+            tokens!(Token::Identifier(name), Token::Identifier(typ), Token::ColonEqual) => {
                 self.eat();
                 self.eat();
                 self.eat();
@@ -396,32 +402,32 @@ impl Compiler {
                 }
             }
 
-            (Token::Identifier(name), Token::ColonEqual, _, _) => {
+            tokens!(Token::Identifier(name), Token::ColonEqual) => {
                 self.eat();
                 self.eat();
                 self.define_variable(&name, Type::UnkownType, block);
             }
 
-            (Token::Identifier(name), Token::Equal, _, _) => {
+            tokens!(Token::Identifier(name), Token::Equal) => {
                 self.eat();
                 self.eat();
                 self.assign(&name, block);
             }
 
-            (Token::If, _, _, _) => {
+            tokens!(Token::If) => {
                 self.if_statment(block);
             }
 
-            (Token::Unreachable, _, _, _) => {
+            tokens!(Token::Unreachable) => {
                 self.eat();
                 block.add(Op::Unreachable, self.line());
             }
 
-            (Token::LeftBrace, _, _, _) => {
+            tokens!(Token::LeftBrace) => {
                 self.scope(block);
             }
 
-            (Token::Newline, _, _, _) => {}
+            tokens!(Token::Newline) => {}
 
             _ => {
                 self.expression(block);
