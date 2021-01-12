@@ -13,6 +13,12 @@ name = "tihdy"
 logos = "0.11.4"
 owo-colors = { git="https://github.com/FredTheDino/owo-colors.git" }
 
+criterion = { version = "0.3", optional = true }
+
 [profile.release]
 debug = true
 lto = "thin"
+
+[[bench]]
+name = "tihdy_benchmark"
+harness = false
