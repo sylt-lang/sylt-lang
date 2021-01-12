@@ -386,7 +386,7 @@ impl Compiler {
 
         // Definition
         match self.peek_four() {
-            (Token::Identifier(name), Token::Identifier(typ), Token::ColonEqual, _) => {
+            (Token::Identifier(name), Token::Identifier(typ), Token::ColonEqual, ..) => {
                 self.eat();
                 self.eat();
                 self.eat();
@@ -397,11 +397,13 @@ impl Compiler {
                 }
             }
 
-            (Token::Identifier(name), Token::ColonEqual, _, _) => {
+            (Token::Identifier(name), Token::ColonEqual, ..) => {
                 self.eat();
                 self.eat();
                 self.define_variable(&name, Type::UnkownType, block);
             }
+
+            (Token::Comma, ..) => {}
 
             _ => { error!(self, "Expected definition at start of for-loop."); }
         }
