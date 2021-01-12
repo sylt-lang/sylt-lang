@@ -13,12 +13,28 @@
 // print d
 // print c
 
-a int := 2
-if a == 0 {
-    print "123"
-} else if a == 1 {
-    print "BCD"
-} else {
-    print "ABC"
+
+for a := 0, a >= 0, a = a - 1 {
+    if a == 2 {
+        continue
+    }
+    print a
 }
+
+for a := 0, a >= 0, a = a - 1 {
+    if a == 2 {
+        continue
+    }
+    print a
+}
+
+a = 0
+
+fiv a in something {
+}
+
+something.each((x) -> {
+
+}
+
 // 1, 2, 3, 4

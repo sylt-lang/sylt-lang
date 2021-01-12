@@ -373,6 +373,38 @@ impl Compiler {
             block.patch(Op::JmpFalse(block.curr()), jump);
         }
 
+        self.expression(block);
+        self.scope(block);
+
+        // Loop variable
+        block.add(Op::Pop, self.line());
+    }
+
+    fn for(&mut self, block: &mut Block) {
+        expect!(self, Token::For, "Expected 'for' at start of for-loop.");
+
+        self.level += 1;
+        let h = self.stack.len();
+
+        match self.peek_four() {
+            (Token::Identifier(name), Token::Identifier(typ), Token::ColonEqual, _) => {
+                self.eat();
+                self.eat();
+                self.eat();
+                if let Ok(typ) = Type::try_from(typ.as_ref()) {
+                    self.define_variable(&name, typ, block);
+                } else {
+                    error!(self, format!("Failed to parse type '{}'.", typ));
+                }
+            }
+
+            (Token::Identifier(name), Token::ColonEqual, _, _) => {
+                self.eat();
+                self.eat();
+                self.define_variable(&name, Type::UnkownType, block);
+            }
+        }
+
     }
 
     fn statement(&mut self, block: &mut Block) {
@@ -410,6 +442,10 @@ impl Compiler {
 
             (Token::If, _, _, _) => {
                 self.if_statment(block);
+            }
+
+            (Token::For, _, _, _) => {
+                self.for(block);
             }
 
             (Token::Unreachable, _, _, _) => {
