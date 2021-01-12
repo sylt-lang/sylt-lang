@@ -380,8 +380,13 @@ impl Compiler {
         }
     }
 
+    //TODO de-complexify
     fn for_loop(&mut self, block: &mut Block) {
         expect!(self, Token::For, "Expected 'for' at start of for-loop.");
+
+        // push outer scope for loop variable
+        self.level += 1;
+        let h = self.stack.len();
 
         // Definition
         match self.peek_four() {
@@ -433,8 +438,12 @@ impl Compiler {
 
         block.patch(Op::JmpFalse(block.curr()), cond_out);
 
-        // Loop variable
-        block.add(Op::Pop, self.line());
+        // pop outer scope
+        self.level -= 1;
+        for _ in h..self.stack.len() {
+            block.add(Op::Pop, self.line());
+        }
+        self.stack.truncate(h);
     }
 
     fn statement(&mut self, block: &mut Block) {

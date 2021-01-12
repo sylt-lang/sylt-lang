@@ -64,4 +64,5 @@ mod tests {
     test_file!(variables, "tests/variables.tdy");
     test_file!(scoping, "tests/scoping.tdy");
     test_file!(if_, "tests/if.tdy");
+    test_file!(for_, "tests/for.tdy");
 }
