@@ -338,6 +338,7 @@ impl Compiler {
 
         while !matches!(self.peek(), Token::RightBrace | Token::EOF) {
             self.statement(block);
+            expect!(self, Token::Newline, "Expect newline after expression.");
         }
 
         self.level -= 1;
@@ -373,6 +374,56 @@ impl Compiler {
             block.patch(Op::JmpFalse(block.curr()), jump);
         }
 
+        self.expression(block);
+        self.scope(block);
+
+        // Loop variable
+        block.add(Op::Pop, self.line());
+    }
+
+    fn for_loop(&mut self, block: &mut Block) {
+        expect!(self, Token::For, "Expected 'for' at start of for-loop.");
+
+        // Definition
+        match self.peek_four() {
+            (Token::Identifier(name), Token::Identifier(typ), Token::ColonEqual, _) => {
+                self.eat();
+                self.eat();
+                self.eat();
+                if let Ok(typ) = Type::try_from(typ.as_ref()) {
+                    self.define_variable(&name, typ, block);
+                } else {
+                    error!(self, format!("Failed to parse type '{}'.", typ));
+                }
+            }
+
+            (Token::Identifier(name), Token::ColonEqual, _, _) => {
+                self.eat();
+                self.eat();
+                self.define_variable(&name, Type::UnkownType, block);
+            }
+
+            _ => { error!(self, "Expected definition at start of for-loop."); }
+        }
+
+        expect!(self, Token::Comma, "Expect ',' between initalizer and loop expression.");
+
+        let cond = block.curr();
+        self.expression(block);
+        let cond_out = block.add(Op::Illegal, self.line());
+        let cond_cont = block.add(Op::Illegal, self.line());
+        expect!(self, Token::Comma, "Expect ',' between initalizer and loop expression.");
+
+        let inc = block.curr();
+        self.statement(block);
+        block.add(Op::Jmp(cond), self.line());
+
+        // patch_jmp!(Op::Jmp, cond_cont => block.curr());
+        block.patch(Op::Jmp(block.curr()), cond_cont);
+        self.scope(block);
+        block.add(Op::Jmp(inc), self.line());
+
+        block.patch(Op::JmpFalse(block.curr()), cond_out);
     }
 
     fn statement(&mut self, block: &mut Block) {
@@ -418,6 +469,10 @@ impl Compiler {
                 self.if_statment(block);
             }
 
+            tokens!(Token::For) => {
+                self.for_loop(block);
+            }
+
             tokens!(Token::Unreachable) => {
                 self.eat();
                 block.add(Op::Unreachable, self.line());
@@ -434,7 +489,7 @@ impl Compiler {
                 block.add(Op::Pop, self.line());
             }
         }
-        expect!(self, Token::Newline, "Expect newline after expression.");
+
     }
 
     pub fn compile(&mut self, name: &str, file: &Path) -> Result<Block, Vec<Error>> {
@@ -442,6 +497,7 @@ impl Compiler {
 
         while self.peek() != Token::EOF {
             self.statement(&mut block);
+            expect!(self, Token::Newline, "Expect newline after expression.");
         }
         block.add(Op::Return, self.line());
 

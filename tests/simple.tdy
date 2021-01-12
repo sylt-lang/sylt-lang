@@ -13,12 +13,26 @@
 // print d
 // print c
 
-a int := 2
-if a == 0 {
-    print "123"
-} else if a == 1 {
-    print "BCD"
-} else {
-    print "ABC"
+for a := 0, a < 10, print a {
+    print a
+    a = a + 1
 }
+
 // 1, 2, 3, 4
+
+
+//
+//  === main ===
+// | Constant(Int(0))
+// | ReadLocal(0)
+// | Constant(Int(10))
+// | Less
+// | JmpFalse(12)
+// | Jmp(11)
+// | Jmp(1)
+// | ReadLocal(0)
+// | Constant(Int(1))
+// | Add
+// | Assign(0)
+// | Jmp(7)
+// | Return

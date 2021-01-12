@@ -103,6 +103,8 @@ pub enum Token {
     #[token("!")]
     Not,
 
+    #[token(",")]
+    Comma,
     #[token(".")]
     Dot,
     #[token("->")]
