@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::collections::HashMap;
 
 use crate::error::{Error, ErrorKind};
@@ -17,7 +18,7 @@ pub enum Value {
     Float(f64),
     Int(i64),
     Bool(bool),
-    String(String),
+    String(Rc<String>),
 }
 
 #[derive(Debug, Clone)]
@@ -153,7 +154,7 @@ impl VM {
     }
 
     pub fn run(&mut self) -> Result<(), Error>{
-        const PRINT_WHILE_RUNNING: bool = false;
+        const PRINT_WHILE_RUNNING: bool = true;
         const PRINT_BLOCK: bool = true;
 
         if PRINT_BLOCK {
@@ -167,8 +168,14 @@ impl VM {
         loop {
             if PRINT_WHILE_RUNNING {
                 print!("    [");
-                for s in self.stack.iter() {
-                    print!("{:?} ", s);
+                for (i, s) in self.stack.iter().enumerate() {
+                    if i != 0 {
+                        print!(" ");
+                    }
+                    match s {
+                        Value::String(rc) => print!("{:?}<{}>", rc, Rc::strong_count(rc)),
+                        _ => print!("{:?}", s),
+                    }
                 }
                 println!("]");
 
@@ -205,7 +212,9 @@ impl VM {
                     match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b + a)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b + a)),
-                        (Value::String(a), Value::String(b)) => self.stack.push(Value::String(format!("{}{}", a, b))),
+                        (Value::String(a), Value::String(b)) => {
+                            self.stack.push(Value::String(Rc::from(format!("{}{}", a, b))))
+                        }
                         (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
                     }
                 }

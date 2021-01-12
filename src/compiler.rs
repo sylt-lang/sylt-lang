@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::convert::TryFrom;
 
 use crate::tokenizer::{Token, TokenStream};
@@ -225,7 +226,7 @@ impl Compiler {
             Token::Float(f) => { Value::Float(f) },
             Token::Int(i) => { Value::Int(i) }
             Token::Bool(b) => { Value::Bool(b) }
-            Token::String(s) => { Value::String(s.clone()) }
+            Token::String(s) => { Value::String(Rc::from(s)) }
             _ => { error!(self, "Cannot parse value."); Value::Bool(false) }
         };
         block.add(Op::Constant(value), self.line());
