@@ -77,23 +77,45 @@ impl Block {
         }
     }
 
-    pub fn line(&mut self, token_position: usize) {
+    pub fn add_line(&mut self, token_position: usize) {
         if token_position != self.last_line_offset {
             self.line_offsets.insert(self.curr(), token_position);
             self.last_line_offset = token_position;
         }
     }
 
+    fn line(&self, ip: usize) -> usize {
+        for i in (0..=ip).rev() {
+            if let Some(line) = self.line_offsets.get(&i) {
+                return *line;
+            }
+        }
+        return 0;
+    }
+
+    pub fn debug_print(&self) {
+        println!("     === {} ===", self.name.blue());
+        for (i, s) in self.ops.iter().enumerate() {
+            if self.line_offsets.contains_key(&i) {
+                print!("{:5} ", self.line_offsets[&i].red());
+            } else {
+                print!("    {} ", "|".red());
+            }
+            println!("{:05} {:?}", i.blue(), s);
+        }
+        println!("");
+    }
+
     pub fn add(&mut self, op: Op, token_position: usize) -> usize {
         let len = self.curr();
-        self.line(token_position);
+        self.add_line(token_position);
         self.ops.push(op);
         len
     }
 
     pub fn add_from(&mut self, ops: &[Op], token_position: usize) -> usize {
         let len = self.curr();
-        self.line(token_position);
+        self.add_line(token_position);
         self.ops.extend_from_slice(ops);
         len
     }
@@ -138,20 +160,11 @@ impl VM {
         self.stack.get(self.stack.len() - amount)
     }
 
-    fn line(&self) -> usize {
-        for i in (0..=self.ip).rev() {
-            if let Some(line) = self.block.line_offsets.get(&i) {
-                return *line;
-            }
-        }
-        return 0;
-    }
-
     fn error(&self, kind: ErrorKind, message: Option<String>) -> Error {
         Error {
             kind,
             file: self.block.file.clone(),
-            line: self.line(),
+            line: self.block.line(self.ip),
             message,
         }
     }
@@ -161,16 +174,7 @@ impl VM {
         const PRINT_BLOCK: bool = true;
 
         if PRINT_BLOCK {
-            println!("     === {} ===", self.block.name.blue());
-            for (i, s) in self.block.ops.iter().enumerate() {
-                if self.block.line_offsets.contains_key(&i) {
-                    print!("{:5} ", self.block.line_offsets[&i].red());
-                } else {
-                    print!("    {} ", "|".red());
-                }
-                println!("{:05} {:?}", i.blue(), s);
-            }
-            println!("");
+            self.block.debug_print();
         }
 
         loop {
@@ -187,7 +191,7 @@ impl VM {
                 }
                 println!("]");
 
-                println!("{:5} {:05} {:?}", self.line().red(), self.ip.blue(), self.block.ops[self.ip]);
+                println!("{:5} {:05} {:?}", self.block.line(self.ip).red(), self.ip.blue(), self.block.ops[self.ip]);
             }
 
             let op = self.block.ops[self.ip].clone();

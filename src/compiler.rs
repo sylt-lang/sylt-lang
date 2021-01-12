@@ -339,7 +339,11 @@ impl Compiler {
 
         while !matches!(self.peek(), Token::RightBrace | Token::EOF) {
             self.statement(block);
-            expect!(self, Token::Newline, "Expect newline after expression.");
+            match self.peek() {
+                Token::Newline => { self.eat(); },
+                Token::RightBrace => { break; },
+                _ => { error!(self, "Expect newline after statement."); },
+            }
         }
 
         self.level -= 1;
@@ -374,12 +378,6 @@ impl Compiler {
         } else {
             block.patch(Op::JmpFalse(block.curr()), jump);
         }
-
-        self.expression(block);
-        self.scope(block);
-
-        // Loop variable
-        block.add(Op::Pop, self.line());
     }
 
     fn for_loop(&mut self, block: &mut Block) {
@@ -434,6 +432,9 @@ impl Compiler {
         block.add(Op::Jmp(inc), self.line());
 
         block.patch(Op::JmpFalse(block.curr()), cond_out);
+
+        // Loop variable
+        block.add(Op::Pop, self.line());
     }
 
     fn statement(&mut self, block: &mut Block) {
