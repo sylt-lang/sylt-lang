@@ -415,7 +415,14 @@ impl Compiler {
         expect!(self, Token::Comma, "Expect ',' between initalizer and loop expression.");
 
         let inc = block.curr();
-        self.statement(block);
+        {
+            let h = self.stack.len();
+            self.statement(block);
+            for _ in h..self.stack.len() {
+                block.add(Op::Pop, self.line());
+            }
+            self.stack.truncate(h);
+        }
         block.add(Op::Jmp(cond), self.line());
 
         // patch_jmp!(Op::Jmp, cond_cont => block.curr());
