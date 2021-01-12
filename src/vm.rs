@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::collections::HashMap;
+use owo_colors::OwoColorize;
 
 use crate::error::{Error, ErrorKind};
 
@@ -135,20 +136,20 @@ impl VM {
         self.stack.get(self.stack.len() - amount)
     }
 
-    fn error(&self, kind: ErrorKind, message: Option<String>) -> Error {
-        let find_line = || {
-            for i in (0..=self.ip).rev() {
-                if let Some(line) = self.block.line_offsets.get(&i) {
-                    return *line;
-                }
+    fn line(&self) -> usize {
+        for i in (0..=self.ip).rev() {
+            if let Some(line) = self.block.line_offsets.get(&i) {
+                return *line;
             }
-            return 0;
-        };
+        }
+        return 0;
+    }
 
+    fn error(&self, kind: ErrorKind, message: Option<String>) -> Error {
         Error {
             kind,
             file: self.block.file.clone(),
-            line: find_line(),
+            line: self.line(),
             message,
         }
     }
@@ -158,9 +159,14 @@ impl VM {
         const PRINT_BLOCK: bool = true;
 
         if PRINT_BLOCK {
-            println!(" === {} ===", self.block.name);
-            for s in self.block.ops.iter() {
-                println!("| {:?}", s);
+            println!("     === {} ===", self.block.name.blue());
+            for (i, s) in self.block.ops.iter().enumerate() {
+                if self.block.line_offsets.contains_key(&i) {
+                    print!("{:5} ", self.block.line_offsets[&i].red());
+                } else {
+                    print!("    {} ", "|".red());
+                }
+                println!("{:05} {:?}", i.blue(), s);
             }
             println!("");
         }
@@ -173,13 +179,13 @@ impl VM {
                         print!(" ");
                     }
                     match s {
-                        Value::String(rc) => print!("{:?}<{}>", rc, Rc::strong_count(rc)),
-                        _ => print!("{:?}", s),
+                        Value::String(rc) => print!("{:?}<{}>", rc.green(), Rc::strong_count(rc)),
+                        _ => print!("{:?}", s.green()),
                     }
                 }
                 println!("]");
 
-                println!("{:?}", self.block.ops[self.ip]);
+                println!("{:5} {:05} {:?}", self.line().red(), self.ip.blue(), self.block.ops[self.ip]);
             }
 
             let op = self.block.ops[self.ip].clone();

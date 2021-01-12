@@ -37,6 +37,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "owo-colors"
+version = "1.2.1"
+source = "git+https://github.com/FredTheDino/owo-colors.git#4ca8cc3da368d17831af67b85fa33215deb4570f"
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -76,6 +81,7 @@ name = "tihdy"
 version = "0.1.0"
 dependencies = [
  "logos",
+ "owo-colors",
 ]
 
 [[package]]
