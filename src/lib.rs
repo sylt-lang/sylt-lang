@@ -19,7 +19,7 @@ pub fn run_string(s: &str) -> Result<(), Vec<Error>> {
 
 pub fn run(tokens: TokenStream, path: &Path) -> Result<(), Vec<Error>> {
     match compiler::compile("main", path, tokens) {
-        Ok(block) => vm::run_block(block).or_else(|e| Err(vec![e])),
+        Ok(block) => vm::run_block(&block).or_else(|e| Err(vec![e])),
         Err(errors) => Err(errors),
     }
 }

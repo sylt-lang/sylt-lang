@@ -130,14 +130,14 @@ impl Block {
 }
 
 #[derive(Debug)]
-pub struct VM {
+pub struct VM<'a> {
     stack: Vec<Value>,
 
-    block: Block,
+    block: &'a Block,
     ip: usize,
 }
 
-pub fn run_block(block: Block) -> Result<(), Error> {
+pub fn run_block<'a> (block: &'a Block) -> Result<(), Error> {
     let mut vm = VM {
         stack: Vec::new(),
 
@@ -148,7 +148,7 @@ pub fn run_block(block: Block) -> Result<(), Error> {
     vm.run()
 }
 
-impl VM {
+impl VM<'_> {
     fn pop_twice(&mut self) -> (Value, Value) {
         let len = self.stack.len();
         let res = (self.stack[len-2].clone(), self.stack[len-1].clone());
