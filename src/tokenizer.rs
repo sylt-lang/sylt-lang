@@ -33,6 +33,9 @@ pub enum Token {
     #[token("print")]
     Print,
 
+    #[token("ret")]
+    Ret,
+
     #[token("+")]
     Plus,
     #[token("++")]
@@ -96,8 +99,8 @@ pub enum Token {
     #[token("<=")]
     LessEqual,
 
-    #[token("|")]
-    Pipe,
+    #[token("fn")]
+    Fn,
 
     #[token("&&")]
     And,

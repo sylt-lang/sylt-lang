@@ -1,0 +1,41 @@
+// Simplest
+f := fn {
+    print 1
+}
+f() <=> true
+
+// Simple
+f2 := fn a: int {
+    print a
+}
+f2(2) <=> true
+
+// Return value
+f3 := fn -> int {
+    ret 3
+}
+print f3()
+f3() <=> 3
+
+// Empty function
+f4 := fn {}
+print f4
+print f4()
+
+// Multiple arguments
+adder := fn a: int, b: int -> int {
+    ret a + b
+}
+adder(1, 2) <=> 3
+
+// Passing functions
+h := fn {
+    print "h"
+    ret 1
+}
+
+g := fn f: int {
+    ret f()
+}
+
+g(h) <=> 1

@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::rc::Rc;
 
 pub mod compiler;
 pub mod tokenizer;
@@ -19,7 +20,7 @@ pub fn run_string(s: &str) -> Result<(), Vec<Error>> {
 
 pub fn run(tokens: TokenStream, path: &Path) -> Result<(), Vec<Error>> {
     match compiler::compile("main", path, tokens) {
-        Ok(block) => vm::run_block(&block).or_else(|e| Err(vec![e])),
+        Ok(block) => vm::run_block(Rc::new(block)).or_else(|e| Err(vec![e])),
         Err(errors) => Err(errors),
     }
 }
@@ -60,9 +61,11 @@ mod tests {
             }
         };
     }
+
     test_file!(order_of_operations, "tests/order-of-operations.tdy");
     test_file!(variables, "tests/variables.tdy");
     test_file!(scoping, "tests/scoping.tdy");
     test_file!(if_, "tests/if.tdy");
     test_file!(for_, "tests/for.tdy");
+    test_file!(fun, "tests/fun.tdy");
 }

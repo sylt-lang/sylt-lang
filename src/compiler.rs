@@ -47,7 +47,7 @@ nextable_enum!(Prec {
     Factor
 });
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 enum Type {
     NoType,
     UnkownType,
@@ -74,7 +74,14 @@ impl TryFrom<&str> for Type {
 struct Variable {
     name: String,
     typ: Type,
-    level: usize,
+    scope: usize,
+    active: bool,
+}
+
+struct Frame {
+    stack: Vec<Variable>,
+    scope: usize,
+    variables_below: usize,
 }
 
 struct Compiler {
@@ -82,11 +89,46 @@ struct Compiler {
     tokens: TokenStream,
     current_file: PathBuf,
 
-    level: usize,
-    stack: Vec<Variable>,
+    frames: Vec<Frame>,
 
     panic: bool,
     errors: Vec<Error>,
+}
+
+macro_rules! push_frame {
+    ($compiler:expr, $block:expr, $code:tt) => {
+        {
+            $compiler.frames.push(Frame {
+                stack: Vec::new(),
+                scope: 0,
+                variables_below: $compiler.frame().variables_below + $compiler.stack().len(),
+            });
+
+            // Return value stored as a variable
+            $compiler.define_variable("", Type::UnkownType, &mut $block).unwrap();
+            $code
+
+            $compiler.frames.pop().unwrap();
+            // The 0th slot is the return value, which is passed out
+            // from functions, and should not be popped.
+            0
+        }
+    };
+}
+
+macro_rules! push_scope {
+    ($compiler:expr, $block:expr, $code:tt) => {
+        let ss = $compiler.stack().len();
+        $compiler.frame_mut().scope += 1;
+
+        $code;
+
+        $compiler.frame_mut().scope -= 1;
+        for _ in ss..$compiler.stack().len() {
+            $block.add(Op::Pop, $compiler.line());
+        }
+        $compiler.stack_mut().truncate(ss);
+    };
 }
 
 impl Compiler {
@@ -96,12 +138,33 @@ impl Compiler {
             tokens,
             current_file: PathBuf::from(current_file),
 
-            level: 0,
-            stack: vec![],
+            frames: vec![Frame {
+                stack: Vec::new(),
+                scope: 0,
+                variables_below: 0,
+            }],
 
             panic: false,
             errors: vec![],
         }
+    }
+
+    fn frame(&self) -> &Frame {
+        let last = self.frames.len() - 1;
+        &self.frames[last]
+    }
+
+    fn frame_mut(&mut self) -> &mut Frame {
+        let last = self.frames.len() - 1;
+        &mut self.frames[last]
+    }
+
+    fn stack(&self) -> &[Variable] {
+        &self.frame().stack.as_ref()
+    }
+
+    fn stack_mut(&mut self) -> &mut Vec<Variable> {
+        &mut self.frame_mut().stack
     }
 
     fn clear_panic(&mut self) {
@@ -122,10 +185,10 @@ impl Compiler {
         if self.panic { return }
         self.panic = true;
         self.errors.push(Error {
-            kind: kind,
+            kind,
             file: self.current_file.clone(),
             line: self.line(),
-            message: message,
+            message,
         });
     }
 
@@ -216,6 +279,8 @@ impl Compiler {
                 | Token::NotEqual
                 => self.binary(block),
 
+            Token::LeftParen => self.call(block),
+
             _ => { return false; },
         }
         return true;
@@ -260,7 +325,7 @@ impl Compiler {
             Token::Minus => &[Op::Sub],
             Token::Star => &[Op::Mul],
             Token::Slash => &[Op::Div],
-            Token::AssertEqual => &[Op::AssertEqual],
+            Token::AssertEqual => &[Op::Equal, Op::Assert],
             Token::EqualEqual => &[Op::Equal],
             Token::Less => &[Op::Less],
             Token::Greater => &[Op::Greater],
@@ -273,7 +338,10 @@ impl Compiler {
     }
 
     fn expression(&mut self, block: &mut Block) {
-        self.parse_precedence(block, Prec::No);
+        match self.peek_four() {
+            (Token::Fn, ..) => self.function(block),
+            _ => self.parse_precedence(block, Prec::No),
+        }
     }
 
     fn parse_precedence(&mut self, block: &mut Block, precedence: Prec) {
@@ -288,11 +356,105 @@ impl Compiler {
         }
     }
 
-    fn find_local(&self, name: &str, block: &Block) -> Option<(usize, Type, usize)> {
-        self.stack.iter()
-                  .enumerate()
-                  .rev()
-                  .find_map(|x| if x.1.name == name { Some((x.0, x.1.typ, x.1.level)) } else { None} )
+    fn find_local(&self, name: &str, _block: &Block) -> Option<(usize, Type, usize)> {
+        let frame = self.frame();
+        for (slot, var) in frame.stack.iter().enumerate().rev() {
+            if var.name == name && var.active {
+                return Some((slot, var.typ, var.scope));
+            }
+        }
+        None
+    }
+
+    fn call(&mut self, block: &mut Block) {
+        expect!(self, Token::LeftParen, "Expected '(' at start of function call.");
+
+        let mut arity = 0;
+        loop {
+            match self.peek() {
+                Token::EOF => {
+                    error!(self, "Unexpected EOF in function call.");
+                    break;
+                }
+                Token::RightParen => {
+                    self.eat();
+                    break;
+                }
+                _ => {
+                    self.expression(block);
+                    arity += 1;
+                    if !matches!(self.peek(), Token::RightParen) {
+                        expect!(self, Token::Comma, "Expected ',' after argument.");
+                    }
+                }
+            }
+        }
+
+        block.add(Op::Call(arity), self.line());
+
+        for _ in 0..arity {
+            block.add(Op::Pop, self.line());
+        }
+    }
+
+    fn function(&mut self, block: &mut Block) {
+        expect!(self, Token::Fn, "Expected 'fn' at start of function.");
+
+        let name = if !self.stack()[self.stack().len() - 1].active {
+            &self.stack()[self.stack().len() - 1].name
+        } else {
+            "anonumus function"
+        };
+
+        let mut _return_type = None;
+        let mut function_block = Block::new(name, &self.current_file);
+        let arity;
+        let _ret = push_frame!(self, function_block, {
+            loop {
+                match self.peek() {
+                    Token::Identifier(name) => {
+                        self.eat();
+                        expect!(self, Token::Colon, "Expected ':' after parameter name.");
+                        if let Ok(typ) = self.type_ident() {
+                            if let Ok(slot) = self.define_variable(&name, typ, &mut function_block) {
+                                self.stack_mut()[slot].active = true;
+                            }
+                        } else {
+                            error!(self, "Failed to parse parameter type.");
+                        }
+                        if !matches!(self.peek(), Token::Arrow | Token::LeftBrace) {
+                            expect!(self, Token::Comma, "Expected ',' after parameter.");
+                        }
+                    }
+                    Token::LeftBrace => {
+                        _return_type = Some(Type::NoType);
+                        break;
+                    }
+                    Token::Arrow => {
+                        self.eat();
+                        if let Ok(typ) = self.type_ident() {
+                            _return_type = Some(typ);
+                        } else {
+                            error!(self, "Failed to parse return type.");
+                        }
+                        break;
+                    }
+                    _ => {
+                        error!(self, "Expected '->' or more paramters in function definition.");
+                        break;
+                    }
+                }
+            }
+            arity = self.frame().stack.len() - 1;
+
+            self.scope(&mut function_block);
+        });
+
+
+        function_block.add(Op::Constant(Value::Bool(true)), self.line());
+        function_block.add(Op::Return, self.line());
+
+        block.add(Op::Constant(Value::Function(arity, Rc::new(function_block))), self.line());
     }
 
     fn variable_expression(&mut self, block: &mut Block) {
@@ -307,17 +469,32 @@ impl Compiler {
         }
     }
 
-    fn define_variable(&mut self, name: &str, typ: Type, block: &mut Block) {
+    fn define_variable(&mut self, name: &str, typ: Type, block: &mut Block) -> Result<usize, ()> {
         if let Some((_, _, level)) = self.find_local(&name, block) {
-            if level == self.level {
+            if level == self.frame().scope {
                 error!(self, format!("Multiple definitions of {} in this block.", name));
-                return;
+                return Err(());
             }
         }
 
+        let slot = self.stack().len();
+        let scope = self.frame().scope;
+        self.stack_mut().push(Variable {
+            name: String::from(name),
+            typ,
+            scope,
+            active: false
+        });
+        Ok(slot)
+    }
+
+    fn definition_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
+        let slot = self.define_variable(name, typ, block);
         self.expression(block);
 
-        self.stack.push(Variable { name: String::from(name), level: self.level, typ });
+        if let Ok(slot) = slot {
+            self.stack_mut()[slot].active = true;
+        }
     }
 
     fn assign(&mut self, name: &str, block: &mut Block) {
@@ -334,25 +511,16 @@ impl Compiler {
             return;
         }
 
-        self.level += 1;
-        let h = self.stack.len();
-
-        while !matches!(self.peek(), Token::RightBrace | Token::EOF) {
-            self.statement(block);
-            match self.peek() {
-                Token::Newline => { self.eat(); },
-                Token::RightBrace => { break; },
-                _ => { error!(self, "Expect newline after statement."); },
+        push_scope!(self, block, {
+            while !matches!(self.peek(), Token::RightBrace | Token::EOF) {
+                self.statement(block);
+                match self.peek() {
+                    Token::Newline => { self.eat(); },
+                    Token::RightBrace => { break; },
+                    _ => { error!(self, "Expect newline after statement."); },
+                }
             }
-        }
-
-        self.level -= 1;
-
-        for _ in h..self.stack.len() {
-            block.add(Op::Pop, self.line());
-        }
-
-        self.stack.truncate(h);
+        });
 
         expect!(self, Token::RightBrace, "Expected '}' at end of block.");
     }
@@ -384,66 +552,53 @@ impl Compiler {
     fn for_loop(&mut self, block: &mut Block) {
         expect!(self, Token::For, "Expected 'for' at start of for-loop.");
 
-        // push outer scope for loop variable
-        self.level += 1;
-        let h = self.stack.len();
-
-        // Definition
-        match self.peek_four() {
-            (Token::Identifier(name), Token::Identifier(typ), Token::ColonEqual, ..) => {
-                self.eat();
-                self.eat();
-                self.eat();
-                if let Ok(typ) = Type::try_from(typ.as_ref()) {
-                    self.define_variable(&name, typ, block);
-                } else {
-                    error!(self, format!("Failed to parse type '{}'.", typ));
+        push_scope!(self, block, {
+            // Definition
+            match self.peek_four() {
+                (Token::Identifier(name), Token::Identifier(typ), Token::ColonEqual, ..) => {
+                    self.eat();
+                    self.eat();
+                    self.eat();
+                    if let Ok(typ) = Type::try_from(typ.as_ref()) {
+                        self.definition_statement(&name, typ, block);
+                    } else {
+                        error!(self, format!("Failed to parse type '{}'.", typ));
+                    }
                 }
+
+                (Token::Identifier(name), Token::ColonEqual, ..) => {
+                    self.eat();
+                    self.eat();
+                    self.definition_statement(&name, Type::UnkownType, block);
+                }
+
+                (Token::Comma, ..) => {}
+
+                _ => { error!(self, "Expected definition at start of for-loop."); }
             }
 
-            (Token::Identifier(name), Token::ColonEqual, ..) => {
-                self.eat();
-                self.eat();
-                self.define_variable(&name, Type::UnkownType, block);
-            }
+            expect!(self, Token::Comma, "Expect ',' between initalizer and loop expression.");
 
-            (Token::Comma, ..) => {}
+            let cond = block.curr();
+            self.expression(block);
+            let cond_out = block.add(Op::Illegal, self.line());
+            let cond_cont = block.add(Op::Illegal, self.line());
+            expect!(self, Token::Comma, "Expect ',' between initalizer and loop expression.");
 
-            _ => { error!(self, "Expected definition at start of for-loop."); }
-        }
+            let inc = block.curr();
+            push_scope!(self, block, {
+                self.statement(block);
+            });
+            block.add(Op::Jmp(cond), self.line());
 
-        expect!(self, Token::Comma, "Expect ',' between initalizer and loop expression.");
+            // patch_jmp!(Op::Jmp, cond_cont => block.curr());
+            block.patch(Op::Jmp(block.curr()), cond_cont);
+            self.scope(block);
+            block.add(Op::Jmp(inc), self.line());
 
-        let cond = block.curr();
-        self.expression(block);
-        let cond_out = block.add(Op::Illegal, self.line());
-        let cond_cont = block.add(Op::Illegal, self.line());
-        expect!(self, Token::Comma, "Expect ',' between initalizer and loop expression.");
+            block.patch(Op::JmpFalse(block.curr()), cond_out);
 
-        let inc = block.curr();
-        {
-            let h = self.stack.len();
-            self.statement(block);
-            for _ in h..self.stack.len() {
-                block.add(Op::Pop, self.line());
-            }
-            self.stack.truncate(h);
-        }
-        block.add(Op::Jmp(cond), self.line());
-
-        // patch_jmp!(Op::Jmp, cond_cont => block.curr());
-        block.patch(Op::Jmp(block.curr()), cond_cont);
-        self.scope(block);
-        block.add(Op::Jmp(inc), self.line());
-
-        block.patch(Op::JmpFalse(block.curr()), cond_out);
-
-        // pop outer scope
-        self.level -= 1;
-        for _ in h..self.stack.len() {
-            block.add(Op::Pop, self.line());
-        }
-        self.stack.truncate(h);
+        });
     }
 
     fn type_ident(&mut self) -> Result<Type, ()> {
@@ -476,7 +631,7 @@ impl Compiler {
                 self.eat();
                 if let Ok(typ) = self.type_ident() {
                     expect!(self, Token::Equal, "Expected assignment.");
-                    self.define_variable(&name, typ, block);
+                    self.definition_statement(&name, typ, block);
                 } else {
                     error!(self, format!("Expected type found '{:?}'.", self.peek()));
                 }
@@ -485,7 +640,7 @@ impl Compiler {
             tokens!(Token::Identifier(name), Token::ColonEqual) => {
                 self.eat();
                 self.eat();
-                self.define_variable(&name, Type::UnkownType, block);
+                self.definition_statement(&name, Type::UnkownType, block);
             }
 
             tokens!(Token::Identifier(name), Token::Equal) => {
@@ -500,6 +655,12 @@ impl Compiler {
 
             tokens!(Token::For) => {
                 self.for_loop(block);
+            }
+
+            tokens!(Token::Ret) => {
+                self.eat();
+                self.expression(block);
+                block.add(Op::Return, self.line());
             }
 
             tokens!(Token::Unreachable) => {

@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::collections::HashMap;
@@ -14,12 +15,25 @@ macro_rules! error {
     };
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Clone)]
 pub enum Value {
     Float(f64),
     Int(i64),
     Bool(bool),
     String(Rc<String>),
+    Function(usize, Rc<Block>),
+}
+
+impl Debug for Value {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Float(f) => write!(fmt, "(float {})", f),
+            Value::Int(i) => write!(fmt, "(int {})", i),
+            Value::Bool(b) => write!(fmt, "(bool {})", b),
+            Value::String(s) => write!(fmt, "(string \"{}\")", s),
+            Value::Function(arity, block) => write!(fmt, "(func {}-{})", block.name, arity),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -46,12 +60,13 @@ pub enum Op {
     Less,    // <
     Greater, // >
 
-    AssertEqual,
+    Assert,
     Unreachable,
 
     ReadLocal(usize),
     Assign(usize),
 
+    Call(usize),
 
     Print,
     Return,
@@ -130,25 +145,32 @@ impl Block {
 }
 
 #[derive(Debug)]
-pub struct VM<'a> {
-    stack: Vec<Value>,
-
-    block: &'a Block,
+struct Frame {
+    stack_offset: usize,
+    block: Rc<Block>,
     ip: usize,
 }
 
-pub fn run_block<'a> (block: &'a Block) -> Result<(), Error> {
+#[derive(Debug)]
+pub struct VM {
+    stack: Vec<Value>,
+    frames: Vec<Frame>,
+}
+
+pub fn run_block(block: Rc<Block>) -> Result<(), Error> {
     let mut vm = VM {
         stack: Vec::new(),
-
-        block,
-        ip: 0,
+        frames: vec![Frame {
+            stack_offset: 0,
+            block,
+            ip: 0
+        }],
     };
 
     vm.run()
 }
 
-impl VM<'_> {
+impl VM {
     fn pop_twice(&mut self) -> (Value, Value) {
         let len = self.stack.len();
         let res = (self.stack[len-2].clone(), self.stack[len-1].clone());
@@ -160,41 +182,54 @@ impl VM<'_> {
         self.stack.get(self.stack.len() - amount)
     }
 
+    fn frame(&self) -> &Frame {
+        let last = self.frames.len() - 1;
+        &self.frames[last]
+    }
+
+    fn frame_mut(&mut self) -> &mut Frame {
+        let last = self.frames.len() - 1;
+        &mut self.frames[last]
+    }
+
     fn error(&self, kind: ErrorKind, message: Option<String>) -> Error {
+        let frame = self.frames.last().unwrap();
         Error {
             kind,
-            file: self.block.file.clone(),
-            line: self.block.line(self.ip),
+            file: frame.block.file.clone(),
+            line: frame.block.line(frame.ip),
             message,
         }
     }
 
     pub fn run(&mut self) -> Result<(), Error>{
+        //TODO better system so tests dont print
         const PRINT_WHILE_RUNNING: bool = true;
         const PRINT_BLOCK: bool = true;
 
         if PRINT_BLOCK {
-            self.block.debug_print();
+            self.frame().block.debug_print();
         }
 
         loop {
             if PRINT_WHILE_RUNNING {
-                print!("    [");
-                for (i, s) in self.stack.iter().enumerate() {
+                let start = self.frame().stack_offset;
+                print!("    {:3} [", start);
+                for (i, s) in self.stack.iter().skip(start).enumerate() {
                     if i != 0 {
                         print!(" ");
                     }
-                    match s {
-                        Value::String(rc) => print!("{:?}<{}>", rc.green(), Rc::strong_count(rc)),
-                        _ => print!("{:?}", s.green()),
-                    }
+                    print!("{:?}", s.green());
                 }
                 println!("]");
 
-                println!("{:5} {:05} {:?}", self.block.line(self.ip).red(), self.ip.blue(), self.block.ops[self.ip]);
+                println!("{:5} {:05} {:?}",
+                         self.frame().block.line(self.frame().ip).red(),
+                         self.frame().ip.blue(),
+                         self.frame().block.ops[self.frame().ip]);
             }
 
-            let op = self.block.ops[self.ip].clone();
+            let op = self.frame().block.ops[self.frame().ip].clone();
             match op {
                 Op::Illegal => {
                     error!(self, ErrorKind::InvalidProgram);
@@ -222,8 +257,8 @@ impl VM<'_> {
 
                 Op::Add => {
                     match self.pop_twice() {
-                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b + a)),
-                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b + a)),
+                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a + b)),
+                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a + b)),
                         (Value::String(a), Value::String(b)) => {
                             self.stack.push(Value::String(Rc::from(format!("{}{}", a, b))))
                         }
@@ -233,41 +268,56 @@ impl VM<'_> {
 
                 Op::Sub => {
                     match self.pop_twice() {
-                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b - a)),
-                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b - a)),
+                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a - b)),
+                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a - b)),
                         (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
                     }
                 }
 
                 Op::Mul => {
                     match self.pop_twice() {
-                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b * a)),
-                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b * a)),
+                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a * b)),
+                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a * b)),
                         (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
                     }
                 }
 
                 Op::Div => {
                     match self.pop_twice() {
-                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(b / a)),
-                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(b / a)),
+                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a / b)),
+                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a / b)),
                         (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
                     }
                 }
 
                 Op::Equal => {
-                    let (a, b) = self.pop_twice();
-                    self.stack.push(Value::Bool(a == b));
+                    match self.pop_twice() {
+                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a == b)),
+                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a == b)),
+                        (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a == b)),
+                        (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a == b)),
+                        (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
+                    }
                 }
 
                 Op::Less => {
-                    let (a, b) = self.pop_twice();
-                    self.stack.push(Value::Bool(a < b));
+                    match self.pop_twice() {
+                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a < b)),
+                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a < b)),
+                        (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a < b)),
+                        (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a < b)),
+                        (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
+                    }
                 }
 
                 Op::Greater => {
-                    let (a, b) = self.pop_twice();
-                    self.stack.push(Value::Bool(a > b));
+                    match self.pop_twice() {
+                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a > b)),
+                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a > b)),
+                        (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a > b)),
+                        (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a > b)),
+                        (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
+                    }
                 }
 
                 Op::And => {
@@ -292,42 +342,74 @@ impl VM<'_> {
                 }
 
                 Op::Jmp(line) => {
-                    self.ip = line;
+                    self.frame_mut().ip = line;
                     continue;
                 }
 
                 Op::JmpFalse(line) => {
-                    if Some(Value::Bool(false)) == self.stack.pop() {
-                        self.ip = line;
+                    if matches!(self.stack.pop(), Some(Value::Bool(false))) {
+                        self.frame_mut().ip = line;
                         continue;
                     }
                 }
 
-                Op::AssertEqual => {
-                    let (a, b) = self.pop_twice();
-                    if a != b {
-                        error!(self, ErrorKind::AssertFailed(a, b));
+                Op::Assert => {
+                    if matches!(self.stack.pop(), Some(Value::Bool(false))) {
+                        error!(self, ErrorKind::Assert);
                     }
-                    self.stack.push(Value::Bool(a == b));
+                    self.stack.push(Value::Bool(true));
                 }
 
                 Op::ReadLocal(slot) => {
+                    let slot = self.frame().stack_offset + slot;
                     self.stack.push(self.stack[slot].clone());
                 }
 
                 Op::Assign(slot) => {
+                    let slot = self.frame().stack_offset + slot;
                     self.stack[slot] = self.stack.pop().unwrap();
                 }
 
+                Op::Call(num_args) => {
+                    let new_base = self.stack.len() - 1 - num_args;
+                    match &self.stack[new_base] {
+                        Value::Function(arity, block) => {
+                            if arity != &num_args {
+                                error!(self,
+                                       ErrorKind::InvalidProgram,
+                                       format!("Invalid number of arguments, got {} expected {}.",
+                                               num_args, arity));
+                            }
+                            if PRINT_BLOCK {
+                                block.debug_print();
+                            }
+                            self.frames.push(Frame {
+                                stack_offset: new_base,
+                                block: Rc::clone(&block),
+                                ip: 0,
+                            });
+                            continue;
+                        },
+                        _ => {
+                            unreachable!()
+                        }
+                    }
+                }
+
                 Op::Print => {
-                    println!("PRINT: {:?}", self.stack.pop());
+                    println!("PRINT: {:?}", self.stack.pop().unwrap());
                 }
 
                 Op::Return => {
-                    return Ok(());
+                    let last = self.frames.pop().unwrap();
+                    if self.frames.is_empty() {
+                        return Ok(());
+                    } else {
+                        self.stack[last.stack_offset] = self.stack.pop().unwrap();
+                    }
                 }
             }
-            self.ip += 1;
+            self.frame_mut().ip += 1;
         }
     }
 }

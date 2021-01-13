@@ -6,7 +6,7 @@ use crate::tokenizer::Token;
 #[derive(Debug, Clone)]
 pub enum ErrorKind {
     TypeError(Op, Vec<Value>),
-    AssertFailed(Value, Value),
+    Assert,
     InvalidProgram,
     Unreachable,
 
@@ -30,8 +30,8 @@ impl fmt::Display for ErrorKind {
                     .fold(String::new(), |a, v| { format!("{}, {:?}", a, v) });
                 write!(f, "Cannot apply {:?} to values {}", op, values)
             }
-            ErrorKind::AssertFailed(a, b) => {
-                write!(f, "Assertion failed, {:?} != {:?}.", a, b)
+            ErrorKind::Assert => {
+                write!(f, "Assertion failed.")
             }
             ErrorKind::SyntaxError(line, token) => {
                 write!(f, "Syntax error on line {} at token {:?}", line, token)
