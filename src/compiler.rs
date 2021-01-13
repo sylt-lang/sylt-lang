@@ -446,6 +446,15 @@ impl Compiler {
         self.stack.truncate(h);
     }
 
+    fn type_ident(&mut self) -> Result<Type, ()> {
+        if let Token::Identifier(typ) = self.peek() {
+            self.eat();
+            Type::try_from(typ.as_ref())
+        } else {
+            Err(())
+        }
+    }
+
     fn statement(&mut self, block: &mut Block) {
         self.clear_panic();
 
@@ -462,14 +471,14 @@ impl Compiler {
                 block.add(Op::Print, self.line());
             },
 
-            tokens!(Token::Identifier(name), Token::Identifier(typ), Token::ColonEqual) => {
+            tokens!(Token::Identifier(name), Token::Colon) => {
                 self.eat();
                 self.eat();
-                self.eat();
-                if let Ok(typ) = Type::try_from(typ.as_ref()) {
+                if let Ok(typ) = self.type_ident() {
+                    expect!(self, Token::Equal, "Expected assignment.");
                     self.define_variable(&name, typ, block);
                 } else {
-                    error!(self, format!("Failed to parse type '{}'.", typ));
+                    error!(self, format!("Expected type found '{:?}'.", self.peek()));
                 }
             }
 

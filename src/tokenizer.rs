@@ -96,6 +96,9 @@ pub enum Token {
     #[token("<=")]
     LessEqual,
 
+    #[token("|")]
+    Pipe,
+
     #[token("&&")]
     And,
     #[token("||")]

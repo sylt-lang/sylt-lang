@@ -1,5 +1,5 @@
-a int := 0
-res int := 0
+a : int = 0
+res : int = 0
 
 if 1 == 2 {
     <!>

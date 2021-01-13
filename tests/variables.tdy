@@ -1,9 +1,9 @@
 // a variable
-a int := 1
+a : int = 1
 a <=> 1
 
 // another variable
-b int := 2
+b : int = 2
 b <=> 2
 
 // assignment
@@ -11,7 +11,14 @@ a = b
 a <=> 2
 
 // ordering
-c int := 3
-d int := 4
+c : int = 3
+d : int = 4
 c <=> 3
 d <=> 4
+
+// No types
+
+e := 1
+f := e + 1
+e <=> 1
+f <=> 2
