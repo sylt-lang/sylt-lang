@@ -131,8 +131,8 @@ impl VM {
                         print!(" ");
                     }
                     match s {
+                        Type::Function(block) => print!("Function({:?} -> {:?})", block.args.green(), block.ret.green()),
                         s => print!("{:?}", s.green()),
-                        Type::Function(block) => print!("Function({:?} -> {:?})", block.args, block.ret),
                     }
                 }
                 println!("]");
