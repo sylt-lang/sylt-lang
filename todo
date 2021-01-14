@@ -7,14 +7,12 @@
  - [?] Globals
  - [x] Variables
  - [x] Scoping
- - [ ] Jumps
-    -  [ ] Type annotations
- - [ ] If
- - [ ] Listor
- - [ ] For
- - [ ] Prepass, for typeing
+ - [x] Jumps
+ - [x] If
+ - [x] For
+ - [x] Functions
  - [ ] Typing
- - [ ] Functions
+ - [ ] Listor
 
 
 global_names = {"name" => idx}
