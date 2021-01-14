@@ -1,11 +1,13 @@
 use std::fmt;
 use std::path::PathBuf;
 use crate::vm::{Op, Value};
+use crate::compiler::Type;
 use crate::tokenizer::Token;
 
 #[derive(Debug, Clone)]
 pub enum ErrorKind {
-    TypeError(Op, Vec<Value>),
+    TypeError(Op, Vec<Type>),
+    RuntimeTypeError(Op, Vec<Value>),
     Assert,
     InvalidProgram,
     Unreachable,
@@ -24,7 +26,13 @@ pub struct Error {
 impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ErrorKind::TypeError(op, values) => {
+            ErrorKind::TypeError(op, types) => {
+                let types = types
+                    .iter()
+                    .fold(String::new(), |a, v| { format!("{}, {:?}", a, v) });
+                write!(f, "Cannot apply {:?} to types {}", op, types)
+            }
+            ErrorKind::RuntimeTypeError(op, values) => {
                 let values = values
                     .iter()
                     .fold(String::new(), |a, v| { format!("{}, {:?}", a, v) });
@@ -52,7 +60,7 @@ impl fmt::Display for Error {
             Some(s) => format!("\n{}", s),
             None => String::from(""),
         };
-        write!(f, "{:?}:{} [Runtime Error] {}{}", self.file, self.line, self.kind, message)
+        write!(f, "{:?}:{} {}{}", self.file, self.line, self.kind, message)
     }
 }
 

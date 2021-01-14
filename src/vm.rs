@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use owo_colors::OwoColorize;
 
+use crate::compiler::Type;
 use crate::error::{Error, ErrorKind};
 
 macro_rules! error {
@@ -74,22 +75,34 @@ pub enum Op {
 
 #[derive(Debug)]
 pub struct Block {
-    name: String,
-    file: PathBuf,
-    ops: Vec<Op>,
-    last_line_offset: usize,
-    line_offsets: HashMap<usize, usize>,
+    pub args: Vec<Type>,
+    pub ret: Type,
+
+    pub name: String,
+    pub file: PathBuf,
+    pub ops: Vec<Op>,
+    pub last_line_offset: usize,
+    pub line_offsets: HashMap<usize, usize>,
+    pub line: usize,
 }
 
 impl Block {
-    pub fn new(name: &str, file: &Path) -> Self {
+    pub fn new(name: &str, file: &Path, line: usize) -> Self {
         Self {
+            args: Vec::new(),
+            ret: Type::UnkownType,
+
             name: String::from(name),
             file: file.to_owned(),
             ops: Vec::new(),
             last_line_offset: 0,
             line_offsets: HashMap::new(),
+            line,
         }
+    }
+
+    pub fn id(&self) -> (PathBuf, usize) {
+        (self.file.clone(), self.line)
     }
 
     pub fn add_line(&mut self, token_position: usize) {
@@ -99,7 +112,7 @@ impl Block {
         }
     }
 
-    fn line(&self, ip: usize) -> usize {
+    pub fn line(&self, ip: usize) -> usize {
         for i in (0..=ip).rev() {
             if let Some(line) = self.line_offsets.get(&i) {
                 return *line;
@@ -119,6 +132,10 @@ impl Block {
             println!("{:05} {:?}", i.blue(), s);
         }
         println!("");
+    }
+
+    pub fn last_instruction(&mut self) -> &Op {
+        self.ops.last().unwrap()
     }
 
     pub fn add(&mut self, op: Op, token_position: usize) -> usize {
@@ -211,6 +228,10 @@ impl VM {
     }
 
     pub fn run(&mut self, block: Rc<Block>) -> Result<(), Error>{
+        if let Err(err) = crate::typer::VM::new().print_ops(true).typecheck(Rc::clone(&block)) {
+            println!("TYPE ERROR: {}", err);
+        }
+
         self.frames.push(Frame {
             stack_offset: 0,
             block,
@@ -261,7 +282,7 @@ impl VM {
                     match self.stack.pop().unwrap() {
                         Value::Float(a) => self.stack.push(Value::Float(-a)),
                         Value::Int(a) => self.stack.push(Value::Int(-a)),
-                        a => error!(self, ErrorKind::TypeError(op.clone(), vec![a])),
+                        a => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a])),
                     }
                 }
 
@@ -272,7 +293,7 @@ impl VM {
                         (Value::String(a), Value::String(b)) => {
                             self.stack.push(Value::String(Rc::from(format!("{}{}", a, b))))
                         }
-                        (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
+                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
                     }
                 }
 
@@ -280,7 +301,7 @@ impl VM {
                     match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a - b)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a - b)),
-                        (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
+                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
                     }
                 }
 
@@ -288,7 +309,7 @@ impl VM {
                     match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a * b)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a * b)),
-                        (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
+                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
                     }
                 }
 
@@ -296,7 +317,7 @@ impl VM {
                     match self.pop_twice() {
                         (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a / b)),
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a / b)),
-                        (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
+                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
                     }
                 }
 
@@ -306,7 +327,7 @@ impl VM {
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a == b)),
                         (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a == b)),
                         (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a == b)),
-                        (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
+                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
                     }
                 }
 
@@ -316,7 +337,7 @@ impl VM {
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a < b)),
                         (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a < b)),
                         (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a < b)),
-                        (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
+                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
                     }
                 }
 
@@ -326,28 +347,28 @@ impl VM {
                         (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a > b)),
                         (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a > b)),
                         (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a > b)),
-                        (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
+                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
                     }
                 }
 
                 Op::And => {
                     match self.pop_twice() {
                         (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a && b)),
-                        (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
+                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
                     }
                 }
 
                 Op::Or => {
                     match self.pop_twice() {
                         (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a || b)),
-                        (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
+                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
                     }
                 }
 
                 Op::Not => {
                     match self.stack.pop().unwrap() {
                         Value::Bool(a) => self.stack.push(Value::Bool(!a)),
-                        a => error!(self, ErrorKind::TypeError(op.clone(), vec![a])),
+                        a => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a])),
                     }
                 }
 

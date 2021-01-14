@@ -4,6 +4,7 @@ use std::rc::Rc;
 pub mod compiler;
 pub mod tokenizer;
 pub mod vm;
+pub mod typer;
 
 mod error;
 

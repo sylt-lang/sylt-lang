@@ -47,26 +47,45 @@ nextable_enum!(Prec {
     Factor
 });
 
-#[derive(Debug, Copy, Clone)]
-enum Type {
+#[derive(Debug, Clone)]
+pub enum Type {
     NoType,
     UnkownType,
     Int,
     Float,
     Bool,
     String,
+    Function(Rc<Block>),
 }
 
-impl TryFrom<&str> for Type {
-    type Error = ();
+impl PartialEq for Type {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Type::NoType, Type::NoType) => true,
+            (Type::Int, Type::Int) => true,
+            (Type::Float, Type::Float) => true,
+            (Type::Bool, Type::Bool) => true,
+            (Type::String, Type::String) => true,
+            (Type::Function(a), Type::Function(b)) => {
+                a.args == b.args && a.ret == b.ret
+            },
+            _ => false,
+        }
+    }
+}
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+impl From<&Value> for Type {
+
+    fn from(value: &Value) -> Type {
         match value {
-            "int" => Ok(Type::Int),
-            "float" => Ok(Type::Float),
-            "bool" => Ok(Type::Bool),
-            "str" => Ok(Type::String),
-            _ => Err(()),
+            Value::Int(_) => Type::Int,
+            Value::Float(_) => Type::Float,
+            Value::Bool(_) => Type::Bool,
+            Value::String(_) => Type::String,
+            Value::Function(_, block) => {
+                Type::Function(Rc::clone(block))
+            },
+            _ => Type::NoType,
         }
     }
 }
@@ -360,7 +379,7 @@ impl Compiler {
         let frame = self.frame();
         for (slot, var) in frame.stack.iter().enumerate().rev() {
             if var.name == name && var.active {
-                return Some((slot, var.typ, var.scope));
+                return Some((slot, var.typ.clone(), var.scope));
             }
         }
         None
@@ -406,8 +425,8 @@ impl Compiler {
             "anonumus function"
         };
 
-        let mut _return_type = None;
-        let mut function_block = Block::new(name, &self.current_file);
+        let mut return_type = None;
+        let mut function_block = Block::new(name, &self.current_file, self.line());
         let arity;
         let _ret = push_frame!(self, function_block, {
             loop {
@@ -416,6 +435,7 @@ impl Compiler {
                         self.eat();
                         expect!(self, Token::Colon, "Expected ':' after parameter name.");
                         if let Ok(typ) = self.type_ident() {
+                            function_block.args.push(typ.clone());
                             if let Ok(slot) = self.define_variable(&name, typ, &mut function_block) {
                                 self.stack_mut()[slot].active = true;
                             }
@@ -427,13 +447,13 @@ impl Compiler {
                         }
                     }
                     Token::LeftBrace => {
-                        _return_type = Some(Type::NoType);
+                        return_type = Some(Type::NoType);
                         break;
                     }
                     Token::Arrow => {
                         self.eat();
                         if let Ok(typ) = self.type_ident() {
-                            _return_type = Some(typ);
+                            return_type = Some(typ);
                         } else {
                             error!(self, "Failed to parse return type.");
                         }
@@ -450,8 +470,11 @@ impl Compiler {
             self.scope(&mut function_block);
         });
 
+        match return_type {
+            Some(typ) => function_block.ret = typ,
+            None => error!(self, "No returntype secified!"),
+        }
 
-        function_block.add(Op::Constant(Value::Bool(true)), self.line());
         function_block.add(Op::Return, self.line());
 
         block.add(Op::Constant(Value::Function(arity, Rc::new(function_block))), self.line());
@@ -555,17 +578,7 @@ impl Compiler {
         push_scope!(self, block, {
             // Definition
             match self.peek_four() {
-                (Token::Identifier(name), Token::Identifier(typ), Token::ColonEqual, ..) => {
-                    self.eat();
-                    self.eat();
-                    self.eat();
-                    if let Ok(typ) = Type::try_from(typ.as_ref()) {
-                        self.definition_statement(&name, typ, block);
-                    } else {
-                        error!(self, format!("Failed to parse type '{}'.", typ));
-                    }
-                }
-
+                // TODO(ed): Typed definitions aswell!
                 (Token::Identifier(name), Token::ColonEqual, ..) => {
                     self.eat();
                     self.eat();
@@ -602,11 +615,18 @@ impl Compiler {
     }
 
     fn type_ident(&mut self) -> Result<Type, ()> {
-        if let Token::Identifier(typ) = self.peek() {
-            self.eat();
-            Type::try_from(typ.as_ref())
-        } else {
-            Err(())
+        match self.eat() {
+            Token::Identifier(x) => {
+                match x.as_str() {
+                    "int" => Ok(Type::Int),
+                    "float" => Ok(Type::Float),
+                    "bool" => Ok(Type::Bool),
+                    "str" => Ok(Type::String),
+                    _ => Err(()),
+                }
+            },
+            _ => Err(()),
+
         }
     }
 
@@ -683,13 +703,14 @@ impl Compiler {
     }
 
     pub fn compile(&mut self, name: &str, file: &Path) -> Result<Block, Vec<Error>> {
-        let mut block = Block::new(name, file);
+        let mut block = Block::new(name, file, 0);
 
         while self.peek() != Token::EOF {
             self.statement(&mut block);
             expect!(self, Token::Newline, "Expect newline after expression.");
         }
         block.add(Op::Return, self.line());
+        block.ret = Type::NoType;
 
         if self.errors.is_empty() {
             Ok(block)

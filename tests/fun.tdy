@@ -2,13 +2,13 @@
 f := fn {
     print 1
 }
-f() <=> true
+f()
 
 // Simple
 f2 := fn a: int {
     print a
 }
-f2(2) <=> true
+f2(2)
 
 // Return value
 f3 := fn -> int {
@@ -39,3 +39,15 @@ g := fn f: int {
 }
 
 g(h) <=> 1
+
+
+q := fn i: int -> int {
+    if i == 1 {
+        ret 2
+    } else {
+        ret 3
+    }
+}
+
+q(1) <=> 2
+q(0) <=> 3

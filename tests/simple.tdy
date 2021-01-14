@@ -1,38 +1,14 @@
-// 1 + 1 <=> 2
-// // asdlkjasl
-// print 1 + 3
-// // OwO
-
-// a int := 0
-// b int := 1
-// c int := 3
-// d int := 2
+// a := 1
+// a = 2 + 1
+// a = 3
 // 
-// print a
-// print b
-// print d
-// print c
+// for i := 0, i < 10, i = i + 1 {
+//     print i + 1
+//     print i + 2
+// }
 
-for a := 0, a < 10, print a {
-    print a
-    a = a + 1
+f := fn b: int -> int {
+    ret b + 1
 }
 
-// 1, 2, 3, 4
-
-
-//
-//  === main ===
-// | Constant(Int(0))
-// | ReadLocal(0)
-// | Constant(Int(10))
-// | Less
-// | JmpFalse(12)
-// | Jmp(11)
-// | Jmp(1)
-// | ReadLocal(0)
-// | Constant(Int(1))
-// | Add
-// | Assign(0)
-// | Jmp(7)
-// | Return
+f(1)
