@@ -155,22 +155,30 @@ struct Frame {
 pub struct VM {
     stack: Vec<Value>,
     frames: Vec<Frame>,
-}
-
-pub fn run_block(block: Rc<Block>) -> Result<(), Error> {
-    let mut vm = VM {
-        stack: Vec::new(),
-        frames: vec![Frame {
-            stack_offset: 0,
-            block,
-            ip: 0
-        }],
-    };
-
-    vm.run()
+    print_blocks: bool,
+    print_ops: bool,
 }
 
 impl VM {
+    pub fn new() -> Self {
+        Self {
+            stack: Vec::new(),
+            frames: Vec::new(),
+            print_blocks: false,
+            print_ops: false,
+        }
+    }
+
+    pub fn print_blocks(mut self, b: bool) -> Self {
+        self.print_blocks = b;
+        self
+    }
+
+    pub fn print_ops(mut self, b: bool) -> Self {
+        self.print_ops = b;
+        self
+    }
+
     fn pop_twice(&mut self) -> (Value, Value) {
         let len = self.stack.len();
         let res = (self.stack[len-2].clone(), self.stack[len-1].clone());
@@ -202,17 +210,19 @@ impl VM {
         }
     }
 
-    pub fn run(&mut self) -> Result<(), Error>{
-        //TODO better system so tests dont print
-        const PRINT_WHILE_RUNNING: bool = true;
-        const PRINT_BLOCK: bool = true;
+    pub fn run(&mut self, block: Rc<Block>) -> Result<(), Error>{
+        self.frames.push(Frame {
+            stack_offset: 0,
+            block,
+            ip: 0
+        });
 
-        if PRINT_BLOCK {
+        if self.print_blocks {
             self.frame().block.debug_print();
         }
 
         loop {
-            if PRINT_WHILE_RUNNING {
+            if self.print_ops {
                 let start = self.frame().stack_offset;
                 print!("    {:3} [", start);
                 for (i, s) in self.stack.iter().skip(start).enumerate() {
@@ -380,7 +390,7 @@ impl VM {
                                        format!("Invalid number of arguments, got {} expected {}.",
                                                num_args, arity));
                             }
-                            if PRINT_BLOCK {
+                            if self.print_blocks {
                                 block.debug_print();
                             }
                             self.frames.push(Frame {
