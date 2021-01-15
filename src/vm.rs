@@ -404,7 +404,7 @@ impl VM {
                 Op::Call(num_args) => {
                     let new_base = self.stack.len() - 1 - num_args;
                     match &self.stack[new_base] {
-                        Value::Function(args, ret, block) => {
+                        Value::Function(args, _ret, block) => {
                             if args.len() != num_args {
                                 error!(self,
                                        ErrorKind::InvalidProgram,
