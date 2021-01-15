@@ -1,26 +1,22 @@
 // Simplest
-f := fn {
-    print 1
-}
+f := fn {}
 f()
 
-// Simple
-f2 := fn a: int {
-    print a
-}
-f2(2)
+// Simple param
+f2 := fn a: int {}
+f2(1)
 
 // Return value
 f3 := fn -> int {
     ret 3
 }
-print f3()
 f3() <=> 3
 
-// Empty function
-f4 := fn {}
-print f4
-print f4()
+// Combined
+f4 := fn a: int -> int {
+    ret a + a
+}
+f4(2) <=> 4
 
 // Multiple arguments
 adder := fn a: int, b: int -> int {
@@ -28,19 +24,19 @@ adder := fn a: int, b: int -> int {
 }
 adder(1, 2) <=> 3
 
+// calls inside calls
+adder(f3(), f3() + 1) <=> 7
+
 // Passing functions
-h := fn {
-    print "h"
+h := fn -> int {
     ret 1
 }
-
-g := fn f: int {
+g := fn f: fn -> int -> int{
     ret f()
 }
-
 g(h) <=> 1
 
-
+// multiple returns
 q := fn i: int -> int {
     if i == 1 {
         ret 2
@@ -48,6 +44,14 @@ q := fn i: int -> int {
         ret 3
     }
 }
-
 q(1) <=> 2
 q(0) <=> 3
+
+// mixing function and value types
+f5 := fn a: fn -> int, b: int -> int {
+    ret a() + b
+}
+f5_inner := fn -> int {
+    ret 1
+}
+f5(f5_inner, 2) <=> 3
