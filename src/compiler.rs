@@ -434,7 +434,7 @@ impl Compiler {
                     Token::Identifier(name) => {
                         self.eat();
                         expect!(self, Token::Colon, "Expected ':' after parameter name.");
-                        if let Ok(typ) = self.type_ident() {
+                        if let Ok(typ) = self.parse_type() {
                             function_block.args.push(typ.clone());
                             if let Ok(slot) = self.define_variable(&name, typ, &mut function_block) {
                                 self.stack_mut()[slot].active = true;
@@ -452,7 +452,7 @@ impl Compiler {
                     }
                     Token::Arrow => {
                         self.eat();
-                        if let Ok(typ) = self.type_ident() {
+                        if let Ok(typ) = self.parse_type() {
                             return_type = Some(typ);
                         } else {
                             error!(self, "Failed to parse return type.");
@@ -614,7 +614,7 @@ impl Compiler {
         });
     }
 
-    fn type_ident(&mut self) -> Result<Type, ()> {
+    fn parse_type(&mut self) -> Result<Type, ()> {
         match self.eat() {
             Token::Identifier(x) => {
                 match x.as_str() {
@@ -649,7 +649,7 @@ impl Compiler {
             tokens!(Token::Identifier(name), Token::Colon) => {
                 self.eat();
                 self.eat();
-                if let Ok(typ) = self.type_ident() {
+                if let Ok(typ) = self.parse_type() {
                     expect!(self, Token::Equal, "Expected assignment.");
                     self.definition_statement(&name, typ, block);
                 } else {
