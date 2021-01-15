@@ -67,13 +67,13 @@ impl VM {
 
     fn pop_twice(&mut self) -> (Type, Type) {
         let len = self.stack.len();
-        let res = (self.stack[len-2].clone(), self.stack[len-1].clone());
+        let res = (self.stack[len - 2].clone(), self.stack[len - 1].clone());
         self.stack.truncate(len - 2);
         res
     }
 
     fn peek_up(&self, amount: usize) -> Type {
-        self.stack[self.stack.len() - amount].clone()
+        self.stack[self.stack.len() - 1 - amount].clone()
     }
 
     fn frame(&self) -> &Frame {
@@ -298,13 +298,6 @@ impl VM {
                 Op::Return => {
                     if outer {
                         return Ok(());
-                    }
-
-                    match self.frame().block.ops[self.frame().ip - 2] {
-                        Op::Return => {
-                            continue;
-                        }
-                        _ => {}
                     }
 
                     let a = self.stack.pop().unwrap_or(Type::NoType);
