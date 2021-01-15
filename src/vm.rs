@@ -228,9 +228,9 @@ impl VM {
     }
 
     pub fn run(&mut self, block: Rc<Block>) -> Result<(), Error>{
-        if let Err(err) = crate::typer::VM::new().print_ops(true).typecheck(Type::NoType, Rc::clone(&block)) {
-            println!("TYPE ERROR: {}", err);
-        }
+        crate::typer::VM::new().print_ops(self.print_ops)
+                               .print_blocks(self.print_blocks)
+                               .typecheck(Type::NoType, Rc::clone(&block))?;
 
         self.frames.push(Frame {
             stack_offset: 0,
