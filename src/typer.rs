@@ -1,13 +1,12 @@
-use std::fmt::Debug;
-use std::rc::Rc;
 use owo_colors::OwoColorize;
-use std::path::PathBuf;
 use std::collections::HashSet;
+use std::fmt::Debug;
+use std::path::PathBuf;
+use std::rc::Rc;
 
 use crate::compiler::Type;
-use crate::vm::Value;
-use crate::vm::{Op, Block};
 use crate::error::{Error, ErrorKind};
+use crate::vm::{Block, Op, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {

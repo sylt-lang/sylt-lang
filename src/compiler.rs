@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use crate::error::{Error, ErrorKind};
 use crate::tokenizer::{Token, TokenStream};
 use crate::vm::{Value, Block, Op};
-use crate::error::{Error, ErrorKind};
 
 macro_rules! nextable_enum {
     ( $name:ident { $( $thing:ident ),* } ) => {

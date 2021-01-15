@@ -1,8 +1,9 @@
 use std::fmt;
 use std::path::PathBuf;
-use crate::vm::{Op, Value};
+
 use crate::compiler::Type;
 use crate::tokenizer::Token;
+use crate::vm::{Op, Value};
 
 #[derive(Debug, Clone)]
 pub enum ErrorKind {

@@ -1,8 +1,8 @@
+use owo_colors::OwoColorize;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::collections::HashMap;
-use owo_colors::OwoColorize;
 
 use crate::compiler::Type;
 use crate::error::{Error, ErrorKind};
