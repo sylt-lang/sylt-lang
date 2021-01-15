@@ -69,6 +69,8 @@ pub enum Op {
     ReadLocal(usize),
     Assign(usize),
 
+    Define(Type),
+
     Call(usize),
 
     Print,
@@ -400,6 +402,8 @@ impl VM {
                     let slot = self.frame().stack_offset + slot;
                     self.stack[slot] = self.stack.pop().unwrap();
                 }
+
+                Op::Define(_) => {}
 
                 Op::Call(num_args) => {
                     let new_base = self.stack.len() - 1 - num_args;

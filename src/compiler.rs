@@ -504,8 +504,9 @@ impl Compiler {
     }
 
     fn definition_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
-        let slot = self.define_variable(name, typ, block);
+        let slot = self.define_variable(name, typ.clone(), block);
         self.expression(block);
+        block.add(Op::Define(typ), self.line());
 
         if let Ok(slot) = slot {
             self.stack_mut()[slot].active = true;

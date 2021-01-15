@@ -259,8 +259,28 @@ impl VM {
                             }
                         }
                         (lhs, rhs) if lhs == rhs => {},
-                        (lhs, rhs) => error!(self, ErrorKind::TypeError(op.clone(),
-                                            vec![lhs.clone(), rhs.clone()])),
+                        (lhs, rhs) => error!(self,
+                                             ErrorKind::TypeError(
+                                                 op.clone(),
+                                                 vec![lhs.clone(), rhs.clone()]
+                                             )),
+                    }
+                }
+
+                Op::Define(ref ty) => {
+                    let top_type = self.stack.last().unwrap();
+                    match (ty, top_type) {
+                        (Type::UnkownType, top_type)
+                            if top_type != &Type::UnkownType => {}
+                        (a, b) if a != b => {
+                            error!(self,
+                                   ErrorKind::TypeError(
+                                       op.clone(),
+                                       vec![a.clone(), b.clone()]),
+                                   format!("Tried to assign a type {:?} to type {:?}.", a, b)
+                            );
+                        }
+                        _ => {}
                     }
                 }
 
