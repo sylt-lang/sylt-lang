@@ -32,15 +32,15 @@ pub fn run(tokens: TokenStream, path: &Path, print: bool) -> Result<(), Vec<Erro
 #[cfg(test)]
 mod tests {
     use super::{run_file, run_string};
-    use crate::error::{Error, ErrorKind};
     use std::path::Path;
 
+    #[macro_export]
     macro_rules! assert_errs {
         ($result:expr, [ $( $kind:pat ),* ]) => {
             println!("{} => {:?}", stringify!($result), $result);
             assert!(matches!(
                 $result.unwrap_err().as_slice(),
-                &[$(Error {
+                &[$($crate::error::Error {
                     kind: $kind,
                     file: _,
                     line: _,
@@ -51,19 +51,38 @@ mod tests {
         };
     }
 
-    #[test]
-    fn unreachable_token() {
-        assert_errs!(run_string("<!>\n", true), [ErrorKind::Unreachable]);
+    #[macro_export]
+    macro_rules! test_string {
+        ($fn:ident, $prog:literal) => {
+            #[test]
+            fn $fn() {
+                $crate::run_string($prog, true).unwrap();
+            }
+        };
+        ($fn:ident, $prog:literal, $errs:tt) => {
+            #[test]
+            fn $fn() {
+                $crate::assert_errs!($crate::run_string($prog, true), $errs);
+            }
+        }
     }
 
+    #[macro_export]
     macro_rules! test_file {
         ($fn:ident, $path:literal) => {
             #[test]
             fn $fn() {
                 let file = Path::new($path);
-                assert!(run_file(&file, true).is_ok());
+                run_file(&file, true).unwrap();
             }
         };
+    }
+
+    use crate::error::ErrorKind;
+
+    #[test]
+    fn unreachable_token() {
+        assert_errs!(run_string("<!>\n", true), [ErrorKind::Unreachable]);
     }
 
     test_file!(order_of_operations, "tests/order-of-operations.tdy");

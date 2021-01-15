@@ -332,3 +332,26 @@ impl VM {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::test_string;
+    use crate::error::ErrorKind;
+
+    test_string!(uncallable_type, "
+                 f := fn i: int {
+                     i()
+                 }
+                 ",
+                 [ErrorKind::TypeError(_, _)]);
+
+    test_string!(wrong_params, "
+                 f : fn -> int = fn a: int -> int {}
+                 ",
+                 [ErrorKind::TypeError(_, _)]);
+
+    test_string!(wrong_ret, "
+                 f : fn -> int = fn {}
+                 ",
+                 [ErrorKind::TypeError(_, _)]);
+}
