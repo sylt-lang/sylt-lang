@@ -48,8 +48,8 @@ nextable_enum!(Prec {
 
 #[derive(Debug, Clone)]
 pub enum Type {
-    NoType,
-    UnkownType,
+    Void,
+    UnknownType,
     Int,
     Float,
     Bool,
@@ -60,7 +60,7 @@ pub enum Type {
 impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Type::NoType, Type::NoType) => true,
+            (Type::Void, Type::Void) => true,
             (Type::Int, Type::Int) => true,
             (Type::Float, Type::Float) => true,
             (Type::Bool, Type::Bool) => true,
@@ -81,7 +81,7 @@ impl From<&Value> for Type {
             Value::String(_) => Type::String,
             Value::Function(args, ret, _) =>
                 Type::Function(args.clone(), Box::new(ret.clone())),
-            _ => Type::NoType,
+            _ => Type::Void,
         }
     }
 }
@@ -120,7 +120,7 @@ macro_rules! push_frame {
             });
 
             // Return value stored as a variable
-            $compiler.define_variable("", Type::UnkownType, &mut $block).unwrap();
+            $compiler.define_variable("", Type::UnknownType, &mut $block).unwrap();
             $code
 
             $compiler.frames.pop().unwrap();
@@ -422,7 +422,7 @@ impl Compiler {
         };
 
         let mut args = Vec::new();
-        let mut return_type = Type::NoType;
+        let mut return_type = Type::Void;
         let mut function_block = Block::new(name, &self.current_file, self.line());
         let _ret = push_frame!(self, function_block, {
             loop {
@@ -575,7 +575,7 @@ impl Compiler {
                 (Token::Identifier(name), Token::ColonEqual, ..) => {
                     self.eat();
                     self.eat();
-                    self.definition_statement(&name, Type::UnkownType, block);
+                    self.definition_statement(&name, Type::UnknownType, block);
                 }
 
                 (Token::Comma, ..) => {}
@@ -627,10 +627,10 @@ impl Compiler {
                         }
                         Token::Arrow => {
                             self.eat();
-                            break self.parse_type().unwrap_or(Type::NoType);
+                            break self.parse_type().unwrap_or(Type::Void);
                         }
                         Token::Comma | Token::Equal => {
-                            break Type::NoType;
+                            break Type::Void;
                         }
                         token => {
                             error!(self, format!("Function type signature contains non-type {:?}.", token));
@@ -686,7 +686,7 @@ impl Compiler {
             tokens!(Token::Identifier(name), Token::ColonEqual) => {
                 self.eat();
                 self.eat();
-                self.definition_statement(&name, Type::UnkownType, block);
+                self.definition_statement(&name, Type::UnknownType, block);
             }
 
             tokens!(Token::Identifier(name), Token::Equal) => {

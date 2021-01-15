@@ -232,7 +232,7 @@ impl VM {
     pub fn run(&mut self, block: Rc<Block>) -> Result<(), Error>{
         crate::typer::VM::new().print_ops(self.print_ops)
                                .print_blocks(self.print_blocks)
-                               .typecheck(Type::NoType, Rc::clone(&block))?;
+                               .typecheck(Type::Void, Rc::clone(&block))?;
 
         self.frames.push(Frame {
             stack_offset: 0,

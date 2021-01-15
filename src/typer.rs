@@ -203,7 +203,7 @@ impl VM {
 
                 Op::Equal | Op::Less | Op::Greater => {
                     match self.pop_twice() {
-                        (a, b) if (&[&a, &b]).contains(&&Type::UnkownType) =>
+                        (a, b) if (&[&a, &b]).contains(&&Type::UnknownType) =>
                             error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
                         (a, b) if a == b => self.stack.push(Type::Bool),
                         (a, b) => error!(self, ErrorKind::TypeError(op.clone(), vec![a, b])),
@@ -251,8 +251,8 @@ impl VM {
                     let lhs = self.stack[slot].clone();
                     let rhs = self.pop();
                     match (&lhs, &rhs) {
-                        (Type::UnkownType, rhs) => {
-                            if rhs == &Type::UnkownType {
+                        (Type::UnknownType, rhs) => {
+                            if rhs == &Type::UnknownType {
                                 error!(self, ErrorKind::TypeError(op.clone(), vec![lhs, rhs.clone()]), "");
                             } else {
                                 self.stack[slot] = rhs.clone();
@@ -270,8 +270,8 @@ impl VM {
                 Op::Define(ref ty) => {
                     let top_type = self.stack.last().unwrap();
                     match (ty, top_type) {
-                        (Type::UnkownType, top_type)
-                            if top_type != &Type::UnkownType => {}
+                        (Type::UnknownType, top_type)
+                            if top_type != &Type::UnknownType => {}
                         (a, b) if a != b => {
                             error!(self,
                                    ErrorKind::TypeError(
@@ -322,7 +322,7 @@ impl VM {
                         return Ok(());
                     }
 
-                    let a = self.stack.pop().unwrap_or(Type::NoType);
+                    let a = self.stack.pop().unwrap_or(Type::Void);
                     if a != return_type {
                         error!(self, ErrorKind::TypeError(op, vec![a, return_type.clone()]), "Not matching return type.");
                     }
