@@ -461,7 +461,6 @@ impl Compiler {
                 }
             }
 
-            println!("({:?} -> {:?})", args, return_type);
             self.scope(&mut function_block);
         });
 
@@ -639,7 +638,6 @@ impl Compiler {
                     }
                 };
                 let f = Type::Function(params, Box::new(return_type));
-                println!("Parsed {:?} on line {}", f, self.line());
                 Ok(f)
             }
             Token::Identifier(x) => {
