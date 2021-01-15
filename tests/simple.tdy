@@ -1,14 +1,20 @@
-// a := 1
-// a = 2 + 1
-// a = 3
-// 
-// for i := 0, i < 10, i = i + 1 {
-//     print i + 1
-//     print i + 2
-// }
-
-f := fn b: int -> int {
-    ret b + 1
+a : fn int, int -> int = fn b: int, c: int -> int {
+   ret b + c
 }
 
-f(1)
+print a(1, 2) + 1
+
+b := fn c: fn int -> -> int {
+    c(2)
+    ret 1
+}
+
+c := fn a: int {
+    print a
+}
+
+b(c)
+
+// print b(fn a: int -> {
+//     print a
+// })

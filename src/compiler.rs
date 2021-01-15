@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::convert::TryFrom;
 
 use crate::tokenizer::{Token, TokenStream};
 use crate::vm::{Value, Block, Op};
@@ -55,7 +54,7 @@ pub enum Type {
     Float,
     Bool,
     String,
-    Function(Rc<Block>),
+    Function(Vec<Type>, Box<Type>),
 }
 
 impl PartialEq for Type {
@@ -66,25 +65,22 @@ impl PartialEq for Type {
             (Type::Float, Type::Float) => true,
             (Type::Bool, Type::Bool) => true,
             (Type::String, Type::String) => true,
-            (Type::Function(a), Type::Function(b)) => {
-                a.args == b.args && a.ret == b.ret
-            },
+            (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) =>
+                a_args == b_args && a_ret == b_ret,
             _ => false,
         }
     }
 }
 
 impl From<&Value> for Type {
-
     fn from(value: &Value) -> Type {
         match value {
             Value::Int(_) => Type::Int,
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
-            Value::Function(_, block) => {
-                Type::Function(Rc::clone(block))
-            },
+            Value::Function(args, ret, _) =>
+                Type::Function(args.clone(), Box::new(ret.clone())),
             _ => Type::NoType,
         }
     }
@@ -425,9 +421,9 @@ impl Compiler {
             "anonumus function"
         };
 
-        let mut return_type = None;
+        let mut args = Vec::new();
+        let mut return_type = Type::NoType;
         let mut function_block = Block::new(name, &self.current_file, self.line());
-        let arity;
         let _ret = push_frame!(self, function_block, {
             loop {
                 match self.peek() {
@@ -435,7 +431,7 @@ impl Compiler {
                         self.eat();
                         expect!(self, Token::Colon, "Expected ':' after parameter name.");
                         if let Ok(typ) = self.parse_type() {
-                            function_block.args.push(typ.clone());
+                            args.push(typ.clone());
                             if let Ok(slot) = self.define_variable(&name, typ, &mut function_block) {
                                 self.stack_mut()[slot].active = true;
                             }
@@ -447,13 +443,12 @@ impl Compiler {
                         }
                     }
                     Token::LeftBrace => {
-                        return_type = Some(Type::NoType);
                         break;
                     }
                     Token::Arrow => {
                         self.eat();
                         if let Ok(typ) = self.parse_type() {
-                            return_type = Some(typ);
+                            return_type = typ;
                         } else {
                             error!(self, "Failed to parse return type.");
                         }
@@ -465,19 +460,17 @@ impl Compiler {
                     }
                 }
             }
-            arity = self.frame().stack.len() - 1;
 
+            println!("({:?} -> {:?})", args, return_type);
             self.scope(&mut function_block);
         });
 
-        match return_type {
-            Some(typ) => function_block.ret = typ,
-            None => error!(self, "No returntype secified!"),
+        if !matches!(function_block.last_op(), Some(&Op::Return)) {
+            function_block.add(Op::Constant(Value::Nil), self.line());
+            function_block.add(Op::Return, self.line());
         }
 
-        function_block.add(Op::Return, self.line());
-
-        block.add(Op::Constant(Value::Function(arity, Rc::new(function_block))), self.line());
+        block.add(Op::Constant(Value::Function(args, return_type, Rc::new(function_block))), self.line());
     }
 
     fn variable_expression(&mut self, block: &mut Block) {
@@ -615,8 +608,42 @@ impl Compiler {
     }
 
     fn parse_type(&mut self) -> Result<Type, ()> {
-        match self.eat() {
+        match self.peek() {
+            Token::Fn => {
+                self.eat();
+                let mut params = Vec::new();
+                let return_type = loop {
+                    match self.peek() {
+                        Token::Identifier(_) | Token::Fn => {
+                            if let Ok(ty) = self.parse_type() {
+                                params.push(ty);
+                                if self.peek() == Token::Comma {
+                                    self.eat();
+                                }
+                            } else {
+                                error!(self, format!("Function type signature contains non-type {:?}.", self.peek()));
+                                return Err(());
+                            }
+                        }
+                        Token::Arrow => {
+                            self.eat();
+                            break self.parse_type().unwrap_or(Type::NoType);
+                        }
+                        Token::Comma | Token::Equal => {
+                            break Type::NoType;
+                        }
+                        token => {
+                            error!(self, format!("Function type signature contains non-type {:?}.", token));
+                            return Err(());
+                        }
+                    }
+                };
+                let f = Type::Function(params, Box::new(return_type));
+                println!("Parsed {:?} on line {}", f, self.line());
+                Ok(f)
+            }
             Token::Identifier(x) => {
+                self.eat();
                 match x.as_str() {
                     "int" => Ok(Type::Int),
                     "float" => Ok(Type::Float),
@@ -624,7 +651,7 @@ impl Compiler {
                     "str" => Ok(Type::String),
                     _ => Err(()),
                 }
-            },
+            }
             _ => Err(()),
 
         }
@@ -710,7 +737,6 @@ impl Compiler {
             expect!(self, Token::Newline, "Expect newline after expression.");
         }
         block.add(Op::Return, self.line());
-        block.ret = Type::NoType;
 
         if self.errors.is_empty() {
             Ok(block)

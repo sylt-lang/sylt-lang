@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::collections::HashSet;
 
 use crate::compiler::Type;
+use crate::vm::Value;
 use crate::vm::{Op, Block};
 use crate::error::{Error, ErrorKind};
 
@@ -96,7 +97,7 @@ impl VM {
         }
     }
 
-    pub fn typecheck(&mut self, block: Rc<Block>) -> Result<(), Error>{
+    pub fn typecheck(&mut self, return_type: Type, block: Rc<Block>) -> Result<(), Error>{
         let id = block.id();
         if self.checked.contains(&id) {
             return Ok(());
@@ -131,7 +132,7 @@ impl VM {
                         print!(" ");
                     }
                     match s {
-                        Type::Function(block) => print!("Function({:?} -> {:?})", block.args.green(), block.ret.green()),
+                        Type::Function(args, ret) => print!("Function({:?} -> {:?})", args.green(), ret.green()),
                         s => print!("{:?}", s.green()),
                     }
                 }
@@ -153,8 +154,24 @@ impl VM {
                 }
 
                 Op::Constant(value) => {
-                    let typ = Type::from(&value);
-                    self.stack.push(typ);
+                    let ty = Type::from(&value);
+                    if let Value::Function(args, ret, block) = value {
+                        let mut stack = vec![ret.clone()];
+                        stack.extend_from_slice(&args);
+
+                        let mut sub = VM {
+                            checked: self.checked.clone(),
+                            stack,
+                            frames: vec![],
+                            print_blocks: self.print_blocks,
+                            print_ops: self.print_ops,
+                        };
+
+                        sub.typecheck(ret.clone(), Rc::clone(&block))?;
+
+                        self.checked = sub.checked;
+                    }
+                    self.stack.push(ty);
                 }
 
                 Op::Neg => {
@@ -237,7 +254,7 @@ impl VM {
                     match (&lhs, &rhs) {
                         (Type::UnkownType, rhs) => {
                             if rhs == &Type::UnkownType {
-                                error!(self, ErrorKind::TypeError(op.clone(), vec![lhs, rhs.clone()]), "Cannot infer type.");
+                                error!(self, ErrorKind::TypeError(op.clone(), vec![lhs, rhs.clone()]), "");
                             } else {
                                 self.stack[slot] = rhs.clone();
                             }
@@ -251,42 +268,23 @@ impl VM {
                 Op::Call(num_args) => {
                     let new_base = self.stack.len() - 1 - num_args;
                     match &self.stack[new_base] {
-                        Type::Function(block) => {
-                            let arity = block.args.len();
-                            if arity != num_args {
+                        Type::Function(args, ret) => {
+                            if args.len() != num_args {
                                 error!(self,
                                        ErrorKind::InvalidProgram,
                                        format!("Invalid number of arguments, got {} expected {}.",
-                                               num_args, arity));
-                            }
-                            if self.print_blocks {
-                                block.debug_print();
+                                               num_args, args.len()));
                             }
 
-                            let stack_args = &self.stack[self.stack.len() - arity..];
-                            if block.args != stack_args {
+                            let stack_args = &self.stack[self.stack.len() - args.len()..];
+                            if args != stack_args {
                                 error!(self,
                                        ErrorKind::TypeError(op.clone(), vec![]),
                                        format!("Expected args of type {:?} but got {:?}.",
-                                               block.args, stack_args));
+                                               args, stack_args));
                             }
 
-                            let mut stack = vec![block.ret.clone()];
-                            stack.extend_from_slice(stack_args);
-
-                            let mut sub = VM {
-                                checked: self.checked.clone(),
-                                stack,
-                                frames: vec![],
-                                print_blocks: self.print_blocks,
-                                print_ops: self.print_ops,
-                            };
-
-                            sub.typecheck(Rc::clone(block))?;
-
-                            self.checked = sub.checked;
-
-                            self.stack[new_base] = block.ret.clone();
+                            self.stack[new_base] = *ret.clone();
                         },
                         _ => {
                             unreachable!()
@@ -311,9 +309,8 @@ impl VM {
                     }
 
                     let a = self.stack.pop().unwrap_or(Type::NoType);
-                    let b = self.frame().block.ret.clone();
-                    if a != b {
-                        error!(self, ErrorKind::TypeError(op, vec![a, b]), "Not matching return type.");
+                    if a != return_type {
+                        error!(self, ErrorKind::TypeError(op, vec![a, return_type.clone()]), "Not matching return type.");
                     }
                 }
             }

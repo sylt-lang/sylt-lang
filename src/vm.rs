@@ -22,7 +22,8 @@ pub enum Value {
     Int(i64),
     Bool(bool),
     String(Rc<String>),
-    Function(usize, Rc<Block>),
+    Function(Vec<Type>, Type, Rc<Block>),
+    Nil,
 }
 
 impl Debug for Value {
@@ -32,7 +33,8 @@ impl Debug for Value {
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),
             Value::String(s) => write!(fmt, "(string \"{}\")", s),
-            Value::Function(arity, block) => write!(fmt, "(func {}-{})", block.name, arity),
+            Value::Function(args, ret, block) => write!(fmt, "(fn {}: {:?} -> {:?})", block.name, args, ret),
+            Value::Nil => write!(fmt, "(nil)"),
         }
     }
 }
@@ -75,9 +77,6 @@ pub enum Op {
 
 #[derive(Debug)]
 pub struct Block {
-    pub args: Vec<Type>,
-    pub ret: Type,
-
     pub name: String,
     pub file: PathBuf,
     pub ops: Vec<Op>,
@@ -89,9 +88,6 @@ pub struct Block {
 impl Block {
     pub fn new(name: &str, file: &Path, line: usize) -> Self {
         Self {
-            args: Vec::new(),
-            ret: Type::UnkownType,
-
             name: String::from(name),
             file: file.to_owned(),
             ops: Vec::new(),
@@ -103,6 +99,10 @@ impl Block {
 
     pub fn id(&self) -> (PathBuf, usize) {
         (self.file.clone(), self.line)
+    }
+
+    pub fn last_op(&self) -> Option<&Op> {
+        self.ops.last()
     }
 
     pub fn add_line(&mut self, token_position: usize) {
@@ -228,7 +228,7 @@ impl VM {
     }
 
     pub fn run(&mut self, block: Rc<Block>) -> Result<(), Error>{
-        if let Err(err) = crate::typer::VM::new().print_ops(true).typecheck(Rc::clone(&block)) {
+        if let Err(err) = crate::typer::VM::new().print_ops(true).typecheck(Type::NoType, Rc::clone(&block)) {
             println!("TYPE ERROR: {}", err);
         }
 
@@ -404,12 +404,12 @@ impl VM {
                 Op::Call(num_args) => {
                     let new_base = self.stack.len() - 1 - num_args;
                     match &self.stack[new_base] {
-                        Value::Function(arity, block) => {
-                            if arity != &num_args {
+                        Value::Function(args, ret, block) => {
+                            if args.len() != num_args {
                                 error!(self,
                                        ErrorKind::InvalidProgram,
                                        format!("Invalid number of arguments, got {} expected {}.",
-                                               num_args, arity));
+                                               num_args, args.len()));
                             }
                             if self.print_blocks {
                                 block.debug_print();
