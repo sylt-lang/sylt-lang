@@ -286,7 +286,9 @@ impl VM {
                             self.stack[new_base] = *ret.clone();
                         },
                         _ => {
-                            unreachable!()
+                            error!(self,
+                                   ErrorKind::TypeError(op.clone(), vec![self.stack[new_base].clone()]),
+                                   format!("Tried to call non-function {:?}", self.stack[new_base]));
                         }
                     }
                 }
