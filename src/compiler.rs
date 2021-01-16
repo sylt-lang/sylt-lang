@@ -29,9 +29,9 @@ macro_rules! error {
 }
 
 macro_rules! expect {
-    ($thing:expr, $exp:pat, $msg:expr) => {
+    ($thing:expr, $exp_head:pat $( | $exp_rest:pat ),* , $msg:expr) => {
         match $thing.peek() {
-            $exp => { $thing.eat(); true },
+            $exp_head $( | $exp_rest )* => { $thing.eat(); true },
             _ => { error!($thing, $msg); false } ,
         }
     };
@@ -733,7 +733,7 @@ impl Compiler {
 
         while self.peek() != Token::EOF {
             self.statement(&mut block);
-            expect!(self, Token::Newline, "Expect newline after expression.");
+            expect!(self, Token::Newline | Token::EOF, "Expect newline or EOF after expression.");
         }
         block.add(Op::Return, self.line());
 
