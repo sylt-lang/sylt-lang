@@ -85,10 +85,82 @@ mod tests {
         assert_errs!(run_string("<!>\n", true), [ErrorKind::Unreachable]);
     }
 
-    test_file!(order_of_operations, "tests/order-of-operations.tdy");
-    test_file!(variables, "tests/variables.tdy");
+    macro_rules! test_multiple {
+        ($mod:ident, $( $fn:ident : $prog:literal ),+ $( , )? ) => {
+            mod $mod {
+                $( test_string!($fn, $prog); )+
+            }
+        }
+    }
+
+    test_multiple!(
+        order_of_operations,
+        terms_and_factors: "1 + 1 * 2 <=> 3
+                            1 * 2 + 3 <=> 5",
+        in_rhs: "5 <=> 1 * 2 + 3",
+        parenthesis: "(1 + 2) * 3 <=> 9",
+        negation: "-1 <=> 0 - 1
+                   -1 + 2 <=> 1
+                   -(1 + 2) <=> -3
+                   1 + -1 <=> 0
+                   2 * -1 <=> -2",
+    );
+
+    test_multiple!(
+        variables,
+        single_variable: "a := 1
+                          a <=> 1",
+        two_variables: "a := 1
+                        b := 2
+                        a <=> 1
+                        b <=> 2",
+        stack_ordering: "a := 1
+                         b := 2
+                         b <=> 2
+                         a <=> 1",
+        assignment: "a := 1
+                     b := 2
+                     a = b
+                     a <=> 2
+                     b <=> 2",
+    );
+
+    test_multiple!(
+        if_,
+        compare_constants_equality: "if 1 == 2 {
+                                       <!>
+                                     }",
+        compare_constants_unequality: "if 1 != 1 {
+                                         <!>
+                                       }",
+        compare_variable: "a := 1
+                           if a == 0 {
+                             <!>
+                           }
+                           if a != 1 {
+                             <!>
+                           }",
+        else_: "a := 1
+                res := 0
+                if a == 0 {
+                  <!>
+                } else {
+                  res = 1
+                }
+                res <=> 1",
+        else_if: "a := 1
+                  res := 0
+                  if a == 0 {
+                    <!>
+                  } else if a == 1 {
+                    res = 1
+                  } else {
+                    <!>
+                  }
+                  res <=> 1",
+    );
+
     test_file!(scoping, "tests/scoping.tdy");
-    test_file!(if_, "tests/if.tdy");
     test_file!(for_, "tests/for.tdy");
     test_file!(fun, "tests/fun.tdy");
 }
