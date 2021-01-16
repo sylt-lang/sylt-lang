@@ -61,7 +61,7 @@ impl fmt::Display for Error {
             Some(s) => format!("\n{}", s),
             None => String::from(""),
         };
-        write!(f, "{:?}:{} {}{}", self.file, self.line, self.kind, message)
+        write!(f, "{}:{} {}{}", self.file.display(), self.line, self.kind, message)
     }
 }
 
