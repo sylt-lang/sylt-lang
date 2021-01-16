@@ -659,20 +659,14 @@ impl Compiler {
     fn statement(&mut self, block: &mut Block) {
         self.clear_panic();
 
-        macro_rules! tokens {
-            ($( $token:pat ),*) => {
-                ($( $token , )* ..)
-            };
-        }
-
         match self.peek_four() {
-            tokens!(Token::Print) => {
+            (Token::Print, ..) => {
                 self.eat();
                 self.expression(block);
                 block.add(Op::Print, self.line());
             },
 
-            tokens!(Token::Identifier(name), Token::Colon) => {
+            (Token::Identifier(name), Token::Colon, ..) => {
                 self.eat();
                 self.eat();
                 if let Ok(typ) = self.parse_type() {
@@ -683,42 +677,42 @@ impl Compiler {
                 }
             }
 
-            tokens!(Token::Identifier(name), Token::ColonEqual) => {
+            (Token::Identifier(name), Token::ColonEqual, ..) => {
                 self.eat();
                 self.eat();
                 self.definition_statement(&name, Type::UnknownType, block);
             }
 
-            tokens!(Token::Identifier(name), Token::Equal) => {
+            (Token::Identifier(name), Token::Equal, ..) => {
                 self.eat();
                 self.eat();
                 self.assign(&name, block);
             }
 
-            tokens!(Token::If) => {
+            (Token::If, ..) => {
                 self.if_statment(block);
             }
 
-            tokens!(Token::For) => {
+            (Token::For, ..) => {
                 self.for_loop(block);
             }
 
-            tokens!(Token::Ret) => {
+            (Token::Ret, ..) => {
                 self.eat();
                 self.expression(block);
                 block.add(Op::Return, self.line());
             }
 
-            tokens!(Token::Unreachable) => {
+            (Token::Unreachable, ..) => {
                 self.eat();
                 block.add(Op::Unreachable, self.line());
             }
 
-            tokens!(Token::LeftBrace) => {
+            (Token::LeftBrace, ..) => {
                 self.scope(block);
             }
 
-            tokens!(Token::Newline) => {}
+            (Token::Newline, ..) => {}
 
             _ => {
                 self.expression(block);
