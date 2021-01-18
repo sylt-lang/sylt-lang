@@ -79,9 +79,22 @@ impl From<&Value> for Type {
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
-            Value::Function(args, ret, _) =>
-                Type::Function(args.clone(), Box::new(ret.clone())),
+            Value::Function(block) => block.ty.clone(),
             _ => Type::Void,
+        }
+    }
+}
+
+impl Type {
+    pub fn as_value(&self) -> Value {
+        match self {
+            Type::Void => Value::Nil,
+            Type::UnknownType => Value::Unkown,
+            Type::Int => Value::Int(1),
+            Type::Float => Value::Float(1.0),
+            Type::Bool => Value::Bool(true),
+            Type::String => Value::String(Rc::new("".to_string())),
+            Type::Function(_, _) => Value::Function(Rc::new(Block::from_type(self))),
         }
     }
 }
@@ -469,7 +482,9 @@ impl Compiler {
             function_block.add(Op::Return, self.line());
         }
 
-        block.add(Op::Constant(Value::Function(args, return_type, Rc::new(function_block))), self.line());
+        function_block.ty = Type::Function(args, Box::new(return_type));
+
+        block.add(Op::Constant(Value::Function(Rc::new(function_block))), self.line());
     }
 
     fn variable_expression(&mut self, block: &mut Block) {
@@ -729,7 +744,9 @@ impl Compiler {
             self.statement(&mut block);
             expect!(self, Token::Newline | Token::EOF, "Expect newline or EOF after expression.");
         }
+        block.add(Op::Constant(Value::Nil), self.line());
         block.add(Op::Return, self.line());
+        block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
 
         if self.errors.is_empty() {
             Ok(block)

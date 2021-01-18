@@ -144,6 +144,8 @@ impl VM {
             }
 
             match op {
+                _ => {}
+                /*
                 Op::Illegal => {}
 
                 Op::Unreachable => {}
@@ -327,6 +329,7 @@ impl VM {
                         error!(self, ErrorKind::TypeError(op, vec![a, return_type.clone()]), "Not matching return type.");
                     }
                 }
+                */
             }
             self.frame_mut().ip += 1;
         }

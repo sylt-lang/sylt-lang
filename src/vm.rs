@@ -22,7 +22,8 @@ pub enum Value {
     Int(i64),
     Bool(bool),
     String(Rc<String>),
-    Function(Vec<Type>, Type, Rc<Block>),
+    Function(Rc<Block>),
+    Unkown,
     Nil,
 }
 
@@ -33,8 +34,32 @@ impl Debug for Value {
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),
             Value::String(s) => write!(fmt, "(string \"{}\")", s),
-            Value::Function(args, ret, block) => write!(fmt, "(fn {}: {:?} -> {:?})", block.name, args, ret),
+            Value::Function(block) => write!(fmt, "(fn {}: {:?})", block.name, block.ty),
+            Value::Unkown => write!(fmt, "(unkown)"),
             Value::Nil => write!(fmt, "(nil)"),
+        }
+    }
+}
+
+impl Value {
+    fn identity(self) -> Self {
+        match self {
+            Value::Float(_) => Value::Float(1.0),
+            Value::Int(_) => Value::Int(1),
+            Value::Bool(_) => Value::Bool(true),
+            a => a,
+        }
+    }
+
+    fn as_type(&self) -> Type {
+        match self {
+            Value::Float(_) => Type::Float,
+            Value::Int(_) => Type::Int,
+            Value::Bool(_) => Type::Bool,
+            Value::String(_) => Type::String,
+            Value::Function(block) => block.ty.clone(),
+            Value::Unkown => Type::UnknownType,
+            Value::Nil => Type::Void,
         }
     }
 }
@@ -79,6 +104,8 @@ pub enum Op {
 
 #[derive(Debug)]
 pub struct Block {
+    pub ty: Type,
+
     pub name: String,
     pub file: PathBuf,
     pub ops: Vec<Op>,
@@ -90,12 +117,35 @@ pub struct Block {
 impl Block {
     pub fn new(name: &str, file: &Path, line: usize) -> Self {
         Self {
+            ty: Type::Void,
             name: String::from(name),
             file: file.to_owned(),
             ops: Vec::new(),
             last_line_offset: 0,
             line_offsets: HashMap::new(),
             line,
+        }
+    }
+
+    pub fn from_type(ty: &Type) -> Self {
+        let mut block = Block::new("/empty/", Path::new(""), 0);
+        block.ty = ty.clone();
+        block
+    }
+
+    pub fn args(&self) -> &Vec<Type> {
+        if let Type::Function(ref args, _) = self.ty {
+            args
+        } else {
+            unreachable!()
+        }
+    }
+
+    pub fn ret(&self) -> &Type {
+        if let Type::Function(_, ref ret) = self.ty {
+            ret
+        } else {
+            unreachable!()
         }
     }
 
@@ -203,6 +253,10 @@ impl VM {
         self
     }
 
+    fn pop(&mut self) -> Value {
+        self.stack.pop().unwrap()
+    }
+
     fn pop_twice(&mut self) -> (Value, Value) {
         let len = self.stack.len();
         let res = (self.stack[len-2].clone(), self.stack[len-1].clone());
@@ -224,6 +278,11 @@ impl VM {
         &mut self.frames[last]
     }
 
+    fn op(&self) -> &Op {
+        let ip = self.frame().ip;
+        &self.frame().block.ops[ip]
+    }
+
     fn error(&self, kind: ErrorKind, message: Option<String>) -> Error {
         let frame = self.frames.last().unwrap();
         Error {
@@ -234,7 +293,7 @@ impl VM {
         }
     }
 
-    fn eval_op(&mut self, op: &Op) -> Result<OpResult, Error> {
+    fn eval_op(&mut self, op: Op) -> Result<OpResult, Error> {
         match op {
             Op::Illegal => {
                 error!(self, ErrorKind::InvalidProgram);
@@ -256,7 +315,7 @@ impl VM {
                 match self.stack.pop().unwrap() {
                     Value::Float(a) => self.stack.push(Value::Float(-a)),
                     Value::Int(a) => self.stack.push(Value::Int(-a)),
-                    a => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a])),
+                    a => error!(self, ErrorKind::RuntimeTypeError(op, vec![a])),
                 }
             }
 
@@ -267,7 +326,7 @@ impl VM {
                     (Value::String(a), Value::String(b)) => {
                         self.stack.push(Value::String(Rc::from(format!("{}{}", a, b))))
                     }
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
@@ -275,7 +334,7 @@ impl VM {
                 match self.pop_twice() {
                     (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a - b)),
                     (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a - b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
@@ -283,7 +342,7 @@ impl VM {
                 match self.pop_twice() {
                     (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a * b)),
                     (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a * b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
@@ -291,7 +350,7 @@ impl VM {
                 match self.pop_twice() {
                     (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a / b)),
                     (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a / b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
@@ -301,7 +360,7 @@ impl VM {
                     (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a == b)),
                     (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a == b)),
                     (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a == b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
@@ -311,7 +370,7 @@ impl VM {
                     (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a < b)),
                     (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a < b)),
                     (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a < b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
@@ -321,39 +380,39 @@ impl VM {
                     (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a > b)),
                     (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a > b)),
                     (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a > b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
             Op::And => {
                 match self.pop_twice() {
                     (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a && b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
             Op::Or => {
                 match self.pop_twice() {
                     (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a || b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
             Op::Not => {
                 match self.stack.pop().unwrap() {
                     Value::Bool(a) => self.stack.push(Value::Bool(!a)),
-                    a => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a])),
+                    a => error!(self, ErrorKind::RuntimeTypeError(op, vec![a])),
                 }
             }
 
             Op::Jmp(line) => {
-                self.frame_mut().ip = *line;
+                self.frame_mut().ip = line;
                 return Ok(OpResult::Continue);
             }
 
             Op::JmpFalse(line) => {
                 if matches!(self.stack.pop(), Some(Value::Bool(false))) {
-                    self.frame_mut().ip = *line;
+                    self.frame_mut().ip = line;
                     return Ok(OpResult::Continue);
                 }
             }
@@ -380,8 +439,9 @@ impl VM {
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match &self.stack[new_base] {
-                    Value::Function(args, _ret, block) => {
-                        if args.len() != *num_args {
+                    Value::Function(block) => {
+                        let args = block.args();
+                        if args.len() != num_args {
                             error!(self,
                                 ErrorKind::InvalidProgram,
                                 format!("Invalid number of arguments, got {} expected {}.",
@@ -420,7 +480,7 @@ impl VM {
         Ok(OpResult::Continue)
     }
 
-    pub fn print_stack(&mut self) {
+    pub fn print_stack(&self) {
         let start = self.frame().stack_offset;
         print!("    {:3} [", start);
         for (i, s) in self.stack.iter().skip(start).enumerate() {
@@ -457,10 +517,136 @@ impl VM {
                 self.print_stack()
             }
 
-            let op = self.frame().block.ops[self.frame().ip].clone();
-            if matches!(self.eval_op(&op)?, OpResult::Done) {
+            if matches!(self.eval_op(self.op().clone())?, OpResult::Done) {
                 return Ok(());
             }
         }
+    }
+
+    fn check_op(&mut self, op: Op) -> Result<(), Error> {
+        match op {
+            Op::Jmp(_line) => {}
+
+            Op::Return => {
+                let a = self.stack.pop().unwrap();
+                let ret = self.frame().block.ret();
+                if a.as_type() != *ret {
+                    error!(self, ErrorKind::TypeError(op, vec![a.as_type(),
+                                                               ret.clone()]),
+                                                      "Not matching return type.".to_string());
+                }
+            }
+
+            Op::Print => {
+                self.pop();
+            }
+
+            Op::Define(ref ty) => {
+                let top_type = self.stack.last().unwrap().as_type();
+                match (ty, top_type) {
+                    (Type::UnknownType, top_type)
+                        if top_type != Type::UnknownType => {}
+                    (a, b) if a != &b => {
+                        error!(self,
+                            ErrorKind::TypeError(
+                                op.clone(),
+                                vec![a.clone(), b.clone()]),
+                                format!("Tried to assign a type {:?} to type {:?}.", a, b)
+                        );
+                    }
+                    _ => {}
+                }
+            }
+
+            Op::Call(num_args) => {
+                let new_base = self.stack.len() - 1 - num_args;
+                match &self.stack[new_base] {
+                    Value::Function(block) => {
+                        let args = block.args();
+                        if args.len() != num_args {
+                            error!(self,
+                                ErrorKind::InvalidProgram,
+                                format!("Invalid number of arguments, got {} expected {}.",
+                                    num_args, args.len()));
+                        }
+
+                        let stack_args = &self.stack[self.stack.len() - args.len()..];
+                        let stack_args: Vec<_> = stack_args.iter().map(|x| x.as_type()).collect();
+                        if args != &stack_args {
+                            error!(self,
+                                ErrorKind::TypeError(op.clone(), vec![]),
+                                format!("Expected args of type {:?} but got {:?}.",
+                                    args, stack_args));
+                        }
+
+                        self.stack[new_base] = block.ret().as_value();
+                    },
+                    _ => {
+                        error!(self,
+                            ErrorKind::TypeError(op.clone(), vec![self.stack[new_base].as_type()]),
+                            format!("Tried to call non-function {:?}", self.stack[new_base]));
+                    }
+                }
+            }
+
+            Op::JmpFalse(_) => {
+                match self.pop() {
+                    Value::Bool(_) => {},
+                    a => { error!(self, ErrorKind::TypeError(op.clone(), vec![a.as_type()])) },
+                }
+            }
+            _ => {
+                self.eval_op(op)?;
+                return Ok(())
+            }
+        }
+        self.frame_mut().ip += 1;
+        Ok(())
+    }
+
+    fn typecheck_block(&mut self, block: Rc<Block>) -> Vec<Error> {
+        self.frames.clear();
+
+        self.frames.push(Frame {
+            stack_offset: 0,
+            block: block,
+            ip: 0
+        });
+
+        if self.print_blocks {
+            self.frame().block.debug_print();
+        }
+
+        let mut errors = Vec::new();
+        loop {
+            let ip = self.frame().ip;
+            if ip > self.frame().block.ops.len() {
+                break;
+            }
+
+            if self.print_ops {
+                self.print_stack()
+            }
+
+            if let Err(e) = self.check_op(self.op().clone()) {
+                errors.push(e);
+            }
+
+            if !self.stack.is_empty() {
+                let ident = self.stack.pop().unwrap().identity();
+                self.stack.push(ident);
+            }
+        }
+        errors
+    }
+
+    pub fn typecheck(&mut self, blocks: Vec<Rc<Block>>) -> Result<(), Vec<Error>> {
+        let mut errors = Vec::new();
+
+        for block in blocks.iter() {
+            errors.append(&mut self.typecheck_block(Rc::clone(block)));
+        }
+
+        return Ok(());
     }
 }
