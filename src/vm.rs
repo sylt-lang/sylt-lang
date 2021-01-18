@@ -178,6 +178,11 @@ pub struct VM {
     print_ops: bool,
 }
 
+enum OpResult {
+    Continue,
+    Done,
+}
+
 impl VM {
     pub fn new() -> Self {
         Self {
@@ -229,6 +234,209 @@ impl VM {
         }
     }
 
+    fn eval_op(&mut self, op: &Op) -> Result<OpResult, Error> {
+        match op {
+            Op::Illegal => {
+                error!(self, ErrorKind::InvalidProgram);
+            }
+
+            Op::Unreachable => {
+                error!(self, ErrorKind::Unreachable);
+            }
+
+            Op::Pop => {
+                self.stack.pop();
+            }
+
+            Op::Constant(value) => {
+                self.stack.push(value.clone());
+            }
+
+            Op::Neg => {
+                match self.stack.pop().unwrap() {
+                    Value::Float(a) => self.stack.push(Value::Float(-a)),
+                    Value::Int(a) => self.stack.push(Value::Int(-a)),
+                    a => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a])),
+                }
+            }
+
+            Op::Add => {
+                match self.pop_twice() {
+                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a + b)),
+                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a + b)),
+                    (Value::String(a), Value::String(b)) => {
+                        self.stack.push(Value::String(Rc::from(format!("{}{}", a, b))))
+                    }
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                }
+            }
+
+            Op::Sub => {
+                match self.pop_twice() {
+                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a - b)),
+                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a - b)),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                }
+            }
+
+            Op::Mul => {
+                match self.pop_twice() {
+                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a * b)),
+                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a * b)),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                }
+            }
+
+            Op::Div => {
+                match self.pop_twice() {
+                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a / b)),
+                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a / b)),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                }
+            }
+
+            Op::Equal => {
+                match self.pop_twice() {
+                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a == b)),
+                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a == b)),
+                    (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a == b)),
+                    (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a == b)),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                }
+            }
+
+            Op::Less => {
+                match self.pop_twice() {
+                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a < b)),
+                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a < b)),
+                    (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a < b)),
+                    (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a < b)),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                }
+            }
+
+            Op::Greater => {
+                match self.pop_twice() {
+                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a > b)),
+                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a > b)),
+                    (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a > b)),
+                    (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a > b)),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                }
+            }
+
+            Op::And => {
+                match self.pop_twice() {
+                    (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a && b)),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                }
+            }
+
+            Op::Or => {
+                match self.pop_twice() {
+                    (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a || b)),
+                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
+                }
+            }
+
+            Op::Not => {
+                match self.stack.pop().unwrap() {
+                    Value::Bool(a) => self.stack.push(Value::Bool(!a)),
+                    a => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a])),
+                }
+            }
+
+            Op::Jmp(line) => {
+                self.frame_mut().ip = *line;
+                return Ok(OpResult::Continue);
+            }
+
+            Op::JmpFalse(line) => {
+                if matches!(self.stack.pop(), Some(Value::Bool(false))) {
+                    self.frame_mut().ip = *line;
+                    return Ok(OpResult::Continue);
+                }
+            }
+
+            Op::Assert => {
+                if matches!(self.stack.pop(), Some(Value::Bool(false))) {
+                    error!(self, ErrorKind::Assert);
+                }
+                self.stack.push(Value::Bool(true));
+            }
+
+            Op::ReadLocal(slot) => {
+                let slot = self.frame().stack_offset + slot;
+                self.stack.push(self.stack[slot].clone());
+            }
+
+            Op::Assign(slot) => {
+                let slot = self.frame().stack_offset + slot;
+                self.stack[slot] = self.stack.pop().unwrap();
+            }
+
+            Op::Define(_) => {}
+
+            Op::Call(num_args) => {
+                let new_base = self.stack.len() - 1 - num_args;
+                match &self.stack[new_base] {
+                    Value::Function(args, _ret, block) => {
+                        if args.len() != *num_args {
+                            error!(self,
+                                ErrorKind::InvalidProgram,
+                                format!("Invalid number of arguments, got {} expected {}.",
+                                    num_args, args.len()));
+                        }
+                        if self.print_blocks {
+                            block.debug_print();
+                        }
+                        self.frames.push(Frame {
+                            stack_offset: new_base,
+                            block: Rc::clone(&block),
+                            ip: 0,
+                        });
+                        return Ok(OpResult::Continue);
+                    },
+                    _ => {
+                        unreachable!()
+                    }
+                }
+            }
+
+            Op::Print => {
+                println!("PRINT: {:?}", self.stack.pop().unwrap());
+            }
+
+            Op::Return => {
+                let last = self.frames.pop().unwrap();
+                if self.frames.is_empty() {
+                    return Ok(OpResult::Done);
+                } else {
+                    self.stack[last.stack_offset] = self.stack.pop().unwrap();
+                }
+            }
+        }
+        self.frame_mut().ip += 1;
+        Ok(OpResult::Continue)
+    }
+
+    pub fn print_stack(&mut self) {
+        let start = self.frame().stack_offset;
+        print!("    {:3} [", start);
+        for (i, s) in self.stack.iter().skip(start).enumerate() {
+            if i != 0 {
+                print!(" ");
+            }
+            print!("{:?}", s.green());
+        }
+        println!("]");
+
+        println!("{:5} {:05} {:?}",
+            self.frame().block.line(self.frame().ip).red(),
+            self.frame().ip.blue(),
+            self.frame().block.ops[self.frame().ip]);
+    }
+
     pub fn run(&mut self, block: Rc<Block>) -> Result<(), Error>{
         crate::typer::VM::new().print_ops(self.print_ops)
                                .print_blocks(self.print_blocks)
@@ -246,205 +454,13 @@ impl VM {
 
         loop {
             if self.print_ops {
-                let start = self.frame().stack_offset;
-                print!("    {:3} [", start);
-                for (i, s) in self.stack.iter().skip(start).enumerate() {
-                    if i != 0 {
-                        print!(" ");
-                    }
-                    print!("{:?}", s.green());
-                }
-                println!("]");
-
-                println!("{:5} {:05} {:?}",
-                         self.frame().block.line(self.frame().ip).red(),
-                         self.frame().ip.blue(),
-                         self.frame().block.ops[self.frame().ip]);
+                self.print_stack()
             }
 
             let op = self.frame().block.ops[self.frame().ip].clone();
-            match op {
-                Op::Illegal => {
-                    error!(self, ErrorKind::InvalidProgram);
-                }
-
-                Op::Unreachable => {
-                    error!(self, ErrorKind::Unreachable);
-                }
-
-                Op::Pop => {
-                    self.stack.pop();
-                }
-
-                Op::Constant(value) => {
-                    self.stack.push(value.clone());
-                }
-
-                Op::Neg => {
-                    match self.stack.pop().unwrap() {
-                        Value::Float(a) => self.stack.push(Value::Float(-a)),
-                        Value::Int(a) => self.stack.push(Value::Int(-a)),
-                        a => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a])),
-                    }
-                }
-
-                Op::Add => {
-                    match self.pop_twice() {
-                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a + b)),
-                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a + b)),
-                        (Value::String(a), Value::String(b)) => {
-                            self.stack.push(Value::String(Rc::from(format!("{}{}", a, b))))
-                        }
-                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
-                    }
-                }
-
-                Op::Sub => {
-                    match self.pop_twice() {
-                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a - b)),
-                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a - b)),
-                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
-                    }
-                }
-
-                Op::Mul => {
-                    match self.pop_twice() {
-                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a * b)),
-                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a * b)),
-                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
-                    }
-                }
-
-                Op::Div => {
-                    match self.pop_twice() {
-                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a / b)),
-                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a / b)),
-                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
-                    }
-                }
-
-                Op::Equal => {
-                    match self.pop_twice() {
-                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a == b)),
-                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a == b)),
-                        (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a == b)),
-                        (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a == b)),
-                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
-                    }
-                }
-
-                Op::Less => {
-                    match self.pop_twice() {
-                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a < b)),
-                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a < b)),
-                        (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a < b)),
-                        (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a < b)),
-                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
-                    }
-                }
-
-                Op::Greater => {
-                    match self.pop_twice() {
-                        (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a > b)),
-                        (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a > b)),
-                        (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a > b)),
-                        (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a > b)),
-                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
-                    }
-                }
-
-                Op::And => {
-                    match self.pop_twice() {
-                        (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a && b)),
-                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
-                    }
-                }
-
-                Op::Or => {
-                    match self.pop_twice() {
-                        (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a || b)),
-                        (a, b) => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a, b])),
-                    }
-                }
-
-                Op::Not => {
-                    match self.stack.pop().unwrap() {
-                        Value::Bool(a) => self.stack.push(Value::Bool(!a)),
-                        a => error!(self, ErrorKind::RuntimeTypeError(op.clone(), vec![a])),
-                    }
-                }
-
-                Op::Jmp(line) => {
-                    self.frame_mut().ip = line;
-                    continue;
-                }
-
-                Op::JmpFalse(line) => {
-                    if matches!(self.stack.pop(), Some(Value::Bool(false))) {
-                        self.frame_mut().ip = line;
-                        continue;
-                    }
-                }
-
-                Op::Assert => {
-                    if matches!(self.stack.pop(), Some(Value::Bool(false))) {
-                        error!(self, ErrorKind::Assert);
-                    }
-                    self.stack.push(Value::Bool(true));
-                }
-
-                Op::ReadLocal(slot) => {
-                    let slot = self.frame().stack_offset + slot;
-                    self.stack.push(self.stack[slot].clone());
-                }
-
-                Op::Assign(slot) => {
-                    let slot = self.frame().stack_offset + slot;
-                    self.stack[slot] = self.stack.pop().unwrap();
-                }
-
-                Op::Define(_) => {}
-
-                Op::Call(num_args) => {
-                    let new_base = self.stack.len() - 1 - num_args;
-                    match &self.stack[new_base] {
-                        Value::Function(args, _ret, block) => {
-                            if args.len() != num_args {
-                                error!(self,
-                                       ErrorKind::InvalidProgram,
-                                       format!("Invalid number of arguments, got {} expected {}.",
-                                               num_args, args.len()));
-                            }
-                            if self.print_blocks {
-                                block.debug_print();
-                            }
-                            self.frames.push(Frame {
-                                stack_offset: new_base,
-                                block: Rc::clone(&block),
-                                ip: 0,
-                            });
-                            continue;
-                        },
-                        _ => {
-                            unreachable!()
-                        }
-                    }
-                }
-
-                Op::Print => {
-                    println!("PRINT: {:?}", self.stack.pop().unwrap());
-                }
-
-                Op::Return => {
-                    let last = self.frames.pop().unwrap();
-                    if self.frames.is_empty() {
-                        return Ok(());
-                    } else {
-                        self.stack[last.stack_offset] = self.stack.pop().unwrap();
-                    }
-                }
+            if matches!(self.eval_op(&op)?, OpResult::Done) {
+                return Ok(());
             }
-            self.frame_mut().ip += 1;
         }
     }
 }
