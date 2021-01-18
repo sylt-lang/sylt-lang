@@ -104,12 +104,31 @@ struct Variable {
     typ: Type,
     scope: usize,
     active: bool,
+    upvalue: bool,
 }
 
 struct Frame {
     stack: Vec<Variable>,
+    upvalues: Vec<(usize, Variable, bool)>,
     scope: usize,
     variables_below: usize,
+}
+
+impl Frame {
+    fn find_local(&self, name: &str) -> Option<(usize, Type, usize, bool)> {
+        for (slot, var) in self.stack.iter().enumerate().rev() {
+            if var.name == name && var.active {
+                return Some((slot, var.typ.clone(), var.scope, false));
+            }
+        }
+        None
+    }
+
+    fn find_upvalue(&self, name: &str) -> Option<(usize, Type, usize, bool)> {
+        for (slot, upvalue) in self.upvalues.iter().enumerate() {
+            //TODO ??
+        }
+    }
 }
 
 struct Compiler {
@@ -388,11 +407,18 @@ impl Compiler {
         }
     }
 
-    fn find_local(&self, name: &str, _block: &Block) -> Option<(usize, Type, usize)> {
-        let frame = self.frame();
-        for (slot, var) in frame.stack.iter().enumerate().rev() {
-            if var.name == name && var.active {
-                return Some((slot, var.typ.clone(), var.scope));
+    fn find_upvalue(&self, name: &str, start_at: usize) -> Option<(usize, Type, usize, bool)> {
+
+    }
+
+    fn find_variable<I>(&mut self, name: &str, mut iterator: I) -> Option<(usize, Type, usize, bool)>
+    where I: Iterator<Item = Frame> {
+        if let Some(frame) = i.next() {
+            if let Some(res) = frame.find_local(name) {
+                return Some(res);
+            }
+            if let Some(res) = frame.find_upvalue(name) {
+                return Some(res);
             }
         }
         None
@@ -519,7 +545,8 @@ impl Compiler {
             name: String::from(name),
             typ,
             scope,
-            active: false
+            active: false,
+            upvalue: false,
         });
         Ok(slot)
     }
@@ -749,6 +776,7 @@ impl Compiler {
             typ: Type::Void,
             scope: 0,
             active: false,
+            upvalue: false,
         });
 
         let mut block = Block::new(name, file, 0);
