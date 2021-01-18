@@ -510,6 +510,7 @@ impl VM {
         });
 
         if self.print_blocks {
+            println!("\n    [[{}]]\n", "RUNNING".red());
             self.frame().block.debug_print();
         }
 
@@ -621,6 +622,7 @@ impl VM {
         });
 
         if self.print_blocks {
+            println!("\n    [[{}]]\n", "TYPECHECK".purple());
             self.frame().block.debug_print();
         }
 
