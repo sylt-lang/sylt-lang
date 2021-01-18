@@ -21,10 +21,15 @@ pub fn run_string(s: &str, print: bool) -> Result<(), Vec<Error>> {
 
 pub fn run(tokens: TokenStream, path: &Path, print: bool) -> Result<(), Vec<Error>> {
     match compiler::compile("main", path, tokens) {
-        Ok(block) =>
-            vm::VM::new().print_blocks(print)
-                         .print_ops(print)
-                         .run(Rc::new(block)).or_else(|e| Err(vec![e])),
+        Ok(blocks) => {
+            let mut vm = vm::VM::new().print_blocks(print).print_ops(print);
+            vm.typecheck(&blocks)?;
+            if let Err(e) = vm.run(Rc::clone(&blocks[0])) {
+                Err(vec![e])
+            } else {
+                Ok(())
+            }
+        }
         Err(errors) => Err(errors),
     }
 }

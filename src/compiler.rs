@@ -121,6 +121,8 @@ struct Compiler {
 
     panic: bool,
     errors: Vec<Error>,
+
+    blocks: Vec<Rc<Block>>,
 }
 
 macro_rules! push_frame {
@@ -174,6 +176,8 @@ impl Compiler {
 
             panic: false,
             errors: vec![],
+
+            blocks: Vec::new(),
         }
     }
 
@@ -483,8 +487,10 @@ impl Compiler {
         }
 
         function_block.ty = Type::Function(args, Box::new(return_type));
+        let function_block = Rc::new(function_block);
 
-        block.add(Op::Constant(Value::Function(Rc::new(function_block))), self.line());
+        block.add(Op::Constant(Value::Function(Rc::clone(&function_block))), self.line());
+        self.blocks.push(function_block);
     }
 
     fn variable_expression(&mut self, block: &mut Block) {
@@ -737,9 +743,15 @@ impl Compiler {
 
     }
 
-    pub fn compile(&mut self, name: &str, file: &Path) -> Result<Block, Vec<Error>> {
-        let mut block = Block::new(name, file, 0);
+    pub fn compile(&mut self, name: &str, file: &Path) -> Result<Vec<Rc<Block>>, Vec<Error>> {
+        self.stack_mut().push(Variable {
+            name: String::from("/main/"),
+            typ: Type::Void,
+            scope: 0,
+            active: false,
+        });
 
+        let mut block = Block::new(name, file, 0);
         while self.peek() != Token::EOF {
             self.statement(&mut block);
             expect!(self, Token::Newline | Token::EOF, "Expect newline or EOF after expression.");
@@ -748,14 +760,16 @@ impl Compiler {
         block.add(Op::Return, self.line());
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
 
+        self.blocks.insert(0, Rc::new(block));
+
         if self.errors.is_empty() {
-            Ok(block)
+            Ok(self.blocks.clone())
         } else {
             Err(self.errors.clone())
         }
     }
 }
 
-pub fn compile(name: &str, file: &Path, tokens: TokenStream) -> Result<Block, Vec<Error>> {
+pub fn compile(name: &str, file: &Path, tokens: TokenStream) -> Result<Vec<Rc<Block>>, Vec<Error>> {
     Compiler::new(file, tokens).compile(name, file)
 }

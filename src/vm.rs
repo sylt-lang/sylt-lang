@@ -498,9 +498,10 @@ impl VM {
     }
 
     pub fn run(&mut self, block: Rc<Block>) -> Result<(), Error>{
-        crate::typer::VM::new().print_ops(self.print_ops)
-                               .print_blocks(self.print_blocks)
-                               .typecheck(Type::Void, Rc::clone(&block))?;
+        self.stack.clear();
+        self.frames.clear();
+
+        self.stack.push(Value::Function(Rc::clone(&block)));
 
         self.frames.push(Frame {
             stack_offset: 0,
@@ -605,7 +606,13 @@ impl VM {
     }
 
     fn typecheck_block(&mut self, block: Rc<Block>) -> Vec<Error> {
+        self.stack.clear();
         self.frames.clear();
+
+        self.stack.push(Value::Function(Rc::clone(&block)));
+        for arg in block.args() {
+            self.stack.push(arg.as_value());
+        }
 
         self.frames.push(Frame {
             stack_offset: 0,
@@ -620,7 +627,7 @@ impl VM {
         let mut errors = Vec::new();
         loop {
             let ip = self.frame().ip;
-            if ip > self.frame().block.ops.len() {
+            if ip >= self.frame().block.ops.len() {
                 break;
             }
 
@@ -630,6 +637,7 @@ impl VM {
 
             if let Err(e) = self.check_op(self.op().clone()) {
                 errors.push(e);
+                self.frame_mut().ip += 1;
             }
 
             if !self.stack.is_empty() {
@@ -640,13 +648,39 @@ impl VM {
         errors
     }
 
-    pub fn typecheck(&mut self, blocks: Vec<Rc<Block>>) -> Result<(), Vec<Error>> {
+    pub fn typecheck(&mut self, blocks: &Vec<Rc<Block>>) -> Result<(), Vec<Error>> {
         let mut errors = Vec::new();
 
         for block in blocks.iter() {
             errors.append(&mut self.typecheck_block(Rc::clone(block)));
         }
 
-        return Ok(());
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    mod typing {
+        use crate::test_string;
+        use crate::error::ErrorKind;
+
+        test_string!(uncallable_type, "
+                 f := fn i: int {
+                     i()
+                 }",
+                 [ErrorKind::TypeError(_, _)]);
+
+        test_string!(wrong_params, "
+                 f : fn -> int = fn a: int -> int {}",
+                 [ErrorKind::TypeError(_, _)]);
+
+        test_string!(wrong_ret, "
+                 f : fn -> int = fn {}",
+                 [ErrorKind::TypeError(_, _)]);
     }
 }
