@@ -41,7 +41,7 @@ mod tests {
     #[macro_export]
     macro_rules! assert_errs {
         ($result:expr, [ $( $kind:pat ),* ]) => {
-            println!("{} => {:?}", stringify!($result), $result);
+            eprintln!("{} => {:?}", stringify!($result), $result);
             assert!(matches!(
                 $result.unwrap_err().as_slice(),
                 &[$($crate::error::Error {

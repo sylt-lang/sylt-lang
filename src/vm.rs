@@ -527,6 +527,8 @@ impl VM {
 
     fn check_op(&mut self, op: Op) -> Result<(), Error> {
         match op {
+            Op::Unreachable => {}
+
             Op::Jmp(_line) => {}
 
             Op::Return => {
@@ -679,7 +681,7 @@ mod tests {
 
         test_string!(wrong_params, "
                  f : fn -> int = fn a: int -> int {}",
-                 [ErrorKind::TypeError(_, _)]);
+                 [ErrorKind::TypeError(_, _), ErrorKind::TypeError(_, _)]);
 
         test_string!(wrong_ret, "
                  f : fn -> int = fn {}",
