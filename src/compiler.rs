@@ -79,7 +79,7 @@ impl From<&Value> for Type {
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
-            Value::Function(block) => block.ty.clone(),
+            Value::Function(_, block) => block.ty.clone(),
             _ => Type::Void,
         }
     }
@@ -94,40 +94,64 @@ impl Type {
             Type::Float => Value::Float(1.0),
             Type::Bool => Value::Bool(true),
             Type::String => Value::String(Rc::new("".to_string())),
-            Type::Function(_, _) => Value::Function(Rc::new(Block::from_type(self))),
+            Type::Function(_, _) => Value::Function(
+                Vec::new(),
+                Rc::new(Block::from_type(self))),
         }
     }
 }
 
+#[derive(Clone)]
 struct Variable {
     name: String,
     typ: Type,
     scope: usize,
+    slot: usize,
+    outer_slot: usize,
     active: bool,
     upvalue: bool,
+    captured: bool,
 }
 
 struct Frame {
     stack: Vec<Variable>,
-    upvalues: Vec<(usize, Variable, bool)>,
+    upvalues: Vec<Variable>,
     scope: usize,
     variables_below: usize,
 }
 
 impl Frame {
-    fn find_local(&self, name: &str) -> Option<(usize, Type, usize, bool)> {
-        for (slot, var) in self.stack.iter().enumerate().rev() {
+    fn find_local(&self, name: &str) -> Option<Variable> {
+        println!("LOCAL!");
+        for var in self.stack.iter().rev() {
             if var.name == name && var.active {
-                return Some((slot, var.typ.clone(), var.scope, false));
+                return Some(var.clone());
             }
         }
         None
     }
 
-    fn find_upvalue(&self, name: &str) -> Option<(usize, Type, usize, bool)> {
-        for (slot, upvalue) in self.upvalues.iter().enumerate() {
-            //TODO ??
+    fn find_upvalue(&self, name: &str) -> Option<Variable> {
+        println!("UPVALUE!");
+        for var in self.upvalues.iter().rev() {
+            if var.name == name && var.active {
+                return Some(var.clone());
+            }
         }
+        None
+    }
+
+    fn add_upvalue(&mut self, variable: Variable) -> Variable {
+        println!("{} - UPDOG", variable.name);
+        let new_variable = Variable {
+            outer_slot: variable.slot,
+            slot: self.upvalues.len(),
+            active: true,
+            upvalue: true,
+            ..variable
+        };
+        self.upvalues.push(new_variable.clone());
+        new_variable
     }
 }
 
@@ -149,6 +173,7 @@ macro_rules! push_frame {
         {
             $compiler.frames.push(Frame {
                 stack: Vec::new(),
+                upvalues: Vec::new(),
                 scope: 0,
                 variables_below: $compiler.frame().variables_below + $compiler.stack().len(),
             });
@@ -173,8 +198,12 @@ macro_rules! push_scope {
         $code;
 
         $compiler.frame_mut().scope -= 1;
-        for _ in ss..$compiler.stack().len() {
-            $block.add(Op::Pop, $compiler.line());
+        for var in $compiler.frame().stack[ss..$compiler.stack().len()].iter().rev() {
+            if var.captured {
+                $block.add(Op::PopUpvalue, $compiler.line());
+            } else {
+                $block.add(Op::Pop, $compiler.line());
+            }
         }
         $compiler.stack_mut().truncate(ss);
     };
@@ -189,6 +218,7 @@ impl Compiler {
 
             frames: vec![Frame {
                 stack: Vec::new(),
+                upvalues: Vec::new(),
                 scope: 0,
                 variables_below: 0,
             }],
@@ -407,21 +437,34 @@ impl Compiler {
         }
     }
 
-    fn find_upvalue(&self, name: &str, start_at: usize) -> Option<(usize, Type, usize, bool)> {
-
-    }
-
-    fn find_variable<I>(&mut self, name: &str, mut iterator: I) -> Option<(usize, Type, usize, bool)>
-    where I: Iterator<Item = Frame> {
-        if let Some(frame) = i.next() {
+    fn find_and_capture_variable<'a, I>(name: &str, mut iterator: I) -> Option<Variable>
+    where I: Iterator<Item = &'a mut Frame> {
+        if let Some(frame) = iterator.next() {
             if let Some(res) = frame.find_local(name) {
+                frame.stack[res.slot].captured = true;
                 return Some(res);
             }
             if let Some(res) = frame.find_upvalue(name) {
                 return Some(res);
             }
+
+            if let Some(res) = Self::find_and_capture_variable(name, iterator) {
+                return Some(frame.add_upvalue(res));
+            }
         }
         None
+    }
+
+    fn find_variable(&mut self, name: &str) -> Option<Variable> {
+        if let Some(res) = self.frame().find_local(name) {
+            return Some(res);
+        }
+
+        if let Some(res) = self.frame().find_upvalue(name) {
+            return Some(res);
+        }
+
+        return Self::find_and_capture_variable(name, self.frames.iter_mut().rev());
     }
 
     fn call(&mut self, block: &mut Block) {
@@ -467,6 +510,7 @@ impl Compiler {
         let mut args = Vec::new();
         let mut return_type = Type::Void;
         let mut function_block = Block::new(name, &self.current_file, self.line());
+
         let _ret = push_frame!(self, function_block, {
             loop {
                 match self.peek() {
@@ -505,6 +549,8 @@ impl Compiler {
             }
 
             self.scope(&mut function_block);
+            // TODO(ed): Send the original place to find the upvalues,
+            // so we know from where to copy them.
         });
 
         if !matches!(function_block.last_op(), Some(&Op::Return)) {
@@ -515,7 +561,9 @@ impl Compiler {
         function_block.ty = Type::Function(args, Box::new(return_type));
         let function_block = Rc::new(function_block);
 
-        block.add(Op::Constant(Value::Function(Rc::clone(&function_block))), self.line());
+
+        let func = Op::Constant(Value::Function(Vec::new(), Rc::clone(&function_block)));
+        block.add(func, self.line());
         self.blocks.push(function_block);
     }
 
@@ -524,16 +572,20 @@ impl Compiler {
             Token::Identifier(name) => name,
             __ => unreachable!(),
         };
-        if let Some((slot, _, _)) = self.find_local(&name, block) {
-            block.add(Op::ReadLocal(slot), self.line());
+        if let Some(var) = self.find_variable(&name) {
+            if var.upvalue {
+                block.add(Op::ReadUpvalue(var.slot), self.line());
+            } else {
+                block.add(Op::ReadLocal(var.slot), self.line());
+            }
         } else {
             error!(self, format!("Using undefined variable {}.", name));
         }
     }
 
     fn define_variable(&mut self, name: &str, typ: Type, block: &mut Block) -> Result<usize, ()> {
-        if let Some((_, _, level)) = self.find_local(&name, block) {
-            if level == self.frame().scope {
+        if let Some(var) = self.find_variable(&name) {
+            if var.scope == self.frame().scope {
                 error!(self, format!("Multiple definitions of {} in this block.", name));
                 return Err(());
             }
@@ -543,6 +595,9 @@ impl Compiler {
         let scope = self.frame().scope;
         self.stack_mut().push(Variable {
             name: String::from(name),
+            captured: false,
+            outer_slot: 0,
+            slot,
             typ,
             scope,
             active: false,
@@ -562,9 +617,13 @@ impl Compiler {
     }
 
     fn assign(&mut self, name: &str, block: &mut Block) {
-        if let Some((slot, _, _)) = self.find_local(&name, block) {
+        if let Some(var) = self.find_variable(&name) {
             self.expression(block);
-            block.add(Op::Assign(slot), self.line());
+            if var.upvalue {
+                block.add(Op::AssignUpvalue(var.slot), self.line());
+            } else {
+                block.add(Op::AssignLocal(var.slot), self.line());
+            }
         } else {
             error!(self, format!("Using undefined variable {}.", name));
         }
@@ -774,8 +833,11 @@ impl Compiler {
         self.stack_mut().push(Variable {
             name: String::from("/main/"),
             typ: Type::Void,
+            outer_slot: 0,
+            slot: 0,
             scope: 0,
             active: false,
+            captured: false,
             upvalue: false,
         });
 

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::cell::RefCell;
 
 use crate::compiler::Type;
 use crate::error::{Error, ErrorKind};
@@ -22,9 +23,51 @@ pub enum Value {
     Int(i64),
     Bool(bool),
     String(Rc<String>),
-    Function(Rc<Block>),
+    Function(Vec<Rc<RefCell<UpValue>>>, Rc<Block>),
     Unkown,
     Nil,
+}
+
+#[derive(Clone, Debug)]
+pub struct UpValue {
+    slot: usize,
+    value: Value,
+}
+
+impl UpValue {
+
+    fn new(value: usize) -> Self {
+        Self {
+            slot: value,
+            value: Value::Nil,
+        }
+    }
+
+    fn get(&self, stack: &[Value]) -> Value {
+        if self.is_closed() {
+            self.value.clone()
+        } else {
+            stack[self.slot].clone()
+        }
+    }
+
+    fn set(&mut self, stack: &mut [Value], value: Value) {
+        if self.is_closed() {
+            self.value = value;
+        } else {
+            stack[self.slot] = value;
+        }
+    }
+
+
+    fn is_closed(&self) -> bool {
+        self.slot == 0
+    }
+
+    fn close(&mut self, value: Value) {
+        self.slot = 0;
+        self.value = value;
+    }
 }
 
 impl Debug for Value {
@@ -34,7 +77,7 @@ impl Debug for Value {
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),
             Value::String(s) => write!(fmt, "(string \"{}\")", s),
-            Value::Function(block) => write!(fmt, "(fn {}: {:?})", block.name, block.ty),
+            Value::Function(_, block) => write!(fmt, "(fn {}: {:?})", block.name, block.ty),
             Value::Unkown => write!(fmt, "(unkown)"),
             Value::Nil => write!(fmt, "(nil)"),
         }
@@ -57,7 +100,7 @@ impl Value {
             Value::Int(_) => Type::Int,
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
-            Value::Function(block) => block.ty.clone(),
+            Value::Function(_, block) => block.ty.clone(),
             Value::Unkown => Type::UnknownType,
             Value::Nil => Type::Void,
         }
@@ -69,6 +112,7 @@ pub enum Op {
     Illegal,
 
     Pop,
+    PopUpvalue,
     Constant(Value),
 
     Add,
@@ -92,7 +136,10 @@ pub enum Op {
     Unreachable,
 
     ReadLocal(usize),
-    Assign(usize),
+    AssignLocal(usize),
+
+    ReadUpvalue(usize),
+    AssignUpvalue(usize),
 
     Define(Type),
 
@@ -105,6 +152,7 @@ pub enum Op {
 #[derive(Debug)]
 pub struct Block {
     pub ty: Type,
+    pub ups: Vec<Type>,
 
     pub name: String,
     pub file: PathBuf,
@@ -118,6 +166,7 @@ impl Block {
     pub fn new(name: &str, file: &Path, line: usize) -> Self {
         Self {
             ty: Type::Void,
+            ups: Vec::new(),
             name: String::from(name),
             file: file.to_owned(),
             ops: Vec::new(),
@@ -222,6 +271,8 @@ struct Frame {
 
 #[derive(Debug)]
 pub struct VM {
+    upvalues: HashMap<usize, Rc<RefCell<UpValue>>>,
+
     stack: Vec<Value>,
     frames: Vec<Frame>,
     print_blocks: bool,
@@ -236,6 +287,7 @@ enum OpResult {
 impl VM {
     pub fn new() -> Self {
         Self {
+            upvalues: HashMap::new(),
             stack: Vec::new(),
             frames: Vec::new(),
             print_blocks: false,
@@ -251,6 +303,11 @@ impl VM {
     pub fn print_ops(mut self, b: bool) -> Self {
         self.print_ops = b;
         self
+    }
+
+    fn find_upvalue(&mut self, slot: usize) -> &mut Rc<RefCell<UpValue>> {
+        self.upvalues.entry(slot).or_insert(
+            Rc::new(RefCell::new(UpValue::new(slot))))
     }
 
     fn pop(&mut self) -> Value {
@@ -304,7 +361,11 @@ impl VM {
             }
 
             Op::Pop => {
-                self.stack.pop();
+                self.stack.pop().unwrap();
+            }
+
+            Op::PopUpvalue => {
+                self.stack.pop().unwrap();
             }
 
             Op::Constant(value) => {
@@ -424,12 +485,33 @@ impl VM {
                 self.stack.push(Value::Bool(true));
             }
 
+            Op::ReadUpvalue(slot) => {
+                let offset = self.frame().stack_offset;
+                let value = match &self.stack[offset] {
+                    Value::Function(ups, _) => {
+                        ups[slot].borrow().get(&self.stack)
+                    }
+                    _ => unreachable!(),
+                };
+                self.stack.push(value);
+            }
+
+            Op::AssignUpvalue(slot) => {
+                let offset = self.frame().stack_offset;
+                let value = self.stack.pop().unwrap();
+                let slot = match &self.stack[offset] {
+                    Value::Function(ups, _) => Rc::clone(&ups[slot]),
+                    _ => unreachable!(),
+                };
+                slot.borrow_mut().set(&mut self.stack, value);
+            }
+
             Op::ReadLocal(slot) => {
                 let slot = self.frame().stack_offset + slot;
                 self.stack.push(self.stack[slot].clone());
             }
 
-            Op::Assign(slot) => {
+            Op::AssignLocal(slot) => {
                 let slot = self.frame().stack_offset + slot;
                 self.stack[slot] = self.stack.pop().unwrap();
             }
@@ -439,7 +521,7 @@ impl VM {
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match &self.stack[new_base] {
-                    Value::Function(block) => {
+                    Value::Function(_, block) => {
                         let args = block.args();
                         if args.len() != num_args {
                             error!(self,
@@ -501,7 +583,7 @@ impl VM {
         self.stack.clear();
         self.frames.clear();
 
-        self.stack.push(Value::Function(Rc::clone(&block)));
+        self.stack.push(Value::Function(Vec::new(), Rc::clone(&block)));
 
         self.frames.push(Frame {
             stack_offset: 0,
@@ -565,7 +647,7 @@ impl VM {
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match &self.stack[new_base] {
-                    Value::Function(block) => {
+                    Value::Function(_, block) => {
                         let args = block.args();
                         if args.len() != num_args {
                             error!(self,
@@ -612,7 +694,7 @@ impl VM {
         self.stack.clear();
         self.frames.clear();
 
-        self.stack.push(Value::Function(Rc::clone(&block)));
+        self.stack.push(Value::Function(Vec::new(), Rc::clone(&block)));
         for arg in block.args() {
             self.stack.push(arg.as_value());
         }
