@@ -559,9 +559,8 @@ impl Compiler {
             // so we know from where to copy them.
         });
 
-        let mut prev = function_block.ops.len() - 1;
-        loop {
-            match function_block.ops[prev] {
+        for op in function_block.ops.iter().rev() {
+            match op {
                 Op::Pop | Op::PopUpvalue => {}
                 Op::Return => { break; } ,
                 _ => {
@@ -570,7 +569,11 @@ impl Compiler {
                     break;
                 }
             }
-            prev -= 1;
+        }
+
+        if function_block.ops.is_empty() {
+            function_block.add(Op::Constant(Value::Nil), self.line());
+            function_block.add(Op::Return, self.line());
         }
 
         function_block.ty = Type::Function(args, Box::new(return_type));
