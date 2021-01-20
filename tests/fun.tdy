@@ -56,6 +56,12 @@ f5_inner := fn -> int {
 }
 f5(f5_inner, 2) <=> 3
 
+// precedence
+f6 := fn a: int, b: int -> int {
+    ret a + b
+}
+1 + f6(2, 3) <=> 6
+
 // factorial := fn n: int -> int {
 //     if n <= 1 {
 //         ret 1
