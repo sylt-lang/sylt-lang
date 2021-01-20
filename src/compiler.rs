@@ -125,7 +125,6 @@ struct Frame {
 
 impl Frame {
     fn find_local(&self, name: &str) -> Option<Variable> {
-        println!("LOCAL!");
         for var in self.stack.iter().rev() {
             if var.name == name && var.active {
                 return Some(var.clone());
@@ -135,7 +134,6 @@ impl Frame {
     }
 
     fn find_upvalue(&self, name: &str) -> Option<Variable> {
-        println!("UPVALUE!");
         for var in self.upvalues.iter().rev() {
             if var.name == name && var.active {
                 return Some(var.clone());
@@ -202,6 +200,7 @@ macro_rules! push_scope {
         $code;
 
         $compiler.frame_mut().scope -= 1;
+
         for var in $compiler.frame().stack[ss..$compiler.stack().len()].iter().rev() {
             if var.captured {
                 $block.add(Op::PopUpvalue, $compiler.line());
@@ -496,17 +495,15 @@ impl Compiler {
         }
 
         block.add(Op::Call(arity), self.line());
-
-        for _ in 0..arity {
-            block.add(Op::Pop, self.line());
-        }
     }
 
     fn function(&mut self, block: &mut Block) {
         expect!(self, Token::Fn, "Expected 'fn' at start of function.");
 
-        let name = if !self.stack()[self.stack().len() - 1].active {
-            &self.stack()[self.stack().len() - 1].name
+        let top = self.stack().len() - 1;
+        let name = if !self.stack()[top].active {
+            self.stack_mut()[top].active = true;
+            &self.stack()[top].name
         } else {
             "anonumus function"
         };
@@ -562,9 +559,18 @@ impl Compiler {
             // so we know from where to copy them.
         });
 
-        if !matches!(function_block.last_op(), Some(&Op::Return)) {
-            function_block.add(Op::Constant(Value::Nil), self.line());
-            function_block.add(Op::Return, self.line());
+        let mut prev = function_block.ops.len() - 1;
+        loop {
+            match function_block.ops[prev] {
+                Op::Pop | Op::PopUpvalue => {}
+                Op::Return => { break; } ,
+                _ => {
+                    function_block.add(Op::Constant(Value::Nil), self.line());
+                    function_block.add(Op::Return, self.line());
+                    break;
+                }
+            }
+            prev -= 1;
         }
 
         function_block.ty = Type::Function(args, Box::new(return_type));

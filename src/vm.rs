@@ -369,7 +369,29 @@ impl VM {
             }
 
             Op::Constant(value) => {
-                self.stack.push(value.clone());
+                let offset = self.frame().stack_offset;
+                let value = match value {
+                    Value::Function(_, block) => {
+                        let mut ups = Vec::new();
+                        println!("UPS: {:?}", block.ups);
+                        for (slot, is_up, _) in block.ups.iter() {
+                            let up = if *is_up {
+                                if let Value::Function(local_ups, _) = &self.stack[offset] {
+                                    Rc::clone(&local_ups[*slot])
+                                } else {
+                                    unreachable!()
+                                }
+                            } else {
+                                let slot = self.frame().stack_offset + slot;
+                                Rc::clone(self.find_upvalue(slot))
+                            };
+                            ups.push(up);
+                        }
+                        Value::Function(ups, block)
+                    },
+                    _ => value.clone(),
+                };
+                self.stack.push(value);
             }
 
             Op::Neg => {
@@ -521,7 +543,7 @@ impl VM {
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match &self.stack[new_base] {
-                    Value::Function(ups, block) => {
+                    Value::Function(_, block) => {
                         let args = block.args();
                         if args.len() != num_args {
                             error!(self,
@@ -555,6 +577,7 @@ impl VM {
                     return Ok(OpResult::Done);
                 } else {
                     self.stack[last.stack_offset] = self.stack.pop().unwrap();
+                    self.stack.truncate(last.stack_offset + 1);
                 }
             }
         }
@@ -612,6 +635,10 @@ impl VM {
             Op::Unreachable => {}
 
             Op::Jmp(_line) => {}
+
+            Op::Constant(value) => {
+                self.stack.push(value.clone());
+            }
 
             Op::ReadUpvalue(slot) => {
                 self.stack.push(self.frame().block.ups[slot].2.as_value());
