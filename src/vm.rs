@@ -706,6 +706,8 @@ impl VM {
                         }
 
                         self.stack[new_base] = block.ret().as_value();
+
+                        self.stack.truncate(new_base + 1);
                     },
                     _ => {
                         error!(self,
