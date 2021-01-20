@@ -232,6 +232,7 @@ mod tests {
                     factorial(5) <=> 120
                     factorial(6) <=> 720
                     factorial(12) <=> 479001600",
+        //TODO this tests doesn't terminate in proper time if we print blocks and ops
         fibonacci: "fibonacci : fn int -> int = fn n: int -> int {
                       if n == 0 {
                         ret 0
