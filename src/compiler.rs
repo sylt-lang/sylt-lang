@@ -143,7 +143,6 @@ impl Frame {
     }
 
     fn add_upvalue(&mut self, variable: Variable) -> Variable {
-        println!("{} - UPDOG", variable.name);
         let new_variable = Variable {
             outer_upvalue: variable.upvalue,
             outer_slot: variable.slot,
@@ -552,9 +551,6 @@ impl Compiler {
             for var in self.frame().upvalues.iter() {
                 function_block.ups.push((var.outer_slot, var.outer_upvalue, var.typ.clone()));
             }
-            println!("{:?}", function_block.ups);
-            // TODO(ed): Send the original place to find the upvalues,
-            // so we know from where to copy them.
         });
 
         for op in function_block.ops.iter().rev() {
@@ -586,7 +582,7 @@ impl Compiler {
     fn variable_expression(&mut self, block: &mut Block) {
         let name = match self.eat() {
             Token::Identifier(name) => name,
-            __ => unreachable!(),
+            _ => unreachable!(),
         };
         if let Some(var) = self.find_variable(&name) {
             if var.upvalue {
@@ -602,7 +598,7 @@ impl Compiler {
         }
     }
 
-    fn define_variable(&mut self, name: &str, typ: Type, block: &mut Block) -> Result<usize, ()> {
+    fn define_variable(&mut self, name: &str, typ: Type, _block: &mut Block) -> Result<usize, ()> {
         if let Some(var) = self.find_variable(&name) {
             if var.scope == self.frame().scope {
                 error!(self, format!("Multiple definitions of {} in this block.", name));

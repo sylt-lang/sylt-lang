@@ -373,7 +373,6 @@ impl VM {
                 let value = match value {
                     Value::Function(_, block) => {
                         let mut ups = Vec::new();
-                        println!("UPS: {:?}", block.ups);
                         for (slot, is_up, _) in block.ups.iter() {
                             let up = if *is_up {
                                 if let Value::Function(local_ups, _) = &self.stack[offset] {
@@ -743,7 +742,7 @@ impl VM {
 
         self.frames.push(Frame {
             stack_offset: 0,
-            block: block,
+            block,
             ip: 0
         });
 
