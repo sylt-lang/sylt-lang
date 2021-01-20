@@ -363,8 +363,6 @@ impl Compiler {
                 | Token::NotEqual
                 => self.binary(block),
 
-            Token::LeftParen => self.call(block),
-
             _ => { return false; },
         }
         return true;
@@ -595,6 +593,9 @@ impl Compiler {
                 block.add(Op::ReadUpvalue(var.slot), self.line());
             } else {
                 block.add(Op::ReadLocal(var.slot), self.line());
+            }
+            if self.peek() == Token::LeftParen {
+                self.call(block);
             }
         } else {
             error!(self, format!("Using undefined variable {}.", name));
