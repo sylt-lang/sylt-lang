@@ -164,7 +164,67 @@ mod tests {
                   res <=> 1",
     );
 
+    test_multiple!(
+        fun,
+        simplest: "f := fn {}
+                   f()",
+        param_1: "f := fn a: int {}
+                f(1)",
+        return_1: "f := fn -> int {
+                     ret 1
+                   }
+                   f() <=> 1",
+        param_and_return: "f := fn a: int -> int {
+                             ret a * 2
+                           }
+                           f(1) <=> 2
+                           f(5) <=> 10",
+        param_2: "add := fn a: int, b: int -> int {
+                    ret a + b
+                  }
+                  add(1, 1) <=> 2
+                  add(10, 20) <=> 30",
+        calls_inside_calls: "one := fn -> int {
+                               ret 1
+                             }
+                             add := fn a: int, b: int -> int {
+                               ret a + b
+                             }
+                             add(one(), one()) <=> 2
+                             add(add(one(), one()), one()) <=> 3
+                             add(one(), add(one(), one())) <=> 3",
+        passing_functions: "g := fn -> int {
+                              ret 1
+                            }
+                            f := fn inner: fn -> int -> int {
+                              ret inner()
+                            }
+                            f(g) <=> 1",
+        passing_functions_mixed: "g := fn a: int -> int {
+                                    ret a * 2
+                                  }
+                                  f := fn inner: fn int -> int, a: int -> int {
+                                    ret inner(a)
+                                  }
+                                  f(g, 2) <=> 4",
+        multiple_returns: "f := fn a: int -> int {
+                             if a == 1 {
+                               ret 2
+                             } else {
+                               ret 3
+                             }
+                           }
+                           f(0) <=> 3
+                           f(1) <=> 2
+                           f(2) <=> 3",
+        precedence: "f := fn a: int, b: int -> int {
+                       ret a + b
+                     }
+                     1 + f(2, 3) <=> 6
+                     2 * f(2, 3) <=> 10
+                     f(2, 3) - (2 + 3) <=> 0"
+    );
+
     test_file!(scoping, "tests/scoping.tdy");
     test_file!(for_, "tests/for.tdy");
-    test_file!(fun, "tests/fun.tdy");
 }
