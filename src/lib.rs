@@ -169,7 +169,7 @@ mod tests {
         simplest: "f := fn {}
                    f()",
         param_1: "f := fn a: int {}
-                f(1)",
+                  f(1)",
         return_1: "f := fn -> int {
                      ret 1
                    }
@@ -222,7 +222,28 @@ mod tests {
                      }
                      1 + f(2, 3) <=> 6
                      2 * f(2, 3) <=> 10
-                     f(2, 3) - (2 + 3) <=> 0"
+                     f(2, 3) - (2 + 3) <=> 0",
+        factorial: "factorial : fn int -> int = fn n: int -> int {
+                      if n <= 1 {
+                        ret 1
+                      }
+                      ret n * factorial(n - 1)
+                    }
+                    factorial(5) <=> 120
+                    factorial(6) <=> 720
+                    factorial(12) <=> 479001600",
+        fibonacci: "fibonacci : fn int -> int = fn n: int -> int {
+                      if n == 0 {
+                        ret 0
+                      } else if n == 1 {
+                        ret 1
+                      } else if n < 0 {
+                        <!>
+                      }
+                      ret fibonacci(n - 1) + fibonacci(n - 2)
+                    }
+                    fibonacci(10) <=> 55
+                    fibonacci(20) <=> 6765"
     );
 
     test_file!(scoping, "tests/scoping.tdy");
