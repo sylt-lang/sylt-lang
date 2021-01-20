@@ -6,7 +6,7 @@ use crate::tokenizer::{Token, TokenStream};
 use crate::vm::{Value, Block, Op};
 
 macro_rules! nextable_enum {
-    ( $name:ident { $( $thing:ident ),* } ) => {
+    ( $name:ident { $( $thing:ident ),* $( , )? } ) => {
         #[derive(PartialEq, PartialOrd, Clone, Copy, Debug)]
         enum $name {
             $( $thing, )*
@@ -43,7 +43,7 @@ nextable_enum!(Prec {
     Bool,
     Comp,
     Term,
-    Factor
+    Factor,
 });
 
 #[derive(Debug, Clone)]
