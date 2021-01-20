@@ -107,7 +107,10 @@ struct Variable {
     typ: Type,
     scope: usize,
     slot: usize,
+
     outer_slot: usize,
+    outer_upvalue: bool,
+
     active: bool,
     upvalue: bool,
     captured: bool,
@@ -144,6 +147,7 @@ impl Frame {
     fn add_upvalue(&mut self, variable: Variable) -> Variable {
         println!("{} - UPDOG", variable.name);
         let new_variable = Variable {
+            outer_upvalue: variable.upvalue,
             outer_slot: variable.slot,
             slot: self.upvalues.len(),
             active: true,
@@ -549,6 +553,11 @@ impl Compiler {
             }
 
             self.scope(&mut function_block);
+
+            for var in self.frame().upvalues.iter() {
+                function_block.ups.push((var.outer_slot, var.outer_upvalue, var.typ.clone()));
+            }
+            println!("{:?}", function_block.ups);
             // TODO(ed): Send the original place to find the upvalues,
             // so we know from where to copy them.
         });
@@ -596,6 +605,7 @@ impl Compiler {
         self.stack_mut().push(Variable {
             name: String::from(name),
             captured: false,
+            outer_upvalue: false,
             outer_slot: 0,
             slot,
             typ,
@@ -833,6 +843,7 @@ impl Compiler {
         self.stack_mut().push(Variable {
             name: String::from("/main/"),
             typ: Type::Void,
+            outer_upvalue: false,
             outer_slot: 0,
             slot: 0,
             scope: 0,

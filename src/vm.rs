@@ -152,7 +152,7 @@ pub enum Op {
 #[derive(Debug)]
 pub struct Block {
     pub ty: Type,
-    pub ups: Vec<Type>,
+    pub ups: Vec<(usize, bool, Type)>,
 
     pub name: String,
     pub file: PathBuf,
@@ -521,7 +521,7 @@ impl VM {
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match &self.stack[new_base] {
-                    Value::Function(_, block) => {
+                    Value::Function(ups, block) => {
                         let args = block.args();
                         if args.len() != num_args {
                             error!(self,
@@ -612,6 +612,19 @@ impl VM {
             Op::Unreachable => {}
 
             Op::Jmp(_line) => {}
+
+            Op::ReadUpvalue(slot) => {
+                self.stack.push(self.frame().block.ups[slot].2.as_value());
+            }
+
+            Op::AssignUpvalue(slot) => {
+                let var = self.frame().block.ups[slot].2.clone();
+                let up = self.stack.pop().unwrap().as_type();
+                if var != up {
+                    error!(self, ErrorKind::TypeError(op, vec![var, up]),
+                                  "Incorrect type for upvalue.".to_string());
+                }
+            }
 
             Op::Return => {
                 let a = self.stack.pop().unwrap();
@@ -738,6 +751,7 @@ impl VM {
         let mut errors = Vec::new();
 
         for block in blocks.iter() {
+            let ups: Vec<_> = block.ups.iter().map(|x| x.2.as_value()).collect();
             errors.append(&mut self.typecheck_block(Rc::clone(block)));
         }
 
