@@ -259,9 +259,13 @@ impl VM {
 
     fn pop_twice(&mut self) -> (Value, Value) {
         let len = self.stack.len();
-        let res = (self.stack[len-2].clone(), self.stack[len-1].clone());
-        self.stack.truncate(len - 2);
-        res
+        // stack : { ... valueA valueB valueC }
+        //                      ^^^^^^
+        //               remove len-2
+        // stack : { ... valueA valueC }
+        //                      ^^^^^^
+        //               remove len-2 again
+        (self.stack.remove(len-2), self.stack.remove(len-2))
     }
 
     fn _peek_up(&self, amount: usize) -> Option<&Value> {
