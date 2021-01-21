@@ -590,6 +590,12 @@ impl VM {
                     return Ok(OpResult::Done);
                 } else {
                     self.stack[last.stack_offset] = self.stack.pop().unwrap();
+                    for slot in last.stack_offset+1..self.stack.len() {
+                        if self.upvalues.contains_key(&slot) {
+                            let value = self.stack[slot].clone();
+                            self.drop_upvalue(slot, value);
+                        }
+                    }
                     self.stack.truncate(last.stack_offset + 1);
                 }
             }
@@ -651,6 +657,10 @@ impl VM {
 
             Op::Constant(value) => {
                 self.stack.push(value.clone());
+            }
+
+            Op::PopUpvalue => {
+                self.stack.pop().unwrap();
             }
 
             Op::ReadUpvalue(slot) => {

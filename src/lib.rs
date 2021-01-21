@@ -232,6 +232,30 @@ mod tests {
                     factorial(5) <=> 120
                     factorial(6) <=> 720
                     factorial(12) <=> 479001600",
+
+        returning_closures: "
+f : fn -> fn -> int = fn -> fn -> int {
+    x : int = 0
+    f := fn -> int {
+        x = x + 1
+        ret x
+    }
+    f() <=> 1
+    ret f
+}
+
+a := f()
+b := f()
+
+a() <=> 2
+a() <=> 3
+
+b() <=> 2
+b() <=> 3
+
+a() <=> 4
+"
+
         //TODO this tests doesn't terminate in proper time if we print blocks and ops
                     /*
         fibonacci: "fibonacci : fn int -> int = fn n: int -> int {
