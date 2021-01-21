@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use tihdy::run_file;
+use tihdy::vm::Value;
 
 struct Args {
     file: Option<PathBuf>,
@@ -10,7 +11,7 @@ struct Args {
 fn main() {
     let args = parse_args();
     let file = args.file.unwrap_or_else(|| Path::new("tests/simple.tdy").to_owned());
-    if let Err(errs) = run_file(&file, args.print) {
+    if let Err(errs) = run_file(&file, args.print, vec![(String::from("hello"), hello)]) {
         for err in errs.iter() {
             println!("{}", err);
         }
@@ -35,4 +36,9 @@ fn parse_args() -> Args {
         }
     };
     args
+}
+
+pub fn hello(_parameters: &[Value]) -> Value {
+    println!("Hello World!");
+    Value::Nil
 }

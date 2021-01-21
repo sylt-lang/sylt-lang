@@ -1,5 +1,1 @@
-a := fn f: fn -> {
-    f()
-}
-
-a(fn { print 2 })
+hello()

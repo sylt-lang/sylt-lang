@@ -6,21 +6,22 @@ pub mod vm;
 
 mod error;
 
+use compiler::RustFunction;
 use error::Error;
 use tokenizer::TokenStream;
 
-pub fn run_file(path: &Path, print: bool) -> Result<(), Vec<Error>> {
-    run(tokenizer::file_to_tokens(path), path, print)
+pub fn run_file(path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
+    run(tokenizer::file_to_tokens(path), path, print, functions)
 }
 
-pub fn run_string(s: &str, print: bool) -> Result<(), Vec<Error>> {
-    run(tokenizer::string_to_tokens(s), Path::new("builtin"), print)
+pub fn run_string(s: &str, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
+    run(tokenizer::string_to_tokens(s), Path::new("builtin"), print, functions)
 }
 
-pub fn run(tokens: TokenStream, path: &Path, print: bool) -> Result<(), Vec<Error>> {
-    match compiler::compile("main", path, tokens) {
+pub fn run(tokens: TokenStream, path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
+    match compiler::compile("main", path, tokens, &functions) {
         Ok(blocks) => {
-            let mut vm = vm::VM::new().print_blocks(print).print_ops(print);
+            let mut vm = vm::VM::new(&functions).print_blocks(print).print_ops(print);
             vm.typecheck(&blocks)?;
             if let Err(e) = vm.run(&blocks) {
                 Err(vec![e])
@@ -59,13 +60,13 @@ mod tests {
         ($fn:ident, $prog:literal) => {
             #[test]
             fn $fn() {
-                $crate::run_string($prog, true).unwrap();
+                $crate::run_string($prog, true, Vec::new()).unwrap();
             }
         };
         ($fn:ident, $prog:literal, $errs:tt) => {
             #[test]
             fn $fn() {
-                $crate::assert_errs!($crate::run_string($prog, true), $errs);
+                $crate::assert_errs!($crate::run_string($prog, true, Vec::new()), $errs);
             }
         }
     }
@@ -76,7 +77,7 @@ mod tests {
             #[test]
             fn $fn() {
                 let file = Path::new($path);
-                run_file(&file, true).unwrap();
+                run_file(&file, true, Vec::new()).unwrap();
             }
         };
     }
@@ -85,7 +86,7 @@ mod tests {
 
     #[test]
     fn unreachable_token() {
-        assert_errs!(run_string("<!>\n", true), [ErrorKind::Unreachable]);
+        assert_errs!(run_string("<!>\n", true, Vec::new()), [ErrorKind::Unreachable]);
     }
 
     macro_rules! test_multiple {

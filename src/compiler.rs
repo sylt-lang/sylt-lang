@@ -181,6 +181,8 @@ impl Frame {
     }
 }
 
+pub type RustFunction = fn(&[Value]) -> Value;
+
 #[derive(Debug, Clone)]
 pub struct Blob {
     pub name: String,
@@ -220,6 +222,8 @@ struct Compiler {
 
     blocks: Vec<Rc<RefCell<Block>>>,
     blobs: Vec<Blob>,
+
+    functions: HashMap<String, (usize, RustFunction)>,
 }
 
 macro_rules! push_frame {
@@ -283,6 +287,8 @@ impl Compiler {
 
             blocks: Vec::new(),
             blobs: Vec::new(),
+
+            functions: HashMap::new(),
         }
     }
 
@@ -509,6 +515,10 @@ impl Compiler {
         None
     }
 
+    fn find_extern_function(&self, name: &str) -> Option<usize> {
+        self.functions.get(name).map(|(i, _)| *i)
+    }
+
     fn find_variable(&mut self, name: &str) -> Option<Variable> {
         if let Some(res) = self.frame().find_local(name) {
             return Some(res);
@@ -518,7 +528,7 @@ impl Compiler {
             return Some(res);
         }
 
-        return Self::find_and_capture_variable(name, self.frames.iter_mut().rev());
+        Self::find_and_capture_variable(name, self.frames.iter_mut().rev())
     }
 
     fn find_blob(&self, name: &str) -> Option<usize> {
@@ -672,6 +682,9 @@ impl Compiler {
             if self.peek() == Token::LeftParen {
                 self.call(block);
             }
+        } else if let Some(slot) = self.find_extern_function(&name) {
+            block.add(Op::Constant(Value::ExternFunction(slot)), self.line());
+            self.call(block);
         } else {
             error!(self, format!("Using undefined variable {}.", name));
         }
@@ -1028,8 +1041,14 @@ impl Compiler {
 
     }
 
-    pub fn compile(&mut self, name: &str, file: &Path) -> Result<Prog, Vec<Error>> {
+    pub fn compile(&mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
         println!("=== START COMPILATION ===");
+        self.functions = functions
+            .to_vec()
+            .into_iter()
+            .enumerate()
+            .map(|(i, (s, f))| (s, (i, f)))
+            .collect();
         self.stack_mut().push(Variable {
             name: String::from("/main/"),
             typ: Type::Void,
@@ -1065,6 +1084,6 @@ impl Compiler {
     }
 }
 
-pub fn compile(name: &str, file: &Path, tokens: TokenStream) -> Result<Prog, Vec<Error>> {
-    Compiler::new(file, tokens).compile(name, file)
+pub fn compile(name: &str, file: &Path, tokens: TokenStream, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
+    Compiler::new(file, tokens).compile(name, file, functions)
 }

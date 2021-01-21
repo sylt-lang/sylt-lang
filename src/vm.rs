@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::cell::RefCell;
 
+use crate::compiler::RustFunction;
 use crate::compiler::Type;
 use crate::error::{Error, ErrorKind};
 use crate::compiler::{Prog, Blob};
@@ -28,6 +29,7 @@ pub enum Value {
     Bool(bool),
     String(Rc<String>),
     Function(Vec<Rc<RefCell<UpValue>>>, Rc<RefCell<Block>>),
+    ExternFunction(usize),
     Unkown,
     Nil,
 }
@@ -39,7 +41,6 @@ pub struct UpValue {
 }
 
 impl UpValue {
-
     fn new(value: usize) -> Self {
         Self {
             slot: value,
@@ -84,6 +85,7 @@ impl Debug for Value {
             Value::Bool(b) => write!(fmt, "(bool {})", b),
             Value::String(s) => write!(fmt, "(string \"{}\")", s),
             Value::Function(_, block) => write!(fmt, "(fn {}: {:?})", block.borrow().name, block.borrow().ty),
+            Value::ExternFunction(slot) => write!(fmt, "(extern fn {})", slot),
             Value::Unkown => write!(fmt, "(unkown)"),
             Value::Nil => write!(fmt, "(nil)"),
         }
@@ -109,6 +111,7 @@ impl Value {
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
             Value::Function(_, block) => block.borrow().ty.clone(),
+            Value::ExternFunction(_) => Type::Void, //TODO
             Value::Unkown => Type::UnknownType,
             Value::Nil => Type::Void,
         }
@@ -280,7 +283,6 @@ struct Frame {
     ip: usize,
 }
 
-#[derive(Debug)]
 pub struct VM {
     upvalues: HashMap<usize, Rc<RefCell<UpValue>>>,
 
@@ -291,6 +293,8 @@ pub struct VM {
 
     print_blocks: bool,
     print_ops: bool,
+
+    extern_functions: Vec<RustFunction>,
 }
 
 enum OpResult {
@@ -299,14 +303,17 @@ enum OpResult {
 }
 
 impl VM {
-    pub fn new() -> Self {
+    pub fn new(functions: &[(String, RustFunction)]) -> Self {
         Self {
             upvalues: HashMap::new(),
+
             stack: Vec::new(),
             frames: Vec::new(),
             blobs: Vec::new(),
             print_blocks: false,
             print_ops: false,
+
+            extern_functions: functions.iter().map(|(_, f)| *f).collect()
         }
     }
 
@@ -618,7 +625,13 @@ impl VM {
                             ip: 0,
                         });
                         return Ok(OpResult::Continue);
-                    },
+                    }
+                    Value::ExternFunction(slot) => {
+                        let extern_func = self.extern_functions[*slot];
+                        let res = extern_func(&[]);
+                        self.stack.truncate(new_base);
+                        self.stack.push(res);
+                    }
                     _ => {
                         unreachable!()
                     }
@@ -853,7 +866,10 @@ impl VM {
                         self.stack[new_base] = block.borrow().ret().as_value();
 
                         self.stack.truncate(new_base + 1);
-                    },
+                    }
+                    Value::ExternFunction(_slot) => {
+                        self.stack.truncate(new_base + 1);
+                    }
                     _ => {
                         error!(self,
                             ErrorKind::TypeError(op.clone(), vec![self.stack[new_base].as_type()]),
