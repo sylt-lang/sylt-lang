@@ -628,7 +628,7 @@ impl VM {
                     }
                     Value::ExternFunction(slot) => {
                         let extern_func = self.extern_functions[*slot];
-                        let res = extern_func(&[]);
+                        let res = extern_func(&self.stack[new_base+1..]);
                         self.stack.truncate(new_base);
                         self.stack.push(res);
                     }

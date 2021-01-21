@@ -38,7 +38,14 @@ fn parse_args() -> Args {
     args
 }
 
-pub fn hello(_parameters: &[Value]) -> Value {
-    println!("Hello World!");
+pub fn hello(parameters: &[Value]) -> Value {
+    match parameters {
+        [Value::String(s)] => {
+            println!("{}", s);
+        }
+        _ => {
+            println!("Bad parameters");
+        }
+    }
     Value::Nil
 }
