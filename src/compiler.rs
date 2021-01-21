@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::cell::RefCell;
 
 use crate::error::{Error, ErrorKind};
 use crate::tokenizer::{Token, TokenStream};
@@ -79,7 +80,7 @@ impl From<&Value> for Type {
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
-            Value::Function(_, block) => block.ty.clone(),
+            Value::Function(_, block) => block.borrow().ty.clone(),
             _ => Type::Void,
         }
     }
@@ -96,7 +97,7 @@ impl Type {
             Type::String => Value::String(Rc::new("".to_string())),
             Type::Function(_, _) => Value::Function(
                 Vec::new(),
-                Rc::new(Block::from_type(self))),
+                Rc::new(RefCell::new(Block::from_type(self)))),
         }
     }
 }
@@ -166,7 +167,7 @@ struct Compiler {
     panic: bool,
     errors: Vec<Error>,
 
-    blocks: Vec<Rc<Block>>,
+    blocks: Vec<Rc<RefCell<Block>>>,
 }
 
 macro_rules! push_frame {
@@ -571,7 +572,7 @@ impl Compiler {
         }
 
         function_block.ty = Type::Function(args, Box::new(return_type));
-        let function_block = Rc::new(function_block);
+        let function_block = Rc::new(RefCell::new(function_block));
 
 
         let func = Op::Constant(Value::Function(Vec::new(), Rc::clone(&function_block)));
@@ -845,7 +846,7 @@ impl Compiler {
 
     }
 
-    pub fn compile(&mut self, name: &str, file: &Path) -> Result<Vec<Rc<Block>>, Vec<Error>> {
+    pub fn compile(&mut self, name: &str, file: &Path) -> Result<Vec<Rc<RefCell<Block>>>, Vec<Error>> {
         self.stack_mut().push(Variable {
             name: String::from("/main/"),
             typ: Type::Void,
@@ -867,7 +868,7 @@ impl Compiler {
         block.add(Op::Return, self.line());
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
 
-        self.blocks.insert(0, Rc::new(block));
+        self.blocks.insert(0, Rc::new(RefCell::new(block)));
 
         if self.errors.is_empty() {
             Ok(self.blocks.clone())
@@ -877,6 +878,6 @@ impl Compiler {
     }
 }
 
-pub fn compile(name: &str, file: &Path, tokens: TokenStream) -> Result<Vec<Rc<Block>>, Vec<Error>> {
+pub fn compile(name: &str, file: &Path, tokens: TokenStream) -> Result<Vec<Rc<RefCell<Block>>>, Vec<Error>> {
     Compiler::new(file, tokens).compile(name, file)
 }

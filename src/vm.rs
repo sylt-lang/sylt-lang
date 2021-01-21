@@ -1,5 +1,6 @@
 use owo_colors::OwoColorize;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -23,7 +24,7 @@ pub enum Value {
     Int(i64),
     Bool(bool),
     String(Rc<String>),
-    Function(Vec<Rc<RefCell<UpValue>>>, Rc<Block>),
+    Function(Vec<Rc<RefCell<UpValue>>>, Rc<RefCell<Block>>),
     Unkown,
     Nil,
 }
@@ -77,7 +78,7 @@ impl Debug for Value {
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),
             Value::String(s) => write!(fmt, "(string \"{}\")", s),
-            Value::Function(_, block) => write!(fmt, "(fn {}: {:?})", block.name, block.ty),
+            Value::Function(_, block) => write!(fmt, "(fn {}: {:?})", block.borrow().name, block.borrow().ty),
             Value::Unkown => write!(fmt, "(unkown)"),
             Value::Nil => write!(fmt, "(nil)"),
         }
@@ -100,7 +101,7 @@ impl Value {
             Value::Int(_) => Type::Int,
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
-            Value::Function(_, block) => block.ty.clone(),
+            Value::Function(_, block) => block.borrow().ty.clone(),
             Value::Unkown => Type::UnknownType,
             Value::Nil => Type::Void,
         }
@@ -265,7 +266,7 @@ impl Block {
 #[derive(Debug)]
 struct Frame {
     stack_offset: usize,
-    block: Rc<Block>,
+    block: Rc<RefCell<Block>>,
     ip: usize,
 }
 
@@ -305,6 +306,15 @@ impl VM {
         self
     }
 
+    fn drop_upvalue(&mut self, slot: usize, value: Value) {
+        if let Entry::Occupied(entry) = self.upvalues.entry(slot) {
+            entry.get().borrow_mut().close(value);
+            entry.remove();
+        } else {
+            unreachable!();
+        }
+    }
+
     fn find_upvalue(&mut self, slot: usize) -> &mut Rc<RefCell<UpValue>> {
         self.upvalues.entry(slot).or_insert(
             Rc::new(RefCell::new(UpValue::new(slot))))
@@ -335,17 +345,17 @@ impl VM {
         &mut self.frames[last]
     }
 
-    fn op(&self) -> &Op {
+    fn op(&self) -> Op {
         let ip = self.frame().ip;
-        &self.frame().block.ops[ip]
+        self.frame().block.borrow().ops[ip].clone()
     }
 
     fn error(&self, kind: ErrorKind, message: Option<String>) -> Error {
         let frame = self.frames.last().unwrap();
         Error {
             kind,
-            file: frame.block.file.clone(),
-            line: frame.block.line(frame.ip),
+            file: frame.block.borrow().file.clone(),
+            line: frame.block.borrow().line(frame.ip),
             message,
         }
     }
@@ -365,7 +375,9 @@ impl VM {
             }
 
             Op::PopUpvalue => {
-                self.stack.pop().unwrap();
+                let value = self.stack.pop().unwrap();
+                let slot = self.stack.len();
+                self.drop_upvalue(slot, value);
             }
 
             Op::Constant(value) => {
@@ -373,7 +385,7 @@ impl VM {
                 let value = match value {
                     Value::Function(_, block) => {
                         let mut ups = Vec::new();
-                        for (slot, is_up, _) in block.ups.iter() {
+                        for (slot, is_up, _) in block.borrow().ups.iter() {
                             let up = if *is_up {
                                 if let Value::Function(local_ups, _) = &self.stack[offset] {
                                     Rc::clone(&local_ups[*slot])
@@ -543,15 +555,17 @@ impl VM {
                 let new_base = self.stack.len() - 1 - num_args;
                 match &self.stack[new_base] {
                     Value::Function(_, block) => {
-                        let args = block.args();
+                        let inner = block.borrow();
+                        let args = inner.args();
                         if args.len() != num_args {
                             error!(self,
                                 ErrorKind::InvalidProgram,
                                 format!("Invalid number of arguments, got {} expected {}.",
                                     num_args, args.len()));
                         }
+
                         if self.print_blocks {
-                            block.debug_print();
+                            inner.debug_print();
                         }
                         self.frames.push(Frame {
                             stack_offset: new_base,
@@ -596,12 +610,12 @@ impl VM {
         println!("]");
 
         println!("{:5} {:05} {:?}",
-            self.frame().block.line(self.frame().ip).red(),
+            self.frame().block.borrow().line(self.frame().ip).red(),
             self.frame().ip.blue(),
-            self.frame().block.ops[self.frame().ip]);
+            self.frame().block.borrow().ops[self.frame().ip]);
     }
 
-    pub fn run(&mut self, block: Rc<Block>) -> Result<(), Error>{
+    pub fn run(&mut self, block: Rc<RefCell<Block>>) -> Result<(), Error>{
         self.stack.clear();
         self.frames.clear();
 
@@ -615,7 +629,7 @@ impl VM {
 
         if self.print_blocks {
             println!("\n    [[{}]]\n", "RUNNING".red());
-            self.frame().block.debug_print();
+            self.frame().block.borrow().debug_print();
         }
 
         loop {
@@ -623,7 +637,7 @@ impl VM {
                 self.print_stack()
             }
 
-            if matches!(self.eval_op(self.op().clone())?, OpResult::Done) {
+            if matches!(self.eval_op(self.op())?, OpResult::Done) {
                 return Ok(());
             }
         }
@@ -640,11 +654,12 @@ impl VM {
             }
 
             Op::ReadUpvalue(slot) => {
-                self.stack.push(self.frame().block.ups[slot].2.as_value());
+                let value = self.frame().block.borrow().ups[slot].2.as_value();
+                self.stack.push(value);
             }
 
             Op::AssignUpvalue(slot) => {
-                let var = self.frame().block.ups[slot].2.clone();
+                let var = self.frame().block.borrow().ups[slot].2.clone();
                 let up = self.stack.pop().unwrap().as_type();
                 if var != up {
                     error!(self, ErrorKind::TypeError(op, vec![var, up]),
@@ -654,7 +669,8 @@ impl VM {
 
             Op::Return => {
                 let a = self.stack.pop().unwrap();
-                let ret = self.frame().block.ret();
+                let inner = self.frame().block.borrow();
+                let ret = inner.ret();
                 if a.as_type() != *ret {
                     error!(self, ErrorKind::TypeError(op, vec![a.as_type(),
                                                                ret.clone()]),
@@ -685,9 +701,10 @@ impl VM {
 
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
-                match &self.stack[new_base] {
+                match self.stack[new_base].clone() {
                     Value::Function(_, block) => {
-                        let args = block.args();
+                        let inner = block.borrow();
+                        let args = inner.args();
                         if args.len() != num_args {
                             error!(self,
                                 ErrorKind::InvalidProgram,
@@ -704,7 +721,7 @@ impl VM {
                                     args, stack_args));
                         }
 
-                        self.stack[new_base] = block.ret().as_value();
+                        self.stack[new_base] = block.borrow().ret().as_value();
 
                         self.stack.truncate(new_base + 1);
                     },
@@ -731,12 +748,12 @@ impl VM {
         Ok(())
     }
 
-    fn typecheck_block(&mut self, block: Rc<Block>) -> Vec<Error> {
+    fn typecheck_block(&mut self, block: Rc<RefCell<Block>>) -> Vec<Error> {
         self.stack.clear();
         self.frames.clear();
 
         self.stack.push(Value::Function(Vec::new(), Rc::clone(&block)));
-        for arg in block.args() {
+        for arg in block.borrow().args() {
             self.stack.push(arg.as_value());
         }
 
@@ -748,13 +765,13 @@ impl VM {
 
         if self.print_blocks {
             println!("\n    [[{}]]\n", "TYPECHECK".purple());
-            self.frame().block.debug_print();
+            self.frame().block.borrow().debug_print();
         }
 
         let mut errors = Vec::new();
         loop {
             let ip = self.frame().ip;
-            if ip >= self.frame().block.ops.len() {
+            if ip >= self.frame().block.borrow().ops.len() {
                 break;
             }
 
@@ -762,7 +779,7 @@ impl VM {
                 self.print_stack()
             }
 
-            if let Err(e) = self.check_op(self.op().clone()) {
+            if let Err(e) = self.check_op(self.op()) {
                 errors.push(e);
                 self.frame_mut().ip += 1;
             }
@@ -775,11 +792,10 @@ impl VM {
         errors
     }
 
-    pub fn typecheck(&mut self, blocks: &Vec<Rc<Block>>) -> Result<(), Vec<Error>> {
+    pub fn typecheck(&mut self, blocks: &Vec<Rc<RefCell<Block>>>) -> Result<(), Vec<Error>> {
         let mut errors = Vec::new();
 
         for block in blocks.iter() {
-            let ups: Vec<_> = block.ups.iter().map(|x| x.2.as_value()).collect();
             errors.append(&mut self.typecheck_block(Rc::clone(block)));
         }
 
