@@ -655,8 +655,41 @@ impl VM {
 
             Op::Jmp(_line) => {}
 
-            Op::Constant(value) => {
-                self.stack.push(value.clone());
+            Op::Constant(ref value) => {
+                match value.clone() {
+                    Value::Function(_, block) => {
+                        self.stack.push(Value::Function(Vec::new(), block.clone()));
+
+                        let mut types = Vec::new();
+                        for (slot, is_up, _) in block.borrow().ups.iter() {
+                            if *is_up {
+                                types.push(Type::Void);
+                            } else {
+                                types.push(self.stack[*slot].as_type());
+                            }
+                        }
+
+                        let mut block_mut = block.borrow_mut();
+                        for (i, (_, is_up, ty)) in block_mut.ups.iter_mut().enumerate() {
+                            if *is_up { continue; }
+
+                            let suggestion = &types[i];
+                            if ty.is_unkown() {
+                                *ty = suggestion.clone();
+                            } else {
+                                if ty != suggestion {
+                                    error!(self,
+                                           ErrorKind::TypeError(op.clone(),
+                                                    vec![ty.clone(), suggestion.clone()]),
+                                           "Failed to infer type.".to_string());
+                                }
+                            }
+                        };
+                    },
+                    _ => {
+                        self.stack.push(value.clone());
+                    }
+                }
             }
 
             Op::PopUpvalue => {

@@ -87,6 +87,13 @@ impl From<&Value> for Type {
 }
 
 impl Type {
+    pub fn is_unkown(&self) -> bool {
+        match self {
+            Type::UnknownType => true,
+            _ => false,
+        }
+    }
+
     pub fn as_value(&self) -> Value {
         match self {
             Type::Void => Value::Nil,
