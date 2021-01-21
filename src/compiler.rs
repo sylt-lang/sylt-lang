@@ -1,12 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::cell::RefCell;
 
 use crate::error::{Error, ErrorKind};
 use crate::tokenizer::{Token, TokenStream};
 use crate::vm::{Value, Block, Op};
 
 macro_rules! nextable_enum {
-    ( $name:ident { $( $thing:ident ),* } ) => {
+    ( $name:ident { $( $thing:ident ),* $( , )? } ) => {
         #[derive(PartialEq, PartialOrd, Clone, Copy, Debug)]
         enum $name {
             $( $thing, )*
@@ -43,7 +44,7 @@ nextable_enum!(Prec {
     Bool,
     Comp,
     Term,
-    Factor
+    Factor,
 });
 
 #[derive(Debug, Clone)]
@@ -79,13 +80,20 @@ impl From<&Value> for Type {
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
-            Value::Function(block) => block.ty.clone(),
+            Value::Function(_, block) => block.borrow().ty.clone(),
             _ => Type::Void,
         }
     }
 }
 
 impl Type {
+    pub fn is_unkown(&self) -> bool {
+        match self {
+            Type::UnknownType => true,
+            _ => false,
+        }
+    }
+
     pub fn as_value(&self) -> Value {
         match self {
             Type::Void => Value::Nil,
@@ -94,22 +102,66 @@ impl Type {
             Type::Float => Value::Float(1.0),
             Type::Bool => Value::Bool(true),
             Type::String => Value::String(Rc::new("".to_string())),
-            Type::Function(_, _) => Value::Function(Rc::new(Block::from_type(self))),
+            Type::Function(_, _) => Value::Function(
+                Vec::new(),
+                Rc::new(RefCell::new(Block::from_type(self)))),
         }
     }
 }
 
+#[derive(Clone)]
 struct Variable {
     name: String,
     typ: Type,
     scope: usize,
+    slot: usize,
+
+    outer_slot: usize,
+    outer_upvalue: bool,
+
     active: bool,
+    upvalue: bool,
+    captured: bool,
 }
 
 struct Frame {
     stack: Vec<Variable>,
+    upvalues: Vec<Variable>,
     scope: usize,
     variables_below: usize,
+}
+
+impl Frame {
+    fn find_local(&self, name: &str) -> Option<Variable> {
+        for var in self.stack.iter().rev() {
+            if var.name == name && var.active {
+                return Some(var.clone());
+            }
+        }
+        None
+    }
+
+    fn find_upvalue(&self, name: &str) -> Option<Variable> {
+        for var in self.upvalues.iter().rev() {
+            if var.name == name && var.active {
+                return Some(var.clone());
+            }
+        }
+        None
+    }
+
+    fn add_upvalue(&mut self, variable: Variable) -> Variable {
+        let new_variable = Variable {
+            outer_upvalue: variable.upvalue,
+            outer_slot: variable.slot,
+            slot: self.upvalues.len(),
+            active: true,
+            upvalue: true,
+            ..variable
+        };
+        self.upvalues.push(new_variable.clone());
+        new_variable
+    }
 }
 
 struct Compiler {
@@ -122,7 +174,7 @@ struct Compiler {
     panic: bool,
     errors: Vec<Error>,
 
-    blocks: Vec<Rc<Block>>,
+    blocks: Vec<Rc<RefCell<Block>>>,
 }
 
 macro_rules! push_frame {
@@ -130,6 +182,7 @@ macro_rules! push_frame {
         {
             $compiler.frames.push(Frame {
                 stack: Vec::new(),
+                upvalues: Vec::new(),
                 scope: 0,
                 variables_below: $compiler.frame().variables_below + $compiler.stack().len(),
             });
@@ -154,8 +207,13 @@ macro_rules! push_scope {
         $code;
 
         $compiler.frame_mut().scope -= 1;
-        for _ in ss..$compiler.stack().len() {
-            $block.add(Op::Pop, $compiler.line());
+
+        for var in $compiler.frame().stack[ss..$compiler.stack().len()].iter().rev() {
+            if var.captured {
+                $block.add(Op::PopUpvalue, $compiler.line());
+            } else {
+                $block.add(Op::Pop, $compiler.line());
+            }
         }
         $compiler.stack_mut().truncate(ss);
     };
@@ -170,6 +228,7 @@ impl Compiler {
 
             frames: vec![Frame {
                 stack: Vec::new(),
+                upvalues: Vec::new(),
                 scope: 0,
                 variables_below: 0,
             }],
@@ -311,8 +370,6 @@ impl Compiler {
                 | Token::NotEqual
                 => self.binary(block),
 
-            Token::LeftParen => self.call(block),
-
             _ => { return false; },
         }
         return true;
@@ -388,14 +445,34 @@ impl Compiler {
         }
     }
 
-    fn find_local(&self, name: &str, _block: &Block) -> Option<(usize, Type, usize)> {
-        let frame = self.frame();
-        for (slot, var) in frame.stack.iter().enumerate().rev() {
-            if var.name == name && var.active {
-                return Some((slot, var.typ.clone(), var.scope));
+    fn find_and_capture_variable<'a, I>(name: &str, mut iterator: I) -> Option<Variable>
+    where I: Iterator<Item = &'a mut Frame> {
+        if let Some(frame) = iterator.next() {
+            if let Some(res) = frame.find_local(name) {
+                frame.stack[res.slot].captured = true;
+                return Some(res);
+            }
+            if let Some(res) = frame.find_upvalue(name) {
+                return Some(res);
+            }
+
+            if let Some(res) = Self::find_and_capture_variable(name, iterator) {
+                return Some(frame.add_upvalue(res));
             }
         }
         None
+    }
+
+    fn find_variable(&mut self, name: &str) -> Option<Variable> {
+        if let Some(res) = self.frame().find_local(name) {
+            return Some(res);
+        }
+
+        if let Some(res) = self.frame().find_upvalue(name) {
+            return Some(res);
+        }
+
+        return Self::find_and_capture_variable(name, self.frames.iter_mut().rev());
     }
 
     fn call(&mut self, block: &mut Block) {
@@ -423,17 +500,15 @@ impl Compiler {
         }
 
         block.add(Op::Call(arity), self.line());
-
-        for _ in 0..arity {
-            block.add(Op::Pop, self.line());
-        }
     }
 
     fn function(&mut self, block: &mut Block) {
         expect!(self, Token::Fn, "Expected 'fn' at start of function.");
 
-        let name = if !self.stack()[self.stack().len() - 1].active {
-            &self.stack()[self.stack().len() - 1].name
+        let top = self.stack().len() - 1;
+        let name = if !self.stack()[top].active {
+            self.stack_mut()[top].active = true;
+            &self.stack()[top].name
         } else {
             "anonumus function"
         };
@@ -441,6 +516,7 @@ impl Compiler {
         let mut args = Vec::new();
         let mut return_type = Type::Void;
         let mut function_block = Block::new(name, &self.current_file, self.line());
+
         let _ret = push_frame!(self, function_block, {
             loop {
                 match self.peek() {
@@ -479,35 +555,60 @@ impl Compiler {
             }
 
             self.scope(&mut function_block);
+
+            for var in self.frame().upvalues.iter() {
+                function_block.ups.push((var.outer_slot, var.outer_upvalue, var.typ.clone()));
+            }
         });
 
-        if !matches!(function_block.last_op(), Some(&Op::Return)) {
+        for op in function_block.ops.iter().rev() {
+            match op {
+                Op::Pop | Op::PopUpvalue => {}
+                Op::Return => { break; } ,
+                _ => {
+                    function_block.add(Op::Constant(Value::Nil), self.line());
+                    function_block.add(Op::Return, self.line());
+                    break;
+                }
+            }
+        }
+
+        if function_block.ops.is_empty() {
             function_block.add(Op::Constant(Value::Nil), self.line());
             function_block.add(Op::Return, self.line());
         }
 
         function_block.ty = Type::Function(args, Box::new(return_type));
-        let function_block = Rc::new(function_block);
+        let function_block = Rc::new(RefCell::new(function_block));
 
-        block.add(Op::Constant(Value::Function(Rc::clone(&function_block))), self.line());
+
+        let func = Op::Constant(Value::Function(Vec::new(), Rc::clone(&function_block)));
+        block.add(func, self.line());
         self.blocks.push(function_block);
     }
 
     fn variable_expression(&mut self, block: &mut Block) {
         let name = match self.eat() {
             Token::Identifier(name) => name,
-            __ => unreachable!(),
+            _ => unreachable!(),
         };
-        if let Some((slot, _, _)) = self.find_local(&name, block) {
-            block.add(Op::ReadLocal(slot), self.line());
+        if let Some(var) = self.find_variable(&name) {
+            if var.upvalue {
+                block.add(Op::ReadUpvalue(var.slot), self.line());
+            } else {
+                block.add(Op::ReadLocal(var.slot), self.line());
+            }
+            if self.peek() == Token::LeftParen {
+                self.call(block);
+            }
         } else {
             error!(self, format!("Using undefined variable {}.", name));
         }
     }
 
-    fn define_variable(&mut self, name: &str, typ: Type, block: &mut Block) -> Result<usize, ()> {
-        if let Some((_, _, level)) = self.find_local(&name, block) {
-            if level == self.frame().scope {
+    fn define_variable(&mut self, name: &str, typ: Type, _block: &mut Block) -> Result<usize, ()> {
+        if let Some(var) = self.find_variable(&name) {
+            if var.scope == self.frame().scope {
                 error!(self, format!("Multiple definitions of {} in this block.", name));
                 return Err(());
             }
@@ -517,9 +618,14 @@ impl Compiler {
         let scope = self.frame().scope;
         self.stack_mut().push(Variable {
             name: String::from(name),
+            captured: false,
+            outer_upvalue: false,
+            outer_slot: 0,
+            slot,
             typ,
             scope,
-            active: false
+            active: false,
+            upvalue: false,
         });
         Ok(slot)
     }
@@ -535,9 +641,13 @@ impl Compiler {
     }
 
     fn assign(&mut self, name: &str, block: &mut Block) {
-        if let Some((slot, _, _)) = self.find_local(&name, block) {
+        if let Some(var) = self.find_variable(&name) {
             self.expression(block);
-            block.add(Op::Assign(slot), self.line());
+            if var.upvalue {
+                block.add(Op::AssignUpvalue(var.slot), self.line());
+            } else {
+                block.add(Op::AssignLocal(var.slot), self.line());
+            }
         } else {
             error!(self, format!("Using undefined variable {}.", name));
         }
@@ -743,12 +853,17 @@ impl Compiler {
 
     }
 
-    pub fn compile(&mut self, name: &str, file: &Path) -> Result<Vec<Rc<Block>>, Vec<Error>> {
+    pub fn compile(&mut self, name: &str, file: &Path) -> Result<Vec<Rc<RefCell<Block>>>, Vec<Error>> {
         self.stack_mut().push(Variable {
             name: String::from("/main/"),
             typ: Type::Void,
+            outer_upvalue: false,
+            outer_slot: 0,
+            slot: 0,
             scope: 0,
             active: false,
+            captured: false,
+            upvalue: false,
         });
 
         let mut block = Block::new(name, file, 0);
@@ -760,7 +875,7 @@ impl Compiler {
         block.add(Op::Return, self.line());
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
 
-        self.blocks.insert(0, Rc::new(block));
+        self.blocks.insert(0, Rc::new(RefCell::new(block)));
 
         if self.errors.is_empty() {
             Ok(self.blocks.clone())
@@ -770,6 +885,6 @@ impl Compiler {
     }
 }
 
-pub fn compile(name: &str, file: &Path, tokens: TokenStream) -> Result<Vec<Rc<Block>>, Vec<Error>> {
+pub fn compile(name: &str, file: &Path, tokens: TokenStream) -> Result<Vec<Rc<RefCell<Block>>>, Vec<Error>> {
     Compiler::new(file, tokens).compile(name, file)
 }

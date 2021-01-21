@@ -1,19 +1,11 @@
-a : fn int, int -> int = fn b: int, c: int -> int {
-   ret b + c
+fac : fn int -> int = fn a: int -> int {
+    if a <= 1 {
+        ret 1
+    }
+    b := fac(a - 1)
+    ret a * b
 }
-
-print a(1, 2) + 1
-
-b := fn c: fn int -> -> int {
-    c(2)
-    ret 1
-}
-
-c := fn a: int {
-    print a
-}
-
-b(c)
+print fac(5)
 
 // print b(fn a: int -> {
 //     print a

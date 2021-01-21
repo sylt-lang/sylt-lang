@@ -169,7 +169,7 @@ mod tests {
         simplest: "f := fn {}
                    f()",
         param_1: "f := fn a: int {}
-                f(1)",
+                  f(1)",
         return_1: "f := fn -> int {
                      ret 1
                    }
@@ -222,7 +222,55 @@ mod tests {
                      }
                      1 + f(2, 3) <=> 6
                      2 * f(2, 3) <=> 10
-                     f(2, 3) - (2 + 3) <=> 0"
+                     f(2, 3) - (2 + 3) <=> 0",
+        factorial: "factorial : fn int -> int = fn n: int -> int {
+                      if n <= 1 {
+                        ret 1
+                      }
+                      ret n * factorial(n - 1)
+                    }
+                    factorial(5) <=> 120
+                    factorial(6) <=> 720
+                    factorial(12) <=> 479001600",
+
+        returning_closures: "
+f : fn -> fn -> int = fn -> fn -> int {
+    x : int = 0
+    f := fn -> int {
+        x = x + 1
+        ret x
+    }
+    f() <=> 1
+    ret f
+}
+
+a := f()
+b := f()
+
+a() <=> 2
+a() <=> 3
+
+b() <=> 2
+b() <=> 3
+
+a() <=> 4
+"
+
+        //TODO this tests doesn't terminate in proper time if we print blocks and ops
+                    /*
+        fibonacci: "fibonacci : fn int -> int = fn n: int -> int {
+                      if n == 0 {
+                        ret 0
+                      } else if n == 1 {
+                        ret 1
+                      } else if n < 0 {
+                        <!>
+                      }
+                      ret fibonacci(n - 1) + fibonacci(n - 2)
+                    }
+                    fibonacci(10) <=> 55
+                    fibonacci(20) <=> 6765"
+                    */
     );
 
     test_file!(scoping, "tests/scoping.tdy");
