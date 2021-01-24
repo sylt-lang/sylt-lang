@@ -1,5 +1,8 @@
 use std::fmt;
+use std::fs::File;
+use std::io::{self, BufRead};
 use std::path::PathBuf;
+use owo_colors::OwoColorize;
 
 use crate::compiler::Type;
 use crate::tokenizer::Token;
@@ -31,25 +34,25 @@ impl fmt::Display for ErrorKind {
                 let types = types
                     .iter()
                     .fold(String::new(), |a, v| { format!("{}, {:?}", a, v) });
-                write!(f, "Cannot apply {:?} to types {}", op, types)
+                write!(f, "{} Cannot apply {:?} to types {}", "Type Error".bold(), op, types)
             }
             ErrorKind::RuntimeTypeError(op, values) => {
                 let values = values
                     .iter()
                     .fold(String::new(), |a, v| { format!("{}, {:?}", a, v) });
-                write!(f, "Cannot apply {:?} to values {}", op, values)
+                write!(f, "{} Cannot apply {:?} to values {}", "Runtime Type Error".bold(), op, values)
             }
             ErrorKind::Assert => {
-                write!(f, "Assertion failed.")
+                write!(f, "{}", "Assertion failed".bold())
             }
             ErrorKind::SyntaxError(line, token) => {
-                write!(f, "Syntax error on line {} at token {:?}", line, token)
+                write!(f, "{} on line {} at token {:?}", "Syntax Error".bold(), line, token)
             }
             ErrorKind::Unreachable => {
-                write!(f, "Reached unreachable code.")
+                write!(f, "{}", "Unreachable".bold())
             }
             ErrorKind::InvalidProgram => {
-                write!(f, "[!!!] Invalid program")
+                write!(f, "{}", "[!!] Invalid program [!!]".bold())
             }
         }
     }
@@ -58,10 +61,19 @@ impl fmt::Display for ErrorKind {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let message = match &self.message {
-            Some(s) => format!("\n{}", s),
+            Some(s) => format!("\n{} {}", ">>>".red(), s),
             None => String::from(""),
         };
-        write!(f, "{}:{} {}{}", self.file.display(), self.line, self.kind, message)
+
+        let line = if let Ok(file) = File::open(&self.file) {
+            io::BufReader::new(file).lines().enumerate()
+                    .filter(|(n, _)| self.line-2 <= *n && *n <= self.line)
+                    .fold(String::from("\n"), |a, (n, l)| format!("{} {:3} | {}\n", a, n.blue(), l.unwrap()))
+        } else {
+            String::new()
+        };
+
+        write!(f, "\n<{}> {}:{} {}{}{}\n", "ERR".red(), self.file.display().blue(), self.line.blue(), self.kind, message, line)
     }
 }
 
