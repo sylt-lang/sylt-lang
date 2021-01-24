@@ -787,6 +787,27 @@ impl Compiler {
         }
     }
 
+    fn blob_statement(&mut self, _block: &mut Block) {
+        expect!(self, Token::Blob, "Expected blob when declaring a blob");
+        let name = if let Token::Identifier(name) = self.eat() {
+            name
+        } else {
+            error!(self, "Expected identifier after 'blob'.");
+            return;
+        };
+
+        expect!(self, Token::LeftBrace, "Expected 'blob' body. AKA '{'.");
+
+        loop {
+            if matches!(self.peek(), Token::EOF | Token::RightBrace) { break; }
+            if matches!(self.peek(), Token::Newline) { self.eat(); continue; }
+        }
+
+        expect!(self, Token::RightBrace, "Expected '}' 'blob' body. AKA '}'.");
+
+        println!("Blob: {}", name);
+    }
+
     fn statement(&mut self, block: &mut Block) {
         self.clear_panic();
 
@@ -818,6 +839,10 @@ impl Compiler {
                 self.eat();
                 self.eat();
                 self.assign(&name, block);
+            }
+
+            (Token::Blob, Token::Identifier(name), ..) => {
+                self.blob_statement(block);
             }
 
             (Token::If, ..) => {
