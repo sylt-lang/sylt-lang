@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use crate::error::{Error, ErrorKind};
 use crate::tokenizer::{Token, TokenStream};
@@ -164,6 +166,35 @@ impl Frame {
     }
 }
 
+#[derive(Debug, Clone)]
+struct Blob {
+    name: String,
+
+    name_to_field: HashMap<String, usize>,
+    field: Vec<Type>,
+}
+
+impl Blob {
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: String::from(name),
+            name_to_field: HashMap::new(),
+            field: Vec::new(),
+        }
+    }
+
+    pub fn add_field(&mut self, name: &str, ty: Type) -> Result<usize, ()> {
+        let slot = self.field.len();
+        let entry = self.name_to_field.entry(String::from(name));
+        if matches!(entry, Entry::Occupied(_)) {
+            return Err(());
+        }
+        entry.or_insert(slot);
+        self.field.push(ty);
+        Ok(slot)
+    }
+}
+
 struct Compiler {
     curr: usize,
     tokens: TokenStream,
@@ -175,6 +206,7 @@ struct Compiler {
     errors: Vec<Error>,
 
     blocks: Vec<Rc<RefCell<Block>>>,
+    blobs: Vec<Blob>,
 }
 
 macro_rules! push_frame {
@@ -237,6 +269,7 @@ impl Compiler {
             errors: vec![],
 
             blocks: Vec::new(),
+            blobs: Vec::new(),
         }
     }
 
@@ -798,14 +831,35 @@ impl Compiler {
 
         expect!(self, Token::LeftBrace, "Expected 'blob' body. AKA '{'.");
 
+        let mut blob = Blob::new(&name);
         loop {
             if matches!(self.peek(), Token::EOF | Token::RightBrace) { break; }
             if matches!(self.peek(), Token::Newline) { self.eat(); continue; }
+
+            let name = if let Token::Identifier(name) = self.eat() {
+                name
+            } else {
+                error!(self, "Expected identifier for field.");
+                continue;
+            };
+
+            expect!(self, Token::Colon, "Expected ':' after field name.");
+
+            let ty = if let Ok(ty) = self.parse_type() {
+                ty
+            } else {
+                error!(self, "Failed to parse blob-field type.");
+                continue;
+            };
+
+            if let Err(_) = blob.add_field(&name, ty) {
+                error!(self, format!("A field named '{}' is defined twice for '{}'", name, blob.name));
+            }
         }
 
         expect!(self, Token::RightBrace, "Expected '}' 'blob' body. AKA '}'.");
 
-        println!("Blob: {}", name);
+        println!("Blob: {:?}", blob);
     }
 
     fn statement(&mut self, block: &mut Block) {
