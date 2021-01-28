@@ -21,6 +21,8 @@ macro_rules! error {
 
 #[derive(Clone)]
 pub enum Value {
+    Blob(usize),
+    BlobInstance(usize, Vec<Value>),
     Float(f64),
     Int(i64),
     Bool(bool),
@@ -75,6 +77,8 @@ impl UpValue {
 impl Debug for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Value::Blob(i) => write!(fmt, "(blob {})", i),
+            Value::BlobInstance(i, v) => write!(fmt, "(inst {} {:?})", i, v),
             Value::Float(f) => write!(fmt, "(float {})", f),
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),
@@ -98,6 +102,8 @@ impl Value {
 
     fn as_type(&self) -> Type {
         match self {
+            Value::BlobInstance(i, _) => Type::BlobInstance(*i),
+            Value::Blob(i) => Type::Blob(*i),
             Value::Float(_) => Type::Float,
             Value::Int(_) => Type::Int,
             Value::Bool(_) => Type::Bool,
@@ -557,7 +563,22 @@ impl VM {
 
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
-                match &self.stack[new_base] {
+                match self.stack[new_base].clone() {
+                    Value::Blob(blob_id) => {
+                        let blob = &self.blobs[blob_id];
+
+                        let mut values = Vec::with_capacity(blob.name_to_field.len());
+                        for _ in 0..values.capacity() {
+                            values.push(Value::Nil);
+                        }
+
+                        for (slot, ty) in blob.name_to_field.values() {
+                            values[*slot] = ty.as_value();
+                        }
+
+                        self.stack.pop();
+                        self.stack.push(Value::BlobInstance(blob_id, values));
+                    }
                     Value::Function(_, block) => {
                         let inner = block.borrow();
                         let args = inner.args();
@@ -751,6 +772,21 @@ impl VM {
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {
+                    Value::Blob(blob_id) => {
+                        let blob = &self.blobs[blob_id];
+
+                        let mut values = Vec::with_capacity(blob.name_to_field.len());
+                        for _ in 0..values.capacity() {
+                            values.push(Value::Nil);
+                        }
+
+                        for (slot, ty) in blob.name_to_field.values() {
+                            values[*slot] = ty.as_value();
+                        }
+
+                        self.stack.pop();
+                        self.stack.push(Value::BlobInstance(blob_id, values));
+                    }
                     Value::Function(_, block) => {
                         let inner = block.borrow();
                         let args = inner.args();
@@ -844,6 +880,7 @@ impl VM {
     pub fn typecheck(&mut self, prog: &Prog) -> Result<(), Vec<Error>> {
         let mut errors = Vec::new();
 
+        self.blobs = prog.blobs.clone();
         for block in prog.blocks.iter() {
             errors.append(&mut self.typecheck_block(Rc::clone(block)));
         }

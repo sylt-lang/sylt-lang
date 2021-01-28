@@ -65,12 +65,16 @@ pub enum Type {
     Bool,
     String,
     Function(Vec<Type>, Box<Type>),
+    Blob(usize),
+    BlobInstance(usize),
 }
 
 impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Type::Void, Type::Void) => true,
+            (Type::BlobInstance(a), Type::BlobInstance(b)) => a == b,
+            (Type::Blob(a), Type::Blob(b)) => a == b,
             (Type::Int, Type::Int) => true,
             (Type::Float, Type::Float) => true,
             (Type::Bool, Type::Bool) => true,
@@ -85,6 +89,8 @@ impl PartialEq for Type {
 impl From<&Value> for Type {
     fn from(value: &Value) -> Type {
         match value {
+            Value::BlobInstance(i, _) => Type::BlobInstance(*i),
+            Value::Blob(i) => Type::Blob(*i),
             Value::Int(_) => Type::Int,
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
@@ -106,6 +112,8 @@ impl Type {
     pub fn as_value(&self) -> Value {
         match self {
             Type::Void => Value::Nil,
+            Type::Blob(i) => Value::Blob(*i),
+            Type::BlobInstance(i) => Value::BlobInstance(*i, Vec::new()),
             Type::UnknownType => Value::Unkown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),
@@ -175,9 +183,9 @@ impl Frame {
 
 #[derive(Debug, Clone)]
 pub struct Blob {
-    name: String,
+    pub name: String,
 
-    name_to_field: HashMap<String, Type>,
+    pub name_to_field: HashMap<String, (usize, Type)>,
 }
 
 impl Blob {
@@ -189,11 +197,12 @@ impl Blob {
     }
 
     pub fn add_field(&mut self, name: &str, ty: Type) -> Result<(), ()> {
+        let size = self.name_to_field.len();
         let entry = self.name_to_field.entry(String::from(name));
         if matches!(entry, Entry::Occupied(_)) {
             Err(())
         } else {
-            entry.or_insert(ty);
+            entry.or_insert((size, ty));
             Ok(())
         }
     }
@@ -645,7 +654,7 @@ impl Compiler {
                 self.call(block);
             }
         } else if let Some(blob) = self.find_blob(&name) {
-            // block.add(Op::Blob(blob));
+            block.add(Op::Constant(Value::Blob(blob)), self.line());
             if self.peek() == Token::LeftParen {
                 self.call(block);
             }
@@ -976,7 +985,7 @@ impl Compiler {
         if self.errors.is_empty() {
             Ok(Prog {
                 blocks: self.blocks.clone(),
-                blobs: Vec::new(),
+                blobs: self.blobs.iter().map(|x| Rc::new(x.clone())).collect(),
             })
         } else {
             Err(self.errors.clone())
