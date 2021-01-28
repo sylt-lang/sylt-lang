@@ -113,7 +113,7 @@ impl Type {
         match self {
             Type::Void => Value::Nil,
             Type::Blob(i) => Value::Blob(*i),
-            Type::BlobInstance(i) => Value::BlobInstance(*i, Vec::new()),
+            Type::BlobInstance(i) => Value::BlobInstance(*i, Rc::new(RefCell::new(Vec::new()))),
             Type::UnknownType => Value::Unkown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),

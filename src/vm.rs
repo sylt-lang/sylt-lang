@@ -22,7 +22,7 @@ macro_rules! error {
 #[derive(Clone)]
 pub enum Value {
     Blob(usize),
-    BlobInstance(usize, Vec<Value>),
+    BlobInstance(usize, Rc<RefCell<Vec<Value>>>),
     Float(f64),
     Int(i64),
     Bool(bool),
@@ -422,7 +422,7 @@ impl VM {
                 let inst = self.stack.pop();
                 if let Some(Value::BlobInstance(ty, values)) = inst {
                     let slot = self.blobs[ty].name_to_field.get(&field).unwrap().0;
-                    self.stack.push(values[slot].clone());
+                    self.stack.push(values.borrow()[slot].clone());
                 } else {
                     error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst.unwrap()]));
                 }
@@ -431,9 +431,9 @@ impl VM {
             Op::Set(field) => {
                 let value = self.stack.pop().unwrap();
                 let inst = self.stack.pop();
-                if let Some(Value::BlobInstance(ty, mut values)) = inst {
+                if let Some(Value::BlobInstance(ty, values)) = inst {
                     let slot = self.blobs[ty].name_to_field.get(&field).unwrap().0;
-                    values[slot] = value;
+                    values.borrow_mut()[slot] = value;
                 } else {
                     error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst.unwrap()]));
                 }
@@ -601,7 +601,7 @@ impl VM {
                         }
 
                         self.stack.pop();
-                        self.stack.push(Value::BlobInstance(blob_id, values));
+                        self.stack.push(Value::BlobInstance(blob_id, Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, block) => {
                         let inner = block.borrow();
@@ -809,7 +809,7 @@ impl VM {
                         }
 
                         self.stack.pop();
-                        self.stack.push(Value::BlobInstance(blob_id, values));
+                        self.stack.push(Value::BlobInstance(blob_id, Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, block) => {
                         let inner = block.borrow();
