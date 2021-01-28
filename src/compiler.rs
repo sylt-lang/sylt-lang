@@ -657,7 +657,7 @@ impl Compiler {
                         if let Token::Identifier(field) = self.eat() {
                             block.add(Op::Get(String::from(field)), self.line());
                         } else {
-                            error!(self, "Expected fieldname after '.'");
+                            error!(self, "Expected fieldname after '.'.");
                             break;
                         }
                     }
@@ -900,6 +900,47 @@ impl Compiler {
         self.blobs.push(blob);
     }
 
+    fn blob_field(&mut self, block: &mut Block) {
+        let name = match self.eat() {
+            Token::Identifier(name) => name,
+            _ => unreachable!(),
+        };
+        if let Some(var) = self.find_variable(&name) {
+            if var.upvalue {
+                block.add(Op::ReadUpvalue(var.slot), self.line());
+            } else {
+                block.add(Op::ReadLocal(var.slot), self.line());
+            }
+            loop {
+                match self.peek() {
+                    Token::Dot => {
+                        self.eat();
+                        let field = if let Token::Identifier(field) = self.eat() {
+                            String::from(field)
+                        } else {
+                            error!(self, "Expected fieldname after '.'.");
+                            return;
+                        };
+
+                        if self.peek() == Token::Equal {
+                            self.eat();
+                            self.expression(block);
+                            block.add(Op::Set(field), self.line());
+                        } else {
+                            block.add(Op::Get(field), self.line());
+                        }
+                    }
+                    Token::LeftParen => {
+                        self.call(block);
+                    }
+                    _ => { break }
+                }
+            }
+        } else {
+            error!(self, format!("Using undefined variable {}.", name));
+        }
+    }
+
     fn statement(&mut self, block: &mut Block) {
         self.clear_panic();
 
@@ -908,7 +949,11 @@ impl Compiler {
                 self.eat();
                 self.expression(block);
                 block.add(Op::Print, self.line());
-            },
+            }
+
+            (Token::Identifier(_), Token::Dot, ..) => {
+                self.blob_field(block);
+            }
 
             (Token::Identifier(name), Token::Colon, ..) => {
                 self.eat();
