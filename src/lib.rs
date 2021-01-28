@@ -272,6 +272,31 @@ a() <=> 4
                     */
     );
 
+    test_multiple!(
+        blob,
+        simple: "blob A {}",
+        instantiate: "blob A {}
+                      a := A()",
+        field: "blob A { a: int }",
+        field_assign: "blob A { a: int }
+                       a := A()
+                       a.a = 2",
+        field_get: "blob A { a: int }
+                       a := A()
+                       a.a = 2
+                       //TODO a.a <=> 2
+                       2 <=> a.a",
+        multiple_fields: "blob A {
+                            a: int
+                            b: int
+                          }
+                          a := A()
+                          a.a = 2
+                          a.b = 3
+                          //TODO a.a + a.b <=> 5
+                          5 <=> a.a + a.b"
+    );
+
     test_file!(scoping, "tests/scoping.tdy");
     test_file!(for_, "tests/for.tdy");
 }
