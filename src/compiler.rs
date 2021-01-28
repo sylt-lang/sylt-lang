@@ -650,8 +650,22 @@ impl Compiler {
             } else {
                 block.add(Op::ReadLocal(var.slot), self.line());
             }
-            if self.peek() == Token::LeftParen {
-                self.call(block);
+            loop {
+                match self.peek() {
+                    Token::Dot => {
+                        self.eat();
+                        if let Token::Identifier(field) = self.eat() {
+                            block.add(Op::Get(String::from(field)), self.line());
+                        } else {
+                            error!(self, "Expected fieldname after '.'");
+                            break;
+                        }
+                    }
+                    Token::LeftParen => {
+                        self.call(block);
+                    }
+                    _ => { break }
+                }
             }
         } else if let Some(blob) = self.find_blob(&name) {
             block.add(Op::Constant(Value::Blob(blob)), self.line());

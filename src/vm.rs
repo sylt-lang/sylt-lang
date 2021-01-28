@@ -122,6 +122,7 @@ pub enum Op {
     Pop,
     PopUpvalue,
     Constant(Value),
+    Get(String),
 
     Add,
     Sub,
@@ -413,6 +414,16 @@ impl VM {
                     _ => value.clone(),
                 };
                 self.stack.push(value);
+            }
+
+            Op::Get(field) => {
+                let inst = self.stack.pop();
+                if let Some(Value::BlobInstance(ty, values)) = inst {
+                    let slot = self.blobs[ty].name_to_field.get(&field).unwrap().0;
+                    self.stack.push(values[slot].clone());
+                } else {
+                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst.unwrap()]));
+                }
             }
 
             Op::Neg => {
