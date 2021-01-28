@@ -8,6 +8,7 @@ use std::cell::RefCell;
 
 use crate::compiler::Type;
 use crate::error::{Error, ErrorKind};
+use crate::compiler::{Prog, Blob};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -276,6 +277,9 @@ pub struct VM {
 
     stack: Vec<Value>,
     frames: Vec<Frame>,
+
+    blobs: Vec<Rc<Blob>>,
+
     print_blocks: bool,
     print_ops: bool,
 }
@@ -291,6 +295,7 @@ impl VM {
             upvalues: HashMap::new(),
             stack: Vec::new(),
             frames: Vec::new(),
+            blobs: Vec::new(),
             print_blocks: false,
             print_ops: false,
         }
@@ -620,7 +625,9 @@ impl VM {
             self.frame().block.borrow().ops[self.frame().ip]);
     }
 
-    pub fn run(&mut self, block: Rc<RefCell<Block>>) -> Result<(), Error>{
+    pub fn run(&mut self, prog: &Prog) -> Result<(), Error>{
+        let block = Rc::clone(&prog.blocks[0]);
+        self.blobs = prog.blobs.clone();
         self.stack.clear();
         self.frames.clear();
 
@@ -834,10 +841,10 @@ impl VM {
         errors
     }
 
-    pub fn typecheck(&mut self, blocks: &Vec<Rc<RefCell<Block>>>) -> Result<(), Vec<Error>> {
+    pub fn typecheck(&mut self, prog: &Prog) -> Result<(), Vec<Error>> {
         let mut errors = Vec::new();
 
-        for block in blocks.iter() {
+        for block in prog.blocks.iter() {
             errors.append(&mut self.typecheck_block(Rc::clone(block)));
         }
 

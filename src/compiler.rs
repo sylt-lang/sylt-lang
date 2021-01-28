@@ -49,6 +49,13 @@ nextable_enum!(Prec {
     Factor,
 });
 
+
+#[derive(Debug, Clone)]
+pub struct Prog {
+    pub blocks: Vec<Rc<RefCell<Block>>>,
+    pub blobs: Vec<Rc<Blob>>,
+}
+
 #[derive(Debug, Clone)]
 pub enum Type {
     Void,
@@ -167,11 +174,10 @@ impl Frame {
 }
 
 #[derive(Debug, Clone)]
-struct Blob {
+pub struct Blob {
     name: String,
 
-    name_to_field: HashMap<String, usize>,
-    field: Vec<Type>,
+    name_to_field: HashMap<String, Type>,
 }
 
 impl Blob {
@@ -179,19 +185,17 @@ impl Blob {
         Self {
             name: String::from(name),
             name_to_field: HashMap::new(),
-            field: Vec::new(),
         }
     }
 
-    pub fn add_field(&mut self, name: &str, ty: Type) -> Result<usize, ()> {
-        let slot = self.field.len();
+    pub fn add_field(&mut self, name: &str, ty: Type) -> Result<(), ()> {
         let entry = self.name_to_field.entry(String::from(name));
         if matches!(entry, Entry::Occupied(_)) {
-            return Err(());
+            Err(())
+        } else {
+            entry.or_insert(ty);
+            Ok(())
         }
-        entry.or_insert(slot);
-        self.field.push(ty);
-        Ok(slot)
     }
 }
 
@@ -508,6 +512,12 @@ impl Compiler {
         return Self::find_and_capture_variable(name, self.frames.iter_mut().rev());
     }
 
+    fn find_blob(&self, name: &str) -> Option<usize> {
+        self.blobs.iter().enumerate()
+            .find(|(_, x)| x.name == name)
+            .map(|(i, _)| i)
+    }
+
     fn call(&mut self, block: &mut Block) {
         expect!(self, Token::LeftParen, "Expected '(' at start of function call.");
 
@@ -631,6 +641,11 @@ impl Compiler {
             } else {
                 block.add(Op::ReadLocal(var.slot), self.line());
             }
+            if self.peek() == Token::LeftParen {
+                self.call(block);
+            }
+        } else if let Some(blob) = self.find_blob(&name) {
+            // block.add(Op::Blob(blob));
             if self.peek() == Token::LeftParen {
                 self.call(block);
             }
@@ -857,9 +872,9 @@ impl Compiler {
             }
         }
 
-        expect!(self, Token::RightBrace, "Expected '}' 'blob' body. AKA '}'.");
+        expect!(self, Token::RightBrace, "Expected '}' after 'blob' body. AKA '}'.");
 
-        println!("Blob: {:?}", blob);
+        self.blobs.push(blob);
     }
 
     fn statement(&mut self, block: &mut Block) {
@@ -895,7 +910,7 @@ impl Compiler {
                 self.assign(&name, block);
             }
 
-            (Token::Blob, Token::Identifier(name), ..) => {
+            (Token::Blob, Token::Identifier(_), ..) => {
                 self.blob_statement(block);
             }
 
@@ -932,7 +947,8 @@ impl Compiler {
 
     }
 
-    pub fn compile(&mut self, name: &str, file: &Path) -> Result<Vec<Rc<RefCell<Block>>>, Vec<Error>> {
+    pub fn compile(&mut self, name: &str, file: &Path) -> Result<Prog, Vec<Error>> {
+        println!("=== START COMPILATION ===");
         self.stack_mut().push(Variable {
             name: String::from("/main/"),
             typ: Type::Void,
@@ -956,14 +972,18 @@ impl Compiler {
 
         self.blocks.insert(0, Rc::new(RefCell::new(block)));
 
+        println!("=== END COMPILATION ===");
         if self.errors.is_empty() {
-            Ok(self.blocks.clone())
+            Ok(Prog {
+                blocks: self.blocks.clone(),
+                blobs: Vec::new(),
+            })
         } else {
             Err(self.errors.clone())
         }
     }
 }
 
-pub fn compile(name: &str, file: &Path, tokens: TokenStream) -> Result<Vec<Rc<RefCell<Block>>>, Vec<Error>> {
+pub fn compile(name: &str, file: &Path, tokens: TokenStream) -> Result<Prog, Vec<Error>> {
     Compiler::new(file, tokens).compile(name, file)
 }
