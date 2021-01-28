@@ -67,8 +67,8 @@ impl fmt::Display for Error {
 
         let line = if let Ok(file) = File::open(&self.file) {
             io::BufReader::new(file).lines().enumerate()
-                    .filter(|(n, _)| self.line-2 <= *n && *n <= self.line)
-                    .fold(String::from("\n"), |a, (n, l)| format!("{} {:3} | {}\n", a, n.blue(), l.unwrap()))
+                    .filter(|(n, _)| self.line-2 <= *n + 1 && *n + 1 <= self.line)
+                    .fold(String::from("\n"), |a, (n, l)| format!("{} {:3} | {}\n", a, (n + 1).blue(), l.unwrap()))
         } else {
             String::new()
         };
