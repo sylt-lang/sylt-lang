@@ -24,10 +24,12 @@ pub enum Token {
     Else,
     #[token("for")]
     For,
-    #[token("in")]
-    In,
-    #[token("loop")]
-    Loop,
+    // #[token("in")]
+    // In,
+    // #[token("loop")]
+    // Loop,
+    #[token("blob")]
+    Blob,
 
     // TODO(ed): Remove
     #[token("print")]

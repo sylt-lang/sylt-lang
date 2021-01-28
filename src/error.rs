@@ -33,13 +33,13 @@ impl fmt::Display for ErrorKind {
             ErrorKind::TypeError(op, types) => {
                 let types = types
                     .iter()
-                    .fold(String::new(), |a, v| { format!("{}, {:?}", a, v) });
+                    .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
                 write!(f, "{} Cannot apply {:?} to types {}", "Type Error".bold(), op, types)
             }
             ErrorKind::RuntimeTypeError(op, values) => {
                 let values = values
                     .iter()
-                    .fold(String::new(), |a, v| { format!("{}, {:?}", a, v) });
+                    .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
                 write!(f, "{} Cannot apply {:?} to values {}", "Runtime Type Error".bold(), op, values)
             }
             ErrorKind::Assert => {

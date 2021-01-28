@@ -8,6 +8,7 @@ use std::cell::RefCell;
 
 use crate::compiler::Type;
 use crate::error::{Error, ErrorKind};
+use crate::compiler::{Prog, Blob};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -20,6 +21,8 @@ macro_rules! error {
 
 #[derive(Clone)]
 pub enum Value {
+    Blob(usize),
+    BlobInstance(usize, Rc<RefCell<Vec<Value>>>),
     Float(f64),
     Int(i64),
     Bool(bool),
@@ -74,6 +77,8 @@ impl UpValue {
 impl Debug for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Value::Blob(i) => write!(fmt, "(blob {})", i),
+            Value::BlobInstance(i, v) => write!(fmt, "(inst {} {:?})", i, v),
             Value::Float(f) => write!(fmt, "(float {})", f),
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),
@@ -97,6 +102,8 @@ impl Value {
 
     fn as_type(&self) -> Type {
         match self {
+            Value::BlobInstance(i, _) => Type::BlobInstance(*i),
+            Value::Blob(i) => Type::Blob(*i),
             Value::Float(_) => Type::Float,
             Value::Int(_) => Type::Int,
             Value::Bool(_) => Type::Bool,
@@ -115,6 +122,9 @@ pub enum Op {
     Pop,
     PopUpvalue,
     Constant(Value),
+
+    Get(String),
+    Set(String),
 
     Add,
     Sub,
@@ -276,6 +286,9 @@ pub struct VM {
 
     stack: Vec<Value>,
     frames: Vec<Frame>,
+
+    blobs: Vec<Rc<Blob>>,
+
     print_blocks: bool,
     print_ops: bool,
 }
@@ -291,6 +304,7 @@ impl VM {
             upvalues: HashMap::new(),
             stack: Vec::new(),
             frames: Vec::new(),
+            blobs: Vec::new(),
             print_blocks: false,
             print_ops: false,
         }
@@ -402,6 +416,27 @@ impl VM {
                     _ => value.clone(),
                 };
                 self.stack.push(value);
+            }
+
+            Op::Get(field) => {
+                let inst = self.stack.pop();
+                if let Some(Value::BlobInstance(ty, values)) = inst {
+                    let slot = self.blobs[ty].name_to_field.get(&field).unwrap().0;
+                    self.stack.push(values.borrow()[slot].clone());
+                } else {
+                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst.unwrap()]));
+                }
+            }
+
+            Op::Set(field) => {
+                let value = self.stack.pop().unwrap();
+                let inst = self.stack.pop();
+                if let Some(Value::BlobInstance(ty, values)) = inst {
+                    let slot = self.blobs[ty].name_to_field.get(&field).unwrap().0;
+                    values.borrow_mut()[slot] = value;
+                } else {
+                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst.unwrap()]));
+                }
             }
 
             Op::Neg => {
@@ -552,7 +587,22 @@ impl VM {
 
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
-                match &self.stack[new_base] {
+                match self.stack[new_base].clone() {
+                    Value::Blob(blob_id) => {
+                        let blob = &self.blobs[blob_id];
+
+                        let mut values = Vec::with_capacity(blob.name_to_field.len());
+                        for _ in 0..values.capacity() {
+                            values.push(Value::Nil);
+                        }
+
+                        for (slot, ty) in blob.name_to_field.values() {
+                            values[*slot] = ty.as_value();
+                        }
+
+                        self.stack.pop();
+                        self.stack.push(Value::BlobInstance(blob_id, Rc::new(RefCell::new(values))));
+                    }
                     Value::Function(_, block) => {
                         let inner = block.borrow();
                         let args = inner.args();
@@ -620,7 +670,9 @@ impl VM {
             self.frame().block.borrow().ops[self.frame().ip]);
     }
 
-    pub fn run(&mut self, block: Rc<RefCell<Block>>) -> Result<(), Error>{
+    pub fn run(&mut self, prog: &Prog) -> Result<(), Error>{
+        let block = Rc::clone(&prog.blocks[0]);
+        self.blobs = prog.blobs.clone();
         self.stack.clear();
         self.frames.clear();
 
@@ -744,6 +796,21 @@ impl VM {
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {
+                    Value::Blob(blob_id) => {
+                        let blob = &self.blobs[blob_id];
+
+                        let mut values = Vec::with_capacity(blob.name_to_field.len());
+                        for _ in 0..values.capacity() {
+                            values.push(Value::Nil);
+                        }
+
+                        for (slot, ty) in blob.name_to_field.values() {
+                            values[*slot] = ty.as_value();
+                        }
+
+                        self.stack.pop();
+                        self.stack.push(Value::BlobInstance(blob_id, Rc::new(RefCell::new(values))));
+                    }
                     Value::Function(_, block) => {
                         let inner = block.borrow();
                         let args = inner.args();
@@ -834,10 +901,11 @@ impl VM {
         errors
     }
 
-    pub fn typecheck(&mut self, blocks: &Vec<Rc<RefCell<Block>>>) -> Result<(), Vec<Error>> {
+    pub fn typecheck(&mut self, prog: &Prog) -> Result<(), Vec<Error>> {
         let mut errors = Vec::new();
 
-        for block in blocks.iter() {
+        self.blobs = prog.blobs.clone();
+        for block in prog.blocks.iter() {
             errors.append(&mut self.typecheck_block(Rc::clone(block)));
         }
 

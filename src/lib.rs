@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::rc::Rc;
 
 pub mod compiler;
 pub mod tokenizer;
@@ -23,7 +22,7 @@ pub fn run(tokens: TokenStream, path: &Path, print: bool) -> Result<(), Vec<Erro
         Ok(blocks) => {
             let mut vm = vm::VM::new().print_blocks(print).print_ops(print);
             vm.typecheck(&blocks)?;
-            if let Err(e) = vm.run(Rc::clone(&blocks[0])) {
+            if let Err(e) = vm.run(&blocks) {
                 Err(vec![e])
             } else {
                 Ok(())
@@ -271,6 +270,31 @@ a() <=> 4
                     fibonacci(10) <=> 55
                     fibonacci(20) <=> 6765"
                     */
+    );
+
+    test_multiple!(
+        blob,
+        simple: "blob A {}",
+        instantiate: "blob A {}
+                      a := A()",
+        field: "blob A { a: int }",
+        field_assign: "blob A { a: int }
+                       a := A()
+                       a.a = 2",
+        field_get: "blob A { a: int }
+                       a := A()
+                       a.a = 2
+                       //TODO a.a <=> 2
+                       2 <=> a.a",
+        multiple_fields: "blob A {
+                            a: int
+                            b: int
+                          }
+                          a := A()
+                          a.a = 2
+                          a.b = 3
+                          //TODO a.a + a.b <=> 5
+                          5 <=> a.a + a.b"
     );
 
     test_file!(scoping, "tests/scoping.tdy");

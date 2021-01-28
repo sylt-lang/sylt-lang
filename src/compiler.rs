@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use crate::error::{Error, ErrorKind};
 use crate::tokenizer::{Token, TokenStream};
@@ -47,6 +49,13 @@ nextable_enum!(Prec {
     Factor,
 });
 
+
+#[derive(Debug, Clone)]
+pub struct Prog {
+    pub blocks: Vec<Rc<RefCell<Block>>>,
+    pub blobs: Vec<Rc<Blob>>,
+}
+
 #[derive(Debug, Clone)]
 pub enum Type {
     Void,
@@ -56,12 +65,16 @@ pub enum Type {
     Bool,
     String,
     Function(Vec<Type>, Box<Type>),
+    Blob(usize),
+    BlobInstance(usize),
 }
 
 impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Type::Void, Type::Void) => true,
+            (Type::BlobInstance(a), Type::BlobInstance(b)) => a == b,
+            (Type::Blob(a), Type::Blob(b)) => a == b,
             (Type::Int, Type::Int) => true,
             (Type::Float, Type::Float) => true,
             (Type::Bool, Type::Bool) => true,
@@ -76,6 +89,8 @@ impl PartialEq for Type {
 impl From<&Value> for Type {
     fn from(value: &Value) -> Type {
         match value {
+            Value::BlobInstance(i, _) => Type::BlobInstance(*i),
+            Value::Blob(i) => Type::Blob(*i),
             Value::Int(_) => Type::Int,
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
@@ -97,6 +112,8 @@ impl Type {
     pub fn as_value(&self) -> Value {
         match self {
             Type::Void => Value::Nil,
+            Type::Blob(i) => Value::Blob(*i),
+            Type::BlobInstance(i) => Value::BlobInstance(*i, Rc::new(RefCell::new(Vec::new()))),
             Type::UnknownType => Value::Unkown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),
@@ -164,6 +181,33 @@ impl Frame {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Blob {
+    pub name: String,
+
+    pub name_to_field: HashMap<String, (usize, Type)>,
+}
+
+impl Blob {
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: String::from(name),
+            name_to_field: HashMap::new(),
+        }
+    }
+
+    pub fn add_field(&mut self, name: &str, ty: Type) -> Result<(), ()> {
+        let size = self.name_to_field.len();
+        let entry = self.name_to_field.entry(String::from(name));
+        if matches!(entry, Entry::Occupied(_)) {
+            Err(())
+        } else {
+            entry.or_insert((size, ty));
+            Ok(())
+        }
+    }
+}
+
 struct Compiler {
     curr: usize,
     tokens: TokenStream,
@@ -175,6 +219,7 @@ struct Compiler {
     errors: Vec<Error>,
 
     blocks: Vec<Rc<RefCell<Block>>>,
+    blobs: Vec<Blob>,
 }
 
 macro_rules! push_frame {
@@ -237,6 +282,7 @@ impl Compiler {
             errors: vec![],
 
             blocks: Vec::new(),
+            blobs: Vec::new(),
         }
     }
 
@@ -475,6 +521,12 @@ impl Compiler {
         return Self::find_and_capture_variable(name, self.frames.iter_mut().rev());
     }
 
+    fn find_blob(&self, name: &str) -> Option<usize> {
+        self.blobs.iter().enumerate()
+            .find(|(_, x)| x.name == name)
+            .map(|(i, _)| i)
+    }
+
     fn call(&mut self, block: &mut Block) {
         expect!(self, Token::LeftParen, "Expected '(' at start of function call.");
 
@@ -598,6 +650,25 @@ impl Compiler {
             } else {
                 block.add(Op::ReadLocal(var.slot), self.line());
             }
+            loop {
+                match self.peek() {
+                    Token::Dot => {
+                        self.eat();
+                        if let Token::Identifier(field) = self.eat() {
+                            block.add(Op::Get(String::from(field)), self.line());
+                        } else {
+                            error!(self, "Expected fieldname after '.'.");
+                            break;
+                        }
+                    }
+                    Token::LeftParen => {
+                        self.call(block);
+                    }
+                    _ => { break }
+                }
+            }
+        } else if let Some(blob) = self.find_blob(&name) {
+            block.add(Op::Constant(Value::Blob(blob)), self.line());
             if self.peek() == Token::LeftParen {
                 self.call(block);
             }
@@ -787,6 +858,89 @@ impl Compiler {
         }
     }
 
+    fn blob_statement(&mut self, _block: &mut Block) {
+        expect!(self, Token::Blob, "Expected blob when declaring a blob");
+        let name = if let Token::Identifier(name) = self.eat() {
+            name
+        } else {
+            error!(self, "Expected identifier after 'blob'.");
+            return;
+        };
+
+        expect!(self, Token::LeftBrace, "Expected 'blob' body. AKA '{'.");
+
+        let mut blob = Blob::new(&name);
+        loop {
+            if matches!(self.peek(), Token::EOF | Token::RightBrace) { break; }
+            if matches!(self.peek(), Token::Newline) { self.eat(); continue; }
+
+            let name = if let Token::Identifier(name) = self.eat() {
+                name
+            } else {
+                error!(self, "Expected identifier for field.");
+                continue;
+            };
+
+            expect!(self, Token::Colon, "Expected ':' after field name.");
+
+            let ty = if let Ok(ty) = self.parse_type() {
+                ty
+            } else {
+                error!(self, "Failed to parse blob-field type.");
+                continue;
+            };
+
+            if let Err(_) = blob.add_field(&name, ty) {
+                error!(self, format!("A field named '{}' is defined twice for '{}'", name, blob.name));
+            }
+        }
+
+        expect!(self, Token::RightBrace, "Expected '}' after 'blob' body. AKA '}'.");
+
+        self.blobs.push(blob);
+    }
+
+    fn blob_field(&mut self, block: &mut Block) {
+        let name = match self.eat() {
+            Token::Identifier(name) => name,
+            _ => unreachable!(),
+        };
+        if let Some(var) = self.find_variable(&name) {
+            if var.upvalue {
+                block.add(Op::ReadUpvalue(var.slot), self.line());
+            } else {
+                block.add(Op::ReadLocal(var.slot), self.line());
+            }
+            loop {
+                match self.peek() {
+                    Token::Dot => {
+                        self.eat();
+                        let field = if let Token::Identifier(field) = self.eat() {
+                            String::from(field)
+                        } else {
+                            error!(self, "Expected fieldname after '.'.");
+                            return;
+                        };
+
+                        if self.peek() == Token::Equal {
+                            self.eat();
+                            self.expression(block);
+                            block.add(Op::Set(field), self.line());
+                        } else {
+                            block.add(Op::Get(field), self.line());
+                        }
+                    }
+                    Token::LeftParen => {
+                        self.call(block);
+                    }
+                    _ => { break }
+                }
+            }
+        } else {
+            error!(self, format!("Using undefined variable {}.", name));
+        }
+    }
+
     fn statement(&mut self, block: &mut Block) {
         self.clear_panic();
 
@@ -795,7 +949,11 @@ impl Compiler {
                 self.eat();
                 self.expression(block);
                 block.add(Op::Print, self.line());
-            },
+            }
+
+            (Token::Identifier(_), Token::Dot, ..) => {
+                self.blob_field(block);
+            }
 
             (Token::Identifier(name), Token::Colon, ..) => {
                 self.eat();
@@ -818,6 +976,10 @@ impl Compiler {
                 self.eat();
                 self.eat();
                 self.assign(&name, block);
+            }
+
+            (Token::Blob, Token::Identifier(_), ..) => {
+                self.blob_statement(block);
             }
 
             (Token::If, ..) => {
@@ -853,7 +1015,8 @@ impl Compiler {
 
     }
 
-    pub fn compile(&mut self, name: &str, file: &Path) -> Result<Vec<Rc<RefCell<Block>>>, Vec<Error>> {
+    pub fn compile(&mut self, name: &str, file: &Path) -> Result<Prog, Vec<Error>> {
+        println!("=== START COMPILATION ===");
         self.stack_mut().push(Variable {
             name: String::from("/main/"),
             typ: Type::Void,
@@ -877,14 +1040,18 @@ impl Compiler {
 
         self.blocks.insert(0, Rc::new(RefCell::new(block)));
 
+        println!("=== END COMPILATION ===");
         if self.errors.is_empty() {
-            Ok(self.blocks.clone())
+            Ok(Prog {
+                blocks: self.blocks.clone(),
+                blobs: self.blobs.iter().map(|x| Rc::new(x.clone())).collect(),
+            })
         } else {
             Err(self.errors.clone())
         }
     }
 }
 
-pub fn compile(name: &str, file: &Path, tokens: TokenStream) -> Result<Vec<Rc<RefCell<Block>>>, Vec<Error>> {
+pub fn compile(name: &str, file: &Path, tokens: TokenStream) -> Result<Prog, Vec<Error>> {
     Compiler::new(file, tokens).compile(name, file)
 }
