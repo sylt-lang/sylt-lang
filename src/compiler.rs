@@ -900,7 +900,7 @@ impl Compiler {
         self.blobs.push(blob);
     }
 
-    fn blob_field(&mut self, block: &mut Block) {
+    fn try_blob_field(&mut self, block: &mut Block) -> Result<(), ()> {
         let name = match self.eat() {
             Token::Identifier(name) => name,
             _ => unreachable!(),
@@ -919,13 +919,14 @@ impl Compiler {
                             String::from(field)
                         } else {
                             error!(self, "Expected fieldname after '.'.");
-                            return;
+                            return Err(());
                         };
 
                         if self.peek() == Token::Equal {
                             self.eat();
                             self.expression(block);
                             block.add(Op::Set(field), self.line());
+                            return Ok(());
                         } else {
                             block.add(Op::Get(field), self.line());
                         }
@@ -933,11 +934,16 @@ impl Compiler {
                     Token::LeftParen => {
                         self.call(block);
                     }
-                    _ => { break }
+                    Token::Newline => {
+                        return Ok(());
+                    }
+                    _ => {
+                        return Err(());
+                    }
                 }
             }
         } else {
-            error!(self, format!("Using undefined variable {}.", name));
+            Err(())
         }
     }
 
@@ -952,7 +958,14 @@ impl Compiler {
             }
 
             (Token::Identifier(_), Token::Dot, ..) => {
-                self.blob_field(block);
+                let block_length = block.ops.len();
+                let token_length = self.curr;
+                // reset block and token stream if blob field fails
+                if self.try_blob_field(block).is_err() {
+                    block.ops.truncate(block_length);
+                    self.curr = token_length;
+                    self.expression(block);
+                }
             }
 
             (Token::Identifier(name), Token::Colon, ..) => {
