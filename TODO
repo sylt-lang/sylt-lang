@@ -1,5 +1,4 @@
 PONG
-- structs in structs
 - foreign function
 - constructors? ({.x = }-ish)
 - foreign structs

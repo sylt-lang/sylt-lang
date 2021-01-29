@@ -1,18 +1,24 @@
+blob B {
+    a: int
+}
+
 blob A {
     a: int
-    b: int
+    b: B
     c: float
 }
 
 hello : fn A -> = fn a: A {
     print a.a
     print a.b
+    print a.b.a
     print a.c
 }
 
 a := A()
 a.a = 1
-a.b = 2
+a.b = B()
+a.b.a = 2
 a.c = 3.
 
 hello(a)

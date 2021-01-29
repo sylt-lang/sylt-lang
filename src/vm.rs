@@ -596,10 +596,6 @@ impl VM {
                             values.push(Value::Nil);
                         }
 
-                        for (slot, ty) in blob.name_to_field.values() {
-                            values[*slot] = ty.as_value();
-                        }
-
                         self.stack.pop();
                         self.stack.push(Value::BlobInstance(blob_id, Rc::new(RefCell::new(values))));
                     }
