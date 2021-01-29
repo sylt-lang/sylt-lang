@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::{borrow::Cow, path::{Path, PathBuf}};
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -560,14 +560,14 @@ impl Compiler {
         let top = self.stack().len() - 1;
         let name = if !self.stack()[top].active {
             self.stack_mut()[top].active = true;
-            &self.stack()[top].name
+            Cow::Borrowed(&self.stack()[top].name)
         } else {
-            "anonumus function"
+            Cow::Owned(format!("λ {}@{:03}", self.current_file.display(), self.line()))
         };
 
         let mut args = Vec::new();
         let mut return_type = Type::Void;
-        let mut function_block = Block::new(name, &self.current_file, self.line());
+        let mut function_block = Block::new(&name, &self.current_file, self.line());
 
         let _ret = push_frame!(self, function_block, {
             loop {

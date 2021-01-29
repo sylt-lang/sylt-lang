@@ -1,24 +1,5 @@
-blob B {
-    a: int
+a := fn f: fn -> {
+    f()
 }
 
-blob A {
-    a: int
-    b: B
-    c: float
-}
-
-hello : fn A -> = fn a: A {
-    print a.a
-    print a.b
-    print a.b.a
-    print a.c
-}
-
-a := A()
-a.a = 1
-a.b = B()
-a.b.a = 2
-a.c = 3.
-
-hello(a)
+a(fn { print 2 })
