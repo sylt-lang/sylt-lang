@@ -1,6 +1,7 @@
 PONG
 - complete plain structs
   - type system
+  - get/set ordering
 - structs in structs
 - foreign function
 - constructors? ({.x = }-ish)
