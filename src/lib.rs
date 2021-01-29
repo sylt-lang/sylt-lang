@@ -20,10 +20,10 @@ pub fn run_string(s: &str, print: bool, functions: Vec<(String, RustFunction)>) 
 
 pub fn run(tokens: TokenStream, path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
     match compiler::compile("main", path, tokens, &functions) {
-        Ok(blocks) => {
-            let mut vm = vm::VM::new(&functions).print_blocks(print).print_ops(print);
-            vm.typecheck(&blocks)?;
-            if let Err(e) = vm.run(&blocks) {
+        Ok(prog) => {
+            let mut vm = vm::VM::new().print_blocks(print).print_ops(print);
+            vm.typecheck(&prog)?;
+            if let Err(e) = vm.run(&prog) {
                 Err(vec![e])
             } else {
                 Ok(())

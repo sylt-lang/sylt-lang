@@ -50,10 +50,11 @@ nextable_enum!(Prec {
 });
 
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Prog {
     pub blocks: Vec<Rc<RefCell<Block>>>,
     pub blobs: Vec<Rc<Blob>>,
+    pub functions: Vec<RustFunction>,
 }
 
 #[derive(Debug, Clone)]
@@ -1077,6 +1078,7 @@ impl Compiler {
             Ok(Prog {
                 blocks: self.blocks.clone(),
                 blobs: self.blobs.iter().map(|x| Rc::new(x.clone())).collect(),
+                functions: functions.iter().map(|(_, f)| *f).collect(),
             })
         } else {
             Err(self.errors.clone())

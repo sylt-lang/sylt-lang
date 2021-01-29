@@ -295,6 +295,7 @@ pub struct VM {
     print_ops: bool,
 
     extern_functions: Vec<RustFunction>,
+
 }
 
 enum OpResult {
@@ -303,7 +304,7 @@ enum OpResult {
 }
 
 impl VM {
-    pub fn new(functions: &[(String, RustFunction)]) -> Self {
+    pub fn new() -> Self {
         Self {
             upvalues: HashMap::new(),
 
@@ -313,7 +314,7 @@ impl VM {
             print_blocks: false,
             print_ops: false,
 
-            extern_functions: functions.iter().map(|(_, f)| *f).collect()
+            extern_functions: Vec::new()
         }
     }
 
@@ -627,7 +628,7 @@ impl VM {
                         return Ok(OpResult::Continue);
                     }
                     Value::ExternFunction(slot) => {
-                        let extern_func = self.extern_functions[*slot];
+                        let extern_func = self.extern_functions[slot];
                         let res = extern_func(&self.stack[new_base+1..]);
                         self.stack.truncate(new_base);
                         self.stack.push(res);
@@ -682,6 +683,7 @@ impl VM {
     pub fn run(&mut self, prog: &Prog) -> Result<(), Error>{
         let block = Rc::clone(&prog.blocks[0]);
         self.blobs = prog.blobs.clone();
+        self.extern_functions = prog.functions.clone();
         self.stack.clear();
         self.frames.clear();
 
@@ -941,6 +943,7 @@ impl VM {
         let mut errors = Vec::new();
 
         self.blobs = prog.blobs.clone();
+        self.extern_functions = prog.functions.clone();
         for block in prog.blocks.iter() {
             errors.append(&mut self.typecheck_block(Rc::clone(block)));
         }
