@@ -1,12 +1,18 @@
-fac : fn int -> int = fn a: int -> int {
-    if a <= 1 {
-        ret 1
-    }
-    b := fac(a - 1)
-    ret a * b
+blob A {
+    a: int
+    b: int
+    c: float
 }
-print fac(5)
 
-// print b(fn a: int -> {
-//     print a
-// })
+hello : fn A -> = fn a: A {
+    print a.a
+    print a.b
+    print a.c
+}
+
+a := A()
+a.a = 1
+a.b = 2
+a.c = 3.
+
+hello(a)

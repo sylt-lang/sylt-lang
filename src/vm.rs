@@ -743,6 +743,30 @@ impl VM {
                 }
             }
 
+            Op::Get(field) => {
+                let inst = self.stack.pop();
+                if let Some(Value::BlobInstance(ty, _)) = inst {
+                    let value = self.blobs[ty].name_to_field.get(&field).unwrap().1.as_value();
+                    self.stack.push(value);
+                } else {
+                    self.stack.push(Value::Nil);
+                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst.unwrap()]));
+                }
+            }
+
+            Op::Set(field) => {
+                let value = self.stack.pop().unwrap();
+                let inst = self.stack.pop();
+                if let Some(Value::BlobInstance(ty, _)) = inst {
+                    let ty = &self.blobs[ty].name_to_field.get(&field).unwrap().1;
+                    if ty != &Type::from(&value) {
+                        error!(self, ErrorKind::RuntimeTypeError(Op::Set(field.clone()), vec![inst.unwrap()]));
+                    }
+                } else {
+                    error!(self, ErrorKind::RuntimeTypeError(Op::Set(field.clone()), vec![inst.unwrap()]));
+                }
+            }
+
             Op::PopUpvalue => {
                 self.stack.pop().unwrap();
             }
