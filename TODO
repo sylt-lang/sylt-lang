@@ -1,0 +1,9 @@
+PONG
+- complete plain structs
+  - type system
+- structs in structs
+- foreign function
+- constructors? ({.x = }-ish)
+- foreign structs
+- graphics api
+- parse input
