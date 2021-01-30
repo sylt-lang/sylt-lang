@@ -472,6 +472,9 @@ impl Compiler {
         let mut return_type = Type::Void;
         let mut function_block = Block::new(&name, &self.current_file, self.line());
 
+        let block_id = self.blocks.len();
+        self.blocks.push(Rc::new(RefCell::new(Block::new(&name, &self.current_file, self.line()))));
+
         let _ret = push_frame!(self, function_block, {
             loop {
                 match self.peek() {
@@ -538,8 +541,8 @@ impl Compiler {
 
 
         let func = Op::Constant(Value::Function(Vec::new(), Rc::clone(&function_block)));
+        self.blocks[block_id] = function_block;
         block.add(func, self.line());
-        self.blocks.push(function_block);
     }
 
     fn variable_expression(&mut self, block: &mut Block) {
