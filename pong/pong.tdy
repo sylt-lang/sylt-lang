@@ -16,17 +16,17 @@ update := fn state: State {
     delta := get_delta()
 
     if key_down("w") {
-        state.p1.paddle.y = state.p1.paddle.y + delta
+        state.p1.paddle.y = state.p1.paddle.y - delta
     }
     if key_down("s") {
-        state.p1.paddle.y = state.p1.paddle.y - delta
+        state.p1.paddle.y = state.p1.paddle.y + delta
     }
 
     if key_down("i") {
-        state.p2.paddle.y = state.p2.paddle.y + delta
-    }
-    if key_down("i") {
         state.p2.paddle.y = state.p2.paddle.y - delta
+    }
+    if key_down("k") {
+        state.p2.paddle.y = state.p2.paddle.y + delta
     }
 }
 
@@ -52,9 +52,6 @@ init := fn {
     state.p2.paddle.y = 10.
 
     for i := 0, i == i, i = i + 1 {
-        log(state.p1.paddle.x, state.p1.paddle.y)
-        log(state.p2.paddle.x, state.p2.paddle.y)
-
         update(state)
         draw(state)
         yield

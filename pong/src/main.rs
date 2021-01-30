@@ -44,7 +44,6 @@ extern_function!(my_next_frame
 
 extern_function!(my_draw_rectangle
     [Value::Float(x), Value::Float(y), Value::Float(w), Value::Float(h)] -> Type::Void => {
-        println!("Drawing rectangle {} {} {} {}", x, y, w, h);
         draw_rectangle(*x as f32, *y as f32, *w as f32, *h as f32, DARKPURPLE);
         Ok(Value::Nil)
     },
