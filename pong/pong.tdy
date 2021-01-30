@@ -1,0 +1,63 @@
+blob Paddle {
+    x: float
+    y: float
+}
+
+blob Player {
+    paddle: Paddle
+}
+
+blob State {
+    p1: Player
+    p2: Player
+}
+
+update := fn state: State {
+    delta := get_delta()
+
+    if key_down("w") {
+        state.p1.paddle.y = state.p1.paddle.y + delta
+    }
+    if key_down("s") {
+        state.p1.paddle.y = state.p1.paddle.y - delta
+    }
+
+    if key_down("i") {
+        state.p2.paddle.y = state.p2.paddle.y + delta
+    }
+    if key_down("i") {
+        state.p2.paddle.y = state.p2.paddle.y - delta
+    }
+}
+
+draw := fn state: State {
+    clear()
+    draw_rectangle(state.p1.paddle.x, state.p1.paddle.y, 0.2, 1.)
+    draw_rectangle(state.p2.paddle.x, state.p2.paddle.y, 0.2, 1.)
+    next_frame()
+}
+
+init := fn {
+    running := true
+
+    state := State()
+    state.p1 = Player()
+    state.p1.paddle = Paddle()
+    state.p1.paddle.x = 1.
+    state.p1.paddle.y = 10.
+
+    state.p2 = Player()
+    state.p2.paddle = Paddle()
+    state.p2.paddle.x = 19.
+    state.p2.paddle.y = 10.
+
+    for i := 0, i < 5, i = i + 1 {
+        log(state.p1.paddle.x, state.p1.paddle.y)
+        log(state.p2.paddle.x, state.p2.paddle.y)
+
+        update(state)
+        draw(state)
+    }
+}
+
+init()
