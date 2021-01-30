@@ -473,7 +473,8 @@ impl Compiler {
         let mut function_block = Block::new(&name, &self.current_file, self.line());
 
         let block_id = self.blocks.len();
-        self.blocks.push(Rc::new(RefCell::new(Block::new(&name, &self.current_file, self.line()))));
+        let new_block = Block::new(&name, &self.current_file, self.line());
+        self.blocks.push(Rc::new(RefCell::new(new_block)));
 
         let _ret = push_frame!(self, function_block, {
             loop {
@@ -886,6 +887,11 @@ impl Compiler {
                 } else {
                     error!(self, format!("Expected type found '{:?}'.", self.peek()));
                 }
+            }
+
+            (Token::Yield, ..) => {
+                self.eat();
+                block.add(Op::Yield, self.line());
             }
 
             (Token::Identifier(name), Token::ColonEqual, ..) => {

@@ -42,7 +42,9 @@ pub struct VM {
 
 }
 
-enum OpResult {
+#[derive(Eq, PartialEq)]
+pub enum OpResult {
+    Yield,
     Continue,
     Done,
 }
@@ -137,6 +139,11 @@ impl VM {
 
             Op::Pop => {
                 self.stack.pop().unwrap();
+            }
+
+            Op::Yield => {
+                self.frame_mut().ip += 1;
+                return Ok(OpResult::Yield);
             }
 
             Op::PopUpvalue => {
@@ -427,7 +434,7 @@ impl VM {
             self.frame().block.borrow().ops[self.frame().ip]);
     }
 
-    pub fn run(&mut self, prog: &Prog) -> Result<(), Error>{
+    pub fn init(&mut self, prog: &Prog) {
         let block = Rc::clone(&prog.blocks[0]);
         self.blobs = prog.blobs.clone();
         self.extern_functions = prog.functions.clone();
@@ -441,6 +448,9 @@ impl VM {
             block,
             ip: 0
         });
+    }
+
+    pub fn run(&mut self) -> Result<OpResult, Error> {
 
         if self.print_blocks {
             println!("\n    [[{}]]\n", "RUNNING".red());
@@ -452,8 +462,9 @@ impl VM {
                 self.print_stack()
             }
 
-            if matches!(self.eval_op(self.op())?, OpResult::Done) {
-                return Ok(());
+            let op = self.eval_op(self.op())?;
+            if matches!(op, OpResult::Done | OpResult::Yield) {
+                return Ok(op);
             }
         }
     }
@@ -463,6 +474,8 @@ impl VM {
             Op::Unreachable => {}
 
             Op::Jmp(_line) => {}
+
+            Op::Yield => {}
 
             Op::Constant(ref value) => {
                 match value.clone() {
