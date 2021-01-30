@@ -630,7 +630,10 @@ impl VM {
                     }
                     Value::ExternFunction(slot) => {
                         let extern_func = self.extern_functions[slot];
-                        let res = extern_func(&self.stack[new_base+1..], false).unwrap(); //FIXME
+                        let res = match extern_func(&self.stack[new_base+1..], false) {
+                            Ok(value) => value,
+                            Err(ek) => error!(self, ek, "Wrong arguments to external function".to_string()),
+                        };
                         self.stack.truncate(new_base);
                         self.stack.push(res);
                     }
@@ -872,7 +875,14 @@ impl VM {
                     }
                     Value::ExternFunction(slot) => {
                         let extern_func = self.extern_functions[slot];
-                        let res = extern_func(&self.stack[new_base+1..], true).unwrap(); //FIXME
+                        let res = match extern_func(&self.stack[new_base+1..], false) {
+                            Ok(value) => value,
+                            Err(ek) => {
+                                self.stack.truncate(new_base);
+                                self.stack.push(Value::Nil);
+                                error!(self, ek, "Wrong arguments to external function".to_string())
+                            }
+                        };
                         self.stack.truncate(new_base);
                         self.stack.push(res);
                     }
