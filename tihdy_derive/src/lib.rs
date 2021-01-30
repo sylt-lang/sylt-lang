@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Expr, Pat, Token, parse::{Parse, ParseStream, Result}, parse_macro_input, punctuated::Punctuated};
+use syn::{Expr, Pat, Token, parse::{Parse, ParseStream, Result}, parse_macro_input};
 
 struct ExternBlock {
     pattern: Pat,
@@ -70,6 +70,7 @@ pub fn extern_function(tokens: TokenStream) -> TokenStream {
         ) -> ::std::result::Result<tihdy::vm::Value, tihdy::error::ErrorKind>
         {
             if __typecheck {
+                #[allow(unused_variables)]
                 match __values {
                     #(#typecheck_blocks),*
                     _ => Err(tihdy::error::ErrorKind::ExternTypeMismatch(stringify!(#function).to_string(), __values.iter().map(|v| tihdy::vm::Type::from(v)).collect()))
