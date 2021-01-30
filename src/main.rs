@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 
 use tihdy::run_file;
-use tihdy::vm::Value;
 
 struct Args {
     file: Option<PathBuf>,
@@ -11,12 +10,14 @@ struct Args {
 fn main() {
     let args = parse_args();
     let file = args.file.unwrap_or_else(|| Path::new("tests/simple.tdy").to_owned());
-    if let Err(errs) = run_file(&file, args.print, vec![(String::from("hello"), hello)]) {
-        for err in errs.iter() {
-            println!("{}", err);
-        }
-        println!(" {} errors occured.", errs.len());
+    let errs = match run_file(&file, args.print, vec![(String::from("extern_test"), extern_test)]) {
+        Err(it) => it,
+        _ => return,
+    };
+    for err in errs.iter() {
+        println!("{}", err);
     }
+    println!(" {} errors occured.", errs.len());
 }
 
 fn parse_args() -> Args {
@@ -38,14 +39,12 @@ fn parse_args() -> Args {
     args
 }
 
-pub fn hello(parameters: &[Value]) -> Value {
-    match parameters {
-        [Value::String(s)] => {
-            println!("{}", s);
-        }
-        _ => {
-            println!("Bad parameters");
-        }
-    }
-    Value::Nil
-}
+tihdy_derive::extern_function!(
+    extern_test
+    [tihdy::vm::Value::Float(x), tihdy::vm::Value::Float(y)] -> tihdy::vm::Type::Float => {
+        Ok(tihdy::vm::Value::Float(x + y))
+    },
+    [tihdy::vm::Value::Float(x)] -> tihdy::vm::Type::Float => {
+        Ok(tihdy::vm::Value::Float(*x))
+    },
+);

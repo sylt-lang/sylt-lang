@@ -1,3 +1,2 @@
-hello()
-hello("a")
-hello("a", "b")
+print extern_test(3.0)
+print extern_test(3.0, 4.0)

@@ -12,6 +12,7 @@ name = "tihdy"
 [dependencies]
 logos = "0.11.4"
 owo-colors = { git="https://github.com/FredTheDino/owo-colors.git" }
+tihdy_derive = { path = "tihdy_derive" }
 
 criterion = { version = "0.3", optional = true }
 

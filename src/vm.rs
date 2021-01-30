@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::cell::RefCell;
 
+pub use crate::compiler::Type;
+
 use crate::compiler::RustFunction;
-use crate::compiler::Type;
 use crate::error::{Error, ErrorKind};
 use crate::compiler::{Prog, Blob};
 
@@ -629,7 +630,7 @@ impl VM {
                     }
                     Value::ExternFunction(slot) => {
                         let extern_func = self.extern_functions[slot];
-                        let res = extern_func(&self.stack[new_base+1..]);
+                        let res = extern_func(&self.stack[new_base+1..], false).unwrap(); //FIXME
                         self.stack.truncate(new_base);
                         self.stack.push(res);
                     }
@@ -869,8 +870,11 @@ impl VM {
 
                         self.stack.truncate(new_base + 1);
                     }
-                    Value::ExternFunction(_slot) => {
-                        self.stack.truncate(new_base + 1);
+                    Value::ExternFunction(slot) => {
+                        let extern_func = self.extern_functions[slot];
+                        let res = extern_func(&self.stack[new_base+1..], true).unwrap(); //FIXME
+                        self.stack.truncate(new_base);
+                        self.stack.push(res);
                     }
                     _ => {
                         error!(self,

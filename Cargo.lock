@@ -525,6 +525,15 @@ dependencies = [
  "criterion",
  "logos",
  "owo-colors",
+ "tihdy_derive",
+]
+
+[[package]]
+name = "tihdy_derive"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn",
 ]
 
 [[package]]

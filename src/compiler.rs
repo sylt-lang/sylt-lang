@@ -182,7 +182,7 @@ impl Frame {
     }
 }
 
-pub type RustFunction = fn(&[Value]) -> Value;
+pub type RustFunction = fn(&[Value], bool) -> Result<Value, ErrorKind>;
 
 #[derive(Debug, Clone)]
 pub struct Blob {

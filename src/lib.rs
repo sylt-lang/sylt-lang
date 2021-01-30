@@ -1,10 +1,9 @@
 use std::path::Path;
 
 pub mod compiler;
+pub mod error;
 pub mod tokenizer;
 pub mod vm;
-
-mod error;
 
 use compiler::RustFunction;
 use error::Error;
