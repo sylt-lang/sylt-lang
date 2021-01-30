@@ -2,11 +2,12 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
+
 use owo_colors::OwoColorize;
 
-use crate::compiler::Type;
+use crate::{Op, Value};
+use crate::Type;
 use crate::tokenizer::Token;
-use crate::vm::{Op, Value};
 
 #[derive(Debug, Clone)]
 pub enum ErrorKind {

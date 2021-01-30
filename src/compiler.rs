@@ -1,12 +1,12 @@
 use std::{borrow::Cow, path::{Path, PathBuf}};
-use std::rc::Rc;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+use std::rc::Rc;
 
+use crate::{Blob, Block, Op, Prog, RustFunction, Type, Value};
 use crate::error::{Error, ErrorKind};
 use crate::tokenizer::{Token, TokenStream};
-use crate::vm::{Value, Block, Op};
 
 macro_rules! nextable_enum {
     ( $name:ident { $( $thing:ident ),* $( , )? } ) => {
@@ -48,84 +48,6 @@ nextable_enum!(Prec {
     Term,
     Factor,
 });
-
-
-#[derive(Clone)]
-pub struct Prog {
-    pub blocks: Vec<Rc<RefCell<Block>>>,
-    pub blobs: Vec<Rc<Blob>>,
-    pub functions: Vec<RustFunction>,
-}
-
-#[derive(Debug, Clone)]
-pub enum Type {
-    Void,
-    UnknownType,
-    Int,
-    Float,
-    Bool,
-    String,
-    Function(Vec<Type>, Box<Type>),
-    Blob(usize),
-    BlobInstance(usize),
-}
-
-impl PartialEq for Type {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Type::Void, Type::Void) => true,
-            (Type::BlobInstance(a), Type::BlobInstance(b)) => a == b,
-            (Type::Blob(a), Type::Blob(b)) => a == b,
-            (Type::Int, Type::Int) => true,
-            (Type::Float, Type::Float) => true,
-            (Type::Bool, Type::Bool) => true,
-            (Type::String, Type::String) => true,
-            (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) =>
-                a_args == b_args && a_ret == b_ret,
-            _ => false,
-        }
-    }
-}
-
-impl From<&Value> for Type {
-    fn from(value: &Value) -> Type {
-        match value {
-            Value::BlobInstance(i, _) => Type::BlobInstance(*i),
-            Value::Blob(i) => Type::Blob(*i),
-            Value::Int(_) => Type::Int,
-            Value::Float(_) => Type::Float,
-            Value::Bool(_) => Type::Bool,
-            Value::String(_) => Type::String,
-            Value::Function(_, block) => block.borrow().ty.clone(),
-            _ => Type::Void,
-        }
-    }
-}
-
-impl Type {
-    pub fn is_unkown(&self) -> bool {
-        match self {
-            Type::UnknownType => true,
-            _ => false,
-        }
-    }
-
-    pub fn as_value(&self) -> Value {
-        match self {
-            Type::Void => Value::Nil,
-            Type::Blob(i) => Value::Blob(*i),
-            Type::BlobInstance(i) => Value::BlobInstance(*i, Rc::new(RefCell::new(Vec::new()))),
-            Type::UnknownType => Value::Unkown,
-            Type::Int => Value::Int(1),
-            Type::Float => Value::Float(1.0),
-            Type::Bool => Value::Bool(true),
-            Type::String => Value::String(Rc::new("".to_string())),
-            Type::Function(_, _) => Value::Function(
-                Vec::new(),
-                Rc::new(RefCell::new(Block::from_type(self)))),
-        }
-    }
-}
 
 #[derive(Clone)]
 struct Variable {
@@ -179,35 +101,6 @@ impl Frame {
         };
         self.upvalues.push(new_variable.clone());
         new_variable
-    }
-}
-
-pub type RustFunction = fn(&[Value], bool) -> Result<Value, ErrorKind>;
-
-#[derive(Debug, Clone)]
-pub struct Blob {
-    pub name: String,
-
-    pub name_to_field: HashMap<String, (usize, Type)>,
-}
-
-impl Blob {
-    pub fn new(name: &str) -> Self {
-        Self {
-            name: String::from(name),
-            name_to_field: HashMap::new(),
-        }
-    }
-
-    pub fn add_field(&mut self, name: &str, ty: Type) -> Result<(), ()> {
-        let size = self.name_to_field.len();
-        let entry = self.name_to_field.entry(String::from(name));
-        if matches!(entry, Entry::Occupied(_)) {
-            Err(())
-        } else {
-            entry.or_insert((size, ty));
-            Ok(())
-        }
     }
 }
 

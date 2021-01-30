@@ -41,10 +41,10 @@ fn parse_args() -> Args {
 
 tihdy_derive::extern_function!(
     extern_test
-    [tihdy::vm::Value::Float(x), tihdy::vm::Value::Float(y)] -> tihdy::vm::Type::Float => {
-        Ok(tihdy::vm::Value::Float(x + y))
+    [tihdy::Value::Float(x), tihdy::Value::Float(y)] -> tihdy::Type::Float => {
+        Ok(tihdy::Value::Float(x + y))
     },
-    [tihdy::vm::Value::Float(x)] -> tihdy::vm::Type::Float => {
-        Ok(tihdy::vm::Value::Float(*x))
+    [tihdy::Value::Float(x)] -> tihdy::Type::Float => {
+        Ok(tihdy::Value::Float(*x))
     },
 );
