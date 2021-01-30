@@ -284,7 +284,7 @@ impl Compiler {
     fn prefix(&mut self, token: Token, block: &mut Block) -> bool {
         match token {
             Token::Identifier(_) => self.variable_expression(block),
-            Token::LeftParen => self.grouping(block),
+            Token::LeftParen => self.grouping_or_tuple(block),
             Token::Minus => self.unary(block),
 
             Token::Float(_) => self.value(block),
@@ -329,6 +329,51 @@ impl Compiler {
             _ => { error!(self, "Cannot parse value."); Value::Bool(false) }
         };
         block.add(Op::Constant(value), self.line());
+    }
+
+    fn grouping_or_tuple(&mut self, block: &mut Block) {
+        let block_length = block.ops.len();
+        let token_length = self.curr;
+        if self.try_tuple(block).is_err() {
+            block.ops.truncate(block_length);
+            self.curr = token_length;
+            self.grouping(block);
+        }
+    }
+
+    fn try_tuple(&mut self, block: &mut Block) -> Result<(), ()> {
+        expect!(self, Token::LeftParen, "Expected '(' at start of tuple");
+
+        let mut num_args = 0;
+        loop {
+            match self.peek() {
+                Token::RightParen | Token::EOF => {
+                    break;
+                }
+                Token::Newline => {
+                    self.eat();
+                }
+                _ => {
+                    self.expression(block);
+                    num_args += 1;
+                    if self.peek() == Token::Comma {
+                        self.eat();
+                        continue;
+                    }
+                    if self.peek() == Token::RightParen {
+                        continue;
+                    }
+                    return Err(());
+                }
+            }
+        }
+        if num_args == 1 {
+            return Err(());
+        }
+
+        expect!(self, Token::RightParen, "Expected ')' after tuple");
+        block.add(Op::Tuple(num_args), self.line());
+        Ok(())
     }
 
     fn grouping(&mut self, block: &mut Block) {

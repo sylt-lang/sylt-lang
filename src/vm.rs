@@ -139,6 +139,11 @@ impl VM {
                 self.stack.pop().unwrap();
             }
 
+            Op::Tuple(size) => {
+                let values = self.stack.split_off(self.stack.len() - size);
+                self.stack.push(Value::Tuple(Rc::new(values)));
+            }
+
             Op::PopUpvalue => {
                 let value = self.stack.pop().unwrap();
                 let slot = self.stack.len();

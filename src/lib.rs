@@ -314,6 +314,7 @@ a() <=> 4
 pub enum Value {
     Blob(usize),
     BlobInstance(usize, Rc<RefCell<Vec<Value>>>),
+    Tuple(Rc<Vec<Value>>),
     Float(f64),
     Int(i64),
     Bool(bool),
@@ -378,6 +379,7 @@ impl Debug for Value {
             Value::ExternFunction(slot) => write!(fmt, "(extern fn {})", slot),
             Value::Unkown => write!(fmt, "(unkown)"),
             Value::Nil => write!(fmt, "(nil)"),
+            Value::Tuple(v) => write!(fmt, "({:?})", v),
         }
     }
 }
@@ -393,18 +395,7 @@ impl Value {
     }
 
     fn as_type(&self) -> Type {
-        match self {
-            Value::BlobInstance(i, _) => Type::BlobInstance(*i),
-            Value::Blob(i) => Type::Blob(*i),
-            Value::Float(_) => Type::Float,
-            Value::Int(_) => Type::Int,
-            Value::Bool(_) => Type::Bool,
-            Value::String(_) => Type::String,
-            Value::Function(_, block) => block.borrow().ty.clone(),
-            Value::ExternFunction(_) => Type::Void, //TODO
-            Value::Unkown => Type::UnknownType,
-            Value::Nil => Type::Void,
-        }
+        Type::from(self)
     }
 }
 
@@ -415,6 +406,7 @@ pub enum Op {
     Pop,
     PopUpvalue,
     Constant(Value),
+    Tuple(usize),
 
     Get(String),
     Set(String),
@@ -582,6 +574,7 @@ pub enum Type {
     Float,
     Bool,
     String,
+    Tuple(Vec<Type>),
     Function(Vec<Type>, Box<Type>),
     Blob(usize),
     BlobInstance(usize),
@@ -609,6 +602,9 @@ impl From<&Value> for Type {
         match value {
             Value::BlobInstance(i, _) => Type::BlobInstance(*i),
             Value::Blob(i) => Type::Blob(*i),
+            Value::Tuple(v) => {
+                Type::Tuple(v.iter().map(|x| Type::from(x)).collect())
+            }
             Value::Int(_) => Type::Int,
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
@@ -632,6 +628,9 @@ impl Type {
             Type::Void => Value::Nil,
             Type::Blob(i) => Value::Blob(*i),
             Type::BlobInstance(i) => Value::BlobInstance(*i, Rc::new(RefCell::new(Vec::new()))),
+            Type::Tuple(fields) => {
+                Value::Tuple(Rc::new(fields.iter().map(|x| x.as_value()).collect()))
+            }
             Type::UnknownType => Value::Unkown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),
