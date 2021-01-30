@@ -175,6 +175,26 @@ impl VM {
                 self.stack.push(value);
             }
 
+            Op::Index => {
+                let slot = self.stack.pop().unwrap();
+                let val = self.stack.pop().unwrap();
+                match (val, slot) {
+                    (Value::Tuple(v), Value::Int(slot)) => {
+                        let slot = slot as usize;
+                        if v.len() < slot {
+                            self.stack.push(Value::Nil);
+                            let len = v.len();
+                            error!(self, ErrorKind::IndexOutOfBounds(Value::Tuple(v), len, slot));
+                        }
+                        self.stack.push(v[slot].clone());
+                    }
+                    (val, slot) => {
+                        self.stack.push(Value::Nil);
+                        error!(self, ErrorKind::RuntimeTypeError(op, vec![val, slot]), String::from("Cannot index type"));
+                    }
+                }
+            }
+
             Op::Get(field) => {
                 let inst = self.stack.pop();
                 if let Some(Value::BlobInstance(ty, values)) = inst {
@@ -519,14 +539,14 @@ impl VM {
 
             Op::Set(field) => {
                 let value = self.stack.pop().unwrap();
-                let inst = self.stack.pop();
-                if let Some(Value::BlobInstance(ty, _)) = inst {
+                let inst = self.stack.pop().unwrap();
+                if let Value::BlobInstance(ty, _) = inst {
                     let ty = &self.blobs[ty].name_to_field.get(&field).unwrap().1;
                     if ty != &Type::from(&value) {
-                        error!(self, ErrorKind::RuntimeTypeError(Op::Set(field.clone()), vec![inst.unwrap()]));
+                        error!(self, ErrorKind::RuntimeTypeError(Op::Set(field.clone()), vec![inst]));
                     }
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(Op::Set(field.clone()), vec![inst.unwrap()]));
+                    error!(self, ErrorKind::RuntimeTypeError(Op::Set(field.clone()), vec![inst]));
                 }
             }
 

@@ -408,6 +408,7 @@ pub enum Op {
     Constant(Value),
     Tuple(usize),
 
+    Index,
     Get(String),
     Set(String),
 
@@ -590,6 +591,9 @@ impl PartialEq for Type {
             (Type::Float, Type::Float) => true,
             (Type::Bool, Type::Bool) => true,
             (Type::String, Type::String) => true,
+            (Type::Tuple(a), Type::Tuple(b)) => {
+                a.iter().zip(b.iter()).all(|(a, b)| a == b)
+            }
             (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) =>
                 a_args == b_args && a_ret == b_ret,
             _ => false,

@@ -315,6 +315,8 @@ impl Compiler {
                 | Token::NotEqual
                 => self.binary(block),
 
+            Token::LeftBracket => self.index(block),
+
             _ => { return false; },
         }
         return true;
@@ -382,6 +384,15 @@ impl Compiler {
         self.expression(block);
 
         expect!(self, Token::RightParen, "Expected ')' around expression.");
+    }
+
+    fn index(&mut self, block: &mut Block) {
+        expect!(self, Token::LeftBracket, "Expected ']' around index.");
+
+        self.expression(block);
+        block.add(Op::Index, self.line());
+
+        expect!(self, Token::RightBracket, "Expected '[' around index.");
     }
 
     fn unary(&mut self, block: &mut Block) {
@@ -796,6 +807,22 @@ impl Compiler {
                 };
                 let f = Type::Function(params, Box::new(return_type));
                 Ok(f)
+            }
+            Token::LeftParen => {
+                self.eat();
+                let mut element = Vec::new();
+                loop {
+                    element.push(self.parse_type()?);
+                    if self.peek() == Token::RightParen {
+                        self.eat();
+                        return Ok(Type::Tuple(element));
+                    }
+                    if !expect!(self,
+                                Token::Comma,
+                                "Expect comma efter element in tuple.") {
+                        return Err(());
+                    }
+                }
             }
             Token::Identifier(x) => {
                 self.eat();
