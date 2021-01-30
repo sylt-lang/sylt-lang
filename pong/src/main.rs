@@ -1,6 +1,7 @@
 use macroquad::{Camera2D, DARKPURPLE, KeyCode, SKYBLUE, clear_background, draw_rectangle, get_frame_time, is_key_down, next_frame, set_camera, vec2};
 use std::path::Path;
 use tihdy::{Type, Value};
+use tihdy::vm::OpResult;
 use tihdy_derive::extern_function;
 
 const SCREEN_WIDTH: f32 = 20.0;
@@ -76,9 +77,26 @@ async fn main() {
     ];
 
     let _guard = rt.enter();  // so we can async { next_frame().await }
-    if let Err(errs) = tihdy::run_file(Path::new("pong.tdy"), false, functions) {
+    let vm = tihdy::compile_file(Path::new("pong.tdy"), false, functions);
+    if let Err(errs) = vm {
         for err in errs {
             println!("{}", err);
+        }
+        return;
+    }
+    let mut vm = vm.unwrap();
+    loop {
+        match vm.run() {
+            Err(e) => {
+                println!("{:?}", e);
+                break;
+            }
+            Ok(OpResult::Yield) => {
+                next_frame().await
+            }
+            _ => {
+                break;
+            }
         }
     }
 }

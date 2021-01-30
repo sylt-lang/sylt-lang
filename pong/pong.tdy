@@ -51,12 +51,13 @@ init := fn {
     state.p2.paddle.x = 19.
     state.p2.paddle.y = 10.
 
-    for i := 0, i < 5, i = i + 1 {
+    for i := 0, i == i, i = i + 1 {
         log(state.p1.paddle.x, state.p1.paddle.y)
         log(state.p2.paddle.x, state.p2.paddle.y)
 
         update(state)
         draw(state)
+        yield
     }
 }
 
