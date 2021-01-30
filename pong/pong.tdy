@@ -34,7 +34,6 @@ draw := fn state: State {
     clear()
     draw_rectangle(state.p1.paddle.x, state.p1.paddle.y, 0.2, 1.)
     draw_rectangle(state.p2.paddle.x, state.p2.paddle.y, 0.2, 1.)
-    next_frame()
 }
 
 init := fn {

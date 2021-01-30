@@ -33,15 +33,6 @@ extern_function!(key_down
     },
 );
 
-extern_function!(my_next_frame
-    [] -> Type::Void => {
-        tokio::spawn(async {
-            next_frame().await
-        });
-        Ok(Value::Nil)
-    },
-);
-
 extern_function!(my_draw_rectangle
     [Value::Float(x), Value::Float(y), Value::Float(w), Value::Float(h)] -> Type::Void => {
         draw_rectangle(*x as f32, *y as f32, *w as f32, *h as f32, DARKPURPLE);
@@ -64,18 +55,14 @@ async fn main() {
         ..Default::default()
     });
 
-    let rt = tokio::runtime::Runtime::new().unwrap();
-
     let functions: Vec<(String, tihdy::RustFunction)> = vec![
         ("log".to_string(), log),
         ("get_delta".to_string(), get_delta),
         ("key_down".to_string(), key_down),
-        ("next_frame".to_string(), my_next_frame),
         ("draw_rectangle".to_string(), my_draw_rectangle),
         ("clear".to_string(), clear),
     ];
 
-    let _guard = rt.enter();  // so we can async { next_frame().await }
     let vm = tihdy::compile_file(Path::new("pong.tdy"), false, functions);
     if let Err(errs) = vm {
         for err in errs {
