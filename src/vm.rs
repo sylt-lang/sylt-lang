@@ -470,9 +470,9 @@ impl VM {
                         self.stack.push(Value::Function(Vec::new(), block.clone()));
 
                         let mut types = Vec::new();
-                        for (slot, is_up, _) in block.borrow().ups.iter() {
+                        for (slot, is_up, ty) in block.borrow().ups.iter() {
                             if *is_up {
-                                types.push(Type::Void);
+                                types.push(ty.clone());
                             } else {
                                 types.push(self.stack[*slot].as_type());
                             }
