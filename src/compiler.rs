@@ -1043,7 +1043,6 @@ impl Compiler {
     }
 
     pub fn compile(&mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
-        println!("=== START COMPILATION ===");
         self.functions = functions
             .to_vec()
             .into_iter()
@@ -1073,7 +1072,6 @@ impl Compiler {
 
         self.blocks.insert(0, Rc::new(RefCell::new(block)));
 
-        println!("=== END COMPILATION ===");
         if self.errors.is_empty() {
             Ok(Prog {
                 blocks: self.blocks.clone(),
