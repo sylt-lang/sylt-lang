@@ -7,6 +7,7 @@ blob Paddle {
 }
 
 BALL_S := 0.4
+BALL_STARTV := 5.0
 
 blob Ball {
     x: float
@@ -71,14 +72,16 @@ rect_overlap := fn ax: float, ay: float, aw: float, ah: float, bx: float, by: fl
 }
 
 ball_and_paddle_check := fn pad: Paddle, ball: Ball {
+    
     if rect_overlap(ball.x, ball.y, BALL_S, BALL_S, pad.x, pad.y, PADDLE_W, PADDLE_H) {
+       SPEEDUP := 0.5
        ballcy := ball.y + BALL_S / 2.
        padcy := pad.y + PADDLE_H / 2.
         if ball.x < pad.x {
-            ball.vx = -abs(ball.vx)
+            ball.vx = -abs(ball.vx) - SPEEDUP
             ball.vy = ball.vy + (ballcy - padcy) * 3.
         } else {
-            ball.vx = abs(ball.vx)
+            ball.vx = abs(ball.vx) + SPEEDUP
             ball.vy = ball.vy + (ballcy - padcy) * 3.
         }
     }
@@ -87,8 +90,6 @@ ball_and_paddle_check := fn pad: Paddle, ball: Ball {
 update := fn state: State {
     delta := get_delta()
     speed := delta * SPEED
-
-    paddle_height := 1.0
 
     if key_down("w") {
         state.p1.paddle.y = state.p1.paddle.y - speed
@@ -101,8 +102,8 @@ update := fn state: State {
         state.p1.paddle.y = 0.0
     }
 
-    if state.p1.paddle.y > 20.0 - paddle_height {
-        state.p1.paddle.y = 20.0 - paddle_height
+    if state.p1.paddle.y > 20.0 - PADDLE_H {
+        state.p1.paddle.y = 20.0 - PADDLE_H
     }
 
     if key_down("i") {
@@ -116,10 +117,9 @@ update := fn state: State {
         state.p2.paddle.y = 0.0
     }
 
-    if state.p2.paddle.y > 20.0 - paddle_height {
-        state.p2.paddle.y = 20.0 - paddle_height
+    if state.p2.paddle.y > 20.0 - PADDLE_H {
+        state.p2.paddle.y = 20.0 - PADDLE_H
     }
-
 
     state.ball.x = state.ball.x + delta * state.ball.vx
     state.ball.y = state.ball.y + delta * state.ball.vy
@@ -135,7 +135,7 @@ update := fn state: State {
     if state.ball.x < 0.0 {
         state.ball.x = 10.0
         state.ball.y = 10.0
-        state.ball.vx = -10.
+        state.ball.vx = -BALL_STARTV
         state.ball.vy = 0.
         state.p1.score = state.p1.score + 1
     }
@@ -143,7 +143,7 @@ update := fn state: State {
     if state.ball.x > 20.0 {
         state.ball.x = 10.0
         state.ball.y = 10.0
-        state.ball.vx = 10.
+        state.ball.vx = BALL_STARTV
         state.ball.vy = 0.
         state.p2.score = state.p2.score + 1
     }
@@ -166,7 +166,7 @@ init := fn {
     state.ball = Ball()
     state.ball.x = 10.0
     state.ball.y = 10.0
-    state.ball.vx = 3.0
+    state.ball.vx = BALL_STARTV
     state.ball.vy = 0.0
 
     state.p1 = Player()
