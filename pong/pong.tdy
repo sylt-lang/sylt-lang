@@ -13,6 +13,7 @@ blob Ball {
 
 blob Player {
     paddle: Paddle
+    score: int
 }
 
 blob State {
@@ -108,6 +109,22 @@ update := fn state: State {
         state.ball.vy = -abs(state.ball.vy)
     }
 
+    if state.ball.x < 0.0 {
+        state.ball.x = 10.0
+        state.ball.y = 10.0
+        state.ball.vx = -10.
+        state.ball.vy = 0.
+        state.p1.score = state.p1.score + 1
+    }
+
+    if state.ball.x > 20.0 {
+        state.ball.x = 10.0
+        state.ball.y = 10.0
+        state.ball.vx = 10.
+        state.ball.vy = 0.
+        state.p2.score = state.p2.score + 1
+    }
+
     ball_and_paddle_check(state.p1.paddle, state.ball)
     ball_and_paddle_check(state.p2.paddle, state.ball)
 }
@@ -130,11 +147,13 @@ init := fn {
     state.ball.vy = 2.0
 
     state.p1 = Player()
+    state.p1.score = 0
     state.p1.paddle = Paddle()
     state.p1.paddle.x = 1.
     state.p1.paddle.y = 10.
 
     state.p2 = Player()
+    state.p2.score = 0
     state.p2.paddle = Paddle()
     state.p2.paddle.x = 19.
     state.p2.paddle.y = 10.
