@@ -88,6 +88,10 @@ impl VM {
             Rc::new(RefCell::new(UpValue::new(slot))))
     }
 
+    fn push(&mut self, value: Value) {
+        self.stack.push(value);
+    }
+
     fn pop(&mut self) -> Value {
         match self.stack.pop() {
             Some(x) => x,
@@ -188,14 +192,14 @@ impl VM {
                     },
                     _ => value.clone(),
                 };
-                self.stack.push(value);
+                self.push(value);
             }
 
             Op::Get(field) => {
                 let inst = self.pop();
                 if let Value::BlobInstance(ty, values) = inst {
                     let slot = self.blobs[ty].name_to_field.get(&field).unwrap().0;
-                    self.stack.push(values.borrow()[slot].clone());
+                    self.push(values.borrow()[slot].clone());
                 } else {
                     error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst]));
                 }
@@ -214,18 +218,18 @@ impl VM {
 
             Op::Neg => {
                 match self.pop() {
-                    Value::Float(a) => self.stack.push(Value::Float(-a)),
-                    Value::Int(a) => self.stack.push(Value::Int(-a)),
+                    Value::Float(a) => self.push(Value::Float(-a)),
+                    Value::Int(a) => self.push(Value::Int(-a)),
                     a => error!(self, ErrorKind::RuntimeTypeError(op, vec![a])),
                 }
             }
 
             Op::Add => {
                 match self.poppop() {
-                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a + b)),
-                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a + b)),
+                    (Value::Float(a), Value::Float(b)) => self.push(Value::Float(a + b)),
+                    (Value::Int(a), Value::Int(b)) => self.push(Value::Int(a + b)),
                     (Value::String(a), Value::String(b)) => {
-                        self.stack.push(Value::String(Rc::from(format!("{}{}", a, b))))
+                        self.push(Value::String(Rc::from(format!("{}{}", a, b))))
                     }
                     (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
@@ -233,75 +237,75 @@ impl VM {
 
             Op::Sub => {
                 match self.poppop() {
-                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a - b)),
-                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a - b)),
+                    (Value::Float(a), Value::Float(b)) => self.push(Value::Float(a - b)),
+                    (Value::Int(a), Value::Int(b)) => self.push(Value::Int(a - b)),
                     (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
             Op::Mul => {
                 match self.poppop() {
-                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a * b)),
-                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a * b)),
+                    (Value::Float(a), Value::Float(b)) => self.push(Value::Float(a * b)),
+                    (Value::Int(a), Value::Int(b)) => self.push(Value::Int(a * b)),
                     (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
             Op::Div => {
                 match self.poppop() {
-                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a / b)),
-                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a / b)),
+                    (Value::Float(a), Value::Float(b)) => self.push(Value::Float(a / b)),
+                    (Value::Int(a), Value::Int(b)) => self.push(Value::Int(a / b)),
                     (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
             Op::Equal => {
                 match self.poppop() {
-                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a == b)),
-                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a == b)),
-                    (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a == b)),
-                    (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a == b)),
+                    (Value::Float(a), Value::Float(b)) => self.push(Value::Bool(a == b)),
+                    (Value::Int(a), Value::Int(b)) => self.push(Value::Bool(a == b)),
+                    (Value::String(a), Value::String(b)) => self.push(Value::Bool(a == b)),
+                    (Value::Bool(a), Value::Bool(b)) => self.push(Value::Bool(a == b)),
                     (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
             Op::Less => {
                 match self.poppop() {
-                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a < b)),
-                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a < b)),
-                    (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a < b)),
-                    (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a < b)),
+                    (Value::Float(a), Value::Float(b)) => self.push(Value::Bool(a < b)),
+                    (Value::Int(a), Value::Int(b)) => self.push(Value::Bool(a < b)),
+                    (Value::String(a), Value::String(b)) => self.push(Value::Bool(a < b)),
+                    (Value::Bool(a), Value::Bool(b)) => self.push(Value::Bool(a < b)),
                     (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
             Op::Greater => {
                 match self.poppop() {
-                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a > b)),
-                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a > b)),
-                    (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a > b)),
-                    (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a > b)),
+                    (Value::Float(a), Value::Float(b)) => self.push(Value::Bool(a > b)),
+                    (Value::Int(a), Value::Int(b)) => self.push(Value::Bool(a > b)),
+                    (Value::String(a), Value::String(b)) => self.push(Value::Bool(a > b)),
+                    (Value::Bool(a), Value::Bool(b)) => self.push(Value::Bool(a > b)),
                     (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
             Op::And => {
                 match self.poppop() {
-                    (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a && b)),
+                    (Value::Bool(a), Value::Bool(b)) => self.push(Value::Bool(a && b)),
                     (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
             Op::Or => {
                 match self.poppop() {
-                    (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a || b)),
+                    (Value::Bool(a), Value::Bool(b)) => self.push(Value::Bool(a || b)),
                     (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
             Op::Not => {
                 match self.pop() {
-                    Value::Bool(a) => self.stack.push(Value::Bool(!a)),
+                    Value::Bool(a) => self.push(Value::Bool(!a)),
                     a => error!(self, ErrorKind::RuntimeTypeError(op, vec![a])),
                 }
             }
@@ -322,7 +326,7 @@ impl VM {
                 if matches!(self.pop(), Value::Bool(false)) {
                     error!(self, ErrorKind::Assert);
                 }
-                self.stack.push(Value::Bool(true));
+                self.push(Value::Bool(true));
             }
 
             Op::ReadUpvalue(slot) => {
@@ -333,7 +337,7 @@ impl VM {
                     }
                     _ => unreachable!(),
                 };
-                self.stack.push(value);
+                self.push(value);
             }
 
             Op::AssignUpvalue(slot) => {
@@ -348,7 +352,7 @@ impl VM {
 
             Op::ReadLocal(slot) => {
                 let slot = self.frame().stack_offset + slot;
-                self.stack.push(self.stack[slot].clone());
+                self.push(self.stack[slot].clone());
             }
 
             Op::AssignLocal(slot) => {
@@ -370,7 +374,7 @@ impl VM {
                         }
 
                         self.pop();
-                        self.stack.push(Value::BlobInstance(blob_id, Rc::new(RefCell::new(values))));
+                        self.push(Value::BlobInstance(blob_id, Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, block) => {
                         let inner = block.borrow();
@@ -399,7 +403,7 @@ impl VM {
                             Err(ek) => error!(self, ek, "Wrong arguments to external function".to_string()),
                         };
                         self.stack.truncate(new_base);
-                        self.stack.push(res);
+                        self.push(res);
                     }
                     _ => {
                         unreachable!()
@@ -455,7 +459,7 @@ impl VM {
         self.stack.clear();
         self.frames.clear();
 
-        self.stack.push(Value::Function(Vec::new(), Rc::clone(&block)));
+        self.push(Value::Function(Vec::new(), Rc::clone(&block)));
 
         self.frames.push(Frame {
             stack_offset: 0,
@@ -494,7 +498,7 @@ impl VM {
             Op::Constant(ref value) => {
                 match value.clone() {
                     Value::Function(_, block) => {
-                        self.stack.push(Value::Function(Vec::new(), block.clone()));
+                        self.push(Value::Function(Vec::new(), block.clone()));
 
                         let mut types = Vec::new();
                         for (slot, is_up, ty) in block.borrow().ups.iter() {
@@ -523,7 +527,7 @@ impl VM {
                         };
                     },
                     _ => {
-                        self.stack.push(value.clone());
+                        self.push(value.clone());
                     }
                 }
             }
@@ -532,9 +536,9 @@ impl VM {
                 let inst = self.pop();
                 if let Value::BlobInstance(ty, _) = inst {
                     let value = self.blobs[ty].name_to_field.get(&field).unwrap().1.as_value();
-                    self.stack.push(value);
+                    self.push(value);
                 } else {
-                    self.stack.push(Value::Nil);
+                    self.push(Value::Nil);
                     error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst]));
                 }
             }
@@ -558,7 +562,7 @@ impl VM {
 
             Op::ReadUpvalue(slot) => {
                 let value = self.frame().block.borrow().ups[slot].2.as_value();
-                self.stack.push(value);
+                self.push(value);
             }
 
             Op::AssignUpvalue(slot) => {
@@ -618,7 +622,7 @@ impl VM {
                         }
 
                         self.pop();
-                        self.stack.push(Value::BlobInstance(blob_id, Rc::new(RefCell::new(values))));
+                        self.push(Value::BlobInstance(blob_id, Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, block) => {
                         let inner = block.borrow();
@@ -649,12 +653,12 @@ impl VM {
                             Ok(value) => value,
                             Err(ek) => {
                                 self.stack.truncate(new_base);
-                                self.stack.push(Value::Nil);
+                                self.push(Value::Nil);
                                 error!(self, ek, "Wrong arguments to external function".to_string())
                             }
                         };
                         self.stack.truncate(new_base);
-                        self.stack.push(res);
+                        self.push(res);
                     }
                     _ => {
                         error!(self,
@@ -683,9 +687,9 @@ impl VM {
         self.stack.clear();
         self.frames.clear();
 
-        self.stack.push(Value::Function(Vec::new(), Rc::clone(&block)));
+        self.push(Value::Function(Vec::new(), Rc::clone(&block)));
         for arg in block.borrow().args() {
-            self.stack.push(arg.as_value());
+            self.push(arg.as_value());
         }
 
         self.frames.push(Frame {
@@ -717,7 +721,7 @@ impl VM {
 
             if !self.stack.is_empty() {
                 let ident = self.pop().identity();
-                self.stack.push(ident);
+                self.push(ident);
             }
         }
         errors
