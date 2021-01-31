@@ -6,6 +6,9 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.release]
+lto = "thin"
+
 [dependencies]
 tihdy = { path = ".."}
 tihdy_derive = { path = "../tihdy_derive" }
