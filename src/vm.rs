@@ -89,7 +89,10 @@ impl VM {
     }
 
     fn pop(&mut self) -> Value {
-        self.stack.pop().unwrap()
+        match self.stack.pop() {
+            Some(x) => x,
+            None => self.crash_and_burn(),
+        }
     }
 
     fn poppop(&mut self) -> (Value, Value) {
@@ -115,6 +118,17 @@ impl VM {
     fn op(&self) -> Op {
         let ip = self.frame().ip;
         self.frame().block.borrow().ops[ip].clone()
+    }
+
+    fn crash_and_burn(&self) -> ! {
+        println!("\n\n    !!!POPING EMPTY STACK - DUMPING EVERYTHING!!!\n");
+        self.print_stack();
+        println!("\n");
+        self.frame().block.borrow().debug_print();
+        println!("    ip: {}, line: {}\n",
+            self.frame().ip.blue(),
+            self.frame().block.borrow().line(self.frame().ip).blue());
+        unreachable!();
     }
 
     fn error(&self, kind: ErrorKind, message: Option<String>) -> Error {
