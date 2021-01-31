@@ -88,11 +88,21 @@ update := fn state: State {
     delta := get_delta()
     speed := delta * SPEED
 
+    paddle_height := 1.0
+
     if key_down("w") {
         state.p1.paddle.y = state.p1.paddle.y - speed
     }
     if key_down("s") {
         state.p1.paddle.y = state.p1.paddle.y + speed
+    }
+
+    if state.p1.paddle.y < 0.0 {
+        state.p1.paddle.y = 0.0
+    }
+
+    if state.p1.paddle.y > 20.0 - paddle_height {
+        state.p1.paddle.y = 20.0 - paddle_height
     }
 
     if key_down("i") {
@@ -101,6 +111,15 @@ update := fn state: State {
     if key_down("k") {
         state.p2.paddle.y = state.p2.paddle.y + speed
     }
+
+    if state.p2.paddle.y < 0.0 {
+        state.p2.paddle.y = 0.0
+    }
+
+    if state.p2.paddle.y > 20.0 - paddle_height {
+        state.p2.paddle.y = 20.0 - paddle_height
+    }
+
 
     state.ball.x = state.ball.x + delta * state.ball.vx
     state.ball.y = state.ball.y + delta * state.ball.vy
