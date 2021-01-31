@@ -49,11 +49,6 @@ extern_function!(clear
 
 #[macroquad::main("Pong")]
 async fn main() {
-    set_camera(Camera2D {
-        zoom: vec2(1. / SCREEN_WIDTH * 2., -1. / SCREEN_HEIGHT * 2.),
-        target: vec2(SCREEN_WIDTH / 2., SCREEN_HEIGHT / 2.),
-        ..Default::default()
-    });
 
     let functions: Vec<(String, tihdy::RustFunction)> = vec![
         ("log".to_string(), log),
@@ -70,6 +65,13 @@ async fn main() {
         }
         return;
     }
+
+    set_camera(Camera2D {
+        zoom: vec2(1. / SCREEN_WIDTH * 2., -1. / SCREEN_HEIGHT * 2.),
+        target: vec2(SCREEN_WIDTH / 2., SCREEN_HEIGHT / 2.),
+        ..Default::default()
+    });
+
     let mut vm = vm.unwrap();
     loop {
         match vm.run() {

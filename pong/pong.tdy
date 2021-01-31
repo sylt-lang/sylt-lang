@@ -3,6 +3,14 @@ blob Paddle {
     y: float
 }
 
+blob Ball {
+    x: float
+    y: float
+
+    vx: float
+    vy: float
+}
+
 blob Player {
     paddle: Paddle
 }
@@ -10,36 +18,89 @@ blob Player {
 blob State {
     p1: Player
     p2: Player
+    ball: Ball
+}
+
+ball_speed := 2.0
+SPEED := 10.0
+
+abs := fn a: float -> float {
+    if a < 0.0 {
+        ret -a
+    }
+    ret a
+}
+
+and := fn a: bool, b: bool -> bool {
+    if a {
+        ret b
+    }
+    ret false
+}
+
+or := fn a: bool, b: bool -> bool {
+    if a {
+        ret true
+    }
+    ret b
+}
+
+rect_overlap := fn ax: float, ay: float, aw: float, ah: float, bx: float, by: float, bw: float, bh: float -> bool {
+    dx := abs(ax - bx) + (-aw - bw) / 2.
+    dy := abs(ay - by) + (-ah - bh) / 2.
+    ret and(dx < 0., dy < 0.)
+}
+
+ball_and_paddle_check := fn pad: Paddle, ball: Ball {
+    if rect_overlap(ball.x, ball.y, 0.2, 0.2, pad.x, pad.y, 0.2, 1.) {
+        ball.vx = -ball.vx
+    }
 }
 
 update := fn state: State {
     delta := get_delta()
+    speed := delta * SPEED
 
     if key_down("w") {
-        state.p1.paddle.y = state.p1.paddle.y - delta
+        state.p1.paddle.y = state.p1.paddle.y - speed
     }
     if key_down("s") {
-        state.p1.paddle.y = state.p1.paddle.y + delta
+        state.p1.paddle.y = state.p1.paddle.y + speed
     }
 
     if key_down("i") {
-        state.p2.paddle.y = state.p2.paddle.y - delta
+        state.p2.paddle.y = state.p2.paddle.y - speed
     }
     if key_down("k") {
-        state.p2.paddle.y = state.p2.paddle.y + delta
+        state.p2.paddle.y = state.p2.paddle.y + speed
     }
+
+    state.ball.x = state.ball.x + delta * state.ball.vx
+    state.ball.y = state.ball.y + delta * state.ball.vy
+
+
+    ball_and_paddle_check(state.p1.paddle, state.ball)
+    ball_and_paddle_check(state.p2.paddle, state.ball)
 }
 
 draw := fn state: State {
     clear()
     draw_rectangle(state.p1.paddle.x, state.p1.paddle.y, 0.2, 1.)
     draw_rectangle(state.p2.paddle.x, state.p2.paddle.y, 0.2, 1.)
+
+    draw_rectangle(state.ball.x, state.ball.y, 0.2, 0.2)
 }
 
 init := fn {
     running := true
 
     state := State()
+    state.ball = Ball()
+    state.ball.x = 10.0
+    state.ball.y = 10.0
+    state.ball.vx = 1.0
+    state.ball.vy = 0.0
+
     state.p1 = Player()
     state.p1.paddle = Paddle()
     state.p1.paddle.x = 1.
