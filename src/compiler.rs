@@ -621,9 +621,38 @@ impl Compiler {
         }
     }
 
-    fn assign(&mut self, name: &str, block: &mut Block) {
+    fn assign(&mut self, block: &mut Block) {
+        let name = match self.eat() {
+            Token::Identifier(name) => name,
+            _ => {
+                error!(self, format!("Expected identifier in assignment"));
+                return;
+            }
+        };
+
+        let op = match self.eat() {
+            Token::Equal => None,
+
+            Token::PlusEqual => Some(Op::Add),
+            Token::MinusEqual => Some(Op::Sub),
+            Token::StarEqual => Some(Op::Mul),
+            Token::SlashEqual => Some(Op::Div),
+
+            _ => {
+                error!(self, format!("Expected '=' in assignment"));
+                return;
+            }
+        };
+
         if let Some(var) = self.find_variable(&name) {
-            self.expression(block);
+            if let Some(op) = op {
+                block.add(Op::Copy, self.line());
+                self.expression(block);
+                block.add(op, self.line());
+            } else {
+                self.expression(block);
+            }
+
             if var.upvalue {
                 block.add(Op::AssignUpvalue(var.slot), self.line());
             } else {
@@ -832,14 +861,31 @@ impl Compiler {
                             return Err(());
                         };
 
-                        if self.peek() == Token::Equal {
-                            self.eat();
-                            self.expression(block);
-                            block.add(Op::Set(field), self.line());
-                            return Ok(());
-                        } else {
-                            block.add(Op::Get(field), self.line());
-                        }
+                        let op = match self.peek() {
+                            Token::Equal => {
+                                self.eat();
+                                self.expression(block);
+                                block.add(Op::Set(field), self.line());
+                                return Ok(());
+                            }
+
+                            Token::PlusEqual => Op::Add,
+                            Token::MinusEqual => Op::Sub,
+                            Token::StarEqual => Op::Mul,
+                            Token::SlashEqual => Op::Div,
+
+                            _ => {
+                                block.add(Op::Get(field), self.line());
+                                continue;
+                            }
+                        };
+                        block.add(Op::Copy, self.line());
+                        block.add(Op::Get(field.clone()), self.line());
+                        self.eat();
+                        self.expression(block);
+                        block.add(op, self.line());
+                        block.add(Op::Set(field), self.line());
+                        return Ok(());
                     }
                     Token::LeftParen => {
                         self.call(block);
@@ -865,6 +911,16 @@ impl Compiler {
                 self.eat();
                 self.expression(block);
                 block.add(Op::Print, self.line());
+            }
+
+            (Token::Identifier(_), Token::Equal, ..) |
+            (Token::Identifier(_), Token::PlusEqual, ..) |
+            (Token::Identifier(_), Token::MinusEqual, ..) |
+            (Token::Identifier(_), Token::SlashEqual, ..) |
+            (Token::Identifier(_), Token::StarEqual, ..)
+
+                => {
+                self.assign(block);
             }
 
             (Token::Identifier(_), Token::Dot, ..) => {
@@ -898,12 +954,6 @@ impl Compiler {
                 self.eat();
                 self.eat();
                 self.definition_statement(&name, Type::UnknownType, block);
-            }
-
-            (Token::Identifier(name), Token::Equal, ..) => {
-                self.eat();
-                self.eat();
-                self.assign(&name, block);
             }
 
             (Token::Blob, Token::Identifier(_), ..) => {

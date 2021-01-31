@@ -325,6 +325,26 @@ a() <=> 4
 
     test_file!(scoping, "tests/scoping.tdy");
     test_file!(for_, "tests/for.tdy");
+
+    test_multiple!(
+        op_assign,
+        add: "a := 1\na += 1\na <=> 2",
+        sub: "a := 2\na -= 1\na <=> 1",
+        mul: "a := 2\na *= 2\na <=> 4",
+        div: "a := 2\na /= 2\na <=> 1",
+        cluster: "
+blob A { a: int }
+a := A()
+a.a = 0
+a.a += 1
+a.a <=> 1
+a.a *= 2
+a.a <=> 2
+a.a /= 2
+a.a <=> 1
+a.a -= 1
+a.a <=> 0"
+    );
 }
 
 #[derive(Clone)]
@@ -431,6 +451,7 @@ pub enum Op {
 
     Pop,
     PopUpvalue,
+    Copy,
     Constant(Value),
 
     Get(String),
