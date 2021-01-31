@@ -306,6 +306,14 @@ a() <=> 4
                           5 <=> a.a + a.b"
     );
 
+    test_multiple!(tuples,
+        add: "(1, 2, 3, 4) + (4, 3, 2, 1) <=> (5, 5, 5, 5)",
+        sub: "(1, -2, 3, -4) - (4, 3, -2, -1) <=> (-3, 1, 1, -5)",
+        mul: "(0, 1, 2) * (2, 3, 4) <=> (0, 3, 8)",
+        types: "a: (int, float, int) = (1, 1., 1)",
+        more_types: "a: (str, bool, int) = (\"abc\", true, 1)",
+    );
+
     test_file!(scoping, "tests/scoping.tdy");
     test_file!(for_, "tests/for.tdy");
 }
