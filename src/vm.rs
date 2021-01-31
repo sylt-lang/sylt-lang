@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use owo_colors::OwoColorize;
 
-use crate::{Blob, Block, Op, Prog, UpValue, Value};
+use crate::{Blob, Block, Op, Prog, UpValue, Value, op};
 use crate::error::{Error, ErrorKind};
 use crate::RustFunction;
 pub use crate::Type;
@@ -17,6 +17,31 @@ macro_rules! error {
     };
     ( $thing:expr, $kind:expr, $msg:expr) => {
         return Err($thing.error($kind, Some($msg)));
+    };
+}
+
+macro_rules! one_op {
+    ( $self:expr, $op:expr, $fun:expr ) => {
+        let a = $self.pop();
+        let b = $fun(&a);
+        if b.is_nil() {
+            $self.push(b);
+            error!($self, ErrorKind::RuntimeTypeError($op, vec![a]));
+        }
+        $self.push(b);
+    };
+}
+
+macro_rules! two_op {
+    ( $self:expr, $op:expr, $fun:expr ) => {
+        let b = $self.pop();
+        let a = $self.pop();
+        let c = $fun(&a, &b);
+        if c.is_nil() {
+            $self.push(c);
+            error!($self, ErrorKind::RuntimeTypeError($op, vec![a, b]));
+        }
+        $self.push(c);
     };
 }
 
@@ -88,6 +113,10 @@ impl VM {
 
     fn pop(&mut self) -> Value {
         self.stack.pop().unwrap()
+    }
+
+    fn push(&mut self, value: Value) {
+        self.stack.push(value)
     }
 
     fn pop_twice(&mut self) -> (Value, Value) {
@@ -216,132 +245,27 @@ impl VM {
                 }
             }
 
-            Op::Neg => {
-                match self.stack.pop().unwrap() {
-                    Value::Float(a) => self.stack.push(Value::Float(-a)),
-                    Value::Int(a) => self.stack.push(Value::Int(-a)),
-                    a => {
-                        self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![a]));
-                    }
-                }
-            }
+            Op::Neg => { one_op!(self, Op::Neg, op::neg); }
 
-            Op::Add => {
-                match self.pop_twice() {
-                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a + b)),
-                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a + b)),
-                    (Value::String(a), Value::String(b)) => {
-                        self.stack.push(Value::String(Rc::from(format!("{}{}", a, b))))
-                    }
-                    (a, b) => {
-                        self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b]));
-                    }
-                }
-            }
+            Op::Add => { two_op!(self, Op::Add, op::add); }
 
-            Op::Sub => {
-                match self.pop_twice() {
-                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a - b)),
-                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a - b)),
-                    (a, b) => {
-                        self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b]));
-                    }
-                }
-            }
+            Op::Sub => { two_op!(self, Op::Sub, op::sub); }
 
-            Op::Mul => {
-                match self.pop_twice() {
-                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a * b)),
-                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a * b)),
-                    (a, b) => {
-                        self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b]));
-                    }
-                }
-            }
+            Op::Mul => { two_op!(self, Op::Mul, op::mul); }
 
-            Op::Div => {
-                match self.pop_twice() {
-                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a / b)),
-                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a / b)),
-                    (a, b) => {
-                        self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b]));
-                    }
-                }
-            }
+            Op::Div => { two_op!(self, Op::Div, op::div); }
 
-            Op::Equal => {
-                match self.pop_twice() {
-                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a == b)),
-                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a == b)),
-                    (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a == b)),
-                    (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a == b)),
-                    (a, b) => {
-                        self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b]));
-                    }
-                }
-            }
+            Op::Equal => { two_op!(self, Op::Equal, op::eq); }
 
-            Op::Less => {
-                match self.pop_twice() {
-                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a < b)),
-                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a < b)),
-                    (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a < b)),
-                    (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a < b)),
-                    (a, b) => {
-                        self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b]));
-                    }
-                }
-            }
+            Op::Less => { two_op!(self, Op::Less, op::less); }
 
-            Op::Greater => {
-                match self.pop_twice() {
-                    (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a > b)),
-                    (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a > b)),
-                    (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a > b)),
-                    (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a > b)),
-                    (a, b) => {
-                        self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b]));
-                    }
-                }
-            }
+            Op::Greater => { two_op!(self, Op::Greater, op::greater); }
 
-            Op::And => {
-                match self.pop_twice() {
-                    (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a && b)),
-                    (a, b) => {
-                        self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b]));
-                    }
-                }
-            }
+            Op::And => { two_op!(self, Op::And, op::and); }
 
-            Op::Or => {
-                match self.pop_twice() {
-                    (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a || b)),
-                    (a, b) => {
-                        self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b]));
-                    }
-                }
-            }
+            Op::Or => { two_op!(self, Op::Or, op::or); }
 
-            Op::Not => {
-                match self.stack.pop().unwrap() {
-                    Value::Bool(a) => self.stack.push(Value::Bool(!a)),
-                    a => {
-                        self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![a]));
-                    }
-                }
-            }
+            Op::Not => { one_op!(self, Op::Not, op::not); }
 
             Op::Jmp(line) => {
                 self.frame_mut().ip = line;

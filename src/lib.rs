@@ -384,6 +384,109 @@ impl Debug for Value {
     }
 }
 
+mod op {
+    use super::Value;
+    use std::rc::Rc;
+
+    fn tuple_op(a: &Rc<Vec<Value>>, b: &Rc<Vec<Value>>, f: fn (&Value, &Value) -> Value) -> Value {
+        Value::Tuple(Rc::new(a.iter().zip(b.iter()).map(|(a, b)| f(a, b)).collect()))
+    }
+
+    pub fn neg(value: &Value) -> Value {
+        match value {
+            Value::Float(a) => Value::Float(-a),
+            Value::Int(a) => Value::Int(-a),
+            Value::Tuple(a) => Value::Tuple(Rc::new(a.iter().map(neg).collect())),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn not(value: &Value) -> Value {
+        match value {
+            Value::Bool(a) => Value::Bool(!a),
+            Value::Tuple(a) => Value::Tuple(Rc::new(a.iter().map(not).collect())),
+            _ => Value::Nil,
+        }
+    }
+
+
+    pub fn add(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Float(a), Value::Float(b)) => Value::Float(a + b),
+            (Value::Int(a), Value::Int(b)) => Value::Int(a + b),
+            (Value::String(a), Value::String(b)) => Value::String(Rc::from(format!("{}{}", a, b))),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_op(a, b, add),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn sub(a: &Value, b: &Value) -> Value {
+        add(a, &neg(b))
+    }
+
+    pub fn mul(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
+            (Value::Int(a), Value::Int(b)) => Value::Int(a * b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_op(a, b, mul),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn div(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
+            (Value::Int(a), Value::Int(b)) => Value::Int(a / b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_op(a, b, div),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn eq(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Float(a), Value::Float(b)) => Value::Bool(a == b),
+            (Value::Int(a), Value::Int(b)) => Value::Bool(a == b),
+            (Value::String(a), Value::String(b)) => Value::Bool(a == b),
+            (Value::Bool(a), Value::Bool(b)) => Value::Bool(a == b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_op(a, b, eq),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn less(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Float(a), Value::Float(b)) => Value::Bool(a < b),
+            (Value::Int(a), Value::Int(b)) => Value::Bool(a < b),
+            (Value::String(a), Value::String(b)) => Value::Bool(a < b),
+            (Value::Bool(a), Value::Bool(b)) => Value::Bool(a < b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_op(a, b, less),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn greater(a: &Value, b: &Value) -> Value {
+        less(b, a)
+    }
+
+    pub fn and(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a && *b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_op(a, b, and),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn or(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a || *b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_op(a, b, or),
+            _ => Value::Nil,
+        }
+    }
+
+}
+
+
 impl Value {
     fn identity(self) -> Self {
         match self {
@@ -391,6 +494,13 @@ impl Value {
             Value::Int(_) => Value::Int(1),
             Value::Bool(_) => Value::Bool(true),
             a => a,
+        }
+    }
+
+    fn is_nil(&self) -> bool {
+        match self {
+            Value::Nil => true,
+            _ => false,
         }
     }
 
