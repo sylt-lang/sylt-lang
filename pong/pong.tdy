@@ -45,6 +45,13 @@ or := fn a: bool, b: bool -> bool {
     ret b
 }
 
+sign := fn a: float -> float {
+    if a < 0.0 {
+        ret -1.0
+    }
+    ret 1.0
+}
+
 rect_overlap := fn ax: float, ay: float, aw: float, ah: float, bx: float, by: float, bw: float, bh: float -> bool {
     acx := ax + aw / 2.
     acy := ay + ah / 2.
@@ -59,7 +66,11 @@ rect_overlap := fn ax: float, ay: float, aw: float, ah: float, bx: float, by: fl
 
 ball_and_paddle_check := fn pad: Paddle, ball: Ball {
     if rect_overlap(ball.x, ball.y, 0.2, 0.2, pad.x, pad.y, 0.2, 1.) {
-        ball.vx = -ball.vx
+        if ball.x < pad.x {
+            ball.vx = -abs(ball.vx)
+        } else {
+            ball.vx = abs(ball.vx)
+        }
     }
 }
 
