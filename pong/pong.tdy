@@ -158,12 +158,12 @@ draw := fn state: State {
     draw_rectangle(state.p1.paddle.x, state.p1.paddle.y, PADDLE_W, PADDLE_H)
     draw_rectangle(state.p2.paddle.x, state.p2.paddle.y, PADDLE_W, PADDLE_H)
 
-    for y := 0.0, y < state.p1.score, y = y + 1.0 {
-        draw_rectangle(15.0, y * 0.5, 0.5, 0.5)
+    for y := 0.0, y < state.p2.score, y = y + 1.0 {
+        draw_rectangle(y * 0.5, 0.0, 0.5, 0.5)
     }
 
-    for y := 0.0, y < state.p2.score, y = y + 1.0 {
-        draw_rectangle(5.0, y * 0.5, 0.5, 0.5)
+    for y := 0.0, y < state.p1.score, y = y + 1.0 {
+        draw_rectangle(20.0 - y * 0.5, 20.0-0.5, 0.5, 0.5)
     }
 
     draw_rectangle(state.ball.x, state.ball.y, BALL_S, BALL_S)
