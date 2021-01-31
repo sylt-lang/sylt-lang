@@ -138,7 +138,7 @@ impl VM {
             }
 
             Op::Pop => {
-                self.stack.pop().unwrap();
+                self.pop();
             }
 
             Op::Yield => {
@@ -147,7 +147,7 @@ impl VM {
             }
 
             Op::PopUpvalue => {
-                let value = self.stack.pop().unwrap();
+                let value = self.pop();
                 let slot = self.stack.len();
                 self.drop_upvalue(slot, value);
             }
@@ -178,28 +178,28 @@ impl VM {
             }
 
             Op::Get(field) => {
-                let inst = self.stack.pop();
-                if let Some(Value::BlobInstance(ty, values)) = inst {
+                let inst = self.pop();
+                if let Value::BlobInstance(ty, values) = inst {
                     let slot = self.blobs[ty].name_to_field.get(&field).unwrap().0;
                     self.stack.push(values.borrow()[slot].clone());
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst.unwrap()]));
+                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst]));
                 }
             }
 
             Op::Set(field) => {
-                let value = self.stack.pop().unwrap();
-                let inst = self.stack.pop();
-                if let Some(Value::BlobInstance(ty, values)) = inst {
+                let value = self.pop();
+                let inst = self.pop();
+                if let Value::BlobInstance(ty, values) = inst {
                     let slot = self.blobs[ty].name_to_field.get(&field).unwrap().0;
                     values.borrow_mut()[slot] = value;
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst.unwrap()]));
+                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst]));
                 }
             }
 
             Op::Neg => {
-                match self.stack.pop().unwrap() {
+                match self.pop() {
                     Value::Float(a) => self.stack.push(Value::Float(-a)),
                     Value::Int(a) => self.stack.push(Value::Int(-a)),
                     a => error!(self, ErrorKind::RuntimeTypeError(op, vec![a])),
@@ -286,7 +286,7 @@ impl VM {
             }
 
             Op::Not => {
-                match self.stack.pop().unwrap() {
+                match self.pop() {
                     Value::Bool(a) => self.stack.push(Value::Bool(!a)),
                     a => error!(self, ErrorKind::RuntimeTypeError(op, vec![a])),
                 }
@@ -298,14 +298,14 @@ impl VM {
             }
 
             Op::JmpFalse(line) => {
-                if matches!(self.stack.pop(), Some(Value::Bool(false))) {
+                if matches!(self.pop(), Value::Bool(false)) {
                     self.frame_mut().ip = line;
                     return Ok(OpResult::Continue);
                 }
             }
 
             Op::Assert => {
-                if matches!(self.stack.pop(), Some(Value::Bool(false))) {
+                if matches!(self.pop(), Value::Bool(false)) {
                     error!(self, ErrorKind::Assert);
                 }
                 self.stack.push(Value::Bool(true));
@@ -324,7 +324,7 @@ impl VM {
 
             Op::AssignUpvalue(slot) => {
                 let offset = self.frame().stack_offset;
-                let value = self.stack.pop().unwrap();
+                let value = self.pop();
                 let slot = match &self.stack[offset] {
                     Value::Function(ups, _) => Rc::clone(&ups[slot]),
                     _ => unreachable!(),
@@ -339,7 +339,7 @@ impl VM {
 
             Op::AssignLocal(slot) => {
                 let slot = self.frame().stack_offset + slot;
-                self.stack[slot] = self.stack.pop().unwrap();
+                self.stack[slot] = self.pop();
             }
 
             Op::Define(_) => {}
@@ -355,7 +355,7 @@ impl VM {
                             values.push(Value::Nil);
                         }
 
-                        self.stack.pop();
+                        self.pop();
                         self.stack.push(Value::BlobInstance(blob_id, Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, block) => {
@@ -394,7 +394,7 @@ impl VM {
             }
 
             Op::Print => {
-                println!("PRINT: {:?}", self.stack.pop().unwrap());
+                println!("PRINT: {:?}", self.pop());
             }
 
             Op::Return => {
@@ -402,7 +402,7 @@ impl VM {
                 if self.frames.is_empty() {
                     return Ok(OpResult::Done);
                 } else {
-                    self.stack[last.stack_offset] = self.stack.pop().unwrap();
+                    self.stack[last.stack_offset] = self.pop();
                     for slot in last.stack_offset+1..self.stack.len() {
                         if self.upvalues.contains_key(&slot) {
                             let value = self.stack[slot].clone();
@@ -515,31 +515,31 @@ impl VM {
             }
 
             Op::Get(field) => {
-                let inst = self.stack.pop();
-                if let Some(Value::BlobInstance(ty, _)) = inst {
+                let inst = self.pop();
+                if let Value::BlobInstance(ty, _) = inst {
                     let value = self.blobs[ty].name_to_field.get(&field).unwrap().1.as_value();
                     self.stack.push(value);
                 } else {
                     self.stack.push(Value::Nil);
-                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst.unwrap()]));
+                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst]));
                 }
             }
 
             Op::Set(field) => {
-                let value = self.stack.pop().unwrap();
-                let inst = self.stack.pop();
-                if let Some(Value::BlobInstance(ty, _)) = inst {
+                let value = self.pop();
+                let inst = self.pop();
+                if let Value::BlobInstance(ty, _) = inst {
                     let ty = &self.blobs[ty].name_to_field.get(&field).unwrap().1;
                     if ty != &Type::from(&value) {
-                        error!(self, ErrorKind::RuntimeTypeError(Op::Set(field.clone()), vec![inst.unwrap()]));
+                        error!(self, ErrorKind::RuntimeTypeError(Op::Set(field.clone()), vec![inst]));
                     }
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(Op::Set(field.clone()), vec![inst.unwrap()]));
+                    error!(self, ErrorKind::RuntimeTypeError(Op::Set(field.clone()), vec![inst]));
                 }
             }
 
             Op::PopUpvalue => {
-                self.stack.pop().unwrap();
+                self.pop();
             }
 
             Op::ReadUpvalue(slot) => {
@@ -549,7 +549,7 @@ impl VM {
 
             Op::AssignUpvalue(slot) => {
                 let var = self.frame().block.borrow().ups[slot].2.clone();
-                let up = self.stack.pop().unwrap().as_type();
+                let up = self.pop().as_type();
                 if var != up {
                     error!(self, ErrorKind::TypeError(op, vec![var, up]),
                                   "Incorrect type for upvalue.".to_string());
@@ -557,7 +557,7 @@ impl VM {
             }
 
             Op::Return => {
-                let a = self.stack.pop().unwrap();
+                let a = self.pop();
                 let inner = self.frame().block.borrow();
                 let ret = inner.ret();
                 if a.as_type() != *ret {
@@ -603,7 +603,7 @@ impl VM {
                             values[*slot] = ty.as_value();
                         }
 
-                        self.stack.pop();
+                        self.pop();
                         self.stack.push(Value::BlobInstance(blob_id, Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, block) => {
@@ -702,7 +702,7 @@ impl VM {
             }
 
             if !self.stack.is_empty() {
-                let ident = self.stack.pop().unwrap().identity();
+                let ident = self.pop().identity();
                 self.stack.push(ident);
             }
         }
