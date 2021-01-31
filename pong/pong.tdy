@@ -66,11 +66,16 @@ rect_overlap := fn ax: float, ay: float, aw: float, ah: float, bx: float, by: fl
 
 ball_and_paddle_check := fn pad: Paddle, ball: Ball {
     if rect_overlap(ball.x, ball.y, 0.2, 0.2, pad.x, pad.y, 0.2, 1.) {
+       ballcy := ball.y + 0.1
+       padcy := pad.y + 0.5
         if ball.x < pad.x {
             ball.vx = -abs(ball.vx)
+            ball.vy = (ballcy - padcy) * 3.
         } else {
             ball.vx = abs(ball.vx)
+            ball.vy = (ballcy - padcy) * 3.
         }
+        log(ball.vx, ball.vy)
     }
 }
 
@@ -116,7 +121,7 @@ init := fn {
     state.ball = Ball()
     state.ball.x = 10.0
     state.ball.y = 10.0
-    state.ball.vx = 1.0
+    state.ball.vx = 3.0
     state.ball.vy = 0.0
 
     state.p1 = Player()
