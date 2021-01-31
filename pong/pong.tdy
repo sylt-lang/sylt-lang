@@ -1,7 +1,12 @@
+PADDLE_W := 0.5
+PADDLE_H := 3.0
+
 blob Paddle {
     x: float
     y: float
 }
+
+BALL_S := 0.4
 
 blob Ball {
     x: float
@@ -66,17 +71,16 @@ rect_overlap := fn ax: float, ay: float, aw: float, ah: float, bx: float, by: fl
 }
 
 ball_and_paddle_check := fn pad: Paddle, ball: Ball {
-    if rect_overlap(ball.x, ball.y, 0.2, 0.2, pad.x, pad.y, 0.2, 1.) {
-       ballcy := ball.y + 0.1
-       padcy := pad.y + 0.5
+    if rect_overlap(ball.x, ball.y, BALL_S, BALL_S, pad.x, pad.y, PADDLE_W, PADDLE_H) {
+       ballcy := ball.y + BALL_S / 2.
+       padcy := pad.y + PADDLE_H / 2.
         if ball.x < pad.x {
             ball.vx = -abs(ball.vx)
-            ball.vy = (ballcy - padcy) * 3.
+            ball.vy = ball.vy + (ballcy - padcy) * 3.
         } else {
             ball.vx = abs(ball.vx)
-            ball.vy = (ballcy - padcy) * 3.
+            ball.vy = ball.vy + (ballcy - padcy) * 3.
         }
-        log(ball.vx, ball.vy)
     }
 }
 
@@ -132,10 +136,10 @@ update := fn state: State {
 draw := fn state: State {
     clear()
 
-    draw_rectangle(state.p1.paddle.x, state.p1.paddle.y, 0.2, 1.)
-    draw_rectangle(state.p2.paddle.x, state.p2.paddle.y, 0.2, 1.)
+    draw_rectangle(state.p1.paddle.x, state.p1.paddle.y, PADDLE_W, PADDLE_H)
+    draw_rectangle(state.p2.paddle.x, state.p2.paddle.y, PADDLE_W, PADDLE_H)
 
-    draw_rectangle(state.ball.x, state.ball.y, 0.2, 0.2)
+    draw_rectangle(state.ball.x, state.ball.y, BALL_S, BALL_S)
 }
 
 init := fn {
@@ -143,8 +147,8 @@ init := fn {
     state.ball = Ball()
     state.ball.x = 10.0
     state.ball.y = 10.0
-    state.ball.vx = 1.0
-    state.ball.vy = 2.0
+    state.ball.vx = 3.0
+    state.ball.vy = 0.0
 
     state.p1 = Player()
     state.p1.score = 0
