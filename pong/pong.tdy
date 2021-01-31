@@ -46,8 +46,14 @@ or := fn a: bool, b: bool -> bool {
 }
 
 rect_overlap := fn ax: float, ay: float, aw: float, ah: float, bx: float, by: float, bw: float, bh: float -> bool {
-    dx := abs(ax - bx) + (-aw - bw) / 2.
-    dy := abs(ay - by) + (-ah - bh) / 2.
+    acx := ax + aw / 2.
+    acy := ay + ah / 2.
+
+    bcx := bx + bw / 2.
+    bcy := by + bh / 2.
+
+    dx := abs(acx - bcx) + (-aw - bw) / 2.
+    dy := abs(acy - bcy) + (-ah - bh) / 2.
     ret and(dx < 0., dy < 0.)
 }
 
@@ -85,6 +91,7 @@ update := fn state: State {
 
 draw := fn state: State {
     clear()
+
     draw_rectangle(state.p1.paddle.x, state.p1.paddle.y, 0.2, 1.)
     draw_rectangle(state.p2.paddle.x, state.p2.paddle.y, 0.2, 1.)
 
