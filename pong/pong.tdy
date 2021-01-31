@@ -108,7 +108,6 @@ update := fn state: State {
         state.ball.vy = -abs(state.ball.vy)
     }
 
-
     ball_and_paddle_check(state.p1.paddle, state.ball)
     ball_and_paddle_check(state.p2.paddle, state.ball)
 }
@@ -123,8 +122,6 @@ draw := fn state: State {
 }
 
 init := fn {
-    running := true
-
     state := State()
     state.ball = Ball()
     state.ball.x = 10.0
