@@ -19,7 +19,7 @@ blob Ball {
 
 blob Player {
     paddle: Paddle
-    score: int
+    score: float
 }
 
 blob State {
@@ -137,7 +137,7 @@ update := fn state: State {
         state.ball.y = 10.0
         state.ball.vx = -BALL_STARTV
         state.ball.vy = 0.
-        state.p1.score = state.p1.score + 1
+        state.p1.score = state.p1.score + 1.0
     }
 
     if state.ball.x > 20.0 {
@@ -145,7 +145,7 @@ update := fn state: State {
         state.ball.y = 10.0
         state.ball.vx = BALL_STARTV
         state.ball.vy = 0.
-        state.p2.score = state.p2.score + 1
+        state.p2.score = state.p2.score + 1.0
     }
 
     ball_and_paddle_check(state.p1.paddle, state.ball)
@@ -157,6 +157,14 @@ draw := fn state: State {
 
     draw_rectangle(state.p1.paddle.x, state.p1.paddle.y, PADDLE_W, PADDLE_H)
     draw_rectangle(state.p2.paddle.x, state.p2.paddle.y, PADDLE_W, PADDLE_H)
+
+    for y := 0.0, y < state.p1.score, y = y + 1.0 {
+        draw_rectangle(15.0, y * 0.5, 0.5, 0.5)
+    }
+
+    for y := 0.0, y < state.p2.score, y = y + 1.0 {
+        draw_rectangle(5.0, y * 0.5, 0.5, 0.5)
+    }
 
     draw_rectangle(state.ball.x, state.ball.y, BALL_S, BALL_S)
 }
@@ -170,13 +178,13 @@ init := fn {
     state.ball.vy = 0.0
 
     state.p1 = Player()
-    state.p1.score = 0
+    state.p1.score = 0.0
     state.p1.paddle = Paddle()
     state.p1.paddle.x = 1.
     state.p1.paddle.y = 10.
 
     state.p2 = Player()
-    state.p2.score = 0
+    state.p2.score = 0.0
     state.p2.paddle = Paddle()
     state.p2.paddle.x = 19.
     state.p2.paddle.y = 10.
