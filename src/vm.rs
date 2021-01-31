@@ -92,7 +92,7 @@ impl VM {
         self.stack.pop().unwrap()
     }
 
-    fn pop_twice(&mut self) -> (Value, Value) {
+    fn poppop(&mut self) -> (Value, Value) {
         let (a, b) = (self.stack.remove(self.stack.len() - 1),
                       self.stack.remove(self.stack.len() - 1));
         (b, a)  // this matches the order they were on the stack
@@ -207,7 +207,7 @@ impl VM {
             }
 
             Op::Add => {
-                match self.pop_twice() {
+                match self.poppop() {
                     (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a + b)),
                     (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a + b)),
                     (Value::String(a), Value::String(b)) => {
@@ -218,7 +218,7 @@ impl VM {
             }
 
             Op::Sub => {
-                match self.pop_twice() {
+                match self.poppop() {
                     (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a - b)),
                     (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a - b)),
                     (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
@@ -226,7 +226,7 @@ impl VM {
             }
 
             Op::Mul => {
-                match self.pop_twice() {
+                match self.poppop() {
                     (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a * b)),
                     (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a * b)),
                     (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
@@ -234,7 +234,7 @@ impl VM {
             }
 
             Op::Div => {
-                match self.pop_twice() {
+                match self.poppop() {
                     (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Float(a / b)),
                     (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Int(a / b)),
                     (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
@@ -242,7 +242,7 @@ impl VM {
             }
 
             Op::Equal => {
-                match self.pop_twice() {
+                match self.poppop() {
                     (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a == b)),
                     (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a == b)),
                     (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a == b)),
@@ -252,7 +252,7 @@ impl VM {
             }
 
             Op::Less => {
-                match self.pop_twice() {
+                match self.poppop() {
                     (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a < b)),
                     (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a < b)),
                     (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a < b)),
@@ -262,7 +262,7 @@ impl VM {
             }
 
             Op::Greater => {
-                match self.pop_twice() {
+                match self.poppop() {
                     (Value::Float(a), Value::Float(b)) => self.stack.push(Value::Bool(a > b)),
                     (Value::Int(a), Value::Int(b)) => self.stack.push(Value::Bool(a > b)),
                     (Value::String(a), Value::String(b)) => self.stack.push(Value::Bool(a > b)),
@@ -272,14 +272,14 @@ impl VM {
             }
 
             Op::And => {
-                match self.pop_twice() {
+                match self.poppop() {
                     (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a && b)),
                     (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
             }
 
             Op::Or => {
-                match self.pop_twice() {
+                match self.poppop() {
                     (Value::Bool(a), Value::Bool(b)) => self.stack.push(Value::Bool(a || b)),
                     (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
                 }
