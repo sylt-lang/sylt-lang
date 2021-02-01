@@ -159,15 +159,21 @@ impl VM {
                 self.pop();
             }
 
-            Op::Yield => {
-                self.frame_mut().ip += 1;
-                return Ok(OpResult::Yield);
-            }
-
             Op::PopUpvalue => {
                 let value = self.pop();
                 let slot = self.stack.len();
                 self.drop_upvalue(slot, value);
+            }
+
+            Op::Copy => {
+                let v = self.pop();
+                self.push(v.clone());
+                self.push(v);
+            }
+
+            Op::Yield => {
+                self.frame_mut().ip += 1;
+                return Ok(OpResult::Yield);
             }
 
             Op::Constant(value) => {
