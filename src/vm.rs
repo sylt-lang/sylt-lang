@@ -34,8 +34,7 @@ macro_rules! one_op {
 
 macro_rules! two_op {
     ( $self:expr, $op:expr, $fun:expr ) => {
-        let b = $self.pop();
-        let a = $self.pop();
+        let (a, b) = $self.poppop();
         let c = $fun(&a, &b);
         if c.is_nil() {
             $self.push(c);
@@ -113,6 +112,12 @@ impl VM {
 
     fn pop(&mut self) -> Value {
         self.stack.pop().unwrap()
+    }
+
+    fn poppop(&mut self) -> (Value, Value) {
+        let (a, b) = (self.stack.remove(self.stack.len() - 1),
+                      self.stack.remove(self.stack.len() - 1));
+        (b, a)  // this matches the order they were on the stack
     }
 
     fn push(&mut self, value: Value) {
