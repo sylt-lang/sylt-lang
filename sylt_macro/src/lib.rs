@@ -65,20 +65,20 @@ pub fn extern_function(tokens: TokenStream) -> TokenStream {
 
     let tokens = quote! {
         pub fn #function (
-            __values: &[tihdy::Value],
+            __values: &[sylt::Value],
             __typecheck: bool
-        ) -> ::std::result::Result<tihdy::Value, tihdy::error::ErrorKind>
+        ) -> ::std::result::Result<sylt::Value, sylt::error::ErrorKind>
         {
             if __typecheck {
                 #[allow(unused_variables)]
                 match __values {
                     #(#typecheck_blocks),*
-                    _ => Err(tihdy::error::ErrorKind::ExternTypeMismatch(stringify!(#function).to_string(), __values.iter().map(|v| tihdy::Type::from(v)).collect()))
+                    _ => Err(sylt::error::ErrorKind::ExternTypeMismatch(stringify!(#function).to_string(), __values.iter().map(|v| sylt::Type::from(v)).collect()))
                 }
             } else {
                 match __values {
                     #(#eval_blocks),*
-                    _ => Err(tihdy::error::ErrorKind::ExternTypeMismatch(stringify!(#function).to_string(), __values.iter().map(|v| tihdy::Type::from(v)).collect()))
+                    _ => Err(sylt::error::ErrorKind::ExternTypeMismatch(stringify!(#function).to_string(), __values.iter().map(|v| sylt::Type::from(v)).collect()))
                 }
             }
         }

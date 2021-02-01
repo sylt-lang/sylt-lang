@@ -17,8 +17,8 @@ for , j < 1000, j = j + 1 {
     a <=> 12586269025
 }
 ";
-    let compiled = tihdy::compiler::compile("main", Path::new("prog"), tihdy::tokenizer::string_to_tokens(prog)).unwrap();
-    c.bench_function("fib 50", |b| b.iter(|| tihdy::vm::run_block(&compiled).unwrap()));
+    let compiled = sylt::compiler::compile("main", Path::new("prog"), sylt::tokenizer::string_to_tokens(prog)).unwrap();
+    c.bench_function("fib 50", |b| b.iter(|| sylt::vm::run_block(&compiled).unwrap()));
 }
 
 pub fn fib_90(c: &mut Criterion) {
@@ -34,8 +34,8 @@ for i := 0, i < 90, i = i + 1 {
 }
 a <=> 2880067194370816120
 ";
-    let compiled = tihdy::compiler::compile("main", Path::new("prog"), tihdy::tokenizer::string_to_tokens(prog)).unwrap();
-    c.bench_function("fib 90", |b| b.iter(|| tihdy::vm::run_block(&compiled).unwrap()));
+    let compiled = sylt::compiler::compile("main", Path::new("prog"), sylt::tokenizer::string_to_tokens(prog)).unwrap();
+    c.bench_function("fib 90", |b| b.iter(|| sylt::vm::run_block(&compiled).unwrap()));
 }
 
 criterion_group!(benches, fib_50, fib_90);

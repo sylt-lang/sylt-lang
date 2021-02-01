@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use tihdy::run_file;
+use sylt::run_file;
 
 struct Args {
     file: Option<PathBuf>,
@@ -39,12 +39,12 @@ fn parse_args() -> Args {
     args
 }
 
-tihdy_derive::extern_function!(
+sylt_macro::extern_function!(
     extern_test
-    [tihdy::Value::Float(x), tihdy::Value::Float(y)] -> tihdy::Type::Float => {
-        Ok(tihdy::Value::Float(x + y))
+    [sylt::Value::Float(x), sylt::Value::Float(y)] -> sylt::Type::Float => {
+        Ok(sylt::Value::Float(x + y))
     },
-    [tihdy::Value::Float(x)] -> tihdy::Type::Float => {
-        Ok(tihdy::Value::Float(*x))
+    [sylt::Value::Float(x)] -> sylt::Type::Float => {
+        Ok(sylt::Value::Float(*x))
     },
 );
