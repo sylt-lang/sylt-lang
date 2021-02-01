@@ -358,14 +358,11 @@ impl Compiler {
                 _ => {
                     self.expression(block);
                     num_args += 1;
-                    if self.peek() == Token::Comma {
-                        self.eat();
-                        continue;
+                    match self.peek() {
+                        Token::Comma => { self.eat(); },
+                        Token::RightParen => {},
+                        _ => { return Err(()); },
                     }
-                    if self.peek() == Token::RightParen {
-                        continue;
-                    }
-                    return Err(());
                 }
             }
         }
