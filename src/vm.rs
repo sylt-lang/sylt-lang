@@ -125,7 +125,7 @@ impl VM {
     }
 
     fn crash_and_burn(&self) -> ! {
-        println!("\n\n    !!!POPING EMPTY STACK - DUMPING EVERYTHING!!!\n");
+        println!("\n\n    !!!POPPING EMPTY STACK - DUMPING EVERYTHING!!!\n");
         self.print_stack();
         println!("\n");
         self.frame().block.borrow().debug_print();
