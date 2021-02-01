@@ -119,12 +119,6 @@ impl VM {
         self.stack.push(value)
     }
 
-    fn pop_twice(&mut self) -> (Value, Value) {
-        let (a, b) = (self.stack.remove(self.stack.len() - 1),
-                      self.stack.remove(self.stack.len() - 1));
-        (b, a)  // this matches the order they were on the stack
-    }
-
     fn _peek_up(&self, amount: usize) -> Option<&Value> {
         self.stack.get(self.stack.len() - amount)
     }
