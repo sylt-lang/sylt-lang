@@ -370,7 +370,7 @@ impl Compiler {
             return Err(());
         }
 
-        expect!(self, Token::RightParen, "Expected ')' after tuple");
+        expect!(self, Token::RightParen, "Expected ')' after tuple.");
         block.add(Op::Tuple(num_args), self.line());
         Ok(())
     }
