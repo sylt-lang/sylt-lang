@@ -331,8 +331,8 @@ a() <=> 4
         more_types: "a: (str, bool, int) = (\"abc\", true, 1)",
     );
 
-    test_file!(scoping, "tests/scoping.tdy");
-    test_file!(for_, "tests/for.tdy");
+    test_file!(scoping, "progs/tests/scoping.sy");
+    test_file!(for_, "progs/tests/for.sy");
 
     test_multiple!(
         op_assign,

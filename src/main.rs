@@ -9,7 +9,7 @@ struct Args {
 
 fn main() {
     let args = parse_args();
-    let file = args.file.unwrap_or_else(|| Path::new("tests/simple.tdy").to_owned());
+    let file = args.file.unwrap_or_else(|| Path::new("progs/tests/simple.sy").to_owned());
     let errs = match run_file(&file, args.print, vec![(String::from("extern_test"), extern_test)]) {
         Err(it) => it,
         _ => return,
