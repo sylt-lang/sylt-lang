@@ -129,10 +129,6 @@ impl VM {
         (b, a)  // this matches the order they were on the stack
     }
 
-    fn push(&mut self, value: Value) {
-        self.stack.push(value)
-    }
-
     fn _peek_up(&self, amount: usize) -> Option<&Value> {
         self.stack.get(self.stack.len() - amount)
     }
@@ -265,8 +261,7 @@ impl VM {
             }
 
             Op::Set(field) => {
-                let value = self.pop();
-                let inst = self.pop();
+                let (inst, value) = self.poppop();
                 if let Value::BlobInstance(ty, values) = inst {
                     let slot = self.blobs[ty].name_to_field.get(&field).unwrap().0;
                     values.borrow_mut()[slot] = value;
