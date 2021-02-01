@@ -35,6 +35,9 @@ pub enum Token {
     #[token("print")]
     Print,
 
+    #[token("yield")]
+    Yield,
+
     #[token("ret")]
     Ret,
 

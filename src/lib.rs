@@ -21,6 +21,22 @@ pub fn run_file(path: &Path, print: bool, functions: Vec<(String, RustFunction)>
     run(tokenizer::file_to_tokens(path), path, print, functions)
 }
 
+pub fn compile_file(path: &Path,
+                    print: bool,
+                    functions: Vec<(String, RustFunction)>
+    ) -> Result<vm::VM, Vec<Error>> {
+    let tokens = tokenizer::file_to_tokens(path);
+    match compiler::compile("main", path, tokens, &functions) {
+        Ok(prog) => {
+            let mut vm = vm::VM::new().print_blocks(print).print_ops(print);
+            vm.typecheck(&prog)?;
+            vm.init(&prog);
+            Ok(vm)
+        }
+        Err(errors) => Err(errors),
+    }
+}
+
 pub fn run_string(s: &str, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
     run(tokenizer::string_to_tokens(s), Path::new("builtin"), print, functions)
 }
@@ -30,7 +46,8 @@ pub fn run(tokens: TokenStream, path: &Path, print: bool, functions: Vec<(String
         Ok(prog) => {
             let mut vm = vm::VM::new().print_blocks(print).print_ops(print);
             vm.typecheck(&prog)?;
-            if let Err(e) = vm.run(&prog) {
+            vm.init(&prog);
+            if let Err(e) = vm.run() {
                 Err(vec![e])
             } else {
                 Ok(())
@@ -316,6 +333,26 @@ a() <=> 4
 
     test_file!(scoping, "tests/scoping.tdy");
     test_file!(for_, "tests/for.tdy");
+
+    test_multiple!(
+        op_assign,
+        add: "a := 1\na += 1\na <=> 2",
+        sub: "a := 2\na -= 1\na <=> 1",
+        mul: "a := 2\na *= 2\na <=> 4",
+        div: "a := 2\na /= 2\na <=> 1",
+        cluster: "
+blob A { a: int }
+a := A()
+a.a = 0
+a.a += 1
+a.a <=> 1
+a.a *= 2
+a.a <=> 2
+a.a /= 2
+a.a <=> 1
+a.a -= 1
+a.a <=> 0"
+    );
 }
 
 #[derive(Clone)]
@@ -523,6 +560,7 @@ pub enum Op {
 
     Pop,
     PopUpvalue,
+    Copy,
     Constant(Value),
     Tuple(usize),
 
@@ -561,7 +599,9 @@ pub enum Op {
     Call(usize),
 
     Print,
+
     Return,
+    Yield,
 }
 
 #[derive(Debug)]

@@ -1,0 +1,199 @@
+PADDLE_W := 0.5
+PADDLE_H := 3.0
+
+blob Paddle {
+    x: float
+    y: float
+}
+
+BALL_S := 0.4
+BALL_STARTV := 5.0
+
+blob Ball {
+    x: float
+    y: float
+
+    vx: float
+    vy: float
+}
+
+blob Player {
+    paddle: Paddle
+    score: float
+}
+
+blob State {
+    p1: Player
+    p2: Player
+    ball: Ball
+}
+
+ball_speed := 2.0
+SPEED := 10.0
+
+abs := fn a: float -> float {
+    if a < 0.0 {
+        ret -a
+    }
+    ret a
+}
+
+and := fn a: bool, b: bool -> bool {
+    if a {
+        ret b
+    }
+    ret false
+}
+
+or := fn a: bool, b: bool -> bool {
+    if a {
+        ret true
+    }
+    ret b
+}
+
+sign := fn a: float -> float {
+    if a < 0.0 {
+        ret -1.0
+    }
+    ret 1.0
+}
+
+rect_overlap := fn ax: float, ay: float, aw: float, ah: float, bx: float, by: float, bw: float, bh: float -> bool {
+    acx := ax + aw / 2.
+    acy := ay + ah / 2.
+
+    bcx := bx + bw / 2.
+    bcy := by + bh / 2.
+
+    dx := abs(acx - bcx) + (-aw - bw) / 2.
+    dy := abs(acy - bcy) + (-ah - bh) / 2.
+    ret and(dx < 0., dy < 0.)
+}
+
+ball_and_paddle_check := fn pad: Paddle, ball: Ball {
+    
+    if rect_overlap(ball.x, ball.y, BALL_S, BALL_S, pad.x, pad.y, PADDLE_W, PADDLE_H) {
+       SPEEDUP := 0.5
+       ballcy := ball.y + BALL_S / 2.
+       padcy := pad.y + PADDLE_H / 2.
+        if ball.x < pad.x {
+            ball.vx = -abs(ball.vx) - SPEEDUP
+            ball.vy = ball.vy + (ballcy - padcy) * 3.
+        } else {
+            ball.vx = abs(ball.vx) + SPEEDUP
+            ball.vy = ball.vy + (ballcy - padcy) * 3.
+        }
+    }
+}
+
+update := fn state: State {
+    delta := get_delta()
+    speed := delta * SPEED
+
+    if key_down("w") {
+        state.p1.paddle.y = state.p1.paddle.y - speed
+    }
+    if key_down("s") {
+        state.p1.paddle.y = state.p1.paddle.y + speed
+    }
+
+    if state.p1.paddle.y < 0.0 {
+        state.p1.paddle.y = 0.0
+    }
+
+    if state.p1.paddle.y > 20.0 - PADDLE_H {
+        state.p1.paddle.y = 20.0 - PADDLE_H
+    }
+
+    if key_down("i") {
+        state.p2.paddle.y = state.p2.paddle.y - speed
+    }
+    if key_down("k") {
+        state.p2.paddle.y = state.p2.paddle.y + speed
+    }
+
+    if state.p2.paddle.y < 0.0 {
+        state.p2.paddle.y = 0.0
+    }
+
+    if state.p2.paddle.y > 20.0 - PADDLE_H {
+        state.p2.paddle.y = 20.0 - PADDLE_H
+    }
+
+    state.ball.x = state.ball.x + delta * state.ball.vx
+    state.ball.y = state.ball.y + delta * state.ball.vy
+
+    if state.ball.y < 0. {
+        state.ball.vy = abs(state.ball.vy)
+    }
+
+    if state.ball.y > 20. - 0.2 {
+        state.ball.vy = -abs(state.ball.vy)
+    }
+
+    if state.ball.x < 0.0 {
+        state.ball.x = 10.0
+        state.ball.y = 10.0
+        state.ball.vx = -BALL_STARTV
+        state.ball.vy = 0.
+        state.p1.score = state.p1.score + 1.0
+    }
+
+    if state.ball.x > 20.0 {
+        state.ball.x = 10.0
+        state.ball.y = 10.0
+        state.ball.vx = BALL_STARTV
+        state.ball.vy = 0.
+        state.p2.score = state.p2.score + 1.0
+    }
+
+    ball_and_paddle_check(state.p1.paddle, state.ball)
+    ball_and_paddle_check(state.p2.paddle, state.ball)
+}
+
+draw := fn state: State {
+    clear()
+
+    draw_rectangle(state.p1.paddle.x, state.p1.paddle.y, PADDLE_W, PADDLE_H)
+    draw_rectangle(state.p2.paddle.x, state.p2.paddle.y, PADDLE_W, PADDLE_H)
+
+    for y := 0.0, y < state.p1.score, y = y + 1.0 {
+        draw_rectangle(15.0, y * 0.5, 0.5, 0.5)
+    }
+
+    for y := 0.0, y < state.p2.score, y = y + 1.0 {
+        draw_rectangle(5.0, y * 0.5, 0.5, 0.5)
+    }
+
+    draw_rectangle(state.ball.x, state.ball.y, BALL_S, BALL_S)
+}
+
+init := fn {
+    state := State()
+    state.ball = Ball()
+    state.ball.x = 10.0
+    state.ball.y = 10.0
+    state.ball.vx = BALL_STARTV
+    state.ball.vy = 0.0
+
+    state.p1 = Player()
+    state.p1.score = 0.0
+    state.p1.paddle = Paddle()
+    state.p1.paddle.x = 1.
+    state.p1.paddle.y = 10.
+
+    state.p2 = Player()
+    state.p2.score = 0.0
+    state.p2.paddle = Paddle()
+    state.p2.paddle.x = 19.
+    state.p2.paddle.y = 10.
+
+    for i := 0, i == i, i = i + 1 {
+        update(state)
+        draw(state)
+        yield
+    }
+}
+
+init()

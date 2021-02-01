@@ -1,0 +1,37 @@
+PONG
+====
+
+Made for Global Game Jam 2021 at LiU Game Jam's site.
+
+The language wasn't really ready for a normal game so we wanted to make Pong
+(the easiest game we could think of) while fixing what we needed to make it
+work.
+
+Building
+--------
+
+Clone the entire tihdy-repo, cd into the pong-directory and then cargo run.
+
+Modifying
+---------
+
+All game logic is located in pong.tdy. Most of the configuration should be
+straight forward. If you want to modify the controls, you need to change both
+the string passed from pong.tdy as well as the respective function in src/main.rs
+(key_down).
+
+If you want to add more rust functions (for example, to draw text to the screen)
+you need to add it like the already existing functions. All functions need a
+return type and a return value, even if it is a Type::Void and Value::Nil. (See
+e.g. clear for an example.) For a draw_text you probably want to take a
+Value::String(s), Value::Float(x), Value::Float(y) and so on. Inside the block
+you then write your normal Rusty code.
+
+After writing your function you also need to link it so you can use it from the
+game file. Add it to 'functions' like the other linked functions inside main()
+in src/main.rs.
+
+After linking, the only thing left to do is call it from the game logic. You'll
+get a type error if you pass the wrong parameters. Additional parameter
+combinations can be set (much like normal function overloading) should you have
+the need by adding more "arms" to the extern_function!().
