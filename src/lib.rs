@@ -323,6 +323,14 @@ a() <=> 4
                           5 <=> a.a + a.b"
     );
 
+    test_multiple!(tuples,
+        add: "(1, 2, 3, 4) + (4, 3, 2, 1) <=> (5, 5, 5, 5)",
+        sub: "(1, -2, 3, -4) - (4, 3, -2, -1) <=> (-3, 1, 1, -5)",
+        mul: "(0, 1, 2) * (2, 3, 4) <=> (0, 3, 8)",
+        types: "a: (int, float, int) = (1, 1., 1)",
+        more_types: "a: (str, bool, int) = (\"abc\", true, 1)",
+    );
+
     test_file!(scoping, "tests/scoping.tdy");
     test_file!(for_, "tests/for.tdy");
 
@@ -351,6 +359,7 @@ a.a <=> 0"
 pub enum Value {
     Blob(usize),
     BlobInstance(usize, Rc<RefCell<Vec<Value>>>),
+    Tuple(Rc<Vec<Value>>),
     Float(f64),
     Int(i64),
     Bool(bool),
@@ -415,9 +424,113 @@ impl Debug for Value {
             Value::ExternFunction(slot) => write!(fmt, "(extern fn {})", slot),
             Value::Unkown => write!(fmt, "(unkown)"),
             Value::Nil => write!(fmt, "(nil)"),
+            Value::Tuple(v) => write!(fmt, "({:?})", v),
         }
     }
 }
+
+mod op {
+    use super::Value;
+    use std::rc::Rc;
+
+    fn tuple_op(a: &Rc<Vec<Value>>, b: &Rc<Vec<Value>>, f: fn (&Value, &Value) -> Value) -> Value {
+        Value::Tuple(Rc::new(a.iter().zip(b.iter()).map(|(a, b)| f(a, b)).collect()))
+    }
+
+    pub fn neg(value: &Value) -> Value {
+        match value {
+            Value::Float(a) => Value::Float(-a),
+            Value::Int(a) => Value::Int(-a),
+            Value::Tuple(a) => Value::Tuple(Rc::new(a.iter().map(neg).collect())),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn not(value: &Value) -> Value {
+        match value {
+            Value::Bool(a) => Value::Bool(!a),
+            Value::Tuple(a) => Value::Tuple(Rc::new(a.iter().map(not).collect())),
+            _ => Value::Nil,
+        }
+    }
+
+
+    pub fn add(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Float(a), Value::Float(b)) => Value::Float(a + b),
+            (Value::Int(a), Value::Int(b)) => Value::Int(a + b),
+            (Value::String(a), Value::String(b)) => Value::String(Rc::from(format!("{}{}", a, b))),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_op(a, b, add),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn sub(a: &Value, b: &Value) -> Value {
+        add(a, &neg(b))
+    }
+
+    pub fn mul(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
+            (Value::Int(a), Value::Int(b)) => Value::Int(a * b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_op(a, b, mul),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn div(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
+            (Value::Int(a), Value::Int(b)) => Value::Int(a / b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_op(a, b, div),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn eq(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Float(a), Value::Float(b)) => Value::Bool(a == b),
+            (Value::Int(a), Value::Int(b)) => Value::Bool(a == b),
+            (Value::String(a), Value::String(b)) => Value::Bool(a == b),
+            (Value::Bool(a), Value::Bool(b)) => Value::Bool(a == b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_op(a, b, eq),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn less(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Float(a), Value::Float(b)) => Value::Bool(a < b),
+            (Value::Int(a), Value::Int(b)) => Value::Bool(a < b),
+            (Value::String(a), Value::String(b)) => Value::Bool(a < b),
+            (Value::Bool(a), Value::Bool(b)) => Value::Bool(a < b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_op(a, b, less),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn greater(a: &Value, b: &Value) -> Value {
+        less(b, a)
+    }
+
+    pub fn and(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a && *b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_op(a, b, and),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn or(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a || *b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_op(a, b, or),
+            _ => Value::Nil,
+        }
+    }
+
+}
+
 
 impl Value {
     fn identity(self) -> Self {
@@ -429,19 +542,15 @@ impl Value {
         }
     }
 
-    fn as_type(&self) -> Type {
+    fn is_nil(&self) -> bool {
         match self {
-            Value::BlobInstance(i, _) => Type::BlobInstance(*i),
-            Value::Blob(i) => Type::Blob(*i),
-            Value::Float(_) => Type::Float,
-            Value::Int(_) => Type::Int,
-            Value::Bool(_) => Type::Bool,
-            Value::String(_) => Type::String,
-            Value::Function(_, block) => block.borrow().ty.clone(),
-            Value::ExternFunction(_) => Type::Void, //TODO
-            Value::Unkown => Type::UnknownType,
-            Value::Nil => Type::Void,
+            Value::Nil => true,
+            _ => false,
         }
+    }
+
+    fn as_type(&self) -> Type {
+        Type::from(self)
     }
 }
 
@@ -453,7 +562,9 @@ pub enum Op {
     PopUpvalue,
     Copy,
     Constant(Value),
+    Tuple(usize),
 
+    Index,
     Get(String),
     Set(String),
 
@@ -622,6 +733,7 @@ pub enum Type {
     Float,
     Bool,
     String,
+    Tuple(Vec<Type>),
     Function(Vec<Type>, Box<Type>),
     Blob(usize),
     BlobInstance(usize),
@@ -637,6 +749,9 @@ impl PartialEq for Type {
             (Type::Float, Type::Float) => true,
             (Type::Bool, Type::Bool) => true,
             (Type::String, Type::String) => true,
+            (Type::Tuple(a), Type::Tuple(b)) => {
+                a.iter().zip(b.iter()).all(|(a, b)| a == b)
+            }
             (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) =>
                 a_args == b_args && a_ret == b_ret,
             _ => false,
@@ -649,6 +764,9 @@ impl From<&Value> for Type {
         match value {
             Value::BlobInstance(i, _) => Type::BlobInstance(*i),
             Value::Blob(i) => Type::Blob(*i),
+            Value::Tuple(v) => {
+                Type::Tuple(v.iter().map(|x| Type::from(x)).collect())
+            }
             Value::Int(_) => Type::Int,
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
@@ -672,6 +790,9 @@ impl Type {
             Type::Void => Value::Nil,
             Type::Blob(i) => Value::Blob(*i),
             Type::BlobInstance(i) => Value::BlobInstance(*i, Rc::new(RefCell::new(Vec::new()))),
+            Type::Tuple(fields) => {
+                Value::Tuple(Rc::new(fields.iter().map(|x| x.as_value()).collect()))
+            }
             Type::UnknownType => Value::Unkown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),

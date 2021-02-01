@@ -284,7 +284,7 @@ impl Compiler {
     fn prefix(&mut self, token: Token, block: &mut Block) -> bool {
         match token {
             Token::Identifier(_) => self.variable_expression(block),
-            Token::LeftParen => self.grouping(block),
+            Token::LeftParen => self.grouping_or_tuple(block),
             Token::Minus => self.unary(block),
 
             Token::Float(_) => self.value(block),
@@ -315,6 +315,8 @@ impl Compiler {
                 | Token::NotEqual
                 => self.binary(block),
 
+            Token::LeftBracket => self.index(block),
+
             _ => { return false; },
         }
         return true;
@@ -331,12 +333,63 @@ impl Compiler {
         block.add(Op::Constant(value), self.line());
     }
 
+    fn grouping_or_tuple(&mut self, block: &mut Block) {
+        let block_length = block.ops.len();
+        let token_length = self.curr;
+        if self.try_tuple(block).is_err() {
+            block.ops.truncate(block_length);
+            self.curr = token_length;
+            self.grouping(block);
+        }
+    }
+
+    fn try_tuple(&mut self, block: &mut Block) -> Result<(), ()> {
+        expect!(self, Token::LeftParen, "Expected '(' at start of tuple");
+
+        let mut num_args = 0;
+        loop {
+            match self.peek() {
+                Token::RightParen | Token::EOF => {
+                    break;
+                }
+                Token::Newline => {
+                    self.eat();
+                }
+                _ => {
+                    self.expression(block);
+                    num_args += 1;
+                    match self.peek() {
+                        Token::Comma => { self.eat(); },
+                        Token::RightParen => {},
+                        _ => { return Err(()); },
+                    }
+                }
+            }
+        }
+        if num_args == 1 {
+            return Err(());
+        }
+
+        expect!(self, Token::RightParen, "Expected ')' after tuple.");
+        block.add(Op::Tuple(num_args), self.line());
+        Ok(())
+    }
+
     fn grouping(&mut self, block: &mut Block) {
         expect!(self, Token::LeftParen, "Expected '(' around expression.");
 
         self.expression(block);
 
         expect!(self, Token::RightParen, "Expected ')' around expression.");
+    }
+
+    fn index(&mut self, block: &mut Block) {
+        expect!(self, Token::LeftBracket, "Expected '[' around index.");
+
+        self.expression(block);
+        block.add(Op::Index, self.line());
+
+        expect!(self, Token::RightBracket, "Expected ']' around index.");
     }
 
     fn unary(&mut self, block: &mut Block) {
@@ -473,8 +526,8 @@ impl Compiler {
         let mut function_block = Block::new(&name, &self.current_file, self.line());
 
         let block_id = self.blocks.len();
-        let new_block = Block::new(&name, &self.current_file, self.line());
-        self.blocks.push(Rc::new(RefCell::new(new_block)));
+        let temp_block = Block::new(&name, &self.current_file, self.line());
+        self.blocks.push(Rc::new(RefCell::new(temp_block)));
 
         let _ret = push_frame!(self, function_block, {
             loop {
@@ -781,6 +834,22 @@ impl Compiler {
                 };
                 let f = Type::Function(params, Box::new(return_type));
                 Ok(f)
+            }
+            Token::LeftParen => {
+                self.eat();
+                let mut element = Vec::new();
+                loop {
+                    element.push(self.parse_type()?);
+                    if self.peek() == Token::RightParen {
+                        self.eat();
+                        return Ok(Type::Tuple(element));
+                    }
+                    if !expect!(self,
+                                Token::Comma,
+                                "Expect comma efter element in tuple.") {
+                        return Err(());
+                    }
+                }
             }
             Token::Identifier(x) => {
                 self.eat();

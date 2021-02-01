@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use owo_colors::OwoColorize;
 
-use crate::{Blob, Block, Op, Prog, UpValue, Value};
+use crate::{Blob, Block, Op, Prog, UpValue, Value, op};
 use crate::error::{Error, ErrorKind};
 use crate::RustFunction;
 pub use crate::Type;
@@ -17,6 +17,30 @@ macro_rules! error {
     };
     ( $thing:expr, $kind:expr, $msg:expr) => {
         return Err($thing.error($kind, Some($msg)));
+    };
+}
+
+macro_rules! one_op {
+    ( $self:expr, $op:expr, $fun:expr ) => {
+        let a = $self.pop();
+        let b = $fun(&a);
+        if b.is_nil() {
+            $self.push(b);
+            error!($self, ErrorKind::RuntimeTypeError($op, vec![a]));
+        }
+        $self.push(b);
+    };
+}
+
+macro_rules! two_op {
+    ( $self:expr, $op:expr, $fun:expr ) => {
+        let (a, b) = $self.poppop();
+        let c = $fun(&a, &b);
+        if c.is_nil() {
+            $self.push(c);
+            error!($self, ErrorKind::RuntimeTypeError($op, vec![a, b]));
+        }
+        $self.push(c);
     };
 }
 
@@ -159,6 +183,11 @@ impl VM {
                 self.pop();
             }
 
+            Op::Tuple(size) => {
+                let values = self.stack.split_off(self.stack.len() - size);
+                self.stack.push(Value::Tuple(Rc::new(values)));
+            }
+
             Op::PopUpvalue => {
                 let value = self.pop();
                 let slot = self.stack.len();
@@ -201,6 +230,26 @@ impl VM {
                 self.push(value);
             }
 
+            Op::Index => {
+                let slot = self.stack.pop().unwrap();
+                let val = self.stack.pop().unwrap();
+                match (val, slot) {
+                    (Value::Tuple(v), Value::Int(slot)) => {
+                        let slot = slot as usize;
+                        if v.len() < slot {
+                            self.stack.push(Value::Nil);
+                            let len = v.len();
+                            error!(self, ErrorKind::IndexOutOfBounds(Value::Tuple(v), len, slot));
+                        }
+                        self.stack.push(v[slot].clone());
+                    }
+                    (val, slot) => {
+                        self.stack.push(Value::Nil);
+                        error!(self, ErrorKind::RuntimeTypeError(op, vec![val, slot]), String::from("Cannot index type"));
+                    }
+                }
+            }
+
             Op::Get(field) => {
                 let inst = self.pop();
                 if let Value::BlobInstance(ty, values) = inst {
@@ -212,8 +261,7 @@ impl VM {
             }
 
             Op::Set(field) => {
-                let value = self.pop();
-                let inst = self.pop();
+                let (inst, value) = self.poppop();
                 if let Value::BlobInstance(ty, values) = inst {
                     let slot = self.blobs[ty].name_to_field.get(&field).unwrap().0;
                     values.borrow_mut()[slot] = value;
@@ -222,99 +270,27 @@ impl VM {
                 }
             }
 
-            Op::Neg => {
-                match self.pop() {
-                    Value::Float(a) => self.push(Value::Float(-a)),
-                    Value::Int(a) => self.push(Value::Int(-a)),
-                    a => error!(self, ErrorKind::RuntimeTypeError(op, vec![a])),
-                }
-            }
+            Op::Neg => { one_op!(self, Op::Neg, op::neg); }
 
-            Op::Add => {
-                match self.poppop() {
-                    (Value::Float(a), Value::Float(b)) => self.push(Value::Float(a + b)),
-                    (Value::Int(a), Value::Int(b)) => self.push(Value::Int(a + b)),
-                    (Value::String(a), Value::String(b)) => {
-                        self.push(Value::String(Rc::from(format!("{}{}", a, b))))
-                    }
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
-                }
-            }
+            Op::Add => { two_op!(self, Op::Add, op::add); }
 
-            Op::Sub => {
-                match self.poppop() {
-                    (Value::Float(a), Value::Float(b)) => self.push(Value::Float(a - b)),
-                    (Value::Int(a), Value::Int(b)) => self.push(Value::Int(a - b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
-                }
-            }
+            Op::Sub => { two_op!(self, Op::Sub, op::sub); }
 
-            Op::Mul => {
-                match self.poppop() {
-                    (Value::Float(a), Value::Float(b)) => self.push(Value::Float(a * b)),
-                    (Value::Int(a), Value::Int(b)) => self.push(Value::Int(a * b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
-                }
-            }
+            Op::Mul => { two_op!(self, Op::Mul, op::mul); }
 
-            Op::Div => {
-                match self.poppop() {
-                    (Value::Float(a), Value::Float(b)) => self.push(Value::Float(a / b)),
-                    (Value::Int(a), Value::Int(b)) => self.push(Value::Int(a / b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
-                }
-            }
+            Op::Div => { two_op!(self, Op::Div, op::div); }
 
-            Op::Equal => {
-                match self.poppop() {
-                    (Value::Float(a), Value::Float(b)) => self.push(Value::Bool(a == b)),
-                    (Value::Int(a), Value::Int(b)) => self.push(Value::Bool(a == b)),
-                    (Value::String(a), Value::String(b)) => self.push(Value::Bool(a == b)),
-                    (Value::Bool(a), Value::Bool(b)) => self.push(Value::Bool(a == b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
-                }
-            }
+            Op::Equal => { two_op!(self, Op::Equal, op::eq); }
 
-            Op::Less => {
-                match self.poppop() {
-                    (Value::Float(a), Value::Float(b)) => self.push(Value::Bool(a < b)),
-                    (Value::Int(a), Value::Int(b)) => self.push(Value::Bool(a < b)),
-                    (Value::String(a), Value::String(b)) => self.push(Value::Bool(a < b)),
-                    (Value::Bool(a), Value::Bool(b)) => self.push(Value::Bool(a < b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
-                }
-            }
+            Op::Less => { two_op!(self, Op::Less, op::less); }
 
-            Op::Greater => {
-                match self.poppop() {
-                    (Value::Float(a), Value::Float(b)) => self.push(Value::Bool(a > b)),
-                    (Value::Int(a), Value::Int(b)) => self.push(Value::Bool(a > b)),
-                    (Value::String(a), Value::String(b)) => self.push(Value::Bool(a > b)),
-                    (Value::Bool(a), Value::Bool(b)) => self.push(Value::Bool(a > b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
-                }
-            }
+            Op::Greater => { two_op!(self, Op::Greater, op::greater); }
 
-            Op::And => {
-                match self.poppop() {
-                    (Value::Bool(a), Value::Bool(b)) => self.push(Value::Bool(a && b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
-                }
-            }
+            Op::And => { two_op!(self, Op::And, op::and); }
 
-            Op::Or => {
-                match self.poppop() {
-                    (Value::Bool(a), Value::Bool(b)) => self.push(Value::Bool(a || b)),
-                    (a, b) => error!(self, ErrorKind::RuntimeTypeError(op, vec![a, b])),
-                }
-            }
+            Op::Or => { two_op!(self, Op::Or, op::or); }
 
-            Op::Not => {
-                match self.pop() {
-                    Value::Bool(a) => self.push(Value::Bool(!a)),
-                    a => error!(self, ErrorKind::RuntimeTypeError(op, vec![a])),
-                }
-            }
+            Op::Not => { one_op!(self, Op::Not, op::not); }
 
             Op::Jmp(line) => {
                 self.frame_mut().ip = line;
@@ -552,6 +528,7 @@ impl VM {
             Op::Set(field) => {
                 let value = self.pop();
                 let inst = self.pop();
+
                 if let Value::BlobInstance(ty, _) = inst {
                     let ty = &self.blobs[ty].name_to_field.get(&field).unwrap().1;
                     if ty != &Type::from(&value) {

@@ -14,6 +14,9 @@ pub enum ErrorKind {
     TypeError(Op, Vec<Type>),
     ExternTypeMismatch(String, Vec<Type>),
     RuntimeTypeError(Op, Vec<Value>),
+
+    IndexOutOfBounds(Value, usize, usize),
+
     Assert,
     InvalidProgram,
     Unreachable,
@@ -37,6 +40,9 @@ impl fmt::Display for ErrorKind {
                     .iter()
                     .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
                 write!(f, "{} Cannot apply {:?} to types {}", "Type Error".bold(), op, types)
+            }
+            ErrorKind::IndexOutOfBounds(value, len, slot) => {
+                write!(f, "{} for {:?} - length is {} but index is {}", "Index Error".bold(), value, len, slot)
             }
             ErrorKind::ExternTypeMismatch(name, types) => {
                 write!(f, "{} Extern function '{}' doesn't accept argument(s) with type(s) {:?}", "Type Error".bold(), name, types)
