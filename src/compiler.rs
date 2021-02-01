@@ -384,12 +384,12 @@ impl Compiler {
     }
 
     fn index(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftBracket, "Expected ']' around index.");
+        expect!(self, Token::LeftBracket, "Expected '[' around index.");
 
         self.expression(block);
         block.add(Op::Index, self.line());
 
-        expect!(self, Token::RightBracket, "Expected '[' around index.");
+        expect!(self, Token::RightBracket, "Expected ']' around index.");
     }
 
     fn unary(&mut self, block: &mut Block) {
