@@ -142,7 +142,7 @@ impl From<&Type> for Value {
             Type::String => Value::String(Rc::new("".to_string())),
             Type::Function(_, _) => Value::Function(
                 Vec::new(),
-                Rc::new(RefCell::new(Block::from_type(ty)))),
+                Rc::new(RefCell::new(Block::empty_with_type(ty)))),
         }
     }
 }
@@ -451,7 +451,7 @@ impl Block {
         }
     }
 
-    pub fn from_type(ty: &Type) -> Self {
+    pub fn empty_with_type(ty: &Type) -> Self {
         let mut block = Block::new("/empty/", Path::new(""), 0);
         block.ty = ty.clone();
         block
