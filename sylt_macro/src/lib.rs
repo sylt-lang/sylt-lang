@@ -51,7 +51,7 @@ pub fn extern_function(tokens: TokenStream) -> TokenStream {
         let pat = block.pattern.clone();
         let ty = block.return_ty.clone();
         quote! {
-            #pat => { Ok(#ty.as_value()) }
+            #pat => { Ok(sylt::Value::from(#ty)) }
         }
     }).collect();
 

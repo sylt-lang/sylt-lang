@@ -517,7 +517,7 @@ impl VM {
             Op::Get(field) => {
                 let inst = self.pop();
                 if let Value::BlobInstance(ty, _) = inst {
-                    let value = self.blobs[ty].name_to_field.get(&field).unwrap().1.as_value();
+                    let value = Value::from(&self.blobs[ty].name_to_field.get(&field).unwrap().1);
                     self.push(value);
                 } else {
                     self.push(Value::Nil);
@@ -544,7 +544,7 @@ impl VM {
             }
 
             Op::ReadUpvalue(slot) => {
-                let value = self.frame().block.borrow().ups[slot].2.as_value();
+                let value = Value::from(&self.frame().block.borrow().ups[slot].2);
                 self.push(value);
             }
 
@@ -601,7 +601,7 @@ impl VM {
                         }
 
                         for (slot, ty) in blob.name_to_field.values() {
-                            values[*slot] = ty.as_value();
+                            values[*slot] = ty.into();
                         }
 
                         self.pop();
@@ -626,7 +626,7 @@ impl VM {
                                     args, stack_args));
                         }
 
-                        self.stack[new_base] = block.borrow().ret().as_value();
+                        self.stack[new_base] = block.borrow().ret().into();
 
                         self.stack.truncate(new_base + 1);
                     }
@@ -672,7 +672,7 @@ impl VM {
 
         self.push(Value::Function(Vec::new(), Rc::clone(&block)));
         for arg in block.borrow().args() {
-            self.push(arg.as_value());
+            self.push(arg.into());
         }
 
         self.frames.push(Frame {

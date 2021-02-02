@@ -124,14 +124,16 @@ impl Type {
             _ => false,
         }
     }
+}
 
-    pub fn as_value(&self) -> Value {
-        match self {
+impl From<&Type> for Value {
+    fn from(ty: &Type) -> Self {
+        match ty {
             Type::Void => Value::Nil,
             Type::Blob(i) => Value::Blob(*i),
             Type::BlobInstance(i) => Value::BlobInstance(*i, Rc::new(RefCell::new(Vec::new()))),
             Type::Tuple(fields) => {
-                Value::Tuple(Rc::new(fields.iter().map(|x| x.as_value()).collect()))
+                Value::Tuple(Rc::new(fields.iter().map(Value::from).collect()))
             }
             Type::UnknownType => Value::Unkown,
             Type::Int => Value::Int(1),
@@ -140,10 +142,17 @@ impl Type {
             Type::String => Value::String(Rc::new("".to_string())),
             Type::Function(_, _) => Value::Function(
                 Vec::new(),
-                Rc::new(RefCell::new(Block::from_type(self)))),
+                Rc::new(RefCell::new(Block::from_type(ty)))),
         }
     }
 }
+
+impl From<Type> for Value {
+    fn from(ty: Type) -> Self {
+        Value::from(&ty)
+    }
+}
+
 
 #[derive(Clone)]
 pub enum Value {
