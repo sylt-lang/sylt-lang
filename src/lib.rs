@@ -317,13 +317,13 @@ pub enum Op {
     Index,
     /// Looks up a field by the given name
     /// and replaces the parent with it.
-    /// Currently only expects [Blobs].
+    /// Currently only expects [Value::Blob].
     ///
     /// {O} - Get(F) - {O.F}
     Get(String),
     /// Looks up a field by the given name
     /// and replaces the current value in the object.
-    /// Currently only expects [Blobs].
+    /// Currently only expects [Value::Blob].
     ///
     /// {O} - Set(F) - {}
     Set(String),
@@ -452,8 +452,8 @@ pub enum Op {
     /// of arguments. The callable value is
     /// then replaced with the result.
     ///
-    /// Callable things are: [Blob], [Function],
-    /// and [ExternFunction].
+    /// Callable things are: [Value::Blob], [Value::Function],
+    /// and [Value::ExternFunction].
     ///
     /// {F, A, B} - Call(2) - {F(A, B)}
     Call(usize),
@@ -477,6 +477,11 @@ pub enum Op {
     Yield,
 }
 
+///
+/// Module with all the operators that can be applied
+/// to values.
+///
+/// Broken out because they need to be recursive.
 mod op {
     use super::Value;
     use std::rc::Rc;
