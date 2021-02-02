@@ -477,10 +477,6 @@ impl Block {
         (self.file.clone(), self.line)
     }
 
-    pub fn last_op(&self) -> Option<&Op> {
-        self.ops.last()
-    }
-
     pub fn add_line(&mut self, token_position: usize) {
         if token_position != self.last_line_offset {
             self.line_offsets.insert(self.curr(), token_position);
