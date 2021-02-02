@@ -111,6 +111,12 @@ impl From<&Value> for Type {
     }
 }
 
+impl From<Value> for Type {
+    fn from(value: Value) -> Type {
+        Type::from(&value)
+    }
+}
+
 impl Type {
     pub fn is_unkown(&self) -> bool {
         match self {
@@ -187,10 +193,6 @@ impl Value {
             Value::Nil => true,
             _ => false,
         }
-    }
-
-    fn as_type(&self) -> Type {
-        Type::from(self)
     }
 }
 

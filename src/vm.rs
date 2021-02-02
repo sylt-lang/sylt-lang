@@ -487,7 +487,7 @@ impl VM {
                             if *is_up {
                                 types.push(ty.clone());
                             } else {
-                                types.push(self.stack[*slot].as_type());
+                                types.push(Type::from(&self.stack[*slot]));
                             }
                         }
 
@@ -550,7 +550,7 @@ impl VM {
 
             Op::AssignUpvalue(slot) => {
                 let var = self.frame().block.borrow().ups[slot].2.clone();
-                let up = self.pop().as_type();
+                let up = self.pop().into();
                 if var != up {
                     error!(self, ErrorKind::TypeError(op, vec![var, up]),
                                   "Incorrect type for upvalue.".to_string());
@@ -561,8 +561,8 @@ impl VM {
                 let a = self.pop();
                 let inner = self.frame().block.borrow();
                 let ret = inner.ret();
-                if a.as_type() != *ret {
-                    error!(self, ErrorKind::TypeError(op, vec![a.as_type(),
+                if Type::from(&a) != *ret {
+                    error!(self, ErrorKind::TypeError(op, vec![a.into(),
                                                                ret.clone()]),
                                                       "Not matching return type.".to_string());
                 }
@@ -573,7 +573,7 @@ impl VM {
             }
 
             Op::Define(ref ty) => {
-                let top_type = self.stack.last().unwrap().as_type();
+                let top_type = self.stack.last().unwrap().into();
                 match (ty, top_type) {
                     (Type::UnknownType, top_type)
                         if top_type != Type::UnknownType => {}
@@ -618,7 +618,7 @@ impl VM {
                         }
 
                         let stack_args = &self.stack[self.stack.len() - args.len()..];
-                        let stack_args: Vec<_> = stack_args.iter().map(|x| x.as_type()).collect();
+                        let stack_args: Vec<_> = stack_args.iter().map(|x| x.into()).collect();
                         if args != &stack_args {
                             error!(self,
                                 ErrorKind::TypeError(op.clone(), vec![]),
@@ -645,7 +645,7 @@ impl VM {
                     }
                     _ => {
                         error!(self,
-                            ErrorKind::TypeError(op.clone(), vec![self.stack[new_base].as_type()]),
+                            ErrorKind::TypeError(op.clone(), vec![Type::from(&self.stack[new_base])]),
                             format!("Tried to call non-function {:?}", self.stack[new_base]));
                     }
                 }
@@ -654,7 +654,7 @@ impl VM {
             Op::JmpFalse(_) => {
                 match self.pop() {
                     Value::Bool(_) => {},
-                    a => { error!(self, ErrorKind::TypeError(op.clone(), vec![a.as_type()])) },
+                    a => { error!(self, ErrorKind::TypeError(op.clone(), vec![a.into()])) },
                 }
             }
             _ => {
