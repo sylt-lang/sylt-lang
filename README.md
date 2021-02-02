@@ -1,16 +1,16 @@
 # Sylt-lang
 -----------
-Sylt is a statically-checked dynamically typed, reference counted programming
-language made for GameJams.
+Sylt is a statically checked and dynamically typed reference counted programming
+language made for game jams.
 
 
-## Why does this exist? Why not use X-lang?
+## Why does this exist? Why use this instead of language X?
 Pfft! Why not?
     
 
 ## Getting started
 Sylt is written entirely in Rust. Pointing to this Git-repo 
-in your Cargo.toml is the easiet way. Alternatively you can
+in your Cargo.toml is the easiest way. Alternatively you can
 build the interpreter and run your own programs from there.
 
 
