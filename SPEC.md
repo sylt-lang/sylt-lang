@@ -29,6 +29,10 @@ d := fn a: int -> int {
     ret a + 1
 }
 
+// Constant
+a :: 1
+a = 2  // This is illegal
+
 // Destructuring a tuple is allowed, after the definiton
 // e = 1, f = 2, g = 3.
 // If the number of variables doesn't match the length
@@ -91,16 +95,45 @@ for {
     break;
 }
 
-// 'After-doer'
-// Any form of code can be placed
-// after an arrow, this will be run AFTER
-// each cycle.
-for -> {
-    
-} -> {
-    print(1)
-    break;
-}
-
 ```
 
+### Functions
+All functions are values.
+```sylt
+// Declare and create the function
+f :: fn {
+    print "A"
+}
+// Semantically equivalent
+f()
+f!
+
+// Declare and create the function
+f :: fn a:int -> int {
+    print a
+    ret a + 1
+}
+// Semantically equivalent
+f 1
+f(1)
+
+// Closures exist
+q := 1
+g :: fn -> int {
+    ret q  // Here the variable 'q' is captured
+}
+q = 2
+print g!  // prints 2
+
+// Supports heigher order functions
+h :: fn -> fn -> int {
+    ret fn -> int { ret 2 }
+}
+print h()()  // prints 2
+```
+
+### Special syntax
+```sylt
+<!>      // The unreachable statement, it should never be executed
+1 <=> 1  // Asserts equality, so the program crashes if 1 != 1
+```
