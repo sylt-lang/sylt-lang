@@ -487,7 +487,7 @@ impl VM {
                             if *is_up {
                                 types.push(ty.clone());
                             } else {
-                                types.push(self.stack[*slot].as_type());
+                                types.push(Type::from(&self.stack[*slot]));
                             }
                         }
 
@@ -517,7 +517,7 @@ impl VM {
             Op::Get(field) => {
                 let inst = self.pop();
                 if let Value::BlobInstance(ty, _) = inst {
-                    let value = self.blobs[ty].name_to_field.get(&field).unwrap().1.as_value();
+                    let value = Value::from(&self.blobs[ty].name_to_field.get(&field).unwrap().1);
                     self.push(value);
                 } else {
                     self.push(Value::Nil);
@@ -544,13 +544,13 @@ impl VM {
             }
 
             Op::ReadUpvalue(slot) => {
-                let value = self.frame().block.borrow().ups[slot].2.as_value();
+                let value = Value::from(&self.frame().block.borrow().ups[slot].2);
                 self.push(value);
             }
 
             Op::AssignUpvalue(slot) => {
                 let var = self.frame().block.borrow().ups[slot].2.clone();
-                let up = self.pop().as_type();
+                let up = self.pop().into();
                 if var != up {
                     error!(self, ErrorKind::TypeError(op, vec![var, up]),
                                   "Incorrect type for upvalue.".to_string());
@@ -561,8 +561,8 @@ impl VM {
                 let a = self.pop();
                 let inner = self.frame().block.borrow();
                 let ret = inner.ret();
-                if a.as_type() != *ret {
-                    error!(self, ErrorKind::TypeError(op, vec![a.as_type(),
+                if Type::from(&a) != *ret {
+                    error!(self, ErrorKind::TypeError(op, vec![a.into(),
                                                                ret.clone()]),
                                                       "Not matching return type.".to_string());
                 }
@@ -573,7 +573,7 @@ impl VM {
             }
 
             Op::Define(ref ty) => {
-                let top_type = self.stack.last().unwrap().as_type();
+                let top_type = self.stack.last().unwrap().into();
                 match (ty, top_type) {
                     (Type::UnknownType, top_type)
                         if top_type != Type::UnknownType => {}
@@ -601,7 +601,7 @@ impl VM {
                         }
 
                         for (slot, ty) in blob.name_to_field.values() {
-                            values[*slot] = ty.as_value();
+                            values[*slot] = ty.into();
                         }
 
                         self.pop();
@@ -618,7 +618,7 @@ impl VM {
                         }
 
                         let stack_args = &self.stack[self.stack.len() - args.len()..];
-                        let stack_args: Vec<_> = stack_args.iter().map(|x| x.as_type()).collect();
+                        let stack_args: Vec<_> = stack_args.iter().map(|x| x.into()).collect();
                         if args != &stack_args {
                             error!(self,
                                 ErrorKind::TypeError(op.clone(), vec![]),
@@ -626,7 +626,7 @@ impl VM {
                                     args, stack_args));
                         }
 
-                        self.stack[new_base] = block.borrow().ret().as_value();
+                        self.stack[new_base] = block.borrow().ret().into();
 
                         self.stack.truncate(new_base + 1);
                     }
@@ -645,7 +645,7 @@ impl VM {
                     }
                     _ => {
                         error!(self,
-                            ErrorKind::TypeError(op.clone(), vec![self.stack[new_base].as_type()]),
+                            ErrorKind::TypeError(op.clone(), vec![Type::from(&self.stack[new_base])]),
                             format!("Tried to call non-function {:?}", self.stack[new_base]));
                     }
                 }
@@ -654,7 +654,7 @@ impl VM {
             Op::JmpFalse(_) => {
                 match self.pop() {
                     Value::Bool(_) => {},
-                    a => { error!(self, ErrorKind::TypeError(op.clone(), vec![a.as_type()])) },
+                    a => { error!(self, ErrorKind::TypeError(op.clone(), vec![a.into()])) },
                 }
             }
             _ => {
@@ -672,7 +672,7 @@ impl VM {
 
         self.push(Value::Function(Vec::new(), Rc::clone(&block)));
         for arg in block.borrow().args() {
-            self.push(arg.as_value());
+            self.push(arg.into());
         }
 
         self.frames.push(Frame {
