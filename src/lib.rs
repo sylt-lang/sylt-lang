@@ -19,7 +19,7 @@ mod compiler;
 mod tokenizer;
 
 /// Compiles a file and links the supplied functions as callable external
-/// functions. Use this is you want your programs to be able to yield.
+/// functions. Use this if you want your programs to be able to yield.
 pub fn compile_file(path: &Path,
                     print: bool,
                     functions: Vec<(String, RustFunction)>
@@ -38,7 +38,7 @@ pub fn compile_file(path: &Path,
     }
 }
 
-/// Compiles and runs a file and links the supplied functions as callable
+/// Compiles, links and runs the given file. Supplied functions are callable
 /// external functions. If you want your program to be able to yield, use
 /// [compile_file].
 pub fn run_file(path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
