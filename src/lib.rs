@@ -999,4 +999,10 @@ a.a <=> 1
 a.a -= 1
 a.a <=> 0"
     );
+
+    test_multiple!(
+        newline_regression,
+        simple: "a := 1 // blargh \na += 1 // blargh \n a <=> 2 // HARGH",
+        expressions: "1 + 1 // blargh \n 2 // blargh \n // HARGH \n",
+    );
 }
