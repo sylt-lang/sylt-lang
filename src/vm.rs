@@ -88,11 +88,13 @@ impl VM {
         }
     }
 
+    /// Tells the VM to dump all the blocks to STDOUT.
     pub fn print_blocks(mut self, b: bool) -> Self {
         self.print_blocks = b;
         self
     }
 
+    /// Tells the VM to dump all the ops as they are run to STDOUT.
     pub fn print_ops(mut self, b: bool) -> Self {
         self.print_ops = b;
         self
@@ -129,10 +131,6 @@ impl VM {
         (b, a)  // this matches the order they were on the stack
     }
 
-    fn _peek_up(&self, amount: usize) -> Option<&Value> {
-        self.stack.get(self.stack.len() - amount)
-    }
-
     fn frame(&self) -> &Frame {
         let last = self.frames.len() - 1;
         &self.frames[last]
@@ -148,8 +146,8 @@ impl VM {
         self.frame().block.borrow().ops[ip].clone()
     }
 
+    /// Stop the program, violently
     fn crash_and_burn(&self) -> ! {
-        println!("\n\n    !!!POPPING EMPTY STACK - DUMPING EVERYTHING!!!\n");
         self.print_stack();
         println!("\n");
         self.frame().block.borrow().debug_print();
@@ -169,6 +167,7 @@ impl VM {
         }
     }
 
+    /// Runs a single operation on the VM
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error> {
         match op {
             Op::Illegal => {
@@ -434,6 +433,7 @@ impl VM {
             self.frame().block.borrow().ops[self.frame().ip]);
     }
 
+    /// Initalizes the VM for running, run cannot be called before this.
     pub fn init(&mut self, prog: &Prog) {
         let block = Rc::clone(&prog.blocks[0]);
         self.blobs = prog.blobs.clone();
@@ -450,6 +450,7 @@ impl VM {
         });
     }
 
+    /// Simulates the program.
     pub fn run(&mut self) -> Result<OpResult, Error> {
 
         if self.print_blocks {
@@ -469,6 +470,7 @@ impl VM {
         }
     }
 
+    /// Checks the current operation for type errors.
     fn check_op(&mut self, op: Op) -> Result<(), Error> {
         match op {
             Op::Unreachable => {}
@@ -710,6 +712,7 @@ impl VM {
         errors
     }
 
+    /// Checks the program for type errors.
     pub fn typecheck(&mut self, prog: &Prog) -> Result<(), Vec<Error>> {
         let mut errors = Vec::new();
 
