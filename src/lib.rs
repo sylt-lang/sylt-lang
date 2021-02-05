@@ -614,6 +614,7 @@ impl Block {
         }
     }
 
+    /// Used to create empty functions.
     pub fn empty_with_type(ty: &Type) -> Self {
         let mut block = Block::new("/empty/", Path::new(""), 0);
         block.ty = ty.clone();
