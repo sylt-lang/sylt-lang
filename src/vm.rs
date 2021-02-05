@@ -9,7 +9,7 @@ use owo_colors::OwoColorize;
 use crate::{Blob, Block, Op, Prog, UpValue, Value, op};
 use crate::error::{Error, ErrorKind};
 use crate::RustFunction;
-pub use crate::Type;
+use crate::Type;
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -59,8 +59,8 @@ pub struct VM {
 
     blobs: Vec<Rc<Blob>>,
 
-    print_blocks: bool,
-    print_ops: bool,
+    pub print_blocks: bool,
+    pub print_ops: bool,
 
     extern_functions: Vec<RustFunction>,
 
@@ -69,12 +69,15 @@ pub struct VM {
 #[derive(Eq, PartialEq)]
 pub enum OpResult {
     Yield,
-    Continue,
     Done,
+
+    // Will never be returned.
+    #[doc(hidden)]
+    Continue,
 }
 
 impl VM {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             upvalues: HashMap::new(),
 
@@ -86,18 +89,6 @@ impl VM {
 
             extern_functions: Vec::new()
         }
-    }
-
-    /// Tells the VM to dump all the blocks to STDOUT.
-    pub fn print_blocks(mut self, b: bool) -> Self {
-        self.print_blocks = b;
-        self
-    }
-
-    /// Tells the VM to dump all the ops as they are run to STDOUT.
-    pub fn print_ops(mut self, b: bool) -> Self {
-        self.print_ops = b;
-        self
     }
 
     fn drop_upvalue(&mut self, slot: usize, value: Value) {
@@ -209,7 +200,7 @@ impl VM {
                 let value = match value {
                     Value::Function(_, block) => {
                         let mut ups = Vec::new();
-                        for (slot, is_up, _) in block.borrow().ups.iter() {
+                        for (slot, is_up, _) in block.borrow().upvalues.iter() {
                             let up = if *is_up {
                                 if let Value::Function(local_ups, _) = &self.stack[offset] {
                                     Rc::clone(&local_ups[*slot])
@@ -252,7 +243,7 @@ impl VM {
             Op::Get(field) => {
                 let inst = self.pop();
                 if let Value::BlobInstance(ty, values) = inst {
-                    let slot = self.blobs[ty].name_to_field.get(&field).unwrap().0;
+                    let slot = self.blobs[ty].fields.get(&field).unwrap().0;
                     self.push(values.borrow()[slot].clone());
                 } else {
                     error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst]));
@@ -262,7 +253,7 @@ impl VM {
             Op::Set(field) => {
                 let (inst, value) = self.poppop();
                 if let Value::BlobInstance(ty, values) = inst {
-                    let slot = self.blobs[ty].name_to_field.get(&field).unwrap().0;
+                    let slot = self.blobs[ty].fields.get(&field).unwrap().0;
                     values.borrow_mut()[slot] = value;
                 } else {
                     error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst]));
@@ -305,7 +296,7 @@ impl VM {
 
             Op::Assert => {
                 if matches!(self.pop(), Value::Bool(false)) {
-                    error!(self, ErrorKind::Assert);
+                    error!(self, ErrorKind::AssertFailed);
                 }
                 self.push(Value::Bool(true));
             }
@@ -349,7 +340,7 @@ impl VM {
                     Value::Blob(blob_id) => {
                         let blob = &self.blobs[blob_id];
 
-                        let mut values = Vec::with_capacity(blob.name_to_field.len());
+                        let mut values = Vec::with_capacity(blob.fields.len());
                         for _ in 0..values.capacity() {
                             values.push(Value::Nil);
                         }
@@ -416,7 +407,7 @@ impl VM {
         Ok(OpResult::Continue)
     }
 
-    pub fn print_stack(&self) {
+    fn print_stack(&self) {
         let start = self.frame().stack_offset;
         print!("    {:3} [", start);
         for (i, s) in self.stack.iter().skip(start).enumerate() {
@@ -433,8 +424,8 @@ impl VM {
             self.frame().block.borrow().ops[self.frame().ip]);
     }
 
-    /// Initalizes the VM for running, run cannot be called before this.
-    pub fn init(&mut self, prog: &Prog) {
+    // Initalizes the VM for running. Run cannot be called before this.
+    pub(crate) fn init(&mut self, prog: &Prog) {
         let block = Rc::clone(&prog.blocks[0]);
         self.blobs = prog.blobs.clone();
         self.extern_functions = prog.functions.clone();
@@ -452,7 +443,6 @@ impl VM {
 
     /// Simulates the program.
     pub fn run(&mut self) -> Result<OpResult, Error> {
-
         if self.print_blocks {
             println!("\n    [[{}]]\n", "RUNNING".red());
             self.frame().block.borrow().debug_print();
@@ -485,7 +475,7 @@ impl VM {
                         self.push(Value::Function(Vec::new(), block.clone()));
 
                         let mut types = Vec::new();
-                        for (slot, is_up, ty) in block.borrow().ups.iter() {
+                        for (slot, is_up, ty) in block.borrow().upvalues.iter() {
                             if *is_up {
                                 types.push(ty.clone());
                             } else {
@@ -494,11 +484,11 @@ impl VM {
                         }
 
                         let mut block_mut = block.borrow_mut();
-                        for (i, (_, is_up, ty)) in block_mut.ups.iter_mut().enumerate() {
+                        for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
                             if *is_up { continue; }
 
                             let suggestion = &types[i];
-                            if ty.is_unkown() {
+                            if matches!(ty, Type::Unknown) {
                                 *ty = suggestion.clone();
                             } else {
                                 if ty != suggestion {
@@ -519,7 +509,7 @@ impl VM {
             Op::Get(field) => {
                 let inst = self.pop();
                 if let Value::BlobInstance(ty, _) = inst {
-                    let value = Value::from(&self.blobs[ty].name_to_field.get(&field).unwrap().1);
+                    let value = Value::from(&self.blobs[ty].fields.get(&field).unwrap().1);
                     self.push(value);
                 } else {
                     self.push(Value::Nil);
@@ -532,7 +522,7 @@ impl VM {
                 let inst = self.pop();
 
                 if let Value::BlobInstance(ty, _) = inst {
-                    let ty = &self.blobs[ty].name_to_field.get(&field).unwrap().1;
+                    let ty = &self.blobs[ty].fields.get(&field).unwrap().1;
                     if ty != &Type::from(&value) {
                         error!(self, ErrorKind::RuntimeTypeError(Op::Set(field.clone()), vec![inst]));
                     }
@@ -546,12 +536,12 @@ impl VM {
             }
 
             Op::ReadUpvalue(slot) => {
-                let value = Value::from(&self.frame().block.borrow().ups[slot].2);
+                let value = Value::from(&self.frame().block.borrow().upvalues[slot].2);
                 self.push(value);
             }
 
             Op::AssignUpvalue(slot) => {
-                let var = self.frame().block.borrow().ups[slot].2.clone();
+                let var = self.frame().block.borrow().upvalues[slot].2.clone();
                 let up = self.pop().into();
                 if var != up {
                     error!(self, ErrorKind::TypeError(op, vec![var, up]),
@@ -577,8 +567,8 @@ impl VM {
             Op::Define(ref ty) => {
                 let top_type = self.stack.last().unwrap().into();
                 match (ty, top_type) {
-                    (Type::UnknownType, top_type)
-                        if top_type != Type::UnknownType => {}
+                    (Type::Unknown, top_type)
+                        if top_type != Type::Unknown => {}
                     (a, b) if a != &b => {
                         error!(self,
                             ErrorKind::TypeError(
@@ -597,12 +587,12 @@ impl VM {
                     Value::Blob(blob_id) => {
                         let blob = &self.blobs[blob_id];
 
-                        let mut values = Vec::with_capacity(blob.name_to_field.len());
+                        let mut values = Vec::with_capacity(blob.fields.len());
                         for _ in 0..values.capacity() {
                             values.push(Value::Nil);
                         }
 
-                        for (slot, ty) in blob.name_to_field.values() {
+                        for (slot, ty) in blob.fields.values() {
                             values[*slot] = ty.into();
                         }
 
@@ -712,8 +702,8 @@ impl VM {
         errors
     }
 
-    /// Checks the program for type errors.
-    pub fn typecheck(&mut self, prog: &Prog) -> Result<(), Vec<Error>> {
+    // Checks the program for type errors.
+    pub(crate) fn typecheck(&mut self, prog: &Prog) -> Result<(), Vec<Error>> {
         let mut errors = Vec::new();
 
         self.blobs = prog.blobs.clone();

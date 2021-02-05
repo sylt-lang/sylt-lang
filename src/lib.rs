@@ -12,23 +12,24 @@ use tokenizer::TokenStream;
 
 use crate::error::ErrorKind;
 
-pub mod compiler;
 pub mod error;
-pub mod tokenizer;
 pub mod vm;
 
-pub fn run_file(path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    run(tokenizer::file_to_tokens(path), path, print, functions)
-}
+mod compiler;
+mod tokenizer;
 
+/// Compiles a file and links the supplied functions as callable external
+/// functions. Use this if you want your programs to be able to yield.
 pub fn compile_file(path: &Path,
                     print: bool,
                     functions: Vec<(String, RustFunction)>
     ) -> Result<vm::VM, Vec<Error>> {
     let tokens = tokenizer::file_to_tokens(path);
-    match compiler::compile("main", path, tokens, &functions) {
+    match compiler::Compiler::new(path, tokens).compile("main", path, &functions) {
         Ok(prog) => {
-            let mut vm = vm::VM::new().print_blocks(print).print_ops(print);
+            let mut vm = vm::VM::new();
+            vm.print_blocks = print;
+            vm.print_ops = print;
             vm.typecheck(&prog)?;
             vm.init(&prog);
             Ok(vm)
@@ -37,14 +38,26 @@ pub fn compile_file(path: &Path,
     }
 }
 
+/// Compiles, links and runs the given file. Supplied functions are callable
+/// external functions. If you want your program to be able to yield, use
+/// [compile_file].
+pub fn run_file(path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
+    run(tokenizer::file_to_tokens(path), path, print, functions)
+}
+
+/// Compile and run a string containing source code. The supplied functions are
+/// linked as callable external functions. This is useful for short test
+/// programs.
 pub fn run_string(s: &str, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
     run(tokenizer::string_to_tokens(s), Path::new("builtin"), print, functions)
 }
 
-pub fn run(tokens: TokenStream, path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    match compiler::compile("main", path, tokens, &functions) {
+fn run(tokens: TokenStream, path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
+    match compiler::Compiler::new(path, tokens).compile("main", path, &functions) {
         Ok(prog) => {
-            let mut vm = vm::VM::new().print_blocks(print).print_ops(print);
+            let mut vm = vm::VM::new();
+            vm.print_blocks = print;
+            vm.print_ops = print;
             vm.typecheck(&prog)?;
             vm.init(&prog);
             if let Err(e) = vm.run() {
@@ -57,12 +70,14 @@ pub fn run(tokens: TokenStream, path: &Path, print: bool, functions: Vec<(String
     }
 }
 
+/// A linkable external function. Created either manually or using
+/// [sylt_macro::extern_function].
 pub type RustFunction = fn(&[Value], bool) -> Result<Value, ErrorKind>;
 
 #[derive(Debug, Clone)]
 pub enum Type {
     Void,
-    UnknownType,
+    Unknown,
     Int,
     Float,
     Bool,
@@ -117,15 +132,6 @@ impl From<Value> for Type {
     }
 }
 
-impl Type {
-    pub fn is_unkown(&self) -> bool {
-        match self {
-            Type::UnknownType => true,
-            _ => false,
-        }
-    }
-}
-
 impl From<&Type> for Value {
     fn from(ty: &Type) -> Self {
         match ty {
@@ -135,7 +141,7 @@ impl From<&Type> for Value {
             Type::Tuple(fields) => {
                 Value::Tuple(Rc::new(fields.iter().map(Value::from).collect()))
             }
-            Type::UnknownType => Value::Unkown,
+            Type::Unknown => Value::Unknown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),
             Type::Bool => Value::Bool(true),
@@ -165,7 +171,7 @@ pub enum Value {
     String(Rc<String>),
     Function(Vec<Rc<RefCell<UpValue>>>, Rc<RefCell<Block>>),
     ExternFunction(usize),
-    Unkown,
+    Unknown,
     Nil,
 }
 
@@ -180,7 +186,7 @@ impl Debug for Value {
             Value::String(s) => write!(fmt, "(string \"{}\")", s),
             Value::Function(_, block) => write!(fmt, "(fn {}: {:?})", block.borrow().name, block.borrow().ty),
             Value::ExternFunction(slot) => write!(fmt, "(extern fn {})", slot),
-            Value::Unkown => write!(fmt, "(unkown)"),
+            Value::Unknown => write!(fmt, "(unknown)"),
             Value::Nil => write!(fmt, "(nil)"),
             Value::Tuple(v) => write!(fmt, "({:?})", v),
         }
@@ -205,6 +211,7 @@ impl Value {
     }
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug)]
 pub struct UpValue {
     slot: usize,
@@ -249,26 +256,27 @@ impl UpValue {
 #[derive(Debug, Clone)]
 pub struct Blob {
     pub name: String,
-
-    pub name_to_field: HashMap<String, (usize, Type)>,
+    /// Maps field names to their slot and type.
+    pub fields: HashMap<String, (usize, Type)>,
 }
 
 impl Blob {
-    pub fn new(name: &str) -> Self {
+    fn new(name: &str) -> Self {
         Self {
             name: String::from(name),
-            name_to_field: HashMap::new(),
+            fields: HashMap::new(),
         }
     }
 
-    pub fn add_field(&mut self, name: &str, ty: Type) -> Result<(), ()> {
-        let size = self.name_to_field.len();
-        let entry = self.name_to_field.entry(String::from(name));
-        if matches!(entry, Entry::Occupied(_)) {
-            Err(())
-        } else {
-            entry.or_insert((size, ty));
-            Ok(())
+    fn add_field(&mut self, name: &str, ty: Type) -> Result<(), ()> {
+        let size = self.fields.len();
+        let entry = self.fields.entry(String::from(name));
+        match entry {
+            Entry::Occupied(_) => Err(()),
+            Entry::Vacant(v) => {
+                v.insert((size, ty));
+                Ok(())
+            }
         }
     }
 }
@@ -496,8 +504,8 @@ mod op {
 
     pub fn neg(value: &Value) -> Value {
         match value {
-            Value::Float(a) => Value::Float(-a),
-            Value::Int(a) => Value::Int(-a),
+            Value::Float(a) => Value::Float(-*a),
+            Value::Int(a) => Value::Int(-*a),
             Value::Tuple(a) => tuple_un_op(a, neg),
             _ => Value::Nil,
         }
@@ -505,7 +513,7 @@ mod op {
 
     pub fn not(value: &Value) -> Value {
         match value {
-            Value::Bool(a) => Value::Bool(!a),
+            Value::Bool(a) => Value::Bool(!*a),
             Value::Tuple(a) => tuple_un_op(a, not),
             _ => Value::Nil,
         }
@@ -590,21 +598,21 @@ mod op {
 #[derive(Debug)]
 pub struct Block {
     pub ty: Type,
-    pub ups: Vec<(usize, bool, Type)>,
+    upvalues: Vec<(usize, bool, Type)>,
 
     pub name: String,
     pub file: PathBuf,
-    pub ops: Vec<Op>,
-    pub last_line_offset: usize,
-    pub line_offsets: HashMap<usize, usize>,
-    pub line: usize,
+    ops: Vec<Op>,
+    last_line_offset: usize,
+    line_offsets: HashMap<usize, usize>,
+    line: usize,
 }
 
 impl Block {
-    pub fn new(name: &str, file: &Path, line: usize) -> Self {
+    fn new(name: &str, file: &Path, line: usize) -> Self {
         Self {
             ty: Type::Void,
-            ups: Vec::new(),
+            upvalues: Vec::new(),
             name: String::from(name),
             file: file.to_owned(),
             ops: Vec::new(),
@@ -614,8 +622,8 @@ impl Block {
         }
     }
 
-    /// Used to create empty functions.
-    pub fn empty_with_type(ty: &Type) -> Self {
+    // Used to create empty functions.
+    fn empty_with_type(ty: &Type) -> Self {
         let mut block = Block::new("/empty/", Path::new(""), 0);
         block.ty = ty.clone();
         block
@@ -637,18 +645,14 @@ impl Block {
         }
     }
 
-    pub fn id(&self) -> (PathBuf, usize) {
-        (self.file.clone(), self.line)
-    }
-
-    pub fn add_line(&mut self, token_position: usize) {
+    fn add_line(&mut self, token_position: usize) {
         if token_position != self.last_line_offset {
             self.line_offsets.insert(self.curr(), token_position);
             self.last_line_offset = token_position;
         }
     }
 
-    pub fn line(&self, ip: usize) -> usize {
+    fn line(&self, ip: usize) -> usize {
         for i in (0..=ip).rev() {
             if let Some(line) = self.line_offsets.get(&i) {
                 return *line;
@@ -667,32 +671,28 @@ impl Block {
             }
             println!("{:05} {:?}", i.blue(), s);
         }
-        println!("");
+        println!();
     }
 
-    pub fn last_instruction(&mut self) -> &Op {
-        self.ops.last().unwrap()
-    }
-
-    pub fn add(&mut self, op: Op, token_position: usize) -> usize {
+    fn add(&mut self, op: Op, token_position: usize) -> usize {
         let len = self.curr();
         self.add_line(token_position);
         self.ops.push(op);
         len
     }
 
-    pub fn add_from(&mut self, ops: &[Op], token_position: usize) -> usize {
+    fn add_from(&mut self, ops: &[Op], token_position: usize) -> usize {
         let len = self.curr();
         self.add_line(token_position);
         self.ops.extend_from_slice(ops);
         len
     }
 
-    pub fn curr(&self) -> usize {
+    fn curr(&self) -> usize {
         self.ops.len()
     }
 
-    pub fn patch(&mut self, op: Op, pos: usize) {
+    fn patch(&mut self, op: Op, pos: usize) {
         self.ops[pos] = op;
     }
 }

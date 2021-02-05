@@ -12,15 +12,18 @@ use crate::tokenizer::Token;
 #[derive(Debug, Clone)]
 pub enum ErrorKind {
     TypeError(Op, Vec<Type>),
+    /// (External function, parameters)
     ExternTypeMismatch(String, Vec<Type>),
     RuntimeTypeError(Op, Vec<Value>),
 
+    /// (Indexed value, length, index)
     IndexOutOfBounds(Value, usize, usize),
 
-    Assert,
+    AssertFailed,
     InvalidProgram,
     Unreachable,
 
+    /// (line, token)
     SyntaxError(usize, Token),
 }
 
@@ -53,7 +56,7 @@ impl fmt::Display for ErrorKind {
                     .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
                 write!(f, "{} Cannot apply {:?} to values {}", "Runtime Type Error".bold(), op, values)
             }
-            ErrorKind::Assert => {
+            ErrorKind::AssertFailed => {
                 write!(f, "{}", "Assertion failed".bold())
             }
             ErrorKind::SyntaxError(line, token) => {
