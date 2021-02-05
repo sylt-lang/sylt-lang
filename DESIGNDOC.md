@@ -6,7 +6,7 @@ For goals and the like, see the README.md.
 
 ## The syntax by example
 
-We choose to include programs here. They should be valid in Sylt programs if all
+We choose to include programs here. They should be valid Sylt programs if all
 goes to plan.
 
 ```sylt
