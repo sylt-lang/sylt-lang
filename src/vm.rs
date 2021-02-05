@@ -306,7 +306,7 @@ impl VM {
 
             Op::Assert => {
                 if matches!(self.pop(), Value::Bool(false)) {
-                    error!(self, ErrorKind::Assert);
+                    error!(self, ErrorKind::AssertFailed);
                 }
                 self.push(Value::Bool(true));
             }

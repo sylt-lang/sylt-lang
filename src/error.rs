@@ -17,7 +17,7 @@ pub enum ErrorKind {
 
     IndexOutOfBounds(Value, usize, usize),
 
-    Assert,
+    AssertFailed,
     InvalidProgram,
     Unreachable,
 
@@ -53,7 +53,7 @@ impl fmt::Display for ErrorKind {
                     .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
                 write!(f, "{} Cannot apply {:?} to values {}", "Runtime Type Error".bold(), op, values)
             }
-            ErrorKind::Assert => {
+            ErrorKind::AssertFailed => {
                 write!(f, "{}", "Assertion failed".bold())
             }
             ErrorKind::SyntaxError(line, token) => {
