@@ -161,11 +161,10 @@ macro_rules! push_scope {
     };
 }
 
+/// Helper function for adding operations to the given block.
 fn add_op(compiler: &Compiler, block: &mut Block, op: Op) -> usize {
     block.add(op, compiler.line())
 }
-
-
 
 impl Compiler {
     pub fn new(current_file: &Path, tokens: TokenStream) -> Self {
@@ -209,6 +208,7 @@ impl Compiler {
         &mut self.frame_mut().stack
     }
 
+    /// Used to recover from a panic so the rest of the code can be parsed.
     fn clear_panic(&mut self) {
         if self.panic {
             self.panic = false;
@@ -257,6 +257,15 @@ impl Compiler {
         t
     }
 
+    /// The line of the current token.
+    fn line(&self) -> usize {
+        if self.curr < self.tokens.len() {
+            self.tokens[self.curr].1
+        } else {
+            self.tokens[self.tokens.len() - 1].1
+        }
+    }
+
     fn precedence(&self, token: Token) -> Prec {
         match token {
             Token::Star | Token::Slash => Prec::Factor,
@@ -279,14 +288,6 @@ impl Compiler {
         }
     }
 
-    fn line(&self) -> usize {
-        if self.curr < self.tokens.len() {
-            self.tokens[self.curr].1
-        } else {
-            self.tokens[self.tokens.len() - 1].1
-        }
-    }
-
     fn prefix(&mut self, token: Token, block: &mut Block) -> bool {
         match token {
             Token::Identifier(_) => self.variable_expression(block),
@@ -304,7 +305,6 @@ impl Compiler {
         }
         return true;
     }
-
 
     fn infix(&mut self, token: Token, block: &mut Block) -> bool {
         match token {
@@ -430,6 +430,7 @@ impl Compiler {
         block.add_from(op, self.line());
     }
 
+    /// Entry point for all expression parsing.
     fn expression(&mut self, block: &mut Block) {
         match self.peek_four() {
             (Token::Fn, ..) => self.function(block),
@@ -516,6 +517,7 @@ impl Compiler {
         add_op(self, block, Op::Call(arity));
     }
 
+    // TODO(ed): de-complexify
     fn function(&mut self, block: &mut Block) {
         expect!(self, Token::Fn, "Expected 'fn' at start of function.");
 
@@ -809,6 +811,7 @@ impl Compiler {
 
     fn parse_type(&mut self) -> Result<Type, ()> {
         match self.peek() {
+
             Token::Fn => {
                 self.eat();
                 let mut params = Vec::new();
@@ -841,6 +844,7 @@ impl Compiler {
                 let f = Type::Function(params, Box::new(return_type));
                 Ok(f)
             }
+
             Token::LeftParen => {
                 self.eat();
                 let mut element = Vec::new();
@@ -857,6 +861,7 @@ impl Compiler {
                     }
                 }
             }
+
             Token::Identifier(x) => {
                 self.eat();
                 match x.as_str() {
@@ -868,7 +873,6 @@ impl Compiler {
                 }
             }
             _ => Err(()),
-
         }
     }
 
