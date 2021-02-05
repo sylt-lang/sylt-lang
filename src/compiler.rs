@@ -103,7 +103,7 @@ impl Frame {
     }
 }
 
-struct Compiler {
+pub(crate) struct Compiler {
     curr: usize,
     tokens: TokenStream,
     current_file: PathBuf,
@@ -130,7 +130,7 @@ macro_rules! push_frame {
             });
 
             // Return value stored as a variable
-            $compiler.define_variable("", Type::UnknownType, &mut $block).unwrap();
+            $compiler.define_variable("", Type::Unknown, &mut $block).unwrap();
             $code
 
             $compiler.frames.pop().unwrap();
@@ -165,10 +165,8 @@ fn add_op(compiler: &Compiler, block: &mut Block, op: Op) -> usize {
     block.add(op, compiler.line())
 }
 
-
-
 impl Compiler {
-    pub fn new(current_file: &Path, tokens: TokenStream) -> Self {
+    pub(crate) fn new(current_file: &Path, tokens: TokenStream) -> Self {
         Self {
             curr: 0,
             tokens,
@@ -575,7 +573,7 @@ impl Compiler {
             self.scope(&mut function_block);
 
             for var in self.frame().upvalues.iter() {
-                function_block.ups.push((var.outer_slot, var.outer_upvalue, var.typ.clone()));
+                function_block.upvalues.push((var.outer_slot, var.outer_upvalue, var.typ.clone()));
             }
         });
 
@@ -775,7 +773,7 @@ impl Compiler {
                 (Token::Identifier(name), Token::ColonEqual, ..) => {
                     self.eat();
                     self.eat();
-                    self.definition_statement(&name, Type::UnknownType, block);
+                    self.definition_statement(&name, Type::Unknown, block);
                 }
 
                 (Token::Comma, ..) => {}
@@ -1028,7 +1026,7 @@ impl Compiler {
             (Token::Identifier(name), Token::ColonEqual, ..) => {
                 self.eat();
                 self.eat();
-                self.definition_statement(&name, Type::UnknownType, block);
+                self.definition_statement(&name, Type::Unknown, block);
             }
 
             (Token::Blob, Token::Identifier(_), ..) => {
@@ -1068,7 +1066,7 @@ impl Compiler {
 
     }
 
-    pub fn compile(&mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
+    pub(crate) fn compile(&mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
         self.functions = functions
             .to_vec()
             .into_iter()
@@ -1108,8 +1106,4 @@ impl Compiler {
             Err(self.errors.clone())
         }
     }
-}
-
-pub fn compile(name: &str, file: &Path, tokens: TokenStream, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
-    Compiler::new(file, tokens).compile(name, file, functions)
 }

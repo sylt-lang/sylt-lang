@@ -12,15 +12,18 @@ use crate::tokenizer::Token;
 #[derive(Debug, Clone)]
 pub enum ErrorKind {
     TypeError(Op, Vec<Type>),
+    /// (External function, parameters)
     ExternTypeMismatch(String, Vec<Type>),
     RuntimeTypeError(Op, Vec<Value>),
 
+    /// (Indexed value, length, index)
     IndexOutOfBounds(Value, usize, usize),
 
     AssertFailed,
     InvalidProgram,
     Unreachable,
 
+    /// (line, token)
     SyntaxError(usize, Token),
 }
 
