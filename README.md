@@ -1,0 +1,32 @@
+# Sylt-lang
+
+Sylt is a statically checked and dynamically typed reference counted programming
+language made for game jams.
+
+## Why does this exist? Why use this instead of language X?
+
+Pfft! Why not?
+    
+## Getting started
+
+Sylt is written entirely in Rust. There are two main ways of using it.
+
+1. Depend on this repository in your Cargo.toml.
+2. Clone this repository and cargo build. You can then pass .sy-files to the
+   resulting binary. Currently this way won't give you any kind of game.
+
+## Basic Usage
+
+Currently, Sylt can only run single files. The last filename given is
+run.
+
+The `-p` flag also lets you see a lot of debug output. If you want
+to debug the compiler and runtime this might be helpful.
+
+## Endgame
+
+A language that has some form of static typechecking, is easy and fast to work
+in. Performance should be good enough that you don't really have to worry about
+it.
+
+Dreams also exist of automatically updating the game when files are changed.
