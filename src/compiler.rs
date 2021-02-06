@@ -946,7 +946,7 @@ impl Compiler {
         self.blobs.push(blob);
     }
 
-    fn try_blob_field(&mut self, block: &mut Block) -> Result<(), ()> {
+    fn blob_field(&mut self, block: &mut Block) {
         let name = match self.eat() {
             Token::Identifier(name) => name,
             _ => unreachable!(),
@@ -965,7 +965,7 @@ impl Compiler {
                             String::from(field)
                         } else {
                             error!(self, "Expected fieldname after '.'.");
-                            return Err(());
+                            return;
                         };
 
                         let op = match self.peek() {
@@ -973,7 +973,7 @@ impl Compiler {
                                 self.eat();
                                 self.expression(block);
                                 add_op(self, block, Op::Set(field));
-                                return Ok(());
+                                return;
                             }
 
                             Token::PlusEqual => Op::Add,
@@ -992,21 +992,23 @@ impl Compiler {
                         self.expression(block);
                         add_op(self, block, op);
                         add_op(self, block, Op::Set(field));
-                        return Ok(());
+                        return;
                     }
                     Token::LeftParen => {
                         self.call(block);
                     }
                     Token::Newline => {
-                        return Ok(());
+                        return;
                     }
                     _ => {
-                        return Err(());
+                        error!(self, "Unexpected token when parsing blob-field.");
+                        return;
                     }
                 }
             }
         } else {
-            Err(())
+            error!(self, format!("Cannot find variable '{}'.", name));
+            return;
         }
     }
 
@@ -1031,14 +1033,7 @@ impl Compiler {
             }
 
             (Token::Identifier(_), Token::Dot, ..) => {
-                let block_length = block.ops.len();
-                let token_length = self.curr;
-                // reset block and token stream if blob field fails
-                if self.try_blob_field(block).is_err() {
-                    block.ops.truncate(block_length);
-                    self.curr = token_length;
-                    self.expression(block);
-                }
+                parse_branch!(self, block, [self.blob_field(block), self.expression(block)]);
             }
 
             (Token::Identifier(name), Token::Colon, ..) => {
