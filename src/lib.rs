@@ -288,7 +288,7 @@ impl Blob {
 /// machine carries out when running the
 /// "byte-code".
 ///
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Op {
     /// This instruction should never be run.
     /// Finding it in a program is a critical error.

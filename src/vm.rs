@@ -155,7 +155,7 @@ impl VM {
 
     fn op(&self) -> Op {
         let ip = self.frame().ip;
-        self.frame().block.borrow().ops[ip].clone()
+        self.frame().block.borrow().ops[ip]
     }
 
     /// Stop the program, violently
@@ -262,25 +262,25 @@ impl VM {
                 }
             }
 
-            Op::Get(field_ident) => {
+            Op::Get(field) => {
                 let inst = self.pop();
-                let field = self.string(field_ident);
+                let field = self.string(field);
                 if let Value::BlobInstance(ty, values) = inst {
                     let slot = self.blobs[ty].fields.get(field).unwrap().0;
                     self.push(values.borrow()[slot].clone());
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field_ident), vec![inst]));
+                    error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
                 }
             }
 
-            Op::Set(field_ident) => {
+            Op::Set(field) => {
                 let (inst, value) = self.poppop();
-                let field = self.string(field_ident);
+                let field = self.string(field);
                 if let Value::BlobInstance(ty, values) = inst {
                     let slot = self.blobs[ty].fields.get(field).unwrap().0;
                     values.borrow_mut()[slot] = value;
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field_ident), vec![inst]));
+                    error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
                 }
             }
 
@@ -520,7 +520,7 @@ impl VM {
                             } else {
                                 if ty != suggestion {
                                     error!(self,
-                                           ErrorKind::TypeError(op.clone(),
+                                           ErrorKind::TypeError(op,
                                                     vec![ty.clone(), suggestion.clone()]),
                                            "Failed to infer type.".to_string());
                                 }
@@ -533,29 +533,29 @@ impl VM {
                 }
             }
 
-            Op::Get(field_ident) => {
+            Op::Get(field) => {
                 let inst = self.pop();
-                let field = self.string(field_ident);
+                let field = self.string(field);
                 if let Value::BlobInstance(ty, _) = inst {
                     let value = Value::from(&self.blobs[ty].fields.get(field).unwrap().1);
                     self.push(value);
                 } else {
                     self.push(Value::Nil);
-                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field_ident), vec![inst]));
+                    error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
                 }
             }
 
-            Op::Set(field_ident) => {
+            Op::Set(field) => {
                 let (inst, value) = self.poppop();
-                let field = self.string(field_ident);
+                let field = self.string(field);
 
                 if let Value::BlobInstance(ty, _) = inst {
                     let ty = &self.blobs[ty].fields.get(field).unwrap().1;
                     if ty != &Type::from(&value) {
-                        error!(self, ErrorKind::RuntimeTypeError(Op::Set(field_ident), vec![inst]));
+                        error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
                     }
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(Op::Set(field_ident), vec![inst]));
+                    error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
                 }
             }
 
@@ -601,7 +601,7 @@ impl VM {
                     (a, b) if a != &b => {
                         error!(self,
                             ErrorKind::TypeError(
-                                op.clone(),
+                                op,
                                 vec![a.clone(), b.clone()]),
                                 format!("Tried to assign a type {:?} to type {:?}.", a, b)
                         );
@@ -642,7 +642,7 @@ impl VM {
                         let stack_args: Vec<_> = stack_args.iter().map(|x| x.into()).collect();
                         if args != &stack_args {
                             error!(self,
-                                ErrorKind::TypeError(op.clone(), vec![]),
+                                ErrorKind::TypeError(op, vec![]),
                                 format!("Expected args of type {:?} but got {:?}.",
                                     args, stack_args));
                         }
@@ -666,7 +666,7 @@ impl VM {
                     }
                     _ => {
                         error!(self,
-                            ErrorKind::TypeError(op.clone(), vec![Type::from(&self.stack[new_base])]),
+                            ErrorKind::TypeError(op, vec![Type::from(&self.stack[new_base])]),
                             format!("Tried to call non-function {:?}", self.stack[new_base]));
                     }
                 }
@@ -675,7 +675,7 @@ impl VM {
             Op::JmpFalse(_) => {
                 match self.pop() {
                     Value::Bool(_) => {},
-                    a => { error!(self, ErrorKind::TypeError(op.clone(), vec![a.into()])) },
+                    a => { error!(self, ErrorKind::TypeError(op, vec![a.into()])) },
                 }
             }
             _ => {
