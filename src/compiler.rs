@@ -117,6 +117,8 @@ pub(crate) struct Compiler {
     blobs: Vec<Blob>,
 
     functions: HashMap<String, (usize, RustFunction)>,
+    constants: Vec<Value>,
+    strings: Vec<String>,
 }
 
 macro_rules! push_frame {
@@ -187,7 +189,30 @@ impl Compiler {
             blobs: Vec::new(),
 
             functions: HashMap::new(),
+
+            constants: vec![Value::Nil],
+            strings: Vec::new(),
         }
+    }
+
+    fn nil_value(&self) -> usize {
+        self.constants.iter()
+            .enumerate()
+            .find_map(|(i, x)|
+                match x {
+                    Value::Nil => Some(i),
+                    _ => None,
+                }).unwrap()
+    }
+
+    fn add_constant(&mut self, value: Value) -> usize {
+        self.constants.push(value);
+        self.constants.len() - 1
+    }
+
+    fn intern_string(&mut self, string: String) -> usize {
+        self.strings.push(string);
+        self.strings.len() - 1
     }
 
     fn frame(&self) -> &Frame {
@@ -336,7 +361,8 @@ impl Compiler {
             Token::String(s) => { Value::String(Rc::from(s)) }
             _ => { error!(self, "Cannot parse value."); Value::Bool(false) }
         };
-        add_op(self, block, Op::Constant(value));
+        let constant = self.add_constant(value);
+        add_op(self, block, Op::Constant(constant));
     }
 
     fn grouping_or_tuple(&mut self, block: &mut Block) {
@@ -586,7 +612,7 @@ impl Compiler {
                 Op::Pop | Op::PopUpvalue => {}
                 Op::Return => { break; } ,
                 _ => {
-                    add_op(self, &mut function_block, Op::Constant(Value::Nil));
+                    add_op(self, &mut function_block, Op::Constant(self.nil_value()));
                     add_op(self, &mut function_block, Op::Return);
                     break;
                 }
@@ -594,7 +620,7 @@ impl Compiler {
         }
 
         if function_block.ops.is_empty() {
-            add_op(self, &mut function_block, Op::Constant(Value::Nil));
+            add_op(self, &mut function_block, Op::Constant(self.nil_value()));
             add_op(self, &mut function_block, Op::Return);
         }
 
@@ -602,9 +628,9 @@ impl Compiler {
         let function_block = Rc::new(RefCell::new(function_block));
 
 
-        let func = Op::Constant(Value::Function(Vec::new(), Rc::clone(&function_block)));
+        let constant = self.add_constant(Value::Function(Vec::new(), Rc::clone(&function_block)));
         self.blocks[block_id] = function_block;
-        add_op(self, block, func);
+        add_op(self, block, Op::Constant(constant));
     }
 
     fn variable_expression(&mut self, block: &mut Block) {
@@ -623,7 +649,8 @@ impl Compiler {
                     Token::Dot => {
                         self.eat();
                         if let Token::Identifier(field) = self.eat() {
-                            add_op(self, block, Op::Get(String::from(field)));
+                            let string = self.intern_string(String::from(field));
+                            add_op(self, block, Op::Get(string));
                         } else {
                             error!(self, "Expected fieldname after '.'.");
                             break;
@@ -636,12 +663,14 @@ impl Compiler {
                 }
             }
         } else if let Some(blob) = self.find_blob(&name) {
-            add_op(self, block, Op::Constant(Value::Blob(blob)));
+            let string = self.add_constant(Value::Blob(blob));
+            add_op(self, block, Op::Constant(string));
             if self.peek() == Token::LeftParen {
                 self.call(block);
             }
         } else if let Some(slot) = self.find_extern_function(&name) {
-            add_op(self, block, Op::Constant(Value::ExternFunction(slot)));
+            let string = self.add_constant(Value::ExternFunction(slot));
+            add_op(self, block, Op::Constant(string));
             self.call(block);
         } else {
             error!(self, format!("Using undefined variable {}.", name));
@@ -675,7 +704,8 @@ impl Compiler {
     fn definition_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
         let slot = self.define_variable(name, typ.clone(), block);
         self.expression(block);
-        add_op(self, block, Op::Define(typ));
+        let constant = self.add_constant(Value::Ty(typ));
+        add_op(self, block, Op::Define(constant));
 
         if let Ok(slot) = slot {
             self.stack_mut()[slot].active = true;
@@ -940,6 +970,7 @@ impl Compiler {
                             return Err(());
                         };
 
+                        let field = self.intern_string(field);
                         let op = match self.peek() {
                             Token::Equal => {
                                 self.eat();
@@ -959,7 +990,7 @@ impl Compiler {
                             }
                         };
                         add_op(self, block, Op::Copy);
-                        add_op(self, block, Op::Get(field.clone()));
+                        add_op(self, block, Op::Get(field));
                         self.eat();
                         self.expression(block);
                         add_op(self, block, op);
@@ -1096,7 +1127,7 @@ impl Compiler {
             self.statement(&mut block);
             expect!(self, Token::Newline | Token::EOF, "Expect newline or EOF after expression.");
         }
-        add_op(self, &mut block, Op::Constant(Value::Nil));
+        add_op(self, &mut block, Op::Constant(self.nil_value()));
         add_op(self, &mut block, Op::Return);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
 
@@ -1107,6 +1138,8 @@ impl Compiler {
                 blocks: self.blocks.clone(),
                 blobs: self.blobs.iter().map(|x| Rc::new(x.clone())).collect(),
                 functions: functions.iter().map(|(_, f)| *f).collect(),
+                constants: self.constants.clone(),
+                strings: self.strings.clone(),
             })
         } else {
             Err(self.errors.clone())

@@ -58,6 +58,8 @@ pub struct VM {
     frames: Vec<Frame>,
 
     blobs: Vec<Rc<Blob>>,
+    constants: Vec<Value>,
+    strings: Vec<String>,
 
     pub print_blocks: bool,
     pub print_ops: bool,
@@ -83,7 +85,11 @@ impl VM {
 
             stack: Vec::new(),
             frames: Vec::new(),
+
             blobs: Vec::new(),
+            constants: Vec::new(),
+            strings: Vec::new(),
+
             print_blocks: false,
             print_ops: false,
 
@@ -130,6 +136,21 @@ impl VM {
     fn frame_mut(&mut self) -> &mut Frame {
         let last = self.frames.len() - 1;
         &mut self.frames[last]
+    }
+
+    fn constant(&self, slot: usize) -> &Value {
+        &self.constants[slot]
+    }
+
+    fn ty(&self, slot: usize) -> &Type {
+        match &self.constants[slot] {
+            Value::Ty(ty) => ty,
+            _ => self.crash_and_burn(),
+        }
+    }
+
+    fn string(&self, slot: usize) -> &String {
+        &self.strings[slot]
     }
 
     fn op(&self) -> Op {
@@ -197,7 +218,8 @@ impl VM {
 
             Op::Constant(value) => {
                 let offset = self.frame().stack_offset;
-                let value = match value {
+                let constant = self.constant(value).clone();
+                let value = match constant {
                     Value::Function(_, block) => {
                         let mut ups = Vec::new();
                         for (slot, is_up, _) in block.borrow().upvalues.iter() {
@@ -215,7 +237,7 @@ impl VM {
                         }
                         Value::Function(ups, block)
                     },
-                    _ => value.clone(),
+                    value => value,
                 };
                 self.push(value);
             }
@@ -240,23 +262,25 @@ impl VM {
                 }
             }
 
-            Op::Get(field) => {
+            Op::Get(field_ident) => {
                 let inst = self.pop();
+                let field = self.string(field_ident);
                 if let Value::BlobInstance(ty, values) = inst {
-                    let slot = self.blobs[ty].fields.get(&field).unwrap().0;
+                    let slot = self.blobs[ty].fields.get(field).unwrap().0;
                     self.push(values.borrow()[slot].clone());
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst]));
+                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field_ident), vec![inst]));
                 }
             }
 
-            Op::Set(field) => {
+            Op::Set(field_ident) => {
                 let (inst, value) = self.poppop();
+                let field = self.string(field_ident);
                 if let Value::BlobInstance(ty, values) = inst {
-                    let slot = self.blobs[ty].fields.get(&field).unwrap().0;
+                    let slot = self.blobs[ty].fields.get(field).unwrap().0;
                     values.borrow_mut()[slot] = value;
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst]));
+                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field_ident), vec![inst]));
                 }
             }
 
@@ -428,6 +452,9 @@ impl VM {
     pub(crate) fn init(&mut self, prog: &Prog) {
         let block = Rc::clone(&prog.blocks[0]);
         self.blobs = prog.blobs.clone();
+        self.constants = prog.constants.clone();
+        self.strings = prog.strings.clone();
+
         self.extern_functions = prog.functions.clone();
         self.stack.clear();
         self.frames.clear();
@@ -469,8 +496,8 @@ impl VM {
 
             Op::Yield => {}
 
-            Op::Constant(ref value) => {
-                match value.clone() {
+            Op::Constant(value) => {
+                match self.constant(value).clone() {
                     Value::Function(_, block) => {
                         self.push(Value::Function(Vec::new(), block.clone()));
 
@@ -500,34 +527,35 @@ impl VM {
                             }
                         };
                     },
-                    _ => {
+                    value => {
                         self.push(value.clone());
                     }
                 }
             }
 
-            Op::Get(field) => {
+            Op::Get(field_ident) => {
                 let inst = self.pop();
+                let field = self.string(field_ident);
                 if let Value::BlobInstance(ty, _) = inst {
-                    let value = Value::from(&self.blobs[ty].fields.get(&field).unwrap().1);
+                    let value = Value::from(&self.blobs[ty].fields.get(field).unwrap().1);
                     self.push(value);
                 } else {
                     self.push(Value::Nil);
-                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field.clone()), vec![inst]));
+                    error!(self, ErrorKind::RuntimeTypeError(Op::Get(field_ident), vec![inst]));
                 }
             }
 
-            Op::Set(field) => {
-                let value = self.pop();
-                let inst = self.pop();
+            Op::Set(field_ident) => {
+                let (inst, value) = self.poppop();
+                let field = self.string(field_ident);
 
                 if let Value::BlobInstance(ty, _) = inst {
-                    let ty = &self.blobs[ty].fields.get(&field).unwrap().1;
+                    let ty = &self.blobs[ty].fields.get(field).unwrap().1;
                     if ty != &Type::from(&value) {
-                        error!(self, ErrorKind::RuntimeTypeError(Op::Set(field.clone()), vec![inst]));
+                        error!(self, ErrorKind::RuntimeTypeError(Op::Set(field_ident), vec![inst]));
                     }
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(Op::Set(field.clone()), vec![inst]));
+                    error!(self, ErrorKind::RuntimeTypeError(Op::Set(field_ident), vec![inst]));
                 }
             }
 
@@ -564,7 +592,8 @@ impl VM {
                 self.pop();
             }
 
-            Op::Define(ref ty) => {
+            Op::Define(ty) => {
+                let ty = self.ty(ty);
                 let top_type = self.stack.last().unwrap().into();
                 match (ty, top_type) {
                     (Type::Unknown, top_type)
@@ -707,6 +736,9 @@ impl VM {
         let mut errors = Vec::new();
 
         self.blobs = prog.blobs.clone();
+        self.constants = prog.constants.clone();
+        self.strings = prog.strings.clone();
+
         self.extern_functions = prog.functions.clone();
         for block in prog.blocks.iter() {
             errors.append(&mut self.typecheck_block(Rc::clone(block)));
