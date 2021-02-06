@@ -371,16 +371,10 @@ impl Compiler {
     }
 
     fn grouping_or_tuple(&mut self, block: &mut Block) {
-        let block_length = block.ops.len();
-        let token_length = self.curr;
-        if self.try_tuple(block).is_err() {
-            block.ops.truncate(block_length);
-            self.curr = token_length;
-            self.grouping(block);
-        }
+        parse_branch!(self, block, [self.tuple(block), self.grouping(block)]);
     }
 
-    fn try_tuple(&mut self, block: &mut Block) -> Result<(), ()> {
+    fn tuple(&mut self, block: &mut Block) {
         expect!(self, Token::LeftParen, "Expected '(' at start of tuple");
 
         let mut num_args = 0;
@@ -398,18 +392,21 @@ impl Compiler {
                     match self.peek() {
                         Token::Comma => { self.eat(); },
                         Token::RightParen => {},
-                        _ => { return Err(()); },
+                        _ => {
+                            error!(self, "Expected ',' or ')' in tuple");
+                            return;
+                        },
                     }
                 }
             }
         }
         if num_args == 1 {
-            return Err(());
+            error!(self, "A tuple must contain more than 1 element.");
+            return;
         }
 
         expect!(self, Token::RightParen, "Expected ')' after tuple.");
         add_op(self, block, Op::Tuple(num_args));
-        Ok(())
     }
 
     fn grouping(&mut self, block: &mut Block) {
