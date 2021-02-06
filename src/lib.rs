@@ -734,7 +734,16 @@ mod tests {
         ($fn:ident, $prog:literal) => {
             #[test]
             fn $fn() {
-                $crate::run_string($prog, true, Vec::new()).unwrap();
+                match $crate::run_string($prog, true, Vec::new()) {
+                    Ok(()) => {},
+                    Err(errs) => {
+                        for e in errs.iter() {
+                            println!("{}", e);
+                        }
+                        println!("  {} - FAILED\n", stringify!($fn));
+                        unreachable!();
+                    }
+                }
             }
         };
         ($fn:ident, $prog:literal, $errs:tt) => {
