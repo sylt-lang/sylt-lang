@@ -741,7 +741,7 @@ mod tests {
                             println!("{}", e);
                         }
                         println!("  {} - FAILED\n", stringify!($fn));
-                        unreachable!();
+                        panic!();
                     }
                 }
             }
