@@ -600,6 +600,9 @@ impl Compiler {
                     }
                 }
             }
+            if self.panic {
+                break;
+            }
         }
 
         add_op(self, block, Op::Call(arity));
@@ -718,18 +721,17 @@ impl Compiler {
                             break;
                         }
                     }
-                    Token::LeftParen => {
-                        self.call(block);
+                    _ => {
+                        if !parse_branch!(self, block, self.call(block)) {
+                            break
+                        }
                     }
-                    _ => { break }
                 }
             }
         } else if let Some(blob) = self.find_blob(&name) {
             let string = self.add_constant(Value::Blob(blob));
             add_op(self, block, Op::Constant(string));
-            if self.peek() == Token::LeftParen {
-                self.call(block);
-            }
+            parse_branch!(self, block, self.call(block));
         } else if let Some(slot) = self.find_extern_function(&name) {
             let string = self.add_constant(Value::ExternFunction(slot));
             add_op(self, block, Op::Constant(string));
@@ -1059,15 +1061,14 @@ impl Compiler {
                         add_op(self, block, Op::Set(field));
                         return;
                     }
-                    Token::LeftParen => {
-                        self.call(block);
-                    }
                     Token::Newline => {
                         return;
                     }
                     _ => {
-                        error!(self, "Unexpected token when parsing blob-field.");
-                        return;
+                        if !parse_branch!(self, block, self.call(block)) {
+                            error!(self, "Unexpected token when parsing blob-field.");
+                            return;
+                        }
                     }
                 }
             }
