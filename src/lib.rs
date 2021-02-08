@@ -162,6 +162,7 @@ impl From<Type> for Value {
 
 #[derive(Clone)]
 pub enum Value {
+    Ty(Type),
     Blob(usize),
     BlobInstance(usize, Rc<RefCell<Vec<Value>>>),
     Tuple(Rc<Vec<Value>>),
@@ -178,6 +179,7 @@ pub enum Value {
 impl Debug for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Value::Ty(ty) => write!(fmt, "(type {:?})", ty),
             Value::Blob(i) => write!(fmt, "(blob {})", i),
             Value::BlobInstance(i, v) => write!(fmt, "(inst {} {:?})", i, v),
             Value::Float(f) => write!(fmt, "(float {})", f),
@@ -286,7 +288,7 @@ impl Blob {
 /// machine carries out when running the
 /// "byte-code".
 ///
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Op {
     /// This instruction should never be run.
     /// Finding it in a program is a critical error.
@@ -307,11 +309,11 @@ pub enum Op {
     ///
     /// {A, B} - Copy - {A, B, B}
     Copy,
-    /// Adds the given value to the top of the stack.
+    /// Adds the value indexed in the `constants-vector` to the top of the stack.
     /// Also links upvalues if the value is a function.
     ///
     /// {A} - Constant(B) - {A, B}
-    Constant(Value),
+    Constant(usize),
     /// Creates a new [Tuple] with the given size and place it on the top
     /// of the stack.
     ///
@@ -326,15 +328,17 @@ pub enum Op {
     /// Looks up a field by the given name
     /// and replaces the parent with it.
     /// Currently only expects [Value::Blob].
+    /// (name is looked up in the internal string-list)
     ///
     /// {O} - Get(F) - {O.F}
-    Get(String),
+    Get(usize),
     /// Looks up a field by the given name
     /// and replaces the current value in the object.
     /// Currently only expects [Value::Blob].
+    /// (name is looked up in the internal string-list)
     ///
     /// {O} - Set(F) - {}
-    Set(String),
+    Set(usize),
 
     /// Adds the two top elements on the stack,
     /// using the function [op::add]. The result
@@ -452,9 +456,10 @@ pub enum Op {
     /// makes sure the top value on the stack
     /// is of the given type, and is ment to signal
     /// that the "variable" is added.
+    /// (The type is looked up in the constants vector)
     ///
     /// Does not affect the stack.
-    Define(Type),
+    Define(usize),
 
     /// Calls "something" with the given number
     /// of arguments. The callable value is
@@ -702,6 +707,8 @@ pub struct Prog {
     pub blocks: Vec<Rc<RefCell<Block>>>,
     pub blobs: Vec<Rc<Blob>>,
     pub functions: Vec<RustFunction>,
+    pub constants: Vec<Value>,
+    pub strings: Vec<String>,
 }
 
 #[cfg(test)]
