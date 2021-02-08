@@ -68,6 +68,32 @@ macro_rules! parse_branch {
             $compiler.errors.extend(stored_errors);
         }
     };
+
+    ($compiler:expr, $block:expr, $call:expr) => {
+        {
+            let block_length = $block.ops.len();
+            let token_length = $compiler.curr;
+            let num_errors = $compiler.errors.len();
+            let mut stored_errors = Vec::new();
+            let mut success = false;
+            // We risk getting a lot of errors if we are in an invalid state
+            // when we start the parse.
+            while !$compiler.panic {
+                $call;
+                if !$compiler.panic {
+                    success = true;
+                    break;
+                }
+                $compiler.panic = false;
+                $compiler.curr = token_length;
+                let thrown_errors = $compiler.errors.len() - num_errors - 1;
+                stored_errors.extend($compiler.errors.split_off(thrown_errors));
+                $block.ops.truncate(block_length);
+                break;
+            }
+            success
+        }
+    };
 }
 
 nextable_enum!(Prec {
