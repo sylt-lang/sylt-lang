@@ -579,29 +579,68 @@ impl Compiler {
     }
 
     fn call(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftParen, "Expected '(' at start of function call.");
-
         let mut arity = 0;
-        loop {
-            match self.peek() {
-                Token::EOF => {
-                    error!(self, "Unexpected EOF in function call.");
-                    break;
-                }
-                Token::RightParen => {
-                    self.eat();
-                    break;
-                }
-                _ => {
-                    self.expression(block);
-                    arity += 1;
-                    if !matches!(self.peek(), Token::RightParen) {
-                        expect!(self, Token::Comma, "Expected ',' after argument.");
+        match self.peek() {
+            Token::LeftParen => {
+                self.eat();
+                loop {
+                    match self.peek() {
+                        Token::EOF => {
+                            error!(self, "Unexpected EOF in function call.");
+                            break;
+                        }
+                        Token::RightParen => {
+                            self.eat();
+                            break;
+                        }
+                        _ => {
+                            self.expression(block);
+                            arity += 1;
+                            if !matches!(self.peek(), Token::RightParen) {
+                                expect!(self, Token::Comma, "Expected ',' after argument.");
+                            }
+                        }
+                    }
+                    if self.panic {
+                        break;
                     }
                 }
+            },
+
+            Token::Not => {
+                // I suspect this will be wierd with the boolean NOT
+                // operator...
+                self.eat();
+                loop {
+                    match self.peek() {
+                        Token::EOF => {
+                            error!(self, "Unexpected EOF in function call.");
+                            break;
+                        }
+                        Token::Newline => {
+                            break;
+                        }
+                        _ => {
+                            if !parse_branch!(self, block, self.expression(block)) {
+                                break;
+                            }
+                            arity += 1;
+                            if matches!(self.peek(), Token::Comma) {
+                                self.eat();
+                            }
+                        }
+                    }
+                    if self.panic {
+                        break;
+                    }
+                }
+                if !self.panic {
+                    println!("LINE {} -- ", self.line());
+                }
             }
-            if self.panic {
-                break;
+
+            _ => {
+                error!(self, "Not a valid function call, expected a '!' or a '('.");
             }
         }
 
