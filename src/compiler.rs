@@ -489,7 +489,7 @@ impl Compiler {
     fn unary(&mut self, block: &mut Block) {
         let op = match self.eat() {
             Token::Minus => Op::Neg,
-            Token::Not => Op::Not,
+            Token::Bang => Op::Not,
             _ => { error!(self, "Invalid unary operator"); Op::Neg },
         };
         self.parse_precedence(block, Prec::Factor);
