@@ -736,18 +736,55 @@ mod tests {
         };
     }
 
+    use std::time::Duration;
+    use std::sync::mpsc;
+    use std::thread;
+
+    // Shamelessly stolen from https://github.com/rust-lang/rfcs/issues/2798
+    pub fn panic_after<T, F>(d: Duration, f: F) -> T
+    where
+        T: Send + 'static,
+        F: FnOnce() -> T,
+        F: Send + 'static,
+    {
+        let (done_tx, done_rx) = mpsc::channel();
+        let handle = thread::spawn(move || {
+            let val = f();
+            done_tx.send(()).expect("Unable to send completion signal");
+            val
+        });
+
+        match done_rx.recv_timeout(d) {
+            Ok(_) => handle.join().expect("Thread panicked"),
+            Err(_) => panic!("Thread took too long"),
+        }
+    }
+
     #[macro_export]
     macro_rules! test_string {
         ($fn:ident, $prog:literal) => {
             #[test]
             fn $fn() {
-                $crate::run_string($prog, true, Vec::new()).unwrap();
+                crate::tests::panic_after(std::time::Duration::from_millis(500), || {
+                    match $crate::run_string($prog, true, Vec::new()) {
+                        Ok(()) => {},
+                        Err(errs) => {
+                            for e in errs.iter() {
+                                println!("{}", e);
+                            }
+                            println!("  {} - FAILED\n", stringify!($fn));
+                            panic!();
+                        }
+                    }
+                });
             }
         };
         ($fn:ident, $prog:literal, $errs:tt) => {
             #[test]
             fn $fn() {
-                $crate::assert_errs!($crate::run_string($prog, true, Vec::new()), $errs);
+                crate::tests::panic_after(std::time::Duration::from_millis(500), || {
+                    $crate::assert_errs!($crate::run_string($prog, true, Vec::new()), $errs);
+                })
             }
         }
     }

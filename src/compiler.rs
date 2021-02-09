@@ -39,6 +39,71 @@ macro_rules! expect {
     };
 }
 
+macro_rules! parse_branch {
+    ($compiler:expr, $block:expr, [ $( $call:expr ),* ]) => {
+        {
+            let block_length = $block.ops.len();
+            let token_length = $compiler.curr;
+            let num_errors = $compiler.errors.len();
+            let mut stored_errors = Vec::new();
+
+            // Closures for early return on success.
+            let success = (|| {
+                // We risk getting a lot of errors if we are in an invalid state
+                // when we start the parse.
+                if $compiler.panic {
+                    return false;
+                }
+                $(
+                    $call;
+                    if !$compiler.panic {
+                        return true;
+                    }
+                    $compiler.panic = false;
+                    $compiler.curr = token_length;
+                    let thrown_errors = $compiler.errors.len() - num_errors - 1;
+                    stored_errors.extend($compiler.errors.split_off(thrown_errors));
+                    $block.ops.truncate(block_length);
+                )*
+                false
+            })();
+
+            if !success {
+                $compiler.errors.extend(stored_errors);
+            }
+            success
+        }
+
+    };
+
+    ($compiler:expr, $block:expr, $call:expr) => {
+        {
+            let block_length = $block.ops.len();
+            let token_length = $compiler.curr;
+            let num_errors = $compiler.errors.len();
+            let mut stored_errors = Vec::new();
+            // Closures for early return on success.
+            (|| {
+                // We risk getting a lot of errors if we are in an invalid state
+                // when we start the parse.
+                if $compiler.panic {
+                    return false;
+                }
+                $call;
+                if !$compiler.panic {
+                    return true;
+                }
+                $compiler.panic = false;
+                $compiler.curr = token_length;
+                let thrown_errors = $compiler.errors.len() - num_errors - 1;
+                stored_errors.extend($compiler.errors.split_off(thrown_errors));
+                $block.ops.truncate(block_length);
+                false
+            })()
+        }
+    };
+}
+
 nextable_enum!(Prec {
     No,
     Assert,
@@ -366,16 +431,10 @@ impl Compiler {
     }
 
     fn grouping_or_tuple(&mut self, block: &mut Block) {
-        let block_length = block.ops.len();
-        let token_length = self.curr;
-        if self.try_tuple(block).is_err() {
-            block.ops.truncate(block_length);
-            self.curr = token_length;
-            self.grouping(block);
-        }
+        parse_branch!(self, block, [self.tuple(block), self.grouping(block)]);
     }
 
-    fn try_tuple(&mut self, block: &mut Block) -> Result<(), ()> {
+    fn tuple(&mut self, block: &mut Block) {
         expect!(self, Token::LeftParen, "Expected '(' at start of tuple");
 
         let mut num_args = 0;
@@ -393,18 +452,21 @@ impl Compiler {
                     match self.peek() {
                         Token::Comma => { self.eat(); },
                         Token::RightParen => {},
-                        _ => { return Err(()); },
+                        _ => {
+                            error!(self, "Expected ',' or ')' in tuple");
+                            return;
+                        },
                     }
                 }
             }
         }
         if num_args == 1 {
-            return Err(());
+            error!(self, "A tuple must contain more than 1 element.");
+            return;
         }
 
         expect!(self, Token::RightParen, "Expected ')' after tuple.");
         add_op(self, block, Op::Tuple(num_args));
-        Ok(())
     }
 
     fn grouping(&mut self, block: &mut Block) {
@@ -948,7 +1010,7 @@ impl Compiler {
         self.blobs.push(blob);
     }
 
-    fn try_blob_field(&mut self, block: &mut Block) -> Result<(), ()> {
+    fn blob_field(&mut self, block: &mut Block) {
         let name = match self.eat() {
             Token::Identifier(name) => name,
             _ => unreachable!(),
@@ -967,7 +1029,7 @@ impl Compiler {
                             String::from(field)
                         } else {
                             error!(self, "Expected fieldname after '.'.");
-                            return Err(());
+                            return;
                         };
 
                         let field = self.intern_string(field);
@@ -976,7 +1038,7 @@ impl Compiler {
                                 self.eat();
                                 self.expression(block);
                                 add_op(self, block, Op::Set(field));
-                                return Ok(());
+                                return;
                             }
 
                             Token::PlusEqual => Op::Add,
@@ -995,21 +1057,23 @@ impl Compiler {
                         self.expression(block);
                         add_op(self, block, op);
                         add_op(self, block, Op::Set(field));
-                        return Ok(());
+                        return;
                     }
                     Token::LeftParen => {
                         self.call(block);
                     }
                     Token::Newline => {
-                        return Ok(());
+                        return;
                     }
                     _ => {
-                        return Err(());
+                        error!(self, "Unexpected token when parsing blob-field.");
+                        return;
                     }
                 }
             }
         } else {
-            Err(())
+            error!(self, format!("Cannot find variable '{}'.", name));
+            return;
         }
     }
 
@@ -1034,14 +1098,7 @@ impl Compiler {
             }
 
             (Token::Identifier(_), Token::Dot, ..) => {
-                let block_length = block.ops.len();
-                let token_length = self.curr;
-                // reset block and token stream if blob field fails
-                if self.try_blob_field(block).is_err() {
-                    block.ops.truncate(block_length);
-                    self.curr = token_length;
-                    self.expression(block);
-                }
+                parse_branch!(self, block, [self.blob_field(block), self.expression(block)]);
             }
 
             (Token::Identifier(name), Token::Colon, ..) => {
