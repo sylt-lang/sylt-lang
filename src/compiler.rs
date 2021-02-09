@@ -638,7 +638,7 @@ impl Compiler {
             }
 
             _ => {
-                error!(self, "Not a valid function call, expected a '!' or a '('.");
+                error!(self, "Invalid function call. Expected '!' or '('.");
             }
         }
 
