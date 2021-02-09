@@ -389,7 +389,7 @@ impl Compiler {
             Token::Bool(_) => self.value(block),
             Token::String(_) => self.value(block),
 
-            Token::Not => self.unary(block),
+            Token::Bang => self.unary(block),
 
             _ => { return false; },
         }
@@ -607,9 +607,7 @@ impl Compiler {
                 }
             },
 
-            Token::Not => {
-                // I suspect this will be wierd with the boolean NOT
-                // operator...
+            Token::Bang => {
                 self.eat();
                 loop {
                     match self.peek() {
