@@ -1058,4 +1058,62 @@ a.a <=> 0"
         simple: "a := 1 // blargh \na += 1 // blargh \n a <=> 2 // HARGH",
         expressions: "1 + 1 // blargh \n 2 // blargh \n // HARGH \n",
     );
+
+    test_multiple!(
+        break_and_continue,
+        simple_break: "
+a := 0
+for i := 0, i < 10, i += 1 {
+    a = a + 1
+    if i == 2 {
+        break
+    }
+}
+a <=> 3
+",
+
+        simple_continue: "
+a := 0
+for i := 0, i < 4, i += 1 {
+    if i == 2 {
+        continue
+    }
+    a = a + 1
+}
+a <=> 3
+",
+
+        advanced_break: "
+a := 0
+for i := 0, i < 10, i += 1 {
+    q := 0
+    qq := 0
+    qqq := 0
+    qqqq := 0
+
+    a = a + 1
+    if i == 2 {
+        break
+    }
+}
+a <=> 3
+",
+
+        advanced_continue: "
+a := 0
+for i := 0, i < 4, i += 1 {
+    q := 0
+    qq := 0
+    qqq := 0
+    qqqq := 0
+
+    if i == 2 {
+        continue
+    }
+    a = a + 1
+}
+a <=> 3
+",
+
+    );
 }
