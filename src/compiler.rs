@@ -126,6 +126,7 @@ struct Variable {
     active: bool,
     upvalue: bool,
     captured: bool,
+    mutable: bool,
 }
 
 struct Frame {
@@ -759,6 +760,32 @@ impl Compiler {
             scope,
             active: false,
             upvalue: false,
+            mutable: true,
+        });
+        Ok(slot)
+    }
+
+    fn define_constant(&mut self, name: &str, typ: Type, _block: &mut Block) -> Result<usize, ()> {
+        if let Some(var) = self.find_variable(&name) {
+            if var.scope == self.frame().scope {
+                error!(self, format!("Multiple definitions of {} in this block.", name));
+                return Err(());
+            }
+        }
+
+        let slot = self.stack().len();
+        let scope = self.frame().scope;
+        self.stack_mut().push(Variable {
+            name: String::from(name),
+            captured: false,
+            outer_upvalue: false,
+            outer_slot: 0,
+            slot,
+            typ,
+            scope,
+            active: false,
+            upvalue: false,
+            mutable: false,
         });
         Ok(slot)
     }
@@ -768,6 +795,15 @@ impl Compiler {
         self.expression(block);
         let constant = self.add_constant(Value::Ty(typ));
         add_op(self, block, Op::Define(constant));
+
+        if let Ok(slot) = slot {
+            self.stack_mut()[slot].active = true;
+        }
+    }
+
+    fn constant_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
+        let slot = self.define_constant(name, typ.clone(), block);
+        self.expression(block);
 
         if let Ok(slot) = slot {
             self.stack_mut()[slot].active = true;
@@ -798,6 +834,10 @@ impl Compiler {
         };
 
         if let Some(var) = self.find_variable(&name) {
+            if !var.mutable {
+                // TODO(ed): Maybe a better error than "SyntaxError".
+                error!(self, format!("Cannot assign to constant '{}'", var.name));
+            }
             if let Some(op) = op {
                 add_op(self, block, Op::Copy);
                 self.expression(block);
@@ -1123,6 +1163,12 @@ impl Compiler {
                 self.definition_statement(&name, Type::Unknown, block);
             }
 
+            (Token::Identifier(name), Token::ColonColon, ..) => {
+                self.eat();
+                self.eat();
+                self.constant_statement(&name, Type::Unknown, block);
+            }
+
             (Token::Blob, Token::Identifier(_), ..) => {
                 self.blob_statement(block);
             }
@@ -1177,6 +1223,7 @@ impl Compiler {
             active: false,
             captured: false,
             upvalue: false,
+            mutable: true,
         });
 
         let mut block = Block::new(name, file, 0);
