@@ -397,6 +397,14 @@ pub enum Op {
     ///
     /// {A} - JmpFalse(n) - {}
     JmpFalse(usize),
+    /// Sets the instruction pointer
+    /// to the given value. And also pops
+    /// the given number of values.
+    ///
+    /// Used for 'break' and 'continue'.
+    ///
+    /// {A, B, C} - JmpNPop(n, 2) - {A}
+    JmpNPop(usize, usize),
 
     /// Compares the two topmost elements
     /// on the stack for equality, and pushes

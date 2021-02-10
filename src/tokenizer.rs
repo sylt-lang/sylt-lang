@@ -24,6 +24,10 @@ pub enum Token {
     Else,
     #[token("for")]
     For,
+    #[token("break")]
+    Break,
+    #[token("continue")]
+    Continue,
     // #[token("in")]
     // In,
     // #[token("loop")]
