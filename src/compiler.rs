@@ -132,10 +132,17 @@ struct Frame {
     stack: Vec<Variable>,
     upvalues: Vec<Variable>,
     scope: usize,
-    variables_below: usize,
 }
 
 impl Frame {
+    fn new() -> Self {
+        Self {
+            stack: Vec::new(),
+            upvalues: Vec::new(),
+            scope: 0,
+        }
+    }
+
     fn find_local(&self, name: &str) -> Option<Variable> {
         for var in self.stack.iter().rev() {
             if var.name == name && var.active {
@@ -189,12 +196,7 @@ pub(crate) struct Compiler {
 macro_rules! push_frame {
     ($compiler:expr, $block:expr, $code:tt) => {
         {
-            $compiler.frames.push(Frame {
-                stack: Vec::new(),
-                upvalues: Vec::new(),
-                scope: 0,
-                variables_below: $compiler.frame().variables_below + $compiler.stack().len(),
-            });
+            $compiler.frames.push(Frame::new());
 
             // Return value stored as a variable
             $compiler.define_variable("", Type::Unknown, &mut $block).unwrap();
@@ -240,12 +242,7 @@ impl Compiler {
             tokens,
             current_file: PathBuf::from(current_file),
 
-            frames: vec![Frame {
-                stack: Vec::new(),
-                upvalues: Vec::new(),
-                scope: 0,
-                variables_below: 0,
-            }],
+            frames: vec![Frame::new()],
 
             panic: false,
             errors: vec![],
