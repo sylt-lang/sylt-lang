@@ -63,9 +63,10 @@ pub struct VM {
 
     pub print_blocks: bool,
     pub print_ops: bool,
+    runtime: bool,
+
 
     extern_functions: Vec<RustFunction>,
-
 }
 
 #[derive(Eq, PartialEq)]
@@ -92,6 +93,7 @@ impl VM {
 
             print_blocks: false,
             print_ops: false,
+            runtime: false,
 
             extern_functions: Vec::new()
         }
@@ -158,10 +160,25 @@ impl VM {
         self.frame().block.borrow().ops[ip]
     }
 
+    fn print_stacktrace(&self) {
+        if !self.runtime { return; }
+
+        println!("\n<{}>", "STACK".red());
+        for (i, frame) in self.frames.iter().enumerate() {
+            println!("  {:>3}. {}:{:<4} in {:10}",
+                i,
+                frame.block.borrow().file.display(),
+                frame.block.borrow().line(self.frame().ip),
+                frame.block.borrow().name.blue());
+        }
+        println!("")
+    }
+
     /// Stop the program, violently
     fn crash_and_burn(&self) -> ! {
         self.print_stack();
         println!("\n");
+        self.print_stacktrace();
         self.frame().block.borrow().debug_print();
         println!("    ip: {}, line: {}\n",
             self.frame().ip.blue(),
@@ -171,6 +188,7 @@ impl VM {
 
     fn error(&self, kind: ErrorKind, message: Option<String>) -> Error {
         let frame = self.frames.last().unwrap();
+        self.print_stacktrace();
         Error {
             kind,
             file: frame.block.borrow().file.clone(),
@@ -458,6 +476,7 @@ impl VM {
         self.extern_functions = prog.functions.clone();
         self.stack.clear();
         self.frames.clear();
+        self.runtime = true;
 
         self.push(Value::Function(Vec::new(), Rc::clone(&block)));
 
@@ -738,6 +757,7 @@ impl VM {
         self.blobs = prog.blobs.clone();
         self.constants = prog.constants.clone();
         self.strings = prog.strings.clone();
+        self.runtime = false;
 
         self.extern_functions = prog.functions.clone();
         for block in prog.blocks.iter() {
