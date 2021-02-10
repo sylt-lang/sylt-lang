@@ -1050,4 +1050,33 @@ a.a <=> 0"
         simple: "a := 1 // blargh \na += 1 // blargh \n a <=> 2 // HARGH",
         expressions: "1 + 1 // blargh \n 2 // blargh \n // HARGH \n",
     );
+
+    test_multiple!(
+        assignment_op_regression,
+        simple_add: "
+a := 0
+b := 99999
+a += 1
+a <=> 1
+",
+
+        simple_sub: "
+a := 0
+b := 99999
+a -= 1
+a <=> -1
+",
+
+        strange: "
+a := 0
+{
+    b := 99999
+    {
+        a := 99999
+    }
+    a -= 1
+}
+a <=> -1
+",
+    );
 }
