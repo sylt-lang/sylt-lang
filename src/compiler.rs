@@ -799,7 +799,11 @@ impl Compiler {
 
         if let Some(var) = self.find_variable(&name) {
             if let Some(op) = op {
-                add_op(self, block, Op::Copy);
+                if var.upvalue {
+                    add_op(self, block, Op::ReadUpvalue(var.slot));
+                } else {
+                    add_op(self, block, Op::ReadLocal(var.slot));
+                }
                 self.expression(block);
                 add_op(self, block, op);
             } else {
