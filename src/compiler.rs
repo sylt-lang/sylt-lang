@@ -389,7 +389,7 @@ impl Compiler {
             Token::Bool(_) => self.value(block),
             Token::String(_) => self.value(block),
 
-            Token::Not => self.unary(block),
+            Token::Bang => self.unary(block),
 
             _ => { return false; },
         }
@@ -489,7 +489,7 @@ impl Compiler {
     fn unary(&mut self, block: &mut Block) {
         let op = match self.eat() {
             Token::Minus => Op::Neg,
-            Token::Not => Op::Not,
+            Token::Bang => Op::Not,
             _ => { error!(self, "Invalid unary operator"); Op::Neg },
         };
         self.parse_precedence(block, Prec::Factor);
@@ -579,26 +579,66 @@ impl Compiler {
     }
 
     fn call(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftParen, "Expected '(' at start of function call.");
-
         let mut arity = 0;
-        loop {
-            match self.peek() {
-                Token::EOF => {
-                    error!(self, "Unexpected EOF in function call.");
-                    break;
-                }
-                Token::RightParen => {
-                    self.eat();
-                    break;
-                }
-                _ => {
-                    self.expression(block);
-                    arity += 1;
-                    if !matches!(self.peek(), Token::RightParen) {
-                        expect!(self, Token::Comma, "Expected ',' after argument.");
+        match self.peek() {
+            Token::LeftParen => {
+                self.eat();
+                loop {
+                    match self.peek() {
+                        Token::EOF => {
+                            error!(self, "Unexpected EOF in function call.");
+                            break;
+                        }
+                        Token::RightParen => {
+                            self.eat();
+                            break;
+                        }
+                        _ => {
+                            self.expression(block);
+                            arity += 1;
+                            if !matches!(self.peek(), Token::RightParen) {
+                                expect!(self, Token::Comma, "Expected ',' after argument.");
+                            }
+                        }
+                    }
+                    if self.panic {
+                        break;
                     }
                 }
+            },
+
+            Token::Bang => {
+                self.eat();
+                loop {
+                    match self.peek() {
+                        Token::EOF => {
+                            error!(self, "Unexpected EOF in function call.");
+                            break;
+                        }
+                        Token::Newline => {
+                            break;
+                        }
+                        _ => {
+                            if !parse_branch!(self, block, self.expression(block)) {
+                                break;
+                            }
+                            arity += 1;
+                            if matches!(self.peek(), Token::Comma) {
+                                self.eat();
+                            }
+                        }
+                    }
+                    if self.panic {
+                        break;
+                    }
+                }
+                if !self.panic {
+                    println!("LINE {} -- ", self.line());
+                }
+            }
+
+            _ => {
+                error!(self, "Invalid function call. Expected '!' or '('.");
             }
         }
 
@@ -718,18 +758,17 @@ impl Compiler {
                             break;
                         }
                     }
-                    Token::LeftParen => {
-                        self.call(block);
+                    _ => {
+                        if !parse_branch!(self, block, self.call(block)) {
+                            break
+                        }
                     }
-                    _ => { break }
                 }
             }
         } else if let Some(blob) = self.find_blob(&name) {
             let string = self.add_constant(Value::Blob(blob));
             add_op(self, block, Op::Constant(string));
-            if self.peek() == Token::LeftParen {
-                self.call(block);
-            }
+            parse_branch!(self, block, self.call(block));
         } else if let Some(slot) = self.find_extern_function(&name) {
             let string = self.add_constant(Value::ExternFunction(slot));
             add_op(self, block, Op::Constant(string));
@@ -1063,15 +1102,14 @@ impl Compiler {
                         add_op(self, block, Op::Set(field));
                         return;
                     }
-                    Token::LeftParen => {
-                        self.call(block);
-                    }
                     Token::Newline => {
                         return;
                     }
                     _ => {
-                        error!(self, "Unexpected token when parsing blob-field.");
-                        return;
+                        if !parse_branch!(self, block, self.call(block)) {
+                            error!(self, "Unexpected token when parsing blob-field.");
+                            return;
+                        }
                     }
                 }
             }

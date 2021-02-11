@@ -1046,6 +1046,14 @@ a.a <=> 0"
     );
 
     test_multiple!(
+        fancy_call,
+        not: "f := fn {}\n f!\n",
+        one_arg: "f := fn a:int { a <=> 1 }\n f! 1\n",
+        two_arg: "f := fn a:int, b:int { b <=> 3 }\n f! 1, 1 + 2\n",
+        three_arg: "f := fn a:int, b:int, c:int { c <=> 13 }\n f! 1, 1 + 2, 1 + 4 * 3\n",
+    );
+
+    test_multiple!(
         newline_regression,
         simple: "a := 1 // blargh \na += 1 // blargh \n a <=> 2 // HARGH",
         expressions: "1 + 1 // blargh \n 2 // blargh \n // HARGH \n",
