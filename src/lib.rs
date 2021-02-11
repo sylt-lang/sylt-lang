@@ -805,6 +805,16 @@ mod tests {
         assert_errs!(run_string("<!>\n", true, Vec::new()), [ErrorKind::Unreachable]);
     }
 
+    #[test]
+    fn assign_to_constant() {
+        assert_errs!(run_string("a :: 2\na = 2", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
+    }
+
+    #[test]
+    fn assign_to_constant_upvalue() {
+        assert_errs!(run_string("a :: 2\nq :: fn { a = 2 }\n", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
+    }
+
     macro_rules! test_multiple {
         ($mod:ident, $( $fn:ident : $prog:literal ),+ $( , )? ) => {
             mod $mod {
@@ -848,7 +858,7 @@ mod tests {
     test_multiple!(
         if_,
         compare_constants_equality: "if 1 == 2 {
-                                       <!>
+                                        <!>
                                      }",
         compare_constants_unequality: "if 1 != 1 {
                                          <!>
@@ -1057,6 +1067,17 @@ a.a <=> 0"
         newline_regression,
         simple: "a := 1 // blargh \na += 1 // blargh \n a <=> 2 // HARGH",
         expressions: "1 + 1 // blargh \n 2 // blargh \n // HARGH \n",
+    );
+
+    test_multiple!(
+        read_constants,
+        simple: "
+a :: 1
+a <=> 1
+b := 2
+{
+    a <=> 1
+}",
     );
 
     test_multiple!(
