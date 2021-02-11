@@ -126,6 +126,7 @@ struct Variable {
     active: bool,
     upvalue: bool,
     captured: bool,
+    mutable: bool,
 }
 
 enum LoopOp {
@@ -437,7 +438,7 @@ impl Compiler {
             Token::Bool(_) => self.value(block),
             Token::String(_) => self.value(block),
 
-            Token::Not => self.unary(block),
+            Token::Bang => self.unary(block),
 
             _ => { return false; },
         }
@@ -537,7 +538,7 @@ impl Compiler {
     fn unary(&mut self, block: &mut Block) {
         let op = match self.eat() {
             Token::Minus => Op::Neg,
-            Token::Not => Op::Not,
+            Token::Bang => Op::Not,
             _ => { error!(self, "Invalid unary operator"); Op::Neg },
         };
         self.parse_precedence(block, Prec::Factor);
@@ -627,26 +628,66 @@ impl Compiler {
     }
 
     fn call(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftParen, "Expected '(' at start of function call.");
-
         let mut arity = 0;
-        loop {
-            match self.peek() {
-                Token::EOF => {
-                    error!(self, "Unexpected EOF in function call.");
-                    break;
-                }
-                Token::RightParen => {
-                    self.eat();
-                    break;
-                }
-                _ => {
-                    self.expression(block);
-                    arity += 1;
-                    if !matches!(self.peek(), Token::RightParen) {
-                        expect!(self, Token::Comma, "Expected ',' after argument.");
+        match self.peek() {
+            Token::LeftParen => {
+                self.eat();
+                loop {
+                    match self.peek() {
+                        Token::EOF => {
+                            error!(self, "Unexpected EOF in function call.");
+                            break;
+                        }
+                        Token::RightParen => {
+                            self.eat();
+                            break;
+                        }
+                        _ => {
+                            self.expression(block);
+                            arity += 1;
+                            if !matches!(self.peek(), Token::RightParen) {
+                                expect!(self, Token::Comma, "Expected ',' after argument.");
+                            }
+                        }
+                    }
+                    if self.panic {
+                        break;
                     }
                 }
+            },
+
+            Token::Bang => {
+                self.eat();
+                loop {
+                    match self.peek() {
+                        Token::EOF => {
+                            error!(self, "Unexpected EOF in function call.");
+                            break;
+                        }
+                        Token::Newline => {
+                            break;
+                        }
+                        _ => {
+                            if !parse_branch!(self, block, self.expression(block)) {
+                                break;
+                            }
+                            arity += 1;
+                            if matches!(self.peek(), Token::Comma) {
+                                self.eat();
+                            }
+                        }
+                    }
+                    if self.panic {
+                        break;
+                    }
+                }
+                if !self.panic {
+                    println!("LINE {} -- ", self.line());
+                }
+            }
+
+            _ => {
+                error!(self, "Invalid function call. Expected '!' or '('.");
             }
         }
 
@@ -766,18 +807,17 @@ impl Compiler {
                             break;
                         }
                     }
-                    Token::LeftParen => {
-                        self.call(block);
+                    _ => {
+                        if !parse_branch!(self, block, self.call(block)) {
+                            break
+                        }
                     }
-                    _ => { break }
                 }
             }
         } else if let Some(blob) = self.find_blob(&name) {
             let string = self.add_constant(Value::Blob(blob));
             add_op(self, block, Op::Constant(string));
-            if self.peek() == Token::LeftParen {
-                self.call(block);
-            }
+            parse_branch!(self, block, self.call(block));
         } else if let Some(slot) = self.find_extern_function(&name) {
             let string = self.add_constant(Value::ExternFunction(slot));
             add_op(self, block, Op::Constant(string));
@@ -807,6 +847,32 @@ impl Compiler {
             scope,
             active: false,
             upvalue: false,
+            mutable: true,
+        });
+        Ok(slot)
+    }
+
+    fn define_constant(&mut self, name: &str, typ: Type, _block: &mut Block) -> Result<usize, ()> {
+        if let Some(var) = self.find_variable(&name) {
+            if var.scope == self.frame().scope {
+                error!(self, format!("Multiple definitions of {} in this block.", name));
+                return Err(());
+            }
+        }
+
+        let slot = self.stack().len();
+        let scope = self.frame().scope;
+        self.stack_mut().push(Variable {
+            name: String::from(name),
+            captured: false,
+            outer_upvalue: false,
+            outer_slot: 0,
+            slot,
+            typ,
+            scope,
+            active: false,
+            upvalue: false,
+            mutable: false,
         });
         Ok(slot)
     }
@@ -816,6 +882,15 @@ impl Compiler {
         self.expression(block);
         let constant = self.add_constant(Value::Ty(typ));
         add_op(self, block, Op::Define(constant));
+
+        if let Ok(slot) = slot {
+            self.stack_mut()[slot].active = true;
+        }
+    }
+
+    fn constant_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
+        let slot = self.define_constant(name, typ.clone(), block);
+        self.expression(block);
 
         if let Ok(slot) = slot {
             self.stack_mut()[slot].active = true;
@@ -846,8 +921,16 @@ impl Compiler {
         };
 
         if let Some(var) = self.find_variable(&name) {
+            if !var.mutable {
+                // TODO(ed): Maybe a better error than "SyntaxError".
+                error!(self, format!("Cannot assign to constant '{}'", var.name));
+            }
             if let Some(op) = op {
-                add_op(self, block, Op::Copy);
+                if var.upvalue {
+                    add_op(self, block, Op::ReadUpvalue(var.slot));
+                } else {
+                    add_op(self, block, Op::ReadLocal(var.slot));
+                }
                 self.expression(block);
                 add_op(self, block, op);
             } else {
@@ -1110,15 +1193,14 @@ impl Compiler {
                         add_op(self, block, Op::Set(field));
                         return;
                     }
-                    Token::LeftParen => {
-                        self.call(block);
-                    }
                     Token::Newline => {
                         return;
                     }
                     _ => {
-                        error!(self, "Unexpected token when parsing blob-field.");
-                        return;
+                        if !parse_branch!(self, block, self.call(block)) {
+                            error!(self, "Unexpected token when parsing blob-field.");
+                            return;
+                        }
                     }
                 }
             }
@@ -1172,6 +1254,12 @@ impl Compiler {
                 self.eat();
                 self.eat();
                 self.definition_statement(&name, Type::Unknown, block);
+            }
+
+            (Token::Identifier(name), Token::ColonColon, ..) => {
+                self.eat();
+                self.eat();
+                self.constant_statement(&name, Type::Unknown, block);
             }
 
             (Token::Blob, Token::Identifier(_), ..) => {
@@ -1246,6 +1334,7 @@ impl Compiler {
             active: false,
             captured: false,
             upvalue: false,
+            mutable: true,
         });
 
         let mut block = Block::new(name, file, 0);

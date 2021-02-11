@@ -116,7 +116,7 @@ pub enum Token {
     #[token("||")]
     Or,
     #[token("!")]
-    Not,
+    Bang,
 
     #[token(",")]
     Comma,
