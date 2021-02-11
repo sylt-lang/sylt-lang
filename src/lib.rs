@@ -858,7 +858,7 @@ mod tests {
     test_multiple!(
         if_,
         compare_constants_equality: "if 1 == 2 {
-
+                                        <!>
                                      }",
         compare_constants_unequality: "if 1 != 1 {
                                          <!>
