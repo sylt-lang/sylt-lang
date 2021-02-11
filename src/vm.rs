@@ -336,6 +336,20 @@ impl VM {
                 }
             }
 
+            Op::JmpNPop(line, to_pop) => {
+                let hi = self.stack.len();
+                let lo = hi - to_pop;
+                for slot in lo..hi {
+                    if self.upvalues.contains_key(&slot) {
+                        let value = self.stack[slot].clone();
+                        self.drop_upvalue(slot, value);
+                    }
+                }
+                self.stack.truncate(lo);
+                self.frame_mut().ip = line;
+                return Ok(OpResult::Continue);
+            }
+
             Op::Assert => {
                 if matches!(self.pop(), Value::Bool(false)) {
                     error!(self, ErrorKind::AssertFailed);
@@ -697,6 +711,9 @@ impl VM {
                     a => { error!(self, ErrorKind::TypeError(op, vec![a.into()])) },
                 }
             }
+
+            Op::JmpNPop(_, _) => {}
+
             _ => {
                 self.eval_op(op)?;
                 return Ok(())

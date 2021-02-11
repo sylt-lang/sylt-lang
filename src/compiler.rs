@@ -129,14 +129,72 @@ struct Variable {
     mutable: bool,
 }
 
+enum LoopOp {
+    Continue,
+    Break,
+}
+
 struct Frame {
+    loops: Vec<Vec<(usize, usize, LoopOp)>>,
     stack: Vec<Variable>,
     upvalues: Vec<Variable>,
     scope: usize,
-    variables_below: usize,
 }
 
 impl Frame {
+    fn new() -> Self {
+        Self {
+            loops: Vec::new(),
+            stack: Vec::new(),
+            upvalues: Vec::new(),
+            scope: 0,
+        }
+    }
+
+    fn count_this_scope(&self) -> usize {
+        for (i, var) in self.stack.iter().rev().enumerate() {
+            println!("i:{} - {} == {}", i, var.scope, self.scope);
+            if var.scope != self.scope {
+                // return i;
+            }
+        }
+        return self.stack.len();
+    }
+
+    fn push_loop(&mut self) {
+        self.loops.push(Vec::new());
+    }
+
+    fn pop_loop(&mut self, block: &mut Block, stacktarget: usize, start: usize, end: usize) {
+        // Compiler error if this fails
+        for (addr, stacksize, op) in self.loops.pop().unwrap().iter() {
+            let to_pop = stacksize - stacktarget;
+            let op = match op {
+                LoopOp::Continue => Op::JmpNPop(start, to_pop),
+                LoopOp::Break => Op::JmpNPop(end, to_pop),
+            };
+            block.patch(op, *addr);
+        }
+    }
+
+    fn add_continue(&mut self, addr: usize, stacksize: usize, block: &mut Block) -> Result<(), ()> {
+        if let Some(top) = self.loops.last_mut() {
+            top.push((addr, stacksize, LoopOp::Continue));
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+
+    fn add_break(&mut self, addr: usize, stacksize: usize, block: &mut Block) -> Result<(), ()> {
+        if let Some(top) = self.loops.last_mut() {
+            top.push((addr, stacksize, LoopOp::Break));
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+
     fn find_local(&self, name: &str) -> Option<Variable> {
         for var in self.stack.iter().rev() {
             if var.name == name && var.active {
@@ -190,12 +248,7 @@ pub(crate) struct Compiler {
 macro_rules! push_frame {
     ($compiler:expr, $block:expr, $code:tt) => {
         {
-            $compiler.frames.push(Frame {
-                stack: Vec::new(),
-                upvalues: Vec::new(),
-                scope: 0,
-                variables_below: $compiler.frame().variables_below + $compiler.stack().len(),
-            });
+            $compiler.frames.push(Frame::new());
 
             // Return value stored as a variable
             $compiler.define_variable("", Type::Unknown, &mut $block).unwrap();
@@ -241,12 +294,7 @@ impl Compiler {
             tokens,
             current_file: PathBuf::from(current_file),
 
-            frames: vec![Frame {
-                stack: Vec::new(),
-                upvalues: Vec::new(),
-                scope: 0,
-                variables_below: 0,
-            }],
+            frames: vec![Frame::new()],
 
             panic: false,
             errors: vec![],
@@ -946,6 +994,7 @@ impl Compiler {
         expect!(self, Token::For, "Expected 'for' at start of for-loop.");
 
         push_scope!(self, block, {
+            self.frame_mut().push_loop();
             // Definition
             match self.peek_four() {
                 // TODO(ed): Typed definitions aswell!
@@ -981,6 +1030,8 @@ impl Compiler {
 
             block.patch(Op::JmpFalse(block.curr()), cond_out);
 
+            let stacksize = self.frame().stack.len();
+            self.frame_mut().pop_loop(block, stacksize, inc, block.curr());
         });
     }
 
@@ -1221,6 +1272,24 @@ impl Compiler {
 
             (Token::For, ..) => {
                 self.for_loop(block);
+            }
+
+            (Token::Break, ..) => {
+                self.eat();
+                let addr = add_op(self, block, Op::Illegal);
+                let stack_size = self.frame().stack.len();
+                if self.frame_mut().add_break(addr, stack_size, block).is_err() {;
+                    error!(self, "Cannot place 'break' outside of loop.");
+                }
+            }
+
+            (Token::Continue, ..) => {
+                self.eat();
+                let addr = add_op(self, block, Op::Illegal);
+                let stack_size = self.frame().stack.len();
+                if self.frame_mut().add_continue(addr, stack_size, block).is_err() {
+                    error!(self, "Cannot place 'continue' outside of loop.");
+                }
             }
 
             (Token::Ret, ..) => {
