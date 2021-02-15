@@ -1399,7 +1399,7 @@ impl Compiler {
             let errors: Vec<_> = self.unkowns.iter().map(|(name, (_, line))|
                 (ErrorKind::SyntaxError(*line, Token::Identifier(name.clone())),
                  *line,
-                 format!("Usage of undefined 'blob': '{}'.", name,)
+                 format!("Usage of undefined value: '{}'.", name,)
                 ))
                 .collect();
             for (e, l, m) in errors.iter() {
