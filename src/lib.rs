@@ -1192,7 +1192,7 @@ a <=> -1
 
     test_multiple!(
         declaration_order,
-        simple: "
+        blob_simple: "
 a := A()
 
 blob A {
@@ -1200,15 +1200,42 @@ blob A {
 }
 ",
 
-        complex: "
+        blob_complex: "
 a := A()
 b := B()
 c := C()
 b2 := B()
 
-blob A { }
+blob A {
+    c: C
+}
 blob C { }
 blob B { }
+",
+
+        constant_function: "
+a()
+a :: fn {}
+",
+
+        constant_function_complex: "
+h :: fn -> int {
+    ret 3
+}
+
+a() <=> 3
+
+k :: fn -> int {
+    ret h()
+}
+
+a :: fn -> int {
+    ret q()
+}
+
+q :: fn -> int {
+    ret k()
+}
 ",
     );
 }
