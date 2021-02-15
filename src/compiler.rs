@@ -228,11 +228,13 @@ pub(crate) struct Compiler {
     errors: Vec<Error>,
 
     blocks: Vec<Rc<RefCell<Block>>>,
-    blobs: Vec<Blob>,
+    blob_id: usize,
 
     functions: HashMap<String, (usize, RustFunction)>,
     constants: Vec<Value>,
     strings: Vec<String>,
+
+
 }
 
 macro_rules! push_frame {
@@ -290,7 +292,7 @@ impl Compiler {
             errors: vec![],
 
             blocks: Vec::new(),
-            blobs: Vec::new(),
+            blob_id: 0,
 
             functions: HashMap::new(),
 
@@ -307,6 +309,12 @@ impl Compiler {
                     Value::Nil => Some(i),
                     _ => None,
                 }).unwrap()
+    }
+
+    fn new_blob_id(&mut self) -> usize {
+        let id = self.blob_id;
+        self.blob_id += 1;
+        id
     }
 
     fn add_constant(&mut self, value: Value) -> usize {
@@ -612,9 +620,10 @@ impl Compiler {
     }
 
     fn find_blob(&self, name: &str) -> Option<usize> {
-        self.blobs.iter().enumerate()
-            .find(|(_, x)| x.name == name)
-            .map(|(i, _)| i)
+        self.constants.iter().enumerate().find_map(|(i, x)| match x {
+            Value::Blob(b) if b.name == name => Some(i),
+            _ => None,
+        })
     }
 
     fn call(&mut self, block: &mut Block) {
@@ -805,8 +814,7 @@ impl Compiler {
                 }
             }
         } else if let Some(blob) = self.find_blob(&name) {
-            let string = self.add_constant(Value::Blob(blob));
-            add_op(self, block, Op::Constant(string));
+            add_op(self, block, Op::Constant(blob));
             parse_branch!(self, block, self.call(block));
         } else if let Some(slot) = self.find_extern_function(&name) {
             let string = self.add_constant(Value::ExternFunction(slot));
@@ -1085,7 +1093,11 @@ impl Compiler {
                     "float" => Ok(Type::Float),
                     "bool" => Ok(Type::Bool),
                     "str" => Ok(Type::String),
-                    x => self.find_blob(x).map(|blob| Type::Instance(blob)).ok_or(()),
+                    x => {
+                        let blob = self.find_blob(x)
+                            .unwrap_or_else(|| { error!(self, "Unkown blob."); 0 } );
+                        Ok(Type::from(&self.constants[blob]))
+                    }
                 }
             }
             _ => Err(()),
@@ -1103,7 +1115,7 @@ impl Compiler {
 
         expect!(self, Token::LeftBrace, "Expected 'blob' body. AKA '{'.");
 
-        let mut blob = Blob::new(&name);
+        let mut blob = Blob::new(self.new_blob_id(), &name);
         loop {
             if matches!(self.peek(), Token::EOF | Token::RightBrace) { break; }
             if matches!(self.peek(), Token::Newline) { self.eat(); continue; }
@@ -1131,7 +1143,7 @@ impl Compiler {
 
         expect!(self, Token::RightBrace, "Expected '}' after 'blob' body. AKA '}'.");
 
-        self.blobs.push(blob);
+        self.constants.push(Value::Blob(Rc::new(blob)));
     }
 
     fn blob_field(&mut self, block: &mut Block) {
@@ -1341,7 +1353,6 @@ impl Compiler {
         if self.errors.is_empty() {
             Ok(Prog {
                 blocks: self.blocks.clone(),
-                blobs: self.blobs.iter().map(|x| Rc::new(x.clone())).collect(),
                 functions: functions.iter().map(|(_, f)| *f).collect(),
                 constants: self.constants.clone(),
                 strings: self.strings.clone(),

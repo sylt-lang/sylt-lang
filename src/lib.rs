@@ -84,16 +84,16 @@ pub enum Type {
     String,
     Tuple(Vec<Type>),
     Function(Vec<Type>, Box<Type>),
-    Blob(usize),
-    Instance(usize),
+    Blob(Rc<Blob>),
+    Instance(Rc<Blob>),
 }
 
 impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Type::Void, Type::Void) => true,
-            (Type::Instance(a), Type::Instance(b)) => a == b,
-            (Type::Blob(a), Type::Blob(b)) => a == b,
+            (Type::Instance(a), Type::Instance(b)) => *a == *b,
+            (Type::Blob(a), Type::Blob(b)) => *a == *b,
             (Type::Int, Type::Int) => true,
             (Type::Float, Type::Float) => true,
             (Type::Bool, Type::Bool) => true,
@@ -111,8 +111,8 @@ impl PartialEq for Type {
 impl From<&Value> for Type {
     fn from(value: &Value) -> Type {
         match value {
-            Value::Instance(i, _) => Type::Instance(*i),
-            Value::Blob(i) => Type::Blob(*i),
+            Value::Instance(b, _) => Type::Instance(Rc::clone(b)),
+            Value::Blob(b) => Type::Blob(Rc::clone(b)),
             Value::Tuple(v) => {
                 Type::Tuple(v.iter().map(|x| Type::from(x)).collect())
             }
@@ -136,8 +136,11 @@ impl From<&Type> for Value {
     fn from(ty: &Type) -> Self {
         match ty {
             Type::Void => Value::Nil,
-            Type::Blob(i) => Value::Blob(*i),
-            Type::Instance(i) => Value::Instance(*i, Rc::new(RefCell::new(Vec::new()))),
+            Type::Blob(b) => Value::Blob(Rc::clone(b)),
+            Type::Instance(b) => {
+                Value::Instance(Rc::clone(b),
+                    Rc::new(RefCell::new(Vec::new())))
+            }
             Type::Tuple(fields) => {
                 Value::Tuple(Rc::new(fields.iter().map(Value::from).collect()))
             }
@@ -163,8 +166,8 @@ impl From<Type> for Value {
 #[derive(Clone)]
 pub enum Value {
     Ty(Type),
-    Blob(usize),
-    Instance(usize, Rc<RefCell<Vec<Value>>>),
+    Blob(Rc<Blob>),
+    Instance(Rc<Blob>, Rc<RefCell<Vec<Value>>>),
     Tuple(Rc<Vec<Value>>),
     Float(f64),
     Int(i64),
@@ -180,8 +183,8 @@ impl Debug for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Ty(ty) => write!(fmt, "(type {:?})", ty),
-            Value::Blob(i) => write!(fmt, "(blob {})", i),
-            Value::Instance(i, v) => write!(fmt, "(inst {} {:?})", i, v),
+            Value::Blob(b) => write!(fmt, "(blob {})", b.name),
+            Value::Instance(b, v) => write!(fmt, "(inst {} {:?})", b.name, v),
             Value::Float(f) => write!(fmt, "(float {})", f),
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),
@@ -257,14 +260,22 @@ impl UpValue {
 
 #[derive(Debug, Clone)]
 pub struct Blob {
+    pub id: usize,
     pub name: String,
     /// Maps field names to their slot and type.
     pub fields: HashMap<String, (usize, Type)>,
 }
 
+impl PartialEq for Blob {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
 impl Blob {
-    fn new(name: &str) -> Self {
+    fn new(id: usize, name: &str) -> Self {
         Self {
+            id: id,
             name: String::from(name),
             fields: HashMap::new(),
         }
@@ -713,7 +724,6 @@ impl Block {
 #[derive(Clone)]
 pub struct Prog {
     pub blocks: Vec<Rc<RefCell<Block>>>,
-    pub blobs: Vec<Rc<Blob>>,
     pub functions: Vec<RustFunction>,
     pub constants: Vec<Value>,
     pub strings: Vec<String>,

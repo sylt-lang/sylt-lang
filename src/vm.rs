@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use owo_colors::OwoColorize;
 
-use crate::{Blob, Block, Op, Prog, UpValue, Value, op};
+use crate::{Block, Op, Prog, UpValue, Value, op};
 use crate::error::{Error, ErrorKind};
 use crate::RustFunction;
 use crate::Type;
@@ -57,7 +57,6 @@ pub struct VM {
     stack: Vec<Value>,
     frames: Vec<Frame>,
 
-    blobs: Vec<Rc<Blob>>,
     constants: Vec<Value>,
     strings: Vec<String>,
 
@@ -87,7 +86,6 @@ impl VM {
             stack: Vec::new(),
             frames: Vec::new(),
 
-            blobs: Vec::new(),
             constants: Vec::new(),
             strings: Vec::new(),
 
@@ -284,7 +282,7 @@ impl VM {
                 let inst = self.pop();
                 let field = self.string(field);
                 if let Value::Instance(ty, values) = inst {
-                    let slot = self.blobs[ty].fields.get(field).unwrap().0;
+                    let slot = ty.fields.get(field).unwrap().0;
                     self.push(values.borrow()[slot].clone());
                 } else {
                     error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
@@ -295,7 +293,7 @@ impl VM {
                 let (inst, value) = self.poppop();
                 let field = self.string(field);
                 if let Value::Instance(ty, values) = inst {
-                    let slot = self.blobs[ty].fields.get(field).unwrap().0;
+                    let slot = ty.fields.get(field).unwrap().0;
                     values.borrow_mut()[slot] = value;
                 } else {
                     error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
@@ -393,16 +391,14 @@ impl VM {
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {
-                    Value::Blob(blob_id) => {
-                        let blob = &self.blobs[blob_id];
-
+                    Value::Blob(blob) => {
                         let mut values = Vec::with_capacity(blob.fields.len());
                         for _ in 0..values.capacity() {
                             values.push(Value::Nil);
                         }
 
                         self.pop();
-                        self.push(Value::Instance(blob_id, Rc::new(RefCell::new(values))));
+                        self.push(Value::Instance(blob, Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, block) => {
                         let inner = block.borrow();
@@ -483,7 +479,6 @@ impl VM {
     // Initalizes the VM for running. Run cannot be called before this.
     pub(crate) fn init(&mut self, prog: &Prog) {
         let block = Rc::clone(&prog.blocks[0]);
-        self.blobs = prog.blobs.clone();
         self.constants = prog.constants.clone();
         self.strings = prog.strings.clone();
 
@@ -570,7 +565,7 @@ impl VM {
                 let inst = self.pop();
                 let field = self.string(field);
                 if let Value::Instance(ty, _) = inst {
-                    let value = Value::from(&self.blobs[ty].fields.get(field).unwrap().1);
+                    let value = Value::from(ty.fields.get(field).unwrap().1.clone());
                     self.push(value);
                 } else {
                     self.push(Value::Nil);
@@ -583,9 +578,9 @@ impl VM {
                 let field = self.string(field);
 
                 if let Value::Instance(ty, _) = inst {
-                    let ty = &self.blobs[ty].fields.get(field).unwrap().1;
+                    let ty = &ty.fields.get(field).unwrap().1;
                     if ty != &Type::from(&value) {
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
+                        error!(self, ErrorKind::RuntimeTypeError(op, vec![Value::from(ty)]));
                     }
                 } else {
                     error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
@@ -646,9 +641,7 @@ impl VM {
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {
-                    Value::Blob(blob_id) => {
-                        let blob = &self.blobs[blob_id];
-
+                    Value::Blob(blob) => {
                         let mut values = Vec::with_capacity(blob.fields.len());
                         for _ in 0..values.capacity() {
                             values.push(Value::Nil);
@@ -659,7 +652,7 @@ impl VM {
                         }
 
                         self.pop();
-                        self.push(Value::Instance(blob_id, Rc::new(RefCell::new(values))));
+                        self.push(Value::Instance(blob, Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, block) => {
                         let inner = block.borrow();
@@ -771,7 +764,6 @@ impl VM {
     pub(crate) fn typecheck(&mut self, prog: &Prog) -> Result<(), Vec<Error>> {
         let mut errors = Vec::new();
 
-        self.blobs = prog.blobs.clone();
         self.constants = prog.constants.clone();
         self.strings = prog.strings.clone();
         self.runtime = false;
