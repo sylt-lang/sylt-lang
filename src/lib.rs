@@ -1183,4 +1183,15 @@ a := 0
 a <=> -1
 ",
     );
+    test_multiple!(
+        declaration_order,
+        simple: "
+a := A()
+
+blob A {
+    a: int
+}
+",
+
+    );
 }

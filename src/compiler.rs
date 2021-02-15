@@ -1,6 +1,6 @@
 use std::{borrow::Cow, path::{Path, PathBuf}};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map::Entry};
 use std::rc::Rc;
 
 use crate::{Blob, Block, Op, Prog, RustFunction, Type, Value};
@@ -229,12 +229,11 @@ pub(crate) struct Compiler {
 
     blocks: Vec<Rc<RefCell<Block>>>,
     blob_id: usize,
+    unkowns: HashMap<String, (usize, usize)>,
 
     functions: HashMap<String, (usize, RustFunction)>,
     constants: Vec<Value>,
     strings: Vec<String>,
-
-
 }
 
 macro_rules! push_frame {
@@ -293,6 +292,7 @@ impl Compiler {
 
             blocks: Vec::new(),
             blob_id: 0,
+            unkowns: HashMap::new(),
 
             functions: HashMap::new(),
 
@@ -619,11 +619,18 @@ impl Compiler {
         Self::find_and_capture_variable(name, self.frames.iter_mut().rev())
     }
 
-    fn find_blob(&self, name: &str) -> Option<usize> {
-        self.constants.iter().enumerate().find_map(|(i, x)| match x {
+    fn find_blob(&mut self, name: &str) -> usize {
+        let res = self.constants.iter().enumerate().find_map(|(i, x)| match x {
             Value::Blob(b) if b.name == name => Some(i),
             _ => None,
-        })
+        });
+        if res.is_some() {
+            return res.unwrap();
+        }
+        let constant = self.add_constant(Value::Nil);
+        let line = self.line();
+        let entry = self.unkowns.entry(name.to_string());
+        entry.or_insert((constant, line)).0
     }
 
     fn call(&mut self, block: &mut Block) {
@@ -679,9 +686,6 @@ impl Compiler {
                     if self.panic {
                         break;
                     }
-                }
-                if !self.panic {
-                    println!("LINE {} -- ", self.line());
                 }
             }
 
@@ -788,6 +792,16 @@ impl Compiler {
             Token::Identifier(name) => name,
             _ => unreachable!(),
         };
+
+        // Global functions take precedence
+        if let Some(slot) = self.find_extern_function(&name) {
+            let string = self.add_constant(Value::ExternFunction(slot));
+            add_op(self, block, Op::Constant(string));
+            self.call(block);
+            return;
+        }
+
+        // Variables
         if let Some(var) = self.find_variable(&name) {
             if var.upvalue {
                 add_op(self, block, Op::ReadUpvalue(var.slot));
@@ -803,26 +817,22 @@ impl Compiler {
                             add_op(self, block, Op::Get(string));
                         } else {
                             error!(self, "Expected fieldname after '.'.");
-                            break;
+                            return;
                         }
                     }
                     _ => {
                         if !parse_branch!(self, block, self.call(block)) {
-                            break
+                            return;
                         }
                     }
                 }
             }
-        } else if let Some(blob) = self.find_blob(&name) {
-            add_op(self, block, Op::Constant(blob));
-            parse_branch!(self, block, self.call(block));
-        } else if let Some(slot) = self.find_extern_function(&name) {
-            let string = self.add_constant(Value::ExternFunction(slot));
-            add_op(self, block, Op::Constant(string));
-            self.call(block);
-        } else {
-            error!(self, format!("Using undefined variable {}.", name));
         }
+
+        // Blobs - Always returns a blob since it's filled in if it isn't used.
+        let blob = self.find_blob(&name);
+        add_op(self, block, Op::Constant(blob));
+        parse_branch!(self, block, self.call(block));
     }
 
     fn define_variable(&mut self, name: &str, typ: Type, _block: &mut Block) -> Result<usize, ()> {
@@ -1094,8 +1104,7 @@ impl Compiler {
                     "bool" => Ok(Type::Bool),
                     "str" => Ok(Type::String),
                     x => {
-                        let blob = self.find_blob(x)
-                            .unwrap_or_else(|| { error!(self, "Unkown blob."); 0 } );
+                        let blob = self.find_blob(x);
                         Ok(Type::from(&self.constants[blob]))
                     }
                 }
@@ -1143,7 +1152,13 @@ impl Compiler {
 
         expect!(self, Token::RightBrace, "Expected '}' after 'blob' body. AKA '}'.");
 
-        self.constants.push(Value::Blob(Rc::new(blob)));
+        let blob = Value::Blob(Rc::new(blob));
+        if let Entry::Occupied(entry) = self.unkowns.entry(name) {
+            let (_, (slot, _)) = entry.remove_entry();
+            self.constants[slot] = blob;
+        } else {
+            self.constants.push(blob);
+        }
     }
 
     fn blob_field(&mut self, block: &mut Block) {
