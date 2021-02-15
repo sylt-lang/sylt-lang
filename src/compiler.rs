@@ -151,16 +151,6 @@ impl Frame {
         }
     }
 
-    fn count_this_scope(&self) -> usize {
-        for (i, var) in self.stack.iter().rev().enumerate() {
-            println!("i:{} - {} == {}", i, var.scope, self.scope);
-            if var.scope != self.scope {
-                // return i;
-            }
-        }
-        return self.stack.len();
-    }
-
     fn push_loop(&mut self) {
         self.loops.push(Vec::new());
     }
@@ -177,7 +167,7 @@ impl Frame {
         }
     }
 
-    fn add_continue(&mut self, addr: usize, stacksize: usize, block: &mut Block) -> Result<(), ()> {
+    fn add_continue(&mut self, addr: usize, stacksize: usize) -> Result<(), ()> {
         if let Some(top) = self.loops.last_mut() {
             top.push((addr, stacksize, LoopOp::Continue));
             Ok(())
@@ -186,7 +176,7 @@ impl Frame {
         }
     }
 
-    fn add_break(&mut self, addr: usize, stacksize: usize, block: &mut Block) -> Result<(), ()> {
+    fn add_break(&mut self, addr: usize, stacksize: usize) -> Result<(), ()> {
         if let Some(top) = self.loops.last_mut() {
             top.push((addr, stacksize, LoopOp::Break));
             Ok(())
@@ -1278,7 +1268,7 @@ impl Compiler {
                 self.eat();
                 let addr = add_op(self, block, Op::Illegal);
                 let stack_size = self.frame().stack.len();
-                if self.frame_mut().add_break(addr, stack_size, block).is_err() {;
+                if self.frame_mut().add_break(addr, stack_size).is_err() {
                     error!(self, "Cannot place 'break' outside of loop.");
                 }
             }
@@ -1287,7 +1277,7 @@ impl Compiler {
                 self.eat();
                 let addr = add_op(self, block, Op::Illegal);
                 let stack_size = self.frame().stack.len();
-                if self.frame_mut().add_continue(addr, stack_size, block).is_err() {
+                if self.frame_mut().add_continue(addr, stack_size).is_err() {
                     error!(self, "Cannot place 'continue' outside of loop.");
                 }
             }
