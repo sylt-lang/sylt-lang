@@ -573,7 +573,7 @@ impl Compiler {
     /// Entry point for all expression parsing.
     fn expression(&mut self, block: &mut Block) {
         match self.peek_four() {
-            (Token::Fn, ..) => self.function(block),
+            (Token::Fn, ..) => { self.function(block, None); },
             _ => self.parse_precedence(block, Prec::No),
         }
     }
@@ -624,9 +624,10 @@ impl Compiler {
         Self::find_and_capture_variable(name, self.frames.iter_mut().rev())
     }
 
-    fn find_blob(&mut self, name: &str) -> usize {
+    fn find_constant(&mut self, name: &str) -> usize {
         let res = self.constants.iter().enumerate().find_map(|(i, x)| match x {
             Value::Blob(b) if b.name == name => Some(i),
+            Value::Function(_, b) if b.borrow().name == name => Some(i),
             _ => None,
         });
         if res.is_some() {
@@ -703,11 +704,13 @@ impl Compiler {
     }
 
     // TODO(ed): de-complexify
-    fn function(&mut self, block: &mut Block) {
+    fn function(&mut self, block: &mut Block, name: Option<&str>) {
         expect!(self, Token::Fn, "Expected 'fn' at start of function.");
 
         let top = self.stack().len() - 1;
-        let name = if !self.stack()[top].active {
+        let name = if let Some(name) = name {
+            Cow::Owned(String::from(name))
+        } else if !self.stack()[top].active {
             self.stack_mut()[top].active = true;
             Cow::Borrowed(&self.stack()[top].name)
         } else {
@@ -787,8 +790,11 @@ impl Compiler {
         let function_block = Rc::new(RefCell::new(function_block));
 
 
-        let constant = self.add_constant(Value::Function(Vec::new(), Rc::clone(&function_block)));
+        // Note(ed): We deliberately add the constant as late as possible.
+        // This behaviour is used in `constant_statement`.
+        let function = Value::Function(Vec::new(), Rc::clone(&function_block));
         self.blocks[block_id] = function_block;
+        let constant = self.add_constant(function);
         add_op(self, block, Op::Constant(constant));
     }
 
@@ -835,8 +841,8 @@ impl Compiler {
         }
 
         // Blobs - Always returns a blob since it's filled in if it isn't used.
-        let blob = self.find_blob(&name);
-        add_op(self, block, Op::Constant(blob));
+        let con = self.find_constant(&name);
+        add_op(self, block, Op::Constant(con));
         parse_branch!(self, block, self.call(block));
     }
 
@@ -902,6 +908,20 @@ impl Compiler {
     }
 
     fn constant_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
+        // Magical global constants
+        if self.frames.len() <= 1 {
+            if parse_branch!(self, block, self.function(block, Some(name))) {
+                // Remove the function, since it's a constant and we already
+                // added it.
+                block.ops.pop().unwrap();
+                if let Entry::Occupied(entry) = self.unkowns.entry(String::from(name)) {
+                    let (_, (slot, _)) = entry.remove_entry();
+                    self.constants[slot] = self.constants.pop().unwrap();
+                }
+                return;
+            }
+        }
+
         let slot = self.define_constant(name, typ.clone(), block);
         self.expression(block);
 
@@ -1109,8 +1129,15 @@ impl Compiler {
                     "bool" => Ok(Type::Bool),
                     "str" => Ok(Type::String),
                     x => {
-                        let blob = self.find_blob(x);
-                        Ok(Type::from(&self.constants[blob]))
+                        let blob = self.find_constant(x);
+                        if let Value::Blob(blob) = &self.constants[blob] {
+                            Ok(Type::Instance(Rc::clone(blob)))
+                        } else {
+                            // TODO(ed): This is kinda bad. If the type cannot
+                            // be found it tries to infer it during runtime
+                            // and doesn't verify it.
+                            Ok(Type::Unknown)
+                        }
                     }
                 }
             }

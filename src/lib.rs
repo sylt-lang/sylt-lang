@@ -1045,7 +1045,11 @@ a() <=> 4
                           a.a = 2
                           a.b = 3
                           a.a + a.b <=> 5
-                          5 <=> a.a + a.b"
+                          5 <=> a.a + a.b",
+        blob_infer: "
+blob A { }
+a : A = A()
+",
     );
 
     test_multiple!(tuples,
@@ -1212,6 +1216,13 @@ blob A {
 blob C { }
 blob B { }
 ",
+
+        blob_infer: "
+blob A { }
+
+a : A = A()
+",
+
 
         constant_function: "
 a()
