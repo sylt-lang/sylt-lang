@@ -1263,5 +1263,24 @@ f() <=> 4
 f() <=> 5
 ",
 
+        constants_in_inner_functions: "
+q : int = 0
+
+f :: fn -> fn -> {
+    g :: fn {
+        q += 1
+    }
+    ret g
+}
+
+g := f()
+g()
+q <=> 3
+g()
+q <=> 4
+g()
+q <=> 5
+",
+
     );
 }
