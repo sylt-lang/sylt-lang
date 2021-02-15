@@ -833,6 +833,12 @@ mod tests {
         assert_errs!(run_string("a :: 2\nq :: fn { a = 2 }\n", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
     }
 
+    #[test]
+    fn undefined_blob() {
+        assert_errs!(run_string("a :: B()\n", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
+    }
+
+
     macro_rules! test_multiple {
         ($mod:ident, $( $fn:ident : $prog:literal ),+ $( , )? ) => {
             mod $mod {
@@ -1183,6 +1189,7 @@ a := 0
 a <=> -1
 ",
     );
+
     test_multiple!(
         declaration_order,
         simple: "
@@ -1193,5 +1200,15 @@ blob A {
 }
 ",
 
+        complex: "
+a := A()
+b := B()
+c := C()
+b2 := B()
+
+blob A { }
+blob C { }
+blob B { }
+",
     );
 }
