@@ -85,14 +85,14 @@ pub enum Type {
     Tuple(Vec<Type>),
     Function(Vec<Type>, Box<Type>),
     Blob(usize),
-    BlobInstance(usize),
+    Instance(usize),
 }
 
 impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Type::Void, Type::Void) => true,
-            (Type::BlobInstance(a), Type::BlobInstance(b)) => a == b,
+            (Type::Instance(a), Type::Instance(b)) => a == b,
             (Type::Blob(a), Type::Blob(b)) => a == b,
             (Type::Int, Type::Int) => true,
             (Type::Float, Type::Float) => true,
@@ -111,7 +111,7 @@ impl PartialEq for Type {
 impl From<&Value> for Type {
     fn from(value: &Value) -> Type {
         match value {
-            Value::BlobInstance(i, _) => Type::BlobInstance(*i),
+            Value::Instance(i, _) => Type::Instance(*i),
             Value::Blob(i) => Type::Blob(*i),
             Value::Tuple(v) => {
                 Type::Tuple(v.iter().map(|x| Type::from(x)).collect())
@@ -137,7 +137,7 @@ impl From<&Type> for Value {
         match ty {
             Type::Void => Value::Nil,
             Type::Blob(i) => Value::Blob(*i),
-            Type::BlobInstance(i) => Value::BlobInstance(*i, Rc::new(RefCell::new(Vec::new()))),
+            Type::Instance(i) => Value::Instance(*i, Rc::new(RefCell::new(Vec::new()))),
             Type::Tuple(fields) => {
                 Value::Tuple(Rc::new(fields.iter().map(Value::from).collect()))
             }
@@ -164,7 +164,7 @@ impl From<Type> for Value {
 pub enum Value {
     Ty(Type),
     Blob(usize),
-    BlobInstance(usize, Rc<RefCell<Vec<Value>>>),
+    Instance(usize, Rc<RefCell<Vec<Value>>>),
     Tuple(Rc<Vec<Value>>),
     Float(f64),
     Int(i64),
@@ -181,7 +181,7 @@ impl Debug for Value {
         match self {
             Value::Ty(ty) => write!(fmt, "(type {:?})", ty),
             Value::Blob(i) => write!(fmt, "(blob {})", i),
-            Value::BlobInstance(i, v) => write!(fmt, "(inst {} {:?})", i, v),
+            Value::Instance(i, v) => write!(fmt, "(inst {} {:?})", i, v),
             Value::Float(f) => write!(fmt, "(float {})", f),
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),

@@ -1085,7 +1085,7 @@ impl Compiler {
                     "float" => Ok(Type::Float),
                     "bool" => Ok(Type::Bool),
                     "str" => Ok(Type::String),
-                    x => self.find_blob(x).map(|blob| Type::BlobInstance(blob)).ok_or(()),
+                    x => self.find_blob(x).map(|blob| Type::Instance(blob)).ok_or(()),
                 }
             }
             _ => Err(()),

@@ -283,7 +283,7 @@ impl VM {
             Op::Get(field) => {
                 let inst = self.pop();
                 let field = self.string(field);
-                if let Value::BlobInstance(ty, values) = inst {
+                if let Value::Instance(ty, values) = inst {
                     let slot = self.blobs[ty].fields.get(field).unwrap().0;
                     self.push(values.borrow()[slot].clone());
                 } else {
@@ -294,7 +294,7 @@ impl VM {
             Op::Set(field) => {
                 let (inst, value) = self.poppop();
                 let field = self.string(field);
-                if let Value::BlobInstance(ty, values) = inst {
+                if let Value::Instance(ty, values) = inst {
                     let slot = self.blobs[ty].fields.get(field).unwrap().0;
                     values.borrow_mut()[slot] = value;
                 } else {
@@ -402,7 +402,7 @@ impl VM {
                         }
 
                         self.pop();
-                        self.push(Value::BlobInstance(blob_id, Rc::new(RefCell::new(values))));
+                        self.push(Value::Instance(blob_id, Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, block) => {
                         let inner = block.borrow();
@@ -569,7 +569,7 @@ impl VM {
             Op::Get(field) => {
                 let inst = self.pop();
                 let field = self.string(field);
-                if let Value::BlobInstance(ty, _) = inst {
+                if let Value::Instance(ty, _) = inst {
                     let value = Value::from(&self.blobs[ty].fields.get(field).unwrap().1);
                     self.push(value);
                 } else {
@@ -582,7 +582,7 @@ impl VM {
                 let (inst, value) = self.poppop();
                 let field = self.string(field);
 
-                if let Value::BlobInstance(ty, _) = inst {
+                if let Value::Instance(ty, _) = inst {
                     let ty = &self.blobs[ty].fields.get(field).unwrap().1;
                     if ty != &Type::from(&value) {
                         error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
@@ -659,7 +659,7 @@ impl VM {
                         }
 
                         self.pop();
-                        self.push(Value::BlobInstance(blob_id, Rc::new(RefCell::new(values))));
+                        self.push(Value::Instance(blob_id, Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, block) => {
                         let inner = block.borrow();
