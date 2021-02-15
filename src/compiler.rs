@@ -361,15 +361,20 @@ impl Compiler {
     }
 
     fn error(&mut self, kind: ErrorKind, message: Option<String>) {
+        self.error_on_line(kind, self.line(), message);
+    }
+
+    fn error_on_line(&mut self, kind: ErrorKind, line: usize, message: Option<String>) {
         if self.panic { return }
         self.panic = true;
         self.errors.push(Error {
             kind,
             file: self.current_file.clone(),
-            line: self.line(),
+            line,
             message,
         });
     }
+
 
     fn peek(&self) -> Token {
         self.peek_at(0)
@@ -1362,6 +1367,18 @@ impl Compiler {
         add_op(self, &mut block, Op::Constant(self.nil_value()));
         add_op(self, &mut block, Op::Return);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
+
+        if self.unkowns.len() != 0 {
+            let errors: Vec<_> = self.unkowns.iter().map(|(name, (_, line))|
+                (ErrorKind::SyntaxError(*line, Token::Identifier(name.clone())),
+                 *line,
+                 format!("Usage of undefined 'blob': '{}'.", name,)
+                ))
+                .collect();
+            for (e, l, m) in errors.iter() {
+                self.error_on_line(e.clone(), *l, Some(m.clone()));
+            }
+        }
 
         self.blocks.insert(0, Rc::new(RefCell::new(block)));
 
