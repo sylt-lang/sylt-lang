@@ -1248,5 +1248,20 @@ q :: fn -> int {
     ret k()
 }
 ",
+
+        constant_function_closure: "
+q := 1
+
+f :: fn -> int {
+    q += 1
+    ret q
+}
+
+f() <=> 2
+f() <=> 3
+f() <=> 4
+f() <=> 5
+",
+
     );
 }
