@@ -694,6 +694,8 @@ impl Block {
     pub fn debug_print(&self) {
         println!("     === {} ===", self.name.blue());
         for (i, s) in self.ops.iter().enumerate() {
+            // TODO(ed): This print should only do one call to print.
+            // Otherwise we can get race conditions in a single line.
             if self.line_offsets.contains_key(&i) {
                 print!("{:5} ", self.line_offsets[&i].red());
             } else {
@@ -763,6 +765,7 @@ mod tests {
     use std::time::Duration;
     use std::sync::mpsc;
     use std::thread;
+    use owo_colors::OwoColorize;
 
     // Shamelessly stolen from https://github.com/rust-lang/rfcs/issues/2798
     pub fn panic_after<T, F>(d: Duration, f: F) -> T
@@ -778,10 +781,19 @@ mod tests {
             val
         });
 
-        match done_rx.recv_timeout(d) {
-            Ok(_) => handle.join().expect("Thread panicked"),
-            Err(_) => panic!("Thread took too long"),
-        }
+        let msg = match done_rx.recv_timeout(d) {
+            Ok(_) => {
+                return handle.join().expect("Thread panicked");
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                "Test took too long to complete"
+            },
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                "Test produced incorrect result"
+            },
+        };
+        println!("    #### {} ####", msg.red());
+        panic!(msg);
     }
 
     #[macro_export]
@@ -1010,10 +1022,9 @@ b() <=> 2
 b() <=> 3
 
 a() <=> 4
-"
+",
 
         //TODO this tests doesn't terminate in proper time if we print blocks and ops
-                    /*
         fibonacci: "fibonacci : fn int -> int = fn n: int -> int {
                       if n == 0 {
                         ret 0
@@ -1024,9 +1035,7 @@ a() <=> 4
                       }
                       ret fibonacci(n - 1) + fibonacci(n - 2)
                     }
-                    fibonacci(10) <=> 55
-                    fibonacci(20) <=> 6765"
-                    */
+                    fibonacci(10) <=> 55",
     );
 
     test_multiple!(
