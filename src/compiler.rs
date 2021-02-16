@@ -917,6 +917,9 @@ impl Compiler {
                 if let Entry::Occupied(entry) = self.unkowns.entry(String::from(name)) {
                     let (_, (slot, _)) = entry.remove_entry();
                     self.constants[slot] = self.constants.pop().unwrap();
+                    add_op(self, block, Op::Link(slot));
+                } else {
+                    add_op(self, block, Op::Link(self.constants.len() - 1));
                 }
                 return;
             }

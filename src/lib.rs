@@ -480,6 +480,12 @@ pub enum Op {
     /// Does not affect the stack.
     Define(usize),
 
+    /// Links the upvalues for the given constant
+    /// function. This updates the constant stack.
+    ///
+    /// Does not affect the stack.
+    Link(usize),
+
     /// Calls "something" with the given number
     /// of arguments. The callable value is
     /// then replaced with the result.
@@ -1275,11 +1281,11 @@ f :: fn -> fn -> {
 
 g := f()
 g()
+q <=> 1
+g()
+q <=> 2
+g()
 q <=> 3
-g()
-q <=> 4
-g()
-q <=> 5
 ",
 
     );

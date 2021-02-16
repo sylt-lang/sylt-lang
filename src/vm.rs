@@ -258,6 +258,34 @@ impl VM {
                 self.push(value);
             }
 
+            Op::Link(slot) => {
+                let offset = self.frame().stack_offset;
+                let constant = self.constant(slot).clone();
+                let constant = match constant {
+                    Value::Function(_, block) => {
+                        let mut ups = Vec::new();
+                        for (slot, is_up, _) in block.borrow().upvalues.iter() {
+                            let up = if *is_up {
+                                if let Value::Function(local_ups, _) = &self.stack[offset] {
+                                    Rc::clone(&local_ups[*slot])
+                                } else {
+                                    unreachable!()
+                                }
+                            } else {
+                                let slot = self.frame().stack_offset + slot;
+                                Rc::clone(self.find_upvalue(slot))
+                            };
+                            ups.push(up);
+                        }
+                        Value::Function(ups, block)
+                    },
+                    value => error!(self,
+                        ErrorKind::RuntimeTypeError(op, vec![value.clone()]),
+                        format!("Not a function {:?}.", value)),
+                };
+                self.constants[slot] = constant;
+            }
+
             Op::Index => {
                 let slot = self.stack.pop().unwrap();
                 let val = self.stack.pop().unwrap();
@@ -636,6 +664,19 @@ impl VM {
                     }
                     _ => {}
                 }
+            }
+
+            Op::Link(slot) => {
+                println!("{:?}", self.constants);
+                println!("{:?} - {}", self.constant(slot), slot);
+                match self.constant(slot).clone() {
+                    Value::Function(_, _) => {}
+                    value => {
+                        error!(self,
+                            ErrorKind::TypeError(op, vec![Type::from(&value)]),
+                            format!("Cannot link non-function {:?}.", value));
+                    }
+                };
             }
 
             Op::Call(num_args) => {
