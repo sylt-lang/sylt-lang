@@ -113,7 +113,7 @@ nextable_enum!(Prec {
     Factor,
 });
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Variable {
     name: String,
     typ: Type,
@@ -226,14 +226,6 @@ impl Frame {
         None
     }
 
-    fn mark_read(&mut self, var: &Variable) {
-        (if var.upvalue {
-            &mut self.upvalues
-        } else {
-            &mut self.stack
-        })[var.slot].read = true;
-    }
-
     fn add_upvalue(&mut self, variable: Variable) -> Variable {
         let new_variable = Variable {
             outer_upvalue: variable.upvalue,
@@ -282,7 +274,15 @@ macro_rules! push_frame {
             // 0-th slot is the function itself.
             for var in frame.stack.iter().skip(1) {
                 if !(var.read || var.upvalue) {
-                    error!($compiler, format!("Unused variable '{}'", var.name));
+                    let e = ErrorKind::SyntaxError(
+                        var.line,
+                        Token::Identifier(var.name.clone()
+                    ));
+                    $compiler.error_on_line(
+                        e,
+                        var.line,
+                        Some(format!("Usage of undefined value: '{}'.", var.name))
+                    );
                 }
                 $compiler.panic = false;
             }
@@ -305,7 +305,15 @@ macro_rules! push_scope {
         let mut errors = Vec::new();
         for var in $compiler.frame().stack.iter().skip(ss).rev() {
             if !(var.read || var.upvalue) {
-                errors.push(format!("Unused variable '{}'", var.name))
+                let e = ErrorKind::SyntaxError(
+                    var.line,
+                    Token::Identifier(var.name.clone()
+                ));
+                errors.push((
+                    e,
+                    var.line,
+                    format!("Usage of undefined value: '{}'.", var.name),)
+                );
             }
             if var.captured {
                 add_op($compiler, $block, Op::PopUpvalue);
@@ -314,8 +322,9 @@ macro_rules! push_scope {
             }
         }
 
-        for err in errors.iter() {
-            error!($compiler, err);
+        for (e, l, m) in errors.iter() {
+            $compiler.error_on_line(e.clone(), *l, Some(m.clone()));
+            $compiler.panic = false;
         }
         $compiler.stack_mut().truncate(ss);
     };
@@ -383,6 +392,26 @@ impl Compiler {
     fn frame_mut(&mut self) -> &mut Frame {
         let last = self.frames.len() - 1;
         &mut self.frames[last]
+    }
+
+    /// Marks a variable as read, also marks upvalues.
+    fn mark_read(&mut self, frame_id: usize, var: &Variable) {
+        // Early out
+        if var.read {
+            return;
+        }
+
+
+        if if let Some(up) = self.frames[frame_id].upvalues.get(var.slot) {
+            up.name == var.name
+        } else { false } {
+            let mut inner_var = self.frames[frame_id].upvalues[var.slot].clone();
+            inner_var.slot = inner_var.outer_slot;
+            self.mark_read(frame_id - 1, &inner_var);
+            self.frames[frame_id].upvalues[var.slot].read = true;
+        } else {
+            self.frames[frame_id].stack[var.slot].read = true;
+        }
     }
 
     fn stack(&self) -> &[Variable] {
@@ -863,7 +892,7 @@ impl Compiler {
 
         // Variables
         if let Some(var) = self.find_variable(&name) {
-            self.frame_mut().mark_read(&var);
+            self.mark_read(self.frames.len() - 1, &var);
             if var.upvalue {
                 add_op(self, block, Op::ReadUpvalue(var.slot));
             } else {
@@ -1221,6 +1250,7 @@ impl Compiler {
             _ => unreachable!(),
         };
         if let Some(var) = self.find_variable(&name) {
+            self.mark_read(self.frames.len() - 1, &var);
             if var.upvalue {
                 add_op(self, block, Op::ReadUpvalue(var.slot));
             } else {
