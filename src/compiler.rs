@@ -119,6 +119,7 @@ struct Variable {
     typ: Type,
     scope: usize,
     slot: usize,
+    line: usize,
 
     outer_slot: usize,
     outer_upvalue: bool,
@@ -128,6 +129,27 @@ struct Variable {
     captured: bool,
     mutable: bool,
     read: bool,
+}
+
+impl Variable {
+    fn new(name: &str, mutable: bool, typ: Type) -> Self {
+        Self {
+            name: String::from(name),
+            typ,
+            scope: 0,
+            slot: 0,
+            line: 0,
+
+            outer_slot: 0,
+            outer_upvalue: false,
+
+            active: false,
+            upvalue: false,
+            captured: false,
+            mutable,
+            read: false,
+        }
+    }
 }
 
 enum LoopOp {
@@ -251,14 +273,16 @@ macro_rules! push_frame {
             $compiler.frames.push(Frame::new());
 
             // Return value stored as a variable
-            $compiler.define_variable("", Type::Unknown, &mut $block).unwrap();
+            let var = Variable::new("", true, Type::Unknown);
+            $compiler.define(var).unwrap();
 
             $code
 
             let frame = $compiler.frames.pop().unwrap();
-            for var in frame.stack.iter() {
+            // 0-th slot is the function itself.
+            for var in frame.stack.iter().skip(1) {
                 if !(var.read || var.upvalue) {
-                    error!($compiler, format!("Unused variable {}", var.name));
+                    error!($compiler, format!("Unused variable '{}'", var.name));
                 }
                 $compiler.panic = false;
             }
@@ -278,12 +302,20 @@ macro_rules! push_scope {
 
         $compiler.frame_mut().scope -= 1;
 
-        for var in $compiler.frame().stack[ss..$compiler.stack().len()].iter().rev() {
+        let mut errors = Vec::new();
+        for var in $compiler.frame().stack.iter().skip(ss).rev() {
+            if !(var.read || var.upvalue) {
+                errors.push(format!("Unused variable '{}'", var.name))
+            }
             if var.captured {
                 add_op($compiler, $block, Op::PopUpvalue);
             } else {
                 add_op($compiler, $block, Op::Pop);
             }
+        }
+
+        for err in errors.iter() {
+            error!($compiler, err);
         }
         $compiler.stack_mut().truncate(ss);
     };
@@ -749,7 +781,8 @@ impl Compiler {
                         expect!(self, Token::Colon, "Expected ':' after parameter name.");
                         if let Ok(typ) = self.parse_type() {
                             args.push(typ.clone());
-                            if let Ok(slot) = self.define_variable(&name, typ, &mut function_block) {
+                            let var = Variable::new(&name, true, typ);
+                            if let Ok(slot) = self.define(var) {
                                 self.stack_mut()[slot].active = true;
                             }
                         } else {
@@ -863,60 +896,26 @@ impl Compiler {
         parse_branch!(self, block, self.call(block));
     }
 
-    fn define_variable(&mut self, name: &str, typ: Type, _block: &mut Block) -> Result<usize, ()> {
-        if let Some(var) = self.find_variable(&name) {
+    fn define(&mut self, mut var: Variable) -> Result<usize, ()> {
+        if let Some(var) = self.find_variable(&var.name) {
             if var.scope == self.frame().scope {
-                error!(self, format!("Multiple definitions of {} in this block.", name));
+                error!(self, format!("Multiple definitions of '{}' in this block.",
+                                     var.name));
                 return Err(());
             }
         }
 
         let slot = self.stack().len();
-        let scope = self.frame().scope;
-        self.stack_mut().push(Variable {
-            name: String::from(name),
-            captured: false,
-            outer_upvalue: false,
-            outer_slot: 0,
-            slot,
-            typ,
-            scope,
-            active: false,
-            upvalue: false,
-            mutable: true,
-            read: false,
-        });
-        Ok(slot)
-    }
-
-    fn define_constant(&mut self, name: &str, typ: Type, _block: &mut Block) -> Result<usize, ()> {
-        if let Some(var) = self.find_variable(&name) {
-            if var.scope == self.frame().scope {
-                error!(self, format!("Multiple definitions of {} in this block.", name));
-                return Err(());
-            }
-        }
-
-        let slot = self.stack().len();
-        let scope = self.frame().scope;
-        self.stack_mut().push(Variable {
-            name: String::from(name),
-            captured: false,
-            outer_upvalue: false,
-            outer_slot: 0,
-            slot,
-            typ,
-            scope,
-            active: false,
-            upvalue: false,
-            mutable: false,
-            read: false,
-        });
+        var.slot = slot;
+        var.scope = self.frame().scope;
+        var.line = self.line();
+        self.stack_mut().push(var);
         Ok(slot)
     }
 
     fn definition_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
-        let slot = self.define_variable(name, typ.clone(), block);
+        let mut var = Variable::new(name, true, typ.clone());
+        let slot = self.define(var);
         self.expression(block);
         let constant = self.add_constant(Value::Ty(typ));
         add_op(self, block, Op::Define(constant));
@@ -944,7 +943,8 @@ impl Compiler {
             }
         }
 
-        let slot = self.define_constant(name, typ.clone(), block);
+        let var = Variable::new(name, false, typ);
+        let slot = self.define(var);
         self.expression(block);
 
         if let Ok(slot) = slot {
@@ -1395,19 +1395,8 @@ impl Compiler {
             .enumerate()
             .map(|(i, (s, f))| (s, (i, f)))
             .collect();
-        self.stack_mut().push(Variable {
-            name: String::from("/main/"),
-            typ: Type::Void,
-            outer_upvalue: false,
-            outer_slot: 0,
-            slot: 0,
-            scope: 0,
-            active: false,
-            captured: false,
-            upvalue: false,
-            mutable: true,
-            read: false,
-        });
+        let mut main = Variable::new("/main/", false, Type::Void);
+        self.define(main);
 
         let mut block = Block::new(name, file, 0);
         while self.peek() != Token::EOF {
@@ -1433,7 +1422,9 @@ impl Compiler {
 
         for var in self.frames.pop().unwrap().stack.iter().skip(1) {
             if !(var.read || var.upvalue) {
-                error!(self, format!("Unused variable {}", var.name));
+                let e = ErrorKind::SyntaxError(var.line, Token::Identifier(var.name.clone()));
+                let m = format!("Unused value '{}'.", var.name);
+                self.error_on_line(e, var.line, Some(m));
             }
             self.panic = false;
         }
