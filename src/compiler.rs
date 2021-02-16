@@ -914,7 +914,7 @@ impl Compiler {
     }
 
     fn definition_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
-        let mut var = Variable::new(name, true, typ.clone());
+        let var = Variable::new(name, true, typ.clone());
         let slot = self.define(var);
         self.expression(block);
         let constant = self.add_constant(Value::Ty(typ));
@@ -1395,8 +1395,8 @@ impl Compiler {
             .enumerate()
             .map(|(i, (s, f))| (s, (i, f)))
             .collect();
-        let mut main = Variable::new("/main/", false, Type::Void);
-        self.define(main);
+        let main = Variable::new("/main/", false, Type::Void);
+        let _ = self.define(main);
 
         let mut block = Block::new(name, file, 0);
         while self.peek() != Token::EOF {
