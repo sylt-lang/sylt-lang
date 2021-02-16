@@ -229,7 +229,7 @@ pub(crate) struct Compiler {
 
     blocks: Vec<Rc<RefCell<Block>>>,
     blob_id: usize,
-    unkowns: HashMap<String, (usize, usize)>,
+    unknown: HashMap<String, (usize, usize)>,
 
     functions: HashMap<String, (usize, RustFunction)>,
     constants: Vec<Value>,
@@ -292,7 +292,7 @@ impl Compiler {
 
             blocks: Vec::new(),
             blob_id: 0,
-            unkowns: HashMap::new(),
+            unknown: HashMap::new(),
 
             functions: HashMap::new(),
 
@@ -635,7 +635,7 @@ impl Compiler {
         }
         let constant = self.add_constant(Value::Nil);
         let line = self.line();
-        let entry = self.unkowns.entry(name.to_string());
+        let entry = self.unknown.entry(name.to_string());
         entry.or_insert((constant, line)).0
     }
 
@@ -914,7 +914,7 @@ impl Compiler {
                 // Remove the function, since it's a constant and we already
                 // added it.
                 block.ops.pop().unwrap();
-                if let Entry::Occupied(entry) = self.unkowns.entry(String::from(name)) {
+                if let Entry::Occupied(entry) = self.unknown.entry(String::from(name)) {
                     let (_, (slot, _)) = entry.remove_entry();
                     self.constants[slot] = self.constants.pop().unwrap();
                     add_op(self, block, Op::Link(slot));
@@ -1188,7 +1188,7 @@ impl Compiler {
         expect!(self, Token::RightBrace, "Expected '}' after 'blob' body. AKA '}'.");
 
         let blob = Value::Blob(Rc::new(blob));
-        if let Entry::Occupied(entry) = self.unkowns.entry(name) {
+        if let Entry::Occupied(entry) = self.unknown.entry(name) {
             let (_, (slot, _)) = entry.remove_entry();
             self.constants[slot] = blob;
         } else {
@@ -1398,8 +1398,8 @@ impl Compiler {
         add_op(self, &mut block, Op::Return);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
 
-        if self.unkowns.len() != 0 {
-            let errors: Vec<_> = self.unkowns.iter().map(|(name, (_, line))|
+        if self.unknown.len() != 0 {
+            let errors: Vec<_> = self.unknown.iter().map(|(name, (_, line))|
                 (ErrorKind::SyntaxError(*line, Token::Identifier(name.clone())),
                  *line,
                  format!("Usage of undefined value: '{}'.", name,)
