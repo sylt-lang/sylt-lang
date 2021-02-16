@@ -1023,19 +1023,6 @@ b() <=> 3
 
 a() <=> 4
 ",
-
-        //TODO this tests doesn't terminate in proper time if we print blocks and ops
-        fibonacci: "fibonacci : fn int -> int = fn n: int -> int {
-                      if n == 0 {
-                        ret 0
-                      } else if n == 1 {
-                        ret 1
-                      } else if n < 0 {
-                        <!>
-                      }
-                      ret fibonacci(n - 1) + fibonacci(n - 2)
-                    }
-                    fibonacci(10) <=> 55",
     );
 
     test_multiple!(
