@@ -127,6 +127,7 @@ struct Variable {
     upvalue: bool,
     captured: bool,
     mutable: bool,
+    read: bool,
 }
 
 enum LoopOp {
@@ -203,6 +204,14 @@ impl Frame {
         None
     }
 
+    fn mark_read(&mut self, var: &Variable) {
+        (if var.upvalue {
+            &mut self.upvalues
+        } else {
+            &mut self.stack
+        })[var.slot].read = true;
+    }
+
     fn add_upvalue(&mut self, variable: Variable) -> Variable {
         let new_variable = Variable {
             outer_upvalue: variable.upvalue,
@@ -243,9 +252,16 @@ macro_rules! push_frame {
 
             // Return value stored as a variable
             $compiler.define_variable("", Type::Unknown, &mut $block).unwrap();
+
             $code
 
-            $compiler.frames.pop().unwrap();
+            let frame = $compiler.frames.pop().unwrap();
+            for var in frame.stack.iter() {
+                if !(var.read || var.upvalue) {
+                    error!($compiler, format!("Unused variable {}", var.name));
+                }
+                $compiler.panic = false;
+            }
             // The 0th slot is the return value, which is passed out
             // from functions, and should not be popped.
             0
@@ -814,6 +830,7 @@ impl Compiler {
 
         // Variables
         if let Some(var) = self.find_variable(&name) {
+            self.frame_mut().mark_read(&var);
             if var.upvalue {
                 add_op(self, block, Op::ReadUpvalue(var.slot));
             } else {
@@ -867,6 +884,7 @@ impl Compiler {
             active: false,
             upvalue: false,
             mutable: true,
+            read: false,
         });
         Ok(slot)
     }
@@ -892,6 +910,7 @@ impl Compiler {
             active: false,
             upvalue: false,
             mutable: false,
+            read: false,
         });
         Ok(slot)
     }
@@ -1387,12 +1406,14 @@ impl Compiler {
             captured: false,
             upvalue: false,
             mutable: true,
+            read: false,
         });
 
         let mut block = Block::new(name, file, 0);
         while self.peek() != Token::EOF {
             self.statement(&mut block);
-            expect!(self, Token::Newline | Token::EOF, "Expect newline or EOF after expression.");
+            expect!(self, Token::Newline | Token::EOF,
+                    "Expect newline or EOF after expression.");
         }
         add_op(self, &mut block, Op::Constant(self.nil_value()));
         add_op(self, &mut block, Op::Return);
@@ -1408,6 +1429,13 @@ impl Compiler {
             for (e, l, m) in errors.iter() {
                 self.error_on_line(e.clone(), *l, Some(m.clone()));
             }
+        }
+
+        for var in self.frames.pop().unwrap().stack.iter().skip(1) {
+            if !(var.read || var.upvalue) {
+                error!(self, format!("Unused variable {}", var.name));
+            }
+            self.panic = false;
         }
 
         self.blocks.insert(0, Rc::new(RefCell::new(block)));
