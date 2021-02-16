@@ -856,6 +856,20 @@ mod tests {
         assert_errs!(run_string("a :: B()\n", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
     }
 
+    #[test]
+    fn unused_variable() {
+        assert_errs!(run_string("a := 1", true, Vec::new()), [ErrorKind::SyntaxError(1, _)]);
+    }
+
+    #[test]
+    fn unused_upvalue() {
+        assert_errs!(run_string("a := 1\nf :: fn { a = 2 }\nf()", true, Vec::new()), [ErrorKind::SyntaxError(1, _)]);
+    }
+
+    #[test]
+    fn unused_function() {
+        assert_errs!(run_string("a := 1\nf := fn { a }\n", true, Vec::new()), [ErrorKind::SyntaxError(2, _)]);
+    }
 
     macro_rules! test_multiple {
         ($mod:ident, $( $fn:ident : $prog:literal ),+ $( , )? ) => {

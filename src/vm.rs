@@ -831,15 +831,18 @@ mod tests {
         test_string!(uncallable_type, "
                  f := fn i: int {
                      i()
-                 }",
+                 }
+                 f",
                  [ErrorKind::TypeError(_, _)]);
 
         test_string!(wrong_params, "
-                 f : fn -> int = fn a: int -> int {}",
+                 f : fn -> int = fn a: int -> int {}
+                 f",
                  [ErrorKind::TypeError(_, _), ErrorKind::TypeError(_, _)]);
 
         test_string!(wrong_ret, "
-                 f : fn -> int = fn {}",
+                 f : fn -> int = fn {}
+                 f",
                  [ErrorKind::TypeError(_, _)]);
     }
 }
