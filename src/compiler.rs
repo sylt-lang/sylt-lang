@@ -630,8 +630,8 @@ impl Compiler {
             Value::Function(_, b) if b.borrow().name == name => Some(i),
             _ => None,
         });
-        if res.is_some() {
-            return res.unwrap();
+        if let Some(res) = res {
+            return res;
         }
         let constant = self.add_constant(Value::Nil);
         let line = self.line();
