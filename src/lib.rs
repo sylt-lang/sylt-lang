@@ -797,8 +797,8 @@ mod tests {
                             for e in errs.iter() {
                                 println!("{}", e);
                             }
-                            println!("  {} - FAILED\n", stringify!($fn));
-                            panic!();
+                            eprintln!("  {} - FAILED\n", stringify!($fn));
+                            unreachable!();
                         }
                     }
                 });
