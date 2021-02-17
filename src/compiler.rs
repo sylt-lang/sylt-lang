@@ -914,12 +914,19 @@ impl Compiler {
                 // Remove the function, since it's a constant and we already
                 // added it.
                 block.ops.pop().unwrap();
-                if let Entry::Occupied(entry) = self.unknown.entry(String::from(name)) {
+                let slot = if let Entry::Occupied(entry) = self.unknown.entry(String::from(name)) {
                     let (_, (slot, _)) = entry.remove_entry();
                     self.constants[slot] = self.constants.pop().unwrap();
-                    add_op(self, block, Op::Link(slot));
+                    slot
                 } else {
-                    add_op(self, block, Op::Link(self.constants.len() - 1));
+                    self.constants.len() - 1
+                };
+                add_op(self, block, Op::Link(slot));
+                if let Value::Function(_, block) = &self.constants[slot] {
+                    let needs_linking = block.borrow().upvalues.len() != 0;
+                    block.borrow_mut().constant = needs_linking;
+                } else {
+                    unreachable!();
                 }
                 return;
             }

@@ -151,7 +151,7 @@ impl From<&Type> for Value {
             Type::String => Value::String(Rc::new("".to_string())),
             Type::Function(_, _) => Value::Function(
                 Vec::new(),
-                Rc::new(RefCell::new(Block::empty_with_type(ty)))),
+                Rc::new(RefCell::new(Block::stubbed_block(ty)))),
         }
     }
 }
@@ -635,6 +635,8 @@ pub struct Block {
     ops: Vec<Op>,
     last_line_offset: usize,
     line_offsets: HashMap<usize, usize>,
+    linked: bool,
+    constant: bool,
 }
 
 impl Block {
@@ -647,12 +649,14 @@ impl Block {
             ops: Vec::new(),
             last_line_offset: 0,
             line_offsets: HashMap::new(),
+            linked: false,
+            constant: false,
         }
     }
 
     // Used to create empty functions.
-    fn empty_with_type(ty: &Type) -> Self {
-        let mut block = Block::new("/empty/", Path::new(""), 0);
+    fn stubbed_block(ty: &Type) -> Self {
+        let mut block = Block::new("/empty/", Path::new(""));
         block.ty = ty.clone();
         block
     }
@@ -852,6 +856,20 @@ mod tests {
     #[test]
     fn undefined_blob() {
         assert_errs!(run_string("a :: B()\n", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
+    }
+
+    #[test]
+    fn call_before_link() {
+        let prog = "
+a := 1
+f()
+c := 5
+
+f :: fn {
+    c <=> 5
+}
+        ";
+        assert_errs!(run_string(prog, true, Vec::new()), [ErrorKind::InvalidProgram, ErrorKind::RuntimeTypeError(_, _)]);
     }
 
 
