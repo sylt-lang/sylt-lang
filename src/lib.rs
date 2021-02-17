@@ -635,11 +635,10 @@ pub struct Block {
     ops: Vec<Op>,
     last_line_offset: usize,
     line_offsets: HashMap<usize, usize>,
-    line: usize,
 }
 
 impl Block {
-    fn new(name: &str, file: &Path, line: usize) -> Self {
+    fn new(name: &str, file: &Path) -> Self {
         Self {
             ty: Type::Void,
             upvalues: Vec::new(),
@@ -648,7 +647,6 @@ impl Block {
             ops: Vec::new(),
             last_line_offset: 0,
             line_offsets: HashMap::new(),
-            line,
         }
     }
 

@@ -719,10 +719,10 @@ impl Compiler {
 
         let mut args = Vec::new();
         let mut return_type = Type::Void;
-        let mut function_block = Block::new(&name, &self.current_file, self.line());
+        let mut function_block = Block::new(&name, &self.current_file);
 
         let block_id = self.blocks.len();
-        let temp_block = Block::new(&name, &self.current_file, self.line());
+        let temp_block = Block::new(&name, &self.current_file);
         self.blocks.push(Rc::new(RefCell::new(temp_block)));
 
         let _ret = push_frame!(self, function_block, {
@@ -1389,7 +1389,7 @@ impl Compiler {
             mutable: true,
         });
 
-        let mut block = Block::new(name, file, 0);
+        let mut block = Block::new(name, file);
         while self.peek() != Token::EOF {
             self.statement(&mut block);
             expect!(self, Token::Newline | Token::EOF, "Expect newline or EOF after expression.");
