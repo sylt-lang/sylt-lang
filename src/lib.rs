@@ -626,17 +626,23 @@ mod op {
 }
 
 #[derive(Debug)]
+enum BlockLinkState {
+    Linked,
+    Unlinked,
+    Nothing,
+}
+
+#[derive(Debug)]
 pub struct Block {
     pub ty: Type,
     upvalues: Vec<(usize, bool, Type)>,
+    linking: BlockLinkState,
 
     pub name: String,
     pub file: PathBuf,
     ops: Vec<Op>,
     last_line_offset: usize,
     line_offsets: HashMap<usize, usize>,
-    linked: bool,
-    constant: bool,
 }
 
 impl Block {
@@ -644,14 +650,29 @@ impl Block {
         Self {
             ty: Type::Void,
             upvalues: Vec::new(),
+            linking: BlockLinkState::Nothing,
+
             name: String::from(name),
             file: file.to_owned(),
             ops: Vec::new(),
             last_line_offset: 0,
             line_offsets: HashMap::new(),
-            linked: false,
-            constant: false,
         }
+    }
+
+    fn mark_constant(&mut self) {
+        if self.upvalues.is_empty() {
+            return;
+        }
+        self.linking = BlockLinkState::Unlinked;
+    }
+
+    fn link(&mut self) {
+        self.linking = BlockLinkState::Linked;
+    }
+
+    fn needs_linking(&self) -> bool {
+        matches!(self.linking, BlockLinkState::Unlinked)
     }
 
     // Used to create empty functions.

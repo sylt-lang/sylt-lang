@@ -923,8 +923,7 @@ impl Compiler {
                 };
                 add_op(self, block, Op::Link(slot));
                 if let Value::Function(_, block) = &self.constants[slot] {
-                    let needs_linking = block.borrow().upvalues.len() != 0;
-                    block.borrow_mut().constant = needs_linking;
+                    block.borrow_mut().mark_constant();
                 } else {
                     unreachable!();
                 }

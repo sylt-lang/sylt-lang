@@ -557,7 +557,7 @@ impl VM {
                     Value::Function(_, block) => {
                         self.push(Value::Function(Vec::new(), block.clone()));
 
-                        if block.borrow().constant && !block.borrow().linked {
+                        if block.borrow().needs_linking() {
                             error!(self,
                                 ErrorKind::InvalidProgram,
                                 format!("Calling function '{}' before all captured variables are declared.",
@@ -676,7 +676,7 @@ impl VM {
             Op::Link(slot) => {
                 match self.constant(slot).clone() {
                     Value::Function(_, block) => {
-                        block.borrow_mut().linked = true;
+                        block.borrow_mut().link();
                     }
                     value => {
                         error!(self,
