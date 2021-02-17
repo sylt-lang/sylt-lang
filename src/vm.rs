@@ -630,6 +630,16 @@ impl VM {
                 }
             }
 
+            Op::AssignLocal(slot) => {
+                let slot = self.frame().stack_offset + slot;
+                let curr = Type::from(&self.stack[slot]);
+                let other = Type::from(self.pop());
+                if curr != other {
+                    error!(self, ErrorKind::TypeMismatch(curr, other),
+                           "Cannot assign to different type.");
+                }
+            }
+
             Op::Return => {
                 let a = self.pop();
                 let inner = self.frame().block.borrow();
@@ -818,6 +828,9 @@ mod tests {
                      i()
                  }",
                  [ErrorKind::ValueError(Op::Call(0), _)]);
+
+        test_string!(invalid_assign, "a := 1\na = 0.1\n",
+                 [ErrorKind::TypeMismatch(Type::Int, Type::Float)]);
 
         test_string!(wrong_params, "
                  f : fn -> int = fn a: int -> int {}",
