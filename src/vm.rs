@@ -432,7 +432,7 @@ impl VM {
                         let inner = block.borrow();
                         let args = inner.args();
                         if args.len() != num_args {
-                            error!(self, ErrorKind::ArgumentCount(num_args, args.len()));
+                            error!(self, ErrorKind::ArgumentCount(args.len(), num_args));
                         }
 
                         if self.print_blocks {
@@ -646,7 +646,7 @@ impl VM {
                 let ret = inner.ret();
                 if Type::from(&a) != *ret {
                     error!(self, ErrorKind::TypeMismatch(a.into(), ret.clone()),
-                           "Value match return type.");
+                           "Value does not match return type.");
                 }
             }
 
@@ -701,7 +701,7 @@ impl VM {
                         let inner = block.borrow();
                         let args = inner.args();
                         if args.len() != num_args {
-                            error!(self, ErrorKind::ArgumentCount(num_args, args.len()));
+                            error!(self, ErrorKind::ArgumentCount(args.len(), num_args));
                         }
 
                         let stack_args = &self.stack[self.stack.len() - args.len()..];

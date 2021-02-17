@@ -64,7 +64,7 @@ impl fmt::Display for ErrorKind {
                 let given = b
                     .iter()
                     .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
-                write!(f, "Argument types don't match, expected [{:?}] but got [{:?}]",
+                write!(f, "Argument types do not match, expected [{:?}] but got [{:?}]",
                        expected, given)
             }
             ErrorKind::IndexOutOfBounds(value, len, slot) => {
@@ -85,10 +85,10 @@ impl fmt::Display for ErrorKind {
                 write!(f, "Assertion failed")
             }
             ErrorKind::SyntaxError(line, token) => {
-                write!(f, "{} on line {} at token {:?}", "Syntax Error".bold(), line, token)
+                write!(f, "Syntax Error on line {} at token {:?}", line, token)
             }
             ErrorKind::Unreachable => {
-                write!(f, "{}", "Unreachable".bold())
+                write!(f, "Reached unreachable code.")
             }
             ErrorKind::InvalidProgram => {
                 write!(f, "{}", "[!!] Invalid program [!!]".bold())
