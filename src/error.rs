@@ -12,14 +12,20 @@ use crate::tokenizer::Token;
 #[derive(Debug, Clone)]
 pub enum ErrorKind {
     TypeError(Op, Vec<Type>),
+    TypeMismatch(Type, Type),
+    CannotInfer(Type, Type),
+    ArgumentType(Vec<Type>, Vec<Type>),
+    IndexError(Value, Type),
+
     /// (External function, parameters)
     ExternTypeMismatch(String, Vec<Type>),
     ValueError(Op, Vec<Value>),
+    UnkownField(Value, String),
+    ArgumentCount(usize, usize),
 
     /// (Indexed value, length, index)
     IndexOutOfBounds(Value, usize, usize),
 
-    /// Sanity checking errors
     AssertFailed,
     InvalidProgram,
     Unreachable,
@@ -68,6 +74,9 @@ impl fmt::Display for ErrorKind {
             }
             ErrorKind::InvalidProgram => {
                 write!(f, "{}", "[!!] Invalid program [!!]".bold())
+            }
+            _ => {
+                write!(f, "{}", "[!!] UNHANDLED ERROR")
             }
         }
     }
