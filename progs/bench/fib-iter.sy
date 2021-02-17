@@ -1,0 +1,14 @@
+// A fibonacci implementation that is a little
+// less awefull. But we run it 10000 times instead.
+j := 0
+for , j < 10000, j = j + 1 {
+    a := 0
+    b := 1
+
+    for i := 0, i < 50, i = i + 1 {
+        c := a
+        a = b
+        b = c + b
+    }
+    a <=> 12586269025
+}
