@@ -7,4 +7,4 @@ fib :: fn a:int -> int {
     ret fib(a - 1) + fib(a - 2)
 }
 // 23 is around where things start getting slow.
-fib(28) <=> 317811
+fib(23) <=> 28657
