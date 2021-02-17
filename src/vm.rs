@@ -480,8 +480,9 @@ impl VM {
             self.frame().block.borrow().ops[self.frame().ip]);
     }
 
-    // Initalizes the VM for running. Run cannot be called before this.
-    pub(crate) fn init(&mut self, prog: &Prog) {
+    /// Initalizes the VM for running. Run cannot be called before this.
+    /// You do not have to call this.
+    pub fn init(&mut self, prog: &Prog) {
         let block = Rc::clone(&prog.blocks[0]);
         self.blobs = prog.blobs.clone();
         self.constants = prog.constants.clone();
