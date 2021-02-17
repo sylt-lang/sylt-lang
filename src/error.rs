@@ -49,22 +49,40 @@ impl fmt::Display for ErrorKind {
                 let types = types
                     .iter()
                     .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
-                write!(f, "{} Cannot apply {:?} to types {}", "Type Error".bold(), op, types)
+                write!(f, "Cannot apply {:?} to types {}", op, types)
+            }
+            ErrorKind::TypeMismatch(a, b) => {
+                write!(f, "Expected '{:?}' and got '{:?}'.", a, b)
+            }
+            ErrorKind::CannotInfer(a, b) => {
+                write!(f, "Failed to infer type '{:?}' from '{:?}'.", a, b)
+            }
+            ErrorKind::ArgumentType(a, b) => {
+                let expected = a
+                    .iter()
+                    .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
+                let given = b
+                    .iter()
+                    .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
+                write!(f, "Argument types don't match, expected [{:?}] but got [{:?}]",
+                       expected, given)
             }
             ErrorKind::IndexOutOfBounds(value, len, slot) => {
-                write!(f, "{} for {:?} - length is {} but index is {}", "Index Error".bold(), value, len, slot)
+                write!(f, "Failed to index for {:?} - length is {} but index is {}",
+                       value, len, slot)
             }
             ErrorKind::ExternTypeMismatch(name, types) => {
-                write!(f, "{} Extern function '{}' doesn't accept argument(s) with type(s) {:?}", "Type Error".bold(), name, types)
+                write!(f, "Extern function '{}' doesn't accept argument(s) with type(s) {:?}",
+                       name, types)
             }
             ErrorKind::ValueError(op, values) => {
                 let values = values
                     .iter()
                     .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
-                write!(f, "{} Cannot apply {:?} to values {}", "Value Error".bold(), op, values)
+                write!(f, "Cannot apply {:?} to values {}", op, values)
             }
             ErrorKind::AssertFailed => {
-                write!(f, "{}", "Assertion failed".bold())
+                write!(f, "Assertion failed")
             }
             ErrorKind::SyntaxError(line, token) => {
                 write!(f, "{} on line {} at token {:?}", "Syntax Error".bold(), line, token)
@@ -75,8 +93,15 @@ impl fmt::Display for ErrorKind {
             ErrorKind::InvalidProgram => {
                 write!(f, "{}", "[!!] Invalid program [!!]".bold())
             }
-            _ => {
-                write!(f, "{}", "[!!] UNHANDLED ERROR")
+            ErrorKind::IndexError(value, slot) => {
+                write!(f, "Cannot index value '{:?}' with type '{:?}'.", value, slot)
+            }
+            ErrorKind::UnkownField(obj, field) => {
+                write!(f, "Cannot find field '{}' on {:?}", field, obj)
+            }
+            ErrorKind::ArgumentCount(expected, given) => {
+                write!(f, "Incorrect argument count, expected {} but got {}.",
+                       expected, given)
             }
         }
     }
