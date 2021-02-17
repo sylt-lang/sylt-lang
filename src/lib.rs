@@ -840,11 +840,6 @@ mod tests {
         assert_errs!(run_string("a :: 2\nq :: fn { a = 2 }\n", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
     }
 
-    #[test]
-    fn assign_to_constant_upvalue2() {
-        assert_errs!(run_string("a :: 2\nq :: fn { a = 2 }\n", true, Vec::new()), [ErrorKind::InvalidProgram]);
-    }
-
     macro_rules! test_multiple {
         ($mod:ident, $( $fn:ident : $prog:literal ),+ $( , )? ) => {
             mod $mod {
