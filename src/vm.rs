@@ -26,7 +26,7 @@ macro_rules! one_op {
         let b = $fun(&a);
         if b.is_nil() {
             $self.push(b);
-            error!($self, ErrorKind::RuntimeTypeError($op, vec![a]));
+            error!($self, ErrorKind::ValueError($op, vec![a]));
         }
         $self.push(b);
     };
@@ -38,7 +38,7 @@ macro_rules! two_op {
         let c = $fun(&a, &b);
         if c.is_nil() {
             $self.push(c);
-            error!($self, ErrorKind::RuntimeTypeError($op, vec![a, b]));
+            error!($self, ErrorKind::ValueError($op, vec![a, b]));
         }
         $self.push(c);
     };
@@ -301,7 +301,7 @@ impl VM {
                     }
                     (val, slot) => {
                         self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![val, slot]), String::from("Cannot index type"));
+                        error!(self, ErrorKind::ValueError(op, vec![val, slot]), String::from("Cannot index type"));
                     }
                 }
             }
@@ -313,7 +313,7 @@ impl VM {
                     let slot = ty.fields.get(field).unwrap().0;
                     self.push(values.borrow()[slot].clone());
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
+                    error!(self, ErrorKind::ValueError(op, vec![inst]));
                 }
             }
 
@@ -324,7 +324,7 @@ impl VM {
                     let slot = ty.fields.get(field).unwrap().0;
                     values.borrow_mut()[slot] = value;
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
+                    error!(self, ErrorKind::ValueError(op, vec![inst]));
                 }
             }
 
@@ -597,7 +597,7 @@ impl VM {
                     self.push(value);
                 } else {
                     self.push(Value::Nil);
-                    error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
+                    error!(self, ErrorKind::ValueError(op, vec![inst]));
                 }
             }
 
@@ -608,10 +608,10 @@ impl VM {
                 if let Value::Instance(ty, _) = inst {
                     let ty = &ty.fields.get(field).unwrap().1;
                     if ty != &Type::from(&value) {
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![Value::from(ty)]));
+                        error!(self, ErrorKind::ValueError(op, vec![inst]));
                     }
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
+                    error!(self, ErrorKind::ValueError(op, vec![inst]));
                 }
             }
 

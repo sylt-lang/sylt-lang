@@ -14,11 +14,12 @@ pub enum ErrorKind {
     TypeError(Op, Vec<Type>),
     /// (External function, parameters)
     ExternTypeMismatch(String, Vec<Type>),
-    RuntimeTypeError(Op, Vec<Value>),
+    ValueError(Op, Vec<Value>),
 
     /// (Indexed value, length, index)
     IndexOutOfBounds(Value, usize, usize),
 
+    /// Sanity checking errors
     AssertFailed,
     InvalidProgram,
     Unreachable,
@@ -50,11 +51,11 @@ impl fmt::Display for ErrorKind {
             ErrorKind::ExternTypeMismatch(name, types) => {
                 write!(f, "{} Extern function '{}' doesn't accept argument(s) with type(s) {:?}", "Type Error".bold(), name, types)
             }
-            ErrorKind::RuntimeTypeError(op, values) => {
+            ErrorKind::ValueError(op, values) => {
                 let values = values
                     .iter()
                     .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
-                write!(f, "{} Cannot apply {:?} to values {}", "Runtime Type Error".bold(), op, values)
+                write!(f, "{} Cannot apply {:?} to values {}", "Value Error".bold(), op, values)
             }
             ErrorKind::AssertFailed => {
                 write!(f, "{}", "Assertion failed".bold())
