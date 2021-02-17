@@ -730,9 +730,14 @@ mod tests {
     #[macro_export]
     macro_rules! assert_errs {
         ($result:expr, [ $( $kind:pat ),* ]) => {
-            eprintln!("{} => {:?}", stringify!($result), $result);
-            assert!(matches!(
-                $result.unwrap_err().as_slice(),
+            let errs = if let Err(errs) = $result {
+                errs
+            } else {
+                eprintln!("    PROGRAM SUCCEEDED, WHEN IT SHOULD FAIL!");
+                unreachable!();
+            };
+            if !matches!(
+                errs.as_slice(),
                 &[$($crate::error::Error {
                     kind: $kind,
                     file: _,
@@ -740,7 +745,19 @@ mod tests {
                     message: _,
                 },
                 )*]
-            ))
+            ) {
+                eprintln!("UNEXPECTED ERRORS");
+                eprint!("    GOT:  [");
+                for err in errs {
+                    eprint!(" ErrorKind::{:?} ", err.kind);
+                }
+                eprint!("]\n    WANT: [");
+                $(
+                eprint!(" {} ", stringify!($kind));
+                )*
+                eprintln!("]");
+                assert!(false);
+            }
         };
     }
 
@@ -821,6 +838,11 @@ mod tests {
     #[test]
     fn assign_to_constant_upvalue() {
         assert_errs!(run_string("a :: 2\nq :: fn { a = 2 }\n", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
+    }
+
+    #[test]
+    fn assign_to_constant_upvalue2() {
+        assert_errs!(run_string("a :: 2\nq :: fn { a = 2 }\n", true, Vec::new()), [ErrorKind::InvalidProgram]);
     }
 
     macro_rules! test_multiple {
