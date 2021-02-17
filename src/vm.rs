@@ -811,20 +811,20 @@ impl VM {
 mod tests {
     mod typing {
         use crate::error::ErrorKind;
-        use crate::test_string;
+        use crate::{test_string, Op, Type};
 
         test_string!(uncallable_type, "
                  f := fn i: int {
                      i()
                  }",
-                 [ErrorKind::TypeError(_, _)]);
+                 [ErrorKind::ValueError(Op::Call(0), _)]);
 
         test_string!(wrong_params, "
                  f : fn -> int = fn a: int -> int {}",
-                 [ErrorKind::TypeError(_, _), ErrorKind::TypeError(_, _)]);
+                 [ErrorKind::TypeMismatch(_, _), ErrorKind::TypeMismatch(Type::Void, Type::Int)]);
 
         test_string!(wrong_ret, "
                  f : fn -> int = fn {}",
-                 [ErrorKind::TypeError(_, _)]);
+                 [ErrorKind::TypeMismatch(_, _)]);
     }
 }
