@@ -26,7 +26,7 @@ macro_rules! one_op {
         let b = $fun(&a);
         if b.is_nil() {
             $self.push(b);
-            error!($self, ErrorKind::ValueError($op, vec![a]));
+            error!($self, ErrorKind::TypeError($op, vec![a.into()]));
         }
         $self.push(b);
     };
@@ -38,7 +38,7 @@ macro_rules! two_op {
         let c = $fun(&a, &b);
         if c.is_nil() {
             $self.push(c);
-            error!($self, ErrorKind::ValueError($op, vec![a, b]));
+            error!($self, ErrorKind::TypeError($op, vec![a.into(), b.into()]));
         }
         $self.push(c);
     };
