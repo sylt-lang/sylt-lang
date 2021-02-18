@@ -84,16 +84,16 @@ pub enum Type {
     String,
     Tuple(Vec<Type>),
     Function(Vec<Type>, Box<Type>),
-    Blob(usize),
-    BlobInstance(usize),
+    Blob(Rc<Blob>),
+    Instance(Rc<Blob>),
 }
 
 impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Type::Void, Type::Void) => true,
-            (Type::BlobInstance(a), Type::BlobInstance(b)) => a == b,
-            (Type::Blob(a), Type::Blob(b)) => a == b,
+            (Type::Instance(a), Type::Instance(b)) => *a == *b,
+            (Type::Blob(a), Type::Blob(b)) => *a == *b,
             (Type::Int, Type::Int) => true,
             (Type::Float, Type::Float) => true,
             (Type::Bool, Type::Bool) => true,
@@ -111,8 +111,8 @@ impl PartialEq for Type {
 impl From<&Value> for Type {
     fn from(value: &Value) -> Type {
         match value {
-            Value::BlobInstance(i, _) => Type::BlobInstance(*i),
-            Value::Blob(i) => Type::Blob(*i),
+            Value::Instance(b, _) => Type::Instance(Rc::clone(b)),
+            Value::Blob(b) => Type::Blob(Rc::clone(b)),
             Value::Tuple(v) => {
                 Type::Tuple(v.iter().map(|x| Type::from(x)).collect())
             }
@@ -136,8 +136,11 @@ impl From<&Type> for Value {
     fn from(ty: &Type) -> Self {
         match ty {
             Type::Void => Value::Nil,
-            Type::Blob(i) => Value::Blob(*i),
-            Type::BlobInstance(i) => Value::BlobInstance(*i, Rc::new(RefCell::new(Vec::new()))),
+            Type::Blob(b) => Value::Blob(Rc::clone(b)),
+            Type::Instance(b) => {
+                Value::Instance(Rc::clone(b),
+                    Rc::new(RefCell::new(Vec::new())))
+            }
             Type::Tuple(fields) => {
                 Value::Tuple(Rc::new(fields.iter().map(Value::from).collect()))
             }
@@ -163,8 +166,8 @@ impl From<Type> for Value {
 #[derive(Clone)]
 pub enum Value {
     Ty(Type),
-    Blob(usize),
-    BlobInstance(usize, Rc<RefCell<Vec<Value>>>),
+    Blob(Rc<Blob>),
+    Instance(Rc<Blob>, Rc<RefCell<Vec<Value>>>),
     Tuple(Rc<Vec<Value>>),
     Float(f64),
     Int(i64),
@@ -180,8 +183,8 @@ impl Debug for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Ty(ty) => write!(fmt, "(type {:?})", ty),
-            Value::Blob(i) => write!(fmt, "(blob {})", i),
-            Value::BlobInstance(i, v) => write!(fmt, "(inst {} {:?})", i, v),
+            Value::Blob(b) => write!(fmt, "(blob {})", b.name),
+            Value::Instance(b, v) => write!(fmt, "(inst {} {:?})", b.name, v),
             Value::Float(f) => write!(fmt, "(float {})", f),
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),
@@ -257,14 +260,22 @@ impl UpValue {
 
 #[derive(Debug, Clone)]
 pub struct Blob {
+    pub id: usize,
     pub name: String,
     /// Maps field names to their slot and type.
     pub fields: HashMap<String, (usize, Type)>,
 }
 
+impl PartialEq for Blob {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
 impl Blob {
-    fn new(name: &str) -> Self {
+    fn new(id: usize, name: &str) -> Self {
         Self {
+            id: id,
             name: String::from(name),
             fields: HashMap::new(),
         }
@@ -468,6 +479,12 @@ pub enum Op {
     ///
     /// Does not affect the stack.
     Define(usize),
+
+    /// Links the upvalues for the given constant
+    /// function. This updates the constant stack.
+    ///
+    /// Does not affect the stack.
+    Link(usize),
 
     /// Calls "something" with the given number
     /// of arguments. The callable value is
@@ -677,6 +694,8 @@ impl Block {
     pub fn debug_print(&self) {
         println!("     === {} ===", self.name.blue());
         for (i, s) in self.ops.iter().enumerate() {
+            // TODO(ed): This print should only do one call to print.
+            // Otherwise we can get race conditions in a single line.
             if self.line_offsets.contains_key(&i) {
                 print!("{:5} ", self.line_offsets[&i].red());
             } else {
@@ -713,7 +732,6 @@ impl Block {
 #[derive(Clone)]
 pub struct Prog {
     pub blocks: Vec<Rc<RefCell<Block>>>,
-    pub blobs: Vec<Rc<Blob>>,
     pub functions: Vec<RustFunction>,
     pub constants: Vec<Value>,
     pub strings: Vec<String>,
@@ -747,6 +765,7 @@ mod tests {
     use std::time::Duration;
     use std::sync::mpsc;
     use std::thread;
+    use owo_colors::OwoColorize;
 
     // Shamelessly stolen from https://github.com/rust-lang/rfcs/issues/2798
     pub fn panic_after<T, F>(d: Duration, f: F) -> T
@@ -762,10 +781,19 @@ mod tests {
             val
         });
 
-        match done_rx.recv_timeout(d) {
-            Ok(_) => handle.join().expect("Thread panicked"),
-            Err(_) => panic!("Thread took too long"),
-        }
+        let msg = match done_rx.recv_timeout(d) {
+            Ok(_) => {
+                return handle.join().expect("Thread panicked");
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                "Test took too long to complete"
+            },
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                "Test produced incorrect result"
+            },
+        };
+        println!("    #### {} ####", msg.red());
+        panic!(msg);
     }
 
     #[macro_export]
@@ -822,6 +850,12 @@ mod tests {
     fn assign_to_constant_upvalue() {
         assert_errs!(run_string("a :: 2\nq :: fn { a = 2 }\n", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
     }
+
+    #[test]
+    fn undefined_blob() {
+        assert_errs!(run_string("a :: B()\n", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
+    }
+
 
     macro_rules! test_multiple {
         ($mod:ident, $( $fn:ident : $prog:literal ),+ $( , )? ) => {
@@ -988,23 +1022,7 @@ b() <=> 2
 b() <=> 3
 
 a() <=> 4
-"
-
-        //TODO this tests doesn't terminate in proper time if we print blocks and ops
-                    /*
-        fibonacci: "fibonacci : fn int -> int = fn n: int -> int {
-                      if n == 0 {
-                        ret 0
-                      } else if n == 1 {
-                        ret 1
-                      } else if n < 0 {
-                        <!>
-                      }
-                      ret fibonacci(n - 1) + fibonacci(n - 2)
-                    }
-                    fibonacci(10) <=> 55
-                    fibonacci(20) <=> 6765"
-                    */
+",
     );
 
     test_multiple!(
@@ -1029,7 +1047,11 @@ a() <=> 4
                           a.a = 2
                           a.b = 3
                           a.a + a.b <=> 5
-                          5 <=> a.a + a.b"
+                          5 <=> a.a + a.b",
+        blob_infer: "
+blob A { }
+a : A = A()
+",
     );
 
     test_multiple!(tuples,
@@ -1172,5 +1194,95 @@ a := 0
 }
 a <=> -1
 ",
+    );
+
+    test_multiple!(
+        declaration_order,
+        blob_simple: "
+a := A()
+
+blob A {
+    a: int
+}
+",
+
+        blob_complex: "
+a := A()
+b := B()
+c := C()
+b2 := B()
+
+blob A {
+    c: C
+}
+blob C { }
+blob B { }
+",
+
+        blob_infer: "
+blob A { }
+
+a : A = A()
+",
+
+
+        constant_function: "
+a()
+a :: fn {}
+",
+
+        constant_function_complex: "
+h :: fn -> int {
+    ret 3
+}
+
+a() <=> 3
+
+k :: fn -> int {
+    ret h()
+}
+
+a :: fn -> int {
+    ret q()
+}
+
+q :: fn -> int {
+    ret k()
+}
+",
+
+        constant_function_closure: "
+q := 1
+
+f :: fn -> int {
+    q += 1
+    ret q
+}
+
+f() <=> 2
+f() <=> 3
+f() <=> 4
+f() <=> 5
+",
+
+        constants_in_inner_functions: "
+q : int = 0
+
+f :: fn -> fn -> {
+    g :: fn {
+        q += 1
+    }
+    ret g
+}
+
+g := f()
+g()
+q <=> 1
+g()
+q <=> 2
+g()
+q <=> 3
+",
+
     );
 }

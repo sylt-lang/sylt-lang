@@ -1,6 +1,6 @@
 use std::{borrow::Cow, path::{Path, PathBuf}};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map::Entry};
 use std::rc::Rc;
 
 use crate::{Blob, Block, Op, Prog, RustFunction, Type, Value};
@@ -228,7 +228,8 @@ pub(crate) struct Compiler {
     errors: Vec<Error>,
 
     blocks: Vec<Rc<RefCell<Block>>>,
-    blobs: Vec<Blob>,
+    blob_id: usize,
+    unknown: HashMap<String, (usize, usize)>,
 
     functions: HashMap<String, (usize, RustFunction)>,
     constants: Vec<Value>,
@@ -290,7 +291,8 @@ impl Compiler {
             errors: vec![],
 
             blocks: Vec::new(),
-            blobs: Vec::new(),
+            blob_id: 0,
+            unknown: HashMap::new(),
 
             functions: HashMap::new(),
 
@@ -307,6 +309,12 @@ impl Compiler {
                     Value::Nil => Some(i),
                     _ => None,
                 }).unwrap()
+    }
+
+    fn new_blob_id(&mut self) -> usize {
+        let id = self.blob_id;
+        self.blob_id += 1;
+        id
     }
 
     fn add_constant(&mut self, value: Value) -> usize {
@@ -353,15 +361,20 @@ impl Compiler {
     }
 
     fn error(&mut self, kind: ErrorKind, message: Option<String>) {
+        self.error_on_line(kind, self.line(), message);
+    }
+
+    fn error_on_line(&mut self, kind: ErrorKind, line: usize, message: Option<String>) {
         if self.panic { return }
         self.panic = true;
         self.errors.push(Error {
             kind,
             file: self.current_file.clone(),
-            line: self.line(),
+            line,
             message,
         });
     }
+
 
     fn peek(&self) -> Token {
         self.peek_at(0)
@@ -560,7 +573,7 @@ impl Compiler {
     /// Entry point for all expression parsing.
     fn expression(&mut self, block: &mut Block) {
         match self.peek_four() {
-            (Token::Fn, ..) => self.function(block),
+            (Token::Fn, ..) => { self.function(block, None); },
             _ => self.parse_precedence(block, Prec::No),
         }
     }
@@ -611,10 +624,19 @@ impl Compiler {
         Self::find_and_capture_variable(name, self.frames.iter_mut().rev())
     }
 
-    fn find_blob(&self, name: &str) -> Option<usize> {
-        self.blobs.iter().enumerate()
-            .find(|(_, x)| x.name == name)
-            .map(|(i, _)| i)
+    fn find_constant(&mut self, name: &str) -> usize {
+        let res = self.constants.iter().enumerate().find_map(|(i, x)| match x {
+            Value::Blob(b) if b.name == name => Some(i),
+            Value::Function(_, b) if b.borrow().name == name => Some(i),
+            _ => None,
+        });
+        if let Some(res) = res {
+            return res;
+        }
+        let constant = self.add_constant(Value::Nil);
+        let line = self.line();
+        let entry = self.unknown.entry(name.to_string());
+        entry.or_insert((constant, line)).0
     }
 
     fn call(&mut self, block: &mut Block) {
@@ -671,9 +693,6 @@ impl Compiler {
                         break;
                     }
                 }
-                if !self.panic {
-                    println!("LINE {} -- ", self.line());
-                }
             }
 
             _ => {
@@ -685,11 +704,13 @@ impl Compiler {
     }
 
     // TODO(ed): de-complexify
-    fn function(&mut self, block: &mut Block) {
+    fn function(&mut self, block: &mut Block, name: Option<&str>) {
         expect!(self, Token::Fn, "Expected 'fn' at start of function.");
 
         let top = self.stack().len() - 1;
-        let name = if !self.stack()[top].active {
+        let name = if let Some(name) = name {
+            Cow::Owned(String::from(name))
+        } else if !self.stack()[top].active {
             self.stack_mut()[top].active = true;
             Cow::Borrowed(&self.stack()[top].name)
         } else {
@@ -769,8 +790,11 @@ impl Compiler {
         let function_block = Rc::new(RefCell::new(function_block));
 
 
-        let constant = self.add_constant(Value::Function(Vec::new(), Rc::clone(&function_block)));
+        // Note(ed): We deliberately add the constant as late as possible.
+        // This behaviour is used in `constant_statement`.
+        let function = Value::Function(Vec::new(), Rc::clone(&function_block));
         self.blocks[block_id] = function_block;
+        let constant = self.add_constant(function);
         add_op(self, block, Op::Constant(constant));
     }
 
@@ -779,6 +803,16 @@ impl Compiler {
             Token::Identifier(name) => name,
             _ => unreachable!(),
         };
+
+        // Global functions take precedence
+        if let Some(slot) = self.find_extern_function(&name) {
+            let string = self.add_constant(Value::ExternFunction(slot));
+            add_op(self, block, Op::Constant(string));
+            self.call(block);
+            return;
+        }
+
+        // Variables
         if let Some(var) = self.find_variable(&name) {
             if var.upvalue {
                 add_op(self, block, Op::ReadUpvalue(var.slot));
@@ -794,27 +828,22 @@ impl Compiler {
                             add_op(self, block, Op::Get(string));
                         } else {
                             error!(self, "Expected fieldname after '.'.");
-                            break;
+                            return;
                         }
                     }
                     _ => {
                         if !parse_branch!(self, block, self.call(block)) {
-                            break
+                            return;
                         }
                     }
                 }
             }
-        } else if let Some(blob) = self.find_blob(&name) {
-            let string = self.add_constant(Value::Blob(blob));
-            add_op(self, block, Op::Constant(string));
-            parse_branch!(self, block, self.call(block));
-        } else if let Some(slot) = self.find_extern_function(&name) {
-            let string = self.add_constant(Value::ExternFunction(slot));
-            add_op(self, block, Op::Constant(string));
-            self.call(block);
-        } else {
-            error!(self, format!("Using undefined variable {}.", name));
         }
+
+        // Blobs - Always returns a blob since it's filled in if it isn't used.
+        let con = self.find_constant(&name);
+        add_op(self, block, Op::Constant(con));
+        parse_branch!(self, block, self.call(block));
     }
 
     fn define_variable(&mut self, name: &str, typ: Type, _block: &mut Block) -> Result<usize, ()> {
@@ -879,6 +908,23 @@ impl Compiler {
     }
 
     fn constant_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
+        // Magical global constants
+        if self.frames.len() <= 1 {
+            if parse_branch!(self, block, self.function(block, Some(name))) {
+                // Remove the function, since it's a constant and we already
+                // added it.
+                block.ops.pop().unwrap();
+                if let Entry::Occupied(entry) = self.unknown.entry(String::from(name)) {
+                    let (_, (slot, _)) = entry.remove_entry();
+                    self.constants[slot] = self.constants.pop().unwrap();
+                    add_op(self, block, Op::Link(slot));
+                } else {
+                    add_op(self, block, Op::Link(self.constants.len() - 1));
+                }
+                return;
+            }
+        }
+
         let slot = self.define_constant(name, typ.clone(), block);
         self.expression(block);
 
@@ -1085,7 +1131,17 @@ impl Compiler {
                     "float" => Ok(Type::Float),
                     "bool" => Ok(Type::Bool),
                     "str" => Ok(Type::String),
-                    x => self.find_blob(x).map(|blob| Type::BlobInstance(blob)).ok_or(()),
+                    x => {
+                        let blob = self.find_constant(x);
+                        if let Value::Blob(blob) = &self.constants[blob] {
+                            Ok(Type::Instance(Rc::clone(blob)))
+                        } else {
+                            // TODO(ed): This is kinda bad. If the type cannot
+                            // be found it tries to infer it during runtime
+                            // and doesn't verify it.
+                            Ok(Type::Unknown)
+                        }
+                    }
                 }
             }
             _ => Err(()),
@@ -1103,7 +1159,7 @@ impl Compiler {
 
         expect!(self, Token::LeftBrace, "Expected 'blob' body. AKA '{'.");
 
-        let mut blob = Blob::new(&name);
+        let mut blob = Blob::new(self.new_blob_id(), &name);
         loop {
             if matches!(self.peek(), Token::EOF | Token::RightBrace) { break; }
             if matches!(self.peek(), Token::Newline) { self.eat(); continue; }
@@ -1131,7 +1187,13 @@ impl Compiler {
 
         expect!(self, Token::RightBrace, "Expected '}' after 'blob' body. AKA '}'.");
 
-        self.blobs.push(blob);
+        let blob = Value::Blob(Rc::new(blob));
+        if let Entry::Occupied(entry) = self.unknown.entry(name) {
+            let (_, (slot, _)) = entry.remove_entry();
+            self.constants[slot] = blob;
+        } else {
+            self.constants.push(blob);
+        }
     }
 
     fn blob_field(&mut self, block: &mut Block) {
@@ -1336,12 +1398,23 @@ impl Compiler {
         add_op(self, &mut block, Op::Return);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
 
+        if self.unknown.len() != 0 {
+            let errors: Vec<_> = self.unknown.iter().map(|(name, (_, line))|
+                (ErrorKind::SyntaxError(*line, Token::Identifier(name.clone())),
+                 *line,
+                 format!("Usage of undefined value: '{}'.", name,)
+                ))
+                .collect();
+            for (e, l, m) in errors.iter() {
+                self.error_on_line(e.clone(), *l, Some(m.clone()));
+            }
+        }
+
         self.blocks.insert(0, Rc::new(RefCell::new(block)));
 
         if self.errors.is_empty() {
             Ok(Prog {
                 blocks: self.blocks.clone(),
-                blobs: self.blobs.iter().map(|x| Rc::new(x.clone())).collect(),
                 functions: functions.iter().map(|(_, f)| *f).collect(),
                 constants: self.constants.clone(),
                 strings: self.strings.clone(),
