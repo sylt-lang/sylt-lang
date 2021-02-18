@@ -733,7 +733,7 @@ mod tests {
             let errs = if let Err(errs) = $result {
                 errs
             } else {
-                eprintln!("    PROGRAM SUCCEEDED, WHEN IT SHOULD FAIL!");
+                eprintln!("    Program succeeded when it should've failed");
                 unreachable!();
             };
             if !matches!(
@@ -746,12 +746,12 @@ mod tests {
                 },
                 )*]
             ) {
-                eprintln!("UNEXPECTED ERRORS");
-                eprint!("    GOT:  [");
+                eprintln!("Unexpected errors");
+                eprint!("    Got:  [");
                 for err in errs {
                     eprint!(" ErrorKind::{:?} ", err.kind);
                 }
-                eprint!("]\n    WANT: [");
+                eprint!("]\n    Want: [");
                 $(
                 eprint!(" {} ", stringify!($kind));
                 )*
@@ -797,7 +797,7 @@ mod tests {
                             for e in errs.iter() {
                                 println!("{}", e);
                             }
-                            eprintln!("  {} - FAILED\n", stringify!($fn));
+                            eprintln!("  {} - failed\n", stringify!($fn));
                             unreachable!();
                         }
                     }
