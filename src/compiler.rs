@@ -394,7 +394,7 @@ impl Compiler {
         &mut self.frames[last]
     }
 
-    /// Marks a variable as read, also marks upvalues.
+    /// Marks a variable as read. Also marks upvalues.
     fn mark_read(&mut self, frame_id: usize, var: &Variable) {
         // Early out
         if var.read {
