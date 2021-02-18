@@ -557,6 +557,13 @@ impl VM {
                     Value::Function(_, block) => {
                         self.push(Value::Function(Vec::new(), block.clone()));
 
+                        if block.borrow().needs_linking() {
+                            error!(self,
+                                ErrorKind::InvalidProgram,
+                                format!("Calling function '{}' before all captured variables are declared.",
+                                    block.borrow().name));
+                        }
+
                         let mut types = Vec::new();
                         for (slot, is_up, ty) in block.borrow().upvalues.iter() {
                             if *is_up {
@@ -667,10 +674,10 @@ impl VM {
             }
 
             Op::Link(slot) => {
-                println!("{:?}", self.constants);
-                println!("{:?} - {}", self.constant(slot), slot);
                 match self.constant(slot).clone() {
-                    Value::Function(_, _) => {}
+                    Value::Function(_, block) => {
+                        block.borrow_mut().link();
+                    }
                     value => {
                         error!(self,
                             ErrorKind::TypeError(op, vec![Type::from(&value)]),
@@ -733,7 +740,7 @@ impl VM {
                     }
                     _ => {
                         error!(self,
-                            ErrorKind::TypeError(op, vec![Type::from(&self.stack[new_base])]),
+                            ErrorKind::InvalidProgram,
                             format!("Tried to call non-function {:?}", self.stack[new_base]));
                     }
                 }
@@ -773,7 +780,7 @@ impl VM {
         });
 
         if self.print_blocks {
-            println!("\n    [[{}]]\n", "TYPECHECK".purple());
+            println!("\n    [[{} - {}]]\n", "TYPECHECKING".purple(), self.frame().block.borrow().name);
             self.frame().block.borrow().debug_print();
         }
 
@@ -833,7 +840,7 @@ mod tests {
                      i()
                  }
                  f",
-                 [ErrorKind::TypeError(_, _)]);
+                 [ErrorKind::InvalidProgram]);
 
         test_string!(wrong_params, "
                  f : fn -> int = fn a: int -> int {}

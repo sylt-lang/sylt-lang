@@ -796,10 +796,10 @@ impl Compiler {
 
         let mut args = Vec::new();
         let mut return_type = Type::Void;
-        let mut function_block = Block::new(&name, &self.current_file, self.line());
+        let mut function_block = Block::new(&name, &self.current_file);
 
         let block_id = self.blocks.len();
-        let temp_block = Block::new(&name, &self.current_file, self.line());
+        let temp_block = Block::new(&name, &self.current_file);
         self.blocks.push(Rc::new(RefCell::new(temp_block)));
 
         let _ret = push_frame!(self, function_block, {
@@ -961,12 +961,18 @@ impl Compiler {
                 // Remove the function, since it's a constant and we already
                 // added it.
                 block.ops.pop().unwrap();
-                if let Entry::Occupied(entry) = self.unknown.entry(String::from(name)) {
+                let slot = if let Entry::Occupied(entry) = self.unknown.entry(String::from(name)) {
                     let (_, (slot, _)) = entry.remove_entry();
                     self.constants[slot] = self.constants.pop().unwrap();
-                    add_op(self, block, Op::Link(slot));
+                    slot
                 } else {
-                    add_op(self, block, Op::Link(self.constants.len() - 1));
+                    self.constants.len() - 1
+                };
+                add_op(self, block, Op::Link(slot));
+                if let Value::Function(_, block) = &self.constants[slot] {
+                    block.borrow_mut().mark_constant();
+                } else {
+                    unreachable!();
                 }
                 return;
             }
@@ -1428,7 +1434,7 @@ impl Compiler {
         let main = Variable::new("/main/", false, Type::Void);
         let _ = self.define(main);
 
-        let mut block = Block::new(name, file, 0);
+        let mut block = Block::new(name, file);
         while self.peek() != Token::EOF {
             self.statement(&mut block);
             expect!(self, Token::Newline | Token::EOF,

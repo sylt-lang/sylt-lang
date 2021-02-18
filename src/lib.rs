@@ -151,7 +151,7 @@ impl From<&Type> for Value {
             Type::String => Value::String(Rc::new("".to_string())),
             Type::Function(_, _) => Value::Function(
                 Vec::new(),
-                Rc::new(RefCell::new(Block::empty_with_type(ty)))),
+                Rc::new(RefCell::new(Block::stubbed_block(ty)))),
         }
     }
 }
@@ -626,35 +626,58 @@ mod op {
 }
 
 #[derive(Debug)]
+enum BlockLinkState {
+    Linked,
+    Unlinked,
+    Nothing,
+}
+
+#[derive(Debug)]
 pub struct Block {
     pub ty: Type,
     upvalues: Vec<(usize, bool, Type)>,
+    linking: BlockLinkState,
 
     pub name: String,
     pub file: PathBuf,
     ops: Vec<Op>,
     last_line_offset: usize,
     line_offsets: HashMap<usize, usize>,
-    line: usize,
 }
 
 impl Block {
-    fn new(name: &str, file: &Path, line: usize) -> Self {
+    fn new(name: &str, file: &Path) -> Self {
         Self {
             ty: Type::Void,
             upvalues: Vec::new(),
+            linking: BlockLinkState::Nothing,
+
             name: String::from(name),
             file: file.to_owned(),
             ops: Vec::new(),
             last_line_offset: 0,
             line_offsets: HashMap::new(),
-            line,
         }
     }
 
+    fn mark_constant(&mut self) {
+        if self.upvalues.is_empty() {
+            return;
+        }
+        self.linking = BlockLinkState::Unlinked;
+    }
+
+    fn link(&mut self) {
+        self.linking = BlockLinkState::Linked;
+    }
+
+    fn needs_linking(&self) -> bool {
+        matches!(self.linking, BlockLinkState::Unlinked)
+    }
+
     // Used to create empty functions.
-    fn empty_with_type(ty: &Type) -> Self {
-        let mut block = Block::new("/empty/", Path::new(""), 0);
+    fn stubbed_block(ty: &Type) -> Self {
+        let mut block = Block::new("/empty/", Path::new(""));
         block.ty = ty.clone();
         block
     }
@@ -854,6 +877,21 @@ mod tests {
     #[test]
     fn undefined_blob() {
         assert_errs!(run_string("a :: B()\n", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
+    }
+
+    #[test]
+    fn call_before_link() {
+        let prog = "
+a := 1
+f()
+c := 5
+
+f :: fn {
+    c <=> 5
+}
+a
+        ";
+        assert_errs!(run_string(prog, true, Vec::new()), [ErrorKind::InvalidProgram, ErrorKind::RuntimeTypeError(_, _)]);
     }
 
     #[test]
