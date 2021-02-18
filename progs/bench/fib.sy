@@ -1,4 +1,4 @@
-// The worst implementation of fibonacci calculations
+// The worst implementation of Fibonacci calculations
 // possible. FYI, it can be done in constant time.
 fib :: fn a:int -> int {
     if a < 2 {

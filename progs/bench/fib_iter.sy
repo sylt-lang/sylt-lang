@@ -1,5 +1,5 @@
-// A fibonacci implementation that is a little
-// less awefull. But we run it 1000 times instead.
+// A Fibonacci implementation that is a little
+// less awful. But we run it 1000 times instead.
 j := 0
 for , j < 1000, j = j + 1 {
     a := 0
