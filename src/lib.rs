@@ -871,7 +871,7 @@ mod tests {
 
     #[test]
     fn assign_to_constant_upvalue() {
-        assert_errs!(run_string("a :: 2\nq :: fn { a = 2 }\n", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
+        assert_errs!(run_string("a :: 2\nq :: fn { a = 2 }\nq()\na", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
     }
 
     #[test]
@@ -889,10 +889,25 @@ c := 5
 f :: fn {
     c <=> 5
 }
+a
         ";
         assert_errs!(run_string(prog, true, Vec::new()), [ErrorKind::InvalidProgram, ErrorKind::RuntimeTypeError(_, _)]);
     }
 
+    #[test]
+    fn unused_variable() {
+        assert_errs!(run_string("a := 1", true, Vec::new()), [ErrorKind::SyntaxError(1, _)]);
+    }
+
+    #[test]
+    fn unused_upvalue() {
+        assert_errs!(run_string("a := 1\nf :: fn { a = 2 }\nf()", true, Vec::new()), [ErrorKind::SyntaxError(1, _)]);
+    }
+
+    #[test]
+    fn unused_function() {
+        assert_errs!(run_string("a := 1\nf := fn { a }\n", true, Vec::new()), [ErrorKind::SyntaxError(2, _)]);
+    }
 
     macro_rules! test_multiple {
         ($mod:ident, $( $fn:ident : $prog:literal ),+ $( , )? ) => {
@@ -1066,7 +1081,8 @@ a() <=> 4
         blob,
         simple: "blob A {}",
         instantiate: "blob A {}
-                      a := A()",
+                      a := A()
+                      a",
         field: "blob A { a: int }",
         field_assign: "blob A { a: int }
                        a := A()
@@ -1088,6 +1104,7 @@ a() <=> 4
         blob_infer: "
 blob A { }
 a : A = A()
+a
 ",
     );
 
@@ -1095,8 +1112,8 @@ a : A = A()
         add: "(1, 2, 3, 4) + (4, 3, 2, 1) <=> (5, 5, 5, 5)",
         sub: "(1, -2, 3, -4) - (4, 3, -2, -1) <=> (-3, 1, 1, -5)",
         mul: "(0, 1, 2) * (2, 3, 4) <=> (0, 3, 8)",
-        types: "a: (int, float, int) = (1, 1., 1)",
-        more_types: "a: (str, bool, int) = (\"abc\", true, 1)",
+        types: "a: (int, float, int) = (1, 1., 1)\na",
+        more_types: "a: (str, bool, int) = (\"abc\", true, 1)\na",
     );
 
     test_file!(scoping, "progs/tests/scoping.sy");
@@ -1201,6 +1218,7 @@ a <=> 1
 b := 2
 {
     a <=> 1
+    b <=> 2
 }",
     );
 
@@ -1211,6 +1229,7 @@ a := 0
 b := 99999
 a += 1
 a <=> 1
+b <=> 99999
 ",
 
         simple_sub: "
@@ -1218,6 +1237,7 @@ a := 0
 b := 99999
 a -= 1
 a <=> -1
+b <=> 99999
 ",
 
         strange: "
@@ -1237,6 +1257,7 @@ a <=> -1
         declaration_order,
         blob_simple: "
 a := A()
+a
 
 blob A {
     a: int
@@ -1249,6 +1270,11 @@ b := B()
 c := C()
 b2 := B()
 
+a
+b
+c
+b2
+
 blob A {
     c: C
 }
@@ -1260,6 +1286,7 @@ blob B { }
 blob A { }
 
 a : A = A()
+a
 ",
 
 
@@ -1322,4 +1349,5 @@ q <=> 3
 ",
 
     );
+
 }
