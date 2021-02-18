@@ -20,7 +20,7 @@ pub enum ErrorKind {
     /// (External function, parameters)
     ExternTypeMismatch(String, Vec<Type>),
     ValueError(Op, Vec<Value>),
-    UnkownField(Value, String),
+    UnknownField(Value, String),
     ArgumentCount(usize, usize),
 
     /// (Indexed value, length, index)
@@ -96,7 +96,7 @@ impl fmt::Display for ErrorKind {
             ErrorKind::IndexError(value, slot) => {
                 write!(f, "Cannot index value '{:?}' with type '{:?}'.", value, slot)
             }
-            ErrorKind::UnkownField(obj, field) => {
+            ErrorKind::UnknownField(obj, field) => {
                 write!(f, "Cannot find field '{}' on {:?}", field, obj)
             }
             ErrorKind::ArgumentCount(expected, given) => {

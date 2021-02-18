@@ -313,7 +313,7 @@ impl VM {
                     let slot = ty.fields.get(field).unwrap().0;
                     self.push(values.borrow()[slot].clone());
                 } else {
-                    error!(self, ErrorKind::UnkownField(inst, field.clone()));
+                    error!(self, ErrorKind::UnknownField(inst, field.clone()));
                 }
             }
 
@@ -324,7 +324,7 @@ impl VM {
                     let slot = ty.fields.get(field).unwrap().0;
                     values.borrow_mut()[slot] = value;
                 } else {
-                    error!(self, ErrorKind::UnkownField(inst, field.clone()));
+                    error!(self, ErrorKind::UnknownField(inst, field.clone()));
                 }
             }
 
@@ -592,7 +592,7 @@ impl VM {
                 } else {
                     let field = field.clone();
                     self.push(Value::Nil);
-                    error!(self, ErrorKind::UnkownField(inst, field));
+                    error!(self, ErrorKind::UnknownField(inst, field));
                 }
             }
 
@@ -608,7 +608,7 @@ impl VM {
                                "Types of field and variable do not match.");
                     }
                 } else {
-                    error!(self, ErrorKind::UnkownField(inst, field.clone()));
+                    error!(self, ErrorKind::UnknownField(inst, field.clone()));
                 }
             }
 
