@@ -605,7 +605,7 @@ impl VM {
                     let expected = Type::from(&value);
                     if ty != &expected {
                         error!(self, ErrorKind::TypeMismatch(expected, ty.clone()),
-                               "Field and variables type deosn't match.");
+                               "Types of field and variable do not match.");
                     }
                 } else {
                     error!(self, ErrorKind::UnkownField(inst, field.clone()));
@@ -662,7 +662,7 @@ impl VM {
                         if top_type != Type::Unknown => {}
                     (a, b) if a != &b => {
                         error!(self, ErrorKind::TypeMismatch(a.clone(), b.clone()),
-                               "Cannot assign missmatching types.");
+                               "Cannot assign mismatching types.");
                     }
                     _ => {}
                 }
