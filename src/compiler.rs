@@ -281,7 +281,7 @@ macro_rules! push_frame {
                     $compiler.error_on_line(
                         e,
                         var.line,
-                        Some(format!("Usage of undefined value: '{}'.", var.name))
+                        Some(format!("Unused value '{}'.", var.name))
                     );
                 }
                 $compiler.panic = false;
