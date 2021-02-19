@@ -809,7 +809,7 @@ mod tests {
                 "Test produced incorrect result"
             },
         };
-        println!("    #### {} ####", msg.red());
+        eprintln!("    #### {} ####", msg.red());
         panic!(msg);
     }
 
@@ -823,7 +823,7 @@ mod tests {
                         Ok(()) => {},
                         Err(errs) => {
                             for e in errs.iter() {
-                                println!("{}", e);
+                                eprintln!("{}", e);
                             }
                             eprintln!("  {} - failed\n", stringify!($fn));
                             unreachable!();
