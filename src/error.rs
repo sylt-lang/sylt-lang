@@ -12,9 +12,16 @@ use crate::tokenizer::Token;
 #[derive(Debug, Clone)]
 pub enum ErrorKind {
     TypeError(Op, Vec<Type>),
+    TypeMismatch(Type, Type),
+    CannotInfer(Type, Type),
+    ArgumentType(Vec<Type>, Vec<Type>),
+    IndexError(Value, Type),
+
     /// (External function, parameters)
     ExternTypeMismatch(String, Vec<Type>),
-    RuntimeTypeError(Op, Vec<Value>),
+    ValueError(Op, Vec<Value>),
+    UnknownField(Value, String),
+    ArgumentCount(usize, usize),
 
     /// (Indexed value, length, index)
     IndexOutOfBounds(Value, usize, usize),
@@ -42,31 +49,59 @@ impl fmt::Display for ErrorKind {
                 let types = types
                     .iter()
                     .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
-                write!(f, "{} Cannot apply {:?} to types {}", "Type Error".bold(), op, types)
+                write!(f, "Cannot apply {:?} to types {}", op, types)
+            }
+            ErrorKind::TypeMismatch(a, b) => {
+                write!(f, "Expected '{:?}' and got '{:?}'.", a, b)
+            }
+            ErrorKind::CannotInfer(a, b) => {
+                write!(f, "Failed to infer type '{:?}' from '{:?}'.", a, b)
+            }
+            ErrorKind::ArgumentType(a, b) => {
+                let expected = a
+                    .iter()
+                    .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
+                let given = b
+                    .iter()
+                    .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
+                write!(f, "Argument types do not match, expected [{:?}] but got [{:?}]",
+                       expected, given)
             }
             ErrorKind::IndexOutOfBounds(value, len, slot) => {
-                write!(f, "{} for {:?} - length is {} but index is {}", "Index Error".bold(), value, len, slot)
+                write!(f, "Failed to index for {:?} - length is {} but index is {}",
+                       value, len, slot)
             }
             ErrorKind::ExternTypeMismatch(name, types) => {
-                write!(f, "{} Extern function '{}' doesn't accept argument(s) with type(s) {:?}", "Type Error".bold(), name, types)
+                write!(f, "Extern function '{}' doesn't accept argument(s) with type(s) {:?}",
+                       name, types)
             }
-            ErrorKind::RuntimeTypeError(op, values) => {
+            ErrorKind::ValueError(op, values) => {
                 let values = values
                     .iter()
                     .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
-                write!(f, "{} Cannot apply {:?} to values {}", "Runtime Type Error".bold(), op, values)
+                write!(f, "Cannot apply {:?} to values {}", op, values)
             }
             ErrorKind::AssertFailed => {
-                write!(f, "{}", "Assertion failed".bold())
+                write!(f, "Assertion failed")
             }
             ErrorKind::SyntaxError(line, token) => {
-                write!(f, "{} on line {} at token {:?}", "Syntax Error".bold(), line, token)
+                write!(f, "Syntax Error on line {} at token {:?}", line, token)
             }
             ErrorKind::Unreachable => {
-                write!(f, "{}", "Unreachable".bold())
+                write!(f, "Reached unreachable code.")
             }
             ErrorKind::InvalidProgram => {
                 write!(f, "{}", "[!!] Invalid program [!!]".bold())
+            }
+            ErrorKind::IndexError(value, slot) => {
+                write!(f, "Cannot index value '{:?}' with type '{:?}'.", value, slot)
+            }
+            ErrorKind::UnknownField(obj, field) => {
+                write!(f, "Cannot find field '{}' on {:?}", field, obj)
+            }
+            ErrorKind::ArgumentCount(expected, given) => {
+                write!(f, "Incorrect argument count, expected {} but got {}.",
+                       expected, given)
             }
         }
     }
@@ -74,8 +109,9 @@ impl fmt::Display for ErrorKind {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let prompt = "*****".red();
         let message = match &self.message {
-            Some(s) => format!("\n{} {}", ">>>".red(), s),
+            Some(s) => format!("\n{} {}", prompt, s),
             None => String::from(""),
         };
 
@@ -87,7 +123,8 @@ impl fmt::Display for Error {
             String::new()
         };
 
-        write!(f, "\n<{}> {}:{} {}{}{}\n", "ERR".red(), self.file.display().blue(), self.line.blue(), self.kind, message, line)
+        write!(f, "\n {}  {}:{} \n{} {}{}{}\n", "ERR".red(),
+               self.file.display().blue(), self.line.blue(), prompt, self.kind, message, line)
     }
 }
 

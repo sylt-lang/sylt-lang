@@ -16,7 +16,7 @@ macro_rules! error {
         return Err($thing.error($kind, None));
     };
     ( $thing:expr, $kind:expr, $msg:expr) => {
-        return Err($thing.error($kind, Some($msg)));
+        return Err($thing.error($kind, Some(String::from($msg))));
     };
 }
 
@@ -26,7 +26,7 @@ macro_rules! one_op {
         let b = $fun(&a);
         if b.is_nil() {
             $self.push(b);
-            error!($self, ErrorKind::RuntimeTypeError($op, vec![a]));
+            error!($self, ErrorKind::TypeError($op, vec![a.into()]));
         }
         $self.push(b);
     };
@@ -38,7 +38,7 @@ macro_rules! two_op {
         let c = $fun(&a, &b);
         if c.is_nil() {
             $self.push(c);
-            error!($self, ErrorKind::RuntimeTypeError($op, vec![a, b]));
+            error!($self, ErrorKind::TypeError($op, vec![a.into(), b.into()]));
         }
         $self.push(c);
     };
@@ -280,7 +280,7 @@ impl VM {
                         Value::Function(ups, block)
                     },
                     value => error!(self,
-                        ErrorKind::RuntimeTypeError(op, vec![value.clone()]),
+                        ErrorKind::ValueError(op, vec![value.clone()]),
                         format!("Not a function {:?}.", value)),
                 };
                 self.constants[slot] = constant;
@@ -301,7 +301,7 @@ impl VM {
                     }
                     (val, slot) => {
                         self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![val, slot]), String::from("Cannot index type"));
+                        error!(self, ErrorKind::IndexError(val, slot.into()));
                     }
                 }
             }
@@ -313,7 +313,7 @@ impl VM {
                     let slot = ty.fields.get(field).unwrap().0;
                     self.push(values.borrow()[slot].clone());
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
+                    error!(self, ErrorKind::UnknownField(inst, field.clone()));
                 }
             }
 
@@ -324,7 +324,7 @@ impl VM {
                     let slot = ty.fields.get(field).unwrap().0;
                     values.borrow_mut()[slot] = value;
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
+                    error!(self, ErrorKind::UnknownField(inst, field.clone()));
                 }
             }
 
@@ -432,10 +432,7 @@ impl VM {
                         let inner = block.borrow();
                         let args = inner.args();
                         if args.len() != num_args {
-                            error!(self,
-                                ErrorKind::InvalidProgram,
-                                format!("Invalid number of arguments, got {} expected {}.",
-                                    num_args, args.len()));
+                            error!(self, ErrorKind::ArgumentCount(args.len(), num_args));
                         }
 
                         if self.print_blocks {
@@ -452,7 +449,7 @@ impl VM {
                         let extern_func = self.extern_functions[slot];
                         let res = match extern_func(&self.stack[new_base+1..], false) {
                             Ok(value) => value,
-                            Err(ek) => error!(self, ek, "Wrong arguments to external function".to_string()),
+                            Err(ek) => error!(self, ek, "Failed in external function."),
                         };
                         self.stack.truncate(new_base);
                         self.push(res);
@@ -504,8 +501,8 @@ impl VM {
             self.frame().block.borrow().ops[self.frame().ip]);
     }
 
-    // Initalizes the VM for running. Run cannot be called before this.
-    pub(crate) fn init(&mut self, prog: &Prog) {
+    #[doc(hidden)]
+    pub fn init(&mut self, prog: &Prog) {
         let block = Rc::clone(&prog.blocks[0]);
         self.constants = prog.constants.clone();
         self.strings = prog.strings.clone();
@@ -582,10 +579,7 @@ impl VM {
                                 *ty = suggestion.clone();
                             } else {
                                 if ty != suggestion {
-                                    error!(self,
-                                           ErrorKind::TypeError(op,
-                                                    vec![ty.clone(), suggestion.clone()]),
-                                           "Failed to infer type.".to_string());
+                                    error!(self, ErrorKind::CannotInfer(ty.clone(), suggestion.clone()));
                                 }
                             }
                         };
@@ -603,8 +597,9 @@ impl VM {
                     let value = Value::from(ty.fields.get(field).unwrap().1.clone());
                     self.push(value);
                 } else {
+                    let field = field.clone();
                     self.push(Value::Nil);
-                    error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
+                    error!(self, ErrorKind::UnknownField(inst, field));
                 }
             }
 
@@ -614,11 +609,13 @@ impl VM {
 
                 if let Value::Instance(ty, _) = inst {
                     let ty = &ty.fields.get(field).unwrap().1;
-                    if ty != &Type::from(&value) {
-                        error!(self, ErrorKind::RuntimeTypeError(op, vec![Value::from(ty)]));
+                    let expected = Type::from(&value);
+                    if ty != &expected {
+                        error!(self, ErrorKind::TypeMismatch(expected, ty.clone()),
+                               "Types of field and variable do not match.");
                     }
                 } else {
-                    error!(self, ErrorKind::RuntimeTypeError(op, vec![inst]));
+                    error!(self, ErrorKind::UnknownField(inst, field.clone()));
                 }
             }
 
@@ -635,8 +632,18 @@ impl VM {
                 let var = self.frame().block.borrow().upvalues[slot].2.clone();
                 let up = self.pop().into();
                 if var != up {
-                    error!(self, ErrorKind::TypeError(op, vec![var, up]),
-                                  "Incorrect type for upvalue.".to_string());
+                    error!(self, ErrorKind::TypeMismatch(up, var),
+                           "Captured varibles type doesn't match upvalue.");
+                }
+            }
+
+            Op::AssignLocal(slot) => {
+                let slot = self.frame().stack_offset + slot;
+                let curr = Type::from(&self.stack[slot]);
+                let other = Type::from(self.pop());
+                if curr != other {
+                    error!(self, ErrorKind::TypeMismatch(curr, other),
+                           "Cannot assign to different type.");
                 }
             }
 
@@ -645,9 +652,8 @@ impl VM {
                 let inner = self.frame().block.borrow();
                 let ret = inner.ret();
                 if Type::from(&a) != *ret {
-                    error!(self, ErrorKind::TypeError(op, vec![a.into(),
-                                                               ret.clone()]),
-                                                      "Not matching return type.".to_string());
+                    error!(self, ErrorKind::TypeMismatch(a.into(), ret.clone()),
+                           "Value does not match return type.");
                 }
             }
 
@@ -662,12 +668,8 @@ impl VM {
                     (Type::Unknown, top_type)
                         if top_type != Type::Unknown => {}
                     (a, b) if a != &b => {
-                        error!(self,
-                            ErrorKind::TypeError(
-                                op,
-                                vec![a.clone(), b.clone()]),
-                                format!("Tried to assign a type {:?} to type {:?}.", a, b)
-                        );
+                        error!(self, ErrorKind::TypeMismatch(a.clone(), b.clone()),
+                               "Cannot assign mismatching types.");
                     }
                     _ => {}
                 }
@@ -706,19 +708,13 @@ impl VM {
                         let inner = block.borrow();
                         let args = inner.args();
                         if args.len() != num_args {
-                            error!(self,
-                                ErrorKind::InvalidProgram,
-                                format!("Invalid number of arguments, got {} expected {}.",
-                                    num_args, args.len()));
+                            error!(self, ErrorKind::ArgumentCount(args.len(), num_args));
                         }
 
                         let stack_args = &self.stack[self.stack.len() - args.len()..];
                         let stack_args: Vec<_> = stack_args.iter().map(|x| x.into()).collect();
                         if args != &stack_args {
-                            error!(self,
-                                ErrorKind::TypeError(op, vec![]),
-                                format!("Expected args of type {:?} but got {:?}.",
-                                    args, stack_args));
+                            error!(self, ErrorKind::ArgumentType(args.clone(), stack_args));
                         }
 
                         self.stack[new_base] = block.borrow().ret().into();
@@ -732,7 +728,7 @@ impl VM {
                             Err(ek) => {
                                 self.stack.truncate(new_base);
                                 self.push(Value::Nil);
-                                error!(self, ek, "Wrong arguments to external function".to_string())
+                                error!(self, ek, "Error from external function.")
                             }
                         };
                         self.stack.truncate(new_base);
@@ -833,23 +829,24 @@ impl VM {
 mod tests {
     mod typing {
         use crate::error::ErrorKind;
-        use crate::test_string;
+        use crate::{test_string, Op, Type};
 
         test_string!(uncallable_type, "
                  f := fn i: int {
                      i()
                  }
                  f",
-                 [ErrorKind::InvalidProgram]);
+                 [ErrorKind::ValueError(Op::Call(0), _)]);
+
+        test_string!(invalid_assign, "a := 1\na = 0.1\na",
+                 [ErrorKind::TypeMismatch(Type::Int, Type::Float)]);
 
         test_string!(wrong_params, "
-                 f : fn -> int = fn a: int -> int {}
-                 f",
-                 [ErrorKind::TypeError(_, _), ErrorKind::TypeError(_, _)]);
+                 f : fn -> int = fn a: int -> int {}\nf",
+                 [ErrorKind::TypeMismatch(_, _), ErrorKind::TypeMismatch(Type::Void, Type::Int)]);
 
         test_string!(wrong_ret, "
-                 f : fn -> int = fn {}
-                 f",
-                 [ErrorKind::TypeError(_, _)]);
+                 f : fn -> int = fn {}\nf",
+                 [ErrorKind::TypeMismatch(_, _)]);
     }
 }
