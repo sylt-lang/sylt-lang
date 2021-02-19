@@ -73,12 +73,18 @@ pub fn extern_function(tokens: TokenStream) -> TokenStream {
                 #[allow(unused_variables)]
                 match __values {
                     #(#typecheck_blocks),*
-                    _ => Err(sylt::error::ErrorKind::ExternTypeMismatch(stringify!(#function).to_string(), __values.iter().map(|v| sylt::Type::from(v)).collect()))
+                    _ => Err(sylt::error::ErrorKind::ExternTypeMismatch(
+                        stringify!(#function).to_string(),
+                        __values.iter().map(|v| sylt::Type::from(v)).collect()
+                    ))
                 }
             } else {
                 match __values {
                     #(#eval_blocks),*
-                    _ => Err(sylt::error::ErrorKind::ExternTypeMismatch(stringify!(#function).to_string(), __values.iter().map(|v| sylt::Type::from(v)).collect()))
+                    _ => Err(sylt::error::ErrorKind::ExternTypeMismatch(
+                        stringify!(#function).to_string(),
+                        __values.iter().map(|v| sylt::Type::from(v)).collect()
+                    ))
                 }
             }
         }
