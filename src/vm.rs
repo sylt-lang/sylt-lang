@@ -554,6 +554,13 @@ impl VM {
                     Value::Function(_, block) => {
                         self.push(Value::Function(Vec::new(), block.clone()));
 
+                        if block.borrow().needs_linking() {
+                            error!(self,
+                                ErrorKind::InvalidProgram,
+                                format!("Calling function '{}' before all captured variables are declared.",
+                                    block.borrow().name));
+                        }
+
                         let mut types = Vec::new();
                         for (slot, is_up, ty) in block.borrow().upvalues.iter() {
                             if *is_up {
@@ -669,10 +676,10 @@ impl VM {
             }
 
             Op::Link(slot) => {
-                println!("{:?}", self.constants);
-                println!("{:?} - {}", self.constant(slot), slot);
                 match self.constant(slot).clone() {
-                    Value::Function(_, _) => {}
+                    Value::Function(_, block) => {
+                        block.borrow_mut().link();
+                    }
                     value => {
                         error!(self,
                             ErrorKind::TypeError(op, vec![Type::from(&value)]),
@@ -728,8 +735,9 @@ impl VM {
                         self.push(res);
                     }
                     _ => {
-                        error!(self, ErrorKind::ValueError(op, vec![self.stack[new_base].clone()]),
-                               "Tried to call non-function.");
+                        error!(self,
+                            ErrorKind::InvalidProgram,
+                            format!("Tried to call non-function {:?}", self.stack[new_base]));
                     }
                 }
             }
@@ -768,7 +776,7 @@ impl VM {
         });
 
         if self.print_blocks {
-            println!("\n    [[{}]]\n", "TYPECHECK".purple());
+            println!("\n    [[{} - {}]]\n", "TYPECHECKING".purple(), self.frame().block.borrow().name);
             self.frame().block.borrow().debug_print();
         }
 
@@ -821,23 +829,24 @@ impl VM {
 mod tests {
     mod typing {
         use crate::error::ErrorKind;
-        use crate::{test_string, Op, Type};
+        use crate::{test_string, Type};
 
         test_string!(uncallable_type, "
                  f := fn i: int {
                      i()
-                 }",
-                 [ErrorKind::ValueError(Op::Call(0), _)]);
+                 }
+                 f",
+                 [ErrorKind::InvalidProgram]);
 
-        test_string!(invalid_assign, "a := 1\na = 0.1\n",
+        test_string!(invalid_assign, "a := 1\na = 0.1\na",
                  [ErrorKind::TypeMismatch(Type::Int, Type::Float)]);
 
         test_string!(wrong_params, "
-                 f : fn -> int = fn a: int -> int {}",
+                 f : fn -> int = fn a: int -> int {}\nf",
                  [ErrorKind::TypeMismatch(_, _), ErrorKind::TypeMismatch(Type::Void, Type::Int)]);
 
         test_string!(wrong_ret, "
-                 f : fn -> int = fn {}",
+                 f : fn -> int = fn {}\nf",
                  [ErrorKind::TypeMismatch(_, _)]);
     }
 }
