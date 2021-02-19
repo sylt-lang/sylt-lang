@@ -748,9 +748,14 @@ mod tests {
     #[macro_export]
     macro_rules! assert_errs {
         ($result:expr, [ $( $kind:pat ),* ]) => {
-            eprintln!("{} => {:?}", stringify!($result), $result);
-            assert!(matches!(
-                $result.unwrap_err().as_slice(),
+            let errs = if let Err(errs) = $result {
+                errs
+            } else {
+                eprintln!("    Program succeeded when it should've failed");
+                unreachable!();
+            };
+            if !matches!(
+                errs.as_slice(),
                 &[$($crate::error::Error {
                     kind: $kind,
                     file: _,
@@ -758,7 +763,19 @@ mod tests {
                     message: _,
                 },
                 )*]
-            ))
+            ) {
+                eprintln!("Unexpected errors");
+                eprint!("    Got:  [");
+                for err in errs {
+                    eprint!(" ErrorKind::{:?} ", err.kind);
+                }
+                eprint!("]\n    Want: [");
+                $(
+                eprint!(" {} ", stringify!($kind));
+                )*
+                eprintln!("]");
+                assert!(false);
+            }
         };
     }
 
@@ -808,8 +825,8 @@ mod tests {
                             for e in errs.iter() {
                                 println!("{}", e);
                             }
-                            println!("  {} - FAILED\n", stringify!($fn));
-                            panic!();
+                            eprintln!("  {} - failed\n", stringify!($fn));
+                            unreachable!();
                         }
                     }
                 });
