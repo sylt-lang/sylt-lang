@@ -94,6 +94,12 @@ pub fn extern_function(tokens: TokenStream) -> TokenStream {
     TokenStream::from(tokens)
 }
 
+type RustFunction = fn(&[Value], bool) -> Result<Value, ErrorKind>;
+
+lazy_static! {
+    static ref LINKED_FUNCTIONS: Mutex<Vec<(String, )>>
+}
+
 #[proc_macro_attribute]
 pub fn extern_link(attr: TokenStream, tokens: TokenStream) -> TokenStream {
     let parsed: syn::ItemFn = parse_macro_input!(tokens);
