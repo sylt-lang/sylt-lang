@@ -829,7 +829,7 @@ impl VM {
 mod tests {
     mod typing {
         use crate::error::ErrorKind;
-        use crate::{test_string, Op, Type};
+        use crate::{test_string, Type};
 
         test_string!(uncallable_type, "
                  f := fn i: int {
