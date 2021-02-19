@@ -908,7 +908,7 @@ f :: fn {
 }
 a
         ";
-        assert_errs!(run_string(prog, true, Vec::new()), [ErrorKind::InvalidProgram, ErrorKind::RuntimeTypeError(_, _)]);
+        assert_errs!(run_string(prog, true, Vec::new()), [ErrorKind::InvalidProgram, ErrorKind::TypeError(_, _)]);
     }
 
     #[test]

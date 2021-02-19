@@ -836,7 +836,7 @@ mod tests {
                      i()
                  }
                  f",
-                 [ErrorKind::ValueError(Op::Call(0), _)]);
+                 [ErrorKind::InvalidProgram]);
 
         test_string!(invalid_assign, "a := 1\na = 0.1\na",
                  [ErrorKind::TypeMismatch(Type::Int, Type::Float)]);
