@@ -7,10 +7,18 @@ struct Args {
     print: bool,
 }
 
+macro_rules! link {
+    ([ $( $ident:tt ),* ]) => {
+        vec![
+            $( (stringify!($ident).to_string(), $ident), )*
+        ]
+    }
+}
+
 fn main() {
     let args = parse_args();
     let file = args.file.unwrap_or_else(|| Path::new("progs/tests/simple.sy").to_owned());
-    let errs = match run_file(&file, args.print, vec![(String::from("extern_test"), extern_test)]) {
+    let errs = match run_file(&file, args.print, link!([extern_test])) {
         Err(it) => it,
         _ => return,
     };
