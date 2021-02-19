@@ -1,5 +1,7 @@
+use lazy_static::lazy_static;
 use proc_macro::TokenStream;
 use quote::quote;
+use std::borrow::Cow;
 use syn::{Expr, Pat, Token, parse::{Parse, ParseStream, Result}, parse_macro_input};
 
 struct ExternBlock {
@@ -88,6 +90,25 @@ pub fn extern_function(tokens: TokenStream) -> TokenStream {
                 }
             }
         }
+    };
+    TokenStream::from(tokens)
+}
+
+#[proc_macro_attribute]
+pub fn extern_link(attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    let parsed: syn::ItemFn = parse_macro_input!(tokens);
+
+    let name = if attr.is_empty() {
+        Cow::Borrowed(&parsed.sig.ident)
+    } else {
+        let attr: syn::Ident = parse_macro_input!(attr);
+        Cow::Owned(attr)
+    };
+
+    let tokens = quote! {
+        #parsed
+
+
     };
     TokenStream::from(tokens)
 }
