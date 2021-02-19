@@ -280,7 +280,7 @@ impl VM {
                         Value::Function(ups, block)
                     },
                     value => error!(self,
-                        ErrorKind::RuntimeTypeError(op, vec![value.clone()]),
+                        ErrorKind::ValueError(op, vec![value.clone()]),
                         format!("Not a function {:?}.", value)),
                 };
                 self.constants[slot] = constant;
@@ -601,7 +601,7 @@ impl VM {
                 let field = self.string(field);
 
                 if let Value::Instance(ty, _) = inst {
-                    let ty = &self.blobs[ty].fields.get(field).unwrap().1;
+                    let ty = &ty.fields.get(field).unwrap().1;
                     let expected = Type::from(&value);
                     if ty != &expected {
                         error!(self, ErrorKind::TypeMismatch(expected, ty.clone()),
