@@ -694,14 +694,14 @@ impl Block {
     pub fn debug_print(&self) {
         println!("     === {} ===", self.name.blue());
         for (i, s) in self.ops.iter().enumerate() {
-            // TODO(ed): This print should only do one call to print.
-            // Otherwise we can get race conditions in a single line.
-            if self.line_offsets.contains_key(&i) {
-                print!("{:5} ", self.line_offsets[&i].red());
-            } else {
-                print!("    {} ", "|".red());
-            }
-            println!("{:05} {:?}", i.blue(), s);
+            println!("{}{}",
+                     if self.line_offsets.contains_key(&i) {
+                         format!("{:5} ", self.line_offsets[&i].red())
+                     } else {
+                         format!("    {} ", "|".red())
+                     },
+                     format!("{:05} {:?}", i.blue(), s)
+            );
         }
         println!();
     }
