@@ -2,6 +2,8 @@ use std::path::{Path, PathBuf};
 
 use sylt::run_file;
 
+mod linked;
+
 struct Args {
     file: Option<PathBuf>,
     print: bool,
@@ -15,10 +17,21 @@ macro_rules! link {
     }
 }
 
+sylt_macro::extern_function!(
+    extern_test
+    [sylt::Value::Float(x), sylt::Value::Float(y)] -> sylt::Type::Float => {
+        Ok(sylt::Value::Float(x + y))
+    },
+    [sylt::Value::Float(x)] -> sylt::Type::Float => {
+        Ok(sylt::Value::Float(*x))
+    },
+);
+
 fn main() {
     let args = parse_args();
     let file = args.file.unwrap_or_else(|| Path::new("progs/tests/simple.sy").to_owned());
-    let errs = match run_file(&file, args.print, link!([extern_test])) {
+    println!("{:?}", sylt_macro::links!());
+    let errs = match run_file(&file, args.print, vec![]) {
         Err(it) => it,
         _ => return,
     };
@@ -46,32 +59,3 @@ fn parse_args() -> Args {
     };
     args
 }
-
-#[sylt_macro::extern_link]
-pub fn f(x: sylt::Value, _typecheck: bool) -> Result<sylt::Value, sylt::error::ErrorKind> {
-    Ok(x)
-}
-
-#[sylt_macro::extern_link(g)]
-pub fn f2(x: sylt::Value, _typecheck: bool) -> Result<sylt::Value, sylt::error::ErrorKind> {
-    Ok(x)
-}
-
-mod m1 {
-    mod m2 {
-        #[sylt_macro::extern_link(h)]
-        pub fn f2(x: sylt::Value, _typecheck: bool) -> Result<sylt::Value, sylt::error::ErrorKind> {
-            Ok(x)
-        }
-    }
-}
-
-sylt_macro::extern_function!(
-    extern_test
-    [sylt::Value::Float(x), sylt::Value::Float(y)] -> sylt::Type::Float => {
-        Ok(sylt::Value::Float(x + y))
-    },
-    [sylt::Value::Float(x)] -> sylt::Type::Float => {
-        Ok(sylt::Value::Float(*x))
-    },
-);

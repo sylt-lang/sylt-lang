@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use proc_macro::TokenStream;
 use quote::quote;
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Mutex};
 use syn::{Expr, Pat, Token, parse::{Parse, ParseStream, Result}, parse_macro_input};
 
 struct ExternBlock {
@@ -66,6 +66,7 @@ pub fn extern_function(tokens: TokenStream) -> TokenStream {
     }).collect();
 
     let tokens = quote! {
+        #[sylt_macro::extern_link]
         pub fn #function (
             __values: &[sylt::Value],
             __typecheck: bool
@@ -94,10 +95,8 @@ pub fn extern_function(tokens: TokenStream) -> TokenStream {
     TokenStream::from(tokens)
 }
 
-type RustFunction = fn(&[Value], bool) -> Result<Value, ErrorKind>;
-
 lazy_static! {
-    static ref LINKED_FUNCTIONS: Mutex<Vec<(String, )>>
+    static ref LINKED_FUNCTIONS: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
 }
 
 #[proc_macro_attribute]
@@ -113,8 +112,27 @@ pub fn extern_link(attr: TokenStream, tokens: TokenStream) -> TokenStream {
 
     let tokens = quote! {
         #parsed
+    };
+    LINKED_FUNCTIONS.lock().unwrap().push((name.to_string(), name.to_string()));
+    TokenStream::from(tokens)
+}
 
+#[proc_macro]
+pub fn links(tokens: TokenStream) -> TokenStream {
+    assert!(tokens.is_empty());
 
+    let linked_functions: Vec<_> = LINKED_FUNCTIONS
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(name, path)| format!("({}, {})", name, path))
+        .collect();
+
+    let tokens = quote! {
+        (|| {
+            let ret: Vec<&str> = vec![ #(#linked_functions),* ];
+            ret
+        })()
     };
     TokenStream::from(tokens)
 }
