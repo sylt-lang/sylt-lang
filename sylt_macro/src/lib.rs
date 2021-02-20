@@ -1,7 +1,5 @@
-use lazy_static::lazy_static;
 use proc_macro::TokenStream;
 use quote::quote;
-use std::{borrow::Cow, sync::Mutex};
 use syn::{Expr, Pat, Token, parse::{Parse, ParseStream, Result}, parse_macro_input};
 
 struct ExternBlock {
@@ -66,7 +64,6 @@ pub fn extern_function(tokens: TokenStream) -> TokenStream {
     }).collect();
 
     let tokens = quote! {
-        #[sylt_macro::extern_link]
         pub fn #function (
             __values: &[sylt::Value],
             __typecheck: bool
@@ -95,44 +92,70 @@ pub fn extern_function(tokens: TokenStream) -> TokenStream {
     TokenStream::from(tokens)
 }
 
-lazy_static! {
-    static ref LINKED_FUNCTIONS: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
+struct LinkRename {
+    _as: Token![as],
+    name: syn::Ident,
 }
 
-#[proc_macro_attribute]
-pub fn extern_link(attr: TokenStream, tokens: TokenStream) -> TokenStream {
-    let parsed: syn::ItemFn = parse_macro_input!(tokens);
-
-    let name = if attr.is_empty() {
-        Cow::Borrowed(&parsed.sig.ident)
-    } else {
-        let attr: syn::Ident = parse_macro_input!(attr);
-        Cow::Owned(attr)
-    };
-
-    let tokens = quote! {
-        #parsed
-    };
-    LINKED_FUNCTIONS.lock().unwrap().push((name.to_string(), name.to_string()));
-    TokenStream::from(tokens)
+impl Parse for LinkRename {
+    fn parse(input: ParseStream) -> Result<Self> {
+        Ok(Self {
+            _as: input.parse()?,
+            name: input.parse()?,
+        })
+    }
 }
+
+struct Link {
+    path: syn::Path,
+    rename: Option<LinkRename>,
+}
+
+impl Parse for Link {
+    fn parse(input: ParseStream) -> Result<Self> {
+        Ok(Self {
+            path: input.parse()?,
+            rename: input.parse().ok(),
+        })
+    }
+}
+
+struct Links {
+    links: Vec<Link>,
+}
+
+impl Parse for Links {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let mut res = Self {
+            links: Vec::new(),
+        };
+        while !input.is_empty() {
+            res.links.push(input.parse()?);
+            let _comma: Option<Token![,]> = input.parse().ok();
+        }
+        Ok(res)
+    }
+}
+
 
 #[proc_macro]
-pub fn links(tokens: TokenStream) -> TokenStream {
-    assert!(tokens.is_empty());
+pub fn link(tokens: TokenStream) -> TokenStream {
+    let links: Links = parse_macro_input!(tokens);
 
-    let linked_functions: Vec<_> = LINKED_FUNCTIONS
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|(name, path)| format!("({}, {})", name, path))
-        .collect();
+    let links: Vec<_> = links.links.iter().map(|link| {
+        let name = if let Some(rename) = &link.rename {
+            &rename.name
+        } else {
+            &link.path.segments.last().unwrap().ident
+        };
+        let path = &link.path;
+        quote! {
+            (stringify!(#name).to_string(), #path)
+        }
+    }).collect();
 
     let tokens = quote! {
-        (|| {
-            let ret: Vec<&str> = vec![ #(#linked_functions),* ];
-            ret
-        })()
+        vec![ #(#links),* ]
     };
     TokenStream::from(tokens)
 }
