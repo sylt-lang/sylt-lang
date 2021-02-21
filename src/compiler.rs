@@ -255,8 +255,12 @@ pub(crate) struct Compiler {
     unknown: HashMap<String, (usize, usize)>,
 
     functions: HashMap<String, (usize, RustFunction)>,
-    constants: Vec<Value>,
+
     strings: Vec<String>,
+
+    constants: Vec<Value>,
+    values: HashMap<Value, usize>,
+
 }
 
 macro_rules! push_frame {
@@ -353,19 +357,11 @@ impl Compiler {
 
             functions: HashMap::new(),
 
-            constants: vec![Value::Nil],
             strings: Vec::new(),
-        }
-    }
 
-    fn nil_value(&self) -> usize {
-        self.constants.iter()
-            .enumerate()
-            .find_map(|(i, x)|
-                match x {
-                    Value::Nil => Some(i),
-                    _ => None,
-                }).unwrap()
+            constants: vec![],
+            values: HashMap::new(),
+        }
     }
 
     fn new_blob_id(&mut self) -> usize {
@@ -375,8 +371,25 @@ impl Compiler {
     }
 
     fn add_constant(&mut self, value: Value) -> usize {
-        self.constants.push(value);
-        self.constants.len() - 1
+        if matches!(value, Value::Float(_)
+                         | Value::Int(_)
+                         | Value::Bool(_)
+                         | Value::String(_)
+                         | Value::Tuple(_)
+                         | Value::Nil) {
+            let entry = self.values.entry(value.clone());
+            if let Entry::Occupied(entry) = entry {
+                *entry.get()
+            } else {
+                let slot = self.constants.len();
+                self.constants.push(value);
+                entry.or_insert(slot);
+                slot
+            }
+        } else {
+            self.constants.push(value);
+            self.constants.len() - 1
+        }
     }
 
     fn intern_string(&mut self, string: String) -> usize {
@@ -710,7 +723,7 @@ impl Compiler {
         if let Some(res) = res {
             return res;
         }
-        let constant = self.add_constant(Value::Nil);
+        let constant = self.add_constant(Value::Unknown);
         let line = self.line();
         let entry = self.unknown.entry(name.to_string());
         entry.or_insert((constant, line)).0
@@ -847,12 +860,13 @@ impl Compiler {
             }
         });
 
+        let nil = self.add_constant(Value::Nil);
         for op in function_block.ops.iter().rev() {
             match op {
                 Op::Pop | Op::PopUpvalue => {}
                 Op::Return => { break; } ,
                 _ => {
-                    add_op(self, &mut function_block, Op::Constant(self.nil_value()));
+                    add_op(self, &mut function_block, Op::Constant(nil));
                     add_op(self, &mut function_block, Op::Return);
                     break;
                 }
@@ -860,7 +874,7 @@ impl Compiler {
         }
 
         if function_block.ops.is_empty() {
-            add_op(self, &mut function_block, Op::Constant(self.nil_value()));
+            add_op(self, &mut function_block, Op::Constant(nil));
             add_op(self, &mut function_block, Op::Return);
         }
 
@@ -1440,7 +1454,8 @@ impl Compiler {
             expect!(self, Token::Newline | Token::EOF,
                     "Expect newline or EOF after expression.");
         }
-        add_op(self, &mut block, Op::Constant(self.nil_value()));
+        let tmp = self.add_constant(Value::Unknown);
+        add_op(self, &mut block, Op::Constant(tmp));
         add_op(self, &mut block, Op::Return);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
 
