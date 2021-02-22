@@ -32,6 +32,8 @@ pub enum ErrorKind {
 
     /// (line, token)
     SyntaxError(usize, Token),
+    /// (start, end)
+    GitConflictError(usize, usize),
 }
 
 #[derive(Debug, Clone)]
@@ -103,6 +105,9 @@ impl fmt::Display for ErrorKind {
             ErrorKind::SyntaxError(line, token) => {
                 write!(f, "Syntax Error on line {} at token {:?}", line, token)
             }
+            ErrorKind::GitConflictError(start_line, end_line) => {
+                write!(f, "Git conflict markers found between lines {} and {}",
+                       start_line, end_line)
             }
         }
     }
