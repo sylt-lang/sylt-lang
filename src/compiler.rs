@@ -322,7 +322,7 @@ macro_rules! push_scope {
                 errors.push((
                     e,
                     var.line,
-                    format!("Usage of undefined value: '{}'.", var.name),)
+                    format!("Variable is unused: '{}'.", var.name),)
                 );
             }
             if var.captured {
@@ -853,7 +853,8 @@ impl Compiler {
                         expect!(self, Token::Colon, "Expected ':' after parameter name.");
                         if let Ok(typ) = self.parse_type() {
                             args.push(typ.clone());
-                            let var = Variable::new(&name, true, typ);
+                            let mut var = Variable::new(&name, true, typ);
+                            var.read = true;
                             if let Ok(slot) = self.define(var) {
                                 self.stack_mut()[slot].active = true;
                             }
@@ -959,7 +960,9 @@ impl Compiler {
                         }
                     }
                     _ => {
-                        if !parse_branch!(self, block, self.call(block)) {
+                        if matches!(self.peek(), Token::Bang | Token::LeftParen) {
+                            self.call(block)
+                        } else {
                             return;
                         }
                     }
