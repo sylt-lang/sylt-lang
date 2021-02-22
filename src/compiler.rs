@@ -39,6 +39,9 @@ macro_rules! expect {
     };
 }
 
+// NOTE(ed): This can cause some strange bugs. It would be nice if we could
+// remove this function, but to do that we need to rewrite some code. Like
+// tuples and fields. Might be worth it tough.
 macro_rules! parse_branch {
     ($compiler:expr, $block:expr, [ $( $call:expr ),* ]) => {
         {
@@ -759,6 +762,15 @@ impl Compiler {
         slot
     }
 
+    fn call_maybe(&mut self, block: &mut Block) -> bool {
+        if matches!(self.peek(), Token::Bang | Token::LeftParen) {
+            self.call(block);
+            true
+        } else {
+            false
+        }
+    }
+
     fn call(&mut self, block: &mut Block) {
         let mut arity = 0;
         match self.peek() {
@@ -960,9 +972,7 @@ impl Compiler {
                         }
                     }
                     _ => {
-                        if matches!(self.peek(), Token::Bang | Token::LeftParen) {
-                            self.call(block)
-                        } else {
+                        if !self.call_maybe(block) {
                             return;
                         }
                     }
@@ -973,7 +983,7 @@ impl Compiler {
         // Blobs - Always returns a blob since it's filled in if it isn't used.
         let con = self.find_constant(&name);
         add_op(self, block, Op::Constant(con));
-        parse_branch!(self, block, self.call(block));
+        self.call_maybe(block);
     }
 
     fn define(&mut self, mut var: Variable) -> Result<usize, ()> {
@@ -1343,7 +1353,7 @@ impl Compiler {
                         return;
                     }
                     _ => {
-                        if !parse_branch!(self, block, self.call(block)) {
+                        if !self.call_maybe(block) {
                             error!(self, "Unexpected token when parsing blob-field.");
                             return;
                         }
