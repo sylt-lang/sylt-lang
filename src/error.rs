@@ -109,7 +109,7 @@ impl fmt::Display for ErrorKind {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let prompt = "*****".red();
+        let prompt = "     ";
         let message = match &self.message {
             Some(s) => format!("\n{} {}", prompt, s),
             None => String::from(""),
@@ -123,7 +123,7 @@ impl fmt::Display for Error {
             String::new()
         };
 
-        write!(f, "\n {}  {}:{} \n{} {}{}{}\n", "ERR".red(),
+        write!(f, "{} {}:{}\n{} {}{}{}", "ERROR".red(),
                self.file.display().blue(), self.line.blue(), prompt, self.kind, message, line)
     }
 }
