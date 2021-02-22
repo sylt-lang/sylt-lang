@@ -240,6 +240,7 @@ impl Frame {
     }
 }
 
+#[derive(Debug)]
 enum Name {
     Slot(usize, usize),
     Unknown(usize, usize),
@@ -827,12 +828,16 @@ impl Compiler {
         expect!(self, Token::Fn, "Expected 'fn' at start of function.");
 
         let top = self.stack().len() - 1;
+        let constant;
         let name = if let Some(name) = name {
+            constant = true;
             String::from(name)
         } else if !self.stack()[top].active {
+            constant = false;
             self.stack_mut()[top].active = true;
             self.stack()[top].name.clone()
         } else {
+            constant = false;
             format!("λ {}@{:03}", self.current_file.display(), self.line())
         };
 
@@ -915,7 +920,11 @@ impl Compiler {
         // This behaviour is used in `constant_statement`.
         let function = Value::Function(Vec::new(), Rc::clone(&function_block));
         self.blocks[block_id] = function_block;
-        let constant = self.named_constant(name, function);
+        let constant = if constant {
+            self.named_constant(name, function)
+        } else {
+            self.add_constant(function)
+        };
         add_op(self, block, Op::Constant(constant));
     }
 
@@ -1477,6 +1486,7 @@ impl Compiler {
         add_op(self, &mut block, Op::Return);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
 
+        println!("{:?}", self.names);
         if self.names.len() != 0 {
             let errors: Vec<_> = self.names.iter().filter_map(|(name, kind)|
                 if let Name::Unknown(_, line) = kind {
@@ -1500,6 +1510,7 @@ impl Compiler {
             self.panic = false;
         }
 
+        block.debug_print();
         self.blocks.insert(0, Rc::new(RefCell::new(block)));
 
         if self.errors.is_empty() {
