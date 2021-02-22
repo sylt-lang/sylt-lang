@@ -755,7 +755,7 @@ impl Compiler {
             Entry::Vacant(_) => {},
         }
         let slot = self.add_constant(value);
-        self.names.insert(name, Name::Unknown(slot, line));
+        self.names.insert(name, Name::Slot(slot, line));
         slot
     }
 
@@ -824,20 +824,16 @@ impl Compiler {
     }
 
     // TODO(ed): de-complexify
-    fn function(&mut self, block: &mut Block, name: Option<&str>) {
+    fn function(&mut self, block: &mut Block, in_name: Option<&str>) {
         expect!(self, Token::Fn, "Expected 'fn' at start of function.");
 
         let top = self.stack().len() - 1;
-        let constant;
-        let name = if let Some(name) = name {
-            constant = true;
+        let name = if let Some(name) = in_name {
             String::from(name)
         } else if !self.stack()[top].active {
-            constant = false;
             self.stack_mut()[top].active = true;
             self.stack()[top].name.clone()
         } else {
-            constant = false;
             format!("λ {}@{:03}", self.current_file.display(), self.line())
         };
 
@@ -920,7 +916,7 @@ impl Compiler {
         // This behaviour is used in `constant_statement`.
         let function = Value::Function(Vec::new(), Rc::clone(&function_block));
         self.blocks[block_id] = function_block;
-        let constant = if constant {
+        let constant = if in_name.is_some() {
             self.named_constant(name, function)
         } else {
             self.add_constant(function)
@@ -1008,20 +1004,19 @@ impl Compiler {
 
     fn constant_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
         // Magical global constants
-        if self.frames.len() <= 1 {
-            if parse_branch!(self, block, self.function(block, Some(name))) {
-                // Remove the function, since it's a constant and we already
-                // added it.
-                block.ops.pop().unwrap();
-                let slot = self.find_constant(name);
-                add_op(self, block, Op::Link(slot));
-                if let Value::Function(_, block) = &self.constants[slot] {
-                    block.borrow_mut().mark_constant();
-                } else {
-                    unreachable!();
-                }
-                return;
+        if self.frames.len() <= 1 && self.peek() == Token::Fn {
+            self.function(block, Some(name));
+            // Remove the function, since it's a constant and we already
+            // added it.
+            block.ops.pop().unwrap();
+            let slot = self.find_constant(name);
+            add_op(self, block, Op::Link(slot));
+            if let Value::Function(_, block) = &self.constants[slot] {
+                block.borrow_mut().mark_constant();
+            } else {
+                unreachable!();
             }
+            return;
         }
 
         let var = Variable::new(name, false, typ);
