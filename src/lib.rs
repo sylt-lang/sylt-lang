@@ -1367,4 +1367,14 @@ q <=> 3
 
     );
 
+    test_string!(conflict_markers, "
+<<<<<<< HEAD
+print extern_test(4.0)
+=======
+print extern_test(5.0)
+>>>>>>> 2
+",
+                 [ErrorKind::SyntaxError(_, _), ErrorKind::GitConflictError(2, 6)]
+    );
+
 }

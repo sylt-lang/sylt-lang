@@ -32,6 +32,8 @@ pub enum ErrorKind {
 
     /// (line, token)
     SyntaxError(usize, Token),
+    /// (start, end)
+    GitConflictError(usize, usize),
 }
 
 #[derive(Debug, Clone)]
@@ -67,9 +69,8 @@ impl fmt::Display for ErrorKind {
                 write!(f, "Argument types do not match, expected [{:?}] but got [{:?}]",
                        expected, given)
             }
-            ErrorKind::IndexOutOfBounds(value, len, slot) => {
-                write!(f, "Failed to index for {:?} - length is {} but index is {}",
-                       value, len, slot)
+            ErrorKind::IndexError(value, slot) => {
+                write!(f, "Cannot index value '{:?}' with type '{:?}'.", value, slot)
             }
             ErrorKind::ExternTypeMismatch(name, types) => {
                 write!(f, "Extern function '{}' doesn't accept argument(s) with type(s) {:?}",
@@ -81,21 +82,6 @@ impl fmt::Display for ErrorKind {
                     .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
                 write!(f, "Cannot apply {:?} to values {}", op, values)
             }
-            ErrorKind::AssertFailed => {
-                write!(f, "Assertion failed")
-            }
-            ErrorKind::SyntaxError(line, token) => {
-                write!(f, "Syntax Error on line {} at token {:?}", line, token)
-            }
-            ErrorKind::Unreachable => {
-                write!(f, "Reached unreachable code.")
-            }
-            ErrorKind::InvalidProgram => {
-                write!(f, "{}", "[!!] Invalid program [!!]".bold())
-            }
-            ErrorKind::IndexError(value, slot) => {
-                write!(f, "Cannot index value '{:?}' with type '{:?}'.", value, slot)
-            }
             ErrorKind::UnknownField(obj, field) => {
                 write!(f, "Cannot find field '{}' on {:?}", field, obj)
             }
@@ -103,13 +89,33 @@ impl fmt::Display for ErrorKind {
                 write!(f, "Incorrect argument count, expected {} but got {}.",
                        expected, given)
             }
+            ErrorKind::IndexOutOfBounds(value, len, slot) => {
+                write!(f, "Failed to index for {:?} - length is {} but index is {}",
+                       value, len, slot)
+            }
+            ErrorKind::AssertFailed => {
+                write!(f, "Assertion failed")
+            }
+            ErrorKind::InvalidProgram => {
+                write!(f, "{}", "[!!] Invalid program [!!]".bold())
+            }
+            ErrorKind::Unreachable => {
+                write!(f, "Reached unreachable code.")
+            }
+            ErrorKind::SyntaxError(line, token) => {
+                write!(f, "Syntax Error on line {} at token {:?}", line, token)
+            }
+            ErrorKind::GitConflictError(start_line, end_line) => {
+                write!(f, "Git conflict markers found between lines {} and {}",
+                       start_line, end_line)
+            }
         }
     }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let prompt = "*****".red();
+        let prompt = "     ";
         let message = match &self.message {
             Some(s) => format!("\n{} {}", prompt, s),
             None => String::from(""),
@@ -123,7 +129,7 @@ impl fmt::Display for Error {
             String::new()
         };
 
-        write!(f, "\n {}  {}:{} \n{} {}{}{}\n", "ERR".red(),
+        write!(f, "{} {}:{}\n{} {}{}{}", "ERROR".red(),
                self.file.display().blue(), self.line.blue(), prompt, self.kind, message, line)
     }
 }

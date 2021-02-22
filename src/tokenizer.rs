@@ -127,6 +127,11 @@ pub enum Token {
     #[token("\n")]
     Newline,
 
+    #[token("<<<<<<<")]
+    GitConflictBegin,
+    #[token(">>>>>>>")]
+    GitConflictEnd,
+
     #[regex(r"//[^\n]*", logos::skip)]
     Comment,
 
