@@ -67,9 +67,8 @@ impl fmt::Display for ErrorKind {
                 write!(f, "Argument types do not match, expected [{:?}] but got [{:?}]",
                        expected, given)
             }
-            ErrorKind::IndexOutOfBounds(value, len, slot) => {
-                write!(f, "Failed to index for {:?} - length is {} but index is {}",
-                       value, len, slot)
+            ErrorKind::IndexError(value, slot) => {
+                write!(f, "Cannot index value '{:?}' with type '{:?}'.", value, slot)
             }
             ErrorKind::ExternTypeMismatch(name, types) => {
                 write!(f, "Extern function '{}' doesn't accept argument(s) with type(s) {:?}",
@@ -81,27 +80,29 @@ impl fmt::Display for ErrorKind {
                     .fold(String::new(), |a, v| { format!("{}{:?}, ", a, v) });
                 write!(f, "Cannot apply {:?} to values {}", op, values)
             }
-            ErrorKind::AssertFailed => {
-                write!(f, "Assertion failed")
-            }
-            ErrorKind::SyntaxError(line, token) => {
-                write!(f, "Syntax Error on line {} at token {:?}", line, token)
-            }
-            ErrorKind::Unreachable => {
-                write!(f, "Reached unreachable code.")
-            }
-            ErrorKind::InvalidProgram => {
-                write!(f, "{}", "[!!] Invalid program [!!]".bold())
-            }
-            ErrorKind::IndexError(value, slot) => {
-                write!(f, "Cannot index value '{:?}' with type '{:?}'.", value, slot)
-            }
             ErrorKind::UnknownField(obj, field) => {
                 write!(f, "Cannot find field '{}' on {:?}", field, obj)
             }
             ErrorKind::ArgumentCount(expected, given) => {
                 write!(f, "Incorrect argument count, expected {} but got {}.",
                        expected, given)
+            }
+            ErrorKind::IndexOutOfBounds(value, len, slot) => {
+                write!(f, "Failed to index for {:?} - length is {} but index is {}",
+                       value, len, slot)
+            }
+            ErrorKind::AssertFailed => {
+                write!(f, "Assertion failed")
+            }
+            ErrorKind::InvalidProgram => {
+                write!(f, "{}", "[!!] Invalid program [!!]".bold())
+            }
+            ErrorKind::Unreachable => {
+                write!(f, "Reached unreachable code.")
+            }
+            ErrorKind::SyntaxError(line, token) => {
+                write!(f, "Syntax Error on line {} at token {:?}", line, token)
+            }
             }
         }
     }
