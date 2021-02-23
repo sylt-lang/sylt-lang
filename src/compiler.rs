@@ -343,9 +343,7 @@ fn split_sections<'a>(tokens: &'a TokenStream) -> Vec<&'a[PlacedToken]> {
     let mut curr = 0;
     while curr < tokens.len() {
         if match (tokens.get(curr + 0), tokens.get(curr + 1), tokens.get(curr + 2)) {
-            (Some((Token::Identifier(_), _)),
-             Some((Token::ColonColon, _)),
-             Some((Token::Fn, _)))
+            (Some((Token::LeftBrace, _)), ..)
                 => {
                 let mut blocks = 0;
                 loop {
@@ -356,6 +354,7 @@ fn split_sections<'a>(tokens: &'a TokenStream) -> Vec<&'a[PlacedToken]> {
                         }
 
                         Some((Token::RightBrace, _)) => {
+                            curr += 1;
                             blocks -= 1;
                             if blocks <= 0 {
                                 break;
@@ -369,9 +368,13 @@ fn split_sections<'a>(tokens: &'a TokenStream) -> Vec<&'a[PlacedToken]> {
                         _ => {}
                     }
                 }
-
-                true
+                false
             },
+
+            (Some((Token::Identifier(_), _)),
+             Some((Token::ColonColon, _)),
+             Some((Token::Fn, _)))
+                => true,
 
             (Some((Token::Identifier(_), _)),
              Some((Token::ColonColon, _)),
@@ -545,10 +548,10 @@ impl<'a> Compiler<'a> {
 
     /// The line of the current token.
     fn line(&self) -> usize {
-        if self.curr < self.section.len() {
-            self.section[self.curr].1
+        if self.section.len() == 0 {
+            0xCAFEBABE
         } else {
-            self.section[self.section.len() - 1].1
+            self.section[std::cmp::min(self.curr, self.section.len() - 1)].1
         }
     }
 
@@ -1507,7 +1510,7 @@ impl<'a> Compiler<'a> {
             let section = self.sections[section];
             self.init_section(section);
             while self.peek() != Token::EOF {
-                println!("compiling {} -- statement -- {:?}", s, self.peek());
+                println!("compiling {} -- statement -- {:?}", s, self.line());
                 self.statement(&mut block);
                 expect!(self, Token::Newline | Token::EOF,
                         "Expect newline or EOF after expression.");
