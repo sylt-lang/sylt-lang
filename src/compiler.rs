@@ -311,9 +311,10 @@ impl Frame {
     }
 }
 
-pub(crate) struct Compiler {
+pub(crate) struct Compiler<'a> {
     curr: usize,
-    tokens: TokenStream,
+    sections: Vec<&'a[PlacedToken]>,
+    section: &'a[PlacedToken],
     current_file: PathBuf,
 
     frames: Vec<Frame>,
@@ -345,7 +346,32 @@ fn split_sections<'a>(tokens: &'a TokenStream) -> Vec<&'a[PlacedToken]> {
             (Some((Token::Identifier(_), _)),
              Some((Token::ColonColon, _)),
              Some((Token::Fn, _)))
-                => true,
+                => {
+                let mut blocks = 0;
+                loop {
+                    curr += 1;
+                    match tokens.get(curr) {
+                        Some((Token::LeftBrace, _)) => {
+                            blocks += 1;
+                        }
+
+                        Some((Token::RightBrace, _)) => {
+                            blocks -= 1;
+                            if blocks <= 0 {
+                                break;
+                            }
+                        }
+
+                        None => {
+                            break;
+                        }
+
+                        _ => {}
+                    }
+                }
+
+                true
+            },
 
             (Some((Token::Identifier(_), _)),
              Some((Token::ColonColon, _)),
@@ -364,19 +390,19 @@ fn split_sections<'a>(tokens: &'a TokenStream) -> Vec<&'a[PlacedToken]> {
         }
         curr += 1;
     }
+    sections.push(&tokens[last..curr]);
     sections
 }
 
-impl Compiler {
-    pub(crate) fn new(current_file: &Path, tokens: TokenStream) -> Self {
-        {
-            let sections = split_sections(&tokens);
-            println!("{:#?}", sections);
-        }
+impl<'a> Compiler<'a> {
+    pub(crate) fn new(current_file: &Path, tokens: &'a TokenStream) -> Self {
+        let sections = split_sections(tokens);
 
+        let section = sections[0];
         Self {
             curr: 0,
-            tokens,
+            section,
+            sections,
             current_file: PathBuf::from(current_file),
 
             frames: vec![Frame::new()],
@@ -489,16 +515,20 @@ impl Compiler {
         });
     }
 
+    fn init_section(&mut self, section: &'a[PlacedToken]) {
+        self.curr = 0;
+        self.section = section;
+    }
 
     fn peek(&self) -> Token {
         self.peek_at(0)
     }
 
     fn peek_at(&self, at: usize) -> Token {
-        if self.tokens.len() <= self.curr + at {
+        if self.section.len() <= self.curr + at {
             crate::tokenizer::Token::EOF
         } else {
-            self.tokens[self.curr + at].0.clone()
+            self.section[self.curr + at].0.clone()
         }
     }
 
@@ -515,10 +545,10 @@ impl Compiler {
 
     /// The line of the current token.
     fn line(&self) -> usize {
-        if self.curr < self.tokens.len() {
-            self.tokens[self.curr].1
+        if self.curr < self.section.len() {
+            self.section[self.curr].1
         } else {
-            self.tokens[self.tokens.len() - 1].1
+            self.section[self.section.len() - 1].1
         }
     }
 
@@ -704,8 +734,8 @@ impl Compiler {
         }
     }
 
-    fn find_and_capture_variable<'a, I>(name: &str, mut iterator: I) -> Option<Variable>
-    where I: Iterator<Item = &'a mut Frame> {
+    fn find_and_capture_variable<'b, I>(name: &str, mut iterator: I) -> Option<Variable>
+    where I: Iterator<Item = &'b mut Frame> {
         if let Some(frame) = iterator.next() {
             if let Some(res) = frame.find_local(name) {
                 frame.stack[res.slot].captured = true;
@@ -1472,10 +1502,16 @@ impl Compiler {
         let _ = self.define(main);
 
         let mut block = Block::new(name, file);
-        while self.peek() != Token::EOF {
-            self.statement(&mut block);
-            expect!(self, Token::Newline | Token::EOF,
-                    "Expect newline or EOF after expression.");
+        for section in 0..self.sections.len() {
+            let s = section;
+            let section = self.sections[section];
+            self.init_section(section);
+            while self.peek() != Token::EOF {
+                println!("compiling {} -- statement -- {:?}", s, self.peek());
+                self.statement(&mut block);
+                expect!(self, Token::Newline | Token::EOF,
+                        "Expect newline or EOF after expression.");
+            }
         }
         add_op(self, &mut block, Op::Constant(self.nil_value()));
         add_op(self, &mut block, Op::Return);

@@ -25,7 +25,7 @@ pub fn compile_file(path: &Path,
                     functions: Vec<(String, RustFunction)>
     ) -> Result<vm::VM, Vec<Error>> {
     let tokens = tokenizer::file_to_tokens(path);
-    match compiler::Compiler::new(path, tokens).compile("main", path, &functions) {
+    match compiler::Compiler::new(path, &tokens).compile("main", path, &functions) {
         Ok(prog) => {
             let mut vm = vm::VM::new();
             vm.print_blocks = print;
@@ -53,7 +53,7 @@ pub fn run_string(s: &str, print: bool, functions: Vec<(String, RustFunction)>) 
 }
 
 fn run(tokens: TokenStream, path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    match compiler::Compiler::new(path, tokens).compile("main", path, &functions) {
+    match compiler::Compiler::new(path, &tokens).compile("main", path, &functions) {
         Ok(prog) => {
             let mut vm = vm::VM::new();
             vm.print_blocks = print;
