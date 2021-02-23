@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use crate::{Blob, Block, Op, Prog, RustFunction, Type, Value};
 use crate::error::{Error, ErrorKind};
-use crate::tokenizer::{Token, TokenStream};
+use crate::tokenizer::{Token, PlacedToken, TokenStream};
 
 macro_rules! nextable_enum {
     ( $name:ident { $( $thing:ident ),* $( , )? } ) => {
@@ -335,8 +335,45 @@ fn add_op(compiler: &Compiler, block: &mut Block, op: Op) -> usize {
     block.add(op, compiler.line())
 }
 
+fn split_sections<'a>(tokens: &'a TokenStream) -> Vec<&'a[PlacedToken]> {
+    let mut sections = Vec::new();
+
+    let mut last = 0;
+    let mut curr = 0;
+    while curr < tokens.len() {
+        if match (tokens.get(curr + 0), tokens.get(curr + 1), tokens.get(curr + 2)) {
+            (Some((Token::Identifier(_), _)),
+             Some((Token::ColonColon, _)),
+             Some((Token::Fn, _)))
+                => true,
+
+            (Some((Token::Identifier(_), _)),
+             Some((Token::ColonColon, _)),
+             Some(_))
+                => true,
+
+            (Some((Token::Identifier(_), _)),
+             Some((Token::ColonEqual, _)),
+             Some(_))
+                => true,
+
+            _ => false,
+        } {
+            sections.push(&tokens[last..curr]);
+            last = curr;
+        }
+        curr += 1;
+    }
+    sections
+}
+
 impl Compiler {
     pub(crate) fn new(current_file: &Path, tokens: TokenStream) -> Self {
+        {
+            let sections = split_sections(&tokens);
+            println!("{:#?}", sections);
+        }
+
         Self {
             curr: 0,
             tokens,
