@@ -842,7 +842,8 @@ mod tests {
             #[test]
             fn $fn() {
                 crate::tests::panic_after(std::time::Duration::from_millis(500), || {
-                    match $crate::run_string($prog, true, Vec::new()) {
+                    let prog = std::concat!("q :: fn {", $prog, "\n{}\n}\nq()");
+                    match $crate::run_string(&prog, true, Vec::new()) {
                         Ok(()) => {},
                         Err(errs) => {
                             for e in errs.iter() {
@@ -859,7 +860,8 @@ mod tests {
             #[test]
             fn $fn() {
                 crate::tests::panic_after(std::time::Duration::from_millis(500), || {
-                    $crate::assert_errs!($crate::run_string($prog, true, Vec::new()), $errs);
+                    let prog = std::concat!("q :: fn {", $prog, "\n{}\n}\nq()");
+                    $crate::assert_errs!($crate::run_string(&prog, true, Vec::new()), $errs);
                 })
             }
         }
