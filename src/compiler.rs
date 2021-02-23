@@ -104,6 +104,77 @@ macro_rules! parse_branch {
     };
 }
 
+macro_rules! push_frame {
+    ($compiler:expr, $block:expr, $code:tt) => {
+        {
+            $compiler.frames.push(Frame::new());
+
+            // Return value stored as a variable
+            let var = Variable::new("", true, Type::Unknown);
+            $compiler.define(var).unwrap();
+
+            $code
+
+            let frame = $compiler.frames.pop().unwrap();
+            // 0-th slot is the function itself.
+            for var in frame.stack.iter().skip(1) {
+                if !(var.read || var.upvalue) {
+                    let e = ErrorKind::SyntaxError(
+                        var.line,
+                        Token::Identifier(var.name.clone()
+                    ));
+                    $compiler.error_on_line(
+                        e,
+                        var.line,
+                        Some(format!("Unused value '{}'.", var.name))
+                    );
+                }
+                $compiler.panic = false;
+            }
+            // The 0th slot is the return value, which is passed out
+            // from functions, and should not be popped.
+            0
+        }
+    };
+}
+
+macro_rules! push_scope {
+    ($compiler:expr, $block:expr, $code:tt) => {
+        let ss = $compiler.stack().len();
+        $compiler.frame_mut().scope += 1;
+
+        $code;
+
+        $compiler.frame_mut().scope -= 1;
+
+        let mut errors = Vec::new();
+        for var in $compiler.frame().stack.iter().skip(ss).rev() {
+            if !(var.read || var.upvalue) {
+                let e = ErrorKind::SyntaxError(
+                    var.line,
+                    Token::Identifier(var.name.clone()
+                ));
+                errors.push((
+                    e,
+                    var.line,
+                    format!("Usage of undefined value: '{}'.", var.name),)
+                );
+            }
+            if var.captured {
+                add_op($compiler, $block, Op::PopUpvalue);
+            } else {
+                add_op($compiler, $block, Op::Pop);
+            }
+        }
+
+        for (e, l, m) in errors.iter() {
+            $compiler.error_on_line(e.clone(), *l, Some(m.clone()));
+            $compiler.panic = false;
+        }
+        $compiler.stack_mut().truncate(ss);
+    };
+}
+
 nextable_enum!(Prec {
     No,
     Assert,
@@ -257,77 +328,6 @@ pub(crate) struct Compiler {
     functions: HashMap<String, (usize, RustFunction)>,
     constants: Vec<Value>,
     strings: Vec<String>,
-}
-
-macro_rules! push_frame {
-    ($compiler:expr, $block:expr, $code:tt) => {
-        {
-            $compiler.frames.push(Frame::new());
-
-            // Return value stored as a variable
-            let var = Variable::new("", true, Type::Unknown);
-            $compiler.define(var).unwrap();
-
-            $code
-
-            let frame = $compiler.frames.pop().unwrap();
-            // 0-th slot is the function itself.
-            for var in frame.stack.iter().skip(1) {
-                if !(var.read || var.upvalue) {
-                    let e = ErrorKind::SyntaxError(
-                        var.line,
-                        Token::Identifier(var.name.clone()
-                    ));
-                    $compiler.error_on_line(
-                        e,
-                        var.line,
-                        Some(format!("Unused value '{}'.", var.name))
-                    );
-                }
-                $compiler.panic = false;
-            }
-            // The 0th slot is the return value, which is passed out
-            // from functions, and should not be popped.
-            0
-        }
-    };
-}
-
-macro_rules! push_scope {
-    ($compiler:expr, $block:expr, $code:tt) => {
-        let ss = $compiler.stack().len();
-        $compiler.frame_mut().scope += 1;
-
-        $code;
-
-        $compiler.frame_mut().scope -= 1;
-
-        let mut errors = Vec::new();
-        for var in $compiler.frame().stack.iter().skip(ss).rev() {
-            if !(var.read || var.upvalue) {
-                let e = ErrorKind::SyntaxError(
-                    var.line,
-                    Token::Identifier(var.name.clone()
-                ));
-                errors.push((
-                    e,
-                    var.line,
-                    format!("Usage of undefined value: '{}'.", var.name),)
-                );
-            }
-            if var.captured {
-                add_op($compiler, $block, Op::PopUpvalue);
-            } else {
-                add_op($compiler, $block, Op::Pop);
-            }
-        }
-
-        for (e, l, m) in errors.iter() {
-            $compiler.error_on_line(e.clone(), *l, Some(m.clone()));
-            $compiler.panic = false;
-        }
-        $compiler.stack_mut().truncate(ss);
-    };
 }
 
 /// Helper function for adding operations to the given block.
