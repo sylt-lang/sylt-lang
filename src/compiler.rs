@@ -371,6 +371,14 @@ fn split_sections<'a>(file_name: PathBuf, tokens: &'a TokenStream) -> Vec<Sectio
     let mut curr = 0;
     while curr < tokens.len() {
         if match (tokens.get(curr + 0), tokens.get(curr + 1), tokens.get(curr + 2)) {
+            (Some((Token::Newline, _)), ..)
+                => {
+                if curr == last {
+                    last += 1;
+                }
+                false
+            },
+
             (Some((Token::LeftBrace, _)), ..)
                 => {
                 let mut blocks = 0;
@@ -617,7 +625,7 @@ impl<'a> Compiler<'a> {
     /// The line of the current token.
     fn line(&self) -> usize {
         if self.section().tokens.len() == 0 {
-            0xCAFEBABE
+            unreachable!("An error occured without a section.");
         } else {
             self.section().tokens[std::cmp::min(self.current_token, self.section().tokens.len() - 1)].1
         }
@@ -878,6 +886,21 @@ impl<'a> Compiler<'a> {
         slot
     }
 
+    fn forward_constant(&mut self, name: String) -> usize {
+        let line = self.line();
+        let slot = self.add_constant(Value::Unknown);
+        match self.names.entry(name.clone()) {
+            Entry::Occupied(_) => {
+                error!(self, format!("Constant named \"{}\" already has a value.", name));
+                0
+            },
+            Entry::Vacant(entry) => {
+                entry.insert(Name::Unknown(slot, line));
+                slot
+            },
+        }
+    }
+
     fn call_maybe(&mut self, block: &mut Block) -> bool {
         if matches!(self.peek(), Token::Bang | Token::LeftParen) {
             self.call(block);
@@ -1120,14 +1143,26 @@ impl<'a> Compiler<'a> {
     }
 
     fn definition_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
-        let var = Variable::new(name, true, typ.clone());
-        let slot = self.define(var);
-        self.expression(block);
-        let constant = self.add_constant(Value::Ty(typ));
-        add_op(self, block, Op::Define(constant));
+        if self.current_context().len() <= 1 {
+            // Global
+            let var = self.find_variable(name)
+                .expect(&format!("Couldn't find variable '{}' during prepass.", name));
+            assert!(var.mutable);
 
-        if let Ok(slot) = slot {
-            self.stack_mut()[slot].active = true;
+            self.expression(block);
+            add_op(self, block, Op::AssignLocal(var.slot));
+            self.stack_mut()[var.slot].active = true;
+        } else {
+            // Local
+            let var = Variable::new(name, true, typ.clone());
+            let slot = self.define(var);
+            self.expression(block);
+            let constant = self.add_constant(Value::Ty(typ));
+            add_op(self, block, Op::Define(constant));
+
+            if let Ok(slot) = slot {
+                self.stack_mut()[slot].active = true;
+            }
         }
     }
 
@@ -1148,12 +1183,24 @@ impl<'a> Compiler<'a> {
             return;
         }
 
-        let var = Variable::new(name, false, typ);
-        let slot = self.define(var);
-        self.expression(block);
+        if self.current_context().len() <= 1 {
+            // Global
+            let var = self.find_variable(name)
+                .expect(&format!("Couldn't find constant '{}' during prepass.", name));
+            assert!(var.mutable);
 
-        if let Ok(slot) = slot {
-            self.stack_mut()[slot].active = true;
+            self.expression(block);
+            add_op(self, block, Op::AssignLocal(var.slot));
+            self.stack_mut()[var.slot].active = true;
+        } else {
+            // Local
+            let var = Variable::new(name, false, typ);
+            let slot = self.define(var);
+            self.expression(block);
+
+            if let Ok(slot) = slot {
+                self.stack_mut()[slot].active = true;
+            }
         }
     }
 
@@ -1590,6 +1637,56 @@ impl<'a> Compiler<'a> {
     }
 
     pub(crate) fn compile(&'a mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
+
+        for section in 0..self.sections.len() {
+            self.init_section(section);
+            let section = &self.sections[section];
+            match (section.tokens.get(0), section.tokens.get(1), section.tokens.get(2))  {
+                (Some((Token::Identifier(name), _)),
+                 Some((Token::ColonColon, _)),
+                 Some((Token::Fn, _))) => {
+                    self.forward_constant(name.to_string());
+                },
+
+                (Some((Token::Blob, _)),
+                 Some((Token::Identifier(name), _)), ..) => {
+                    self.forward_constant(name.to_string());
+                },
+
+                (Some((Token::Identifier(name), _)),
+                 Some((Token::Colon, _)), ..) => {
+                    self.eat();
+                    self.eat();
+                    if let Ok(ty) = self.parse_type() {
+                        let is_mut = self.peek() == Token::Equal;
+                        let var = Variable::new(name, is_mut, ty);
+                        let _ = self.define(var);
+                    } else {
+                        error!(self, format!("Failed to parse type global '{}'.", name));
+                    }
+                }
+
+                (Some((Token::Identifier(name), _)),
+                 Some((Token::ColonColon, _)), ..) => {
+                    let var = Variable::new(name, false, Type::Unknown);
+                    let _ = self.define(var);
+                },
+
+                (Some((Token::Identifier(name), _)),
+                 Some((Token::ColonEqual, _)), ..) => {
+                    let var = Variable::new(name, true, Type::Unknown);
+                    let _ = self.define(var);
+                },
+
+
+                (None, ..) => {}
+
+                (a, b, c) => {
+                    panic!(format!("{:?} {:?} {:?}", a, b, c));
+                }
+            }
+        }
+
         self.functions = functions
             .to_vec()
             .into_iter()
@@ -1603,7 +1700,6 @@ impl<'a> Compiler<'a> {
         for section in 0..self.sections.len() {
             self.init_section(section);
             while self.peek() != Token::EOF {
-                println!("compiling {} -- statement -- {:?}", section, self.line());
                 self.statement(&mut block);
                 expect!(self, Token::Newline | Token::EOF,
                         "Expect newline or EOF after expression.");
