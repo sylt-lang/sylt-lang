@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use crate::{Blob, Block, Op, Prog, RustFunction, Type, Value};
 use crate::error::{Error, ErrorKind};
-use crate::tokenizer::{Token, TokenStream};
+use crate::tokenizer::{Token, PlacedToken, TokenStream};
 
 macro_rules! nextable_enum {
     ( $name:ident { $( $thing:ident ),* $( , )? } ) => {
@@ -101,6 +101,77 @@ macro_rules! parse_branch {
                 false
             })()
         }
+    };
+}
+
+macro_rules! push_frame {
+    ($compiler:expr, $block:expr, $code:tt) => {
+        {
+            $compiler.frames.push(Frame::new());
+
+            // Return value stored as a variable
+            let var = Variable::new("", true, Type::Unknown);
+            $compiler.define(var).unwrap();
+
+            $code
+
+            let frame = $compiler.frames.pop().unwrap();
+            // 0-th slot is the function itself.
+            for var in frame.stack.iter().skip(1) {
+                if !(var.read || var.upvalue) {
+                    let e = ErrorKind::SyntaxError(
+                        var.line,
+                        Token::Identifier(var.name.clone()
+                    ));
+                    $compiler.error_on_line(
+                        e,
+                        var.line,
+                        Some(format!("Unused value '{}'.", var.name))
+                    );
+                }
+                $compiler.panic = false;
+            }
+            // The 0th slot is the return value, which is passed out
+            // from functions, and should not be popped.
+            0
+        }
+    };
+}
+
+macro_rules! push_scope {
+    ($compiler:expr, $block:expr, $code:tt) => {
+        let ss = $compiler.stack().len();
+        $compiler.frame_mut().scope += 1;
+
+        $code;
+
+        $compiler.frame_mut().scope -= 1;
+
+        let mut errors = Vec::new();
+        for var in $compiler.frame().stack.iter().skip(ss).rev() {
+            if !(var.read || var.upvalue) {
+                let e = ErrorKind::SyntaxError(
+                    var.line,
+                    Token::Identifier(var.name.clone()
+                ));
+                errors.push((
+                    e,
+                    var.line,
+                    format!("Usage of undefined value: '{}'.", var.name),)
+                );
+            }
+            if var.captured {
+                add_op($compiler, $block, Op::PopUpvalue);
+            } else {
+                add_op($compiler, $block, Op::Pop);
+            }
+        }
+
+        for (e, l, m) in errors.iter() {
+            $compiler.error_on_line(e.clone(), *l, Some(m.clone()));
+            $compiler.panic = false;
+        }
+        $compiler.stack_mut().truncate(ss);
     };
 }
 
@@ -240,9 +311,10 @@ impl Frame {
     }
 }
 
-pub(crate) struct Compiler {
+pub(crate) struct Compiler<'a> {
     curr: usize,
-    tokens: TokenStream,
+    sections: Vec<&'a[PlacedToken]>,
+    section: &'a[PlacedToken],
     current_file: PathBuf,
 
     frames: Vec<Frame>,
@@ -259,87 +331,81 @@ pub(crate) struct Compiler {
     strings: Vec<String>,
 }
 
-macro_rules! push_frame {
-    ($compiler:expr, $block:expr, $code:tt) => {
-        {
-            $compiler.frames.push(Frame::new());
-
-            // Return value stored as a variable
-            let var = Variable::new("", true, Type::Unknown);
-            $compiler.define(var).unwrap();
-
-            $code
-
-            let frame = $compiler.frames.pop().unwrap();
-            // 0-th slot is the function itself.
-            for var in frame.stack.iter().skip(1) {
-                if !(var.read || var.upvalue) {
-                    let e = ErrorKind::SyntaxError(
-                        var.line,
-                        Token::Identifier(var.name.clone()
-                    ));
-                    $compiler.error_on_line(
-                        e,
-                        var.line,
-                        Some(format!("Unused value '{}'.", var.name))
-                    );
-                }
-                $compiler.panic = false;
-            }
-            // The 0th slot is the return value, which is passed out
-            // from functions, and should not be popped.
-            0
-        }
-    };
-}
-
-macro_rules! push_scope {
-    ($compiler:expr, $block:expr, $code:tt) => {
-        let ss = $compiler.stack().len();
-        $compiler.frame_mut().scope += 1;
-
-        $code;
-
-        $compiler.frame_mut().scope -= 1;
-
-        let mut errors = Vec::new();
-        for var in $compiler.frame().stack.iter().skip(ss).rev() {
-            if !(var.read || var.upvalue) {
-                let e = ErrorKind::SyntaxError(
-                    var.line,
-                    Token::Identifier(var.name.clone()
-                ));
-                errors.push((
-                    e,
-                    var.line,
-                    format!("Usage of undefined value: '{}'.", var.name),)
-                );
-            }
-            if var.captured {
-                add_op($compiler, $block, Op::PopUpvalue);
-            } else {
-                add_op($compiler, $block, Op::Pop);
-            }
-        }
-
-        for (e, l, m) in errors.iter() {
-            $compiler.error_on_line(e.clone(), *l, Some(m.clone()));
-            $compiler.panic = false;
-        }
-        $compiler.stack_mut().truncate(ss);
-    };
-}
-
 /// Helper function for adding operations to the given block.
 fn add_op(compiler: &Compiler, block: &mut Block, op: Op) -> usize {
     block.add(op, compiler.line())
 }
 
-impl Compiler {
-    pub(crate) fn new(current_file: &Path, tokens: TokenStream) -> Self {
+fn split_sections<'a>(tokens: &'a TokenStream) -> Vec<&'a[PlacedToken]> {
+    let mut sections = Vec::new();
+
+    let mut last = 0;
+    let mut curr = 0;
+    while curr < tokens.len() {
+        if match (tokens.get(curr + 0), tokens.get(curr + 1), tokens.get(curr + 2)) {
+            (Some((Token::LeftBrace, _)), ..)
+                => {
+                let mut blocks = 0;
+                loop {
+                    curr += 1;
+                    match tokens.get(curr) {
+                        Some((Token::LeftBrace, _)) => {
+                            blocks += 1;
+                        }
+
+                        Some((Token::RightBrace, _)) => {
+                            curr += 1;
+                            blocks -= 1;
+                            if blocks <= 0 {
+                                break;
+                            }
+                        }
+
+                        None => {
+                            break;
+                        }
+
+                        _ => {}
+                    }
+                }
+                false
+            },
+
+            (Some((Token::Identifier(_), _)),
+             Some((Token::ColonColon, _)),
+             Some((Token::Fn, _)))
+                => true,
+
+            (Some((Token::Identifier(_), _)),
+             Some((Token::ColonColon, _)),
+             Some(_))
+                => true,
+
+            (Some((Token::Identifier(_), _)),
+             Some((Token::ColonEqual, _)),
+             Some(_))
+                => true,
+
+            _ => false,
+        } {
+            sections.push(&tokens[last..curr]);
+            last = curr;
+        }
+        curr += 1;
+    }
+    sections.push(&tokens[last..curr]);
+    sections
+}
+
+impl<'a> Compiler<'a> {
+    pub(crate) fn new(current_file: &Path, tokens: &'a TokenStream) -> Self {
+        let sections = split_sections(tokens);
+
+        let section = sections[0];
         Self {
             curr: 0,
-            tokens,
+            section,
+            sections,
             current_file: PathBuf::from(current_file),
 
             frames: vec![Frame::new()],
@@ -452,16 +518,20 @@ impl Compiler {
         });
     }
 
+    fn init_section(&mut self, section: &'a[PlacedToken]) {
+        self.curr = 0;
+        self.section = section;
+    }
 
     fn peek(&self) -> Token {
         self.peek_at(0)
     }
 
     fn peek_at(&self, at: usize) -> Token {
-        if self.tokens.len() <= self.curr + at {
+        if self.section.len() <= self.curr + at {
             crate::tokenizer::Token::EOF
         } else {
-            self.tokens[self.curr + at].0.clone()
+            self.section[self.curr + at].0.clone()
         }
     }
 
@@ -490,10 +560,10 @@ impl Compiler {
 
     /// The line of the current token.
     fn line(&self) -> usize {
-        if self.curr < self.tokens.len() {
-            self.tokens[self.curr].1
+        if self.section.len() == 0 {
+            0xCAFEBABE
         } else {
-            self.tokens[self.tokens.len() - 1].1
+            self.section[std::cmp::min(self.curr, self.section.len() - 1)].1
         }
     }
 
@@ -679,8 +749,8 @@ impl Compiler {
         }
     }
 
-    fn find_and_capture_variable<'a, I>(name: &str, mut iterator: I) -> Option<Variable>
-    where I: Iterator<Item = &'a mut Frame> {
+    fn find_and_capture_variable<'b, I>(name: &str, mut iterator: I) -> Option<Variable>
+    where I: Iterator<Item = &'b mut Frame> {
         if let Some(frame) = iterator.next() {
             if let Some(res) = frame.find_local(name) {
                 frame.stack[res.slot].captured = true;
@@ -1447,10 +1517,16 @@ impl Compiler {
         let _ = self.define(main);
 
         let mut block = Block::new(name, file);
-        while self.peek() != Token::EOF {
-            self.statement(&mut block);
-            expect!(self, Token::Newline | Token::EOF,
-                    "Expect newline or EOF after expression.");
+        for section in 0..self.sections.len() {
+            let s = section;
+            let section = self.sections[section];
+            self.init_section(section);
+            while self.peek() != Token::EOF {
+                println!("compiling {} -- statement -- {:?}", s, self.line());
+                self.statement(&mut block);
+                expect!(self, Token::Newline | Token::EOF,
+                        "Expect newline or EOF after expression.");
+            }
         }
         add_op(self, &mut block, Op::Constant(self.nil_value()));
         add_op(self, &mut block, Op::Return);
