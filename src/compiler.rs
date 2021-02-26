@@ -43,7 +43,7 @@ macro_rules! parse_branch {
     ($compiler:expr, $block:expr, [ $( $call:expr ),* ]) => {
         {
             let block_length = $block.ops.len();
-            let token_length = $compiler.curr;
+            let token_length = $compiler.current_token;
             let num_errors = $compiler.errors.len();
             let mut stored_errors = Vec::new();
 
@@ -60,7 +60,7 @@ macro_rules! parse_branch {
                         return true;
                     }
                     $compiler.panic = false;
-                    $compiler.curr = token_length;
+                    $compiler.current_token = token_length;
                     let thrown_errors = $compiler.errors.len() - num_errors - 1;
                     stored_errors.extend($compiler.errors.split_off(thrown_errors));
                     $block.ops.truncate(block_length);
@@ -79,7 +79,7 @@ macro_rules! parse_branch {
     ($compiler:expr, $block:expr, $call:expr) => {
         {
             let block_length = $block.ops.len();
-            let token_length = $compiler.curr;
+            let token_length = $compiler.current_token;
             let num_errors = $compiler.errors.len();
             let mut stored_errors = Vec::new();
             // Closures for early return on success.
@@ -94,7 +94,7 @@ macro_rules! parse_branch {
                     return true;
                 }
                 $compiler.panic = false;
-                $compiler.curr = token_length;
+                $compiler.current_token = token_length;
                 let thrown_errors = $compiler.errors.len() - num_errors - 1;
                 stored_errors.extend($compiler.errors.split_off(thrown_errors));
                 $block.ops.truncate(block_length);
@@ -328,7 +328,7 @@ impl<'a> Section<'a> {
 }
 
 pub(crate) struct Compiler<'a> {
-    curr: usize,
+    current_token: usize,
     current_section: usize,
     sections: Vec<Section<'a>>,
 
@@ -420,7 +420,7 @@ impl<'a> Compiler<'a> {
         let mut contextes = HashMap::new();
         contextes.insert(current_file, vec![Frame::new()]);
         Self {
-            curr: 0,
+            current_token: 0,
             current_section: 0,
             sections,
 
@@ -552,7 +552,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn init_section(&mut self, section: usize) {
-        self.curr = 0;
+        self.current_token = 0;
         self.current_section = section;
     }
 
@@ -561,10 +561,10 @@ impl<'a> Compiler<'a> {
     }
 
     fn peek_at(&self, at: usize) -> Token {
-        if self.section().tokens.len() <= self.curr + at {
+        if self.section().tokens.len() <= self.current_token + at {
             crate::tokenizer::Token::EOF
         } else {
-            self.section().tokens[self.curr + at].0.clone()
+            self.section().tokens[self.current_token + at].0.clone()
         }
     }
 
@@ -575,12 +575,12 @@ impl<'a> Compiler<'a> {
 
     fn eat(&mut self) -> Token {
         let t = self.peek();
-        self.curr += 1;
+        self.current_token += 1;
         match t {
             Token::GitConflictBegin => {
-                self.curr -= 1;
+                self.current_token -= 1;
                 let start = self.line();
-                self.curr += 1;
+                self.current_token += 1;
                 while !matches!(self.eat(), Token::GitConflictEnd) {}
                 self.panic = false;
                 self.error_on_line(ErrorKind::GitConflictError(start, self.line()), start, None);
@@ -596,7 +596,7 @@ impl<'a> Compiler<'a> {
         if self.section().tokens.len() == 0 {
             0xCAFEBABE
         } else {
-            self.section().tokens[std::cmp::min(self.curr, self.section().tokens.len() - 1)].1
+            self.section().tokens[std::cmp::min(self.current_token, self.section().tokens.len() - 1)].1
         }
     }
 
