@@ -20,10 +20,11 @@ mod tokenizer;
 
 /// Compiles a file and links the supplied functions as callable external
 /// functions. Use this if you want your programs to be able to yield.
-pub fn compile_file(path: &Path,
-                    print: bool,
-                    functions: Vec<(String, RustFunction)>
-    ) -> Result<vm::VM, Vec<Error>> {
+pub fn compile_file(
+    path: &Path,
+    print: bool,
+    functions: Vec<(String, RustFunction)>
+) -> Result<vm::VM, Vec<Error>> {
     let tokens = tokenizer::file_to_tokens(path);
     match compiler::Compiler::new(path, &tokens).compile("main", path, &functions) {
         Ok(prog) => {

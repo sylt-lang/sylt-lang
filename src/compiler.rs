@@ -107,7 +107,7 @@ macro_rules! parse_branch {
 macro_rules! push_frame {
     ($compiler:expr, $block:expr, $code:tt) => {
         {
-            $compiler.frames.push(Frame::new());
+            $compiler.current_context_mut().push(Frame::new());
 
             // Return value stored as a variable
             let var = Variable::new("", true, Type::Unknown);
@@ -115,7 +115,7 @@ macro_rules! push_frame {
 
             $code
 
-            let frame = $compiler.frames.pop().unwrap();
+            let frame = $compiler.current_context_mut().pop().unwrap();
             // 0-th slot is the function itself.
             for var in frame.stack.iter().skip(1) {
                 if !(var.read || var.upvalue) {
@@ -311,13 +311,20 @@ impl Frame {
     }
 }
 
+type CompilerContext = Vec<Frame>;
+
+struct Section<'a> {
+    path: PathBuf,
+    tokens: &'a [PlacedToken],
+}
+
 pub(crate) struct Compiler<'a> {
     curr: usize,
     sections: Vec<&'a[PlacedToken]>,
     section: &'a[PlacedToken],
     current_file: PathBuf,
 
-    frames: Vec<Frame>,
+    contextes: HashMap<PathBuf, CompilerContext>,
 
     panic: bool,
     errors: Vec<Error>,
@@ -402,13 +409,16 @@ impl<'a> Compiler<'a> {
         let sections = split_sections(tokens);
 
         let section = sections[0];
+
+        let mut contextes = HashMap::new();
+        contextes.insert(current_file.to_path_buf(), vec![Frame::new()]);
         Self {
             curr: 0,
             section,
             sections,
             current_file: PathBuf::from(current_file),
 
-            frames: vec![Frame::new()],
+            contextes,
 
             panic: false,
             errors: vec![],
@@ -450,14 +460,22 @@ impl<'a> Compiler<'a> {
         self.strings.len() - 1
     }
 
+    fn current_context(&self) -> &CompilerContext {
+        self.contextes.get(&self.current_file).unwrap()
+    }
+
+    fn current_context_mut(&mut self) -> &mut CompilerContext {
+        self.contextes.get_mut(&self.current_file).unwrap()
+    }
+
     fn frame(&self) -> &Frame {
-        let last = self.frames.len() - 1;
-        &self.frames[last]
+        let last = self.current_context().len() - 1;
+        &self.current_context()[last]
     }
 
     fn frame_mut(&mut self) -> &mut Frame {
-        let last = self.frames.len() - 1;
-        &mut self.frames[last]
+        let last = self.current_context().len() - 1;
+        &mut self.current_context_mut()[last]
     }
 
     /// Marks a variable as read. Also marks upvalues.
@@ -468,15 +486,15 @@ impl<'a> Compiler<'a> {
         }
 
 
-        if if let Some(up) = self.frames[frame_id].upvalues.get(var.slot) {
+        if if let Some(up) = self.current_context()[frame_id].upvalues.get(var.slot) {
             up.name == var.name
         } else { false } {
-            let mut inner_var = self.frames[frame_id].upvalues[var.slot].clone();
+            let mut inner_var = self.current_context()[frame_id].upvalues[var.slot].clone();
             inner_var.slot = inner_var.outer_slot;
             self.mark_read(frame_id - 1, &inner_var);
-            self.frames[frame_id].upvalues[var.slot].read = true;
+            self.current_context_mut()[frame_id].upvalues[var.slot].read = true;
         } else {
-            self.frames[frame_id].stack[var.slot].read = true;
+            self.current_context_mut()[frame_id].stack[var.slot].read = true;
         }
     }
 
@@ -780,7 +798,7 @@ impl<'a> Compiler<'a> {
             return Some(res);
         }
 
-        Self::find_and_capture_variable(name, self.frames.iter_mut().rev())
+        Self::find_and_capture_variable(name, self.current_context_mut().iter_mut().rev())
     }
 
     fn find_constant(&mut self, name: &str) -> usize {
@@ -974,7 +992,7 @@ impl<'a> Compiler<'a> {
 
         // Variables
         if let Some(var) = self.find_variable(&name) {
-            self.mark_read(self.frames.len() - 1, &var);
+            self.mark_read(self.current_context().len() - 1, &var);
             if var.upvalue {
                 add_op(self, block, Op::ReadUpvalue(var.slot));
             } else {
@@ -1038,7 +1056,7 @@ impl<'a> Compiler<'a> {
 
     fn constant_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
         // Magical global constants
-        if self.frames.len() <= 1 {
+        if self.current_context().len() <= 1 {
             if parse_branch!(self, block, self.function(block, Some(name))) {
                 // Remove the function, since it's a constant and we already
                 // added it.
@@ -1338,7 +1356,7 @@ impl<'a> Compiler<'a> {
             _ => unreachable!(),
         };
         if let Some(var) = self.find_variable(&name) {
-            self.mark_read(self.frames.len() - 1, &var);
+            self.mark_read(self.current_context().len() - 1, &var);
             if var.upvalue {
                 add_op(self, block, Op::ReadUpvalue(var.slot));
             } else {
@@ -1544,7 +1562,7 @@ impl<'a> Compiler<'a> {
             }
         }
 
-        for var in self.frames.pop().unwrap().stack.iter().skip(1) {
+        for var in self.current_context_mut().pop().unwrap().stack.iter().skip(1) {
             if !(var.read || var.upvalue) {
                 let e = ErrorKind::SyntaxError(var.line, Token::Identifier(var.name.clone()));
                 let m = format!("Unused value '{}'.", var.name);
