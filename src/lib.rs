@@ -4,6 +4,7 @@ use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::hash::{Hash, Hasher};
 
 use owo_colors::OwoColorize;
 
@@ -196,6 +197,43 @@ impl Debug for Value {
             Value::Nil => write!(fmt, "(nil)"),
             Value::Tuple(v) => write!(fmt, "({:?})", v),
         }
+    }
+}
+
+impl PartialEq<Value> for Value {
+    fn eq(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Value::Float(a), Value::Float(b)) => a == b,
+            (Value::Int(a), Value::Int(b)) => a == b,
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::Tuple(a), Value::Tuple(b)) => {
+                a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| a == b)
+            }
+            (Value::Nil, Value::Nil) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Value {}
+
+impl Hash for Value {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Value::Float(a) => {
+                // We have to limit the values, because
+                // floats are wierd.
+                assert!(a.is_finite());
+                a.to_bits().hash(state);
+            },
+            Value::Int(a) => a.hash(state),
+            Value::Bool(a) => a.hash(state),
+            Value::String(a) => a.hash(state),
+            Value::Tuple(a) => a.hash(state),
+            Value::Nil => state.write_i8(0),
+            _ => {},
+        };
     }
 }
 
@@ -1217,6 +1255,11 @@ for i := 0, i < 10, i += 1 {
     if i == 2 {
         break
     }
+
+    q
+    qq
+    qqq
+    qqqq
 }
 a <=> 3
 ",
@@ -1233,6 +1276,11 @@ for i := 0, i < 4, i += 1 {
         continue
     }
     a = a + 1
+
+    q
+    qq
+    qqq
+    qqqq
 }
 a <=> 3
 ",
@@ -1274,7 +1322,9 @@ a := 0
     b := 99999
     {
         a := 99999
+        a
     }
+    b
     a -= 1
 }
 a <=> -1

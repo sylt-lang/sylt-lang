@@ -1,4 +1,4 @@
-use std::{borrow::Cow, path::{Path, PathBuf}};
+use std::{path::{Path, PathBuf}};
 use std::cell::RefCell;
 use std::collections::{HashMap, hash_map::Entry};
 use std::rc::Rc;
@@ -39,6 +39,9 @@ macro_rules! expect {
     };
 }
 
+// NOTE(ed): This can cause some strange bugs. It would be nice if we could
+// remove this function, but to do that we need to rewrite some code. Like
+// tuples and fields. Might be worth it tough.
 macro_rules! parse_branch {
     ($compiler:expr, $block:expr, [ $( $call:expr ),* ]) => {
         {
@@ -327,6 +330,13 @@ impl<'a> Section<'a> {
     }
 }
 
+#[derive(Debug)]
+enum Name {
+    Slot(usize, usize),
+    Unknown(usize, usize),
+    Space(HashMap<String, usize>),
+}
+
 pub(crate) struct Compiler<'a> {
     current_token: usize,
     current_section: usize,
@@ -339,11 +349,14 @@ pub(crate) struct Compiler<'a> {
 
     blocks: Vec<Rc<RefCell<Block>>>,
     blob_id: usize,
-    unknown: HashMap<String, (usize, usize)>,
 
     functions: HashMap<String, (usize, RustFunction)>,
-    constants: Vec<Value>,
+
     strings: Vec<String>,
+
+    constants: Vec<Value>,
+    values: HashMap<Value, usize>,
+    names: HashMap<String, Name>,
 }
 
 /// Helper function for adding operations to the given block.
@@ -431,23 +444,15 @@ impl<'a> Compiler<'a> {
 
             blocks: Vec::new(),
             blob_id: 0,
-            unknown: HashMap::new(),
 
             functions: HashMap::new(),
 
-            constants: vec![Value::Nil],
             strings: Vec::new(),
-        }
-    }
 
-    fn nil_value(&self) -> usize {
-        self.constants.iter()
-            .enumerate()
-            .find_map(|(i, x)|
-                match x {
-                    Value::Nil => Some(i),
-                    _ => None,
-                }).unwrap()
+            constants: vec![],
+            values: HashMap::new(),
+            names: HashMap::new(),
+        }
     }
 
     fn new_blob_id(&mut self) -> usize {
@@ -457,8 +462,26 @@ impl<'a> Compiler<'a> {
     }
 
     fn add_constant(&mut self, value: Value) -> usize {
-        self.constants.push(value);
-        self.constants.len() - 1
+        if matches!(value, Value::Float(_)
+                         | Value::Int(_)
+                         | Value::Bool(_)
+                         | Value::String(_)
+                         | Value::Tuple(_)
+                         | Value::Nil)
+        {
+            let entry = self.values.entry(value.clone());
+            if let Entry::Occupied(entry) = entry {
+                *entry.get()
+            } else {
+                let slot = self.constants.len();
+                self.constants.push(value);
+                entry.or_insert(slot);
+                slot
+            }
+        } else {
+            self.constants.push(value);
+            self.constants.len() - 1
+        }
     }
 
     fn intern_string(&mut self, string: String) -> usize {
@@ -817,18 +840,51 @@ impl<'a> Compiler<'a> {
     }
 
     fn find_constant(&mut self, name: &str) -> usize {
-        let res = self.constants.iter().enumerate().find_map(|(i, x)| match x {
-            Value::Blob(b) if b.name == name => Some(i),
-            Value::Function(_, b) if b.borrow().name == name => Some(i),
-            _ => None,
-        });
-        if let Some(res) = res {
-            return res;
-        }
-        let constant = self.add_constant(Value::Nil);
+        match self.names.entry(name.to_string()) {
+            Entry::Occupied(entry) => {
+                match entry.get() {
+                    Name::Slot(i, _) => { return *i; },
+                    Name::Unknown(i, _) => { return *i; },
+                    _ => unreachable!(),
+                }
+            },
+            Entry::Vacant(_) => {},
+        };
+
+        let slot = self.add_constant(Value::Unknown);
         let line = self.line();
-        let entry = self.unknown.entry(name.to_string());
-        entry.or_insert((constant, line)).0
+        self.names.insert(name.to_string(), Name::Unknown(slot, line));
+        slot
+    }
+
+    fn named_constant(&mut self, name: String, value: Value) -> usize {
+        let line = self.line();
+        match self.names.entry(name.clone()) {
+            Entry::Occupied(mut entry) => {
+                let slot = if let Name::Unknown(slot, _) = entry.get() {
+                    *slot
+                } else {
+                    error!(self, format!("Constant named \"{}\" already has a value.", name));
+                    return 0;
+                };
+                entry.insert(Name::Slot(slot, line));
+                self.constants[slot] = value;
+                return slot;
+            },
+            Entry::Vacant(_) => {},
+        }
+        let slot = self.add_constant(value);
+        self.names.insert(name, Name::Slot(slot, line));
+        slot
+    }
+
+    fn call_maybe(&mut self, block: &mut Block) -> bool {
+        if matches!(self.peek(), Token::Bang | Token::LeftParen) {
+            self.call(block);
+            true
+        } else {
+            false
+        }
     }
 
     fn call(&mut self, block: &mut Block) {
@@ -896,17 +952,17 @@ impl<'a> Compiler<'a> {
     }
 
     // TODO(ed): de-complexify
-    fn function(&mut self, block: &mut Block, name: Option<&str>) {
+    fn function(&mut self, block: &mut Block, in_name: Option<&str>) {
         expect!(self, Token::Fn, "Expected 'fn' at start of function.");
 
         let top = self.stack().len() - 1;
-        let name = if let Some(name) = name {
-            Cow::Owned(String::from(name))
+        let name = if let Some(name) = in_name {
+            String::from(name)
         } else if !self.stack()[top].active {
             self.stack_mut()[top].active = true;
-            Cow::Borrowed(&self.stack()[top].name)
+            self.stack()[top].name.clone()
         } else {
-            Cow::Owned(format!("λ {}@{:03}", self.current_file().display(), self.line()))
+            format!("λ {}@{:03}", self.current_file().display(), self.line())
         };
 
         let mut args = Vec::new();
@@ -925,7 +981,8 @@ impl<'a> Compiler<'a> {
                         expect!(self, Token::Colon, "Expected ':' after parameter name.");
                         if let Ok(typ) = self.parse_type() {
                             args.push(typ.clone());
-                            let var = Variable::new(&name, true, typ);
+                            let mut var = Variable::new(&name, true, typ);
+                            var.read = true;
                             if let Ok(slot) = self.define(var) {
                                 self.stack_mut()[slot].active = true;
                             }
@@ -962,12 +1019,13 @@ impl<'a> Compiler<'a> {
             }
         });
 
+        let nil = self.add_constant(Value::Nil);
         for op in function_block.ops.iter().rev() {
             match op {
                 Op::Pop | Op::PopUpvalue => {}
                 Op::Return => { break; } ,
                 _ => {
-                    add_op(self, &mut function_block, Op::Constant(self.nil_value()));
+                    add_op(self, &mut function_block, Op::Constant(nil));
                     add_op(self, &mut function_block, Op::Return);
                     break;
                 }
@@ -975,7 +1033,7 @@ impl<'a> Compiler<'a> {
         }
 
         if function_block.ops.is_empty() {
-            add_op(self, &mut function_block, Op::Constant(self.nil_value()));
+            add_op(self, &mut function_block, Op::Constant(nil));
             add_op(self, &mut function_block, Op::Return);
         }
 
@@ -987,7 +1045,11 @@ impl<'a> Compiler<'a> {
         // This behaviour is used in `constant_statement`.
         let function = Value::Function(Vec::new(), Rc::clone(&function_block));
         self.blocks[block_id] = function_block;
-        let constant = self.add_constant(function);
+        let constant = if in_name.is_some() {
+            self.named_constant(name, function)
+        } else {
+            self.add_constant(function)
+        };
         add_op(self, block, Op::Constant(constant));
     }
 
@@ -1026,7 +1088,7 @@ impl<'a> Compiler<'a> {
                         }
                     }
                     _ => {
-                        if !parse_branch!(self, block, self.call(block)) {
+                        if !self.call_maybe(block) {
                             return;
                         }
                     }
@@ -1037,7 +1099,7 @@ impl<'a> Compiler<'a> {
         // Blobs - Always returns a blob since it's filled in if it isn't used.
         let con = self.find_constant(&name);
         add_op(self, block, Op::Constant(con));
-        parse_branch!(self, block, self.call(block));
+        self.call_maybe(block);
     }
 
     fn define(&mut self, mut var: Variable) -> Result<usize, ()> {
@@ -1071,26 +1133,19 @@ impl<'a> Compiler<'a> {
 
     fn constant_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
         // Magical global constants
-        if self.current_context().len() <= 1 {
-            if parse_branch!(self, block, self.function(block, Some(name))) {
-                // Remove the function, since it's a constant and we already
-                // added it.
-                block.ops.pop().unwrap();
-                let slot = if let Entry::Occupied(entry) = self.unknown.entry(String::from(name)) {
-                    let (_, (slot, _)) = entry.remove_entry();
-                    self.constants[slot] = self.constants.pop().unwrap();
-                    slot
-                } else {
-                    self.constants.len() - 1
-                };
-                add_op(self, block, Op::Link(slot));
-                if let Value::Function(_, block) = &self.constants[slot] {
-                    block.borrow_mut().mark_constant();
-                } else {
-                    unreachable!();
-                }
-                return;
+        if self.current_context().len() <= 1 && self.peek() == Token::Fn {
+            self.function(block, Some(name));
+            // Remove the function, since it's a constant and we already
+            // added it.
+            block.ops.pop().unwrap();
+            let slot = self.find_constant(name);
+            add_op(self, block, Op::Link(slot));
+            if let Value::Function(_, block) = &self.constants[slot] {
+                block.borrow_mut().mark_constant();
+            } else {
+                unreachable!();
             }
+            return;
         }
 
         let var = Variable::new(name, false, typ);
@@ -1357,12 +1412,7 @@ impl<'a> Compiler<'a> {
         expect!(self, Token::RightBrace, "Expected '}' after 'blob' body. AKA '}'.");
 
         let blob = Value::Blob(Rc::new(blob));
-        if let Entry::Occupied(entry) = self.unknown.entry(name) {
-            let (_, (slot, _)) = entry.remove_entry();
-            self.constants[slot] = blob;
-        } else {
-            self.constants.push(blob);
-        }
+        self.named_constant(name, blob);
     }
 
     fn blob_field(&mut self, block: &mut Block) {
@@ -1419,7 +1469,7 @@ impl<'a> Compiler<'a> {
                         return;
                     }
                     _ => {
-                        if !parse_branch!(self, block, self.call(block)) {
+                        if !self.call_maybe(block) {
                             error!(self, "Unexpected token when parsing blob-field.");
                             return;
                         }
@@ -1559,17 +1609,21 @@ impl<'a> Compiler<'a> {
                         "Expect newline or EOF after expression.");
             }
         }
-        add_op(self, &mut block, Op::Constant(self.nil_value()));
+        let tmp = self.add_constant(Value::Unknown);
+        add_op(self, &mut block, Op::Constant(tmp));
         add_op(self, &mut block, Op::Return);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
 
-        if self.unknown.len() != 0 {
-            let errors: Vec<_> = self.unknown.iter().map(|(name, (_, line))|
-                (ErrorKind::SyntaxError(*line, Token::Identifier(name.clone())),
-                 *line,
-                 format!("Usage of undefined value: '{}'.", name,)
-                ))
-                .collect();
+        println!("{:?}", self.names);
+        if self.names.len() != 0 {
+            let errors: Vec<_> = self.names.iter().filter_map(|(name, kind)|
+                if let Name::Unknown(_, line) = kind {
+                    Some((ErrorKind::SyntaxError(*line, Token::Identifier(name.clone())),
+                    *line,
+                    format!("Usage of undefined value: '{}'.", name,)))
+                } else {
+                    None
+                }) .collect();
             for (e, l, m) in errors.iter() {
                 self.error_on_line(e.clone(), *l, Some(m.clone()));
             }
@@ -1584,6 +1638,7 @@ impl<'a> Compiler<'a> {
             self.panic = false;
         }
 
+        block.debug_print();
         self.blocks.insert(0, Rc::new(RefCell::new(block)));
 
         if self.errors.is_empty() {
