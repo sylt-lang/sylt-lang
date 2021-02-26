@@ -928,7 +928,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Gives faulty line number"]
     fn assign_to_constant_upvalue() {
         assert_errs!(run_string("a :: 2\nq :: fn { a = 2 }\nq()\na", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
     }
