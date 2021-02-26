@@ -543,6 +543,18 @@ impl<'a> Compiler<'a> {
     fn eat(&mut self) -> Token {
         let t = self.peek();
         self.curr += 1;
+        match t {
+            Token::GitConflictBegin => {
+                self.curr -= 1;
+                let start = self.line();
+                self.curr += 1;
+                while !matches!(self.eat(), Token::GitConflictEnd) {}
+                self.panic = false;
+                self.error_on_line(ErrorKind::GitConflictError(start, self.line()), start, None);
+                self.panic = true;
+            }
+            _ => {}
+        }
         t
     }
 
