@@ -1063,7 +1063,6 @@ a
                   }
                   add(1, 1) <=> 2
                   add(10, 20) <=> 30",
-        /*
         calls_inside_calls: "one := fn -> int {
                                ret 1
                              }
@@ -1087,7 +1086,6 @@ a
                                     ret inner(a)
                                   }
                                   f(g, 2) <=> 4",
-        */
         multiple_returns: "f := fn a: int -> int {
                              if a == 1 {
                                ret 2
@@ -1114,7 +1112,6 @@ a
                     factorial(6) <=> 720
                     factorial(12) <=> 479001600",
 
-/*
         returning_closures: "
 f : fn -> fn -> int = fn -> fn -> int {
     x : int = 0
@@ -1137,17 +1134,15 @@ b() <=> 3
 
 a() <=> 4
 ",
-*/
     );
 
     test_multiple!(
         blob,
         simple: "blob A {}",
-        field: "blob A { a: int }",
-        /*
         instantiate: "blob A {}
                       a := A()
                       a",
+        field: "blob A { a: int }",
         field_assign: "blob A { a: int }
                        a := A()
                        a.a = 2",
@@ -1165,7 +1160,6 @@ a() <=> 4
                           a.b = 3
                           a.a + a.b <=> 5
                           5 <=> a.a + a.b",
-        */
         blob_infer: "
 blob A { }
 a : A = A()
@@ -1182,7 +1176,7 @@ a
     );
 
     test_file!(scoping, "progs/tests/scoping.sy");
-    // test_file!(for_, "progs/tests/for.sy");
+    test_file!(for_, "progs/tests/for.sy");
 
     test_multiple!(
         op_assign,
@@ -1190,7 +1184,6 @@ a
         sub: "a := 2\na -= 1\na <=> 1",
         mul: "a := 2\na *= 2\na <=> 4",
         div: "a := 2\na /= 2\na <=> 1",
-/*
         cluster: "
 blob A { a: int }
 a := A()
@@ -1203,7 +1196,6 @@ a.a /= 2
 a.a <=> 1
 a.a -= 1
 a.a <=> 0"
-*/
     );
 
     test_multiple!(
@@ -1369,7 +1361,6 @@ a
 ",
 
 
-/*
         constant_function: "
 a()
 a :: fn {}
@@ -1394,6 +1385,21 @@ q :: fn -> int {
     ret k()
 }
 ",
+
+        constant_function_closure: "
+q := 1
+
+f :: fn -> int {
+    q += 1
+    ret q
+}
+
+f() <=> 2
+f() <=> 3
+f() <=> 4
+f() <=> 5
+",
+
         constants_in_inner_functions: "
 q : int = 0
 
@@ -1412,24 +1418,9 @@ q <=> 2
 g()
 q <=> 3
 ",
-*/
 
-        constant_function_closure: "
-q := 1
-
-f :: fn -> int {
-    q += 1
-    ret q
-}
-
-f() <=> 2
-f() <=> 3
-f() <=> 4
-f() <=> 5
-",
     );
 
-/*
     test_string!(conflict_markers, "
 <<<<<<< HEAD
 print extern_test(4.0)
@@ -1439,6 +1430,5 @@ print extern_test(5.0)
 ",
                  [ErrorKind::SyntaxError(_, _), ErrorKind::GitConflictError(2, 6)]
     );
-*/
 
 }
