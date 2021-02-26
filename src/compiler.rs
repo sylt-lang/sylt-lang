@@ -318,11 +318,19 @@ struct Section<'a> {
     tokens: &'a [PlacedToken],
 }
 
+impl<'a> Section<'a> {
+    fn new(path: PathBuf, tokens: &'a [PlacedToken]) -> Self {
+        Section {
+            path,
+            tokens
+        }
+    }
+}
+
 pub(crate) struct Compiler<'a> {
     curr: usize,
-    sections: Vec<&'a[PlacedToken]>,
-    section: &'a[PlacedToken],
-    current_file: PathBuf,
+    current_section: usize,
+    sections: Vec<Section<'a>>,
 
     contextes: HashMap<PathBuf, CompilerContext>,
 
@@ -343,7 +351,7 @@ fn add_op(compiler: &Compiler, block: &mut Block, op: Op) -> usize {
     block.add(op, compiler.line())
 }
 
-fn split_sections<'a>(tokens: &'a TokenStream) -> Vec<&'a[PlacedToken]> {
+fn split_sections<'a>(file_name: PathBuf, tokens: &'a TokenStream) -> Vec<Section> {
     let mut sections = Vec::new();
 
     let mut last = 0;
@@ -395,28 +403,26 @@ fn split_sections<'a>(tokens: &'a TokenStream) -> Vec<&'a[PlacedToken]> {
 
             _ => false,
         } {
-            sections.push(&tokens[last..curr]);
+            sections.push(Section::new(file_name.clone(), &tokens[last..curr]));
             last = curr;
         }
         curr += 1;
     }
-    sections.push(&tokens[last..curr]);
+    sections.push(Section::new(file_name, &tokens[last..curr]));
     sections
 }
 
 impl<'a> Compiler<'a> {
     pub(crate) fn new(current_file: &Path, tokens: &'a TokenStream) -> Self {
-        let sections = split_sections(tokens);
-
-        let section = sections[0];
+        let current_file = current_file.to_path_buf();
+        let sections = split_sections(current_file.clone(), tokens);
 
         let mut contextes = HashMap::new();
-        contextes.insert(current_file.to_path_buf(), vec![Frame::new()]);
+        contextes.insert(current_file, vec![Frame::new()]);
         Self {
             curr: 0,
-            section,
+            current_section: 0,
             sections,
-            current_file: PathBuf::from(current_file),
 
             contextes,
 
@@ -460,12 +466,21 @@ impl<'a> Compiler<'a> {
         self.strings.len() - 1
     }
 
+    fn section(&self) -> &Section {
+        &self.sections[self.current_section]
+    }
+
+    fn current_file(&self) -> &Path {
+        &self.section().path
+    }
+
     fn current_context(&self) -> &CompilerContext {
-        self.contextes.get(&self.current_file).unwrap()
+        self.contextes.get(self.current_file()).unwrap()
     }
 
     fn current_context_mut(&mut self) -> &mut CompilerContext {
-        self.contextes.get_mut(&self.current_file).unwrap()
+        let file = self.current_file().to_path_buf();
+        self.contextes.get_mut(&file).unwrap()
     }
 
     fn frame(&self) -> &Frame {
@@ -530,15 +545,15 @@ impl<'a> Compiler<'a> {
         self.panic = true;
         self.errors.push(Error {
             kind,
-            file: self.current_file.clone(),
+            file: self.current_file().to_path_buf(),
             line,
             message,
         });
     }
 
-    fn init_section(&mut self, section: &'a[PlacedToken]) {
+    fn init_section(&mut self, section: usize) {
         self.curr = 0;
-        self.section = section;
+        self.current_section = section;
     }
 
     fn peek(&self) -> Token {
@@ -546,10 +561,10 @@ impl<'a> Compiler<'a> {
     }
 
     fn peek_at(&self, at: usize) -> Token {
-        if self.section.len() <= self.curr + at {
+        if self.section().tokens.len() <= self.curr + at {
             crate::tokenizer::Token::EOF
         } else {
-            self.section[self.curr + at].0.clone()
+            self.section().tokens[self.curr + at].0.clone()
         }
     }
 
@@ -578,10 +593,10 @@ impl<'a> Compiler<'a> {
 
     /// The line of the current token.
     fn line(&self) -> usize {
-        if self.section.len() == 0 {
+        if self.section().tokens.len() == 0 {
             0xCAFEBABE
         } else {
-            self.section[std::cmp::min(self.curr, self.section.len() - 1)].1
+            self.section().tokens[std::cmp::min(self.curr, self.section().tokens.len() - 1)].1
         }
     }
 
@@ -891,15 +906,15 @@ impl<'a> Compiler<'a> {
             self.stack_mut()[top].active = true;
             Cow::Borrowed(&self.stack()[top].name)
         } else {
-            Cow::Owned(format!("λ {}@{:03}", self.current_file.display(), self.line()))
+            Cow::Owned(format!("λ {}@{:03}", self.current_file().display(), self.line()))
         };
 
         let mut args = Vec::new();
         let mut return_type = Type::Void;
-        let mut function_block = Block::new(&name, &self.current_file);
+        let mut function_block = Block::new(&name, self.current_file());
 
         let block_id = self.blocks.len();
-        let temp_block = Block::new(&name, &self.current_file);
+        let temp_block = Block::new(&name, self.current_file());
         self.blocks.push(Rc::new(RefCell::new(temp_block)));
 
         let _ret = push_frame!(self, function_block, {
@@ -1524,7 +1539,7 @@ impl<'a> Compiler<'a> {
 
     }
 
-    pub(crate) fn compile(&mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
+    pub(crate) fn compile(&'a mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
         self.functions = functions
             .to_vec()
             .into_iter()
@@ -1536,11 +1551,9 @@ impl<'a> Compiler<'a> {
 
         let mut block = Block::new(name, file);
         for section in 0..self.sections.len() {
-            let s = section;
-            let section = self.sections[section];
             self.init_section(section);
             while self.peek() != Token::EOF {
-                println!("compiling {} -- statement -- {:?}", s, self.line());
+                println!("compiling {} -- statement -- {:?}", section, self.line());
                 self.statement(&mut block);
                 expect!(self, Token::Newline | Token::EOF,
                         "Expect newline or EOF after expression.");
