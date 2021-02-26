@@ -1529,6 +1529,44 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    fn outer_statement(&mut self, block: &mut Block) {
+        self.clear_panic();
+        match self.peek_four() {
+            (Token::Identifier(name), Token::ColonEqual, ..) => {
+                self.eat();
+                self.eat();
+                self.definition_statement(&name, Type::Unknown, block);
+            },
+
+            (Token::Identifier(name), Token::ColonColon, ..) => {
+                self.eat();
+                self.eat();
+                self.constant_statement(&name, Type::Unknown, block);
+            },
+
+            (Token::Blob, Token::Identifier(_), ..) => {
+                self.blob_statement(block);
+            },
+
+            (Token::Identifier(name), Token::Colon, ..) => {
+                self.eat();
+                self.eat();
+                if let Ok(typ) = self.parse_type() {
+                    expect!(self, Token::Equal, "Expected assignment.");
+                    self.definition_statement(&name, typ, block);
+                } else {
+                    error!(self, format!("Expected type found '{:?}'.", self.peek()));
+                }
+            }
+
+            (Token::Newline, ..) => {}
+
+            _ => {
+                error!(self, "Invalid outer statement.");
+            }
+        }
+    }
+
     fn statement(&mut self, block: &mut Block) {
         self.clear_panic();
 
@@ -1700,7 +1738,7 @@ impl<'a> Compiler<'a> {
         for section in 0..self.sections.len() {
             self.init_section(section);
             while self.peek() != Token::EOF {
-                self.statement(&mut block);
+                self.outer_statement(&mut block);
                 expect!(self, Token::Newline | Token::EOF,
                         "Expect newline or EOF after expression.");
             }
@@ -1710,7 +1748,6 @@ impl<'a> Compiler<'a> {
         add_op(self, &mut block, Op::Return);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
 
-        println!("{:?}", self.names);
         if self.names.len() != 0 {
             let errors: Vec<_> = self.names.iter().filter_map(|(name, kind)|
                 if let Name::Unknown(_, line) = kind {
@@ -1724,6 +1761,10 @@ impl<'a> Compiler<'a> {
                 self.error_on_line(e.clone(), *l, Some(m.clone()));
             }
         }
+
+        let constant = self.find_constant("start");
+        add_op(self, &mut block, Op::Constant(constant));
+        add_op(self, &mut block, Op::Call(0));
 
         for var in self.current_context_mut().pop().unwrap().stack.iter().skip(1) {
             if !(var.read || var.upvalue) {
