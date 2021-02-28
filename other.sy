@@ -1,0 +1,9 @@
+f :: fn {
+  print "f"
+}
+
+// answer := 42
+
+g :: fn {
+  ret 42
+}
