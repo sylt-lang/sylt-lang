@@ -1,11 +1,12 @@
-use std::{path::{Path, PathBuf}};
+use std::path::{Path, PathBuf};
 use std::cell::RefCell;
 use std::collections::{HashMap, hash_map::Entry};
 use std::rc::Rc;
 
 use crate::{Blob, Block, Op, Prog, RustFunction, Type, Value};
 use crate::error::{Error, ErrorKind};
-use crate::tokenizer::{Token, PlacedToken, TokenStream};
+use crate::sectionizer::Section;
+use crate::tokenizer::Token;
 
 macro_rules! nextable_enum {
     ( $name:ident { $( $thing:ident ),* $( , )? } ) => {
@@ -330,31 +331,17 @@ impl<'a> CompilerContext<'a> {
     }
 }
 
-struct Section<'a> {
-    path: PathBuf,
-    tokens: &'a [PlacedToken],
-}
-
-impl<'a> Section<'a> {
-    fn new(path: PathBuf, tokens: &'a [PlacedToken]) -> Self {
-        Section {
-            path,
-            tokens,
-        }
-    }
-}
-
 #[derive(Debug)]
 enum Name<'a> {
     Slot(usize, usize),
     Unknown(usize, usize),
-    Namespace(&'a Namespace<'a>),
+    _Namespace(&'a Namespace<'a>),
 }
 
 pub(crate) struct Compiler<'a> {
     current_token: usize,
     current_section: usize,
-    sections: Vec<Section<'a>>,
+    sections: Vec<Section>,
 
     contextes: HashMap<PathBuf, CompilerContext<'a>>,
 
@@ -377,82 +364,13 @@ fn add_op(compiler: &Compiler, block: &mut Block, op: Op) -> usize {
     block.add(op, compiler.line())
 }
 
-fn split_sections<'a>(file_name: PathBuf, tokens: &'a TokenStream) -> Vec<Section> {
-    let mut sections = Vec::new();
-
-    let mut last = 0;
-    let mut curr = 0;
-    while curr < tokens.len() {
-        if match (tokens.get(curr + 0), tokens.get(curr + 1), tokens.get(curr + 2)) {
-            (Some((Token::Newline, _)), ..)
-                => {
-                if curr == last {
-                    last += 1;
-                }
-                false
-            },
-
-            (Some((Token::LeftBrace, _)), ..)
-                => {
-                let mut blocks = 0;
-                loop {
-                    curr += 1;
-                    match tokens.get(curr) {
-                        Some((Token::LeftBrace, _)) => {
-                            blocks += 1;
-                        }
-
-                        Some((Token::RightBrace, _)) => {
-                            curr += 1;
-                            blocks -= 1;
-                            if blocks <= 0 {
-                                break;
-                            }
-                        }
-
-                        None => {
-                            break;
-                        }
-
-                        _ => {}
-                    }
-                }
-                false
-            },
-
-            (Some((Token::Identifier(_), _)),
-             Some((Token::ColonColon, _)),
-             Some((Token::Fn, _)))
-                => true,
-
-            (Some((Token::Identifier(_), _)),
-             Some((Token::ColonColon, _)),
-             Some(_))
-                => true,
-
-            (Some((Token::Identifier(_), _)),
-             Some((Token::ColonEqual, _)),
-             Some(_))
-                => true,
-
-            _ => false,
-        } {
-            sections.push(Section::new(file_name.clone(), &tokens[last..curr]));
-            last = curr;
-        }
-        curr += 1;
-    }
-    sections.push(Section::new(file_name, &tokens[last..curr]));
-    sections
-}
-
 impl<'a, 'b> Compiler<'a> {
-    pub(crate) fn new(current_file: &Path, tokens: &'a TokenStream) -> Self {
-        let current_file = current_file.to_path_buf();
-        let sections = split_sections(current_file.clone(), tokens);
+    pub(crate) fn new(sections: Vec<Section>) -> Self {
+        let contextes = sections
+            .iter()
+            .map(|section| (section.path.to_path_buf(), CompilerContext::new()))
+            .collect();
 
-        let mut contextes = HashMap::new();
-        contextes.insert(current_file, CompilerContext::new());
         Self {
             current_token: 0,
             current_section: 0,
@@ -1701,7 +1619,6 @@ impl<'a, 'b> Compiler<'a> {
     }
 
     pub(crate) fn compile(&'b mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
-
         for section in 0..self.sections.len() {
             self.init_section(section);
             let section = &self.sections[section];
@@ -1709,21 +1626,24 @@ impl<'a, 'b> Compiler<'a> {
                 (Some((Token::Identifier(name), _)),
                  Some((Token::ColonColon, _)),
                  Some((Token::Fn, _))) => {
-                    self.forward_constant(name.to_string());
+                    let name = name.to_string();
+                    self.forward_constant(name);
                 },
 
                 (Some((Token::Blob, _)),
                  Some((Token::Identifier(name), _)), ..) => {
-                    self.forward_constant(name.to_string());
+                    let name = name.to_string();
+                    self.forward_constant(name);
                 },
 
                 (Some((Token::Identifier(name), _)),
                  Some((Token::Colon, _)), ..) => {
+                    let name = name.to_string();
                     self.eat();
                     self.eat();
                     if let Ok(ty) = self.parse_type() {
                         let is_mut = self.peek() == Token::Equal;
-                        let var = Variable::new(name, is_mut, ty);
+                        let var = Variable::new(&name, is_mut, ty);
                         let _ = self.define(var);
                     } else {
                         error!(self, format!("Failed to parse type global '{}'.", name));

@@ -9,7 +9,6 @@ use std::hash::{Hash, Hasher};
 use owo_colors::OwoColorize;
 
 use error::Error;
-use tokenizer::TokenStream;
 
 use crate::error::ErrorKind;
 
@@ -17,45 +16,39 @@ pub mod error;
 pub mod vm;
 
 mod compiler;
+mod sectionizer;
 mod tokenizer;
 
 /// Compiles a file and links the supplied functions as callable external
 /// functions. Use this if you want your programs to be able to yield.
-pub fn compile_file(
-    path: &Path,
-    print: bool,
-    functions: Vec<(String, RustFunction)>
-) -> Result<vm::VM, Vec<Error>> {
-    let tokens = tokenizer::file_to_tokens(path);
-    match compiler::Compiler::new(path, &tokens).compile("main", path, &functions) {
-        Ok(prog) => {
-            let mut vm = vm::VM::new();
-            vm.print_blocks = print;
-            vm.print_ops = print;
-            vm.typecheck(&prog)?;
-            vm.init(&prog);
-            Ok(vm)
-        }
-        Err(errors) => Err(errors),
-    }
-}
+//pub fn compile_file(
+//    path: &Path,
+//    print: bool,
+//    functions: Vec<(String, RustFunction)>
+//) -> Result<vm::VM, Vec<Error>> {
+//    match compiler::Compiler::new(path).compile("main", path, &functions) {
+//        Ok(prog) => {
+//            let mut vm = vm::VM::new();
+//            vm.print_blocks = print;
+//            vm.print_ops = print;
+//            vm.typecheck(&prog)?;
+//            vm.init(&prog);
+//            Ok(vm)
+//        }
+//        Err(errors) => Err(errors),
+//    }
+//}
 
 /// Compiles, links and runs the given file. Supplied functions are callable
 /// external functions. If you want your program to be able to yield, use
 /// [compile_file].
 pub fn run_file(path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    run(tokenizer::file_to_tokens(path), path, print, functions)
+    run(path, print, functions)
 }
 
-/// Compile and run a string containing source code. The supplied functions are
-/// linked as callable external functions. This is useful for short test
-/// programs.
-pub fn run_string(s: &str, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    run(tokenizer::string_to_tokens(s), Path::new("builtin"), print, functions)
-}
-
-fn run(tokens: TokenStream, path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    match compiler::Compiler::new(path, &tokens).compile("main", path, &functions) {
+fn run(path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
+    let sections = sectionizer::sectionize(path);
+    match compiler::Compiler::new(sections).compile("main", path, &functions) {
         Ok(prog) => {
             let mut vm = vm::VM::new();
             vm.print_blocks = print;
