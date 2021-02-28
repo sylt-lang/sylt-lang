@@ -2,5 +2,8 @@ use other
 
 start :: fn {
   other.f()
-  // print other.g()
+  print other.g()
+  42 <=> other.g()
+  other.g() <=> 42
+  other.q = 1
 }

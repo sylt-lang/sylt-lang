@@ -1040,10 +1040,17 @@ impl<'a, 'b> Compiler {
     }
 
     fn variable_expression(&'b mut self, block: &mut Block) {
-        let name = match self.eat() {
+        let name = match self.peek() {
             Token::Identifier(name) => name,
             _ => unreachable!(),
         };
+
+        if let Some(_) = self.find_namespace(&name) {
+            self.blob_field(block);
+            return;
+        }
+
+        self.eat();
 
         // Global functions take precedence
         if let Some(slot) = self.find_extern_function(&name) {
@@ -1432,22 +1439,8 @@ impl<'a, 'b> Compiler {
             _ => unreachable!(),
         };
         if let Some(_) = self.find_namespace(&name) {
-            expect!(self, Token::Dot, "Expected '.' after namespace.");
-            if let Token::Identifier(ident) = self.eat() {
-                println!("{:#?}", self.find_namespace(&name));
-                match self.find_namespace(&name).unwrap().get(&ident) {
-                    Some(Name::Slot(slot, _)) |
-                    Some(Name::Unknown(slot, _)) => {
-                        add_op(self, block, Op::Constant(*slot));
-                        self.call_maybe(block);
-                    }
-                    _ => {
-                        error!(self, format!("Cannot find constant '{}' in namespace '{}'.", ident, name));
-                    }
-                }
-            } else {
-                error!(self, "Expected identifier after namespace.");
-            }
+            error!(self, "Cannot treat namespace as blob.");
+            return;
         } else if let Some(var) = self.find_variable(&name) {
             self.mark_read(self.frames().len() - 1, &var);
             if var.upvalue {
@@ -1569,8 +1562,9 @@ impl<'a, 'b> Compiler {
             }
 
             (Token::Identifier(_), Token::Dot, ..) => {
-                //parse_branch!(self, block, [self.blob_field(block), self.expression(block)]);
-                self.blob_field(block);
+                if !parse_branch!(self, block, self.blob_field(block)) {
+                    self.expression(block);
+                }
             }
 
             (Token::Identifier(name), Token::Colon, ..) => {
@@ -1659,6 +1653,7 @@ impl<'a, 'b> Compiler {
         for section in 0..self.sections.len() {
             self.init_section(section);
             let section = &self.sections[section];
+            println!("SECTION: {:?} -- {:?}", section.path, section.tokens.first());
             match (section.tokens.get(0), section.tokens.get(1), section.tokens.get(2))  {
                 (Some((Token::Use, _)),
                  Some((Token::Identifier(name), _)), ..) => {

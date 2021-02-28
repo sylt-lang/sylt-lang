@@ -82,11 +82,6 @@ pub fn sectionize(path: &Path) -> Vec<Section> {
 
                 (Some((Token::Identifier(_), _)),
                  Some((Token::ColonColon, _)),
-                 Some((Token::Fn, _)))
-                    => true,
-
-                (Some((Token::Identifier(_), _)),
-                 Some((Token::ColonColon, _)),
                  Some(_))
                     => true,
 

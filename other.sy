@@ -2,8 +2,8 @@ f :: fn {
   print "f"
 }
 
-// answer := 42
 
-g :: fn {
-  // ret answer
+g :: fn -> int {
+  answer :: 42
+  ret answer
 }
