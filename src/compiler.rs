@@ -446,7 +446,7 @@ fn split_sections<'a>(file_name: PathBuf, tokens: &'a TokenStream) -> Vec<Sectio
     sections
 }
 
-impl<'a> Compiler<'a> {
+impl<'a, 'b> Compiler<'a> {
     pub(crate) fn new(current_file: &Path, tokens: &'a TokenStream) -> Self {
         let current_file = current_file.to_path_buf();
         let sections = split_sections(current_file.clone(), tokens);
@@ -475,13 +475,13 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn new_blob_id(&'a mut self) -> usize {
+    fn new_blob_id(&'b mut self) -> usize {
         let id = self.blob_id;
         self.blob_id += 1;
         id
     }
 
-    fn add_constant(&'a mut self, value: Value) -> usize {
+    fn add_constant(&'b mut self, value: Value) -> usize {
         if matches!(value, Value::Float(_)
                          | Value::Int(_)
                          | Value::Bool(_)
@@ -504,7 +504,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn intern_string(&'a mut self, string: String) -> usize {
+    fn intern_string(&'b mut self, string: String) -> usize {
         self.strings.push(string);
         self.strings.len() - 1
     }
@@ -517,11 +517,11 @@ impl<'a> Compiler<'a> {
         &self.section().path
     }
 
-    fn current_context(&self) -> &CompilerContext {
+    fn current_context(&'b self) -> &CompilerContext {
         self.contextes.get(self.current_file()).unwrap()
     }
 
-    fn current_context_mut(&'a mut self) -> &mut CompilerContext<'a> {
+    fn current_context_mut(&'b mut self) -> &mut CompilerContext<'a> {
         let file = self.current_file().to_path_buf();
         self.contextes.get_mut(&file).unwrap()
     }
@@ -530,7 +530,7 @@ impl<'a> Compiler<'a> {
         self.current_context().frames.last().unwrap()
     }
 
-    fn frame_mut(&'a mut self) -> &mut Frame {
+    fn frame_mut(&'b mut self) -> &mut Frame {
         self.current_context_mut().frames.last_mut().unwrap()
     }
 
@@ -538,7 +538,7 @@ impl<'a> Compiler<'a> {
         &self.current_context().frames
     }
 
-    fn frames_mut(&'a mut self) -> &mut Vec<Frame> {
+    fn frames_mut(&'b mut self) -> &mut Vec<Frame> {
         &mut self.current_context_mut().frames
     }
 
@@ -546,26 +546,27 @@ impl<'a> Compiler<'a> {
         &self.current_context().namespace
     }
 
-    fn names_mut(&'a mut self) -> &mut Namespace<'a> {
+    fn names_mut(&'b mut self) -> &mut Namespace<'a> {
         &mut self.current_context_mut().namespace
     }
 
     /// Marks a variable as read. Also marks upvalues.
-    fn mark_read(&'a mut self, frame_id: usize, var: &Variable) {
+    fn mark_read(&'b mut self, frame_id: usize, var: &Variable) {
         // Early out
         if var.read {
             return;
         }
 
-        if if let Some(up) = self.frames()[frame_id].upvalues.get(var.slot) {
-            up.name == var.name
-        } else { false } {
-            let mut inner_var = self.frames()[frame_id].upvalues[var.slot].clone();
-            inner_var.slot = inner_var.outer_slot;
-            self.mark_read(frame_id - 1, &inner_var);
-            self.frames_mut()[frame_id].upvalues[var.slot].read = true;
-        } else {
-            self.frames_mut()[frame_id].stack[var.slot].read = true;
+        match self.frames()[frame_id].upvalues.get(var.slot) {
+            Some(up) if up.name == var.name => {
+                let mut inner_var = self.frames()[frame_id].upvalues[var.slot].clone();
+                inner_var.slot = inner_var.outer_slot;
+                self.mark_read(frame_id - 1, &inner_var);
+                self.frames_mut()[frame_id].upvalues[var.slot].read = true;
+            }
+            _ => {
+                self.frames_mut()[frame_id].stack[var.slot].read = true;
+            }
         }
     }
 
@@ -573,12 +574,12 @@ impl<'a> Compiler<'a> {
         &self.frame().stack.as_ref()
     }
 
-    fn stack_mut(&'a mut self) -> &mut Vec<Variable> {
+    fn stack_mut(&'b mut self) -> &mut Vec<Variable> {
         &mut self.frame_mut().stack
     }
 
     /// Used to recover from a panic so the rest of the code can be parsed.
-    fn clear_panic(&'a mut self) {
+    fn clear_panic(&'b mut self) {
         if self.panic {
             self.panic = false;
 
@@ -592,11 +593,11 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn error(&'a mut self, kind: ErrorKind, message: Option<String>) {
+    fn error(&'b mut self, kind: ErrorKind, message: Option<String>) {
         self.error_on_line(kind, self.line(), message);
     }
 
-    fn error_on_line(&'a mut self, kind: ErrorKind, line: usize, message: Option<String>) {
+    fn error_on_line(&'b mut self, kind: ErrorKind, line: usize, message: Option<String>) {
         if self.panic { return }
         self.panic = true;
         self.errors.push(Error {
@@ -607,7 +608,7 @@ impl<'a> Compiler<'a> {
         });
     }
 
-    fn init_section(&'a mut self, section: usize) {
+    fn init_section(&'b mut self, section: usize) {
         self.current_token = 0;
         self.current_section = section;
     }
@@ -629,7 +630,7 @@ impl<'a> Compiler<'a> {
         (self.peek_at(0), self.peek_at(1), self.peek_at(2), self.peek_at(3))
     }
 
-    fn eat(&'a mut self) -> Token {
+    fn eat(&'b mut self) -> Token {
         let t = self.peek();
         self.current_token += 1;
         match t {
@@ -678,7 +679,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn prefix(&'a mut self, token: Token, block: &mut Block) -> bool {
+    fn prefix(&'b mut self, token: Token, block: &mut Block) -> bool {
         match token {
             Token::Identifier(_) => self.variable_expression(block),
             Token::LeftParen => self.grouping_or_tuple(block),
@@ -696,7 +697,7 @@ impl<'a> Compiler<'a> {
         return true;
     }
 
-    fn infix(&'a mut self, token: Token, block: &mut Block) -> bool {
+    fn infix(&'b mut self, token: Token, block: &mut Block) -> bool {
         match token {
             Token::Minus
                 | Token::Plus
@@ -718,7 +719,7 @@ impl<'a> Compiler<'a> {
         return true;
     }
 
-    fn value(&'a mut self, block: &mut Block) {
+    fn value(&'b mut self, block: &mut Block) {
         let value = match self.eat() {
             Token::Float(f) => { Value::Float(f) },
             Token::Int(i) => { Value::Int(i) }
@@ -730,11 +731,11 @@ impl<'a> Compiler<'a> {
         add_op(self, block, Op::Constant(constant));
     }
 
-    fn grouping_or_tuple(&'a mut self, block: &mut Block) {
+    fn grouping_or_tuple(&'b mut self, block: &mut Block) {
         parse_branch!(self, block, [self.tuple(block), self.grouping(block)]);
     }
 
-    fn tuple(&'a mut self, block: &mut Block) {
+    fn tuple(&'b mut self, block: &mut Block) {
         expect!(self, Token::LeftParen, "Expected '(' at start of tuple");
 
         let mut num_args = 0;
@@ -769,7 +770,7 @@ impl<'a> Compiler<'a> {
         add_op(self, block, Op::Tuple(num_args));
     }
 
-    fn grouping(&'a mut self, block: &mut Block) {
+    fn grouping(&'b mut self, block: &mut Block) {
         expect!(self, Token::LeftParen, "Expected '(' around expression.");
 
         self.expression(block);
@@ -777,7 +778,7 @@ impl<'a> Compiler<'a> {
         expect!(self, Token::RightParen, "Expected ')' around expression.");
     }
 
-    fn index(&'a mut self, block: &mut Block) {
+    fn index(&'b mut self, block: &mut Block) {
         expect!(self, Token::LeftBracket, "Expected '[' around index.");
 
         self.expression(block);
@@ -786,7 +787,7 @@ impl<'a> Compiler<'a> {
         expect!(self, Token::RightBracket, "Expected ']' around index.");
     }
 
-    fn unary(&'a mut self, block: &mut Block) {
+    fn unary(&'b mut self, block: &mut Block) {
         let op = match self.eat() {
             Token::Minus => Op::Neg,
             Token::Bang => Op::Not,
@@ -796,7 +797,7 @@ impl<'a> Compiler<'a> {
         add_op(self, block, op);
     }
 
-    fn binary(&'a mut self, block: &mut Block) {
+    fn binary(&'b mut self, block: &mut Block) {
         let op = self.eat();
 
         self.parse_precedence(block, self.precedence(op.clone()).next());
@@ -819,14 +820,14 @@ impl<'a> Compiler<'a> {
     }
 
     /// Entry point for all expression parsing.
-    fn expression(&'a mut self, block: &mut Block) {
+    fn expression(&'b mut self, block: &mut Block) {
         match self.peek_four() {
             (Token::Fn, ..) => { self.function(block, None); },
             _ => self.parse_precedence(block, Prec::No),
         }
     }
 
-    fn parse_precedence(&'a mut self, block: &mut Block, precedence: Prec) {
+    fn parse_precedence(&'b mut self, block: &mut Block, precedence: Prec) {
         if !self.prefix(self.peek(), block) {
             error!(self, "Invalid expression.");
         }
@@ -838,8 +839,8 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn find_and_capture_variable<'b, I>(name: &str, mut iterator: I) -> Option<Variable>
-    where I: Iterator<Item = &'b mut Frame> {
+    fn find_and_capture_variable<'i, I>(name: &str, mut iterator: I) -> Option<Variable>
+    where I: Iterator<Item = &'i mut Frame> {
         if let Some(frame) = iterator.next() {
             if let Some(res) = frame.find_local(name) {
                 frame.stack[res.slot].captured = true;
@@ -860,7 +861,7 @@ impl<'a> Compiler<'a> {
         self.functions.get(name).map(|(i, _)| *i)
     }
 
-    fn find_variable(&'a mut self, name: &str) -> Option<Variable> {
+    fn find_variable(&'b mut self, name: &str) -> Option<Variable> {
         if let Some(res) = self.frame().find_local(name) {
             return Some(res);
         }
@@ -872,8 +873,8 @@ impl<'a> Compiler<'a> {
         Self::find_and_capture_variable(name, self.frames_mut().iter_mut().rev())
     }
 
-    fn find_constant(&'a mut self, name: &str) -> usize {
-        match self.names().entry(name.to_string()) {
+    fn find_constant(&'b mut self, name: &str) -> usize {
+        match self.names_mut().entry(name.to_string()) {
             Entry::Occupied(entry) => {
                 match entry.get() {
                     Name::Slot(i, _) => { return *i; },
@@ -886,13 +887,13 @@ impl<'a> Compiler<'a> {
 
         let slot = self.add_constant(Value::Unknown);
         let line = self.line();
-        self.names().insert(name.to_string(), Name::Unknown(slot, line));
+        self.names_mut().insert(name.to_string(), Name::Unknown(slot, line));
         slot
     }
 
-    fn named_constant(&'a mut self, name: String, value: Value) -> usize {
+    fn named_constant(&'b mut self, name: String, value: Value) -> usize {
         let line = self.line();
-        match self.names().entry(name.clone()) {
+        match self.names_mut().entry(name.clone()) {
             Entry::Occupied(mut entry) => {
                 let slot = if let Name::Unknown(slot, _) = entry.get() {
                     *slot
@@ -907,14 +908,14 @@ impl<'a> Compiler<'a> {
             Entry::Vacant(_) => {},
         }
         let slot = self.add_constant(value);
-        self.names().insert(name, Name::Slot(slot, line));
+        self.names_mut().insert(name, Name::Slot(slot, line));
         slot
     }
 
-    fn forward_constant(&'a mut self, name: String) -> usize {
+    fn forward_constant(&'b mut self, name: String) -> usize {
         let line = self.line();
         let slot = self.add_constant(Value::Unknown);
-        match self.names().entry(name.clone()) {
+        match self.names_mut().entry(name.clone()) {
             Entry::Occupied(_) => {
                 error!(self, format!("Constant named \"{}\" already has a value.", name));
                 0
@@ -926,7 +927,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn call_maybe(&'a mut self, block: &mut Block) -> bool {
+    fn call_maybe(&'b mut self, block: &mut Block) -> bool {
         if matches!(self.peek(), Token::Bang | Token::LeftParen) {
             self.call(block);
             true
@@ -935,7 +936,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn call(&'a mut self, block: &mut Block) {
+    fn call(&'b mut self, block: &mut Block) {
         let mut arity = 0;
         match self.peek() {
             Token::LeftParen => {
@@ -1000,7 +1001,7 @@ impl<'a> Compiler<'a> {
     }
 
     // TODO(ed): de-complexify
-    fn function(&'a mut self, block: &mut Block, in_name: Option<&str>) {
+    fn function(&'b mut self, block: &mut Block, in_name: Option<&str>) {
         expect!(self, Token::Fn, "Expected 'fn' at start of function.");
 
         let top = self.stack().len() - 1;
@@ -1101,7 +1102,7 @@ impl<'a> Compiler<'a> {
         add_op(self, block, Op::Constant(constant));
     }
 
-    fn variable_expression(&'a mut self, block: &mut Block) {
+    fn variable_expression(&'b mut self, block: &mut Block) {
         let name = match self.eat() {
             Token::Identifier(name) => name,
             _ => unreachable!(),
@@ -1150,7 +1151,7 @@ impl<'a> Compiler<'a> {
         self.call_maybe(block);
     }
 
-    fn define(&'a mut self, mut var: Variable) -> Result<usize, ()> {
+    fn define(&'b mut self, mut var: Variable) -> Result<usize, ()> {
         if let Some(var) = self.find_variable(&var.name) {
             if var.scope == self.frame().scope {
                 error!(self, format!("Multiple definitions of '{}' in this block.",
@@ -1167,7 +1168,7 @@ impl<'a> Compiler<'a> {
         Ok(slot)
     }
 
-    fn definition_statement(&'a mut self, name: &str, typ: Type, block: &mut Block) {
+    fn definition_statement(&'b mut self, name: &str, typ: Type, block: &mut Block) {
         if self.frames().len() <= 1 {
             // Global
             let var = self.find_variable(name)
@@ -1191,7 +1192,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn constant_statement(&'a mut self, name: &str, typ: Type, block: &mut Block) {
+    fn constant_statement(&'b mut self, name: &str, typ: Type, block: &mut Block) {
         // Magical global constants
         if self.frames().len() <= 1 && self.peek() == Token::Fn {
             self.function(block, Some(name));
@@ -1229,7 +1230,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn assign(&'a mut self, block: &mut Block) {
+    fn assign(&'b mut self, block: &mut Block) {
         let name = match self.eat() {
             Token::Identifier(name) => name,
             _ => {
@@ -1279,7 +1280,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn scope(&'a mut self, block: &mut Block) {
+    fn scope(&'b mut self, block: &mut Block) {
         if !expect!(self, Token::LeftBrace, "Expected '{' at start of block.") {
             return;
         }
@@ -1298,7 +1299,7 @@ impl<'a> Compiler<'a> {
         expect!(self, Token::RightBrace, "Expected '}' at end of block.");
     }
 
-    fn if_statment(&'a mut self, block: &mut Block) {
+    fn if_statment(&'b mut self, block: &mut Block) {
         expect!(self, Token::If, "Expected 'if' at start of if-statement.");
         self.expression(block);
         let jump = add_op(self, block, Op::Illegal);
@@ -1322,7 +1323,7 @@ impl<'a> Compiler<'a> {
     }
 
     //TODO de-complexify
-    fn for_loop(&'a mut self, block: &mut Block) {
+    fn for_loop(&'b mut self, block: &mut Block) {
         expect!(self, Token::For, "Expected 'for' at start of for-loop.");
 
         push_scope!(self, block, {
@@ -1367,7 +1368,7 @@ impl<'a> Compiler<'a> {
         });
     }
 
-    fn parse_type(&'a mut self) -> Result<Type, ()> {
+    fn parse_type(&'b mut self) -> Result<Type, ()> {
         match self.peek() {
 
             Token::Fn => {
@@ -1444,7 +1445,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn blob_statement(&'a mut self, _block: &mut Block) {
+    fn blob_statement(&'b mut self, _block: &mut Block) {
         expect!(self, Token::Blob, "Expected blob when declaring a blob");
         let name = if let Token::Identifier(name) = self.eat() {
             name
@@ -1487,7 +1488,7 @@ impl<'a> Compiler<'a> {
         self.named_constant(name, blob);
     }
 
-    fn blob_field(&'a mut self, block: &mut Block) {
+    fn blob_field(&'b mut self, block: &mut Block) {
         let name = match self.eat() {
             Token::Identifier(name) => name,
             _ => unreachable!(),
@@ -1554,7 +1555,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn outer_statement(&'a mut self, block: &mut Block) {
+    fn outer_statement(&'b mut self, block: &mut Block) {
         self.clear_panic();
         match self.peek_four() {
             (Token::Identifier(name), Token::ColonEqual, ..) => {
@@ -1592,7 +1593,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn statement(&'a mut self, block: &mut Block) {
+    fn statement(&'b mut self, block: &mut Block) {
         self.clear_panic();
 
         match self.peek_four() {
@@ -1699,7 +1700,7 @@ impl<'a> Compiler<'a> {
 
     }
 
-    pub(crate) fn compile(&'a mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
+    pub(crate) fn compile(&'b mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
 
         for section in 0..self.sections.len() {
             self.init_section(section);
