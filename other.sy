@@ -5,5 +5,5 @@ f :: fn {
 // answer := 42
 
 g :: fn {
-  ret 42
+  // ret answer
 }

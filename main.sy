@@ -2,5 +2,5 @@ use other
 
 start :: fn {
   other.f()
-  print other.g()
+  // print other.g()
 }

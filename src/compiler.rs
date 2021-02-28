@@ -581,7 +581,8 @@ impl<'a, 'b> Compiler {
     /// The line of the current token.
     fn line(&self) -> usize {
         if self.section().tokens.len() == 0 {
-            unreachable!("An error occured without a section.");
+            // unreachable!("An error occured without a section.");
+            666666
         } else {
             self.section().tokens[std::cmp::min(self.current_token, self.section().tokens.len() - 1)].1
         }
@@ -1433,17 +1434,19 @@ impl<'a, 'b> Compiler {
         if let Some(_) = self.find_namespace(&name) {
             expect!(self, Token::Dot, "Expected '.' after namespace.");
             if let Token::Identifier(ident) = self.eat() {
+                println!("{:#?}", self.find_namespace(&name));
                 match self.find_namespace(&name).unwrap().get(&ident) {
-                    Some(Name::Slot(slot, _)) => {
+                    Some(Name::Slot(slot, _)) |
+                    Some(Name::Unknown(slot, _)) => {
                         add_op(self, block, Op::Constant(*slot));
                         self.call_maybe(block);
                     }
                     _ => {
-                        error!(self, "?");
+                        error!(self, format!("Cannot find constant '{}' in namespace '{}'.", ident, name));
                     }
                 }
             } else {
-                error!(self, "?");
+                error!(self, "Expected identifier after namespace.");
             }
         } else if let Some(var) = self.find_variable(&name) {
             self.mark_read(self.frames().len() - 1, &var);
@@ -1745,6 +1748,7 @@ impl<'a, 'b> Compiler {
             }
         }
 
+        self.init_section(0);
         let constant = self.find_constant("start");
         add_op(self, &mut block, Op::Constant(constant));
         add_op(self, &mut block, Op::Call(0));
