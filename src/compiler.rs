@@ -1562,6 +1562,7 @@ impl<'a, 'b> Compiler {
             }
 
             (Token::Identifier(_), Token::Dot, ..) => {
+                // TODO(ed): This doesn't work!!!!!!
                 if !parse_branch!(self, block, self.blob_field(block)) {
                     self.expression(block);
                 }
