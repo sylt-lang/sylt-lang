@@ -21,23 +21,24 @@ mod tokenizer;
 
 /// Compiles a file and links the supplied functions as callable external
 /// functions. Use this if you want your programs to be able to yield.
-//pub fn compile_file(
-//    path: &Path,
-//    print: bool,
-//    functions: Vec<(String, RustFunction)>
-//) -> Result<vm::VM, Vec<Error>> {
-//    match compiler::Compiler::new(path).compile("main", path, &functions) {
-//        Ok(prog) => {
-//            let mut vm = vm::VM::new();
-//            vm.print_blocks = print;
-//            vm.print_ops = print;
-//            vm.typecheck(&prog)?;
-//            vm.init(&prog);
-//            Ok(vm)
-//        }
-//        Err(errors) => Err(errors),
-//    }
-//}
+pub fn compile_file(
+    path: &Path,
+    print: bool,
+    functions: Vec<(String, RustFunction)>
+) -> Result<vm::VM, Vec<Error>> {
+    let sections = sectionizer::sectionize(path);
+    match compiler::Compiler::new(sections).compile("main", path, &functions) {
+        Ok(prog) => {
+            let mut vm = vm::VM::new();
+            vm.print_blocks = print;
+            vm.print_ops = print;
+            vm.typecheck(&prog)?;
+            vm.init(&prog);
+            Ok(vm)
+        }
+        Err(errors) => Err(errors),
+    }
+}
 
 /// Compiles, links and runs the given file. Supplied functions are callable
 /// external functions. If you want your program to be able to yield, use
