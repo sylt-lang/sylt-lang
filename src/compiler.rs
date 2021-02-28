@@ -1743,9 +1743,6 @@ impl<'a> Compiler<'a> {
                         "Expect newline or EOF after expression.");
             }
         }
-        let tmp = self.add_constant(Value::Unknown);
-        add_op(self, &mut block, Op::Constant(tmp));
-        add_op(self, &mut block, Op::Return);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
 
         if self.names.len() != 0 {
@@ -1765,6 +1762,10 @@ impl<'a> Compiler<'a> {
         let constant = self.find_constant("start");
         add_op(self, &mut block, Op::Constant(constant));
         add_op(self, &mut block, Op::Call(0));
+
+        let tmp = self.add_constant(Value::Unknown);
+        add_op(self, &mut block, Op::Constant(tmp));
+        add_op(self, &mut block, Op::Return);
 
         for var in self.current_context_mut().pop().unwrap().stack.iter().skip(1) {
             if !(var.read || var.upvalue) {
