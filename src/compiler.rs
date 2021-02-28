@@ -315,14 +315,14 @@ impl Frame {
     }
 }
 
-type Namespace<'a> = HashMap<String, Name<'a>>;
+type Namespace = HashMap<String, Name>;
 
-struct CompilerContext<'a> {
+struct CompilerContext {
     frames: Vec<Frame>,
-    namespace: Namespace<'a>,
+    namespace: Namespace,
 }
 
-impl<'a> CompilerContext<'a> {
+impl CompilerContext {
     fn new() -> Self {
         Self {
             frames: vec![Frame::new()],
@@ -332,18 +332,18 @@ impl<'a> CompilerContext<'a> {
 }
 
 #[derive(Debug)]
-enum Name<'a> {
+enum Name {
     Slot(usize, usize),
     Unknown(usize, usize),
-    _Namespace(&'a Namespace<'a>),
+    Namespace(PathBuf),
 }
 
-pub(crate) struct Compiler<'a> {
+pub(crate) struct Compiler {
     current_token: usize,
     current_section: usize,
     sections: Vec<Section>,
 
-    contextes: HashMap<PathBuf, CompilerContext<'a>>,
+    contextes: HashMap<PathBuf, CompilerContext>,
 
     panic: bool,
     errors: Vec<Error>,
@@ -364,7 +364,7 @@ fn add_op(compiler: &Compiler, block: &mut Block, op: Op) -> usize {
     block.add(op, compiler.line())
 }
 
-impl<'a, 'b> Compiler<'a> {
+impl<'a, 'b> Compiler {
     pub(crate) fn new(sections: Vec<Section>) -> Self {
         let contextes = sections
             .iter()
@@ -397,6 +397,18 @@ impl<'a, 'b> Compiler<'a> {
         let id = self.blob_id;
         self.blob_id += 1;
         id
+    }
+
+    fn add_namespace(&mut self, name: String) {
+        let path = Path::new(&format!("{}.sy", name)).to_path_buf();
+        match self.names_mut().entry(name.clone()) {
+            Entry::Vacant(v) => {
+                v.insert(Name::Namespace(path));
+            }
+            Entry::Occupied(_) => {
+                error!(self, format!("Namespace {} already present.", name));
+            }
+        }
     }
 
     fn add_constant(&'b mut self, value: Value) -> usize {
@@ -439,7 +451,7 @@ impl<'a, 'b> Compiler<'a> {
         self.contextes.get(self.current_file()).unwrap()
     }
 
-    fn current_context_mut(&'b mut self) -> &mut CompilerContext<'a> {
+    fn current_context_mut(&'b mut self) -> &mut CompilerContext {
         let file = self.current_file().to_path_buf();
         self.contextes.get_mut(&file).unwrap()
     }
@@ -460,11 +472,11 @@ impl<'a, 'b> Compiler<'a> {
         &mut self.current_context_mut().frames
     }
 
-    fn names(&'a self) -> &Namespace<'a> {
+    fn names(&'a self) -> &Namespace {
         &self.current_context().namespace
     }
 
-    fn names_mut(&'b mut self) -> &mut Namespace<'a> {
+    fn names_mut(&'b mut self) -> &mut Namespace {
         &mut self.current_context_mut().namespace
     }
 
@@ -757,6 +769,13 @@ impl<'a, 'b> Compiler<'a> {
         }
     }
 
+    fn find_namespace(&self, name: &str) -> Option<&Namespace> {
+        match self.names().get(name) {
+            Some(Name::Namespace(path)) => Some(&self.contextes.get(path).unwrap().namespace),
+            _ => None,
+        }
+    }
+
     fn find_and_capture_variable<'i, I>(name: &str, mut iterator: I) -> Option<Variable>
     where I: Iterator<Item = &'i mut Frame> {
         if let Some(frame) = iterator.next() {
@@ -797,7 +816,10 @@ impl<'a, 'b> Compiler<'a> {
                 match entry.get() {
                     Name::Slot(i, _) => { return *i; },
                     Name::Unknown(i, _) => { return *i; },
-                    _ => unreachable!(),
+                    _ => {
+                        error!(self, format!("Tried to find constant '{}' but it was a namespace.", name));
+                        return 0;
+                    }
                 }
             },
             Entry::Vacant(_) => {},
@@ -922,12 +944,8 @@ impl<'a, 'b> Compiler<'a> {
     fn function(&'b mut self, block: &mut Block, in_name: Option<&str>) {
         expect!(self, Token::Fn, "Expected 'fn' at start of function.");
 
-        let top = self.stack().len() - 1;
         let name = if let Some(name) = in_name {
             String::from(name)
-        } else if !self.stack()[top].active {
-            self.stack_mut()[top].active = true;
-            self.stack()[top].name.clone()
         } else {
             format!("λ {}@{:03}", self.current_file().display(), self.line())
         };
@@ -1406,12 +1424,28 @@ impl<'a, 'b> Compiler<'a> {
         self.named_constant(name, blob);
     }
 
+    //TODO rename
     fn blob_field(&'b mut self, block: &mut Block) {
         let name = match self.eat() {
             Token::Identifier(name) => name,
             _ => unreachable!(),
         };
-        if let Some(var) = self.find_variable(&name) {
+        if let Some(_) = self.find_namespace(&name) {
+            expect!(self, Token::Dot, "Expected '.' after namespace.");
+            if let Token::Identifier(ident) = self.eat() {
+                match self.find_namespace(&name).unwrap().get(&ident) {
+                    Some(Name::Slot(slot, _)) => {
+                        add_op(self, block, Op::Constant(*slot));
+                        self.call_maybe(block);
+                    }
+                    _ => {
+                        error!(self, "?");
+                    }
+                }
+            } else {
+                error!(self, "?");
+            }
+        } else if let Some(var) = self.find_variable(&name) {
             self.mark_read(self.frames().len() - 1, &var);
             if var.upvalue {
                 add_op(self, block, Op::ReadUpvalue(var.slot));
@@ -1532,7 +1566,8 @@ impl<'a, 'b> Compiler<'a> {
             }
 
             (Token::Identifier(_), Token::Dot, ..) => {
-                parse_branch!(self, block, [self.blob_field(block), self.expression(block)]);
+                //parse_branch!(self, block, [self.blob_field(block), self.expression(block)]);
+                self.blob_field(block);
             }
 
             (Token::Identifier(name), Token::Colon, ..) => {
@@ -1615,7 +1650,6 @@ impl<'a, 'b> Compiler<'a> {
                 add_op(self, block, Op::Pop);
             }
         }
-
     }
 
     pub(crate) fn compile(&'b mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
@@ -1623,18 +1657,24 @@ impl<'a, 'b> Compiler<'a> {
             self.init_section(section);
             let section = &self.sections[section];
             match (section.tokens.get(0), section.tokens.get(1), section.tokens.get(2))  {
+                (Some((Token::Use, _)),
+                 Some((Token::Identifier(name), _)), ..) => {
+                    let name = name.to_string();
+                    self.add_namespace(name);
+                }
+
                 (Some((Token::Identifier(name), _)),
                  Some((Token::ColonColon, _)),
                  Some((Token::Fn, _))) => {
                     let name = name.to_string();
                     self.forward_constant(name);
-                },
+                }
 
                 (Some((Token::Blob, _)),
                  Some((Token::Identifier(name), _)), ..) => {
                     let name = name.to_string();
                     self.forward_constant(name);
-                },
+                }
 
                 (Some((Token::Identifier(name), _)),
                  Some((Token::Colon, _)), ..) => {
@@ -1654,19 +1694,19 @@ impl<'a, 'b> Compiler<'a> {
                  Some((Token::ColonColon, _)), ..) => {
                     let var = Variable::new(name, false, Type::Unknown);
                     let _ = self.define(var);
-                },
+                }
 
                 (Some((Token::Identifier(name), _)),
                  Some((Token::ColonEqual, _)), ..) => {
                     let var = Variable::new(name, true, Type::Unknown);
                     let _ = self.define(var);
-                },
+                }
 
 
                 (None, ..) => {}
 
                 (a, b, c) => {
-                    panic!(format!("{:?} {:?} {:?}", a, b, c));
+                    panic!(format!("Unknown outer token sequence: {:?} {:?} {:?}", a, b, c));
                 }
             }
         }
@@ -1683,7 +1723,7 @@ impl<'a, 'b> Compiler<'a> {
         let mut block = Block::new(name, file);
         for section in 0..self.sections.len() {
             self.init_section(section);
-            while self.peek() != Token::EOF {
+            while !matches!(self.peek(), Token::EOF | Token::Use) {
                 self.outer_statement(&mut block);
                 expect!(self, Token::Newline | Token::EOF,
                         "Expect newline or EOF after expression.");

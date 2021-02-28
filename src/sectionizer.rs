@@ -43,7 +43,6 @@ pub fn sectionize(path: &Path) -> Vec<Section> {
                 (Some((Token::Use, _)),
                  Some((Token::Identifier(use_file), _)),
                  Some((Token::Newline, _))) => {
-                    curr += 3;
                     let use_file: PathBuf = format!("{}.sy", use_file).into();
                     if !read_files.contains(&use_file) {
                         let use_file_tokens = file_to_tokens(&use_file);
