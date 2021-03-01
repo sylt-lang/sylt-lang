@@ -9,4 +9,5 @@ start :: fn {
 
   other.third.print_the_third()
   third.print_the_third()
+  third.main.other.third.main.third.print_the_third()
 }

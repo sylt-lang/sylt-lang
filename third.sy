@@ -1,3 +1,5 @@
+use main
+
 print_the_third :: fn {
     print "three"
 }

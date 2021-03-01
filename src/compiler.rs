@@ -331,7 +331,7 @@ impl CompilerContext {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Name {
     Slot(usize, usize),
     Unknown(usize, usize),
@@ -1051,21 +1051,25 @@ impl<'a, 'b> Compiler {
 
         if let Some(_) = self.find_namespace(&name) {
             self.eat();
-            let mut name = name;
+            // TODO(ed): This is a clone I would love to get rid of...
+            let mut namespace = self.find_namespace(&name).unwrap().clone();
             loop {
                 if self.eat() != Token::Dot {
                     error!(self, "Expect '.' after namespace.");
                     return;
                 }
                 if let Token::Identifier(field) = self.eat() {
-                    match self.find_namespace(&name).unwrap().get(&field) {
+                    match namespace.get(&field) {
                         Some(Name::Slot(slot, _)) | Some(Name::Unknown(slot, _)) => {
                             add_op(self, block, Op::Constant(*slot));
                             self.call_maybe(block);
                             return;
                         }
                         Some(Name::Namespace(inner_name)) => {
-                            name = self.to_namespace(&inner_name);
+                            namespace = self.contextes
+                                .get(inner_name)
+                                .unwrap().namespace
+                                .clone();
                         }
                         _ => {
                             error!(self, "Invalid namespace field.");
