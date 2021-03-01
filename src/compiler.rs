@@ -770,6 +770,10 @@ impl<'a, 'b> Compiler {
         }
     }
 
+    fn to_namespace(&self, path: &PathBuf) -> String {
+        path.to_str().unwrap().strip_suffix(".sy").unwrap().to_string()
+    }
+
     fn find_namespace(&self, name: &str) -> Option<&Namespace> {
         match self.names().get(name) {
             Some(Name::Namespace(path)) => Some(&self.contextes.get(path).unwrap().namespace),
@@ -1047,6 +1051,7 @@ impl<'a, 'b> Compiler {
 
         if let Some(_) = self.find_namespace(&name) {
             self.eat();
+            let mut name = name;
             loop {
                 if self.eat() != Token::Dot {
                     error!(self, "Expect '.' after namespace.");
@@ -1057,6 +1062,10 @@ impl<'a, 'b> Compiler {
                         Some(Name::Slot(slot, _)) | Some(Name::Unknown(slot, _)) => {
                             add_op(self, block, Op::Constant(*slot));
                             self.call_maybe(block);
+                            return;
+                        }
+                        Some(Name::Namespace(inner_name)) => {
+                            name = self.to_namespace(&inner_name);
                         }
                         _ => {
                             error!(self, "Invalid namespace field.");
@@ -1065,7 +1074,6 @@ impl<'a, 'b> Compiler {
                 } else {
                     error!(self, "Expected fieldname after '.'.");
                 }
-                return;
             }
         }
 
