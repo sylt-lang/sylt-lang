@@ -1048,31 +1048,24 @@ impl<'a, 'b> Compiler {
         if let Some(_) = self.find_namespace(&name) {
             self.eat();
             loop {
-                match self.peek() {
-                    Token::Dot => {
-                        self.eat();
-                        if let Token::Identifier(field) = self.eat() {
-                            match self.find_namespace(&name).unwrap().get(&field) {
-                                Some(Name::Slot(slot, _))
-                                    | Some(Name::Unknown(slot, _)) => {
-                                    add_op(self, block, Op::Constant(*slot));
-                                    self.call_maybe(block);
-                                    return;
-                                }
-                                _ => {
-                                    error!(self, "Invalid namespace field.");
-                                }
-                            }
-                        } else {
-                            error!(self, "Expected fieldname after '.'.");
-                            return;
+                if self.eat() != Token::Dot {
+                    error!(self, "Expect '.' after namespace.");
+                    return;
+                }
+                if let Token::Identifier(field) = self.eat() {
+                    match self.find_namespace(&name).unwrap().get(&field) {
+                        Some(Name::Slot(slot, _)) | Some(Name::Unknown(slot, _)) => {
+                            add_op(self, block, Op::Constant(*slot));
+                            self.call_maybe(block);
+                        }
+                        _ => {
+                            error!(self, "Invalid namespace field.");
                         }
                     }
-                    _ => {
-                        error!(self, "Expect '.' after namespace.");
-                        return;
-                    }
+                } else {
+                    error!(self, "Expected fieldname after '.'.");
                 }
+                return;
             }
         }
 

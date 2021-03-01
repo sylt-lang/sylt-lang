@@ -7,6 +7,6 @@ start :: fn {
   42 <=> other.g()
   other.g() <=> 42
 
-  other.third.print_the_third()
+  // other.third.print_the_third()
   third.print_the_third()
 }
