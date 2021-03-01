@@ -5,5 +5,4 @@ start :: fn {
   print other.g()
   42 <=> other.g()
   other.g() <=> 42
-  other.q = 1
 }

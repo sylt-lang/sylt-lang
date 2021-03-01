@@ -1046,8 +1046,34 @@ impl<'a, 'b> Compiler {
         };
 
         if let Some(_) = self.find_namespace(&name) {
-            self.blob_field(block);
-            return;
+            self.eat();
+            loop {
+                match self.peek() {
+                    Token::Dot => {
+                        self.eat();
+                        if let Token::Identifier(field) = self.eat() {
+                            match self.find_namespace(&name).unwrap().get(&field) {
+                                Some(Name::Slot(slot, _))
+                                    | Some(Name::Unknown(slot, _)) => {
+                                    add_op(self, block, Op::Constant(*slot));
+                                    self.call_maybe(block);
+                                    return;
+                                }
+                                _ => {
+                                    error!(self, "Invalid namespace field.");
+                                }
+                            }
+                        } else {
+                            error!(self, "Expected fieldname after '.'.");
+                            return;
+                        }
+                    }
+                    _ => {
+                        error!(self, "Expect '.' after namespace.");
+                        return;
+                    }
+                }
+            }
         }
 
         self.eat();
@@ -1432,16 +1458,29 @@ impl<'a, 'b> Compiler {
         self.named_constant(name, blob);
     }
 
+    fn access_dotted(&mut self, block: &mut Block) {
+        let name = match self.peek() {
+            Token::Identifier(name) => name,
+            _ => unreachable!(),
+        };
+        println!("dotted {}", name);
+        if let Some(_) = self.find_namespace(&name) {
+            println!("A");
+            self.expression(block);
+        } else {
+            println!("B");
+            parse_branch!(self, block, [self.blob_field(block), self.expression(block)]);
+        }
+    }
+
     //TODO rename
     fn blob_field(&'b mut self, block: &mut Block) {
         let name = match self.eat() {
             Token::Identifier(name) => name,
             _ => unreachable!(),
         };
-        if let Some(_) = self.find_namespace(&name) {
-            error!(self, "Cannot treat namespace as blob.");
-            return;
-        } else if let Some(var) = self.find_variable(&name) {
+
+        if let Some(var) = self.find_variable(&name) {
             self.mark_read(self.frames().len() - 1, &var);
             if var.upvalue {
                 add_op(self, block, Op::ReadUpvalue(var.slot));
@@ -1562,10 +1601,7 @@ impl<'a, 'b> Compiler {
             }
 
             (Token::Identifier(_), Token::Dot, ..) => {
-                // TODO(ed): This doesn't work!!!!!!
-                if !parse_branch!(self, block, self.blob_field(block)) {
-                    self.expression(block);
-                }
+                self.access_dotted(block);
             }
 
             (Token::Identifier(name), Token::Colon, ..) => {
