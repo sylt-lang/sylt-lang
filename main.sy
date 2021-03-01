@@ -1,8 +1,12 @@
 use other
+use third
 
 start :: fn {
   other.f()
   print other.g()
   42 <=> other.g()
   other.g() <=> 42
+
+  other.third.print_the_third()
+  third.print_the_third()
 }

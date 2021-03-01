@@ -1,3 +1,5 @@
+use third
+
 f :: fn {
   print "f"
 }
