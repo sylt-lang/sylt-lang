@@ -770,10 +770,6 @@ impl<'a, 'b> Compiler {
         }
     }
 
-    fn to_namespace(&self, path: &PathBuf) -> String {
-        path.to_str().unwrap().strip_suffix(".sy").unwrap().to_string()
-    }
-
     fn find_namespace(&self, name: &str) -> Option<&Namespace> {
         match self.names().get(name) {
             Some(Name::Namespace(path)) => Some(&self.contextes.get(path).unwrap().namespace),
@@ -1029,7 +1025,6 @@ impl<'a, 'b> Compiler {
 
         function_block.ty = Type::Function(args, Box::new(return_type));
         let function_block = Rc::new(RefCell::new(function_block));
-
 
         // Note(ed): We deliberately add the constant as late as possible.
         // This behaviour is used in `constant_statement`.
@@ -1468,12 +1463,9 @@ impl<'a, 'b> Compiler {
             Token::Identifier(name) => name,
             _ => unreachable!(),
         };
-        println!("dotted {}", name);
         if let Some(_) = self.find_namespace(&name) {
-            println!("A");
             self.expression(block);
         } else {
-            println!("B");
             parse_branch!(self, block, [self.blob_field(block), self.expression(block)]);
         }
     }
@@ -1695,7 +1687,6 @@ impl<'a, 'b> Compiler {
         for section in 0..self.sections.len() {
             self.init_section(section);
             let section = &self.sections[section];
-            println!("SECTION: {:?} -- {:?}", section.path, section.tokens.first());
             match (section.tokens.get(0), section.tokens.get(1), section.tokens.get(2))  {
                 (Some((Token::Use, _)),
                  Some((Token::Identifier(name), _)), ..) => {
