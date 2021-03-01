@@ -54,7 +54,7 @@ pub fn sectionize(path: &Path) -> Vec<Section> {
 
                 (Some((Token::LeftBrace, _)), ..)
                     => {
-                        let mut blocks = 0;
+                        let mut blocks = 1;
                         loop {
                             curr += 1;
                             match tokens.get(curr) {

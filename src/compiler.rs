@@ -1794,7 +1794,6 @@ impl<'a, 'b> Compiler {
             self.panic = false;
         }
 
-        block.debug_print();
         self.blocks.insert(0, Rc::new(RefCell::new(block)));
 
         if self.errors.is_empty() {
