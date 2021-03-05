@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use owo_colors::OwoColorize;
 
-use crate::{Block, Op, Prog, UpValue, Value, op};
+use crate::{Block, BlockLinkState, Op, Prog, UpValue, Value, op};
 use crate::error::{Error, ErrorKind};
 use crate::RustFunction;
 use crate::Type;
@@ -553,36 +553,37 @@ impl VM {
                 match self.constant(value).clone() {
                     Value::Function(_, block) => {
                         self.push(Value::Function(Vec::new(), block.clone()));
-
-                        if block.borrow().needs_linking() {
-                            error!(self,
-                                ErrorKind::InvalidProgram,
-                                format!("Calling function '{}' before all captured variables are declared.",
-                                    block.borrow().name));
-                        }
-
-                        let mut types = Vec::new();
-                        for (slot, is_up, ty) in block.borrow().upvalues.iter() {
-                            if *is_up {
-                                types.push(ty.clone());
-                            } else {
-                                types.push(Type::from(&self.stack[*slot]));
+                        if !matches!(block.borrow().linking, BlockLinkState::Linked) {
+                            if block.borrow().needs_linking() {
+                                error!(self,
+                                       ErrorKind::InvalidProgram,
+                                       format!("Calling function '{}' before all captured variables are declared.",
+                                               block.borrow().name));
                             }
-                        }
 
-                        let mut block_mut = block.borrow_mut();
-                        for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
-                            if *is_up { continue; }
-
-                            let suggestion = &types[i];
-                            if matches!(ty, Type::Unknown) {
-                                *ty = suggestion.clone();
-                            } else {
-                                if ty != suggestion {
-                                    error!(self, ErrorKind::CannotInfer(ty.clone(), suggestion.clone()));
+                            let mut types = Vec::new();
+                            for (slot, is_up, ty) in block.borrow().upvalues.iter() {
+                                if *is_up {
+                                    types.push(ty.clone());
+                                } else {
+                                    types.push(Type::from(&self.stack[*slot]));
                                 }
                             }
-                        };
+
+                            let mut block_mut = block.borrow_mut();
+                            for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
+                                if *is_up { continue; }
+
+                                let suggestion = &types[i];
+                                if matches!(ty, Type::Unknown) {
+                                    *ty = suggestion.clone();
+                                } else {
+                                    if ty != suggestion {
+                                        error!(self, ErrorKind::CannotInfer(ty.clone(), suggestion.clone()));
+                                    }
+                                }
+                            };
+                        }
                     },
                     value => {
                         self.push(value.clone());
@@ -652,6 +653,7 @@ impl VM {
                 let inner = self.frame().block.borrow();
                 let ret = inner.ret();
                 if Type::from(&a) != *ret {
+
                     error!(self, ErrorKind::TypeMismatch(a.into(), ret.clone()),
                            "Value does not match return type.");
                 }
@@ -679,6 +681,29 @@ impl VM {
                 match self.constant(slot).clone() {
                     Value::Function(_, block) => {
                         block.borrow_mut().link();
+
+                        let mut types = Vec::new();
+                        for (slot, is_up, ty) in block.borrow().upvalues.iter() {
+                            if *is_up {
+                                types.push(ty.clone());
+                            } else {
+                                types.push(Type::from(&self.stack[*slot]));
+                            }
+                        }
+
+                        let mut block_mut = block.borrow_mut();
+                        for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
+                            if *is_up { continue; }
+
+                            let suggestion = &types[i];
+                            if matches!(ty, Type::Unknown) {
+                                *ty = suggestion.clone();
+                            } else {
+                                if ty != suggestion {
+                                    error!(self, ErrorKind::CannotInfer(ty.clone(), suggestion.clone()));
+                                }
+                            }
+                        }
                     }
                     value => {
                         error!(self,

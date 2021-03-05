@@ -227,11 +227,13 @@ impl Variable {
     }
 }
 
+#[derive(Debug)]
 enum LoopOp {
     Continue,
     Break,
 }
 
+#[derive(Debug)]
 struct Frame {
     loops: Vec<Vec<(usize, usize, LoopOp)>>,
     stack: Vec<Variable>,
@@ -1146,7 +1148,6 @@ impl Compiler {
             assert!(var.mutable);
 
             self.expression(block);
-            add_op(self, block, Op::AssignLocal(var.slot));
             self.stack_mut()[var.slot].active = true;
         } else {
             // Local
@@ -1684,6 +1685,10 @@ impl Compiler {
     }
 
     pub(crate) fn compile(&mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
+        let main = Variable::new("/main/", false, Type::Void);
+        let slot = self.define(main).unwrap();
+        self.frame_mut().stack[slot].read = true;
+
         for section in 0..self.sections.len() {
             self.init_section(section);
             let section = &mut self.sections[section];
@@ -1715,7 +1720,8 @@ impl Compiler {
                     if let Ok(ty) = self.parse_type() {
                         let is_mut = self.peek() == Token::Equal;
                         let var = Variable::new(&name, is_mut, ty);
-                        let _ = self.define(var);
+                        let slot = self.define(var).unwrap();
+                        self.frame_mut().stack[slot].active = true;
                     } else {
                         error!(self, format!("Failed to parse type global '{}'.", name));
                     }
@@ -1724,13 +1730,15 @@ impl Compiler {
                 (Some((Token::Identifier(name), _)),
                  Some((Token::ColonColon, _)), ..) => {
                     let var = Variable::new(name, false, Type::Unknown);
-                    let _ = self.define(var);
+                    let slot = self.define(var).unwrap();
+                    self.frame_mut().stack[slot].active = true;
                 }
 
                 (Some((Token::Identifier(name), _)),
                  Some((Token::ColonEqual, _)), ..) => {
                     let var = Variable::new(name, true, Type::Unknown);
-                    let _ = self.define(var);
+                    let slot = self.define(var).unwrap();
+                    self.frame_mut().stack[slot].active = true;
                 }
 
 
@@ -1750,9 +1758,6 @@ impl Compiler {
             .enumerate()
             .map(|(i, (s, f))| (s, (i, f)))
             .collect();
-        let main = Variable::new("/main/", false, Type::Void);
-        let _ = self.define(main);
-
         let mut block = Block::new(name, file);
         for section in 0..self.sections.len() {
             self.init_section(section);
