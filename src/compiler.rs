@@ -1737,7 +1737,8 @@ impl Compiler {
                 (None, ..) => {}
 
                 (a, b, c) => {
-                    panic!(format!("Unknown outer token sequence: {:?} {:?} {:?}", a, b, c));
+                    let msg = format!("Unknown outer token sequence: {:?} {:?} {:?}", a, b, c);
+                    error!(self, msg);
                 }
             }
         }
