@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{Expr, Pat, Token, parse::{Parse, ParseStream, Result}, parse_macro_input};
 
@@ -45,7 +44,7 @@ impl Parse for ExternFunction {
 }
 
 #[proc_macro]
-pub fn extern_function(tokens: TokenStream) -> TokenStream {
+pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let parsed: ExternFunction = parse_macro_input!(tokens);
     let function = parsed.function;
 
@@ -91,7 +90,7 @@ pub fn extern_function(tokens: TokenStream) -> TokenStream {
             }
         }
     };
-    TokenStream::from(tokens)
+    proc_macro::TokenStream::from(tokens)
 }
 
 struct LinkRename {
@@ -140,7 +139,7 @@ impl Parse for Links {
 }
 
 #[proc_macro]
-pub fn link(tokens: TokenStream) -> TokenStream {
+pub fn link(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let links: Links = parse_macro_input!(tokens);
 
     let links: Vec<_> = links.links.iter().map(|link| {
@@ -158,7 +157,16 @@ pub fn link(tokens: TokenStream) -> TokenStream {
     let tokens = quote! {
         vec![ #(#links),* ]
     };
-    TokenStream::from(tokens)
+    proc_macro::TokenStream::from(tokens)
+}
+
+fn parse_test(contents: String) -> Option<String> {
+    for line in contents.split("\n") {
+        if line.starts_with("// errors: ") {
+            return Some(line.strip_prefix("// errors: ").unwrap().to_string());
+        }
+    }
+    None
 }
 
 fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
@@ -177,11 +185,20 @@ fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
         } else {
             assert!(!path.to_str().unwrap().contains(","), "You should be ashamed.");
 
-            let path = path.to_str().unwrap();
+            let path_string = path.to_str().unwrap();
             let test_name = format_ident!("file_{}", file_name.replace(".sy", ""));
-            let tokens = quote! {
-                test_file!(#test_name, #path);
+
+            let tokens = if let Some(wanted_err) = parse_test(std::fs::read_to_string(path.clone()).unwrap()) {
+                let wanted_err: proc_macro2::TokenStream = wanted_err.parse().unwrap();
+                quote! {
+                    test_file!(#test_name, #path_string, #wanted_err);
+                }
+            } else {
+                quote! {
+                    test_file!(#test_name, #path_string);
+                }
             };
+
             tests.extend(tokens);
         }
     }
@@ -196,8 +213,9 @@ fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
 }
 
 #[proc_macro]
-pub fn find_tests(tokens: TokenStream) -> TokenStream {
+pub fn find_tests(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     assert!(tokens.is_empty());
 
-    TokenStream::from(find_test_paths(Path::new("progs/")))
+    let tokens = find_test_paths(Path::new("progs/"));
+    proc_macro::TokenStream::from(tokens)
 }

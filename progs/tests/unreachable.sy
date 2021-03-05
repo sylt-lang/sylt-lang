@@ -1,1 +1,5 @@
-<!>
+start :: fn {
+    <!>
+}
+
+// errors: [ErrorKind::Unreachable]

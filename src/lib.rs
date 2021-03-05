@@ -914,6 +914,16 @@ mod tests {
                 crate::run_file(&file, true, Vec::new()).unwrap();
             }
         };
+        ($fn:ident, $path:literal, $errs:tt) => {
+            #[test]
+            fn $fn() {
+                use crate::error::ErrorKind;
+
+                let file = std::path::Path::new($path);
+                let res = crate::run_file(&file, true, Vec::new());
+                $crate::assert_errs!(res, $errs);
+            }
+        };
     }
 
     sylt_macro::find_tests!();
