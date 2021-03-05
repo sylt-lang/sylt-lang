@@ -160,13 +160,41 @@ pub fn link(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     proc_macro::TokenStream::from(tokens)
 }
 
-fn parse_test(contents: String) -> Option<String> {
-    for line in contents.split("\n") {
-        if line.starts_with("// errors: ") {
-            return Some(line.strip_prefix("// errors: ").unwrap().to_string());
+struct TestSettings {
+    errors: Option<String>,
+    print: bool,
+}
+
+impl Default for TestSettings {
+    fn default() -> Self {
+        Self {
+            errors: None,
+            print: true,
         }
     }
-    None
+}
+
+fn parse_test_settings(contents: String) -> TestSettings {
+    let mut settings = TestSettings::default();
+
+    for line in contents.split("\n") {
+        if line.starts_with("// errors: ") {
+            settings.errors = Some(line.strip_prefix("// errors: ").unwrap().to_string());
+        } else if line.starts_with("// flags: ") {
+            for flag in line.split(" ").skip(2) {
+                match flag {
+                    "no_print" => {
+                        settings.print = false;
+                    }
+                    _ => {
+                        panic!("Unknown test flag '{}'", flag);
+                    }
+                }
+            }
+        }
+    }
+
+    settings
 }
 
 fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
@@ -188,14 +216,16 @@ fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
             let path_string = path.to_str().unwrap();
             let test_name = format_ident!("file_{}", file_name.replace(".sy", ""));
 
-            let tokens = if let Some(wanted_err) = parse_test(std::fs::read_to_string(path.clone()).unwrap()) {
-                let wanted_err: proc_macro2::TokenStream = wanted_err.parse().unwrap();
+            let settings = parse_test_settings(std::fs::read_to_string(path.clone()).unwrap());
+            let print = settings.print;
+            let tokens = if let Some(wanted_errs) = settings.errors {
+                let wanted_errs: proc_macro2::TokenStream = wanted_errs.parse().unwrap();
                 quote! {
-                    test_file!(#test_name, #path_string, #wanted_err);
+                    test_file!(#test_name, #path_string, #print, #wanted_errs);
                 }
             } else {
                 quote! {
-                    test_file!(#test_name, #path_string);
+                    test_file!(#test_name, #path_string, #print);
                 }
             };
 

@@ -1,7 +1,6 @@
 // A Fibonacci implementation that is a little
 // less awful. But we run it 1000 times instead.
 start :: fn {
-    <!>
     j := 0
     for , j < 1000, j = j + 1 {
         a := 0
@@ -15,3 +14,5 @@ start :: fn {
         a <=> 12586269025
     }
 }
+
+// flags: no_print

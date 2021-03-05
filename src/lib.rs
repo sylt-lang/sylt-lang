@@ -873,14 +873,14 @@ mod tests {
 
     #[macro_export]
     macro_rules! test_file {
-        ($fn:ident, $path:literal) => {
+        ($fn:ident, $path:literal, $print:expr) => {
             #[test]
             fn $fn() {
                 let file = std::path::Path::new($path);
-                crate::run_file(&file, true, Vec::new()).unwrap();
+                crate::run_file(&file, $print, Vec::new()).unwrap();
             }
         };
-        ($fn:ident, $path:literal, $errs:tt) => {
+        ($fn:ident, $path:literal, $print:expr, $errs:tt) => {
             #[test]
             fn $fn() {
                 use crate::error::ErrorKind;
@@ -888,7 +888,7 @@ mod tests {
                 use crate::Type;
 
                 let file = std::path::Path::new($path);
-                let res = crate::run_file(&file, true, Vec::new());
+                let res = crate::run_file(&file, $print, Vec::new());
                 $crate::assert_errs!(res, $errs);
             }
         };
