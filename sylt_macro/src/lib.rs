@@ -1,5 +1,7 @@
+use std::path::{Path, PathBuf};
+
 use proc_macro::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 use syn::{Expr, Pat, Token, parse::{Parse, ParseStream, Result}, parse_macro_input};
 
 struct ExternBlock {
@@ -137,7 +139,6 @@ impl Parse for Links {
     }
 }
 
-
 #[proc_macro]
 pub fn link(tokens: TokenStream) -> TokenStream {
     let links: Links = parse_macro_input!(tokens);
@@ -157,5 +158,46 @@ pub fn link(tokens: TokenStream) -> TokenStream {
     let tokens = quote! {
         vec![ #(#links),* ]
     };
+    TokenStream::from(tokens)
+}
+
+fn find_test_paths(directory: &Path) -> Vec<PathBuf> {
+    let mut tests = Vec::new();
+
+    for entry in std::fs::read_dir(directory).unwrap() {
+        let path = entry.unwrap().path();
+        let file_name = path.file_name().unwrap().to_str().unwrap();
+
+        if file_name.starts_with("_") {
+            continue;
+        }
+
+        if path.is_dir() {
+            tests.append(&mut find_test_paths(&path));
+        } else {
+            assert!(!path.to_str().unwrap().contains(","), "You should be ashamed.");
+            tests.push(path);
+        }
+    }
+
+    tests
+}
+
+#[proc_macro]
+pub fn find_tests(tokens: TokenStream) -> TokenStream {
+    assert!(tokens.is_empty());
+
+    let tests: Vec<_> = find_test_paths(Path::new("progs/")).iter().map(|path| {
+        let path = path.to_str().unwrap();
+        let test_name = format_ident!("{}", path.replace("/", "_").replace(".sy", ""));
+        quote! {
+            test_file!(#test_name, #path);
+        }
+    }).collect();
+
+    let tokens = quote! {
+        #(#tests)*
+    };
+
     TokenStream::from(tokens)
 }

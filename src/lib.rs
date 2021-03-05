@@ -918,6 +918,8 @@ mod tests {
         };
     }
 
+    sylt_macro::find_tests!();
+
     #[test]
     fn unreachable_token() {
         assert_errs!(run_string("<!>\n", true, Vec::new()), [ErrorKind::Unreachable]);
