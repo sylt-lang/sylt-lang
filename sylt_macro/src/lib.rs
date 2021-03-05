@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
@@ -161,8 +161,8 @@ pub fn link(tokens: TokenStream) -> TokenStream {
     TokenStream::from(tokens)
 }
 
-fn find_test_paths(directory: &Path) -> Vec<PathBuf> {
-    let mut tests = Vec::new();
+fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
+    let mut tests = quote! {};
 
     for entry in std::fs::read_dir(directory).unwrap() {
         let path = entry.unwrap().path();
@@ -173,31 +173,31 @@ fn find_test_paths(directory: &Path) -> Vec<PathBuf> {
         }
 
         if path.is_dir() {
-            tests.append(&mut find_test_paths(&path));
+            tests.extend(find_test_paths(&path));
         } else {
             assert!(!path.to_str().unwrap().contains(","), "You should be ashamed.");
-            tests.push(path);
+
+            let path = path.to_str().unwrap();
+            let test_name = format_ident!("file_{}", file_name.replace(".sy", ""));
+            let tokens = quote! {
+                test_file!(#test_name, #path);
+            };
+            tests.extend(tokens);
         }
     }
 
-    tests
+    let directory = directory.file_name().unwrap().to_str().unwrap().replace("/", "");
+    let directory = format_ident!("{}", directory);
+    quote! {
+        mod #directory {
+            #tests
+        }
+    }
 }
 
 #[proc_macro]
 pub fn find_tests(tokens: TokenStream) -> TokenStream {
     assert!(tokens.is_empty());
 
-    let tests: Vec<_> = find_test_paths(Path::new("progs/")).iter().map(|path| {
-        let path = path.to_str().unwrap();
-        let test_name = format_ident!("{}", path.replace("/", "_").replace(".sy", ""));
-        quote! {
-            test_file!(#test_name, #path);
-        }
-    }).collect();
-
-    let tokens = quote! {
-        #(#tests)*
-    };
-
-    TokenStream::from(tokens)
+    TokenStream::from(find_test_paths(Path::new("progs/")))
 }

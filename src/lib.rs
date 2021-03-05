@@ -802,11 +802,9 @@ pub struct Prog {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
     use crate::error::ErrorKind;
 
-    use super::{run_file, run_string};
+    use super::run_string;
 
     #[macro_export]
     macro_rules! assert_errs {
@@ -912,8 +910,8 @@ mod tests {
         ($fn:ident, $path:literal) => {
             #[test]
             fn $fn() {
-                let file = Path::new($path);
-                run_file(&file, true, Vec::new()).unwrap();
+                let file = std::path::Path::new($path);
+                crate::run_file(&file, true, Vec::new()).unwrap();
             }
         };
     }
