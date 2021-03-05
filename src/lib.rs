@@ -802,10 +802,6 @@ pub struct Prog {
 
 #[cfg(test)]
 mod tests {
-    use crate::error::ErrorKind;
-
-    use super::run_string;
-
     #[macro_export]
     macro_rules! assert_errs {
         ($result:expr, [ $( $kind:pat ),* ]) => {
@@ -887,6 +883,7 @@ mod tests {
             #[test]
             fn $fn() {
                 use crate::error::ErrorKind;
+                #[allow(unused_imports)]
                 use crate::Type;
 
                 let file = std::path::Path::new($path);
