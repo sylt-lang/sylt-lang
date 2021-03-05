@@ -236,22 +236,26 @@ impl VM {
                 let offset = self.frame().stack_offset;
                 let constant = self.constant(value).clone();
                 let value = match constant {
-                    Value::Function(_, block) => {
-                        let mut ups = Vec::new();
-                        for (slot, is_up, _) in block.borrow().upvalues.iter() {
-                            let up = if *is_up {
-                                if let Value::Function(local_ups, _) = &self.stack[offset] {
-                                    Rc::clone(&local_ups[*slot])
+                    Value::Function(ups, block) => {
+                        if matches!(block.borrow().linking, BlockLinkState::Linked) {
+                            Value::Function(ups.clone(), block)
+                        } else {
+                            let mut ups = Vec::new();
+                            for (slot, is_up, _) in block.borrow().upvalues.iter() {
+                                let up = if *is_up {
+                                    if let Value::Function(local_ups, _) = &self.stack[offset] {
+                                        Rc::clone(&local_ups[*slot])
+                                    } else {
+                                        unreachable!()
+                                    }
                                 } else {
-                                    unreachable!()
-                                }
-                            } else {
-                                let slot = self.frame().stack_offset + slot;
-                                Rc::clone(self.find_upvalue(slot))
-                            };
-                            ups.push(up);
+                                    let slot = self.frame().stack_offset + slot;
+                                    Rc::clone(self.find_upvalue(slot))
+                                };
+                                ups.push(up);
+                            }
+                            Value::Function(ups, block)
                         }
-                        Value::Function(ups, block)
                     },
                     value => value,
                 };
