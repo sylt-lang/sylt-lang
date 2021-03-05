@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 pub struct Section {
     pub tokens: Vec<PlacedToken>,
     pub path: PathBuf,
+    pub faulty: bool,
 }
 
 impl Section {
@@ -13,6 +14,7 @@ impl Section {
         Self {
             tokens: Vec::from(tokens),
             path,
+            faulty: false,
         }
     }
 }

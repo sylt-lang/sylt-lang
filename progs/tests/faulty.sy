@@ -2,4 +2,4 @@ asdflökja;;;;
 123
 asd
 
-// errors: [ErrorKind::SyntaxError(_, _), ErrorKind::SyntaxError(_, _), ErrorKind::SyntaxError(_, _)]
+// errors: [ErrorKind::SyntaxError(_, _)]

@@ -1571,8 +1571,8 @@ impl Compiler {
 
             (Token::Newline, ..) => {}
 
-            _ => {
-                error!(self, "Invalid outer statement.");
+            (a, b, c, d) => {
+                error!(self, format!("Unknown outer token sequence: {:?} {:?} {:?} {:?}.", a, b, c, d))
             }
         }
     }
@@ -1686,7 +1686,7 @@ impl Compiler {
     pub(crate) fn compile(&mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
         for section in 0..self.sections.len() {
             self.init_section(section);
-            let section = &self.sections[section];
+            let section = &mut self.sections[section];
             match (section.tokens.get(0), section.tokens.get(1), section.tokens.get(2))  {
                 (Some((Token::Use, _)),
                  Some((Token::Identifier(name), _)), ..) => {
@@ -1737,7 +1737,8 @@ impl Compiler {
                 (None, ..) => {}
 
                 (a, b, c) => {
-                    let msg = format!("Unknown outer token sequence: {:?} {:?} {:?}", a, b, c);
+                    section.faulty = true;
+                    let msg = format!("Unknown outer token sequence: {:?} {:?} {:?}. Expected 'use', function, blob or variable.", a, b, c);
                     error!(self, msg);
                 }
             }
@@ -1755,6 +1756,9 @@ impl Compiler {
         let mut block = Block::new(name, file);
         for section in 0..self.sections.len() {
             self.init_section(section);
+            if self.sections[section].faulty {
+                continue;
+            }
             while !matches!(self.peek(), Token::EOF | Token::Use) {
                 self.outer_statement(&mut block);
                 expect!(self, Token::Newline | Token::EOF,
