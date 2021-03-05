@@ -842,6 +842,7 @@ mod tests {
     use owo_colors::OwoColorize;
 
     // Shamelessly stolen from https://github.com/rust-lang/rfcs/issues/2798
+    #[allow(dead_code)]
     pub fn panic_after<T, F>(d: Duration, f: F) -> T
     where
         T: Send + 'static,
