@@ -1,0 +1,19 @@
+h :: fn -> int {
+    ret 3
+}
+
+k :: fn -> int {
+    ret h()
+}
+
+a :: fn -> int {
+    ret q()
+}
+
+q :: fn -> int {
+    ret k()
+}
+
+start :: fn {
+    a() <=> 3
+}

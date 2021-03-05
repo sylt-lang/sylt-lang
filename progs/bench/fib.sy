@@ -7,4 +7,8 @@ fib :: fn a:int -> int {
     ret fib(a - 1) + fib(a - 2)
 }
 // 23 is around where things start getting slow.
-fib(23) <=> 28657
+start :: fn {
+    //TODO pass arguments to skip debug printing. this test is very slow otherwise
+    <!>
+    // fib(23) <=> 28657
+}

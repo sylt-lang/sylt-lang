@@ -824,29 +824,3 @@ impl VM {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    mod typing {
-        use crate::error::ErrorKind;
-        use crate::{test_string, Type};
-
-        test_string!(uncallable_type, "
-                 f := fn i: int {
-                     i()
-                 }
-                 f",
-                 [ErrorKind::InvalidProgram]);
-
-        test_string!(invalid_assign, "a := 1\na = 0.1\na",
-                 [ErrorKind::TypeMismatch(Type::Int, Type::Float)]);
-
-        test_string!(wrong_params, "
-                 f : fn -> int = fn a: int -> int {}\nf",
-                 [ErrorKind::TypeMismatch(_, _), ErrorKind::TypeMismatch(Type::Void, Type::Int)]);
-
-        test_string!(wrong_ret, "
-                 f : fn -> int = fn {}\nf",
-                 [ErrorKind::TypeMismatch(_, _)]);
-    }
-}
