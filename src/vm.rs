@@ -101,8 +101,6 @@ impl VM {
         if let Entry::Occupied(entry) = self.upvalues.entry(slot) {
             entry.get().borrow_mut().close(value);
             entry.remove();
-        } else {
-            unreachable!();
         }
     }
 
