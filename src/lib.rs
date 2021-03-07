@@ -561,7 +561,7 @@ pub enum Op {
 ///
 /// Broken out because they need to be recursive.
 mod op {
-    use super::Value;
+    use super::{Type, Value};
     use std::rc::Rc;
 
     fn tuple_bin_op(a: &Rc<Vec<Value>>, b: &Rc<Vec<Value>>, f: fn (&Value, &Value) -> Value) -> Value {
@@ -577,6 +577,7 @@ mod op {
             Value::Float(a) => Value::Float(-*a),
             Value::Int(a) => Value::Int(-*a),
             Value::Tuple(a) => tuple_un_op(a, neg),
+            Value::Unknown => Value::Unknown,
             _ => Value::Nil,
         }
     }
@@ -585,6 +586,7 @@ mod op {
         match value {
             Value::Bool(a) => Value::Bool(!*a),
             Value::Tuple(a) => tuple_un_op(a, not),
+            Value::Unknown => Value::from(Type::Bool),
             _ => Value::Nil,
         }
     }
@@ -596,6 +598,7 @@ mod op {
             (Value::Int(a), Value::Int(b)) => Value::Int(a + b),
             (Value::String(a), Value::String(b)) => Value::String(Rc::from(format!("{}{}", a, b))),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, add),
+            (Value::Unknown, a) | (a, Value::Unknown) => a.clone(),
             _ => Value::Nil,
         }
     }
@@ -609,6 +612,7 @@ mod op {
             (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
             (Value::Int(a), Value::Int(b)) => Value::Int(a * b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, mul),
+            (Value::Unknown, a) | (a, Value::Unknown) => a.clone(),
             _ => Value::Nil,
         }
     }
@@ -618,6 +622,7 @@ mod op {
             (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
             (Value::Int(a), Value::Int(b)) => Value::Int(a / b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, div),
+            (Value::Unknown, a) | (a, Value::Unknown) => a.clone(),
             _ => Value::Nil,
         }
     }
@@ -629,6 +634,7 @@ mod op {
             (Value::String(a), Value::String(b)) => Value::Bool(a == b),
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(a == b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, eq),
+            (Value::Unknown, _) | (_, Value::Unknown) => Value::from(Type::Bool),
             _ => Value::Nil,
         }
     }
@@ -640,6 +646,7 @@ mod op {
             (Value::String(a), Value::String(b)) => Value::Bool(a < b),
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(a < b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, less),
+            (Value::Unknown, _) | (_, Value::Unknown) => Value::from(Type::Bool),
             _ => Value::Nil,
         }
     }
@@ -652,6 +659,7 @@ mod op {
         match (a, b) {
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a && *b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, and),
+            (Value::Unknown, _) | (_, Value::Unknown) => Value::from(Type::Bool),
             _ => Value::Nil,
         }
     }
@@ -660,6 +668,7 @@ mod op {
         match (a, b) {
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a || *b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, or),
+            (Value::Unknown, _) | (_, Value::Unknown) => Value::from(Type::Bool),
             _ => Value::Nil,
         }
     }
