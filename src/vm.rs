@@ -717,6 +717,14 @@ impl VM {
                 };
             }
 
+            Op::Index => {
+                // We don't have any information about the slot and the indexable might contain
+                // mixed types.
+                self.stack.pop().unwrap(); // indexable
+                self.stack.pop().unwrap(); // slot
+                self.stack.push(Value::Unknown);
+            }
+
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {
