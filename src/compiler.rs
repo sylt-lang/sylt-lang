@@ -182,7 +182,8 @@ macro_rules! push_scope {
 nextable_enum!(Prec {
     No,
     Assert,
-    Bool,
+    BoolOr,
+    BoolAnd,
     Comp,
     Term,
     Factor,
@@ -615,7 +616,8 @@ impl Compiler {
                 | Token::NotEqual
                 => Prec::Comp,
 
-            Token::And | Token::Or => Prec::Bool,
+            Token::And => Prec::BoolAnd,
+            Token::Or => Prec::BoolOr,
 
             Token::AssertEqual => Prec::Assert,
 
@@ -655,6 +657,9 @@ impl Compiler {
                 | Token::LessEqual
                 | Token::NotEqual
                 => self.binary(block),
+
+            Token::And | Token::Or
+                => self.binary_bool(block),
 
             Token::LeftBracket => self.index(block),
 
@@ -739,6 +744,34 @@ impl Compiler {
         };
         self.parse_precedence(block, Prec::Factor);
         add_op(self, block, op);
+    }
+
+    fn binary_bool(&mut self, block: &mut Block) {
+        let op = self.eat();
+
+        match op {
+            Token::And => {
+                add_op(self, block, Op::Copy);
+                let jump = add_op(self, block, Op::Illegal);
+
+                self.parse_precedence(block, self.precedence(op.clone()).next());
+
+                block.patch(Op::JmpFalse(block.curr()), jump);
+            }
+
+            Token::Or => {
+                add_op(self, block, Op::Copy);
+                let skipp = add_op(self, block, Op::Illegal);
+                let jump = add_op(self, block, Op::Illegal);
+                block.patch(Op::JmpFalse(block.curr()), skipp);
+
+                self.parse_precedence(block, self.precedence(op.clone()).next());
+
+                block.patch(Op::Jmp(block.curr()), jump);
+            }
+
+            _ => { error!(self, "Illegal operator"); }
+        }
     }
 
     fn binary(&mut self, block: &mut Block) {
