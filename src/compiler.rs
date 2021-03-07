@@ -285,6 +285,17 @@ impl Frame {
         }
     }
 
+    fn find_outer(&self, name: &str) -> Option<Variable> {
+        // Only really makes sense in the outermost frame
+        // where declaration order doesn't matter
+        for var in self.stack.iter().rev() {
+            if var.name == name {
+                return Some(var.clone());
+            }
+        }
+        None
+    }
+
     fn find_local(&self, name: &str) -> Option<Variable> {
         for var in self.stack.iter().rev() {
             if var.name == name && var.active {
@@ -1145,7 +1156,7 @@ impl Compiler {
     fn definition_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
         if self.frames().len() <= 1 {
             // Global
-            let var = self.find_variable(name)
+            let var = self.frame().find_outer(name)
                 .expect(&format!("Couldn't find variable '{}' during prepass.", name));
             assert!(var.mutable);
 
@@ -1184,7 +1195,7 @@ impl Compiler {
 
         if self.frames().len() <= 1 {
             // Global
-            let var = self.find_variable(name)
+            let var = self.frame().find_outer(name)
                 .expect(&format!("Couldn't find constant '{}' during prepass.", name));
             assert!(!var.mutable);
 
@@ -1722,7 +1733,6 @@ impl Compiler {
                         let is_mut = self.peek() == Token::Equal;
                         let var = Variable::new(&name, is_mut, ty);
                         let slot = self.define(var).unwrap();
-                        self.frame_mut().stack[slot].active = true;
                     } else {
                         error!(self, format!("Failed to parse type global '{}'.", name));
                     }
@@ -1732,14 +1742,12 @@ impl Compiler {
                  Some((Token::ColonColon, _)), ..) => {
                     let var = Variable::new(name, false, Type::Unknown);
                     let slot = self.define(var).unwrap();
-                    self.frame_mut().stack[slot].active = true;
                 }
 
                 (Some((Token::Identifier(name), _)),
                  Some((Token::ColonEqual, _)), ..) => {
                     let var = Variable::new(name, true, Type::Unknown);
                     let slot = self.define(var).unwrap();
-                    self.frame_mut().stack[slot].active = true;
                 }
 
 
