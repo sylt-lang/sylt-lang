@@ -691,6 +691,14 @@ impl Compiler {
                 Token::Newline => {
                     self.eat();
                 }
+                Token::Comma => {
+                    //TODO(gu): This creates a lot of syntax errors since the compiler panic is
+                    // ignored and the statement is tried as a grouping instead, even though we
+                    // _know_ that this can't be parsed as a grouping either.
+                    // Tracked in #100.
+                    error!(self, "Tuples must begin with an element or ')'.");
+                    return;
+                }
                 _ => {
                     self.expression(block);
                     num_args += 1;
