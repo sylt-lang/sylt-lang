@@ -178,7 +178,10 @@ pub enum Value {
     String(Rc<String>),
     Function(Vec<Rc<RefCell<UpValue>>>, Rc<RefCell<Block>>),
     ExternFunction(usize),
+    /// This value should not be present when running, only when type checking.
+    /// Most operations are valid but produce funky results.
     Unknown,
+    /// Should not be present when running.
     Nil,
 }
 
