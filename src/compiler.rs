@@ -1124,17 +1124,19 @@ impl Compiler {
     }
 
     fn define(&mut self, mut var: Variable) -> Result<usize, ()> {
-        if let Some(var) = self.find_variable(&var.name) {
-            if var.scope == self.frame().scope {
+        let frame = self.frame();
+
+        if let Some(res) = frame.find_local(&var.name).or(frame.find_upvalue(&var.name)) {
+            if res.scope == frame.scope {
                 error!(self, format!("Multiple definitions of '{}' in this block.",
-                                     var.name));
+                                     res.name));
                 return Err(());
             }
         }
 
         let slot = self.stack().len();
         var.slot = slot;
-        var.scope = self.frame().scope;
+        var.scope = frame.scope;
         var.line = self.line();
         self.stack_mut().push(var);
         Ok(slot)
