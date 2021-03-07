@@ -1,0 +1,6 @@
+start :: fn {
+    a := (1, 2)
+    a[2]
+}
+
+// errors: [ErrorKind::IndexOutOfBounds(_, 2, 2)]
