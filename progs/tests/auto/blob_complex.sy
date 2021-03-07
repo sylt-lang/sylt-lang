@@ -1,19 +1,19 @@
 start :: fn {
 
-a := A()
-b := B()
-c := C()
-b2 := B()
+    a := A()
+    b := B()
+    c := C()
+    b2 := B()
 
-a
-b
-c
-b2
+    a
+    b
+    c
+    b2
 
-blob A {
-    c: C
-}
-blob C { }
-blob B { }
+    blob A {
+        c: C
+    }
+    blob C { }
+    blob B { }
 
 }

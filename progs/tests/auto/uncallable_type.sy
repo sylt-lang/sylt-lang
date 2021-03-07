@@ -1,9 +1,8 @@
 start :: fn {
-
-                 f := fn i: int {
-                     i()
-                 }
-                 f
+    f := fn i: int {
+        i()
+    }
+    f
 }
 
 // errors: [ErrorKind::InvalidProgram]

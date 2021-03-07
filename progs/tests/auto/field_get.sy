@@ -1,7 +1,7 @@
 start :: fn {
-blob A { a: int }
-                       a := A()
-                       a.a = 2
-                       a.a <=> 2
-                       2 <=> a.a
+    blob A { a: int }
+    a := A()
+    a.a = 2
+    a.a <=> 2
+    2 <=> a.a
 }

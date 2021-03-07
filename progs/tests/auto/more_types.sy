@@ -1,4 +1,4 @@
 start :: fn {
-a: (str, bool, int) = ("abc", true, 1)
-a
+    a: (str, bool, int) = ("abc", true, 1)
+    a
 }

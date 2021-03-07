@@ -1,5 +1,5 @@
 start :: fn {
-blob A {}
-                      a := A()
-                      a
+    blob A {}
+    a := A()
+    a
 }

@@ -1,4 +1,4 @@
 start :: fn {
-f := fn a: int {}
-                  f(1)
+    f := fn a: int {}
+    f(1)
 }

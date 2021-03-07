@@ -1,7 +1,7 @@
 start :: fn {
 
-                 f : fn -> int = fn a: int -> int {}
-f
+    f : fn -> int = fn a: int -> int {}
+    f
 }
 
 // errors: [ErrorKind::TypeMismatch(_, _), ErrorKind::TypeMismatch(Type::Void, Type::Int)]

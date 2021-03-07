@@ -1,8 +1,8 @@
 start :: fn {
 
-blob A { }
+    blob A { }
 
-a : A = A()
-a
+    a : A = A()
+    a
 
 }

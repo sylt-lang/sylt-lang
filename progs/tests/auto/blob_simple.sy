@@ -1,10 +1,10 @@
 start :: fn {
 
-a := A()
-a
+    a := A()
+    a
 
-blob A {
-    a: int
-}
+    blob A {
+        a: int
+    }
 
 }

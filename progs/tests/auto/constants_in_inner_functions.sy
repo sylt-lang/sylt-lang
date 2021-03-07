@@ -1,20 +1,20 @@
 start :: fn {
 
-q : int = 0
+    q : int = 0
 
-f :: fn -> fn -> {
-    g :: fn {
-        q += 1
+    f :: fn -> fn -> {
+        g :: fn {
+            q += 1
+        }
+        ret g
     }
-    ret g
-}
 
-g := f()
-g()
-q <=> 1
-g()
-q <=> 2
-g()
-q <=> 3
+    g := f()
+    g()
+    q <=> 1
+    g()
+    q <=> 2
+    g()
+    q <=> 3
 
 }
