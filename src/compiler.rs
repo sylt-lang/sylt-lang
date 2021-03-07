@@ -680,7 +680,7 @@ impl Compiler {
     }
 
     fn tuple(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftParen, "Expected '(' at start of tuple");
+        expect!(self, Token::LeftParen, "Expected '(' at start of tuple.");
 
         let mut num_args = 0;
         let trailing_comma = loop {
@@ -711,7 +711,7 @@ impl Compiler {
                         },
                         Token::RightParen => {},
                         _ => {
-                            error!(self, "Expected ',' or ')' in tuple");
+                            error!(self, "Expected ',' or ')' after tuple element.");
                             return;
                         },
                     }
@@ -719,7 +719,7 @@ impl Compiler {
             }
         };
         if num_args == 1 && !trailing_comma {
-            error!(self, "A tuple must contain more than 1 element or end with a trailing comma.");
+            error!(self, "A tuple with 1 element must end with a trailing comma.");
             return;
         }
 
