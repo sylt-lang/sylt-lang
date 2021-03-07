@@ -1,0 +1,10 @@
+start :: fn {
+
+a := A()
+a
+
+blob A {
+    a: int
+}
+
+}

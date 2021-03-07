@@ -1,0 +1,10 @@
+fac :: fn a: int -> int {
+    if a < 1 { ret 1 }
+    ret a * fac! a - 1
+}
+
+a :: fac! 4
+
+start :: fn {
+    a <=> 24
+}

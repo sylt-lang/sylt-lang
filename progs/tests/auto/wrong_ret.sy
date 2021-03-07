@@ -1,0 +1,7 @@
+start :: fn {
+
+                 f : fn -> int = fn {}
+f
+}
+
+// errors: [ErrorKind::TypeMismatch(_, _)]

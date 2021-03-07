@@ -1,19 +1,21 @@
-a := 0
-for i := 0, i < 3, i = i + 1 {
-    a = a + i
-}
-a <=> 3
-
-a = 0
-for i := 0, i <= 3, i = i + 1 {
-    a = a + i
-}
-a <=> 6
-
-a = 0
-for i := 0, i < 3, i = i + 1 {
-    for j := 0, j < 3, j = j + 1 {
-        a = a + i * j
+start :: fn {
+    a := 0
+    for i := 0, i < 3, i = i + 1 {
+        a = a + i
     }
+    a <=> 3
+
+    a = 0
+    for i := 0, i <= 3, i = i + 1 {
+        a = a + i
+    }
+    a <=> 6
+
+    a = 0
+    for i := 0, i < 3, i = i + 1 {
+        for j := 0, j < 3, j = j + 1 {
+            a = a + i * j
+        }
+    }
+    a <=> 9
 }
-a <=> 9

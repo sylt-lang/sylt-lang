@@ -4,11 +4,11 @@ use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::hash::{Hash, Hasher};
 
 use owo_colors::OwoColorize;
 
 use error::Error;
-use tokenizer::TokenStream;
 
 use crate::error::ErrorKind;
 
@@ -16,16 +16,18 @@ pub mod error;
 pub mod vm;
 
 mod compiler;
+mod sectionizer;
 mod tokenizer;
 
 /// Compiles a file and links the supplied functions as callable external
 /// functions. Use this if you want your programs to be able to yield.
-pub fn compile_file(path: &Path,
-                    print: bool,
-                    functions: Vec<(String, RustFunction)>
-    ) -> Result<vm::VM, Vec<Error>> {
-    let tokens = tokenizer::file_to_tokens(path);
-    match compiler::Compiler::new(path, tokens).compile("main", path, &functions) {
+pub fn compile_file(
+    path: &Path,
+    print: bool,
+    functions: Vec<(String, RustFunction)>
+) -> Result<vm::VM, Vec<Error>> {
+    let sections = sectionizer::sectionize(path);
+    match compiler::Compiler::new(sections).compile("main", path, &functions) {
         Ok(prog) => {
             let mut vm = vm::VM::new();
             vm.print_blocks = print;
@@ -42,18 +44,19 @@ pub fn compile_file(path: &Path,
 /// external functions. If you want your program to be able to yield, use
 /// [compile_file].
 pub fn run_file(path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    run(tokenizer::file_to_tokens(path), path, print, functions)
+    run(path, print, functions)
 }
 
-/// Compile and run a string containing source code. The supplied functions are
-/// linked as callable external functions. This is useful for short test
-/// programs.
-pub fn run_string(s: &str, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    run(tokenizer::string_to_tokens(s), Path::new("builtin"), print, functions)
+pub fn run_string(source: &str, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
+    let mut path = std::env::temp_dir();
+    path.push(format!("test_{}.sy", rand::random::<u32>()));
+    std::fs::write(path.clone(), source).expect("Failed to write source to temporary file");
+    run(&path, print, functions)
 }
 
-fn run(tokens: TokenStream, path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    match compiler::Compiler::new(path, tokens).compile("main", path, &functions) {
+fn run(path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
+    let sections = sectionizer::sectionize(path);
+    match compiler::Compiler::new(sections).compile("main", path, &functions) {
         Ok(prog) => {
             let mut vm = vm::VM::new();
             vm.print_blocks = print;
@@ -195,6 +198,43 @@ impl Debug for Value {
             Value::Nil => write!(fmt, "(nil)"),
             Value::Tuple(v) => write!(fmt, "({:?})", v),
         }
+    }
+}
+
+impl PartialEq<Value> for Value {
+    fn eq(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Value::Float(a), Value::Float(b)) => a == b,
+            (Value::Int(a), Value::Int(b)) => a == b,
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::Tuple(a), Value::Tuple(b)) => {
+                a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| a == b)
+            }
+            (Value::Nil, Value::Nil) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Value {}
+
+impl Hash for Value {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Value::Float(a) => {
+                // We have to limit the values, because
+                // floats are wierd.
+                assert!(a.is_finite());
+                a.to_bits().hash(state);
+            },
+            Value::Int(a) => a.hash(state),
+            Value::Bool(a) => a.hash(state),
+            Value::String(a) => a.hash(state),
+            Value::Tuple(a) => a.hash(state),
+            Value::Nil => state.write_i8(0),
+            _ => {},
+        };
     }
 }
 
@@ -762,12 +802,6 @@ pub struct Prog {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
-    use crate::error::ErrorKind;
-
-    use super::{run_file, run_string};
-
     #[macro_export]
     macro_rules! assert_errs {
         ($result:expr, [ $( $kind:pat ),* ]) => {
@@ -808,6 +842,7 @@ mod tests {
     use owo_colors::OwoColorize;
 
     // Shamelessly stolen from https://github.com/rust-lang/rfcs/issues/2798
+    #[allow(dead_code)]
     pub fn panic_after<T, F>(d: Duration, f: F) -> T
     where
         T: Send + 'static,
@@ -837,544 +872,27 @@ mod tests {
     }
 
     #[macro_export]
-    macro_rules! test_string {
-        ($fn:ident, $prog:literal) => {
-            #[test]
-            fn $fn() {
-                crate::tests::panic_after(std::time::Duration::from_millis(500), || {
-                    match $crate::run_string($prog, true, Vec::new()) {
-                        Ok(()) => {},
-                        Err(errs) => {
-                            for e in errs.iter() {
-                                eprintln!("{}", e);
-                            }
-                            eprintln!("  {} - failed\n", stringify!($fn));
-                            unreachable!();
-                        }
-                    }
-                });
-            }
-        };
-        ($fn:ident, $prog:literal, $errs:tt) => {
-            #[test]
-            fn $fn() {
-                crate::tests::panic_after(std::time::Duration::from_millis(500), || {
-                    $crate::assert_errs!($crate::run_string($prog, true, Vec::new()), $errs);
-                })
-            }
-        }
-    }
-
-    #[macro_export]
     macro_rules! test_file {
-        ($fn:ident, $path:literal) => {
+        ($fn:ident, $path:literal, $print:expr) => {
             #[test]
             fn $fn() {
-                let file = Path::new($path);
-                run_file(&file, true, Vec::new()).unwrap();
+                let file = std::path::Path::new($path);
+                crate::run_file(&file, $print, Vec::new()).unwrap();
+            }
+        };
+        ($fn:ident, $path:literal, $print:expr, $errs:tt) => {
+            #[test]
+            fn $fn() {
+                use crate::error::ErrorKind;
+                #[allow(unused_imports)]
+                use crate::Type;
+
+                let file = std::path::Path::new($path);
+                let res = crate::run_file(&file, $print, Vec::new());
+                $crate::assert_errs!(res, $errs);
             }
         };
     }
 
-    #[test]
-    fn unreachable_token() {
-        assert_errs!(run_string("<!>\n", true, Vec::new()), [ErrorKind::Unreachable]);
-    }
-
-    #[test]
-    fn assign_to_constant() {
-        assert_errs!(run_string("a :: 2\na = 2", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
-    }
-
-    #[test]
-    fn assign_to_constant_upvalue() {
-        assert_errs!(run_string("a :: 2\nq :: fn { a = 2 }\nq()\na", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
-    }
-
-    #[test]
-    fn undefined_blob() {
-        assert_errs!(run_string("a :: B()\n", true, Vec::new()), [ErrorKind::SyntaxError(_, _)]);
-    }
-
-    #[test]
-    fn call_before_link() {
-        let prog = "
-a := 1
-f()
-c := 5
-
-f :: fn {
-    c <=> 5
-}
-a
-        ";
-        assert_errs!(run_string(prog, true, Vec::new()), [ErrorKind::InvalidProgram, ErrorKind::TypeError(_, _)]);
-    }
-
-    #[test]
-    fn unused_variable() {
-        assert_errs!(run_string("a := 1", true, Vec::new()), [ErrorKind::SyntaxError(1, _)]);
-    }
-
-    #[test]
-    fn unused_upvalue() {
-        assert_errs!(run_string("a := 1\nf :: fn { a = 2 }\nf()", true, Vec::new()), [ErrorKind::SyntaxError(1, _)]);
-    }
-
-    #[test]
-    fn unused_function() {
-        assert_errs!(run_string("a := 1\nf := fn { a }\n", true, Vec::new()), [ErrorKind::SyntaxError(2, _)]);
-    }
-
-    macro_rules! test_multiple {
-        ($mod:ident, $( $fn:ident : $prog:literal ),+ $( , )? ) => {
-            mod $mod {
-                $( test_string!($fn, $prog); )+
-            }
-        }
-    }
-
-    test_multiple!(
-        order_of_operations,
-        terms_and_factors: "1 + 1 * 2 <=> 3
-                            1 * 2 + 3 <=> 5",
-        in_rhs: "5 <=> 1 * 2 + 3",
-        parenthesis: "(1 + 2) * 3 <=> 9",
-        negation: "-1 <=> 0 - 1
-                   -1 + 2 <=> 1
-                   -(1 + 2) <=> -3
-                   1 + -1 <=> 0
-                   2 * -1 <=> -2",
-    );
-
-    test_multiple!(
-        variables,
-        single_variable: "a := 1
-                          a <=> 1",
-        two_variables: "a := 1
-                        b := 2
-                        a <=> 1
-                        b <=> 2",
-        stack_ordering: "a := 1
-                         b := 2
-                         b <=> 2
-                         a <=> 1",
-        assignment: "a := 1
-                     b := 2
-                     a = b
-                     a <=> 2
-                     b <=> 2",
-    );
-
-    test_multiple!(
-        if_,
-        compare_constants_equality: "if 1 == 2 {
-                                        <!>
-                                     }",
-        compare_constants_unequality: "if 1 != 1 {
-                                         <!>
-                                       }",
-        compare_variable: "a := 1
-                           if a == 0 {
-                             <!>
-                           }
-                           if a != 1 {
-                             <!>
-                           }",
-        else_: "a := 1
-                res := 0
-                if a == 0 {
-                  <!>
-                } else {
-                  res = 1
-                }
-                res <=> 1",
-        else_if: "a := 1
-                  res := 0
-                  if a == 0 {
-                    <!>
-                  } else if a == 1 {
-                    res = 1
-                  } else {
-                    <!>
-                  }
-                  res <=> 1",
-    );
-
-    test_multiple!(
-        fun,
-        simplest: "f := fn {}
-                   f()",
-        param_1: "f := fn a: int {}
-                  f(1)",
-        return_1: "f := fn -> int {
-                     ret 1
-                   }
-                   f() <=> 1",
-        param_and_return: "f := fn a: int -> int {
-                             ret a * 2
-                           }
-                           f(1) <=> 2
-                           f(5) <=> 10",
-        param_2: "add := fn a: int, b: int -> int {
-                    ret a + b
-                  }
-                  add(1, 1) <=> 2
-                  add(10, 20) <=> 30",
-        calls_inside_calls: "one := fn -> int {
-                               ret 1
-                             }
-                             add := fn a: int, b: int -> int {
-                               ret a + b
-                             }
-                             add(one(), one()) <=> 2
-                             add(add(one(), one()), one()) <=> 3
-                             add(one(), add(one(), one())) <=> 3",
-        passing_functions: "g := fn -> int {
-                              ret 1
-                            }
-                            f := fn inner: fn -> int -> int {
-                              ret inner()
-                            }
-                            f(g) <=> 1",
-        passing_functions_mixed: "g := fn a: int -> int {
-                                    ret a * 2
-                                  }
-                                  f := fn inner: fn int -> int, a: int -> int {
-                                    ret inner(a)
-                                  }
-                                  f(g, 2) <=> 4",
-        multiple_returns: "f := fn a: int -> int {
-                             if a == 1 {
-                               ret 2
-                             } else {
-                               ret 3
-                             }
-                           }
-                           f(0) <=> 3
-                           f(1) <=> 2
-                           f(2) <=> 3",
-        precedence: "f := fn a: int, b: int -> int {
-                       ret a + b
-                     }
-                     1 + f(2, 3) <=> 6
-                     2 * f(2, 3) <=> 10
-                     f(2, 3) - (2 + 3) <=> 0",
-        factorial: "factorial : fn int -> int = fn n: int -> int {
-                      if n <= 1 {
-                        ret 1
-                      }
-                      ret n * factorial(n - 1)
-                    }
-                    factorial(5) <=> 120
-                    factorial(6) <=> 720
-                    factorial(12) <=> 479001600",
-
-        returning_closures: "
-f : fn -> fn -> int = fn -> fn -> int {
-    x : int = 0
-    f := fn -> int {
-        x = x + 1
-        ret x
-    }
-    f() <=> 1
-    ret f
-}
-
-a := f()
-b := f()
-
-a() <=> 2
-a() <=> 3
-
-b() <=> 2
-b() <=> 3
-
-a() <=> 4
-",
-    );
-
-    test_multiple!(
-        blob,
-        simple: "blob A {}",
-        instantiate: "blob A {}
-                      a := A()
-                      a",
-        field: "blob A { a: int }",
-        field_assign: "blob A { a: int }
-                       a := A()
-                       a.a = 2",
-        field_get: "blob A { a: int }
-                       a := A()
-                       a.a = 2
-                       a.a <=> 2
-                       2 <=> a.a",
-        multiple_fields: "blob A {
-                            a: int
-                            b: int
-                          }
-                          a := A()
-                          a.a = 2
-                          a.b = 3
-                          a.a + a.b <=> 5
-                          5 <=> a.a + a.b",
-        blob_infer: "
-blob A { }
-a : A = A()
-a
-",
-    );
-
-    test_multiple!(tuples,
-        add: "(1, 2, 3, 4) + (4, 3, 2, 1) <=> (5, 5, 5, 5)",
-        sub: "(1, -2, 3, -4) - (4, 3, -2, -1) <=> (-3, 1, 1, -5)",
-        mul: "(0, 1, 2) * (2, 3, 4) <=> (0, 3, 8)",
-        types: "a: (int, float, int) = (1, 1., 1)\na",
-        more_types: "a: (str, bool, int) = (\"abc\", true, 1)\na",
-    );
-
-    test_file!(scoping, "progs/tests/scoping.sy");
-    test_file!(for_, "progs/tests/for.sy");
-
-    test_multiple!(
-        op_assign,
-        add: "a := 1\na += 1\na <=> 2",
-        sub: "a := 2\na -= 1\na <=> 1",
-        mul: "a := 2\na *= 2\na <=> 4",
-        div: "a := 2\na /= 2\na <=> 1",
-        cluster: "
-blob A { a: int }
-a := A()
-a.a = 0
-a.a += 1
-a.a <=> 1
-a.a *= 2
-a.a <=> 2
-a.a /= 2
-a.a <=> 1
-a.a -= 1
-a.a <=> 0"
-    );
-
-    test_multiple!(
-        fancy_call,
-        not: "f := fn {}\n f!\n",
-        one_arg: "f := fn a:int { a <=> 1 }\n f! 1\n",
-        two_arg: "f := fn a:int, b:int { b <=> 3 }\n f! 1, 1 + 2\n",
-        three_arg: "f := fn a:int, b:int, c:int { c <=> 13 }\n f! 1, 1 + 2, 1 + 4 * 3\n",
-    );
-
-    test_multiple!(
-        newline_regression,
-        simple: "a := 1 // blargh \na += 1 // blargh \n a <=> 2 // HARGH",
-        expressions: "1 + 1 // blargh \n 2 // blargh \n // HARGH \n",
-    );
-
-    test_multiple!(
-        break_and_continue,
-        simple_break: "
-a := 0
-for i := 0, i < 10, i += 1 {
-    a = a + 1
-    if i == 2 {
-        break
-    }
-}
-a <=> 3
-",
-
-        simple_continue: "
-a := 0
-for i := 0, i < 4, i += 1 {
-    if i == 2 {
-        continue
-    }
-    a = a + 1
-}
-a <=> 3
-",
-
-        advanced_break: "
-a := 0
-for i := 0, i < 10, i += 1 {
-    q := 0
-    qq := 0
-    qqq := 0
-    qqqq := 0
-
-    a = a + 1
-    if i == 2 {
-        break
-    }
-}
-a <=> 3
-",
-
-        advanced_continue: "
-a := 0
-for i := 0, i < 4, i += 1 {
-    q := 0
-    qq := 0
-    qqq := 0
-    qqqq := 0
-
-    if i == 2 {
-        continue
-    }
-    a = a + 1
-}
-a <=> 3
-",
-    );
-
-    test_multiple!(
-        read_constants,
-        simple: "
-a :: 1
-a <=> 1
-b := 2
-{
-    a <=> 1
-    b <=> 2
-}",
-    );
-
-    test_multiple!(
-        assignment_op_regression,
-        simple_add: "
-a := 0
-b := 99999
-a += 1
-a <=> 1
-b <=> 99999
-",
-
-        simple_sub: "
-a := 0
-b := 99999
-a -= 1
-a <=> -1
-b <=> 99999
-",
-
-        strange: "
-a := 0
-{
-    b := 99999
-    {
-        a := 99999
-    }
-    a -= 1
-}
-a <=> -1
-",
-    );
-
-    test_multiple!(
-        declaration_order,
-        blob_simple: "
-a := A()
-a
-
-blob A {
-    a: int
-}
-",
-
-        blob_complex: "
-a := A()
-b := B()
-c := C()
-b2 := B()
-
-a
-b
-c
-b2
-
-blob A {
-    c: C
-}
-blob C { }
-blob B { }
-",
-
-        blob_infer: "
-blob A { }
-
-a : A = A()
-a
-",
-
-
-        constant_function: "
-a()
-a :: fn {}
-",
-
-        constant_function_complex: "
-h :: fn -> int {
-    ret 3
-}
-
-a() <=> 3
-
-k :: fn -> int {
-    ret h()
-}
-
-a :: fn -> int {
-    ret q()
-}
-
-q :: fn -> int {
-    ret k()
-}
-",
-
-        constant_function_closure: "
-q := 1
-
-f :: fn -> int {
-    q += 1
-    ret q
-}
-
-f() <=> 2
-f() <=> 3
-f() <=> 4
-f() <=> 5
-",
-
-        constants_in_inner_functions: "
-q : int = 0
-
-f :: fn -> fn -> {
-    g :: fn {
-        q += 1
-    }
-    ret g
-}
-
-g := f()
-g()
-q <=> 1
-g()
-q <=> 2
-g()
-q <=> 3
-",
-
-    );
-
-    test_string!(conflict_markers, "
-<<<<<<< HEAD
-print extern_test(4.0)
-=======
-print extern_test(5.0)
->>>>>>> 2
-",
-                 [ErrorKind::SyntaxError(_, _), ErrorKind::GitConflictError(2, 6)]
-    );
-
+    sylt_macro::find_tests!();
 }

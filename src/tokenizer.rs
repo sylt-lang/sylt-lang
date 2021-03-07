@@ -127,6 +127,9 @@ pub enum Token {
     #[token("\n")]
     Newline,
 
+    #[token("use")]
+    Use,
+
     #[token("<<<<<<<")]
     GitConflictBegin,
     #[token(">>>>>>>")]

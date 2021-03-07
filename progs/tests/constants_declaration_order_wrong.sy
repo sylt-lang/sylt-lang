@@ -1,0 +1,8 @@
+a :: b + 1
+b :: 1
+
+start :: fn {
+    a <=> b + 1
+}
+
+// errors: [ErrorKind::SyntaxError(1, _)]

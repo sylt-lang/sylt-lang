@@ -1,14 +1,18 @@
 // A Fibonacci implementation that is a little
 // less awful. But we run it 1000 times instead.
-j := 0
-for , j < 1000, j = j + 1 {
-    a := 0
-    b := 1
+start :: fn {
+    j := 0
+    for , j < 1000, j = j + 1 {
+        a := 0
+        b := 1
 
-    for i := 0, i < 50, i = i + 1 {
-        c := a
-        a = b
-        b = c + b
+        for i := 0, i < 50, i = i + 1 {
+            c := a
+            a = b
+            b = c + b
+        }
+        a <=> 12586269025
     }
-    a <=> 12586269025
 }
+
+// flags: no_print

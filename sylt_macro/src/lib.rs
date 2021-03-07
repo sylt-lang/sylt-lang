@@ -1,5 +1,6 @@
-use proc_macro::TokenStream;
-use quote::quote;
+use std::path::Path;
+
+use quote::{format_ident, quote};
 use syn::{Expr, Pat, Token, parse::{Parse, ParseStream, Result}, parse_macro_input};
 
 struct ExternBlock {
@@ -43,7 +44,7 @@ impl Parse for ExternFunction {
 }
 
 #[proc_macro]
-pub fn extern_function(tokens: TokenStream) -> TokenStream {
+pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let parsed: ExternFunction = parse_macro_input!(tokens);
     let function = parsed.function;
 
@@ -89,7 +90,7 @@ pub fn extern_function(tokens: TokenStream) -> TokenStream {
             }
         }
     };
-    TokenStream::from(tokens)
+    proc_macro::TokenStream::from(tokens)
 }
 
 struct LinkRename {
@@ -137,9 +138,8 @@ impl Parse for Links {
     }
 }
 
-
 #[proc_macro]
-pub fn link(tokens: TokenStream) -> TokenStream {
+pub fn link(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let links: Links = parse_macro_input!(tokens);
 
     let links: Vec<_> = links.links.iter().map(|link| {
@@ -157,5 +157,95 @@ pub fn link(tokens: TokenStream) -> TokenStream {
     let tokens = quote! {
         vec![ #(#links),* ]
     };
-    TokenStream::from(tokens)
+    proc_macro::TokenStream::from(tokens)
+}
+
+struct TestSettings {
+    errors: Option<String>,
+    print: bool,
+}
+
+impl Default for TestSettings {
+    fn default() -> Self {
+        Self {
+            errors: None,
+            print: true,
+        }
+    }
+}
+
+fn parse_test_settings(contents: String) -> TestSettings {
+    let mut settings = TestSettings::default();
+
+    for line in contents.split("\n") {
+        if line.starts_with("// errors: ") {
+            settings.errors = Some(line.strip_prefix("// errors: ").unwrap().to_string());
+        } else if line.starts_with("// flags: ") {
+            for flag in line.split(" ").skip(2) {
+                match flag {
+                    "no_print" => {
+                        settings.print = false;
+                    }
+                    _ => {
+                        panic!("Unknown test flag '{}'", flag);
+                    }
+                }
+            }
+        }
+    }
+
+    settings
+}
+
+fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
+    let mut tests = quote! {};
+
+    for entry in std::fs::read_dir(directory).unwrap() {
+        let path = entry.unwrap().path();
+        let file_name = path.file_name().unwrap().to_str().unwrap();
+
+        if file_name.starts_with("_") {
+            continue;
+        }
+
+        if path.is_dir() {
+            tests.extend(find_test_paths(&path));
+        } else {
+            assert!(!path.to_str().unwrap().contains(","), "You should be ashamed.");
+
+            let path_string = path.to_str().unwrap();
+            let test_name = format_ident!("file_{}", file_name.replace(".sy", ""));
+
+            let settings = parse_test_settings(std::fs::read_to_string(path.clone()).unwrap());
+            let print = settings.print;
+            let tokens = if let Some(wanted_errs) = settings.errors {
+                let wanted_errs: proc_macro2::TokenStream = wanted_errs.parse().unwrap();
+                quote! {
+                    test_file!(#test_name, #path_string, #print, #wanted_errs);
+                }
+            } else {
+                quote! {
+                    test_file!(#test_name, #path_string, #print);
+                }
+            };
+
+            tests.extend(tokens);
+        }
+    }
+
+    let directory = directory.file_name().unwrap().to_str().unwrap().replace("/", "");
+    let directory = format_ident!("{}", directory);
+    quote! {
+        mod #directory {
+            #tests
+        }
+    }
+}
+
+#[proc_macro]
+pub fn find_tests(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    assert!(tokens.is_empty());
+
+    let tokens = find_test_paths(Path::new("progs/"));
+    proc_macro::TokenStream::from(tokens)
 }
