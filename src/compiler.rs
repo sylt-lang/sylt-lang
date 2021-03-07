@@ -683,10 +683,10 @@ impl Compiler {
         expect!(self, Token::LeftParen, "Expected '(' at start of tuple");
 
         let mut num_args = 0;
-        loop {
+        let trailing_comma = loop {
             match self.peek() {
                 Token::RightParen | Token::EOF => {
-                    break;
+                    break false;
                 }
                 Token::Newline => {
                     self.eat();
@@ -695,7 +695,12 @@ impl Compiler {
                     self.expression(block);
                     num_args += 1;
                     match self.peek() {
-                        Token::Comma => { self.eat(); },
+                        Token::Comma => {
+                            self.eat();
+                            if matches!(self.peek(), Token::RightParen) {
+                                break true;
+                            }
+                        },
                         Token::RightParen => {},
                         _ => {
                             error!(self, "Expected ',' or ')' in tuple");
@@ -704,9 +709,9 @@ impl Compiler {
                     }
                 }
             }
-        }
-        if num_args == 1 {
-            error!(self, "A tuple must contain more than 1 element.");
+        };
+        if num_args == 1 && !trailing_comma {
+            error!(self, "A tuple must contain more than 1 element or end with a trailing comma.");
             return;
         }
 
