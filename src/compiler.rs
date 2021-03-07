@@ -51,7 +51,7 @@ macro_rules! parse_branch {
             let num_errors = $compiler.errors.len();
             let mut stored_errors = Vec::new();
 
-            // Closures for early return on success.
+            // Loop for early return on success.
             let success = loop {
                 // We risk getting a lot of errors if we are in an invalid state
                 // when we start the parse.
