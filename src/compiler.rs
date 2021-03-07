@@ -1184,10 +1184,9 @@ impl Compiler {
             // Global
             let var = self.find_variable(name)
                 .expect(&format!("Couldn't find constant '{}' during prepass.", name));
-            assert!(var.mutable);
+            assert!(!var.mutable);
 
             self.expression(block);
-            add_op(self, block, Op::AssignLocal(var.slot));
             self.stack_mut()[var.slot].active = true;
         } else {
             // Local
