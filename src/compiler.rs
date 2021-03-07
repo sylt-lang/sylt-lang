@@ -1732,7 +1732,7 @@ impl Compiler {
                     if let Ok(ty) = self.parse_type() {
                         let is_mut = self.peek() == Token::Equal;
                         let var = Variable::new(&name, is_mut, ty);
-                        let slot = self.define(var).unwrap();
+                        let _ = self.define(var).unwrap();
                     } else {
                         error!(self, format!("Failed to parse type global '{}'.", name));
                     }
@@ -1741,13 +1741,13 @@ impl Compiler {
                 (Some((Token::Identifier(name), _)),
                  Some((Token::ColonColon, _)), ..) => {
                     let var = Variable::new(name, false, Type::Unknown);
-                    let slot = self.define(var).unwrap();
+                    let _ = self.define(var).unwrap();
                 }
 
                 (Some((Token::Identifier(name), _)),
                  Some((Token::ColonEqual, _)), ..) => {
                     let var = Variable::new(name, true, Type::Unknown);
-                    let slot = self.define(var).unwrap();
+                    let _ = self.define(var).unwrap();
                 }
 
 
