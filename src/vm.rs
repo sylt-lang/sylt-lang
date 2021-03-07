@@ -296,7 +296,7 @@ impl VM {
                 match (val, slot) {
                     (Value::Tuple(v), Value::Int(slot)) => {
                         let slot = slot as usize;
-                        if v.len() < slot {
+                        if v.len() <= slot {
                             self.stack.push(Value::Nil);
                             let len = v.len();
                             error!(self, ErrorKind::IndexOutOfBounds(Value::Tuple(v), len, slot));
