@@ -1,0 +1,56 @@
+start :: fn {
+    ts := 0
+    t :: fn -> bool {
+        ts += 1
+        ret true
+    }
+
+    fs := 0
+    f :: fn -> bool {
+        fs += 1
+        ret false
+    }
+
+    i :: fn -> bool {
+        <!>
+        ret false
+    }
+
+    if f() && i() {
+        <!>
+    }
+
+    if t() || i() {
+        // Empty
+    } else {
+        <!>
+    }
+
+    if f() && i() && i() {
+        <!>
+    }
+
+    if t() || i() || i() {
+        // Empty
+    } else {
+        <!>
+    }
+
+    fs <=> 2
+    ts <=> 2
+}
+
+
+
+    // if t() || i() && f() {
+    //     // Empty
+    // } else {
+    //     <!>
+    // }
+
+    // if f() && t() || i() {
+    //     // Empty
+    // } else {
+    //     <!>
+    // }
+
