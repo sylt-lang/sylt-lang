@@ -720,8 +720,8 @@ impl VM {
             Op::Index => {
                 // We don't have any information about the slot and the indexable might contain
                 // mixed types.
-                self.stack.pop().unwrap(); // indexable
-                self.stack.pop().unwrap(); // slot
+                self.stack.pop().unwrap();
+                self.stack.pop().unwrap();
                 self.stack.push(Value::Unknown);
             }
 
