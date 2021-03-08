@@ -186,6 +186,7 @@ nextable_enum!(Prec {
     Comp,
     Term,
     Factor,
+    Index,
 });
 
 #[derive(Clone, Debug)]
@@ -603,6 +604,8 @@ impl Compiler {
 
     fn precedence(&self, token: Token) -> Prec {
         match token {
+            Token::LeftBracket => Prec::Index,
+
             Token::Star | Token::Slash => Prec::Factor,
 
             Token::Minus | Token::Plus => Prec::Term,
