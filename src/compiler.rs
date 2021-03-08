@@ -1752,7 +1752,13 @@ impl Compiler {
 
             (Token::Ret, ..) => {
                 self.eat();
-                self.expression(block);
+                if self.peek() == Token::Newline {
+                    self.eat();
+                    let nil = self.add_constant(Value::Nil);
+                    add_op(self, block, Op::Constant(nil));
+                } else {
+                    self.expression(block);
+                }
                 add_op(self, block, Op::Return);
             }
 
