@@ -1484,6 +1484,7 @@ impl Compiler {
             Token::Identifier(x) => {
                 self.eat();
                 match x.as_str() {
+                    "void" => Ok(Type::Void),
                     "int" => Ok(Type::Int),
                     "float" => Ok(Type::Float),
                     "bool" => Ok(Type::Bool),
