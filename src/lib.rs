@@ -681,7 +681,13 @@ mod op {
             (Value::Int(a), Value::Int(b)) => Value::Bool(a == b),
             (Value::String(a), Value::String(b)) => Value::Bool(a == b),
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(a == b),
-            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, eq),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => {
+                a.iter().zip(b.iter()).find_map(
+                    |(a, b)| match eq(a, b) {
+                        Value::Bool(true) => None,
+                        a => Some(a),
+                    }).unwrap_or(Value::Bool(true))
+            }
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => eq(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, eq),
@@ -696,7 +702,13 @@ mod op {
             (Value::Int(a), Value::Int(b)) => Value::Bool(a < b),
             (Value::String(a), Value::String(b)) => Value::Bool(a < b),
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(a < b),
-            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, less),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => {
+                a.iter().zip(b.iter()).find_map(
+                    |(a, b)| match less(a, b) {
+                        Value::Bool(true) => None,
+                        a => Some(a),
+                    }).unwrap_or(Value::Bool(true))
+            }
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => less(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, less),
