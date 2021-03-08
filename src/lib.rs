@@ -86,6 +86,7 @@ pub enum Type {
     Bool,
     String,
     Tuple(Vec<Type>),
+    Union(Vec<Type>),
     Function(Vec<Type>, Box<Type>),
     Blob(Rc<Blob>),
     Instance(Rc<Blob>),
@@ -104,6 +105,9 @@ impl PartialEq for Type {
             (Type::Tuple(a), Type::Tuple(b)) => {
                 a.iter().zip(b.iter()).all(|(a, b)| a == b)
             }
+            (Type::Union(a), b) | (b, Type::Union(a)) => {
+                a.iter().any(|x| x == b)
+            }
             (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) =>
                 a_args == b_args && a_ret == b_ret,
             _ => false,
@@ -118,6 +122,9 @@ impl From<&Value> for Type {
             Value::Blob(b) => Type::Blob(Rc::clone(b)),
             Value::Tuple(v) => {
                 Type::Tuple(v.iter().map(|x| Type::from(x)).collect())
+            }
+            Value::Union(v) => {
+                Type::Union(v.iter().map(|x| Type::from(x)).collect())
             }
             Value::Int(_) => Type::Int,
             Value::Float(_) => Type::Float,
@@ -147,6 +154,9 @@ impl From<&Type> for Value {
             Type::Tuple(fields) => {
                 Value::Tuple(Rc::new(fields.iter().map(Value::from).collect()))
             }
+            Type::Union(v) => {
+                Value::Union(v.iter().map(Value::from).collect())
+            }
             Type::Unknown => Value::Unknown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),
@@ -172,6 +182,7 @@ pub enum Value {
     Blob(Rc<Blob>),
     Instance(Rc<Blob>, Rc<RefCell<Vec<Value>>>),
     Tuple(Rc<Vec<Value>>),
+    Union(Vec<Value>),
     Float(f64),
     Int(i64),
     Bool(bool),
@@ -200,6 +211,7 @@ impl Debug for Value {
             Value::Unknown => write!(fmt, "(unknown)"),
             Value::Nil => write!(fmt, "(nil)"),
             Value::Tuple(v) => write!(fmt, "({:?})", v),
+            Value::Union(v) => write!(fmt, "(U {:?})", v),
         }
     }
 }
@@ -213,6 +225,9 @@ impl PartialEq<Value> for Value {
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Tuple(a), Value::Tuple(b)) => {
                 a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| a == b)
+            }
+            (Value::Union(a), b) | (b, Value::Union(a)) => {
+                a.iter().any(|x| x == b)
             }
             (Value::Nil, Value::Nil) => true,
             _ => false,
@@ -575,11 +590,34 @@ mod op {
         Value::Tuple(Rc::new(a.iter().map(f).collect()))
     }
 
+    fn union_un_op(a: &Vec<Value>, f: fn (&Value) -> Value) -> Value {
+        a.iter().find_map(|x| {
+            let x = f(x);
+            if x.is_nil() {
+                None
+            } else {
+                Some(x)
+            }
+        }).unwrap_or(Value::Nil)
+    }
+
+    fn union_bin_op(a: &Vec<Value>, b: &Value, f: fn (&Value, &Value) -> Value) -> Value {
+        a.iter().find_map(|x| {
+            let x = f(x, b);
+            if x.is_nil() {
+                None
+            } else {
+                Some(x)
+            }
+        }).unwrap_or(Value::Nil)
+    }
+
     pub fn neg(value: &Value) -> Value {
         match value {
             Value::Float(a) => Value::Float(-*a),
             Value::Int(a) => Value::Int(-*a),
             Value::Tuple(a) => tuple_un_op(a, neg),
+            Value::Union(v) => union_un_op(&v, neg),
             Value::Unknown => Value::Unknown,
             _ => Value::Nil,
         }
@@ -589,6 +627,7 @@ mod op {
         match value {
             Value::Bool(a) => Value::Bool(!*a),
             Value::Tuple(a) => tuple_un_op(a, not),
+            Value::Union(v) => union_un_op(&v, not),
             Value::Unknown => Value::from(Type::Bool),
             _ => Value::Nil,
         }
@@ -603,6 +642,7 @@ mod op {
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, add),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => add(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
+            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, add),
             _ => Value::Nil,
         }
     }
@@ -618,6 +658,7 @@ mod op {
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, mul),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => mul(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
+            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, mul),
             _ => Value::Nil,
         }
     }
@@ -629,6 +670,7 @@ mod op {
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, div),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => div(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
+            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, div),
             _ => Value::Nil,
         }
     }
@@ -642,6 +684,7 @@ mod op {
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, eq),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => eq(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
+            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, eq),
             _ => Value::Nil,
         }
     }
@@ -655,6 +698,7 @@ mod op {
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, less),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => less(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
+            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, less),
             _ => Value::Nil,
         }
     }
@@ -669,6 +713,7 @@ mod op {
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, and),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => and(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
+            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, and),
             _ => Value::Nil,
         }
     }
@@ -679,6 +724,7 @@ mod op {
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, or),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => or(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
+            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, or),
             _ => Value::Nil,
         }
     }
