@@ -51,7 +51,7 @@ macro_rules! parse_branch {
             let num_errors = $compiler.errors.len();
             let mut stored_errors = Vec::new();
 
-            // Closures for early return on success.
+            // Loop for early return on success.
             let success = loop {
                 // We risk getting a lot of errors if we are in an invalid state
                 // when we start the parse.
@@ -187,6 +187,7 @@ nextable_enum!(Prec {
     Comp,
     Term,
     Factor,
+    Index,
 });
 
 #[derive(Clone, Debug)]
@@ -604,6 +605,8 @@ impl Compiler {
 
     fn precedence(&self, token: Token) -> Prec {
         match token {
+            Token::LeftBracket => Prec::Index,
+
             Token::Star | Token::Slash => Prec::Factor,
 
             Token::Minus | Token::Plus => Prec::Term,
@@ -685,33 +688,46 @@ impl Compiler {
     }
 
     fn tuple(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftParen, "Expected '(' at start of tuple");
+        expect!(self, Token::LeftParen, "Expected '(' at start of tuple.");
 
         let mut num_args = 0;
-        loop {
+        let trailing_comma = loop {
             match self.peek() {
                 Token::RightParen | Token::EOF => {
-                    break;
+                    break false;
                 }
                 Token::Newline => {
                     self.eat();
+                }
+                Token::Comma => {
+                    //TODO(gu): This creates a lot of syntax errors since the compiler panic is
+                    // ignored and the statement is tried as a grouping instead, even though we
+                    // _know_ that this can't be parsed as a grouping either.
+                    // Tracked in #100.
+                    error!(self, "Tuples must begin with an element or ')'.");
+                    return;
                 }
                 _ => {
                     self.expression(block);
                     num_args += 1;
                     match self.peek() {
-                        Token::Comma => { self.eat(); },
+                        Token::Comma => {
+                            self.eat();
+                            if matches!(self.peek(), Token::RightParen) {
+                                break true;
+                            }
+                        },
                         Token::RightParen => {},
                         _ => {
-                            error!(self, "Expected ',' or ')' in tuple");
+                            error!(self, "Expected ',' or ')' after tuple element.");
                             return;
                         },
                     }
                 }
             }
-        }
-        if num_args == 1 {
-            error!(self, "A tuple must contain more than 1 element.");
+        };
+        if num_args == 1 && !trailing_comma {
+            error!(self, "A tuple with 1 element must end with a trailing comma.");
             return;
         }
 

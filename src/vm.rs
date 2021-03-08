@@ -294,7 +294,7 @@ impl VM {
                 match (val, slot) {
                     (Value::Tuple(v), Value::Int(slot)) => {
                         let slot = slot as usize;
-                        if v.len() < slot {
+                        if v.len() <= slot {
                             self.stack.push(Value::Nil);
                             let len = v.len();
                             error!(self, ErrorKind::IndexOutOfBounds(Value::Tuple(v), len, slot));
@@ -713,6 +713,14 @@ impl VM {
                             format!("Cannot link non-function {:?}.", value));
                     }
                 };
+            }
+
+            Op::Index => {
+                // We don't have any information about the slot and the indexable might contain
+                // mixed types.
+                self.stack.pop().unwrap();
+                self.stack.pop().unwrap();
+                self.stack.push(Value::Unknown);
             }
 
             Op::Call(num_args) => {
