@@ -1,0 +1,7 @@
+start :: fn {
+    add := fn a: int, b: int -> int {
+        ret a + b
+    }
+    add(1, 1) <=> 2
+    add(10, 20) <=> 30
+}

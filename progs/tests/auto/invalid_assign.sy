@@ -1,7 +1,0 @@
-start :: fn {
-a := 1
-a = 0.1
-a
-}
-
-// errors: [ErrorKind::TypeMismatch(Type::Int, Type::Float)]

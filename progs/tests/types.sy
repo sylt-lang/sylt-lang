@@ -1,0 +1,4 @@
+start :: fn {
+    a: (int, float, int) = (1, 1., 1)
+    a
+}

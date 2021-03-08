@@ -1,0 +1,6 @@
+start :: fn {
+    f := fn -> int {
+        ret 1
+    }
+    f() <=> 1
+}

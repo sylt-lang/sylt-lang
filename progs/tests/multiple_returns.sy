@@ -1,0 +1,12 @@
+start :: fn {
+    f := fn a: int -> int {
+        if a == 1 {
+            ret 2
+        } else {
+            ret 3
+        }
+    }
+    f(0) <=> 3
+    f(1) <=> 2
+    f(2) <=> 3
+}

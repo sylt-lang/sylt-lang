@@ -1,3 +1,0 @@
-start :: fn {
-blob A { a: int }
-}

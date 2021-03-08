@@ -1,0 +1,9 @@
+start :: fn {
+    g := fn -> int {
+        ret 1
+    }
+    f := fn inner: fn -> int -> int {
+        ret inner()
+    }
+    f(g) <=> 1
+}

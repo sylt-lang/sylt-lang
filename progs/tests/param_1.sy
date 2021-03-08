@@ -1,0 +1,4 @@
+start :: fn {
+    f := fn a: int {}
+    f(1)
+}

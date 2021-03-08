@@ -1,5 +1,0 @@
-start :: fn {
-blob A {}
-                      a := A()
-                      a
-}

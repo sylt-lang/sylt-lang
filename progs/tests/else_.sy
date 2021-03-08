@@ -1,0 +1,10 @@
+start :: fn {
+    a := 1
+    res := 0
+    if a == 0 {
+        <!>
+    } else {
+        res = 1
+    }
+    res <=> 1
+}
