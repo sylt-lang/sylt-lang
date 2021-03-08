@@ -15,6 +15,9 @@ pub enum Token {
     #[regex(r"[\d]+", |lex| lex.slice().parse())]
     Int(i64),
 
+    #[regex(r"nil")]
+    Nil,
+
     #[regex(r"true|false", |lex| lex.slice().parse(), priority=2)]
     Bool(bool),
 

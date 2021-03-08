@@ -634,10 +634,11 @@ impl Compiler {
             Token::LeftParen => self.grouping_or_tuple(block),
             Token::Minus => self.unary(block),
 
-            Token::Float(_) => self.value(block),
-            Token::Int(_) => self.value(block),
-            Token::Bool(_) => self.value(block),
-            Token::String(_) => self.value(block),
+            Token::Float(_)
+                | Token::Int(_)
+                | Token::Bool(_)
+                | Token::String(_)
+                | Token::Nil => self.value(block),
 
             Token::Bang => self.unary(block),
 
@@ -676,6 +677,7 @@ impl Compiler {
             Token::Float(f) => { Value::Float(f) },
             Token::Int(i) => { Value::Int(i) }
             Token::Bool(b) => { Value::Bool(b) }
+            Token::Nil => { Value::Nil }
             Token::String(s) => { Value::String(Rc::from(s)) }
             _ => { error!(self, "Cannot parse value."); Value::Bool(false) }
         };

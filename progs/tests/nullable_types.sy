@@ -1,0 +1,33 @@
+test001 :: fn -> int {
+    a : int? = nil
+    a = 2
+    ret a
+}
+
+test002 :: fn b:bool -> int? {
+    if b {
+        ret nil
+    } else {
+        ret 0
+    }
+}
+
+// TODO(ed): Introduce type type!
+test003 :: fn {
+    a := test002! false
+    a += 1
+    a <=> 1
+}
+
+
+start :: fn {
+    test001!
+    nil <=> test002! true
+    0 <=> test002! false
+    q : bool? = true
+    q <=> true
+    q = nil
+    q <=> nil
+    test003!
+}
+

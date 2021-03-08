@@ -685,6 +685,7 @@ mod op {
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => eq(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, eq),
+            (Value::Nil, Value::Nil) => Value::Bool(true),
             _ => Value::Nil,
         }
     }

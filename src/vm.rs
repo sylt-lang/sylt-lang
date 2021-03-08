@@ -669,6 +669,10 @@ impl VM {
                 let ty = self.ty(ty);
                 let top_type = self.stack.last().unwrap().into();
                 match (ty, top_type) {
+                    (a, b) if matches!(a, Type::Union(_)) && a == &b => {
+                        let last = self.stack.len() - 1;
+                        self.stack[last] = Value::from(a);
+                    }
                     (Type::Unknown, top_type)
                         if top_type != Type::Unknown => {}
                     (a, b) if a != &b => {
