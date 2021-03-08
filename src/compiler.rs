@@ -1401,8 +1401,17 @@ impl Compiler {
     }
 
     fn parse_type(&mut self) -> Result<Type, ()> {
-        match self.peek() {
+        let ty = self.parse_simple_type();
+        if self.peek() == Token::Questionmark {
+            self.eat();
+            ty.map(|x| Type::Union(vec![x, Type::Void]))
+        } else {
+            ty
+        }
+    }
 
+    fn parse_simple_type(&mut self) -> Result<Type, ()> {
+        match self.peek() {
             Token::Fn => {
                 self.eat();
                 let mut params = Vec::new();
