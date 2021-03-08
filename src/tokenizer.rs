@@ -122,6 +122,8 @@ pub enum Token {
     Bang,
     #[token("?")]
     Questionmark,
+    #[token("|")]
+    Pipe,
 
     #[token(",")]
     Comma,

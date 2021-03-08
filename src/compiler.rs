@@ -1403,12 +1403,29 @@ impl Compiler {
     }
 
     fn parse_type(&mut self) -> Result<Type, ()> {
-        let ty = self.parse_simple_type();
-        if self.peek() == Token::Questionmark {
-            self.eat();
-            ty.map(|x| Type::Union(vec![x, Type::Void]))
+        let mut tys = vec![self.parse_simple_type()?];
+        loop {
+            match self.peek() {
+                Token::Questionmark => {
+                    self.eat();
+                    tys.push(Type::Void);
+                    return Ok(Type::Union(tys));
+                },
+
+                Token::Pipe => {
+                    self.eat();
+                    tys.push(self.parse_simple_type()?);
+                },
+
+                _ => {
+                    break;
+                },
+            }
+        }
+        if tys.len() == 1 {
+            Ok(tys[0].clone())
         } else {
-            ty
+            Ok(Type::Union(tys))
         }
     }
 
