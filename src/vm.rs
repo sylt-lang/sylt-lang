@@ -656,7 +656,7 @@ impl VM {
                 let ret = inner.ret();
                 if Type::from(&a) != *ret {
 
-                    error!(self, ErrorKind::TypeMismatch(a.into(), ret.clone()),
+                    error!(self, ErrorKind::TypeMismatch(ret.clone(), a.into()),
                            "Value does not match return type.");
                 }
             }
