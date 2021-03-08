@@ -601,7 +601,8 @@ mod op {
             (Value::Int(a), Value::Int(b)) => Value::Int(a + b),
             (Value::String(a), Value::String(b)) => Value::String(Rc::from(format!("{}{}", a, b))),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, add),
-            (Value::Unknown, a) | (a, Value::Unknown) => a.clone(),
+            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => add(a, a),
+            (Value::Unknown, Value::Unknown) => Value::Unknown,
             _ => Value::Nil,
         }
     }
@@ -615,7 +616,8 @@ mod op {
             (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
             (Value::Int(a), Value::Int(b)) => Value::Int(a * b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, mul),
-            (Value::Unknown, a) | (a, Value::Unknown) => a.clone(),
+            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => mul(a, a),
+            (Value::Unknown, Value::Unknown) => Value::Unknown,
             _ => Value::Nil,
         }
     }
@@ -625,7 +627,8 @@ mod op {
             (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
             (Value::Int(a), Value::Int(b)) => Value::Int(a / b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, div),
-            (Value::Unknown, a) | (a, Value::Unknown) => a.clone(),
+            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => div(a, a),
+            (Value::Unknown, Value::Unknown) => Value::Unknown,
             _ => Value::Nil,
         }
     }
@@ -637,7 +640,8 @@ mod op {
             (Value::String(a), Value::String(b)) => Value::Bool(a == b),
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(a == b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, eq),
-            (Value::Unknown, _) | (_, Value::Unknown) => Value::from(Type::Bool),
+            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => eq(a, a),
+            (Value::Unknown, Value::Unknown) => Value::Unknown,
             _ => Value::Nil,
         }
     }
@@ -649,7 +653,8 @@ mod op {
             (Value::String(a), Value::String(b)) => Value::Bool(a < b),
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(a < b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, less),
-            (Value::Unknown, _) | (_, Value::Unknown) => Value::from(Type::Bool),
+            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => less(a, a),
+            (Value::Unknown, Value::Unknown) => Value::Unknown,
             _ => Value::Nil,
         }
     }
@@ -662,7 +667,8 @@ mod op {
         match (a, b) {
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a && *b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, and),
-            (Value::Unknown, _) | (_, Value::Unknown) => Value::from(Type::Bool),
+            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => and(a, a),
+            (Value::Unknown, Value::Unknown) => Value::Unknown,
             _ => Value::Nil,
         }
     }
@@ -671,7 +677,8 @@ mod op {
         match (a, b) {
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a || *b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, or),
-            (Value::Unknown, _) | (_, Value::Unknown) => Value::from(Type::Bool),
+            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => or(a, a),
+            (Value::Unknown, Value::Unknown) => Value::Unknown,
             _ => Value::Nil,
         }
     }
