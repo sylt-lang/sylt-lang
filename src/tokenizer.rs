@@ -117,6 +117,8 @@ pub enum Token {
     Or,
     #[token("!")]
     Bang,
+    #[token("?")]
+    Questionmark,
 
     #[token(",")]
     Comma,
