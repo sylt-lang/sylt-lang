@@ -87,6 +87,7 @@ pub enum Type {
     String,
     Tuple(Vec<Type>),
     Union(HashSet<Type>),
+    Array(Box<Type>),
     Function(Vec<Type>, Box<Type>),
     Blob(Rc<Blob>),
     Instance(Rc<Blob>),
@@ -152,6 +153,7 @@ impl PartialEq for Type {
             (Type::Union(a), b) | (b, Type::Union(a)) => {
                 a.iter().any(|x| x == b)
             }
+            (Type::Array(a), Type::Array(b)) => a == b,
             (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) =>
                 a_args == b_args && a_ret == b_ret,
             _ => false,
@@ -189,6 +191,7 @@ impl From<Value> for Type {
 }
 
 impl From<&Type> for Value {
+
     fn from(ty: &Type) -> Self {
         match ty {
             Type::Void => Value::Nil,
@@ -202,6 +205,9 @@ impl From<&Type> for Value {
             }
             Type::Union(v) => {
                 Value::Union(v.iter().map(Value::from).collect())
+            }
+            Type::Array(fields) => {
+                Value::Array(vec![Value::from(fields.as_ref())])
             }
             Type::Unknown => Value::Unknown,
             Type::Int => Value::Int(1),
@@ -229,6 +235,7 @@ pub enum Value {
     Instance(Rc<Blob>, Rc<RefCell<Vec<Value>>>),
     Tuple(Rc<Vec<Value>>),
     Union(HashSet<Value>),
+    Array(Vec<Value>),
     Float(f64),
     Int(i64),
     Bool(bool),
@@ -252,6 +259,7 @@ impl Debug for Value {
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),
             Value::String(s) => write!(fmt, "(string \"{}\")", s),
+            Value::Array(v) => write!(fmt, "(array {:?})", v),
             Value::Function(_, block) => write!(fmt, "(fn {}: {:?})", block.borrow().name, block.borrow().ty),
             Value::ExternFunction(slot) => write!(fmt, "(extern fn {})", slot),
             Value::Unknown => write!(fmt, "(unknown)"),
@@ -269,6 +277,7 @@ impl PartialEq<Value> for Value {
             (Value::Int(a), Value::Int(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::String(a), Value::String(b)) => a == b,
+            (Value::Array(a), Value::Array(b)) => a == b,
             (Value::Tuple(a), Value::Tuple(b)) => {
                 a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| a == b)
             }
@@ -350,7 +359,6 @@ impl UpValue {
             stack[self.slot] = value;
         }
     }
-
 
     fn is_closed(&self) -> bool {
         self.slot == 0
@@ -739,6 +747,16 @@ mod op {
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, eq),
             (Value::Nil, Value::Nil) => Value::Bool(true),
+            (Value::Array(a), Value::Array(b))  => {
+                if a.len() != b.len() {
+                    return Value::Bool(false);
+                }
+                a.iter().zip(b.iter()).find_map(
+                    |(a, b)| match eq(a, b) {
+                        Value::Bool(true) => None,
+                        a => Some(a),
+                    }).unwrap_or(Value::Bool(true))
+            }
             _ => Value::Nil,
         }
     }
