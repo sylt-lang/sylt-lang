@@ -108,6 +108,10 @@ impl Hash for Type {
                 }
                 6
             }
+            Type::Array(t) => {
+                t.as_ref().hash(h);
+                12
+            }
             Type::Union(ts) => {
                 for t in ts {
                     t.hash(h);
@@ -207,7 +211,7 @@ impl From<&Type> for Value {
                 Value::Union(v.iter().map(Value::from).collect())
             }
             Type::Array(fields) => {
-                Value::Array(vec![Value::from(fields.as_ref())])
+                Value::Array(Rc::new(vec![Value::from(fields.as_ref())]))
             }
             Type::Unknown => Value::Unknown,
             Type::Int => Value::Int(1),
@@ -234,8 +238,8 @@ pub enum Value {
     Blob(Rc<Blob>),
     Instance(Rc<Blob>, Rc<RefCell<Vec<Value>>>),
     Tuple(Rc<Vec<Value>>),
+    Array(Rc<Vec<Value>>),
     Union(HashSet<Value>),
-    Array(Vec<Value>),
     Float(f64),
     Int(i64),
     Bool(bool),
@@ -442,6 +446,11 @@ pub enum Op {
     ///
     /// {A, B, C} - Tuple(3) - {D(A, B, C)}
     Tuple(usize),
+    /// Creates a new [Array] with the given size and place it on the top
+    /// of the stack.
+    ///
+    /// {A, B, C} - Array(3) - {D(A, B, C)}
+    Array(usize),
 
     /// Indexes something indexable, currently only Tuples,
     /// and adds that element to the stack.

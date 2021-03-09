@@ -633,6 +633,7 @@ impl Compiler {
             Token::Identifier(_) => self.variable_expression(block),
             Token::LeftParen => self.grouping_or_tuple(block),
             Token::Minus => self.unary(block),
+            Token::LeftBracket => self.array(block),
 
             Token::Float(_)
                 | Token::Int(_)
@@ -687,6 +688,44 @@ impl Compiler {
 
     fn grouping_or_tuple(&mut self, block: &mut Block) {
         parse_branch!(self, block, [self.tuple(block), self.grouping(block)]);
+    }
+
+    fn array(&mut self, block: &mut Block) {
+        expect!(self, Token::LeftBracket, "Expected '[' at start of array.");
+        let mut num_args = 0;
+        loop {
+            match self.peek() {
+                Token::RightBracket | Token::EOF => {
+                    break false;
+                }
+                Token::Newline => {
+                    self.eat();
+                }
+                Token::Comma => {
+                    error!(self, "Tuples must begin with an element or ')'.");
+                    return;
+                }
+                _ => {
+                    self.expression(block);
+                    num_args += 1;
+                    match self.peek() {
+                        Token::Comma => {
+                            self.eat();
+                            if matches!(self.peek(), Token::RightParen) {
+                                break true;
+                            }
+                        },
+                        Token::RightBracket => {},
+                        _ => {
+                            error!(self, "Expected ',' or ']' after array element.");
+                            return;
+                        },
+                    }
+                }
+            }
+        };
+        expect!(self, Token::RightBracket, "Expected ']' after array.");
+        add_op(self, block, Op::Array(num_args));
     }
 
     fn tuple(&mut self, block: &mut Block) {
