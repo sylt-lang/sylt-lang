@@ -17,13 +17,13 @@ start :: fn {
     }
 
     if t() || i() && i() {
-        // Empty
+        // This block is intentionally left blank
     } else {
         <!>
     }
 
     if f() && i() || t() {
-        // Empty
+        // This block is intentionally left blank
     } else {
         <!>
     }
