@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::cell::RefCell;
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::rc::Rc;
 
 use crate::{Blob, Block, Op, Prog, RustFunction, Type, Value};
@@ -1403,18 +1403,19 @@ impl Compiler {
     }
 
     fn parse_type(&mut self) -> Result<Type, ()> {
-        let mut tys = vec![self.parse_simple_type()?];
+        let mut tys = HashSet::new();
+        tys.insert(self.parse_simple_type()?);
         loop {
             match self.peek() {
                 Token::Questionmark => {
                     self.eat();
-                    tys.push(Type::Void);
+                    tys.insert(Type::Void);
                     return Ok(Type::Union(tys));
                 },
 
                 Token::Pipe => {
                     self.eat();
-                    tys.push(self.parse_simple_type()?);
+                    tys.insert(self.parse_simple_type()?);
                 },
 
                 _ => {
@@ -1423,7 +1424,7 @@ impl Compiler {
             }
         }
         if tys.len() == 1 {
-            Ok(tys[0].clone())
+            Ok(tys.iter().next().unwrap().clone())
         } else {
             Ok(Type::Union(tys))
         }

@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
@@ -86,10 +86,54 @@ pub enum Type {
     Bool,
     String,
     Tuple(Vec<Type>),
-    Union(Vec<Type>),
+    Union(HashSet<Type>),
     Function(Vec<Type>, Box<Type>),
     Blob(Rc<Blob>),
     Instance(Rc<Blob>),
+}
+
+impl Hash for Type {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        match self {
+            Type::Void => 0,
+            Type::Unknown => 1,
+            Type::Int => 2,
+            Type::Float => 3,
+            Type::Bool => 4,
+            Type::String => 5,
+            Type::Tuple(ts) => {
+                for t in ts.iter() {
+                    t.hash(h);
+                }
+                6
+            }
+            Type::Union(ts) => {
+                for t in ts {
+                    t.hash(h);
+                }
+                7
+            }
+            Type::Function(args, ret) => {
+                ret.hash(h);
+                for t in args.iter() {
+                    t.hash(h);
+                }
+                8
+            }
+            Type::Blob(b) => {
+                for (_, t) in b.fields.values() {
+                    t.hash(h);
+                }
+                10
+            }
+            Type::Instance(b) => {
+                for (_, t) in b.fields.values() {
+                    t.hash(h);
+                }
+                11
+            }
+        }.hash(h);
+    }
 }
 
 impl PartialEq for Type {
@@ -114,6 +158,8 @@ impl PartialEq for Type {
         }
     }
 }
+
+impl Eq for Type {}
 
 impl From<&Value> for Type {
     fn from(value: &Value) -> Type {
