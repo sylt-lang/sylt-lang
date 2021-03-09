@@ -773,10 +773,10 @@ impl VM {
                 let mut err = None;
                 self.stack[new_base] = match callable {
                     Value::Union(alts) => {
-                        let mut returns = Vec::new();
+                        let mut returns = HashSet::new();
                         for alt in alts.iter() {
                             if let Ok(res) = call_callable(&alt) {
-                                returns.push(res);
+                                returns.insert(res);
                             }
                         }
                         if returns.is_empty() {

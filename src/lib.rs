@@ -228,7 +228,7 @@ pub enum Value {
     Blob(Rc<Blob>),
     Instance(Rc<Blob>, Rc<RefCell<Vec<Value>>>),
     Tuple(Rc<Vec<Value>>),
-    Union(Vec<Value>),
+    Union(HashSet<Value>),
     Float(f64),
     Int(i64),
     Bool(bool),
@@ -627,6 +627,7 @@ pub enum Op {
 mod op {
     use super::{Type, Value};
     use std::rc::Rc;
+    use std::collections::HashSet;
 
     fn tuple_bin_op(a: &Rc<Vec<Value>>, b: &Rc<Vec<Value>>, f: fn (&Value, &Value) -> Value) -> Value {
         Value::Tuple(Rc::new(a.iter().zip(b.iter()).map(|(a, b)| f(a, b)).collect()))
@@ -636,7 +637,7 @@ mod op {
         Value::Tuple(Rc::new(a.iter().map(f).collect()))
     }
 
-    fn union_un_op(a: &Vec<Value>, f: fn (&Value) -> Value) -> Value {
+    fn union_un_op(a: &HashSet<Value>, f: fn (&Value) -> Value) -> Value {
         a.iter().find_map(|x| {
             let x = f(x);
             if x.is_nil() {
@@ -647,7 +648,7 @@ mod op {
         }).unwrap_or(Value::Nil)
     }
 
-    fn union_bin_op(a: &Vec<Value>, b: &Value, f: fn (&Value, &Value) -> Value) -> Value {
+    fn union_bin_op(a: &HashSet<Value>, b: &Value, f: fn (&Value, &Value) -> Value) -> Value {
         a.iter().find_map(|x| {
             let x = f(x, b);
             if x.is_nil() {
