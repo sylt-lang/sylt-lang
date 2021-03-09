@@ -1521,6 +1521,16 @@ impl Compiler {
                 }
             }
 
+            Token::LeftBracket => {
+                self.eat();
+                let ty = self.parse_type();
+                expect!(self, Token::RightBracket, "Expected ']' after array type.");
+                return match ty {
+                    Ok(ty) => Ok(Type::Array(Box::new(ty))),
+                    Err(_) => Err(()),
+                }
+            }
+
             Token::Identifier(x) => {
                 self.eat();
                 match x.as_str() {

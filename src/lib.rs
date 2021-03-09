@@ -175,6 +175,14 @@ impl From<&Value> for Type {
             Value::Tuple(v) => {
                 Type::Tuple(v.iter().map(|x| Type::from(x)).collect())
             }
+            Value::Array(v) => {
+                let set: HashSet<_> = v.iter().map(|x| Type::from(x)).collect();
+                match set.len() {
+                    0 => Type::Array(Box::new(Type::Unknown)),
+                    1 => Type::Array(Box::new(set.into_iter().next().unwrap())),
+                    _ => Type::Array(Box::new(Type::Union(set))),
+                }
+            }
             Value::Union(v) => {
                 Type::Union(v.iter().map(|x| Type::from(x)).collect())
             }
