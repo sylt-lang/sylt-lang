@@ -4,4 +4,4 @@ start :: fn {
     f
 }
 
-// errors: [ErrorKind::TypeMismatch(_, _), ErrorKind::TypeMismatch(Type::Void, Type::Int)]
+// errors: [ErrorKind::TypeMismatch(_, _), ErrorKind::TypeMismatch(Type::Int, Type::Void)]

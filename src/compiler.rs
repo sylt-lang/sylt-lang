@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::cell::RefCell;
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::rc::Rc;
 
 use crate::{Blob, Block, Op, Prog, RustFunction, Type, Value};
@@ -634,10 +634,11 @@ impl Compiler {
             Token::LeftParen => self.grouping_or_tuple(block),
             Token::Minus => self.unary(block),
 
-            Token::Float(_) => self.value(block),
-            Token::Int(_) => self.value(block),
-            Token::Bool(_) => self.value(block),
-            Token::String(_) => self.value(block),
+            Token::Float(_)
+                | Token::Int(_)
+                | Token::Bool(_)
+                | Token::String(_)
+                | Token::Nil => self.value(block),
 
             Token::Bang => self.unary(block),
 
@@ -676,6 +677,7 @@ impl Compiler {
             Token::Float(f) => { Value::Float(f) },
             Token::Int(i) => { Value::Int(i) }
             Token::Bool(b) => { Value::Bool(b) }
+            Token::Nil => { Value::Nil }
             Token::String(s) => { Value::String(Rc::from(s)) }
             _ => { error!(self, "Cannot parse value."); Value::Bool(false) }
         };
@@ -1401,8 +1403,35 @@ impl Compiler {
     }
 
     fn parse_type(&mut self) -> Result<Type, ()> {
-        match self.peek() {
+        let mut tys = HashSet::new();
+        tys.insert(self.parse_simple_type()?);
+        loop {
+            match self.peek() {
+                Token::QuestionMark => {
+                    self.eat();
+                    tys.insert(Type::Void);
+                    return Ok(Type::Union(tys));
+                },
 
+                Token::Pipe => {
+                    self.eat();
+                    tys.insert(self.parse_simple_type()?);
+                },
+
+                _ => {
+                    break;
+                },
+            }
+        }
+        if tys.len() == 1 {
+            Ok(tys.iter().next().unwrap().clone())
+        } else {
+            Ok(Type::Union(tys))
+        }
+    }
+
+    fn parse_simple_type(&mut self) -> Result<Type, ()> {
+        match self.peek() {
             Token::Fn => {
                 self.eat();
                 let mut params = Vec::new();
@@ -1456,6 +1485,7 @@ impl Compiler {
             Token::Identifier(x) => {
                 self.eat();
                 match x.as_str() {
+                    "void" => Ok(Type::Void),
                     "int" => Ok(Type::Int),
                     "float" => Ok(Type::Float),
                     "bool" => Ok(Type::Bool),
@@ -1723,7 +1753,13 @@ impl Compiler {
 
             (Token::Ret, ..) => {
                 self.eat();
-                self.expression(block);
+                if self.peek() == Token::Newline {
+                    self.eat();
+                    let nil = self.add_constant(Value::Nil);
+                    add_op(self, block, Op::Constant(nil));
+                } else {
+                    self.expression(block);
+                }
                 add_op(self, block, Op::Return);
             }
 

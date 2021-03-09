@@ -1,0 +1,36 @@
+f :: fn a:bool -> int | str | void {
+    if a {
+        ret 1
+    } else {
+        ret
+    }
+}
+
+g :: fn a:bool -> int | (bool, bool) {
+    if a {
+        ret 1
+    } else {
+        ret (true, true)
+    }
+}
+
+h :: fn a:bool -> int | fn -> int {
+    if a {
+        f :: fn -> int { ret 1 }
+        ret f
+    } else {
+        ret 1
+    }
+}
+
+start :: fn {
+    1 <=> f! true
+    nil <=> f! false
+    (true, true) <=> g! false
+    1 <=> g! true
+    f(true) <=> g(true)
+
+    1 <=> h! false
+    q :: h! true
+    1 <=> q()
+}
