@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use sylt::run_file;
+use sylt::{run_file, Type};
 
 struct Args {
     file: Option<PathBuf>,
@@ -10,7 +10,7 @@ struct Args {
 fn main() {
     let args = parse_args();
     let file = args.file.unwrap_or_else(|| Path::new("progs/tests/simple.sy").to_owned());
-    let errs = match run_file(&file, args.print, sylt_macro::link!(extern_test as test)) {
+    let errs = match run_file(&file, args.print, sylt_macro::link!(extern_test as test, dbg)) {
         Err(it) => it,
         _ => return,
     };
@@ -46,5 +46,13 @@ sylt_macro::extern_function!(
     },
     [sylt::Value::Float(x)] -> sylt::Type::Float => {
         Ok(sylt::Value::Float(*x))
+    },
+);
+
+sylt_macro::extern_function!(
+    dbg
+    [x] -> sylt::Type::Void => {
+        println!("DBG: {:?}, {:?}", x, Type::from(x));
+        Ok(sylt::Value::Nil)
     },
 );
