@@ -78,6 +78,9 @@ fn run(path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Resu
 pub type RustFunction = fn(&[Value], bool) -> Result<Value, ErrorKind>;
 
 #[derive(Debug, Clone)]
+// TODO(ed): Our type comparison is wrong, we need something that is
+// asymetrical when comparing the types. Currently we just choose the
+// vauger of the types.
 pub enum Type {
     Void,
     Unknown,
