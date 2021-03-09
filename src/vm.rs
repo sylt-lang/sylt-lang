@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::rc::Rc;
 
@@ -729,55 +729,76 @@ impl VM {
 
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
-                match self.stack[new_base].clone() {
-                    Value::Blob(blob) => {
-                        let mut values = Vec::with_capacity(blob.fields.len());
-                        for _ in 0..values.capacity() {
-                            values.push(Value::Nil);
-                        }
+                let callable = &self.stack[new_base];
 
-                        for (slot, ty) in blob.fields.values() {
-                            values[*slot] = ty.into();
-                        }
-
-                        self.pop();
-                        self.push(Value::Instance(blob, Rc::new(RefCell::new(values))));
-                    }
-                    Value::Function(_, block) => {
-                        let inner = block.borrow();
-                        let args = inner.args();
-                        if args.len() != num_args {
-                            error!(self, ErrorKind::ArgumentCount(args.len(), num_args));
-                        }
-
-                        let stack_args = &self.stack[self.stack.len() - args.len()..];
-                        let stack_args: Vec<_> = stack_args.iter().map(|x| x.into()).collect();
-                        if args != &stack_args {
-                            error!(self, ErrorKind::ArgumentType(args.clone(), stack_args));
-                        }
-
-                        self.stack[new_base] = block.borrow().ret().into();
-
-                        self.stack.truncate(new_base + 1);
-                    }
-                    Value::ExternFunction(slot) => {
-                        let extern_func = self.extern_functions[slot];
-                        let res = match extern_func(&self.stack[new_base+1..], false) {
-                            Ok(value) => value,
-                            Err(ek) => {
-                                self.stack.truncate(new_base);
-                                self.push(Value::Nil);
-                                error!(self, ek, "Error from external function.")
+                let call_callable = |callable: &Value| {
+                    let args = &self.stack[new_base+1..];
+                    let args: Vec<_> = args.iter().map(|x| x.into()).collect();
+                    match callable {
+                        Value::Blob(blob) => {
+                            let mut values = Vec::with_capacity(blob.fields.len());
+                            for _ in 0..values.capacity() {
+                                values.push(Value::Nil);
                             }
-                        };
-                        self.stack.truncate(new_base);
-                        self.push(res);
+
+                            for (slot, ty) in blob.fields.values() {
+                                values[*slot] = ty.into();
+                            }
+
+                            Ok(Value::Instance(blob.clone(), Rc::new(RefCell::new(values))))
+                        }
+
+                        Value::Function(_, block) => {
+                            let inner = block.borrow();
+                            let fargs = inner.args();
+                            if fargs != &args {
+                                Err(ErrorKind::ArgumentType(args.clone(), args))
+                            } else {
+                                Ok(inner.ret().into())
+                            }
+
+                        }
+
+                        Value::ExternFunction(slot) => {
+                            let extern_func = self.extern_functions[*slot];
+                            extern_func(&self.stack[new_base+1..], false)
+                        }
+
+                        _ => {
+                            Err(ErrorKind::InvalidProgram)
+                        }
                     }
+                };
+
+                let mut err = None;
+                self.stack[new_base] = match callable {
+                    Value::Union(alts) => {
+                        let mut returns = Vec::new();
+                        for alt in alts.iter() {
+                            if let Ok(res) = call_callable(&alt) {
+                                returns.push(res);
+                            }
+                        }
+                        if returns.is_empty() {
+                            err = Some(ErrorKind::InvalidProgram);
+                            Value::Nil
+                        } else {
+                            Value::Union(returns)
+                        }
+                    },
                     _ => {
-                        error!(self,
-                            ErrorKind::InvalidProgram,
-                            format!("Tried to call non-function {:?}", self.stack[new_base]));
+                        match call_callable(callable) {
+                            Err(e) => {
+                                err = Some(e);
+                                Value::Nil
+                            },
+                            Ok(v) => v
+                        }
                     }
+                };
+                self.stack.truncate(new_base + 1);
+                if err.is_some() {
+                    error!(self, err.unwrap());
                 }
             }
 
