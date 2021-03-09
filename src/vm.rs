@@ -297,7 +297,8 @@ impl VM {
                 let slot = self.stack.pop().unwrap();
                 let val = self.stack.pop().unwrap();
                 match (val, slot) {
-                    (Value::Tuple(v), Value::Int(slot)) => {
+                    (Value::Tuple(v), Value::Int(slot)) |
+                    (Value::Array(v), Value::Int(slot)) => {
                         let slot = slot as usize;
                         if v.len() <= slot {
                             self.stack.push(Value::Nil);
