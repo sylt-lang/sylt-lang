@@ -1407,7 +1407,7 @@ impl Compiler {
         tys.insert(self.parse_simple_type()?);
         loop {
             match self.peek() {
-                Token::Questionmark => {
+                Token::QuestionMark => {
                     self.eat();
                     tys.insert(Type::Void);
                     return Ok(Type::Union(tys));
