@@ -38,7 +38,7 @@ fn run(args: Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Err
             }]);
         }
     };
-    let sections = sectionizer::sectionize(&path);
+    let sections = sectionizer::sectionize(&path)?;
     match compiler::Compiler::new(sections).compile("/preamble", &path, &functions) {
         Ok(prog) => {
             let mut vm = vm::VM::new();
