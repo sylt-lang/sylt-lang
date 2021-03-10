@@ -60,8 +60,8 @@ pub struct VM {
     constants: Vec<Value>,
     strings: Vec<String>,
 
-    pub print_blocks: bool,
-    pub print_ops: bool,
+    pub print_bytecode: bool,
+    pub print_exec: bool,
     runtime: bool,
 
 
@@ -89,8 +89,8 @@ impl VM {
             constants: Vec::new(),
             strings: Vec::new(),
 
-            print_blocks: false,
-            print_ops: false,
+            print_bytecode: false,
+            print_exec: false,
             runtime: false,
 
             extern_functions: Vec::new()
@@ -437,7 +437,8 @@ impl VM {
                             error!(self, ErrorKind::ArgumentCount(args.len(), num_args));
                         }
 
-                        if self.print_blocks {
+                        #[cfg(debug_assertions)]
+                        if self.print_bytecode {
                             inner.debug_print();
                         }
                         self.frames.push(Frame {
@@ -498,8 +499,8 @@ impl VM {
         println!("]");
 
         println!("{:5} {:05} {:?}",
-            self.frame().block.borrow().line(self.frame().ip).red(),
-            self.frame().ip.blue(),
+            self.frame().block.borrow().line(self.frame().ip).blue(),
+            self.frame().ip.red(),
             self.frame().block.borrow().ops[self.frame().ip]);
     }
 
@@ -525,13 +526,14 @@ impl VM {
 
     /// Simulates the program.
     pub fn run(&mut self) -> Result<OpResult, Error> {
-        if self.print_blocks {
+        if self.print_bytecode {
             println!("\n    [[{}]]\n", "RUNNING".red());
             self.frame().block.borrow().debug_print();
         }
 
         loop {
-            if self.print_ops {
+            #[cfg(debug_assertions)]
+            if self.print_exec {
                 self.print_stack()
             }
 
@@ -835,7 +837,7 @@ impl VM {
             ip: 0
         });
 
-        if self.print_blocks {
+        if self.print_bytecode {
             println!("\n    [[{} - {}]]\n", "TYPECHECKING".purple(), self.frame().block.borrow().name);
             self.frame().block.borrow().debug_print();
         }
@@ -847,7 +849,8 @@ impl VM {
                 break;
             }
 
-            if self.print_ops {
+            #[cfg(debug_assertions)]
+            if self.print_exec {
                 self.print_stack()
             }
 

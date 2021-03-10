@@ -19,48 +19,31 @@ mod compiler;
 mod sectionizer;
 mod tokenizer;
 
-/// Compiles a file and links the supplied functions as callable external
-/// functions. Use this if you want your programs to be able to yield.
-pub fn compile_file(
-    path: &Path,
-    print: bool,
-    functions: Vec<(String, RustFunction)>
-) -> Result<vm::VM, Vec<Error>> {
-    let sections = sectionizer::sectionize(path);
-    match compiler::Compiler::new(sections).compile("main", path, &functions) {
-        Ok(prog) => {
-            let mut vm = vm::VM::new();
-            vm.print_blocks = print;
-            vm.print_ops = print;
-            vm.typecheck(&prog)?;
-            vm.init(&prog);
-            Ok(vm)
-        }
-        Err(errors) => Err(errors),
-    }
-}
-
 /// Compiles, links and runs the given file. Supplied functions are callable
 /// external functions. If you want your program to be able to yield, use
 /// [compile_file].
-pub fn run_file(path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    run(path, print, functions)
+pub fn run_file(args: Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
+    run(args, functions)
 }
 
-pub fn run_string(source: &str, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    let mut path = std::env::temp_dir();
-    path.push(format!("test_{}.sy", rand::random::<u32>()));
-    std::fs::write(path.clone(), source).expect("Failed to write source to temporary file");
-    run(&path, print, functions)
-}
-
-fn run(path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    let sections = sectionizer::sectionize(path);
-    match compiler::Compiler::new(sections).compile("main", path, &functions) {
+fn run(args: Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
+    let path = match args.file {
+        Some(file) => file,
+        None => {
+            return Err(vec![Error {
+                kind: ErrorKind::NoFileGiven,
+                file: PathBuf::from(""),
+                line: 0,
+                message: None,
+            }]);
+        }
+    };
+    let sections = sectionizer::sectionize(&path);
+    match compiler::Compiler::new(sections).compile("/preamble", &path, &functions) {
         Ok(prog) => {
             let mut vm = vm::VM::new();
-            vm.print_blocks = print;
-            vm.print_ops = print;
+            vm.print_bytecode = args.print_bytecode;
+            vm.print_exec = args.print_exec;
             vm.typecheck(&prog)?;
             vm.init(&prog);
             if let Err(e) = vm.run() {
@@ -70,6 +53,22 @@ fn run(path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Resu
             }
         }
         Err(errors) => Err(errors),
+    }
+}
+
+pub struct Args {
+    pub file: Option<PathBuf>,
+    pub print_exec: bool,
+    pub print_bytecode: bool,
+}
+
+impl Default for Args {
+    fn default() -> Self {
+        Self {
+            file: None,
+            print_exec: false,
+            print_bytecode: false,
+        }
     }
 }
 
@@ -884,11 +883,11 @@ impl Block {
         for (i, s) in self.ops.iter().enumerate() {
             println!("{}{}",
                      if self.line_offsets.contains_key(&i) {
-                         format!("{:5} ", self.line_offsets[&i].red())
+                         format!("{:5} ", self.line_offsets[&i].blue())
                      } else {
-                         format!("    {} ", "|".red())
+                         format!("    {} ", "|".blue())
                      },
-                     format!("{:05} {:?}", i.blue(), s)
+                     format!("{:05} {:?}", i.red(), s)
             );
         }
         println!();
@@ -1001,19 +1000,23 @@ mod tests {
         ($fn:ident, $path:literal, $print:expr) => {
             #[test]
             fn $fn() {
-                let file = std::path::Path::new($path);
-                crate::run_file(&file, $print, Vec::new()).unwrap();
+                let mut args = $crate::Args::default();
+                args.file = Some(std::path::PathBuf::from($path));
+                args.print_bytecode = $print;
+                $crate::run_file(args, Vec::new()).unwrap();
             }
         };
         ($fn:ident, $path:literal, $print:expr, $errs:tt) => {
             #[test]
             fn $fn() {
-                use crate::error::ErrorKind;
+                use $crate::error::ErrorKind;
                 #[allow(unused_imports)]
-                use crate::Type;
+                use $crate::Type;
 
-                let file = std::path::Path::new($path);
-                let res = crate::run_file(&file, $print, Vec::new());
+                let mut args = $crate::Args::default();
+                args.file = Some(std::path::PathBuf::from($path));
+                args.print_bytecode = $print;
+                let res = $crate::run_file(args, Vec::new());
                 $crate::assert_errs!(res, $errs);
             }
         };

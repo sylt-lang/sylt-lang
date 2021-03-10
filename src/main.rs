@@ -1,16 +1,10 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use sylt::run_file;
-
-struct Args {
-    file: Option<PathBuf>,
-    print: bool,
-}
+use sylt::{run_file, Args};
 
 fn main() {
     let args = parse_args();
-    let file = args.file.unwrap_or_else(|| Path::new("progs/tests/simple.sy").to_owned());
-    let errs = match run_file(&file, args.print, sylt_macro::link!(extern_test as test)) {
+    let errs = match run_file(args, sylt_macro::link!(extern_test as test)) {
         Err(it) => it,
         _ => return,
     };
@@ -21,17 +15,17 @@ fn main() {
 }
 
 fn parse_args() -> Args {
-    let mut args = Args {
-        file: None,
-        print: false,
-    };
+    let mut args = Args::default();
 
     for s in std::env::args().skip(1) {
         let path = Path::new(&s).to_owned();
         if path.is_file() {
             args.file = Some(path);
-        } else if "-p" == s {
-            args.print = true;
+        } else if s == "-v" {
+            args.print_bytecode = true;
+        } else if s == "-vv" {
+            args.print_bytecode = true;
+            args.print_exec = true;
         } else {
             eprintln!("Invalid argument {}.", s);
         }

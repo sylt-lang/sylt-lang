@@ -34,6 +34,9 @@ pub enum ErrorKind {
     SyntaxError(usize, Token),
     /// (start, end)
     GitConflictError(usize, usize),
+
+    FileNotFound(PathBuf),
+    NoFileGiven,
 }
 
 #[derive(Debug, Clone)]
@@ -54,10 +57,10 @@ impl fmt::Display for ErrorKind {
                 write!(f, "Cannot apply {:?} to types {}", op, types)
             }
             ErrorKind::TypeMismatch(a, b) => {
-                write!(f, "Expected '{:?}' and got '{:?}'.", a, b)
+                write!(f, "Expected '{:?}' and got '{:?}'", a, b)
             }
             ErrorKind::CannotInfer(a, b) => {
-                write!(f, "Failed to infer type '{:?}' from '{:?}'.", a, b)
+                write!(f, "Failed to infer type '{:?}' from '{:?}'", a, b)
             }
             ErrorKind::ArgumentType(a, b) => {
                 let expected = a
@@ -70,7 +73,7 @@ impl fmt::Display for ErrorKind {
                        expected, given)
             }
             ErrorKind::IndexError(value, slot) => {
-                write!(f, "Cannot index value '{:?}' with type '{:?}'.", value, slot)
+                write!(f, "Cannot index value '{:?}' with type '{:?}'", value, slot)
             }
             ErrorKind::ExternTypeMismatch(name, types) => {
                 write!(f, "Extern function '{}' doesn't accept argument(s) with type(s) {:?}",
@@ -86,7 +89,7 @@ impl fmt::Display for ErrorKind {
                 write!(f, "Cannot find field '{}' on {:?}", field, obj)
             }
             ErrorKind::ArgumentCount(expected, given) => {
-                write!(f, "Incorrect argument count, expected {} but got {}.",
+                write!(f, "Incorrect argument count, expected {} but got {}",
                        expected, given)
             }
             ErrorKind::IndexOutOfBounds(value, len, slot) => {
@@ -100,7 +103,7 @@ impl fmt::Display for ErrorKind {
                 write!(f, "{}", "[!!] Invalid program [!!]".bold())
             }
             ErrorKind::Unreachable => {
-                write!(f, "Reached unreachable code.")
+                write!(f, "Reached unreachable code")
             }
             ErrorKind::SyntaxError(line, token) => {
                 write!(f, "Syntax Error on line {} at token {:?}", line, token)
@@ -108,6 +111,12 @@ impl fmt::Display for ErrorKind {
             ErrorKind::GitConflictError(start_line, end_line) => {
                 write!(f, "Git conflict markers found between lines {} and {}",
                        start_line, end_line)
+            }
+            ErrorKind::FileNotFound(path) => {
+                write!(f, "File '{}' not found", path.display())
+            }
+            ErrorKind::NoFileGiven => {
+                write!(f, "No file to run")
             }
         }
     }

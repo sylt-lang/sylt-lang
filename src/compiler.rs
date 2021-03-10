@@ -596,8 +596,7 @@ impl Compiler {
     /// The line of the current token.
     fn line(&self) -> usize {
         if self.section().tokens.len() == 0 {
-            // unreachable!("An error occured without a section.");
-            666666
+            0
         } else {
             self.section().tokens[std::cmp::min(self.current_token, self.section().tokens.len() - 1)].1
         }
@@ -1782,7 +1781,7 @@ impl Compiler {
     }
 
     pub(crate) fn compile(&mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
-        let main = Variable::new("/main/", false, Type::Void);
+        let main = Variable::new("/preamble", false, Type::Void);
         let slot = self.define(main).unwrap();
         self.frame_mut().stack[slot].read = true;
 
