@@ -47,13 +47,6 @@ pub fn run_file(path: &Path, print: bool, functions: Vec<(String, RustFunction)>
     run(path, print, functions)
 }
 
-pub fn run_string(source: &str, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    let mut path = std::env::temp_dir();
-    path.push(format!("test_{}.sy", rand::random::<u32>()));
-    std::fs::write(path.clone(), source).expect("Failed to write source to temporary file");
-    run(&path, print, functions)
-}
-
 fn run(path: &Path, print: bool, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
     let sections = sectionizer::sectionize(path);
     match compiler::Compiler::new(sections).compile("main", path, &functions) {
