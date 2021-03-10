@@ -2,16 +2,19 @@ use std::path::Path;
 
 use sylt::{run_file, Args};
 
-fn main() {
+fn main() -> Result<(), String> {
     let args = parse_args();
+    if args.file.is_none() {
+        return Err("No file to run".to_string());
+    }
     let errs = match run_file(args, sylt_macro::link!(extern_test as test)) {
         Err(it) => it,
-        _ => return,
+        _ => return Ok(()),
     };
     for err in errs.iter() {
         println!("{}", err);
     }
-    println!(" {} errors occured.", errs.len());
+    Err(format!("{} errors occured.", errs.len()))
 }
 
 fn parse_args() -> Args {

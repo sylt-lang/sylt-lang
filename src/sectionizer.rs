@@ -1,3 +1,4 @@
+use crate::error::{Error, ErrorKind};
 use crate::tokenizer::{PlacedToken, Token, file_to_tokens};
 
 use std::collections::HashSet;
@@ -19,12 +20,15 @@ impl Section {
     }
 }
 
-pub fn sectionize(path: &Path) -> Vec<Section> {
+pub fn sectionize(path: &Path) -> Result<Vec<Section>, Vec<Error>> {
     let mut read_files = HashSet::new();
     read_files.insert(path.to_path_buf());
-    let tokens = file_to_tokens(path);
+    let tokens = file_to_tokens(path).map_err(|_| vec![
+                 Error::new_nowhere(ErrorKind::FileNotFound(path.to_path_buf()), None)
+    ])?;
     let mut all_tokens = vec![(path.to_path_buf(), tokens)];
     let mut sections = Vec::new();
+    let mut errors = Vec::new();
 
     let mut i = 0;
     while i < all_tokens.len() {
@@ -44,12 +48,23 @@ pub fn sectionize(path: &Path) -> Vec<Section> {
 
                 (Some((Token::Use, _)),
                  Some((Token::Identifier(use_file), _)),
-                 Some((Token::Newline, _))) => {
+                 Some((Token::Newline, line))) => {
                     let use_file: PathBuf = format!("{}.sy", use_file).into();
                     if !read_files.contains(&use_file) {
-                        let use_file_tokens = file_to_tokens(&use_file);
                         read_files.insert(use_file.clone());
-                        all_tokens.push((use_file, use_file_tokens))
+                        match file_to_tokens(&use_file) {
+                            Ok(tokens) => {
+                                all_tokens.push((use_file, tokens))
+                            }
+                            Err(_) => {
+                                errors.push(Error {
+                                    kind: ErrorKind::FileNotFound(use_file),
+                                    file: path.to_path_buf(),
+                                    line: *line,
+                                    message: None,
+                                });
+                            }
+                        }
                     }
                     true
                 },
@@ -101,5 +116,9 @@ pub fn sectionize(path: &Path) -> Vec<Section> {
         }
         sections.push(Section::new(path.clone(), &tokens[last..curr]));
     }
-    sections
+    if errors.is_empty() {
+        Ok(sections)
+    } else {
+        Err(errors)
+    }
 }

@@ -143,3 +143,13 @@ impl fmt::Display for Error {
     }
 }
 
+impl Error {
+    pub fn new_nowhere(kind: ErrorKind, message: Option<String>) -> Self {
+        Self {
+            kind,
+            message,
+            file: PathBuf::from("!compiler!"),
+            line: 0,
+        }
+    }
+}
