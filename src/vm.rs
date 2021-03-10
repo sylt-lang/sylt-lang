@@ -498,8 +498,8 @@ impl VM {
         println!("]");
 
         println!("{:5} {:05} {:?}",
-            self.frame().block.borrow().line(self.frame().ip).red(),
-            self.frame().ip.blue(),
+            self.frame().block.borrow().line(self.frame().ip).blue(),
+            self.frame().ip.red(),
             self.frame().block.borrow().ops[self.frame().ip]);
     }
 

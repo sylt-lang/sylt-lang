@@ -877,11 +877,11 @@ impl Block {
         for (i, s) in self.ops.iter().enumerate() {
             println!("{}{}",
                      if self.line_offsets.contains_key(&i) {
-                         format!("{:5} ", self.line_offsets[&i].red())
+                         format!("{:5} ", self.line_offsets[&i].blue())
                      } else {
-                         format!("    {} ", "|".red())
+                         format!("    {} ", "|".blue())
                      },
-                     format!("{:05} {:?}", i.blue(), s)
+                     format!("{:05} {:?}", i.red(), s)
             );
         }
         println!();

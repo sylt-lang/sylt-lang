@@ -596,8 +596,7 @@ impl Compiler {
     /// The line of the current token.
     fn line(&self) -> usize {
         if self.section().tokens.len() == 0 {
-            // unreachable!("An error occured without a section.");
-            666666
+            0
         } else {
             self.section().tokens[std::cmp::min(self.current_token, self.section().tokens.len() - 1)].1
         }
