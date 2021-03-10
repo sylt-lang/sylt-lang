@@ -1781,7 +1781,7 @@ impl Compiler {
     }
 
     pub(crate) fn compile(&mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
-        let main = Variable::new("/main/", false, Type::Void);
+        let main = Variable::new("/preamble", false, Type::Void);
         let slot = self.define(main).unwrap();
         self.frame_mut().stack[slot].read = true;
 
