@@ -214,7 +214,7 @@ fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
             assert!(!path.to_str().unwrap().contains(","), "You should be ashamed.");
 
             let path_string = path.to_str().unwrap();
-            let test_name = format_ident!("file_{}", file_name.replace(".sy", ""));
+            let test_name = format_ident!("{}", file_name.replace(".sy", ""));
 
             let settings = parse_test_settings(std::fs::read_to_string(path.clone()).unwrap());
             let print = settings.print;

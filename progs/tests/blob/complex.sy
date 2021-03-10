@@ -1,5 +1,4 @@
 start :: fn {
-
     a := A()
     b := B()
     c := C()
@@ -15,5 +14,4 @@ start :: fn {
     }
     blob C { }
     blob B { }
-
 }
