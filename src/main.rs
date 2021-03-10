@@ -22,10 +22,10 @@ fn parse_args() -> Args {
         if path.is_file() {
             args.file = Some(path);
         } else if s == "-v" {
-            args.print_exec = true;
-        } else if s == "-vv" {
-            args.print_exec = true;
             args.print_bytecode = true;
+        } else if s == "-vv" {
+            args.print_bytecode = true;
+            args.print_exec = true;
         } else {
             eprintln!("Invalid argument {}.", s);
         }
