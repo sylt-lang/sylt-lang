@@ -437,6 +437,7 @@ impl VM {
                             error!(self, ErrorKind::ArgumentCount(args.len(), num_args));
                         }
 
+                        #[cfg(debug_assertions)]
                         if self.print_bytecode {
                             inner.debug_print();
                         }
@@ -531,6 +532,7 @@ impl VM {
         }
 
         loop {
+            #[cfg(debug_assertions)]
             if self.print_exec {
                 self.print_stack()
             }
@@ -847,6 +849,7 @@ impl VM {
                 break;
             }
 
+            #[cfg(debug_assertions)]
             if self.print_exec {
                 self.print_stack()
             }
