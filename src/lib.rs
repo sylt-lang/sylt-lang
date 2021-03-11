@@ -182,11 +182,13 @@ impl From<&Value> for Type {
                 let v: &RefCell<_> = v.borrow();
                 let v: &Vec<_> = &v.borrow();
                 let set: HashSet<_> = v.iter().map(|x| Type::from(x)).collect();
-                match set.len() {
-                    0 => Type::List(Box::new(Type::Unknown)),
-                    1 => Type::List(Box::new(set.into_iter().next().unwrap())),
-                    _ => Type::List(Box::new(Type::Union(set))),
-                }
+                println!("{:?} ?> {:?}", v, set);
+                let t = match set.len() {
+                    0 => Type::Unknown,
+                    1 => set.into_iter().next().unwrap(),
+                    _ => Type::Union(set),
+                };
+                Type::List(Box::new(t))
             }
             Value::Union(v) => {
                 Type::Union(v.iter().map(|x| Type::from(x)).collect())
@@ -200,6 +202,7 @@ impl From<&Value> for Type {
                 let block = &block.borrow();
                 block.borrow().ty.clone()
             }
+            Value::Unknown => Type::Unknown,
             _ => Type::Void,
         }
     }
@@ -212,7 +215,6 @@ impl From<Value> for Type {
 }
 
 impl From<&Type> for Value {
-
     fn from(ty: &Type) -> Self {
         match ty {
             Type::Void => Value::Nil,
