@@ -215,7 +215,7 @@ impl VM {
 
             Op::List(size) => {
                 let values = self.stack.split_off(self.stack.len() - size);
-                self.stack.push(Value::List(Rc::new(values)));
+                self.stack.push(Value::List(Rc::new(RefCell::new(values))));
             }
 
             Op::PopUpvalue => {
@@ -306,12 +306,14 @@ impl VM {
                         }
                         self.stack.push(v[slot].clone());
                     }
-                    (Value::List(v), Value::Int(slot)) => {
+                    (Value::List(rc_v), Value::Int(slot)) => {
                         let slot = slot as usize;
+                        let v = rc_v.borrow();
                         if v.len() <= slot {
                             self.stack.push(Value::Nil);
                             let len = v.len();
-                            error!(self, ErrorKind::IndexOutOfBounds(Value::List(v), len, slot));
+                            drop(v);
+                            error!(self, ErrorKind::IndexOutOfBounds(Value::List(rc_v), len, slot));
                         }
                         self.stack.push(v[slot].clone());
                     }

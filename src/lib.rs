@@ -179,6 +179,7 @@ impl From<&Value> for Type {
                 Type::Tuple(v.iter().map(|x| Type::from(x)).collect())
             }
             Value::List(v) => {
+                let v = v.borrow();
                 let set: HashSet<_> = v.iter().map(|x| Type::from(x)).collect();
                 match set.len() {
                     0 => Type::List(Box::new(Type::Unknown)),
@@ -222,7 +223,7 @@ impl From<&Type> for Value {
                 Value::Union(v.iter().map(Value::from).collect())
             }
             Type::List(fields) => {
-                Value::List(Rc::new(vec![Value::from(fields.as_ref())]))
+                Value::List(Rc::new(RefCell::new(vec![Value::from(fields.as_ref())])))
             }
             Type::Unknown => Value::Unknown,
             Type::Int => Value::Int(1),
@@ -249,7 +250,7 @@ pub enum Value {
     Blob(Rc<Blob>),
     Instance(Rc<Blob>, Rc<RefCell<Vec<Value>>>),
     Tuple(Rc<Vec<Value>>),
-    List(Rc<Vec<Value>>),
+    List(Rc<RefCell<Vec<Value>>>),
     Union(HashSet<Value>),
     Float(f64),
     Int(i64),
@@ -768,6 +769,8 @@ mod op {
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, eq),
             (Value::Nil, Value::Nil) => Value::Bool(true),
             (Value::List(a), Value::List(b))  => {
+                let a = a.borrow();
+                let b = b.borrow();
                 if a.len() != b.len() {
                     return Value::Bool(false);
                 }
