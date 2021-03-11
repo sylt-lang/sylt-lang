@@ -21,7 +21,7 @@ start :: fn {
     }
 
     if t() || i() {
-        // Empty
+        // This block is intentionally left blank
     } else {
         <!>
     }
@@ -31,7 +31,7 @@ start :: fn {
     }
 
     if t() || i() || i() {
-        // Empty
+        // This block is intentionally left blank
     } else {
         <!>
     }
@@ -39,18 +39,3 @@ start :: fn {
     fs <=> 2
     ts <=> 2
 }
-
-
-
-    // if t() || i() && f() {
-    //     // Empty
-    // } else {
-    //     <!>
-    // }
-
-    // if f() && t() || i() {
-    //     // Empty
-    // } else {
-    //     <!>
-    // }
-

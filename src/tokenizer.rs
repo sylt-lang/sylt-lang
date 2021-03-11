@@ -183,8 +183,8 @@ pub fn string_to_tokens(content: &str) -> TokenStream {
     lined_tokens
 }
 
-pub fn file_to_tokens(file: &Path) -> TokenStream {
-    string_to_tokens(&fs::read_to_string(file).unwrap())
+pub fn file_to_tokens(file: &Path) -> Result<TokenStream, std::io::Error> {
+    Ok(string_to_tokens(&fs::read_to_string(file)?))
 }
 
 #[cfg(test)]
