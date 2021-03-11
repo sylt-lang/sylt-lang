@@ -685,17 +685,19 @@ impl VM {
                 let ty = self.ty(ty);
                 let top_type = self.stack.last().unwrap().into();
                 match (ty, top_type) {
-                    (a, b) if matches!(a, Type::Union(_)) && a == &b => {
-                        let last = self.stack.len() - 1;
-                        self.stack[last] = Value::from(a);
-                    }
                     (Type::Unknown, top_type)
                         if top_type != Type::Unknown => {}
                     (a, b) if a != &b => {
                         error!(self, ErrorKind::TypeMismatch(a.clone(), b.clone()),
                                "Cannot assign mismatching types.");
                     }
-                    _ => {}
+                    (a, b) if a == &b => {
+                        let last = self.stack.len() - 1;
+                        self.stack[last] = Value::from(a);
+                    }
+                    _ => {
+                        self.crash_and_burn();
+                    }
                 }
             }
 
@@ -777,7 +779,7 @@ impl VM {
 
                         Value::ExternFunction(slot) => {
                             let extern_func = self.extern_functions[*slot];
-                            extern_func(&self.stack[new_base+1..], false)
+                            extern_func(&self.stack[new_base+1..], true)
                         }
 
                         _ => {

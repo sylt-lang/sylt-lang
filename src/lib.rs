@@ -333,6 +333,10 @@ impl Value {
             Value::Float(_) => Value::Float(1.0),
             Value::Int(_) => Value::Int(1),
             Value::Bool(_) => Value::Bool(true),
+            x if matches!(x, Value::List(_)) => {
+                let x = Type::from(x);
+                Value::from(&x)
+            }
             a => a,
         }
     }
