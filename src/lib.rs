@@ -90,7 +90,7 @@ pub enum Type {
     String,
     Tuple(Vec<Type>),
     Union(HashSet<Type>),
-    Array(Box<Type>),
+    List(Box<Type>),
     Function(Vec<Type>, Box<Type>),
     Blob(Rc<Blob>),
     Instance(Rc<Blob>),
@@ -111,7 +111,7 @@ impl Hash for Type {
                 }
                 6
             }
-            Type::Array(t) => {
+            Type::List(t) => {
                 t.as_ref().hash(h);
                 12
             }
@@ -160,7 +160,7 @@ impl PartialEq for Type {
             (Type::Union(a), b) | (b, Type::Union(a)) => {
                 a.iter().any(|x| x == b)
             }
-            (Type::Array(a), Type::Array(b)) => a == b,
+            (Type::List(a), Type::List(b)) => a == b,
             (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) =>
                 a_args == b_args && a_ret == b_ret,
             _ => false,
@@ -178,12 +178,12 @@ impl From<&Value> for Type {
             Value::Tuple(v) => {
                 Type::Tuple(v.iter().map(|x| Type::from(x)).collect())
             }
-            Value::Array(v) => {
+            Value::List(v) => {
                 let set: HashSet<_> = v.iter().map(|x| Type::from(x)).collect();
                 match set.len() {
-                    0 => Type::Array(Box::new(Type::Unknown)),
-                    1 => Type::Array(Box::new(set.into_iter().next().unwrap())),
-                    _ => Type::Array(Box::new(Type::Union(set))),
+                    0 => Type::List(Box::new(Type::Unknown)),
+                    1 => Type::List(Box::new(set.into_iter().next().unwrap())),
+                    _ => Type::List(Box::new(Type::Union(set))),
                 }
             }
             Value::Union(v) => {
@@ -221,8 +221,8 @@ impl From<&Type> for Value {
             Type::Union(v) => {
                 Value::Union(v.iter().map(Value::from).collect())
             }
-            Type::Array(fields) => {
-                Value::Array(Rc::new(vec![Value::from(fields.as_ref())]))
+            Type::List(fields) => {
+                Value::List(Rc::new(vec![Value::from(fields.as_ref())]))
             }
             Type::Unknown => Value::Unknown,
             Type::Int => Value::Int(1),
@@ -249,7 +249,7 @@ pub enum Value {
     Blob(Rc<Blob>),
     Instance(Rc<Blob>, Rc<RefCell<Vec<Value>>>),
     Tuple(Rc<Vec<Value>>),
-    Array(Rc<Vec<Value>>),
+    List(Rc<Vec<Value>>),
     Union(HashSet<Value>),
     Float(f64),
     Int(i64),
@@ -274,7 +274,7 @@ impl Debug for Value {
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),
             Value::String(s) => write!(fmt, "(string \"{}\")", s),
-            Value::Array(v) => write!(fmt, "(array {:?})", v),
+            Value::List(v) => write!(fmt, "(array {:?})", v),
             Value::Function(_, block) => write!(fmt, "(fn {}: {:?})", block.borrow().name, block.borrow().ty),
             Value::ExternFunction(slot) => write!(fmt, "(extern fn {})", slot),
             Value::Unknown => write!(fmt, "(unknown)"),
@@ -292,7 +292,7 @@ impl PartialEq<Value> for Value {
             (Value::Int(a), Value::Int(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::String(a), Value::String(b)) => a == b,
-            (Value::Array(a), Value::Array(b)) => a == b,
+            (Value::List(a), Value::List(b)) => a == b,
             (Value::Tuple(a), Value::Tuple(b)) => {
                 a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| a == b)
             }
@@ -457,11 +457,11 @@ pub enum Op {
     ///
     /// {A, B, C} - Tuple(3) - {D(A, B, C)}
     Tuple(usize),
-    /// Creates a new [Array] with the given size and place it on the top
+    /// Creates a new [List] with the given size and place it on the top
     /// of the stack.
     ///
-    /// {A, B, C} - Array(3) - {D(A, B, C)}
-    Array(usize),
+    /// {A, B, C} - List(3) - {D(A, B, C)}
+    List(usize),
 
     /// Indexes something indexable, currently only Tuples,
     /// and adds that element to the stack.
@@ -767,7 +767,7 @@ mod op {
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, eq),
             (Value::Nil, Value::Nil) => Value::Bool(true),
-            (Value::Array(a), Value::Array(b))  => {
+            (Value::List(a), Value::List(b))  => {
                 if a.len() != b.len() {
                     return Value::Bool(false);
                 }

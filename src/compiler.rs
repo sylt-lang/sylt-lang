@@ -633,7 +633,7 @@ impl Compiler {
             Token::Identifier(_) => self.variable_expression(block),
             Token::LeftParen => self.grouping_or_tuple(block),
             Token::Minus => self.unary(block),
-            Token::LeftBracket => self.array(block),
+            Token::LeftBracket => self.list(block),
 
             Token::Float(_)
                 | Token::Int(_)
@@ -690,8 +690,8 @@ impl Compiler {
         parse_branch!(self, block, [self.tuple(block), self.grouping(block)]);
     }
 
-    fn array(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftBracket, "Expected '[' at start of array.");
+    fn list(&mut self, block: &mut Block) {
+        expect!(self, Token::LeftBracket, "Expected '[' at start of list.");
         let mut num_args = 0;
         loop {
             match self.peek() {
@@ -717,15 +717,15 @@ impl Compiler {
                         },
                         Token::RightBracket => {},
                         _ => {
-                            error!(self, "Expected ',' or ']' after array element.");
+                            error!(self, "Expected ',' or ']' after list element.");
                             return;
                         },
                     }
                 }
             }
         };
-        expect!(self, Token::RightBracket, "Expected ']' after array.");
-        add_op(self, block, Op::Array(num_args));
+        expect!(self, Token::RightBracket, "Expected ']' after list.");
+        add_op(self, block, Op::List(num_args));
     }
 
     fn tuple(&mut self, block: &mut Block) {
@@ -1524,9 +1524,9 @@ impl Compiler {
             Token::LeftBracket => {
                 self.eat();
                 let ty = self.parse_type();
-                expect!(self, Token::RightBracket, "Expected ']' after array type.");
+                expect!(self, Token::RightBracket, "Expected ']' after list type.");
                 return match ty {
-                    Ok(ty) => Ok(Type::Array(Box::new(ty))),
+                    Ok(ty) => Ok(Type::List(Box::new(ty))),
                     Err(_) => Err(()),
                 }
             }

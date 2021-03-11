@@ -213,9 +213,9 @@ impl VM {
                 self.stack.push(Value::Tuple(Rc::new(values)));
             }
 
-            Op::Array(size) => {
+            Op::List(size) => {
                 let values = self.stack.split_off(self.stack.len() - size);
-                self.stack.push(Value::Array(Rc::new(values)));
+                self.stack.push(Value::List(Rc::new(values)));
             }
 
             Op::PopUpvalue => {
@@ -298,7 +298,7 @@ impl VM {
                 let val = self.stack.pop().unwrap();
                 match (val, slot) {
                     (Value::Tuple(v), Value::Int(slot)) |
-                    (Value::Array(v), Value::Int(slot)) => {
+                    (Value::List(v), Value::Int(slot)) => {
                         let slot = slot as usize;
                         if v.len() <= slot {
                             self.stack.push(Value::Nil);
