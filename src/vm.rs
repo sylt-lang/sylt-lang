@@ -297,13 +297,21 @@ impl VM {
                 let slot = self.stack.pop().unwrap();
                 let val = self.stack.pop().unwrap();
                 match (val, slot) {
-                    (Value::Tuple(v), Value::Int(slot)) |
-                    (Value::List(v), Value::Int(slot)) => {
+                    (Value::Tuple(v), Value::Int(slot)) => {
                         let slot = slot as usize;
                         if v.len() <= slot {
                             self.stack.push(Value::Nil);
                             let len = v.len();
                             error!(self, ErrorKind::IndexOutOfBounds(Value::Tuple(v), len, slot));
+                        }
+                        self.stack.push(v[slot].clone());
+                    }
+                    (Value::List(v), Value::Int(slot)) => {
+                        let slot = slot as usize;
+                        if v.len() <= slot {
+                            self.stack.push(Value::Nil);
+                            let len = v.len();
+                            error!(self, ErrorKind::IndexOutOfBounds(Value::List(v), len, slot));
                         }
                         self.stack.push(v[slot].clone());
                     }
