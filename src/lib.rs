@@ -5,6 +5,7 @@ use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::hash::{Hash, Hasher};
+use std::borrow::Borrow;
 
 use owo_colors::OwoColorize;
 
@@ -179,7 +180,8 @@ impl From<&Value> for Type {
                 Type::Tuple(v.iter().map(|x| Type::from(x)).collect())
             }
             Value::List(v) => {
-                let v = v.borrow();
+                let v: &RefCell<_> = v.borrow();
+                let v: &Vec<_> = &v.borrow();
                 let set: HashSet<_> = v.iter().map(|x| Type::from(x)).collect();
                 match set.len() {
                     0 => Type::List(Box::new(Type::Unknown)),
@@ -194,7 +196,11 @@ impl From<&Value> for Type {
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
-            Value::Function(_, block) => block.borrow().ty.clone(),
+            Value::Function(_, block) => {
+                let block: &RefCell<_> = block.borrow();
+                let block = &block.borrow();
+                block.borrow().ty.clone()
+            }
             _ => Type::Void,
         }
     }
@@ -276,7 +282,14 @@ impl Debug for Value {
             Value::Bool(b) => write!(fmt, "(bool {})", b),
             Value::String(s) => write!(fmt, "(string \"{}\")", s),
             Value::List(v) => write!(fmt, "(array {:?})", v),
-            Value::Function(_, block) => write!(fmt, "(fn {}: {:?})", block.borrow().name, block.borrow().ty),
+            Value::Function(_, block) => {
+                let block: &RefCell<_> = block.borrow();
+                let block = &block.borrow();
+                write!(fmt, "(fn {}: {:?})",
+                    block.name,
+                    block.ty
+                )
+            }
             Value::ExternFunction(slot) => write!(fmt, "(extern fn {})", slot),
             Value::Unknown => write!(fmt, "(unknown)"),
             Value::Nil => write!(fmt, "(nil)"),
@@ -1047,7 +1060,11 @@ mod tests {
             #[test]
             fn $fn() {
                 let file = std::path::Path::new($path);
-                crate::run_file(&file, $print, Vec::new()).unwrap();
+                crate::run_file(&file, $print, sylt_macro::link!(
+                    crate::dbg as dbg,
+                    crate::push as push,
+                    crate::len as len,
+                )).unwrap();
             }
         };
         ($fn:ident, $path:literal, $print:expr, $errs:tt) => {
@@ -1066,3 +1083,54 @@ mod tests {
 
     sylt_macro::find_tests!();
 }
+
+// The "standard library"
+use crate as sylt;
+sylt_macro::extern_function!(
+    dbg
+    [x] -> Type::Void => {
+        println!("DBG: {:?}, {:?}", x, Type::from(x));
+        Ok(Value::Nil)
+    },
+);
+
+pub fn push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> {
+    match (values, typecheck) {
+        ([Value::List(ls), v], true) => {
+            let ls: &RefCell<_> = ls.borrow();
+            let ls = &ls.borrow();
+            assert!(ls.len() == 1);
+            let ls = Type::from(&ls[0]);
+            let v: Type = Type::from(&*v);
+            if ls == v {
+                Ok(Value::Nil)
+            } else {
+                Err(ErrorKind::TypeMismatch(ls, v))
+            }
+        }
+        ([Value::List(ls), v], false) => {
+            // NOTE(ed): Deliberattly no type checking.
+            let ls: &RefCell<_> = ls.borrow();
+            ls.borrow_mut().push(v.clone());
+            Ok(Value::Nil)
+        }
+        (values, _) => {
+            Err(ErrorKind::ExternTypeMismatch(
+                "push".to_string(),
+                values.iter().map(|x| Type::from(x)).collect()
+            ))
+        }
+    }
+}
+
+sylt_macro::extern_function!(
+    len
+    [Value::List(ls)] -> Type::Int => {
+        let ls: &RefCell<Vec<Value>> = ls.borrow();
+        let ls = ls.borrow();
+        Ok(Value::Int(ls.len() as i64))
+    },
+    [Value::Tuple(ls)] -> Type::Int => {
+        Ok(Value::Int(ls.len() as i64))
+    },
+);
