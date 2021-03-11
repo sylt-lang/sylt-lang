@@ -5,6 +5,7 @@ use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::hash::{Hash, Hasher};
+use std::io::Write;
 
 use owo_colors::OwoColorize;
 
@@ -49,6 +50,13 @@ fn run(args: Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Err
             if let Err(e) = vm.run() {
                 Err(vec![e])
             } else {
+                let mut log = std::fs::File::create("perf.csv").unwrap();
+                for (i, timer) in vm.times_per_op.iter().enumerate() {
+                    if let Some(name) = name_from_index(i) {
+                        let output = format!("'{}'| {}| {}|\n", name, timer.calls, timer.time);
+                        log.write(output.as_ref()).unwrap();
+                    }
+                }
                 Ok(())
             }
         }
@@ -616,6 +624,89 @@ pub enum Op {
     ///
     /// Does not affect the stack.
     Yield,
+}
+
+impl Op {
+    fn index(&self) -> usize {
+        match self {
+            Op::Illegal => 1,
+            Op::Pop => 2,
+            Op::PopUpvalue => 3,
+            Op::Copy => 4,
+            Op::Constant(_) => 5,
+            Op::Tuple(_) => 6,
+            Op::Index => 7,
+            Op::Get(_) => 8,
+            Op::Set(_) => 9,
+            Op::Add => 10,
+            Op::Sub => 11,
+            Op::Mul => 12,
+            Op::Div => 13,
+            Op::Neg => 14,
+            Op::And => 15,
+            Op::Or => 16,
+            Op::Not => 17,
+            Op::Jmp(_) => 18,
+            Op::JmpFalse(_) => 19,
+            Op::JmpNPop(_, _) => 20,
+            Op::Equal => 21,
+            Op::Less => 22,
+            Op::Greater => 23,
+            Op::Assert => 24,
+            Op::Unreachable => 25,
+            Op::ReadLocal(_) => 26,
+            Op::AssignLocal(_) => 27,
+            Op::ReadUpvalue(_) => 28,
+            Op::AssignUpvalue(_) => 29,
+            Op::Define(_) => 30,
+            Op::Link(_) => 31,
+            Op::Call(_) => 32,
+            Op::Print => 33,
+            Op::Return => 34,
+            Op::Yield => 35,
+        }
+    }
+}
+
+fn name_from_index(index: usize) -> Option<&'static str> {
+    match index {
+        1 => Some("Op::Illegal"),
+        2 => Some("Op::Pop"),
+        3 => Some("Op::PopUpvalue"),
+        4 => Some("Op::Copy"),
+        5 => Some("Op::Constant(_)"),
+        6 => Some("Op::Tuple(_)"),
+        7 => Some("Op::Index"),
+        8 => Some("Op::Get(_)"),
+        9 => Some("Op::Set(_)"),
+        10 => Some("Op::Add"),
+        11 => Some("Op::Sub"),
+        12 => Some("Op::Mul"),
+        13 => Some("Op::Div"),
+        14 => Some("Op::Neg"),
+        15 => Some("Op::And"),
+        16 => Some("Op::Or"),
+        17 => Some("Op::Not"),
+        18 => Some("Op::Jmp(_)"),
+        19 => Some("Op::JmpFalse(_)"),
+        20 => Some("Op::JmpNPop(_, _)"),
+        21 => Some("Op::Equal"),
+        22 => Some("Op::Less"),
+        23 => Some("Op::Greater"),
+        24 => Some("Op::Assert"),
+        25 => Some("Op::Unreachable"),
+        26 => Some("Op::ReadLocal(_)"),
+        27 => Some("Op::AssignLocal(_)"),
+        28 => Some("Op::ReadUpvalue(_)"),
+        29 => Some("Op::AssignUpvalue(_)"),
+        30 => Some("Op::Define(_)"),
+        31 => Some("Op::Link(_)"),
+        32 => Some("Op::Call(_)"),
+        33 => Some("Op::Print"),
+        34 => Some("Op::Return"),
+        35 => Some("Op::Yield"),
+        _ => None,
+    }
 }
 
 ///

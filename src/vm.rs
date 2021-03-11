@@ -3,6 +3,7 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::rc::Rc;
+use std::time::Instant;
 
 use owo_colors::OwoColorize;
 
@@ -51,7 +52,24 @@ struct Frame {
     ip: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Timer {
+    pub calls: usize,
+    pub time: usize,
+}
+
+impl Default for Timer {
+    fn default() -> Self {
+        Self {
+            calls: 0,
+            time: 0,
+        }
+    }
+}
+
 pub struct VM {
+    pub times_per_op: [Timer; 100],
+
     upvalues: HashMap<usize, Rc<RefCell<UpValue>>>,
 
     stack: Vec<Value>,
@@ -81,6 +99,7 @@ pub enum OpResult {
 impl VM {
     pub(crate) fn new() -> Self {
         Self {
+            times_per_op: [Timer::default(); 100],
             upvalues: HashMap::new(),
 
             stack: Vec::new(),
@@ -195,6 +214,7 @@ impl VM {
 
     /// Runs a single operation on the VM
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error> {
+        let start = Instant::now();
         match op {
             Op::Illegal => {
                 error!(self, ErrorKind::InvalidProgram);
@@ -483,6 +503,10 @@ impl VM {
                 }
             }
         }
+        let time = start.elapsed().as_nanos();
+        let mut timer = &mut self.times_per_op[op.index()];
+        timer.calls += 1;
+        timer.time += time as usize;
         self.frame_mut().ip += 1;
         Ok(OpResult::Continue)
     }
@@ -530,6 +554,10 @@ impl VM {
             println!("\n    [[{}]]\n", "RUNNING".red());
             self.frame().block.borrow().debug_print();
         }
+
+        // Reset the performance counter, causes problems with yield,
+        // but I don't know if we are to keep this code.
+        self.times_per_op = [Timer::default(); 100];
 
         loop {
             #[cfg(debug_assertions)]
