@@ -262,6 +262,9 @@ impl Type {
             (Type::Union(a), Type::Union(b)) => {
                 a.iter().all(|x| b.contains(x))
             },
+            (_, Type::Union(_)) => {
+                false
+            },
             (a, b) => {
                 a == b
             },
