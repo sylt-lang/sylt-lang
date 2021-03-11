@@ -15,7 +15,8 @@ fn main() {
     let errs = match run_file(&file, args.print, sylt_macro::link!(
         extern_test as test,
         dbg,
-        sylt_push as push,
+        push,
+        len,
     )) {
         Err(it) => it,
         _ => return,
@@ -63,7 +64,7 @@ sylt_macro::extern_function!(
     },
 );
 
-pub fn sylt_push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> {
+pub fn push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> {
     match (values, typecheck) {
         ([Value::List(ls), v], true) => {
             let ls: &RefCell<Vec<Value>> = ls.borrow();
@@ -91,3 +92,15 @@ pub fn sylt_push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> 
         }
     }
 }
+
+sylt_macro::extern_function!(
+    len
+    [Value::List(ls)] -> Type::Int => {
+        let ls: &RefCell<Vec<Value>> = ls.borrow();
+        let ls = ls.borrow();
+        Ok(Value::Int(ls.len() as i64))
+    },
+    [Value::Tuple(ls)] -> Type::Int => {
+        Ok(Value::Int(ls.len() as i64))
+    },
+);
