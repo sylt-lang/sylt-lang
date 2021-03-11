@@ -1933,7 +1933,7 @@ impl Compiler {
         add_op(self, &mut block, Op::Constant(constant));
         add_op(self, &mut block, Op::Call(0));
 
-        let tmp = self.add_constant(Value::Unknown);
+        let tmp = self.add_constant(Value::Nil);
         add_op(self, &mut block, Op::Constant(tmp));
         add_op(self, &mut block, Op::Return);
 
