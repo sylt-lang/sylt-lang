@@ -158,6 +158,7 @@ impl PartialEq for Type {
                 a.iter().zip(b.iter()).all(|(a, b)| a == b)
             }
             (Type::Union(a), b) | (b, Type::Union(a)) => {
+                // TODO(ed): This might be too lose, since b might be a union.
                 a.iter().any(|x| x == b)
             }
             (Type::List(a), Type::List(b)) => a == b,
@@ -182,7 +183,6 @@ impl From<&Value> for Type {
                 let v: &RefCell<_> = v.borrow();
                 let v: &Vec<_> = &v.borrow();
                 let set: HashSet<_> = v.iter().map(|x| Type::from(x)).collect();
-                println!("{:?} ?> {:?}", v, set);
                 let t = match set.len() {
                     0 => Type::Unknown,
                     1 => set.into_iter().next().unwrap(),
@@ -250,6 +250,24 @@ impl From<Type> for Value {
     }
 }
 
+impl Type {
+    pub fn fits(&self, other: &Self) -> bool {
+        match (self, other) {
+            (_, Type::Unknown) => {
+                true
+            }
+            (Type::List(a), Type::List(b)) => {
+                a.fits(b)
+            },
+            (Type::Union(a), Type::Union(b)) => {
+                a.iter().all(|x| b.contains(x))
+            },
+            (a, b) => {
+                a == b
+            },
+        }
+    }
+}
 
 #[derive(Clone)]
 pub enum Value {
