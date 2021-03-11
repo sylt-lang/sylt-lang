@@ -1,0 +1,15 @@
+start :: fn {
+    a: [int] = [1, 2]
+    b: [int] = []
+    c: [int | str] = [1, "abc"]
+    d: [int | str] = [1]
+    e: [int | str] = ["s"]
+    f: [int | str] = []
+
+    a
+    b
+    c
+    d
+    e
+    f
+}
