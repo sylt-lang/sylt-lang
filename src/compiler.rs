@@ -689,11 +689,7 @@ impl Compiler {
     }
 
     fn grouping_or_tuple(&mut self, block: &mut Block) {
-        parse_branch!(self, block, [self.tuple(block), self.grouping(block)]);
-    }
-
-    fn tuple(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftParen, "Expected '(' at start of tuple");
+        expect!(self, Token::LeftParen, "Expected '(' at for grouping or tuple.");
 
         let mut num_args = 0;
         let trailing_comma = loop {
@@ -705,12 +701,13 @@ impl Compiler {
                     self.eat();
                 }
                 Token::Comma => {
-                    //TODO(gu): This creates a lot of syntax errors since the compiler panic is
-                    // ignored and the statement is tried as a grouping instead, even though we
-                    // _know_ that this can't be parsed as a grouping either.
-                    // Tracked in #100.
-                    error!(self, "Tuples must begin with an element or ')'");
-                    return;
+                    self.eat();
+                    if matches!(self.peek(), Token::RightParen) {
+                        break true;
+                    } else {
+                        error!(self, "Tuples must begin with an element or ')'");
+                        return;
+                    }
                 }
                 _ => {
                     self.expression(block);
@@ -731,21 +728,11 @@ impl Compiler {
                 }
             }
         };
-        if num_args == 1 && !trailing_comma {
-            error!(self, "A tuple with 1 element must end with a trailing comma");
-            return;
+
+        if trailing_comma || num_args > 1 {
+            add_op(self, block, Op::Tuple(num_args));
         }
-
         expect!(self, Token::RightParen, "Expected ')' after tuple");
-        add_op(self, block, Op::Tuple(num_args));
-    }
-
-    fn grouping(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftParen, "Expected '(' around expression");
-
-        self.expression(block);
-
-        expect!(self, Token::RightParen, "Expected ')' around expression");
     }
 
     fn index(&mut self, block: &mut Block) {

@@ -1,7 +1,0 @@
-start :: fn {
-    a := (,)
-    a
-}
-
-//TODO(gu) See #100
-// errors: [ErrorKind::SyntaxError(_, _), ErrorKind::SyntaxError(_, _), ErrorKind::SyntaxError(_, _)]
