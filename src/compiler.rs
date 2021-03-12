@@ -1720,11 +1720,6 @@ impl Compiler {
                 add_op(self, block, Op::Yield);
             }
 
-            (Token::Identifier(_), Token::ColonColon, Token::Blob, ..) => {
-                self.blob_statement(block);
-            }
-
-
             (Token::Identifier(name), Token::ColonEqual, ..) => {
                 self.eat();
                 self.eat();
