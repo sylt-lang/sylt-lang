@@ -44,72 +44,20 @@ macro_rules! expect {
     };
 }
 
-// NOTE(ed): This can cause some strange bugs. It would be nice if we could
-// remove this function, but to do that we need to rewrite some code. Like
-// tuples and fields. Might be worth it tough.
-macro_rules! parse_branch {
-    ($compiler:expr, $block:expr, [ $( $call:expr ),* ]) => {
+macro_rules! rest_of_line_contains {
+    ($compiler:expr, $head:pat $( | $tail:pat )* ) => {
         {
-            let block_length = $block.ops.len();
-            let token_length = $compiler.current_token;
-            let num_errors = $compiler.errors.len();
-            let mut stored_errors = Vec::new();
-
-            // Loop for early return on success.
-            let success = loop {
-                // We risk getting a lot of errors if we are in an invalid state
-                // when we start the parse.
-                if $compiler.panic {
-                    break false;
-                }
-                $(
-                    $call;
-                    if !$compiler.panic {
-                        break true;
-                    }
-                    $compiler.panic = false;
-                    $compiler.current_token = token_length;
-                    let thrown_errors = $compiler.errors.len() - num_errors - 1;
-                    stored_errors.extend($compiler.errors.split_off(thrown_errors));
-                    $block.ops.truncate(block_length);
-                )*
-                break false;
-            };
-
-            if !success {
-                $compiler.errors.extend(stored_errors);
+            let mut i = 0;
+            while match $compiler.peek_at(i) {
+                Token::Newline | Token::EOF => false,
+                $head $( | $tail )* => false,
+                _ => true,
+            } {
+                i += 1;
             }
-            success
+            matches!($compiler.peek_at(i), $head $( | $tail )*)
         }
-
-    };
-
-    ($compiler:expr, $block:expr, $call:expr) => {
-        {
-            let block_length = $block.ops.len();
-            let token_length = $compiler.current_token;
-            let num_errors = $compiler.errors.len();
-            let mut stored_errors = Vec::new();
-            // Closures for early return on success.
-            loop {
-                // We risk getting a lot of errors if we are in an invalid state
-                // when we start the parse.
-                if $compiler.panic {
-                    break false;
-                }
-                $call;
-                if !$compiler.panic {
-                    break true;
-                }
-                $compiler.panic = false;
-                $compiler.current_token = token_length;
-                let thrown_errors = $compiler.errors.len() - num_errors - 1;
-                stored_errors.extend($compiler.errors.split_off(thrown_errors));
-                $block.ops.truncate(block_length);
-                break false;
-            }
-        }
-    };
+    }
 }
 
 macro_rules! push_frame {
@@ -1553,7 +1501,16 @@ impl Compiler {
         if let Some(_) = self.find_namespace(&name) {
             self.expression(block);
         } else {
-            parse_branch!(self, block, [self.blob_field(block), self.expression(block)]);
+            if rest_of_line_contains!(self,
+                  Token::Equal
+                | Token::PlusEqual
+                | Token::MinusEqual
+                | Token::StarEqual
+                | Token::SlashEqual) {
+                self.blob_field(block)
+            } else {
+                self.expression(block)
+            }
         }
     }
 
