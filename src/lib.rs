@@ -1101,7 +1101,11 @@ mod tests {
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
                 args.print_bytecode = $print;
-                let res = $crate::run_file(args, Vec::new());
+                let res = $crate::run_file(args, sylt_macro::link!(
+                    crate::dbg as dbg,
+                    crate::push as push,
+                    crate::len as len,
+                ));
                 $crate::assert_errs!(res, $errs);
             }
         };
