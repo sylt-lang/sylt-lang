@@ -9,3 +9,4 @@ start :: fn {
     push(c, 0.1)
 }
 
+// errors: [ErrorKind::TypeMismatch(Type::Int, Type::String), ErrorKind::TypeMismatch(Type::List(_), Type::List(_)), ErrorKind::TypeMismatch(_, Type::Float)]
