@@ -15,8 +15,11 @@ macro_rules! error {
     ( $thing:expr, $kind:expr) => {
         return Err($thing.error($kind, None));
     };
-    ( $thing:expr, $kind:expr, $msg:expr) => {
-        return Err($thing.error($kind, Some(String::from($msg))));
+    ( $thing:expr, $kind:expr, $( $msg:expr ),*) => {
+        {
+            let msg = Some(format!($( $msg ),*).into());
+            return Err($thing.error($kind, msg));
+        }
     };
 }
 
@@ -283,7 +286,7 @@ impl VM {
                     },
                     value => error!(self,
                         ErrorKind::ValueError(op, vec![value.clone()]),
-                        format!("Not a function {:?}.", value)),
+                        "Not a function {:?}.", value),
                 };
                 self.constants[slot] = constant;
             }
@@ -561,8 +564,8 @@ impl VM {
                             if block.borrow().needs_linking() {
                                 error!(self,
                                        ErrorKind::InvalidProgram,
-                                       format!("Calling function '{}' before all captured variables are declared.",
-                                               block.borrow().name));
+                                       "Calling function '{}' before all captured variables are declared.",
+                                               block.borrow().name);
                             }
 
                             let mut types = Vec::new();
@@ -716,7 +719,7 @@ impl VM {
                     value => {
                         error!(self,
                             ErrorKind::TypeError(op, vec![Type::from(&value)]),
-                            format!("Cannot link non-function {:?}.", value));
+                            "Cannot link non-function {:?}.", value);
                     }
                 };
             }
