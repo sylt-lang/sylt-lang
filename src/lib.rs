@@ -158,6 +158,7 @@ impl PartialEq for Type {
                 a.iter().zip(b.iter()).all(|(a, b)| a == b)
             }
             (Type::Union(a), b) | (b, Type::Union(a)) => {
+                // TODO(ed): This might be too lose, since b might be a union.
                 a.iter().any(|x| x == b)
             }
             (Type::List(a), Type::List(b)) => a == b,
@@ -249,6 +250,27 @@ impl From<Type> for Value {
     }
 }
 
+impl Type {
+    pub fn fits(&self, other: &Self) -> bool {
+        match (self, other) {
+            (_, Type::Unknown) => {
+                true
+            }
+            (Type::List(a), Type::List(b)) => {
+                a.fits(b)
+            },
+            (Type::Union(a), Type::Union(b)) => {
+                a.iter().all(|x| b.contains(x))
+            },
+            (_, Type::Union(_)) => {
+                false
+            },
+            (a, b) => {
+                a == b
+            },
+        }
+    }
+}
 
 #[derive(Clone)]
 pub enum Value {
@@ -1079,7 +1101,11 @@ mod tests {
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
                 args.print_bytecode = $print;
-                let res = $crate::run_file(args, Vec::new());
+                let res = $crate::run_file(args, sylt_macro::link!(
+                    crate::dbg as dbg,
+                    crate::push as push,
+                    crate::len as len,
+                ));
                 $crate::assert_errs!(res, $errs);
             }
         };

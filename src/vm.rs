@@ -689,16 +689,13 @@ impl VM {
                 match (ty, top_type) {
                     (Type::Unknown, top_type)
                         if top_type != Type::Unknown => {}
-                    (a, b) if a != &b => {
-                        error!(self, ErrorKind::TypeMismatch(a.clone(), b.clone()),
-                               "Cannot assign mismatching types.");
-                    }
-                    (a, b) if a == &b => {
+                    (a, b) if a.fits(&b) => {
                         let last = self.stack.len() - 1;
                         self.stack[last] = Value::from(a);
                     }
-                    _ => {
-                        self.crash_and_burn();
+                    (a, b) => {
+                        error!(self, ErrorKind::TypeMismatch(a.clone(), b.clone()),
+                               "Cannot assign mismatching types.");
                     }
                 }
             }
