@@ -165,7 +165,7 @@ macro_rules! push_scope {
                 errors.push((
                     e,
                     var.line,
-                    format!("Usage of undefined value: '{}'.", var.name),)
+                    format!("Unused value: '{}'.", var.name),)
                 );
             }
             if var.captured {
