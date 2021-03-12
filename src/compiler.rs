@@ -26,16 +26,20 @@ macro_rules! nextable_enum {
 }
 
 macro_rules! error {
-    ($thing:expr, $msg:expr) => {
-        $thing.error(ErrorKind::SyntaxError($thing.line(), $thing.peek()), Some(String::from($msg)))
+    ($thing:expr, $( $msg:expr ),* ) => {
+        {
+            let msg = Some(format!($( $msg ),*).into());
+            let err = ErrorKind::SyntaxError($thing.line(), $thing.peek());
+            $thing.error(err, msg);
+        }
     };
 }
 
 macro_rules! expect {
-    ($thing:expr, $exp_head:pat $( | $exp_rest:pat ),* , $msg:expr) => {
+    ($thing:expr, $exp_head:pat $( | $exp_rest:pat ),* , $( $msg:expr ),*) => {
         match $thing.peek() {
             $exp_head $( | $exp_rest )* => { $thing.eat(); true },
-            _ => { error!($thing, $msg); false } ,
+            _ => { error!($thing, $( $msg ),*); false } ,
         }
     };
 }
@@ -421,7 +425,7 @@ impl Compiler {
                 v.insert(Name::Namespace(path));
             }
             Entry::Occupied(_) => {
-                error!(self, format!("Namespace {} already present.", name));
+                error!(self, "Namespace {} already present.", name);
             }
         }
     }
@@ -881,7 +885,7 @@ impl Compiler {
                     Name::Slot(i, _) => { return *i; },
                     Name::Unknown(i, _) => { return *i; },
                     _ => {
-                        error!(self, format!("Tried to find constant '{}' but it was a namespace.", name));
+                        error!(self, "Tried to find constant '{}' but it was a namespace.", name);
                         return 0;
                     }
                 }
@@ -902,7 +906,7 @@ impl Compiler {
                 let slot = if let Name::Unknown(slot, _) = entry.get() {
                     *slot
                 } else {
-                    error!(self, format!("Constant named \"{}\" already has a value.", name));
+                    error!(self, "Constant named \"{}\" already has a value.", name);
                     return 0;
                 };
                 entry.insert(Name::Slot(slot, line));
@@ -921,7 +925,7 @@ impl Compiler {
         let slot = self.add_constant(Value::Unknown);
         match self.names_mut().entry(name.clone()) {
             Entry::Occupied(_) => {
-                error!(self, format!("Constant named \"{}\" already has a value.", name));
+                error!(self, "Constant named \"{}\" already has a value.", name);
                 0
             },
             Entry::Vacant(entry) => {
@@ -1189,8 +1193,7 @@ impl Compiler {
 
         if let Some(res) = frame.find_local(&var.name).or(frame.find_upvalue(&var.name)) {
             if res.scope == frame.scope {
-                error!(self, format!("Multiple definitions of '{}' in this block.",
-                                     res.name));
+                error!(self, "Multiple definitions of '{}' in this block.", res.name);
                 return Err(());
             }
         }
@@ -1267,7 +1270,7 @@ impl Compiler {
         let name = match self.eat() {
             Token::Identifier(name) => name,
             _ => {
-                error!(self, format!("Expected identifier in assignment"));
+                error!(self, "Expected identifier in assignment");
                 return;
             }
         };
@@ -1281,7 +1284,7 @@ impl Compiler {
             Token::SlashEqual => Some(Op::Div),
 
             _ => {
-                error!(self, format!("Expected '=' in assignment"));
+                error!(self, "Expected '=' in assignment");
                 return;
             }
         };
@@ -1289,7 +1292,7 @@ impl Compiler {
         if let Some(var) = self.find_variable(&name) {
             if !var.mutable {
                 // TODO(ed): Maybe a better error than "SyntaxError".
-                error!(self, format!("Cannot assign to constant '{}'", var.name));
+                error!(self, "Cannot assign to constant '{}'", var.name);
             }
             if let Some(op) = op {
                 if var.upvalue {
@@ -1309,12 +1312,12 @@ impl Compiler {
                 add_op(self, block, Op::AssignLocal(var.slot));
             }
         } else {
-            error!(self, format!("Using undefined variable {}.", name));
+            error!(self, "Using undefined variable {}.", name);
         }
     }
 
     fn scope(&mut self, block: &mut Block) {
-        if !expect!(self, Token::LeftBrace, "Expected '{' at start of block.") {
+        if !expect!(self, Token::LeftBrace, "Expected '{{' at start of block.") {
             return;
         }
 
@@ -1329,7 +1332,7 @@ impl Compiler {
             }
         });
 
-        expect!(self, Token::RightBrace, "Expected '}' at end of block.");
+        expect!(self, Token::RightBrace, "Expected '}}' at end of block.");
     }
 
     fn if_statment(&mut self, block: &mut Block) {
@@ -1347,7 +1350,7 @@ impl Compiler {
             match self.peek() {
                 Token::If => self.if_statment(block),
                 Token::LeftBrace => self.scope(block),
-                _ => error!(self, "Epected 'if' or '{' after else."),
+                _ => error!(self, "Epected 'if' or '{{' after else."),
             }
             block.patch(Op::Jmp(block.curr()), else_jmp);
         } else {
@@ -1443,7 +1446,7 @@ impl Compiler {
                                     self.eat();
                                 }
                             } else {
-                                error!(self, format!("Function type signature contains non-type {:?}.", self.peek()));
+                                error!(self, "Function type signature contains non-type {:?}.", self.peek());
                                 return Err(());
                             }
                         }
@@ -1455,7 +1458,7 @@ impl Compiler {
                             break Type::Void;
                         }
                         token => {
-                            error!(self, format!("Function type signature contains non-type {:?}.", token));
+                            error!(self, "Function type signature contains non-type {:?}.", token);
                             return Err(());
                         }
                     }
@@ -1515,7 +1518,7 @@ impl Compiler {
             return;
         };
 
-        expect!(self, Token::LeftBrace, "Expected 'blob' body. AKA '{'.");
+        expect!(self, Token::LeftBrace, "Expected 'blob' body. AKA '{{'.");
 
         let mut blob = Blob::new(self.new_blob_id(), &name);
         loop {
@@ -1539,11 +1542,11 @@ impl Compiler {
             };
 
             if let Err(_) = blob.add_field(&name, ty) {
-                error!(self, format!("A field named '{}' is defined twice for '{}'", name, blob.name));
+                error!(self, "A field named '{}' is defined twice for '{}'", name, blob.name);
             }
         }
 
-        expect!(self, Token::RightBrace, "Expected '}' after 'blob' body. AKA '}'.");
+        expect!(self, Token::RightBrace, "Expected '}}' after 'blob' body.");
 
         let blob = Value::Blob(Rc::new(blob));
         self.named_constant(name, blob);
@@ -1625,7 +1628,7 @@ impl Compiler {
                 }
             }
         } else {
-            error!(self, format!("Cannot find variable '{}'.", name));
+            error!(self, "Cannot find variable '{}'.", name);
             return;
         }
     }
@@ -1656,14 +1659,14 @@ impl Compiler {
                     expect!(self, Token::Equal, "Expected assignment.");
                     self.definition_statement(&name, typ, block);
                 } else {
-                    error!(self, format!("Expected type found '{:?}'.", self.peek()));
+                    error!(self, "Expected type found '{:?}'.", self.peek());
                 }
             }
 
             (Token::Newline, ..) => {}
 
             (a, b, c, d) => {
-                error!(self, format!("Unknown outer token sequence: {:?} {:?} {:?} {:?}.", a, b, c, d))
+                error!(self, "Unknown outer token sequence: {:?} {:?} {:?} {:?}.", a, b, c, d)
             }
         }
     }
@@ -1699,7 +1702,7 @@ impl Compiler {
                     expect!(self, Token::Equal, "Expected assignment.");
                     self.definition_statement(&name, typ, block);
                 } else {
-                    error!(self, format!("Expected type found '{:?}'.", self.peek()));
+                    error!(self, "Expected type found '{:?}'.", self.peek());
                 }
             }
 
@@ -1818,7 +1821,7 @@ impl Compiler {
                         let var = Variable::new(&name, is_mut, ty);
                         let _ = self.define(var).unwrap();
                     } else {
-                        error!(self, format!("Failed to parse type global '{}'.", name));
+                        error!(self, "Failed to parse type global '{}'.", name);
                     }
                 }
 
@@ -1839,8 +1842,7 @@ impl Compiler {
 
                 (a, b, c) => {
                     section.faulty = true;
-                    let msg = format!("Unknown outer token sequence: {:?} {:?} {:?}. Expected 'use', function, blob or variable.", a, b, c);
-                    error!(self, msg);
+                    error!(self, "Unknown outer token sequence: {:?} {:?} {:?}. Expected 'use', function, blob or variable.", a, b, c);
                 }
             }
         }
