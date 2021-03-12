@@ -1518,13 +1518,14 @@ impl Compiler {
     }
 
     fn blob_statement(&mut self, _block: &mut Block) {
-        expect!(self, Token::Blob, "Expected blob when declaring a blob");
         let name = if let Token::Identifier(name) = self.eat() {
             name
         } else {
             error!(self, "Expected identifier after 'blob'");
             return;
         };
+        expect!(self, Token::ColonColon, "Expected '::' when declaring a blob");
+        expect!(self, Token::Blob, "Expected blob when declaring a blob");
 
         expect!(self, Token::LeftBrace, "Expected 'blob' body. AKA '{{'");
 
@@ -1650,14 +1651,14 @@ impl Compiler {
                 self.definition_statement(&name, Type::Unknown, block);
             },
 
+            (Token::Identifier(_), Token::ColonColon, Token::Blob, ..) => {
+                self.blob_statement(block);
+            },
+
             (Token::Identifier(name), Token::ColonColon, ..) => {
                 self.eat();
                 self.eat();
                 self.constant_statement(&name, Type::Unknown, block);
-            },
-
-            (Token::Blob, Token::Identifier(_), ..) => {
-                self.blob_statement(block);
             },
 
             (Token::Identifier(name), Token::Colon, ..) => {
@@ -1719,6 +1720,11 @@ impl Compiler {
                 add_op(self, block, Op::Yield);
             }
 
+            (Token::Identifier(_), Token::ColonColon, Token::Blob, ..) => {
+                self.blob_statement(block);
+            }
+
+
             (Token::Identifier(name), Token::ColonEqual, ..) => {
                 self.eat();
                 self.eat();
@@ -1729,10 +1735,6 @@ impl Compiler {
                 self.eat();
                 self.eat();
                 self.constant_statement(&name, Type::Unknown, block);
-            }
-
-            (Token::Blob, Token::Identifier(_), ..) => {
-                self.blob_statement(block);
             }
 
             (Token::If, ..) => {
@@ -1813,8 +1815,9 @@ impl Compiler {
                     self.forward_constant(name);
                 }
 
-                (Some((Token::Blob, _)),
-                 Some((Token::Identifier(name), _)), ..) => {
+                (Some((Token::Identifier(name), _)),
+                 Some((Token::ColonColon, _)),
+                 Some((Token::Blob, _))) => {
                     let name = name.to_string();
                     self.forward_constant(name);
                 }
