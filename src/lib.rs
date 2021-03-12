@@ -78,9 +78,6 @@ impl Default for Args {
 pub type RustFunction = fn(&[Value], bool) -> Result<Value, ErrorKind>;
 
 #[derive(Debug, Clone)]
-// TODO(ed): Our type comparison is wrong, we need something that is
-// asymetrical when comparing the types. Currently we just choose the
-// vauger of the types.
 pub enum Type {
     Void,
     Unknown,
@@ -158,7 +155,6 @@ impl PartialEq for Type {
                 a.iter().zip(b.iter()).all(|(a, b)| a == b)
             }
             (Type::Union(a), b) | (b, Type::Union(a)) => {
-                // TODO(ed): This might be too lose, since b might be a union.
                 a.iter().any(|x| x == b)
             }
             (Type::List(a), Type::List(b)) => a == b,
