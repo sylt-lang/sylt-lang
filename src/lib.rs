@@ -182,7 +182,6 @@ impl From<&Value> for Type {
                 let v: &RefCell<_> = v.borrow();
                 let v: &Vec<_> = &v.borrow();
                 let set: HashSet<_> = v.iter().map(|x| Type::from(x)).collect();
-                println!("{:?} ?> {:?}", v, set);
                 let t = match set.len() {
                     0 => Type::Unknown,
                     1 => set.into_iter().next().unwrap(),

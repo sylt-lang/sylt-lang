@@ -4,6 +4,11 @@ use sylt::{run_file, Args};
 
 fn main() -> Result<(), String> {
     let args = parse_args();
+    if args.file.is_none() {
+    let errs = match run_file(args, sylt_macro::link!(
+        return Err("No file to run".to_string());
+        sylt::dbg as dbg,
+    }
     let errs = match run_file(args, sylt_macro::link!(
         sylt::dbg as dbg,
         sylt::push as push,
@@ -36,4 +41,3 @@ fn parse_args() -> Args {
     };
     args
 }
-
