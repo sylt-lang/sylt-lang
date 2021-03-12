@@ -972,9 +972,7 @@ impl Compiler {
                             break;
                         }
                         _ => {
-                            if !parse_branch!(self, block, self.expression(block)) {
-                                break;
-                            }
+                            self.expression(block);
                             arity += 1;
                             if matches!(self.peek(), Token::Comma) {
                                 self.eat();
