@@ -1209,8 +1209,12 @@ impl Compiler {
     fn definition_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
         if self.frames().len() <= 1 {
             // Global
-            let var = self.frame().find_outer(name)
-                .expect(&format!("Couldn't find variable '{}' during prepass", name));
+            let var = self.frame().find_outer(name);
+            if var.is_none() {
+                error!(self, "Couldn't find variable '{}' during prepass", name);
+                return;
+            }
+            let var = var.unwrap();
             assert!(var.mutable);
 
             self.expression(block);
@@ -1248,8 +1252,12 @@ impl Compiler {
 
         if self.frames().len() <= 1 {
             // Global
-            let var = self.frame().find_outer(name)
-                .expect(&format!("Couldn't find constant '{}' during prepass", name));
+            let var = self.frame().find_outer(name);
+            if var.is_none() {
+                error!(self, "Couldn't find constant '{}' during prepass", name);
+                return;
+            }
+            let var = var.unwrap();
             assert!(!var.mutable);
 
             self.expression(block);
