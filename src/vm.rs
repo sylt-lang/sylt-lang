@@ -740,11 +740,20 @@ impl VM {
             }
 
             Op::Index => {
-                // We don't have any information about the slot and the indexable might contain
-                // mixed types.
-                self.stack.pop().unwrap();
-                self.stack.pop().unwrap();
-                self.stack.push(Value::Unknown);
+                let (a, b) = self.poppop();
+                match (Type::from(a), Type::from(b)) {
+                    (Type::List(a), b) if b.fits(&Type::Int) => {
+                        self.push(Value::from(a.as_ref()));
+                    }
+                    (Type::Tuple(a), b) if b.fits(&Type::Int) => {
+                        self.push(
+                            Value::Union(a.iter().map(|x| Value::from(x)).collect())
+                        );
+                    }
+                    _ => {
+                        self.push(Value::Nil);
+                    }
+                }
             }
 
             Op::Call(num_args) => {
