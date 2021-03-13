@@ -637,7 +637,7 @@ impl Compiler {
     }
 
     fn grouping_or_tuple(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftParen, "Expected '(' at for grouping or tuple.");
+        expect!(self, Token::LeftParen, "Expected '(' for grouping or tuple.");
 
         let mut num_args = 0;
         let trailing_comma = loop {
