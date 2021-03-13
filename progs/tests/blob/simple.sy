@@ -1,10 +1,10 @@
+A :: blob {
+    a: int
+}
+
 start :: fn {
 
     a := A()
     a
-
-    blob A {
-        a: int
-    }
 
 }

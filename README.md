@@ -1,12 +1,14 @@
 # Sylt-lang
 
+![The Sylt mascot](res/sylt.png)
+
 Sylt is a statically checked and dynamically typed reference counted programming
 language made for game jams.
 
 ## Why does this exist? Why use this instead of language X?
 
-Pfft! Why not?
-    
+Pfft! We objectively have the best logo.
+
 ## Getting started
 
 Sylt is written entirely in Rust. There are two main ways of using it.
@@ -29,4 +31,4 @@ A language that has some form of static typechecking, is easy and fast to work
 in. Performance should be good enough that you don't really have to worry about
 it.
 
-Dreams also exist of automatically updating the game when files are changed.
+Dreams exist of automatically recompiling and updating the game while the game is running.

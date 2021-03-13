@@ -1,3 +1,11 @@
+A :: blob {
+    c: C
+}
+
+C :: blob { }
+
+B :: blob { }
+
 start :: fn {
     a := A()
     b := B()
@@ -8,10 +16,4 @@ start :: fn {
     b
     c
     b2
-
-    blob A {
-        c: C
-    }
-    blob C { }
-    blob B { }
 }
