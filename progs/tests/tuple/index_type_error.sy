@@ -10,4 +10,4 @@ start :: fn {
     c[0] == "str"
 }
 
-// errors: [ErrorKind::TypeMismatch(_, _), ErrorKind::TypeMismatch(_, _), ErrorKind::TypeMismatch(_, _)]
+// errors: [ErrorKind::TypeError(_, _), ErrorKind::TypeError(_, _), ErrorKind::TypeError(_, _)]
