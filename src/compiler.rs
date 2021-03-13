@@ -648,15 +648,6 @@ impl Compiler {
                 Token::Newline => {
                     self.eat();
                 }
-                Token::Comma => {
-                    self.eat();
-                    if matches!(self.peek(), Token::RightParen) {
-                        break true;
-                    } else {
-                        error!(self, "Tuples must begin with an element or ')'");
-                        return;
-                    }
-                }
                 _ => {
                     self.expression(block);
                     num_args += 1;
