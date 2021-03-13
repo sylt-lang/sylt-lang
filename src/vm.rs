@@ -15,8 +15,11 @@ macro_rules! error {
     ( $thing:expr, $kind:expr) => {
         return Err($thing.error($kind, None));
     };
-    ( $thing:expr, $kind:expr, $msg:expr) => {
-        return Err($thing.error($kind, Some(String::from($msg))));
+    ( $thing:expr, $kind:expr, $( $msg:expr ),*) => {
+        {
+            let msg = Some(format!($( $msg ),*).into());
+            return Err($thing.error($kind, msg));
+        }
     };
 }
 
@@ -288,7 +291,7 @@ impl VM {
                     },
                     value => error!(self,
                         ErrorKind::ValueError(op, vec![value.clone()]),
-                        format!("Not a function {:?}.", value)),
+                        "Not a function {:?}", value),
                 };
                 self.constants[slot] = constant;
             }
@@ -468,7 +471,7 @@ impl VM {
                         let extern_func = self.extern_functions[slot];
                         let res = match extern_func(&self.stack[new_base+1..], false) {
                             Ok(value) => value,
-                            Err(ek) => error!(self, ek, "Failed in external function."),
+                            Err(ek) => error!(self, ek, "Failed in external function"),
                         };
                         self.stack.truncate(new_base);
                         self.push(res);
@@ -577,8 +580,8 @@ impl VM {
                             if block.borrow().needs_linking() {
                                 error!(self,
                                        ErrorKind::InvalidProgram,
-                                       format!("Calling function '{}' before all captured variables are declared.",
-                                               block.borrow().name));
+                                       "Calling function '{}' before all captured variables are declared",
+                                               block.borrow().name);
                             }
 
                             let mut types = Vec::new();
@@ -633,7 +636,7 @@ impl VM {
                     let expected = Type::from(&value);
                     if ty != &expected {
                         error!(self, ErrorKind::TypeMismatch(expected, ty.clone()),
-                               "Types of field and variable do not match.");
+                               "Types of field and variable do not match");
                     }
                 } else {
                     error!(self, ErrorKind::UnknownField(inst, field.clone()));
@@ -654,7 +657,7 @@ impl VM {
                 let up = self.pop().into();
                 if var != up {
                     error!(self, ErrorKind::TypeMismatch(up, var),
-                           "Captured varibles type doesn't match upvalue.");
+                           "Captured varibles type doesn't match upvalue");
                 }
             }
 
@@ -664,7 +667,7 @@ impl VM {
                 let other = Type::from(self.pop());
                 if curr != other {
                     error!(self, ErrorKind::TypeMismatch(curr, other),
-                           "Cannot assign to different type.");
+                           "Cannot assign to different type");
                 }
             }
 
@@ -675,7 +678,7 @@ impl VM {
                 if Type::from(&a) != *ret {
 
                     error!(self, ErrorKind::TypeMismatch(ret.clone(), a.into()),
-                           "Value does not match return type.");
+                           "Value does not match return type");
                 }
             }
 
@@ -695,7 +698,7 @@ impl VM {
                     }
                     (a, b) => {
                         error!(self, ErrorKind::TypeMismatch(a.clone(), b.clone()),
-                               "Cannot assign mismatching types.");
+                               "Cannot assign mismatching types");
                     }
                 }
             }
@@ -731,7 +734,7 @@ impl VM {
                     value => {
                         error!(self,
                             ErrorKind::TypeError(op, vec![Type::from(&value)]),
-                            format!("Cannot link non-function {:?}.", value));
+                            "Cannot link non-function {:?}", value);
                     }
                 };
             }

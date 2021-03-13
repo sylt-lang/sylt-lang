@@ -26,16 +26,20 @@ macro_rules! nextable_enum {
 }
 
 macro_rules! error {
-    ($thing:expr, $msg:expr) => {
-        $thing.error(ErrorKind::SyntaxError($thing.line(), $thing.peek()), Some(String::from($msg)))
+    ($thing:expr, $( $msg:expr ),* ) => {
+        {
+            let msg = Some(format!($( $msg ),*).into());
+            let err = ErrorKind::SyntaxError($thing.line(), $thing.peek());
+            $thing.error(err, msg);
+        }
     };
 }
 
 macro_rules! expect {
-    ($thing:expr, $exp_head:pat $( | $exp_rest:pat ),* , $msg:expr) => {
+    ($thing:expr, $exp_head:pat $( | $exp_rest:pat ),* , $( $msg:expr ),*) => {
         match $thing.peek() {
             $exp_head $( | $exp_rest )* => { $thing.eat(); true },
-            _ => { error!($thing, $msg); false } ,
+            _ => { error!($thing, $( $msg ),*); false } ,
         }
     };
 }
@@ -130,7 +134,7 @@ macro_rules! push_frame {
                     $compiler.error_on_line(
                         e,
                         var.line,
-                        Some(format!("Unused value '{}'.", var.name))
+                        Some(format!("Unused value '{}'", var.name))
                     );
                 }
                 $compiler.panic = false;
@@ -161,7 +165,7 @@ macro_rules! push_scope {
                 errors.push((
                     e,
                     var.line,
-                    format!("Usage of undefined value: '{}'.", var.name),)
+                    format!("Unused value: '{}'", var.name),)
                 );
             }
             if var.captured {
@@ -421,7 +425,7 @@ impl Compiler {
                 v.insert(Name::Namespace(path));
             }
             Entry::Occupied(_) => {
-                error!(self, format!("Namespace {} already present.", name));
+                error!(self, "Namespace {} already present", name);
             }
         }
     }
@@ -679,7 +683,7 @@ impl Compiler {
             Token::Bool(b) => { Value::Bool(b) }
             Token::Nil => { Value::Nil }
             Token::String(s) => { Value::String(Rc::from(s)) }
-            _ => { error!(self, "Cannot parse value."); Value::Bool(false) }
+            _ => { error!(self, "Cannot parse value"); Value::Bool(false) }
         };
         let constant = self.add_constant(value);
         add_op(self, block, Op::Constant(constant));
@@ -728,7 +732,7 @@ impl Compiler {
     }
 
     fn tuple(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftParen, "Expected '(' at start of tuple.");
+        expect!(self, Token::LeftParen, "Expected '(' at start of tuple");
 
         let mut num_args = 0;
         let trailing_comma = loop {
@@ -744,7 +748,7 @@ impl Compiler {
                     // ignored and the statement is tried as a grouping instead, even though we
                     // _know_ that this can't be parsed as a grouping either.
                     // Tracked in #100.
-                    error!(self, "Tuples must begin with an element or ')'.");
+                    error!(self, "Tuples must begin with an element or ')'");
                     return;
                 }
                 _ => {
@@ -759,7 +763,7 @@ impl Compiler {
                         },
                         Token::RightParen => {},
                         _ => {
-                            error!(self, "Expected ',' or ')' after tuple element.");
+                            error!(self, "Expected ',' or ')' after tuple element");
                             return;
                         },
                     }
@@ -767,29 +771,29 @@ impl Compiler {
             }
         };
         if num_args == 1 && !trailing_comma {
-            error!(self, "A tuple with 1 element must end with a trailing comma.");
+            error!(self, "A tuple with 1 element must end with a trailing comma");
             return;
         }
 
-        expect!(self, Token::RightParen, "Expected ')' after tuple.");
+        expect!(self, Token::RightParen, "Expected ')' after tuple");
         add_op(self, block, Op::Tuple(num_args));
     }
 
     fn grouping(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftParen, "Expected '(' around expression.");
+        expect!(self, Token::LeftParen, "Expected '(' around expression");
 
         self.expression(block);
 
-        expect!(self, Token::RightParen, "Expected ')' around expression.");
+        expect!(self, Token::RightParen, "Expected ')' around expression");
     }
 
     fn index(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftBracket, "Expected '[' around index.");
+        expect!(self, Token::LeftBracket, "Expected '[' around index");
 
         self.expression(block);
         add_op(self, block, Op::Index);
 
-        expect!(self, Token::RightBracket, "Expected ']' around index.");
+        expect!(self, Token::RightBracket, "Expected ']' around index");
     }
 
     fn unary(&mut self, block: &mut Block) {
@@ -862,7 +866,7 @@ impl Compiler {
 
     fn parse_precedence(&mut self, block: &mut Block, precedence: Prec) {
         if !self.prefix(self.peek(), block) {
-            error!(self, "Invalid expression.");
+            error!(self, "Invalid expression");
         }
 
         while precedence <= self.precedence(self.peek()) {
@@ -920,7 +924,7 @@ impl Compiler {
                     Name::Slot(i, _) => { return *i; },
                     Name::Unknown(i, _) => { return *i; },
                     _ => {
-                        error!(self, format!("Tried to find constant '{}' but it was a namespace.", name));
+                        error!(self, "Tried to find constant '{}' but it was a namespace", name);
                         return 0;
                     }
                 }
@@ -941,7 +945,7 @@ impl Compiler {
                 let slot = if let Name::Unknown(slot, _) = entry.get() {
                     *slot
                 } else {
-                    error!(self, format!("Constant named \"{}\" already has a value.", name));
+                    error!(self, "Constant named \"{}\" already has a value", name);
                     return 0;
                 };
                 entry.insert(Name::Slot(slot, line));
@@ -960,7 +964,7 @@ impl Compiler {
         let slot = self.add_constant(Value::Unknown);
         match self.names_mut().entry(name.clone()) {
             Entry::Occupied(_) => {
-                error!(self, format!("Constant named \"{}\" already has a value.", name));
+                error!(self, "Constant named \"{}\" already has a value", name);
                 0
             },
             Entry::Vacant(entry) => {
@@ -987,7 +991,7 @@ impl Compiler {
                 loop {
                     match self.peek() {
                         Token::EOF => {
-                            error!(self, "Unexpected EOF in function call.");
+                            error!(self, "Unexpected EOF in function call");
                             break;
                         }
                         Token::RightParen => {
@@ -998,7 +1002,7 @@ impl Compiler {
                             self.expression(block);
                             arity += 1;
                             if !matches!(self.peek(), Token::RightParen) {
-                                expect!(self, Token::Comma, "Expected ',' after argument.");
+                                expect!(self, Token::Comma, "Expected ',' after argument");
                             }
                         }
                     }
@@ -1013,7 +1017,7 @@ impl Compiler {
                 loop {
                     match self.peek() {
                         Token::EOF => {
-                            error!(self, "Unexpected EOF in function call.");
+                            error!(self, "Unexpected EOF in function call");
                             break;
                         }
                         Token::Newline => {
@@ -1036,7 +1040,7 @@ impl Compiler {
             }
 
             _ => {
-                error!(self, "Invalid function call. Expected '!' or '('.");
+                error!(self, "Invalid function call. Expected '!' or '('");
             }
         }
 
@@ -1045,7 +1049,7 @@ impl Compiler {
 
     // TODO(ed): de-complexify
     fn function(&mut self, block: &mut Block, in_name: Option<&str>) {
-        expect!(self, Token::Fn, "Expected 'fn' at start of function.");
+        expect!(self, Token::Fn, "Expected 'fn' at start of function");
 
         let name = if let Some(name) = in_name {
             String::from(name)
@@ -1066,7 +1070,7 @@ impl Compiler {
                 match self.peek() {
                     Token::Identifier(name) => {
                         self.eat();
-                        expect!(self, Token::Colon, "Expected ':' after parameter name.");
+                        expect!(self, Token::Colon, "Expected ':' after parameter name");
                         if let Ok(typ) = self.parse_type() {
                             args.push(typ.clone());
                             let mut var = Variable::new(&name, true, typ);
@@ -1075,10 +1079,10 @@ impl Compiler {
                                 self.stack_mut()[slot].active = true;
                             }
                         } else {
-                            error!(self, "Failed to parse parameter type.");
+                            error!(self, "Failed to parse parameter type");
                         }
                         if !matches!(self.peek(), Token::Arrow | Token::LeftBrace) {
-                            expect!(self, Token::Comma, "Expected ',' after parameter.");
+                            expect!(self, Token::Comma, "Expected ',' after parameter");
                         }
                     }
                     Token::LeftBrace => {
@@ -1089,12 +1093,12 @@ impl Compiler {
                         if let Ok(typ) = self.parse_type() {
                             return_type = typ;
                         } else {
-                            error!(self, "Failed to parse return type.");
+                            error!(self, "Failed to parse return type");
                         }
                         break;
                     }
                     _ => {
-                        error!(self, "Expected '->' or more paramters in function definition.");
+                        error!(self, "Expected '->' or more paramters in function definition");
                         break;
                     }
                 }
@@ -1152,7 +1156,7 @@ impl Compiler {
             let mut namespace = self.find_namespace(&name).unwrap().clone();
             loop {
                 if self.eat() != Token::Dot {
-                    error!(self, "Expect '.' after namespace.");
+                    error!(self, "Expect '.' after namespace");
                     return;
                 }
                 if let Token::Identifier(field) = self.eat() {
@@ -1169,11 +1173,11 @@ impl Compiler {
                                 .clone();
                         }
                         _ => {
-                            error!(self, "Invalid namespace field.");
+                            error!(self, "Invalid namespace field");
                         }
                     }
                 } else {
-                    error!(self, "Expected fieldname after '.'.");
+                    error!(self, "Expected fieldname after '.'");
                 }
             }
         }
@@ -1204,7 +1208,7 @@ impl Compiler {
                             let string = self.intern_string(String::from(field));
                             add_op(self, block, Op::Get(string));
                         } else {
-                            error!(self, "Expected fieldname after '.'.");
+                            error!(self, "Expected fieldname after '.'");
                             return;
                         }
                     }
@@ -1228,8 +1232,7 @@ impl Compiler {
 
         if let Some(res) = frame.find_local(&var.name).or(frame.find_upvalue(&var.name)) {
             if res.scope == frame.scope {
-                error!(self, format!("Multiple definitions of '{}' in this block.",
-                                     res.name));
+                error!(self, "Multiple definitions of '{}' in this block", res.name);
                 return Err(());
             }
         }
@@ -1245,8 +1248,12 @@ impl Compiler {
     fn definition_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
         if self.frames().len() <= 1 {
             // Global
-            let var = self.frame().find_outer(name)
-                .expect(&format!("Couldn't find variable '{}' during prepass.", name));
+            let var = self.frame().find_outer(name);
+            if var.is_none() {
+                error!(self, "Couldn't find variable '{}' during prepass", name);
+                return;
+            }
+            let var = var.unwrap();
             assert!(var.mutable);
 
             self.expression(block);
@@ -1284,8 +1291,12 @@ impl Compiler {
 
         if self.frames().len() <= 1 {
             // Global
-            let var = self.frame().find_outer(name)
-                .expect(&format!("Couldn't find constant '{}' during prepass.", name));
+            let var = self.frame().find_outer(name);
+            if var.is_none() {
+                error!(self, "Couldn't find constant '{}' during prepass", name);
+                return;
+            }
+            let var = var.unwrap();
             assert!(!var.mutable);
 
             self.expression(block);
@@ -1306,7 +1317,7 @@ impl Compiler {
         let name = match self.eat() {
             Token::Identifier(name) => name,
             _ => {
-                error!(self, format!("Expected identifier in assignment"));
+                error!(self, "Expected identifier in assignment");
                 return;
             }
         };
@@ -1320,7 +1331,7 @@ impl Compiler {
             Token::SlashEqual => Some(Op::Div),
 
             _ => {
-                error!(self, format!("Expected '=' in assignment"));
+                error!(self, "Expected '=' in assignment");
                 return;
             }
         };
@@ -1328,7 +1339,7 @@ impl Compiler {
         if let Some(var) = self.find_variable(&name) {
             if !var.mutable {
                 // TODO(ed): Maybe a better error than "SyntaxError".
-                error!(self, format!("Cannot assign to constant '{}'", var.name));
+                error!(self, "Cannot assign to constant '{}'", var.name);
             }
             if let Some(op) = op {
                 if var.upvalue {
@@ -1348,12 +1359,12 @@ impl Compiler {
                 add_op(self, block, Op::AssignLocal(var.slot));
             }
         } else {
-            error!(self, format!("Using undefined variable {}.", name));
+            error!(self, "Using undefined variable {}", name);
         }
     }
 
     fn scope(&mut self, block: &mut Block) {
-        if !expect!(self, Token::LeftBrace, "Expected '{' at start of block.") {
+        if !expect!(self, Token::LeftBrace, "Expected '{{' at start of block") {
             return;
         }
 
@@ -1363,16 +1374,16 @@ impl Compiler {
                 match self.peek() {
                     Token::Newline => { self.eat(); },
                     Token::RightBrace => { break; },
-                    _ => { error!(self, "Expect newline after statement."); },
+                    _ => { error!(self, "Expect newline after statement"); },
                 }
             }
         });
 
-        expect!(self, Token::RightBrace, "Expected '}' at end of block.");
+        expect!(self, Token::RightBrace, "Expected '}}' at end of block");
     }
 
     fn if_statment(&mut self, block: &mut Block) {
-        expect!(self, Token::If, "Expected 'if' at start of if-statement.");
+        expect!(self, Token::If, "Expected 'if' at start of if-statement");
         self.expression(block);
         let jump = add_op(self, block, Op::Illegal);
         self.scope(block);
@@ -1386,7 +1397,7 @@ impl Compiler {
             match self.peek() {
                 Token::If => self.if_statment(block),
                 Token::LeftBrace => self.scope(block),
-                _ => error!(self, "Epected 'if' or '{' after else."),
+                _ => error!(self, "Epected 'if' or '{{' after else"),
             }
             block.patch(Op::Jmp(block.curr()), else_jmp);
         } else {
@@ -1396,7 +1407,7 @@ impl Compiler {
 
     //TODO de-complexify
     fn for_loop(&mut self, block: &mut Block) {
-        expect!(self, Token::For, "Expected 'for' at start of for-loop.");
+        expect!(self, Token::For, "Expected 'for' at start of for-loop");
 
         push_scope!(self, block, {
             self.frame_mut().push_loop();
@@ -1411,16 +1422,16 @@ impl Compiler {
 
                 (Token::Comma, ..) => {}
 
-                _ => { error!(self, "Expected definition at start of for-loop."); }
+                _ => { error!(self, "Expected definition at start of for-loop"); }
             }
 
-            expect!(self, Token::Comma, "Expect ',' between initalizer and loop expression.");
+            expect!(self, Token::Comma, "Expect ',' between initalizer and loop expression");
 
             let cond = block.curr();
             self.expression(block);
             let cond_out = add_op(self, block, Op::Illegal);
             let cond_cont = add_op(self, block, Op::Illegal);
-            expect!(self, Token::Comma, "Expect ',' between initalizer and loop expression.");
+            expect!(self, Token::Comma, "Expect ',' between initalizer and loop expression");
 
             let inc = block.curr();
             push_scope!(self, block, {
@@ -1482,7 +1493,7 @@ impl Compiler {
                                     self.eat();
                                 }
                             } else {
-                                error!(self, format!("Function type signature contains non-type {:?}.", self.peek()));
+                                error!(self, "Function type signature contains non-type {:?}", self.peek());
                                 return Err(());
                             }
                         }
@@ -1494,7 +1505,7 @@ impl Compiler {
                             break Type::Void;
                         }
                         token => {
-                            error!(self, format!("Function type signature contains non-type {:?}.", token));
+                            error!(self, "Function type signature contains non-type {:?}", token);
                             return Err(());
                         }
                     }
@@ -1514,7 +1525,7 @@ impl Compiler {
                     }
                     if !expect!(self,
                                 Token::Comma,
-                                "Expect comma efter element in tuple.") {
+                                "Expect comma efter element in tuple") {
                         return Err(());
                     }
                 }
@@ -1560,11 +1571,11 @@ impl Compiler {
         let name = if let Token::Identifier(name) = self.eat() {
             name
         } else {
-            error!(self, "Expected identifier after 'blob'.");
+            error!(self, "Expected identifier after 'blob'");
             return;
         };
 
-        expect!(self, Token::LeftBrace, "Expected 'blob' body. AKA '{'.");
+        expect!(self, Token::LeftBrace, "Expected 'blob' body. AKA '{{'");
 
         let mut blob = Blob::new(self.new_blob_id(), &name);
         loop {
@@ -1574,25 +1585,25 @@ impl Compiler {
             let name = if let Token::Identifier(name) = self.eat() {
                 name
             } else {
-                error!(self, "Expected identifier for field.");
+                error!(self, "Expected identifier for field");
                 continue;
             };
 
-            expect!(self, Token::Colon, "Expected ':' after field name.");
+            expect!(self, Token::Colon, "Expected ':' after field name");
 
             let ty = if let Ok(ty) = self.parse_type() {
                 ty
             } else {
-                error!(self, "Failed to parse blob-field type.");
+                error!(self, "Failed to parse blob-field type");
                 continue;
             };
 
             if let Err(_) = blob.add_field(&name, ty) {
-                error!(self, format!("A field named '{}' is defined twice for '{}'", name, blob.name));
+                error!(self, "A field named '{}' is defined twice for '{}'", name, blob.name);
             }
         }
 
-        expect!(self, Token::RightBrace, "Expected '}' after 'blob' body. AKA '}'.");
+        expect!(self, Token::RightBrace, "Expected '}}' after 'blob' body");
 
         let blob = Value::Blob(Rc::new(blob));
         self.named_constant(name, blob);
@@ -1631,7 +1642,7 @@ impl Compiler {
                         let field = if let Token::Identifier(field) = self.eat() {
                             String::from(field)
                         } else {
-                            error!(self, "Expected fieldname after '.'.");
+                            error!(self, "Expected fieldname after '.'");
                             return;
                         };
 
@@ -1667,14 +1678,14 @@ impl Compiler {
                     }
                     _ => {
                         if !self.call_maybe(block) {
-                            error!(self, "Unexpected token when parsing blob-field.");
+                            error!(self, "Unexpected token when parsing blob-field");
                             return;
                         }
                     }
                 }
             }
         } else {
-            error!(self, format!("Cannot find variable '{}'.", name));
+            error!(self, "Cannot find variable '{}'", name);
             return;
         }
     }
@@ -1702,17 +1713,17 @@ impl Compiler {
                 self.eat();
                 self.eat();
                 if let Ok(typ) = self.parse_type() {
-                    expect!(self, Token::Equal, "Expected assignment.");
+                    expect!(self, Token::Equal, "Expected assignment");
                     self.definition_statement(&name, typ, block);
                 } else {
-                    error!(self, format!("Expected type found '{:?}'.", self.peek()));
+                    error!(self, "Expected type found '{:?}'", self.peek());
                 }
             }
 
             (Token::Newline, ..) => {}
 
             (a, b, c, d) => {
-                error!(self, format!("Unknown outer token sequence: {:?} {:?} {:?} {:?}.", a, b, c, d))
+                error!(self, "Unknown outer token sequence: {:?} {:?} {:?} {:?}", a, b, c, d)
             }
         }
     }
@@ -1745,10 +1756,10 @@ impl Compiler {
                 self.eat();
                 self.eat();
                 if let Ok(typ) = self.parse_type() {
-                    expect!(self, Token::Equal, "Expected assignment.");
+                    expect!(self, Token::Equal, "Expected assignment");
                     self.definition_statement(&name, typ, block);
                 } else {
-                    error!(self, format!("Expected type found '{:?}'.", self.peek()));
+                    error!(self, "Expected type found '{:?}'", self.peek());
                 }
             }
 
@@ -1786,7 +1797,7 @@ impl Compiler {
                 let addr = add_op(self, block, Op::Illegal);
                 let stack_size = self.frame().stack.len();
                 if self.frame_mut().add_break(addr, stack_size).is_err() {
-                    error!(self, "Cannot place 'break' outside of loop.");
+                    error!(self, "Cannot place 'break' outside of loop");
                 }
             }
 
@@ -1795,7 +1806,7 @@ impl Compiler {
                 let addr = add_op(self, block, Op::Illegal);
                 let stack_size = self.frame().stack.len();
                 if self.frame_mut().add_continue(addr, stack_size).is_err() {
-                    error!(self, "Cannot place 'continue' outside of loop.");
+                    error!(self, "Cannot place 'continue' outside of loop");
                 }
             }
 
@@ -1867,7 +1878,7 @@ impl Compiler {
                         let var = Variable::new(&name, is_mut, ty);
                         let _ = self.define(var).unwrap();
                     } else {
-                        error!(self, format!("Failed to parse type global '{}'.", name));
+                        error!(self, "Failed to parse type global '{}'", name);
                     }
                 }
 
@@ -1888,8 +1899,7 @@ impl Compiler {
 
                 (a, b, c) => {
                     section.faulty = true;
-                    let msg = format!("Unknown outer token sequence: {:?} {:?} {:?}. Expected 'use', function, blob or variable.", a, b, c);
-                    error!(self, msg);
+                    error!(self, "Unknown outer token sequence: {:?} {:?} {:?}. Expected 'use', function, blob or variable", a, b, c);
                 }
             }
         }
@@ -1909,7 +1919,7 @@ impl Compiler {
             while !matches!(self.peek(), Token::EOF | Token::Use) {
                 self.outer_statement(&mut block);
                 expect!(self, Token::Newline | Token::EOF,
-                        "Expect newline or EOF after expression.");
+                        "Expect newline or EOF after expression");
             }
         }
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
@@ -1919,7 +1929,7 @@ impl Compiler {
                 if let Name::Unknown(_, line) = kind {
                     Some((ErrorKind::SyntaxError(*line, Token::Identifier(name.clone())),
                     *line,
-                    format!("Usage of undefined value: '{}'.", name,)))
+                    format!("Usage of undefined value: '{}'", name,)))
                 } else {
                     None
                 }) .collect();
@@ -1940,7 +1950,7 @@ impl Compiler {
         for var in self.frames_mut().pop().unwrap().stack.iter().skip(1) {
             if !(var.read || var.upvalue) {
                 let e = ErrorKind::SyntaxError(var.line, Token::Identifier(var.name.clone()));
-                let m = format!("Unused value '{}'.", var.name);
+                let m = format!("Unused value '{}'", var.name);
                 self.error_on_line(e, var.line, Some(m));
             }
             self.panic = false;
