@@ -5,6 +5,7 @@ use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::hash::{Hash, Hasher};
+use std::borrow::Borrow;
 
 use owo_colors::OwoColorize;
 
@@ -86,6 +87,7 @@ pub enum Type {
     String,
     Tuple(Vec<Type>),
     Union(HashSet<Type>),
+    List(Box<Type>),
     Function(Vec<Type>, Box<Type>),
     Blob(Rc<Blob>),
     Instance(Rc<Blob>),
@@ -105,6 +107,10 @@ impl Hash for Type {
                     t.hash(h);
                 }
                 6
+            }
+            Type::List(t) => {
+                t.as_ref().hash(h);
+                12
             }
             Type::Union(ts) => {
                 for t in ts {
@@ -151,6 +157,7 @@ impl PartialEq for Type {
             (Type::Union(a), b) | (b, Type::Union(a)) => {
                 a.iter().any(|x| x == b)
             }
+            (Type::List(a), Type::List(b)) => a == b,
             (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) =>
                 a_args == b_args && a_ret == b_ret,
             _ => false,
@@ -168,6 +175,17 @@ impl From<&Value> for Type {
             Value::Tuple(v) => {
                 Type::Tuple(v.iter().map(|x| Type::from(x)).collect())
             }
+            Value::List(v) => {
+                let v: &RefCell<_> = v.borrow();
+                let v: &Vec<_> = &v.borrow();
+                let set: HashSet<_> = v.iter().map(|x| Type::from(x)).collect();
+                let t = match set.len() {
+                    0 => Type::Unknown,
+                    1 => set.into_iter().next().unwrap(),
+                    _ => Type::Union(set),
+                };
+                Type::List(Box::new(t))
+            }
             Value::Union(v) => {
                 Type::Union(v.iter().map(|x| Type::from(x)).collect())
             }
@@ -175,7 +193,12 @@ impl From<&Value> for Type {
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
-            Value::Function(_, block) => block.borrow().ty.clone(),
+            Value::Function(_, block) => {
+                let block: &RefCell<_> = block.borrow();
+                let block = &block.borrow();
+                block.borrow().ty.clone()
+            }
+            Value::Unknown => Type::Unknown,
             _ => Type::Void,
         }
     }
@@ -202,6 +225,9 @@ impl From<&Type> for Value {
             Type::Union(v) => {
                 Value::Union(v.iter().map(Value::from).collect())
             }
+            Type::List(fields) => {
+                Value::List(Rc::new(RefCell::new(vec![Value::from(fields.as_ref())])))
+            }
             Type::Unknown => Value::Unknown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),
@@ -220,6 +246,29 @@ impl From<Type> for Value {
     }
 }
 
+impl Type {
+    /// Checks if the other type is valid in a place where the self type is. It's an asymmetrical
+    /// comparison for types useful when checking assignment.
+    pub fn fits(&self, other: &Self) -> bool {
+        match (self, other) {
+            (_, Type::Unknown) => {
+                true
+            }
+            (Type::List(a), Type::List(b)) => {
+                a.fits(b)
+            },
+            (Type::Union(a), Type::Union(b)) => {
+                a.iter().all(|x| b.contains(x))
+            },
+            (_, Type::Union(_)) => {
+                false
+            },
+            (a, b) => {
+                a == b
+            },
+        }
+    }
+}
 
 #[derive(Clone)]
 pub enum Value {
@@ -227,6 +276,7 @@ pub enum Value {
     Blob(Rc<Blob>),
     Instance(Rc<Blob>, Rc<RefCell<Vec<Value>>>),
     Tuple(Rc<Vec<Value>>),
+    List(Rc<RefCell<Vec<Value>>>),
     Union(HashSet<Value>),
     Float(f64),
     Int(i64),
@@ -251,7 +301,15 @@ impl Debug for Value {
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),
             Value::String(s) => write!(fmt, "(string \"{}\")", s),
-            Value::Function(_, block) => write!(fmt, "(fn {}: {:?})", block.borrow().name, block.borrow().ty),
+            Value::List(v) => write!(fmt, "(array {:?})", v),
+            Value::Function(_, block) => {
+                let block: &RefCell<_> = block.borrow();
+                let block = &block.borrow();
+                write!(fmt, "(fn {}: {:?})",
+                    block.name,
+                    block.ty
+                )
+            }
             Value::ExternFunction(slot) => write!(fmt, "(extern fn {})", slot),
             Value::Unknown => write!(fmt, "(unknown)"),
             Value::Nil => write!(fmt, "(nil)"),
@@ -268,6 +326,7 @@ impl PartialEq<Value> for Value {
             (Value::Int(a), Value::Int(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::String(a), Value::String(b)) => a == b,
+            (Value::List(a), Value::List(b)) => a == b,
             (Value::Tuple(a), Value::Tuple(b)) => {
                 a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| a == b)
             }
@@ -307,6 +366,10 @@ impl Value {
             Value::Float(_) => Value::Float(1.0),
             Value::Int(_) => Value::Int(1),
             Value::Bool(_) => Value::Bool(true),
+            x if matches!(x, Value::List(_)) => {
+                let x = Type::from(x);
+                Value::from(&x)
+            }
             a => a,
         }
     }
@@ -349,7 +412,6 @@ impl UpValue {
             stack[self.slot] = value;
         }
     }
-
 
     fn is_closed(&self) -> bool {
         self.slot == 0
@@ -433,6 +495,11 @@ pub enum Op {
     ///
     /// {A, B, C} - Tuple(3) - {D(A, B, C)}
     Tuple(usize),
+    /// Creates a new [List] with the given size and place it on the top
+    /// of the stack.
+    ///
+    /// {A, B, C} - List(3) - {D(A, B, C)}
+    List(usize),
 
     /// Indexes something indexable, currently only Tuples,
     /// and adds that element to the stack.
@@ -728,16 +795,36 @@ mod op {
             (Value::String(a), Value::String(b)) => Value::Bool(a == b),
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(a == b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => {
-                a.iter().zip(b.iter()).find_map(
-                    |(a, b)| match eq(a, b) {
-                        Value::Bool(true) => None,
-                        a => Some(a),
-                    }).unwrap_or(Value::Bool(true))
+                for (a, b) in a.iter().zip(b.iter()) {
+                    match eq(a, b) {
+                        Value::Bool(true) => {},
+                        Value::Bool(false) => { return Value::Bool(false); },
+                        Value::Nil => { return Value::Nil; },
+                        _ => unreachable!("Equality should only return bool or nil.")
+                    }
+                }
+                Value::Bool(true)
             }
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => eq(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, eq),
             (Value::Nil, Value::Nil) => Value::Bool(true),
+            (Value::List(a), Value::List(b))  => {
+                let a = a.borrow();
+                let b = b.borrow();
+                if a.len() != b.len() {
+                    return Value::Bool(false);
+                }
+                for (a, b) in a.iter().zip(b.iter()) {
+                    match eq(a, b) {
+                        Value::Bool(true) => {},
+                        Value::Bool(false) => { return Value::Bool(false); },
+                        Value::Nil => { return Value::Nil; },
+                        _ => unreachable!("Equality should only return bool or nil.")
+                    }
+                }
+                Value::Bool(true)
+            }
             _ => Value::Nil,
         }
     }
@@ -1003,7 +1090,11 @@ mod tests {
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
                 args.print_bytecode = $print;
-                $crate::run_file(args, Vec::new()).unwrap();
+                $crate::run_file(args, sylt_macro::link!(
+                    crate::dbg as dbg,
+                    crate::push as push,
+                    crate::len as len,
+                )).unwrap();
             }
         };
         ($fn:ident, $path:literal, $print:expr, $errs:tt) => {
@@ -1016,7 +1107,11 @@ mod tests {
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
                 args.print_bytecode = $print;
-                let res = $crate::run_file(args, Vec::new());
+                let res = $crate::run_file(args, sylt_macro::link!(
+                    crate::dbg as dbg,
+                    crate::push as push,
+                    crate::len as len,
+                ));
                 $crate::assert_errs!(res, $errs);
             }
         };
@@ -1024,3 +1119,54 @@ mod tests {
 
     sylt_macro::find_tests!();
 }
+
+// The "standard library"
+use crate as sylt;
+sylt_macro::extern_function!(
+    dbg
+    [x] -> Type::Void => {
+        println!("DBG: {:?}, {:?}", x, Type::from(x));
+        Ok(Value::Nil)
+    },
+);
+
+pub fn push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> {
+    match (values, typecheck) {
+        ([Value::List(ls), v], true) => {
+            let ls: &RefCell<_> = ls.borrow();
+            let ls = &ls.borrow();
+            assert!(ls.len() == 1);
+            let ls = Type::from(&ls[0]);
+            let v: Type = Type::from(&*v);
+            if ls == v {
+                Ok(Value::Nil)
+            } else {
+                Err(ErrorKind::TypeMismatch(ls, v))
+            }
+        }
+        ([Value::List(ls), v], false) => {
+            // NOTE(ed): Deliberately no type checking.
+            let ls: &RefCell<_> = ls.borrow();
+            ls.borrow_mut().push(v.clone());
+            Ok(Value::Nil)
+        }
+        (values, _) => {
+            Err(ErrorKind::ExternTypeMismatch(
+                "push".to_string(),
+                values.iter().map(|x| Type::from(x)).collect()
+            ))
+        }
+    }
+}
+
+sylt_macro::extern_function!(
+    len
+    [Value::List(ls)] -> Type::Int => {
+        let ls: &RefCell<Vec<Value>> = ls.borrow();
+        let ls = ls.borrow();
+        Ok(Value::Int(ls.len() as i64))
+    },
+    [Value::Tuple(ls)] -> Type::Int => {
+        Ok(Value::Int(ls.len() as i64))
+    },
+);

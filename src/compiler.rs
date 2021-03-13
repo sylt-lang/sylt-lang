@@ -584,6 +584,7 @@ impl Compiler {
             Token::Identifier(_) => self.variable_expression(block),
             Token::LeftParen => self.grouping_or_tuple(block),
             Token::Minus => self.unary(block),
+            Token::LeftBracket => self.list(block),
 
             Token::Float(_)
                 | Token::Int(_)
@@ -634,6 +635,44 @@ impl Compiler {
         };
         let constant = self.add_constant(value);
         add_op(self, block, Op::Constant(constant));
+    }
+
+    fn list(&mut self, block: &mut Block) {
+        expect!(self, Token::LeftBracket, "Expected '[' at start of list");
+        let mut num_args = 0;
+        loop {
+            match self.peek() {
+                Token::RightBracket | Token::EOF => {
+                    break;
+                }
+                Token::Newline => {
+                    self.eat();
+                }
+                Token::Comma => {
+                    error!(self, "Lists must begin with an element or ']'");
+                    return;
+                }
+                _ => {
+                    self.expression(block);
+                    num_args += 1;
+                    match self.peek() {
+                        Token::Comma => {
+                            self.eat();
+                            if matches!(self.peek(), Token::RightBracket) {
+                                break;
+                            }
+                        },
+                        Token::RightBracket => {},
+                        _ => {
+                            error!(self, "Expected ',' or ']' after list element");
+                            return;
+                        },
+                    }
+                }
+            }
+        };
+        expect!(self, Token::RightBracket, "Expected ']' after list");
+        add_op(self, block, Op::List(num_args));
     }
 
     fn grouping_or_tuple(&mut self, block: &mut Block) {
@@ -1415,6 +1454,16 @@ impl Compiler {
                 }
             }
 
+            Token::LeftBracket => {
+                self.eat();
+                let ty = self.parse_type();
+                expect!(self, Token::RightBracket, "Expected ']' after list type");
+                return match ty {
+                    Ok(ty) => Ok(Type::List(Box::new(ty))),
+                    Err(_) => Err(()),
+                }
+            }
+
             Token::Identifier(x) => {
                 self.eat();
                 match x.as_str() {
@@ -1824,7 +1873,7 @@ impl Compiler {
         add_op(self, &mut block, Op::Constant(constant));
         add_op(self, &mut block, Op::Call(0));
 
-        let tmp = self.add_constant(Value::Unknown);
+        let tmp = self.add_constant(Value::Nil);
         add_op(self, &mut block, Op::Constant(tmp));
         add_op(self, &mut block, Op::Return);
 

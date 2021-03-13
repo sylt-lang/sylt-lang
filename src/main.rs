@@ -7,7 +7,11 @@ fn main() -> Result<(), String> {
     if args.file.is_none() {
         return Err("No file to run".to_string());
     }
-    let errs = match run_file(args, sylt_macro::link!(extern_test as test)) {
+    let errs = match run_file(args, sylt_macro::link!(
+        sylt::dbg as dbg,
+        sylt::push as push,
+        sylt::len as len,
+    )) {
         Err(it) => it,
         _ => return Ok(()),
     };
@@ -35,13 +39,3 @@ fn parse_args() -> Args {
     };
     args
 }
-
-sylt_macro::extern_function!(
-    extern_test
-    [sylt::Value::Float(x), sylt::Value::Float(y)] -> sylt::Type::Float => {
-        Ok(sylt::Value::Float(x + y))
-    },
-    [sylt::Value::Float(x)] -> sylt::Type::Float => {
-        Ok(sylt::Value::Float(*x))
-    },
-);
