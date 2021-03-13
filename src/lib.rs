@@ -795,11 +795,15 @@ mod op {
             (Value::String(a), Value::String(b)) => Value::Bool(a == b),
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(a == b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => {
-                a.iter().zip(b.iter()).find_map(
-                    |(a, b)| match eq(a, b) {
-                        Value::Bool(true) => None,
-                        a => Some(a),
-                    }).unwrap_or(Value::Bool(true))
+                for (a, b) in a.iter().zip(b.iter()) {
+                    match eq(a, b) {
+                        Value::Bool(true) => {},
+                        Value::Bool(false) => { return Value::Bool(false); },
+                        Value::Nil => { return Value::Nil; },
+                        _ => unreachable!("Equality should only return bool or nil.")
+                    }
+                }
+                Value::Bool(true)
             }
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => eq(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
@@ -811,11 +815,15 @@ mod op {
                 if a.len() != b.len() {
                     return Value::Bool(false);
                 }
-                a.iter().zip(b.iter()).find_map(
-                    |(a, b)| match eq(a, b) {
-                        Value::Bool(true) => None,
-                        a => Some(a),
-                    }).unwrap_or(Value::Bool(true))
+                for (a, b) in a.iter().zip(b.iter()) {
+                    match eq(a, b) {
+                        Value::Bool(true) => {},
+                        Value::Bool(false) => { return Value::Bool(false); },
+                        Value::Nil => { return Value::Nil; },
+                        _ => unreachable!("Equality should only return bool or nil.")
+                    }
+                }
+                Value::Bool(true)
             }
             _ => Value::Nil,
         }
