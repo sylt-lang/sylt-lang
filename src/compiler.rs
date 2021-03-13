@@ -694,7 +694,7 @@ impl Compiler {
     }
 
     fn list(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftBracket, "Expected '[' at start of list.");
+        expect!(self, Token::LeftBracket, "Expected '[' at start of list");
         let mut num_args = 0;
         loop {
             match self.peek() {
@@ -705,7 +705,7 @@ impl Compiler {
                     self.eat();
                 }
                 Token::Comma => {
-                    error!(self, "Tuples must begin with an element or ')'.");
+                    error!(self, "Tuples must begin with an element or ')'");
                     return;
                 }
                 _ => {
@@ -720,14 +720,14 @@ impl Compiler {
                         },
                         Token::RightBracket => {},
                         _ => {
-                            error!(self, "Expected ',' or ']' after list element.");
+                            error!(self, "Expected ',' or ']' after list element");
                             return;
                         },
                     }
                 }
             }
         };
-        expect!(self, Token::RightBracket, "Expected ']' after list.");
+        expect!(self, Token::RightBracket, "Expected ']' after list");
         add_op(self, block, Op::List(num_args));
     }
 
@@ -1534,7 +1534,7 @@ impl Compiler {
             Token::LeftBracket => {
                 self.eat();
                 let ty = self.parse_type();
-                expect!(self, Token::RightBracket, "Expected ']' after list type.");
+                expect!(self, Token::RightBracket, "Expected ']' after list type");
                 return match ty {
                     Ok(ty) => Ok(Type::List(Box::new(ty))),
                     Err(_) => Err(()),
