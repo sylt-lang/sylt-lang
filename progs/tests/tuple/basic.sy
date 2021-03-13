@@ -6,7 +6,7 @@ start :: fn {
     b := (1,)
     b[0] <=> 1
 
-    empty := (,)
+    empty := ()
     c := (empty,)
     c[0] <=> (,)
 

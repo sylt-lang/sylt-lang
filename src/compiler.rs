@@ -676,8 +676,7 @@ impl Compiler {
                 }
             }
         };
-
-        if trailing_comma || num_args > 1 {
+        if (trailing_comma && num_args == 1) || num_args != 1 {
             add_op(self, block, Op::Tuple(num_args));
         }
         expect!(self, Token::RightParen, "Expected ')' after tuple");
