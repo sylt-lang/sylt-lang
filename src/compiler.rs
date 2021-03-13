@@ -705,7 +705,7 @@ impl Compiler {
                     self.eat();
                 }
                 Token::Comma => {
-                    error!(self, "Tuples must begin with an element or ')'");
+                    error!(self, "Lists must begin with an element or ']'");
                     return;
                 }
                 _ => {
@@ -714,7 +714,7 @@ impl Compiler {
                     match self.peek() {
                         Token::Comma => {
                             self.eat();
-                            if matches!(self.peek(), Token::RightParen) {
+                            if matches!(self.peek(), Token::RightBracket) {
                                 break;
                             }
                         },
