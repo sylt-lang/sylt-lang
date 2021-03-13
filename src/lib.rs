@@ -247,8 +247,8 @@ impl From<Type> for Value {
 }
 
 impl Type {
-    /// Checks if the other type is valid in a place where the self type is. It's an asymetrical
-    /// comparison for types usefull when checking assignment.
+    /// Checks if the other type is valid in a place where the self type is. It's an asymmetrical
+    /// comparison for types useful when checking assignment.
     pub fn fits(&self, other: &Self) -> bool {
         match (self, other) {
             (_, Type::Unknown) => {
