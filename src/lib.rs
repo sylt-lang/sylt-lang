@@ -1145,7 +1145,7 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> {
             }
         }
         ([Value::List(ls), v], false) => {
-            // NOTE(ed): Deliberatly no type checking.
+            // NOTE(ed): Deliberately no type checking.
             let ls: &RefCell<_> = ls.borrow();
             ls.borrow_mut().push(v.clone());
             Ok(Value::Nil)
