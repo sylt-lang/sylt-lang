@@ -699,7 +699,7 @@ impl Compiler {
         loop {
             match self.peek() {
                 Token::RightBracket | Token::EOF => {
-                    break false;
+                    break;
                 }
                 Token::Newline => {
                     self.eat();
@@ -715,7 +715,7 @@ impl Compiler {
                         Token::Comma => {
                             self.eat();
                             if matches!(self.peek(), Token::RightParen) {
-                                break true;
+                                break;
                             }
                         },
                         Token::RightBracket => {},
