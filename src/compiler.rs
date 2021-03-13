@@ -1525,7 +1525,7 @@ impl Compiler {
             return;
         };
         expect!(self, Token::ColonColon, "Expected '::' when declaring a blob");
-        expect!(self, Token::Blob, "Expected blob when declaring a blob");
+        expect!(self, Token::Blob, "Expected 'blob' when declaring a blob");
 
         expect!(self, Token::LeftBrace, "Expected 'blob' body. AKA '{{'");
 
