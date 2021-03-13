@@ -44,72 +44,20 @@ macro_rules! expect {
     };
 }
 
-// NOTE(ed): This can cause some strange bugs. It would be nice if we could
-// remove this function, but to do that we need to rewrite some code. Like
-// tuples and fields. Might be worth it tough.
-macro_rules! parse_branch {
-    ($compiler:expr, $block:expr, [ $( $call:expr ),* ]) => {
+macro_rules! rest_of_line_contains {
+    ($compiler:expr, $head:pat $( | $tail:pat )* ) => {
         {
-            let block_length = $block.ops.len();
-            let token_length = $compiler.current_token;
-            let num_errors = $compiler.errors.len();
-            let mut stored_errors = Vec::new();
-
-            // Loop for early return on success.
-            let success = loop {
-                // We risk getting a lot of errors if we are in an invalid state
-                // when we start the parse.
-                if $compiler.panic {
-                    break false;
-                }
-                $(
-                    $call;
-                    if !$compiler.panic {
-                        break true;
-                    }
-                    $compiler.panic = false;
-                    $compiler.current_token = token_length;
-                    let thrown_errors = $compiler.errors.len() - num_errors - 1;
-                    stored_errors.extend($compiler.errors.split_off(thrown_errors));
-                    $block.ops.truncate(block_length);
-                )*
-                break false;
-            };
-
-            if !success {
-                $compiler.errors.extend(stored_errors);
+            let mut i = 0;
+            while match $compiler.peek_at(i) {
+                Token::Newline | Token::EOF => false,
+                $head $( | $tail )* => false,
+                _ => true,
+            } {
+                i += 1;
             }
-            success
+            matches!($compiler.peek_at(i), $head $( | $tail )*)
         }
-
-    };
-
-    ($compiler:expr, $block:expr, $call:expr) => {
-        {
-            let block_length = $block.ops.len();
-            let token_length = $compiler.current_token;
-            let num_errors = $compiler.errors.len();
-            let mut stored_errors = Vec::new();
-            // Closures for early return on success.
-            loop {
-                // We risk getting a lot of errors if we are in an invalid state
-                // when we start the parse.
-                if $compiler.panic {
-                    break false;
-                }
-                $call;
-                if !$compiler.panic {
-                    break true;
-                }
-                $compiler.panic = false;
-                $compiler.current_token = token_length;
-                let thrown_errors = $compiler.errors.len() - num_errors - 1;
-                stored_errors.extend($compiler.errors.split_off(thrown_errors));
-                $block.ops.truncate(block_length);
-                break false;
-            }
-        }
-    };
+    }
 }
 
 macro_rules! push_frame {
@@ -689,11 +637,7 @@ impl Compiler {
     }
 
     fn grouping_or_tuple(&mut self, block: &mut Block) {
-        parse_branch!(self, block, [self.tuple(block), self.grouping(block)]);
-    }
-
-    fn tuple(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftParen, "Expected '(' at start of tuple");
+        expect!(self, Token::LeftParen, "Expected '(' for grouping or tuple.");
 
         let mut num_args = 0;
         let trailing_comma = loop {
@@ -703,14 +647,6 @@ impl Compiler {
                 }
                 Token::Newline => {
                     self.eat();
-                }
-                Token::Comma => {
-                    //TODO(gu): This creates a lot of syntax errors since the compiler panic is
-                    // ignored and the statement is tried as a grouping instead, even though we
-                    // _know_ that this can't be parsed as a grouping either.
-                    // Tracked in #100.
-                    error!(self, "Tuples must begin with an element or ')'");
-                    return;
                 }
                 _ => {
                     self.expression(block);
@@ -731,21 +667,10 @@ impl Compiler {
                 }
             }
         };
-        if num_args == 1 && !trailing_comma {
-            error!(self, "A tuple with 1 element must end with a trailing comma");
-            return;
+        if (trailing_comma && num_args == 1) || num_args != 1 {
+            add_op(self, block, Op::Tuple(num_args));
         }
-
         expect!(self, Token::RightParen, "Expected ')' after tuple");
-        add_op(self, block, Op::Tuple(num_args));
-    }
-
-    fn grouping(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftParen, "Expected '(' around expression");
-
-        self.expression(block);
-
-        expect!(self, Token::RightParen, "Expected ')' around expression");
     }
 
     fn index(&mut self, block: &mut Block) {
@@ -985,9 +910,7 @@ impl Compiler {
                             break;
                         }
                         _ => {
-                            if !parse_branch!(self, block, self.expression(block)) {
-                                break;
-                            }
+                            self.expression(block);
                             arity += 1;
                             if matches!(self.peek(), Token::Comma) {
                                 self.eat();
@@ -1569,7 +1492,16 @@ impl Compiler {
         if let Some(_) = self.find_namespace(&name) {
             self.expression(block);
         } else {
-            parse_branch!(self, block, [self.blob_field(block), self.expression(block)]);
+            if rest_of_line_contains!(self,
+                  Token::Equal
+                | Token::PlusEqual
+                | Token::MinusEqual
+                | Token::StarEqual
+                | Token::SlashEqual) {
+                self.blob_field(block)
+            } else {
+                self.expression(block)
+            }
         }
     }
 
