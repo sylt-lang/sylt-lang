@@ -329,23 +329,43 @@ impl VM {
 
             Op::Get(field) => {
                 let inst = self.pop();
-                let field = self.string(field);
-                if let Value::Instance(ty, values) = inst {
-                    let slot = ty.fields.get(field).unwrap().0;
-                    self.push(values.borrow()[slot].clone());
-                } else {
-                    error!(self, ErrorKind::UnknownField(inst, field.clone()));
+                match inst {
+                    Value::Instance(ty, values) => {
+                        let field = self.string(field);
+                        match ty.fields.get(field) {
+                            Some((slot, _)) => {
+                                self.push(values.borrow()[*slot].clone());
+                            }
+                            _ => {
+                                let err = Err(self.error(ErrorKind::UnknownField(ty.name.clone(), field.clone()), None));
+                                self.push(Value::Nil);
+                                return err;
+                            }
+                        };
+                    }
+                    inst => {
+                        error!(self, ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)]));
+                    }
                 }
             }
 
             Op::Set(field) => {
                 let (inst, value) = self.poppop();
-                let field = self.string(field);
-                if let Value::Instance(ty, values) = inst {
-                    let slot = ty.fields.get(field).unwrap().0;
-                    values.borrow_mut()[slot] = value;
-                } else {
-                    error!(self, ErrorKind::UnknownField(inst, field.clone()));
+                match inst {
+                    Value::Instance(ty, values) => {
+                        let field = self.string(field);
+                        match ty.fields.get(field) {
+                            Some((slot, _)) => {
+                                values.borrow_mut()[*slot] = value;
+                            }
+                            _ => {
+                                error!(self, ErrorKind::UnknownField(ty.name.clone(), field.clone()));
+                            }
+                        };
+                    }
+                    inst => {
+                        error!(self, ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)]));
+                    }
                 }
             }
 
@@ -614,34 +634,30 @@ impl VM {
                 }
             }
 
-            Op::Get(field) => {
-                let inst = self.pop();
-                let field = self.string(field);
-                if let Value::Instance(ty, _) = inst {
-                    let value = Value::from(ty.fields.get(field).unwrap().1.clone());
-                    self.push(value);
-                } else {
-                    let field = field.clone();
-                    self.push(Value::Nil);
-                    error!(self, ErrorKind::UnknownField(inst, field));
-                }
-            }
-
             Op::Set(field) => {
                 let (inst, value) = self.poppop();
-                let field = self.string(field);
-
-                if let Value::Instance(ty, _) = inst {
-                    let ty = &ty.fields.get(field).unwrap().1;
-                    let expected = Type::from(&value);
-                    if ty != &expected {
-                        error!(self, ErrorKind::TypeMismatch(expected, ty.clone()),
-                               "Types of field and variable do not match");
+                match inst {
+                    Value::Instance(ty, _) => {
+                        let field = self.string(field);
+                        match ty.fields.get(field) {
+                            Some((_, ty)) => {
+                                let expected = Type::from(&value);
+                                if ty != &expected {
+                                    error!(self, ErrorKind::TypeMismatch(expected, ty.clone()),
+                                    "Types of field and variable do not match");
+                                }
+                            }
+                            _ => {
+                                error!(self, ErrorKind::UnknownField(ty.name.clone(), field.clone()));
+                            }
+                        };
                     }
-                } else {
-                    error!(self, ErrorKind::UnknownField(inst, field.clone()));
+                    inst => {
+                        error!(self, ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)]));
+                    }
                 }
             }
+
 
             Op::PopUpvalue => {
                 self.pop();
