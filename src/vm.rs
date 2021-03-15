@@ -260,7 +260,7 @@ impl VM {
                                 };
                                 ups.push(up);
                             }
-                            Value::Function(ups, block)
+                            Value::Function(Rc::new(ups), block)
                         }
                     },
                     value => value,
@@ -287,7 +287,7 @@ impl VM {
                             };
                             ups.push(up);
                         }
-                        Value::Function(ups, block)
+                        Value::Function(Rc::new(ups), block)
                     },
                     value => error!(self,
                         ErrorKind::ValueError(op, vec![value.clone()]),
@@ -534,7 +534,7 @@ impl VM {
         self.frames.clear();
         self.runtime = true;
 
-        self.push(Value::Function(Vec::new(), Rc::clone(&block)));
+        self.push(Value::Function(Rc::new(Vec::new()), Rc::clone(&block)));
 
         self.frames.push(Frame {
             stack_offset: 0,
@@ -575,7 +575,7 @@ impl VM {
             Op::Constant(value) => {
                 match self.constant(value).clone() {
                     Value::Function(_, block) => {
-                        self.push(Value::Function(Vec::new(), block.clone()));
+                        self.push(Value::Function(Rc::new(Vec::new()), block.clone()));
                         if !matches!(block.borrow().linking, BlockLinkState::Linked) {
                             if block.borrow().needs_linking() {
                                 error!(self,
@@ -844,7 +844,7 @@ impl VM {
         self.stack.clear();
         self.frames.clear();
 
-        self.push(Value::Function(Vec::new(), Rc::clone(&block)));
+        self.push(Value::Function(Rc::new(Vec::new()), Rc::clone(&block)));
         for arg in block.borrow().args() {
             self.push(arg.into());
         }

@@ -234,7 +234,7 @@ impl From<&Type> for Value {
             Type::Bool => Value::Bool(true),
             Type::String => Value::String(Rc::new("".to_string())),
             Type::Function(_, _) => Value::Function(
-                Vec::new(),
+                Rc::new(Vec::new()),
                 Rc::new(RefCell::new(Block::stubbed_block(ty)))),
         }
     }
@@ -282,7 +282,7 @@ pub enum Value {
     Int(i64),
     Bool(bool),
     String(Rc<String>),
-    Function(Vec<Rc<RefCell<UpValue>>>, Rc<RefCell<Block>>),
+    Function(Rc<Vec<Rc<RefCell<UpValue>>>>, Rc<RefCell<Block>>),
     ExternFunction(usize),
     /// This value should not be present when running, only when type checking.
     /// Most operations are valid but produce funky results.
