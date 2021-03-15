@@ -52,6 +52,7 @@ struct Frame {
     stack_offset: usize,
     block: Rc<RefCell<Block>>,
     ip: usize,
+    contains_upvalues: bool,
 }
 
 pub struct VM {
@@ -248,6 +249,7 @@ impl VM {
                         } else {
                             let mut ups = Vec::new();
                             for (slot, is_up, _) in block.borrow().upvalues.iter() {
+                                self.frame_mut().contains_upvalues = true;
                                 let up = if *is_up {
                                     if let Value::Function(local_ups, _) = &self.stack[offset] {
                                         Rc::clone(&local_ups[*slot])
@@ -464,6 +466,7 @@ impl VM {
                             stack_offset: new_base,
                             block: Rc::clone(&block),
                             ip: 0,
+                            contains_upvalues: true,
                         });
                         return Ok(OpResult::Continue);
                     }
@@ -492,10 +495,12 @@ impl VM {
                     return Ok(OpResult::Done);
                 } else {
                     self.stack[last.stack_offset] = self.pop();
-                    for slot in last.stack_offset+1..self.stack.len() {
-                        if self.upvalues.contains_key(&slot) {
-                            let value = self.stack[slot].clone();
-                            self.drop_upvalue(slot, value);
+                    if last.contains_upvalues {
+                        for slot in last.stack_offset+1..self.stack.len() {
+                            if self.upvalues.contains_key(&slot) {
+                                let value = self.stack[slot].clone();
+                                self.drop_upvalue(slot, value);
+                            }
                         }
                     }
                     self.stack.truncate(last.stack_offset + 1);
@@ -539,7 +544,8 @@ impl VM {
         self.frames.push(Frame {
             stack_offset: 0,
             block,
-            ip: 0
+            ip: 0,
+            contains_upvalues: false,
         });
     }
 
@@ -852,7 +858,8 @@ impl VM {
         self.frames.push(Frame {
             stack_offset: 0,
             block,
-            ip: 0
+            ip: 0,
+            contains_upvalues: false,
         });
 
         if self.print_bytecode {
