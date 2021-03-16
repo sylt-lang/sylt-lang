@@ -480,11 +480,11 @@ pub enum Op {
     ///
     /// {A, B} - Pop - {A}
     PopUpvalue,
-    /// Copies the value on the top of the stack
-    /// and puts it on top of the stack.
+    /// Copies the N values on the top of the stack
+    /// and puts them on top of the stack.
     ///
-    /// {A, B} - Copy - {A, B, B}
-    Copy,
+    /// {A, B} - Copy(2) - {A, B, A, B}
+    Copy(usize),
     /// Adds the value indexed in the `constants-vector` to the top of the stack.
     /// Also links upvalues if the value is a function.
     ///
@@ -501,10 +501,15 @@ pub enum Op {
     /// {A, B, C} - List(3) - {D(A, B, C)}
     List(usize),
 
-    /// Indexes something indexable, currently only Tuples,
+    /// Indexes something indexable,
     /// and adds that element to the stack.
     ///
     /// {T, I} - Index - {T[I]}
+    SetIndex,
+    /// Sets the indexes of something indexable.
+    /// T[I] = V
+    ///
+    /// {T, I, V} - Index - {}
     Index,
     /// Looks up a field by the given name
     /// and replaces the parent with it.

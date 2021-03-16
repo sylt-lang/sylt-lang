@@ -227,10 +227,9 @@ impl VM {
                 self.drop_upvalue(slot, value);
             }
 
-            Op::Copy => {
-                let v = self.pop();
-                self.push(v.clone());
-                self.push(v);
+            Op::Copy(n) => {
+                let end = Vec::from(&self.stack[self.stack.len()-n..]);
+                self.stack.extend(end);
             }
 
             Op::Yield => {
@@ -323,6 +322,30 @@ impl VM {
                     (val, slot) => {
                         self.stack.push(Value::Nil);
                         error!(self, ErrorKind::IndexError(val, slot.into()));
+                    }
+                }
+            }
+
+            Op::SetIndex => {
+                let value = self.stack.pop().unwrap();
+                let slot = self.stack.pop().unwrap();
+                let indexable = self.stack.pop().unwrap();
+                match (indexable, slot, value) {
+                    (Value::List(rc_v), Value::Int(slot), n) => {
+                        let slot = slot as usize;
+                        let v = rc_v.borrow();
+                        if v.len() <= slot {
+                            self.stack.push(Value::Nil);
+                            let len = v.len();
+                            drop(v);
+                            error!(self, ErrorKind::IndexOutOfBounds(Value::List(rc_v), len, slot));
+                        }
+                        drop(v);
+                        rc_v.borrow_mut()[slot] = n;
+                    }
+                    (indexable, slot, _) => {
+                        self.stack.push(Value::Nil);
+                        error!(self, ErrorKind::IndexError(indexable, slot.into()));
                     }
                 }
             }
@@ -761,6 +784,30 @@ impl VM {
                 self.stack.pop().unwrap();
                 self.stack.pop().unwrap();
                 self.stack.push(Value::Unknown);
+            }
+
+            Op::SetIndex => {
+                let value = Type::from(self.stack.pop().unwrap());
+                let slot = Type::from(self.stack.pop().unwrap());
+                let indexable = Type::from(self.stack.pop().unwrap());
+                match (indexable, slot, value) {
+                    (Type::List(v), Type::Int, n) => {
+                        match (v.as_ref(), &n) {
+                            (Type::Unknown, top_type)
+                                if top_type != &Type::Unknown => {}
+                            (a, b) if a.fits(b) => {}
+                            (a, b) => {
+                                error!(self, ErrorKind::TypeMismatch(a.clone(), b.clone()),
+                                       "Cannot assign mismatching types");
+                            }
+                        }
+                    }
+                    (indexable, slot, _) => {
+                        self.stack.push(Value::Nil);
+                        error!(self, ErrorKind::TypeError(Op::SetIndex,
+                                    vec![indexable, slot.into()]));
+                    }
+                }
             }
 
             Op::Call(num_args) => {

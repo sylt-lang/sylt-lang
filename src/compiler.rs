@@ -736,7 +736,7 @@ impl Compiler {
 
         match op {
             Token::And => {
-                add_op(self, block, Op::Copy);
+                add_op(self, block, Op::Copy(1));
                 let jump = add_op(self, block, Op::Illegal);
 
                 self.parse_precedence(block, self.precedence(op.clone()).next());
@@ -745,7 +745,7 @@ impl Compiler {
             }
 
             Token::Or => {
-                add_op(self, block, Op::Copy);
+                add_op(self, block, Op::Copy(1));
                 let skipp = add_op(self, block, Op::Illegal);
                 let jump = add_op(self, block, Op::Illegal);
                 block.patch(Op::JmpFalse(block.curr()), skipp);
@@ -1598,12 +1598,45 @@ impl Compiler {
                                 continue;
                             }
                         };
-                        add_op(self, block, Op::Copy);
+                        add_op(self, block, Op::Copy(1));
                         add_op(self, block, Op::Get(field));
                         self.eat();
                         self.expression(block);
                         add_op(self, block, op);
                         add_op(self, block, Op::Set(field));
+                        return;
+                    }
+                    Token::RightBracket => {
+                        self.eat();
+                        self.expression(block);
+                        add_op(self, block, Op::Copy(2));
+                        expect!(self, Token::RightBracket, "Expected ']'");
+
+                        let op = match self.peek() {
+                            Token::Equal => {
+                                self.eat();
+                                self.expression(block);
+                                add_op(self, block, Op::SetIndex);
+                                add_op(self, block, Op::Pop);
+                                add_op(self, block, Op::Pop);
+                                return;
+                            }
+
+                            Token::PlusEqual => Op::Add,
+                            Token::MinusEqual => Op::Sub,
+                            Token::StarEqual => Op::Mul,
+                            Token::SlashEqual => Op::Div,
+
+                            _ => {
+                                add_op(self, block, Op::Index);
+                                continue;
+                            }
+                        };
+                        add_op(self, block, Op::Index);
+                        self.eat();
+                        self.expression(block);
+                        add_op(self, block, op);
+                        add_op(self, block, Op::SetIndex);
                         return;
                     }
                     Token::Newline => {
@@ -1681,7 +1714,9 @@ impl Compiler {
                 self.assign(block);
             }
 
-            (Token::Identifier(_), Token::Dot, ..) => {
+            (Token::Identifier(_), Token::Dot, ..) |
+            (Token::Identifier(_), Token::RightBrace, ..)
+                => {
                 self.access_dotted(block);
             }
 
