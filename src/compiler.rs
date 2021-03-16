@@ -1057,7 +1057,7 @@ impl Compiler {
 
         // Note(ed): We deliberately add the constant as late as possible.
         // This behaviour is used in `constant_statement`.
-        let function = Value::Function(Vec::new(), Rc::clone(&function_block));
+        let function = Value::Function(Rc::new(Vec::new()), Rc::clone(&function_block));
         self.blocks[block_id] = function_block;
         let constant = if in_name.is_some() {
             self.named_constant(name, function)
