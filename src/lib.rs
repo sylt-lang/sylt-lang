@@ -73,6 +73,13 @@ impl Default for Args {
     }
 }
 
+pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
+    let mut res = PathBuf::from(current_file);
+    res.pop();
+    res.push(format!("{}.sy", module));
+    res
+}
+
 /// A linkable external function. Created either manually or using
 /// [sylt_macro::extern_function].
 pub type RustFunction = fn(&[Value], bool) -> Result<Value, ErrorKind>;
