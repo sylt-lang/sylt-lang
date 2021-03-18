@@ -505,12 +505,12 @@ pub enum Op {
     /// and adds that element to the stack.
     ///
     /// {T, I} - Index - {T[I]}
-    SetIndex,
+    Index,
     /// Sets the indexes of something indexable.
     /// T[I] = V
     ///
     /// {T, I, V} - Index - {}
-    Index,
+    SetIndex,
     /// Looks up a field by the given name
     /// and replaces the parent with it.
     /// Currently only expects [Value::Blob].
