@@ -1,0 +1,17 @@
+Q :: blob {
+    a : [int]
+}
+
+start :: fn {
+    a :: [1]
+    push(a, 3)
+    a[1] = 4
+    push(a, 3)
+    a[1] <=> 4
+
+    q :: Q([4])
+    push(q.a, 3)
+    q.a[1] = 1
+    push(q.a, 3)
+    q.a[1] <=> 1
+}
