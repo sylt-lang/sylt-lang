@@ -815,6 +815,10 @@ impl VM {
                     let args: Vec<_> = args.iter().map(|x| x.into()).collect();
                     match callable {
                         Value::Blob(blob) => {
+                            if blob.fields.len() != num_args {
+                                return Err(ErrorKind::ArgumentCount(blob.fields.len(), num_args));
+                            }
+
                             let mut values = Vec::with_capacity(blob.fields.len());
                             for _ in 0..values.capacity() {
                                 values.push(Value::Nil);
