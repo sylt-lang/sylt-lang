@@ -484,11 +484,7 @@ impl VM {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {
                     Value::Blob(blob) => {
-                        let mut values = Vec::with_capacity(blob.fields.len());
-                        for _ in 0..values.capacity() {
-                            values.push(Value::Nil);
-                        }
-
+                        let values = self.stack.split_off(new_base+1);
                         self.pop();
                         self.push(Value::Instance(blob, Rc::new(RefCell::new(values))));
                     }
@@ -825,6 +821,10 @@ impl VM {
                             }
 
                             for (slot, ty) in blob.fields.values() {
+                                let given_ty = Type::from(&self.stack[new_base+1+slot]);
+                                if !ty.fits(&given_ty) {
+                                    return Err(ErrorKind::TypeMismatch(ty.clone(), given_ty))
+                                }
                                 values[*slot] = ty.into();
                             }
 
