@@ -5,9 +5,8 @@ use std::path::Path;
 macro_rules! bench_file {
     ( $name:ident ) => {
         pub fn $name(c: &mut Criterion) {
-            let prog =
-                fs::read_to_string(Path::new(&format!("progs/bench/{}.sy", stringify!($name))))
-                    .unwrap();
+            let file = Path::new(&format!("progs/bench/{}.sy", stringify!($name)));
+            let prog = fs::read_to_string(file).unwrap();
             c.bench_function(stringify!($name), |b| {
                 b.iter(|| {
                     sylt::run_string(&prog, false, Vec::new()).unwrap();
