@@ -6,10 +6,10 @@ use std::rc::Rc;
 
 use owo_colors::OwoColorize;
 
-use crate::{Block, BlockLinkState, Op, Prog, UpValue, Value, op};
 use crate::error::{Error, ErrorKind};
 use crate::RustFunction;
 use crate::Type;
+use crate::{op, Block, BlockLinkState, Op, Prog, UpValue, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -68,7 +68,6 @@ pub struct VM {
     pub print_exec: bool,
     runtime: bool,
 
-
     extern_functions: Vec<RustFunction>,
 }
 
@@ -97,7 +96,7 @@ impl VM {
             print_exec: false,
             runtime: false,
 
-            extern_functions: Vec::new()
+            extern_functions: Vec::new(),
         }
     }
 
@@ -109,8 +108,9 @@ impl VM {
     }
 
     fn find_upvalue(&mut self, slot: usize) -> &mut Rc<RefCell<UpValue>> {
-        self.upvalues.entry(slot).or_insert(
-            Rc::new(RefCell::new(UpValue::new(slot))))
+        self.upvalues
+            .entry(slot)
+            .or_insert(Rc::new(RefCell::new(UpValue::new(slot))))
     }
 
     fn push(&mut self, value: Value) {
@@ -125,9 +125,11 @@ impl VM {
     }
 
     fn poppop(&mut self) -> (Value, Value) {
-        let (a, b) = (self.stack.remove(self.stack.len() - 1),
-                      self.stack.remove(self.stack.len() - 1));
-        (b, a)  // this matches the order they were on the stack
+        let (a, b) = (
+            self.stack.remove(self.stack.len() - 1),
+            self.stack.remove(self.stack.len() - 1),
+        );
+        (b, a) // this matches the order they were on the stack
     }
 
     fn frame(&self) -> &Frame {
@@ -161,15 +163,19 @@ impl VM {
     }
 
     fn print_stacktrace(&self) {
-        if !self.runtime { return; }
+        if !self.runtime {
+            return;
+        }
 
         println!("\n<{}>", "STACK".red());
         for (i, frame) in self.frames.iter().enumerate() {
-            println!("  {:>3}. {}:{:<4} in {:10}",
+            println!(
+                "  {:>3}. {}:{:<4} in {:10}",
                 i,
                 frame.block.borrow().file.display(),
                 frame.block.borrow().line(self.frame().ip),
-                frame.block.borrow().name.blue());
+                frame.block.borrow().name.blue()
+            );
         }
         println!("")
     }
@@ -180,9 +186,11 @@ impl VM {
         println!("\n");
         self.print_stacktrace();
         self.frame().block.borrow().debug_print();
-        println!("    ip: {}, line: {}\n",
+        println!(
+            "    ip: {}, line: {}\n",
             self.frame().ip.blue(),
-            self.frame().block.borrow().line(self.frame().ip).blue());
+            self.frame().block.borrow().line(self.frame().ip).blue()
+        );
         unreachable!();
     }
 
@@ -229,7 +237,7 @@ impl VM {
             }
 
             Op::Copy(n) => {
-                let end = Vec::from(&self.stack[self.stack.len()-n..]);
+                let end = Vec::from(&self.stack[self.stack.len() - n..]);
                 self.stack.extend(end);
             }
 
@@ -263,7 +271,7 @@ impl VM {
                             }
                             Value::Function(Rc::new(ups), block)
                         }
-                    },
+                    }
                     value => value,
                 };
                 self.push(value);
@@ -289,10 +297,13 @@ impl VM {
                             ups.push(up);
                         }
                         Value::Function(Rc::new(ups), block)
-                    },
-                    value => error!(self,
+                    }
+                    value => error!(
+                        self,
                         ErrorKind::ValueError(op, vec![value.clone()]),
-                        "Not a function {:?}", value),
+                        "Not a function {:?}",
+                        value
+                    ),
                 };
                 self.constants[slot] = constant;
             }
@@ -306,7 +317,10 @@ impl VM {
                         if v.len() <= slot {
                             self.stack.push(Value::Nil);
                             let len = v.len();
-                            error!(self, ErrorKind::IndexOutOfBounds(Value::Tuple(v), len, slot));
+                            error!(
+                                self,
+                                ErrorKind::IndexOutOfBounds(Value::Tuple(v), len, slot)
+                            );
                         }
                         self.stack.push(v[slot].clone());
                     }
@@ -317,7 +331,10 @@ impl VM {
                             self.stack.push(Value::Nil);
                             let len = v.len();
                             drop(v);
-                            error!(self, ErrorKind::IndexOutOfBounds(Value::List(rc_v), len, slot));
+                            error!(
+                                self,
+                                ErrorKind::IndexOutOfBounds(Value::List(rc_v), len, slot)
+                            );
                         }
                         self.stack.push(v[slot].clone());
                     }
@@ -340,7 +357,10 @@ impl VM {
                             self.stack.push(Value::Nil);
                             let len = v.len();
                             drop(v);
-                            error!(self, ErrorKind::IndexOutOfBounds(Value::List(rc_v), len, slot));
+                            error!(
+                                self,
+                                ErrorKind::IndexOutOfBounds(Value::List(rc_v), len, slot)
+                            );
                         }
                         drop(v);
                         rc_v.borrow_mut()[slot] = n;
@@ -362,14 +382,20 @@ impl VM {
                                 self.push(values.borrow()[*slot].clone());
                             }
                             _ => {
-                                let err = Err(self.error(ErrorKind::UnknownField(ty.name.clone(), field.clone()), None));
+                                let err = Err(self.error(
+                                    ErrorKind::UnknownField(ty.name.clone(), field.clone()),
+                                    None,
+                                ));
                                 self.push(Value::Nil);
                                 return err;
                             }
                         };
                     }
                     inst => {
-                        error!(self, ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)]));
+                        error!(
+                            self,
+                            ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)])
+                        );
                     }
                 }
             }
@@ -384,37 +410,65 @@ impl VM {
                                 values.borrow_mut()[*slot] = value;
                             }
                             _ => {
-                                error!(self, ErrorKind::UnknownField(ty.name.clone(), field.clone()));
+                                error!(
+                                    self,
+                                    ErrorKind::UnknownField(ty.name.clone(), field.clone())
+                                );
                             }
                         };
                     }
                     inst => {
-                        error!(self, ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)]));
+                        error!(
+                            self,
+                            ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)])
+                        );
                     }
                 }
             }
 
-            Op::Neg => { one_op!(self, Op::Neg, op::neg); }
+            Op::Neg => {
+                one_op!(self, Op::Neg, op::neg);
+            }
 
-            Op::Add => { two_op!(self, Op::Add, op::add); }
+            Op::Add => {
+                two_op!(self, Op::Add, op::add);
+            }
 
-            Op::Sub => { two_op!(self, Op::Sub, op::sub); }
+            Op::Sub => {
+                two_op!(self, Op::Sub, op::sub);
+            }
 
-            Op::Mul => { two_op!(self, Op::Mul, op::mul); }
+            Op::Mul => {
+                two_op!(self, Op::Mul, op::mul);
+            }
 
-            Op::Div => { two_op!(self, Op::Div, op::div); }
+            Op::Div => {
+                two_op!(self, Op::Div, op::div);
+            }
 
-            Op::Equal => { two_op!(self, Op::Equal, op::eq); }
+            Op::Equal => {
+                two_op!(self, Op::Equal, op::eq);
+            }
 
-            Op::Less => { two_op!(self, Op::Less, op::less); }
+            Op::Less => {
+                two_op!(self, Op::Less, op::less);
+            }
 
-            Op::Greater => { two_op!(self, Op::Greater, op::greater); }
+            Op::Greater => {
+                two_op!(self, Op::Greater, op::greater);
+            }
 
-            Op::And => { two_op!(self, Op::And, op::and); }
+            Op::And => {
+                two_op!(self, Op::And, op::and);
+            }
 
-            Op::Or => { two_op!(self, Op::Or, op::or); }
+            Op::Or => {
+                two_op!(self, Op::Or, op::or);
+            }
 
-            Op::Not => { one_op!(self, Op::Not, op::not); }
+            Op::Not => {
+                one_op!(self, Op::Not, op::not);
+            }
 
             Op::Jmp(line) => {
                 self.frame_mut().ip = line;
@@ -452,9 +506,7 @@ impl VM {
             Op::ReadUpvalue(slot) => {
                 let offset = self.frame().stack_offset;
                 let value = match &self.stack[offset] {
-                    Value::Function(ups, _) => {
-                        ups[slot].borrow().get(&self.stack)
-                    }
+                    Value::Function(ups, _) => ups[slot].borrow().get(&self.stack),
                     _ => unreachable!(),
                 };
                 self.push(value);
@@ -486,7 +538,7 @@ impl VM {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {
                     Value::Blob(blob) => {
-                        let values = self.stack.split_off(new_base+1);
+                        let values = self.stack.split_off(new_base + 1);
                         self.pop();
                         self.push(Value::Instance(blob, Rc::new(RefCell::new(values))));
                     }
@@ -511,7 +563,7 @@ impl VM {
                     }
                     Value::ExternFunction(slot) => {
                         let extern_func = self.extern_functions[slot];
-                        let res = match extern_func(&self.stack[new_base+1..], false) {
+                        let res = match extern_func(&self.stack[new_base + 1..], false) {
                             Ok(value) => value,
                             Err(ek) => error!(self, ek, "Failed in external function"),
                         };
@@ -535,7 +587,7 @@ impl VM {
                 } else {
                     self.stack[last.stack_offset] = self.pop();
                     if last.contains_upvalues {
-                        for slot in last.stack_offset+1..self.stack.len() {
+                        for slot in last.stack_offset + 1..self.stack.len() {
                             if self.upvalues.contains_key(&slot) {
                                 let value = self.stack[slot].clone();
                                 self.drop_upvalue(slot, value);
@@ -561,10 +613,12 @@ impl VM {
         }
         println!("]");
 
-        println!("{:5} {:05} {:?}",
+        println!(
+            "{:5} {:05} {:?}",
             self.frame().block.borrow().line(self.frame().ip).blue(),
             self.frame().ip.red(),
-            self.frame().block.borrow().ops[self.frame().ip]);
+            self.frame().block.borrow().ops[self.frame().ip]
+        );
     }
 
     #[doc(hidden)]
@@ -640,19 +694,24 @@ impl VM {
 
                             let mut block_mut = block.borrow_mut();
                             for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
-                                if *is_up { continue; }
+                                if *is_up {
+                                    continue;
+                                }
 
                                 let suggestion = &types[i];
                                 if matches!(ty, Type::Unknown) {
                                     *ty = suggestion.clone();
                                 } else {
                                     if ty != suggestion {
-                                        error!(self, ErrorKind::CannotInfer(ty.clone(), suggestion.clone()));
+                                        error!(
+                                            self,
+                                            ErrorKind::CannotInfer(ty.clone(), suggestion.clone())
+                                        );
                                     }
                                 }
-                            };
+                            }
                         }
-                    },
+                    }
                     value => {
                         self.push(value.clone());
                     }
@@ -668,21 +727,29 @@ impl VM {
                             Some((_, ty)) => {
                                 let expected = Type::from(&value);
                                 if ty != &expected {
-                                    error!(self, ErrorKind::TypeMismatch(expected, ty.clone()),
-                                    "Types of field and variable do not match");
+                                    error!(
+                                        self,
+                                        ErrorKind::TypeMismatch(expected, ty.clone()),
+                                        "Types of field and variable do not match"
+                                    );
                                 }
                             }
                             _ => {
-                                error!(self, ErrorKind::UnknownField(ty.name.clone(), field.clone()));
+                                error!(
+                                    self,
+                                    ErrorKind::UnknownField(ty.name.clone(), field.clone())
+                                );
                             }
                         };
                     }
                     inst => {
-                        error!(self, ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)]));
+                        error!(
+                            self,
+                            ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)])
+                        );
                     }
                 }
             }
-
 
             Op::PopUpvalue => {
                 self.pop();
@@ -697,8 +764,11 @@ impl VM {
                 let var = self.frame().block.borrow().upvalues[slot].2.clone();
                 let up = self.pop().into();
                 if var != up {
-                    error!(self, ErrorKind::TypeMismatch(up, var),
-                           "Captured varibles type doesn't match upvalue");
+                    error!(
+                        self,
+                        ErrorKind::TypeMismatch(up, var),
+                        "Captured varibles type doesn't match upvalue"
+                    );
                 }
             }
 
@@ -707,8 +777,11 @@ impl VM {
                 let curr = Type::from(&self.stack[slot]);
                 let other = Type::from(self.pop());
                 if curr != other {
-                    error!(self, ErrorKind::TypeMismatch(curr, other),
-                           "Cannot assign to different type");
+                    error!(
+                        self,
+                        ErrorKind::TypeMismatch(curr, other),
+                        "Cannot assign to different type"
+                    );
                 }
             }
 
@@ -717,9 +790,11 @@ impl VM {
                 let inner = self.frame().block.borrow();
                 let ret = inner.ret();
                 if Type::from(&a) != *ret {
-
-                    error!(self, ErrorKind::TypeMismatch(ret.clone(), a.into()),
-                           "Value does not match return type");
+                    error!(
+                        self,
+                        ErrorKind::TypeMismatch(ret.clone(), a.into()),
+                        "Value does not match return type"
+                    );
                 }
             }
 
@@ -731,15 +806,17 @@ impl VM {
                 let ty = self.ty(ty);
                 let top_type = self.stack.last().unwrap().into();
                 match (ty, top_type) {
-                    (Type::Unknown, top_type)
-                        if top_type != Type::Unknown => {}
+                    (Type::Unknown, top_type) if top_type != Type::Unknown => {}
                     (a, b) if a.fits(&b) => {
                         let last = self.stack.len() - 1;
                         self.stack[last] = Value::from(a);
                     }
                     (a, b) => {
-                        error!(self, ErrorKind::TypeMismatch(a.clone(), b.clone()),
-                               "Cannot assign mismatching types");
+                        error!(
+                            self,
+                            ErrorKind::TypeMismatch(a.clone(), b.clone()),
+                            "Cannot assign mismatching types"
+                        );
                     }
                 }
             }
@@ -760,22 +837,30 @@ impl VM {
 
                         let mut block_mut = block.borrow_mut();
                         for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
-                            if *is_up { continue; }
+                            if *is_up {
+                                continue;
+                            }
 
                             let suggestion = &types[i];
                             if matches!(ty, Type::Unknown) {
                                 *ty = suggestion.clone();
                             } else {
                                 if ty != suggestion {
-                                    error!(self, ErrorKind::CannotInfer(ty.clone(), suggestion.clone()));
+                                    error!(
+                                        self,
+                                        ErrorKind::CannotInfer(ty.clone(), suggestion.clone())
+                                    );
                                 }
                             }
                         }
                     }
                     value => {
-                        error!(self,
+                        error!(
+                            self,
                             ErrorKind::TypeError(op, vec![Type::from(&value)]),
-                            "Cannot link non-function {:?}", value);
+                            "Cannot link non-function {:?}",
+                            value
+                        );
                     }
                 };
             }
@@ -787,9 +872,7 @@ impl VM {
                         self.push(Value::from(a.as_ref()));
                     }
                     (Type::Tuple(a), b) if b.fits(&Type::Int) => {
-                        self.push(
-                            Value::Union(a.iter().map(|x| Value::from(x)).collect())
-                        );
+                        self.push(Value::Union(a.iter().map(|x| Value::from(x)).collect()));
                     }
                     _ => {
                         self.push(Value::Nil);
@@ -802,21 +885,23 @@ impl VM {
                 let slot = Type::from(self.stack.pop().unwrap());
                 let indexable = Type::from(self.stack.pop().unwrap());
                 match (indexable, slot, value) {
-                    (Type::List(v), Type::Int, n) => {
-                        match (v.as_ref(), &n) {
-                            (Type::Unknown, top_type)
-                                if top_type != &Type::Unknown => {}
-                            (a, b) if a.fits(b) => {}
-                            (a, b) => {
-                                error!(self, ErrorKind::TypeMismatch(a.clone(), b.clone()),
-                                       "Cannot assign mismatching types");
-                            }
+                    (Type::List(v), Type::Int, n) => match (v.as_ref(), &n) {
+                        (Type::Unknown, top_type) if top_type != &Type::Unknown => {}
+                        (a, b) if a.fits(b) => {}
+                        (a, b) => {
+                            error!(
+                                self,
+                                ErrorKind::TypeMismatch(a.clone(), b.clone()),
+                                "Cannot assign mismatching types"
+                            );
                         }
-                    }
+                    },
                     (indexable, slot, _) => {
                         self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::TypeError(Op::AssignIndex,
-                                    vec![indexable, slot.into()]));
+                        error!(
+                            self,
+                            ErrorKind::TypeError(Op::AssignIndex, vec![indexable, slot.into()])
+                        );
                     }
                 }
             }
@@ -826,7 +911,7 @@ impl VM {
                 let callable = &self.stack[new_base];
 
                 let call_callable = |callable: &Value| {
-                    let args = &self.stack[new_base+1..];
+                    let args = &self.stack[new_base + 1..];
                     let args: Vec<_> = args.iter().map(|x| x.into()).collect();
                     match callable {
                         Value::Blob(blob) => {
@@ -840,9 +925,9 @@ impl VM {
                             }
 
                             for (slot, ty) in blob.fields.values() {
-                                let given_ty = Type::from(&self.stack[new_base+1+slot]);
+                                let given_ty = Type::from(&self.stack[new_base + 1 + slot]);
                                 if !ty.fits(&given_ty) {
-                                    return Err(ErrorKind::TypeMismatch(ty.clone(), given_ty))
+                                    return Err(ErrorKind::TypeMismatch(ty.clone(), given_ty));
                                 }
                                 values[*slot] = ty.into();
                             }
@@ -858,17 +943,14 @@ impl VM {
                             } else {
                                 Ok(inner.ret().into())
                             }
-
                         }
 
                         Value::ExternFunction(slot) => {
                             let extern_func = self.extern_functions[*slot];
-                            extern_func(&self.stack[new_base+1..], true)
+                            extern_func(&self.stack[new_base + 1..], true)
                         }
 
-                        _ => {
-                            Err(ErrorKind::InvalidProgram)
-                        }
+                        _ => Err(ErrorKind::InvalidProgram),
                     }
                 };
 
@@ -887,16 +969,14 @@ impl VM {
                         } else {
                             Value::Union(returns)
                         }
-                    },
-                    _ => {
-                        match call_callable(callable) {
-                            Err(e) => {
-                                err = Some(e);
-                                Value::Nil
-                            },
-                            Ok(v) => v
-                        }
                     }
+                    _ => match call_callable(callable) {
+                        Err(e) => {
+                            err = Some(e);
+                            Value::Nil
+                        }
+                        Ok(v) => v,
+                    },
                 };
                 self.stack.truncate(new_base + 1);
                 if err.is_some() {
@@ -904,18 +984,18 @@ impl VM {
                 }
             }
 
-            Op::JmpFalse(_) => {
-                match self.pop() {
-                    Value::Bool(_) => {},
-                    a => { error!(self, ErrorKind::TypeError(op, vec![a.into()])) },
+            Op::JmpFalse(_) => match self.pop() {
+                Value::Bool(_) => {}
+                a => {
+                    error!(self, ErrorKind::TypeError(op, vec![a.into()]))
                 }
-            }
+            },
 
             Op::JmpNPop(_, _) => {}
 
             _ => {
                 self.eval_op(op)?;
-                return Ok(())
+                return Ok(());
             }
         }
         self.frame_mut().ip += 1;
@@ -939,7 +1019,11 @@ impl VM {
         });
 
         if self.print_bytecode {
-            println!("\n    [[{} - {}]]\n", "TYPECHECKING".purple(), self.frame().block.borrow().name);
+            println!(
+                "\n    [[{} - {}]]\n",
+                "TYPECHECKING".purple(),
+                self.frame().block.borrow().name
+            );
             self.frame().block.borrow().debug_print();
         }
 

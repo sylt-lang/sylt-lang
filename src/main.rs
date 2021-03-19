@@ -7,11 +7,10 @@ fn main() -> Result<(), String> {
     if args.file.is_none() {
         return Err("No file to run".to_string());
     }
-    let errs = match run_file(args, sylt_macro::link!(
-        sylt::dbg as dbg,
-        sylt::push as push,
-        sylt::len as len,
-    )) {
+    let errs = match run_file(
+        args,
+        sylt_macro::link!(sylt::dbg as dbg, sylt::push as push, sylt::len as len,),
+    ) {
         Err(it) => it,
         _ => return Ok(()),
     };
@@ -36,6 +35,6 @@ fn parse_args() -> Args {
         } else {
             eprintln!("Invalid argument {}.", s);
         }
-    };
+    }
     args
 }

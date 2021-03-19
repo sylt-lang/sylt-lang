@@ -1,11 +1,11 @@
+use std::borrow::Borrow;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::hash::{Hash, Hasher};
-use std::borrow::Borrow;
 
 use owo_colors::OwoColorize;
 
@@ -144,7 +144,8 @@ impl Hash for Type {
                 }
                 11
             }
-        }.hash(h);
+        }
+        .hash(h);
     }
 }
 
@@ -158,15 +159,12 @@ impl PartialEq for Type {
             (Type::Float, Type::Float) => true,
             (Type::Bool, Type::Bool) => true,
             (Type::String, Type::String) => true,
-            (Type::Tuple(a), Type::Tuple(b)) => {
-                a.iter().zip(b.iter()).all(|(a, b)| a == b)
-            }
-            (Type::Union(a), b) | (b, Type::Union(a)) => {
-                a.iter().any(|x| x == b)
-            }
+            (Type::Tuple(a), Type::Tuple(b)) => a.iter().zip(b.iter()).all(|(a, b)| a == b),
+            (Type::Union(a), b) | (b, Type::Union(a)) => a.iter().any(|x| x == b),
             (Type::List(a), Type::List(b)) => a == b,
-            (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) =>
-                a_args == b_args && a_ret == b_ret,
+            (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
+                a_args == b_args && a_ret == b_ret
+            }
             _ => false,
         }
     }
@@ -179,9 +177,7 @@ impl From<&Value> for Type {
         match value {
             Value::Instance(b, _) => Type::Instance(Rc::clone(b)),
             Value::Blob(b) => Type::Blob(Rc::clone(b)),
-            Value::Tuple(v) => {
-                Type::Tuple(v.iter().map(|x| Type::from(x)).collect())
-            }
+            Value::Tuple(v) => Type::Tuple(v.iter().map(|x| Type::from(x)).collect()),
             Value::List(v) => {
                 let v: &RefCell<_> = v.borrow();
                 let v: &Vec<_> = &v.borrow();
@@ -193,9 +189,7 @@ impl From<&Value> for Type {
                 };
                 Type::List(Box::new(t))
             }
-            Value::Union(v) => {
-                Type::Union(v.iter().map(|x| Type::from(x)).collect())
-            }
+            Value::Union(v) => Type::Union(v.iter().map(|x| Type::from(x)).collect()),
             Value::Int(_) => Type::Int,
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
@@ -222,16 +216,9 @@ impl From<&Type> for Value {
         match ty {
             Type::Void => Value::Nil,
             Type::Blob(b) => Value::Blob(Rc::clone(b)),
-            Type::Instance(b) => {
-                Value::Instance(Rc::clone(b),
-                    Rc::new(RefCell::new(Vec::new())))
-            }
-            Type::Tuple(fields) => {
-                Value::Tuple(Rc::new(fields.iter().map(Value::from).collect()))
-            }
-            Type::Union(v) => {
-                Value::Union(v.iter().map(Value::from).collect())
-            }
+            Type::Instance(b) => Value::Instance(Rc::clone(b), Rc::new(RefCell::new(Vec::new()))),
+            Type::Tuple(fields) => Value::Tuple(Rc::new(fields.iter().map(Value::from).collect())),
+            Type::Union(v) => Value::Union(v.iter().map(Value::from).collect()),
             Type::List(fields) => {
                 Value::List(Rc::new(RefCell::new(vec![Value::from(fields.as_ref())])))
             }
@@ -242,7 +229,8 @@ impl From<&Type> for Value {
             Type::String => Value::String(Rc::new("".to_string())),
             Type::Function(_, _) => Value::Function(
                 Rc::new(Vec::new()),
-                Rc::new(RefCell::new(Block::stubbed_block(ty)))),
+                Rc::new(RefCell::new(Block::stubbed_block(ty))),
+            ),
         }
     }
 }
@@ -258,21 +246,11 @@ impl Type {
     /// comparison for types useful when checking assignment.
     pub fn fits(&self, other: &Self) -> bool {
         match (self, other) {
-            (_, Type::Unknown) => {
-                true
-            }
-            (Type::List(a), Type::List(b)) => {
-                a.fits(b)
-            },
-            (Type::Union(a), Type::Union(b)) => {
-                a.iter().all(|x| b.contains(x))
-            },
-            (_, Type::Union(_)) => {
-                false
-            },
-            (a, b) => {
-                a == b
-            },
+            (_, Type::Unknown) => true,
+            (Type::List(a), Type::List(b)) => a.fits(b),
+            (Type::Union(a), Type::Union(b)) => a.iter().all(|x| b.contains(x)),
+            (_, Type::Union(_)) => false,
+            (a, b) => a == b,
         }
     }
 }
@@ -312,10 +290,7 @@ impl Debug for Value {
             Value::Function(_, block) => {
                 let block: &RefCell<_> = block.borrow();
                 let block = &block.borrow();
-                write!(fmt, "(fn {}: {:?})",
-                    block.name,
-                    block.ty
-                )
+                write!(fmt, "(fn {}: {:?})", block.name, block.ty)
             }
             Value::ExternFunction(slot) => write!(fmt, "(extern fn {})", slot),
             Value::Unknown => write!(fmt, "(unknown)"),
@@ -337,9 +312,7 @@ impl PartialEq<Value> for Value {
             (Value::Tuple(a), Value::Tuple(b)) => {
                 a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| a == b)
             }
-            (Value::Union(a), b) | (b, Value::Union(a)) => {
-                a.iter().any(|x| x == b)
-            }
+            (Value::Union(a), b) | (b, Value::Union(a)) => a.iter().any(|x| x == b),
             (Value::Nil, Value::Nil) => true,
             _ => false,
         }
@@ -356,13 +329,13 @@ impl Hash for Value {
                 // floats are wierd.
                 assert!(a.is_finite());
                 a.to_bits().hash(state);
-            },
+            }
             Value::Int(a) => a.hash(state),
             Value::Bool(a) => a.hash(state),
             Value::String(a) => a.hash(state),
             Value::Tuple(a) => a.hash(state),
             Value::Nil => state.write_i8(0),
-            _ => {},
+            _ => {}
         };
     }
 }
@@ -704,37 +677,47 @@ pub enum Op {
 /// Broken out because they need to be recursive.
 mod op {
     use super::{Type, Value};
-    use std::rc::Rc;
     use std::collections::HashSet;
+    use std::rc::Rc;
 
-    fn tuple_bin_op(a: &Rc<Vec<Value>>, b: &Rc<Vec<Value>>, f: fn (&Value, &Value) -> Value) -> Value {
-        Value::Tuple(Rc::new(a.iter().zip(b.iter()).map(|(a, b)| f(a, b)).collect()))
+    fn tuple_bin_op(
+        a: &Rc<Vec<Value>>,
+        b: &Rc<Vec<Value>>,
+        f: fn(&Value, &Value) -> Value,
+    ) -> Value {
+        Value::Tuple(Rc::new(
+            a.iter().zip(b.iter()).map(|(a, b)| f(a, b)).collect(),
+        ))
     }
 
-    fn tuple_un_op(a: &Rc<Vec<Value>>, f: fn (&Value) -> Value) -> Value {
+    fn tuple_un_op(a: &Rc<Vec<Value>>, f: fn(&Value) -> Value) -> Value {
         Value::Tuple(Rc::new(a.iter().map(f).collect()))
     }
 
-    fn union_un_op(a: &HashSet<Value>, f: fn (&Value) -> Value) -> Value {
-        a.iter().find_map(|x| {
-            let x = f(x);
-            if x.is_nil() {
-                None
-            } else {
-                Some(x)
-            }
-        }).unwrap_or(Value::Nil)
+    fn union_un_op(a: &HashSet<Value>, f: fn(&Value) -> Value) -> Value {
+        a.iter()
+            .find_map(|x| {
+                let x = f(x);
+                if x.is_nil() {
+                    None
+                } else {
+                    Some(x)
+                }
+            })
+            .unwrap_or(Value::Nil)
     }
 
-    fn union_bin_op(a: &HashSet<Value>, b: &Value, f: fn (&Value, &Value) -> Value) -> Value {
-        a.iter().find_map(|x| {
-            let x = f(x, b);
-            if x.is_nil() {
-                None
-            } else {
-                Some(x)
-            }
-        }).unwrap_or(Value::Nil)
+    fn union_bin_op(a: &HashSet<Value>, b: &Value, f: fn(&Value, &Value) -> Value) -> Value {
+        a.iter()
+            .find_map(|x| {
+                let x = f(x, b);
+                if x.is_nil() {
+                    None
+                } else {
+                    Some(x)
+                }
+            })
+            .unwrap_or(Value::Nil)
     }
 
     pub fn neg(value: &Value) -> Value {
@@ -757,7 +740,6 @@ mod op {
             _ => Value::Nil,
         }
     }
-
 
     pub fn add(a: &Value, b: &Value) -> Value {
         match (a, b) {
@@ -809,10 +791,14 @@ mod op {
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => {
                 for (a, b) in a.iter().zip(b.iter()) {
                     match eq(a, b) {
-                        Value::Bool(true) => {},
-                        Value::Bool(false) => { return Value::Bool(false); },
-                        Value::Nil => { return Value::Nil; },
-                        _ => unreachable!("Equality should only return bool or nil.")
+                        Value::Bool(true) => {}
+                        Value::Bool(false) => {
+                            return Value::Bool(false);
+                        }
+                        Value::Nil => {
+                            return Value::Nil;
+                        }
+                        _ => unreachable!("Equality should only return bool or nil."),
                     }
                 }
                 Value::Bool(true)
@@ -821,7 +807,7 @@ mod op {
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, eq),
             (Value::Nil, Value::Nil) => Value::Bool(true),
-            (Value::List(a), Value::List(b))  => {
+            (Value::List(a), Value::List(b)) => {
                 let a = a.borrow();
                 let b = b.borrow();
                 if a.len() != b.len() {
@@ -829,10 +815,14 @@ mod op {
                 }
                 for (a, b) in a.iter().zip(b.iter()) {
                     match eq(a, b) {
-                        Value::Bool(true) => {},
-                        Value::Bool(false) => { return Value::Bool(false); },
-                        Value::Nil => { return Value::Nil; },
-                        _ => unreachable!("Equality should only return bool or nil.")
+                        Value::Bool(true) => {}
+                        Value::Bool(false) => {
+                            return Value::Bool(false);
+                        }
+                        Value::Nil => {
+                            return Value::Nil;
+                        }
+                        _ => unreachable!("Equality should only return bool or nil."),
                     }
                 }
                 Value::Bool(true)
@@ -847,13 +837,14 @@ mod op {
             (Value::Int(a), Value::Int(b)) => Value::Bool(a < b),
             (Value::String(a), Value::String(b)) => Value::Bool(a < b),
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(a < b),
-            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => {
-                a.iter().zip(b.iter()).find_map(
-                    |(a, b)| match less(a, b) {
-                        Value::Bool(true) => None,
-                        a => Some(a),
-                    }).unwrap_or(Value::Bool(true))
-            }
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => a
+                .iter()
+                .zip(b.iter())
+                .find_map(|(a, b)| match less(a, b) {
+                    Value::Bool(true) => None,
+                    a => Some(a),
+                })
+                .unwrap_or(Value::Bool(true)),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => less(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, less),
@@ -980,13 +971,14 @@ impl Block {
     pub fn debug_print(&self) {
         println!("     === {} ===", self.name.blue());
         for (i, s) in self.ops.iter().enumerate() {
-            println!("{}{}",
-                     if self.line_offsets.contains_key(&i) {
-                         format!("{:5} ", self.line_offsets[&i].blue())
-                     } else {
-                         format!("    {} ", "|".blue())
-                     },
-                     format!("{:05} {:?}", i.red(), s)
+            println!(
+                "{}{}",
+                if self.line_offsets.contains_key(&i) {
+                    format!("{:5} ", self.line_offsets[&i].blue())
+                } else {
+                    format!("    {} ", "|".blue())
+                },
+                format!("{:05} {:?}", i.red(), s)
             );
         }
         println!();
@@ -1059,10 +1051,10 @@ mod tests {
         };
     }
 
-    use std::time::Duration;
+    use owo_colors::OwoColorize;
     use std::sync::mpsc;
     use std::thread;
-    use owo_colors::OwoColorize;
+    use std::time::Duration;
 
     // Shamelessly stolen from https://github.com/rust-lang/rfcs/issues/2798
     #[allow(dead_code)]
@@ -1083,12 +1075,8 @@ mod tests {
             Ok(_) => {
                 return handle.join().expect("Thread panicked");
             }
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                "Test took too long to complete"
-            },
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                "Test produced incorrect result"
-            },
+            Err(mpsc::RecvTimeoutError::Timeout) => "Test took too long to complete",
+            Err(mpsc::RecvTimeoutError::Disconnected) => "Test produced incorrect result",
         };
         eprintln!("    #### {} ####", msg.red());
         panic!(msg);
@@ -1102,11 +1090,11 @@ mod tests {
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
                 args.print_bytecode = $print;
-                $crate::run_file(args, sylt_macro::link!(
-                    crate::dbg as dbg,
-                    crate::push as push,
-                    crate::len as len,
-                )).unwrap();
+                $crate::run_file(
+                    args,
+                    sylt_macro::link!(crate::dbg as dbg, crate::push as push, crate::len as len,),
+                )
+                .unwrap();
             }
         };
         ($fn:ident, $path:literal, $print:expr, $errs:tt) => {
@@ -1119,11 +1107,10 @@ mod tests {
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
                 args.print_bytecode = $print;
-                let res = $crate::run_file(args, sylt_macro::link!(
-                    crate::dbg as dbg,
-                    crate::push as push,
-                    crate::len as len,
-                ));
+                let res = $crate::run_file(
+                    args,
+                    sylt_macro::link!(crate::dbg as dbg, crate::push as push, crate::len as len,),
+                );
                 $crate::assert_errs!(res, $errs);
             }
         };
@@ -1162,12 +1149,10 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> {
             ls.borrow_mut().push(v.clone());
             Ok(Value::Nil)
         }
-        (values, _) => {
-            Err(ErrorKind::ExternTypeMismatch(
-                "push".to_string(),
-                values.iter().map(|x| Type::from(x)).collect()
-            ))
-        }
+        (values, _) => Err(ErrorKind::ExternTypeMismatch(
+            "push".to_string(),
+            values.iter().map(|x| Type::from(x)).collect(),
+        )),
     }
 }
 

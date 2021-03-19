@@ -1,6 +1,6 @@
+use logos::Logos;
 use std::fs;
 use std::path::Path;
-use logos::Logos;
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 pub enum Token {

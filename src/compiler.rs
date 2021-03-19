@@ -1,12 +1,12 @@
-use std::path::{Path, PathBuf};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet, hash_map::Entry};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use crate::{Blob, Block, Op, Prog, RustFunction, Type, Value, path_to_module};
 use crate::error::{Error, ErrorKind};
 use crate::sectionizer::Section;
 use crate::tokenizer::Token;
+use crate::{path_to_module, Blob, Block, Op, Prog, RustFunction, Type, Value};
 
 macro_rules! nextable_enum {
     ( $name:ident { $( $thing:ident ),* $( , )? } ) => {
@@ -106,15 +106,8 @@ macro_rules! push_scope {
         let mut errors = Vec::new();
         for var in $compiler.frame().stack.iter().skip(ss).rev() {
             if !(var.read || var.upvalue) {
-                let e = ErrorKind::SyntaxError(
-                    var.line,
-                    Token::Identifier(var.name.clone()
-                ));
-                errors.push((
-                    e,
-                    var.line,
-                    format!("Unused value: '{}'", var.name),)
-                );
+                let e = ErrorKind::SyntaxError(var.line, Token::Identifier(var.name.clone()));
+                errors.push((e, var.line, format!("Unused value: '{}'", var.name)));
             }
             if var.captured {
                 add_op($compiler, $block, Op::PopUpvalue);
@@ -379,13 +372,15 @@ impl Compiler {
     }
 
     fn add_constant(&mut self, value: Value) -> usize {
-        if matches!(value, Value::Float(_)
-                         | Value::Int(_)
-                         | Value::Bool(_)
-                         | Value::String(_)
-                         | Value::Tuple(_)
-                         | Value::Nil)
-        {
+        if matches!(
+            value,
+            Value::Float(_)
+                | Value::Int(_)
+                | Value::Bool(_)
+                | Value::String(_)
+                | Value::Tuple(_)
+                | Value::Nil
+        ) {
             let entry = self.values.entry(value.clone());
             if let Entry::Occupied(entry) = entry {
                 *entry.get()
@@ -495,7 +490,9 @@ impl Compiler {
     }
 
     fn error_on_line(&mut self, kind: ErrorKind, line: usize, message: Option<String>) {
-        if self.panic { return }
+        if self.panic {
+            return;
+        }
         self.panic = true;
         self.errors.push(Error {
             kind,
@@ -524,7 +521,12 @@ impl Compiler {
 
     // TODO(ed): Const generics
     fn peek_four(&self) -> (Token, Token, Token, Token) {
-        (self.peek_at(0), self.peek_at(1), self.peek_at(2), self.peek_at(3))
+        (
+            self.peek_at(0),
+            self.peek_at(1),
+            self.peek_at(2),
+            self.peek_at(3),
+        )
     }
 
     fn eat(&mut self) -> Token {
@@ -550,7 +552,9 @@ impl Compiler {
         if self.section().tokens.len() == 0 {
             0
         } else {
-            self.section().tokens[std::cmp::min(self.current_token, self.section().tokens.len() - 1)].1
+            self.section().tokens
+                [std::cmp::min(self.current_token, self.section().tokens.len() - 1)]
+            .1
         }
     }
 
@@ -563,12 +567,11 @@ impl Compiler {
             Token::Minus | Token::Plus => Prec::Term,
 
             Token::EqualEqual
-                | Token::Greater
-                | Token::GreaterEqual
-                | Token::Less
-                | Token::LessEqual
-                | Token::NotEqual
-                => Prec::Comp,
+            | Token::Greater
+            | Token::GreaterEqual
+            | Token::Less
+            | Token::LessEqual
+            | Token::NotEqual => Prec::Comp,
 
             Token::And => Prec::BoolAnd,
             Token::Or => Prec::BoolOr,
@@ -586,15 +589,15 @@ impl Compiler {
             Token::Minus => self.unary(block),
             Token::LeftBracket => self.list(block),
 
-            Token::Float(_)
-                | Token::Int(_)
-                | Token::Bool(_)
-                | Token::String(_)
-                | Token::Nil => self.value(block),
+            Token::Float(_) | Token::Int(_) | Token::Bool(_) | Token::String(_) | Token::Nil => {
+                self.value(block)
+            }
 
             Token::Bang => self.unary(block),
 
-            _ => { return false; },
+            _ => {
+                return false;
+            }
         }
         return true;
     }
@@ -602,34 +605,37 @@ impl Compiler {
     fn infix(&mut self, token: Token, block: &mut Block) -> bool {
         match token {
             Token::Minus
-                | Token::Plus
-                | Token::Slash
-                | Token::Star
-                | Token::AssertEqual
-                | Token::EqualEqual
-                | Token::Greater
-                | Token::GreaterEqual
-                | Token::Less
-                | Token::LessEqual
-                | Token::NotEqual
-                => self.binary(block),
+            | Token::Plus
+            | Token::Slash
+            | Token::Star
+            | Token::AssertEqual
+            | Token::EqualEqual
+            | Token::Greater
+            | Token::GreaterEqual
+            | Token::Less
+            | Token::LessEqual
+            | Token::NotEqual => self.binary(block),
 
-            Token::And | Token::Or
-                => self.binary_bool(block),
+            Token::And | Token::Or => self.binary_bool(block),
 
-            _ => { return false; },
+            _ => {
+                return false;
+            }
         }
         return true;
     }
 
     fn value(&mut self, block: &mut Block) {
         let value = match self.eat() {
-            Token::Float(f) => { Value::Float(f) },
-            Token::Int(i) => { Value::Int(i) }
-            Token::Bool(b) => { Value::Bool(b) }
-            Token::Nil => { Value::Nil }
-            Token::String(s) => { Value::String(Rc::from(s)) }
-            _ => { error!(self, "Cannot parse value"); Value::Bool(false) }
+            Token::Float(f) => Value::Float(f),
+            Token::Int(i) => Value::Int(i),
+            Token::Bool(b) => Value::Bool(b),
+            Token::Nil => Value::Nil,
+            Token::String(s) => Value::String(Rc::from(s)),
+            _ => {
+                error!(self, "Cannot parse value");
+                Value::Bool(false)
+            }
         };
         let constant = self.add_constant(value);
         add_op(self, block, Op::Constant(constant));
@@ -659,22 +665,26 @@ impl Compiler {
                             if matches!(self.peek(), Token::RightBracket) {
                                 break;
                             }
-                        },
-                        Token::RightBracket => {},
+                        }
+                        Token::RightBracket => {}
                         _ => {
                             error!(self, "Expected ',' or ']' after list element");
                             return;
-                        },
+                        }
                     }
                 }
             }
-        };
+        }
         expect!(self, Token::RightBracket, "Expected ']' after list");
         add_op(self, block, Op::List(num_args));
     }
 
     fn grouping_or_tuple(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftParen, "Expected '(' for grouping or tuple.");
+        expect!(
+            self,
+            Token::LeftParen,
+            "Expected '(' for grouping or tuple."
+        );
 
         let mut num_args = 0;
         let trailing_comma = loop {
@@ -694,12 +704,12 @@ impl Compiler {
                             if matches!(self.peek(), Token::RightParen) {
                                 break true;
                             }
-                        },
-                        Token::RightParen => {},
+                        }
+                        Token::RightParen => {}
                         _ => {
                             error!(self, "Expected ',' or ')' after tuple element");
                             return;
-                        },
+                        }
                     }
                 }
             }
@@ -714,7 +724,10 @@ impl Compiler {
         let op = match self.eat() {
             Token::Minus => Op::Neg,
             Token::Bang => Op::Not,
-            _ => { error!(self, "Invalid unary operator"); Op::Neg },
+            _ => {
+                error!(self, "Invalid unary operator");
+                Op::Neg
+            }
         };
         self.parse_precedence(block, Prec::Factor);
         add_op(self, block, op);
@@ -744,7 +757,9 @@ impl Compiler {
                 block.patch(Op::Jmp(block.curr()), jump);
             }
 
-            _ => { error!(self, "Illegal operator"); }
+            _ => {
+                error!(self, "Illegal operator");
+            }
         }
     }
 
@@ -765,7 +780,10 @@ impl Compiler {
             Token::NotEqual => &[Op::Equal, Op::Not],
             Token::LessEqual => &[Op::Greater, Op::Not],
             Token::GreaterEqual => &[Op::Less, Op::Not],
-            _ => { error!(self, "Illegal operator"); &[] }
+            _ => {
+                error!(self, "Illegal operator");
+                &[]
+            }
         };
         block.add_from(op, self.line());
     }
@@ -773,7 +791,9 @@ impl Compiler {
     /// Entry point for all expression parsing.
     fn expression(&mut self, block: &mut Block) {
         match self.peek_four() {
-            (Token::Fn, ..) => { self.function(block, None); },
+            (Token::Fn, ..) => {
+                self.function(block, None);
+            }
             _ => self.parse_precedence(block, Prec::No),
         }
     }
@@ -798,7 +818,9 @@ impl Compiler {
     }
 
     fn find_and_capture_variable<'i, I>(name: &str, mut iterator: I) -> Option<Variable>
-    where I: Iterator<Item = &'i mut Frame> {
+    where
+        I: Iterator<Item = &'i mut Frame>,
+    {
         if let Some(frame) = iterator.next() {
             if let Some(res) = frame.find_local(name) {
                 frame.stack[res.slot].captured = true;
@@ -833,22 +855,28 @@ impl Compiler {
 
     fn find_constant(&mut self, name: &str) -> usize {
         match self.names_mut().entry(name.to_string()) {
-            Entry::Occupied(entry) => {
-                match entry.get() {
-                    Name::Slot(i, _) => { return *i; },
-                    Name::Unknown(i, _) => { return *i; },
-                    _ => {
-                        error!(self, "Tried to find constant '{}' but it was a namespace", name);
-                        return 0;
-                    }
+            Entry::Occupied(entry) => match entry.get() {
+                Name::Slot(i, _) => {
+                    return *i;
+                }
+                Name::Unknown(i, _) => {
+                    return *i;
+                }
+                _ => {
+                    error!(
+                        self,
+                        "Tried to find constant '{}' but it was a namespace", name
+                    );
+                    return 0;
                 }
             },
-            Entry::Vacant(_) => {},
+            Entry::Vacant(_) => {}
         };
 
         let slot = self.add_constant(Value::Unknown);
         let line = self.line();
-        self.names_mut().insert(name.to_string(), Name::Unknown(slot, line));
+        self.names_mut()
+            .insert(name.to_string(), Name::Unknown(slot, line));
         slot
     }
 
@@ -865,8 +893,8 @@ impl Compiler {
                 entry.insert(Name::Slot(slot, line));
                 self.constants[slot] = value;
                 return slot;
-            },
-            Entry::Vacant(_) => {},
+            }
+            Entry::Vacant(_) => {}
         }
         let slot = self.add_constant(value);
         self.names_mut().insert(name, Name::Slot(slot, line));
@@ -880,11 +908,11 @@ impl Compiler {
             Entry::Occupied(_) => {
                 error!(self, "Constant named \"{}\" already has a value", name);
                 0
-            },
+            }
             Entry::Vacant(entry) => {
                 entry.insert(Name::Unknown(slot, line));
                 slot
-            },
+            }
         }
     }
 
@@ -924,7 +952,7 @@ impl Compiler {
                         break;
                     }
                 }
-            },
+            }
 
             Token::Bang => {
                 self.eat();
@@ -1010,7 +1038,10 @@ impl Compiler {
                         break;
                     }
                     _ => {
-                        error!(self, "Expected '->' or more paramters in function definition");
+                        error!(
+                            self,
+                            "Expected '->' or more paramters in function definition"
+                        );
                         break;
                     }
                 }
@@ -1019,7 +1050,9 @@ impl Compiler {
             self.scope(&mut function_block);
 
             for var in self.frame().upvalues.iter() {
-                function_block.upvalues.push((var.outer_slot, var.outer_upvalue, var.typ.clone()));
+                function_block
+                    .upvalues
+                    .push((var.outer_slot, var.outer_upvalue, var.typ.clone()));
             }
         });
 
@@ -1027,7 +1060,9 @@ impl Compiler {
         for op in function_block.ops.iter().rev() {
             match op {
                 Op::Pop | Op::PopUpvalue => {}
-                Op::Return => { break; } ,
+                Op::Return => {
+                    break;
+                }
                 _ => {
                     add_op(self, &mut function_block, Op::Constant(nil));
                     add_op(self, &mut function_block, Op::Return);
@@ -1079,10 +1114,7 @@ impl Compiler {
                             return;
                         }
                         Some(Name::Namespace(inner_name)) => {
-                            namespace = self.contextes
-                                .get(inner_name)
-                                .unwrap().namespace
-                                .clone();
+                            namespace = self.contextes.get(inner_name).unwrap().namespace.clone();
                         }
                         _ => {
                             error!(self, "Invalid namespace field");
@@ -1180,7 +1212,10 @@ impl Compiler {
     fn define(&mut self, mut var: Variable) -> Result<usize, ()> {
         let frame = self.frame();
 
-        if let Some(res) = frame.find_local(&var.name).or(frame.find_upvalue(&var.name)) {
+        if let Some(res) = frame
+            .find_local(&var.name)
+            .or(frame.find_upvalue(&var.name))
+        {
             if res.scope == frame.scope {
                 error!(self, "Multiple definitions of '{}' in this block", res.name);
                 return Err(());
@@ -1322,9 +1357,15 @@ impl Compiler {
             while !matches!(self.peek(), Token::RightBrace | Token::EOF) {
                 self.statement(block);
                 match self.peek() {
-                    Token::Newline => { self.eat(); },
-                    Token::RightBrace => { break; },
-                    _ => { error!(self, "Expect newline after statement"); },
+                    Token::Newline => {
+                        self.eat();
+                    }
+                    Token::RightBrace => {
+                        break;
+                    }
+                    _ => {
+                        error!(self, "Expect newline after statement");
+                    }
                 }
             }
         });
@@ -1372,16 +1413,26 @@ impl Compiler {
 
                 (Token::Comma, ..) => {}
 
-                _ => { error!(self, "Expected definition at start of for-loop"); }
+                _ => {
+                    error!(self, "Expected definition at start of for-loop");
+                }
             }
 
-            expect!(self, Token::Comma, "Expect ',' between initalizer and loop expression");
+            expect!(
+                self,
+                Token::Comma,
+                "Expect ',' between initalizer and loop expression"
+            );
 
             let cond = block.curr();
             self.expression(block);
             let cond_out = add_op(self, block, Op::Illegal);
             let cond_cont = add_op(self, block, Op::Illegal);
-            expect!(self, Token::Comma, "Expect ',' between initalizer and loop expression");
+            expect!(
+                self,
+                Token::Comma,
+                "Expect ',' between initalizer and loop expression"
+            );
 
             let inc = block.curr();
             push_scope!(self, block, {
@@ -1397,7 +1448,8 @@ impl Compiler {
             block.patch(Op::JmpFalse(block.curr()), cond_out);
 
             let stacksize = self.frame().stack.len();
-            self.frame_mut().pop_loop(block, stacksize, inc, block.curr());
+            self.frame_mut()
+                .pop_loop(block, stacksize, inc, block.curr());
         });
     }
 
@@ -1410,16 +1462,16 @@ impl Compiler {
                     self.eat();
                     tys.insert(Type::Void);
                     return Ok(Type::Union(tys));
-                },
+                }
 
                 Token::Pipe => {
                     self.eat();
                     tys.insert(self.parse_simple_type()?);
-                },
+                }
 
                 _ => {
                     break;
-                },
+                }
             }
         }
         if tys.len() == 1 {
@@ -1443,7 +1495,11 @@ impl Compiler {
                                     self.eat();
                                 }
                             } else {
-                                error!(self, "Function type signature contains non-type {:?}", self.peek());
+                                error!(
+                                    self,
+                                    "Function type signature contains non-type {:?}",
+                                    self.peek()
+                                );
                                 return Err(());
                             }
                         }
@@ -1455,7 +1511,10 @@ impl Compiler {
                             break Type::Void;
                         }
                         token => {
-                            error!(self, "Function type signature contains non-type {:?}", token);
+                            error!(
+                                self,
+                                "Function type signature contains non-type {:?}", token
+                            );
                             return Err(());
                         }
                     }
@@ -1473,9 +1532,7 @@ impl Compiler {
                         self.eat();
                         return Ok(Type::Tuple(element));
                     }
-                    if !expect!(self,
-                                Token::Comma,
-                                "Expect comma efter element in tuple") {
+                    if !expect!(self, Token::Comma, "Expect comma efter element in tuple") {
                         return Err(());
                     }
                 }
@@ -1488,7 +1545,7 @@ impl Compiler {
                 return match ty {
                     Ok(ty) => Ok(Type::List(Box::new(ty))),
                     Err(_) => Err(()),
-                }
+                };
             }
 
             Token::Identifier(x) => {
@@ -1523,15 +1580,24 @@ impl Compiler {
             error!(self, "Expected identifier after 'blob'");
             return;
         };
-        expect!(self, Token::ColonColon, "Expected '::' when declaring a blob");
+        expect!(
+            self,
+            Token::ColonColon,
+            "Expected '::' when declaring a blob"
+        );
         expect!(self, Token::Blob, "Expected 'blob' when declaring a blob");
 
         expect!(self, Token::LeftBrace, "Expected 'blob' body. AKA '{{'");
 
         let mut blob = Blob::new(self.new_blob_id(), &name);
         loop {
-            if matches!(self.peek(), Token::EOF | Token::RightBrace) { break; }
-            if matches!(self.peek(), Token::Newline) { self.eat(); continue; }
+            if matches!(self.peek(), Token::EOF | Token::RightBrace) {
+                break;
+            }
+            if matches!(self.peek(), Token::Newline) {
+                self.eat();
+                continue;
+            }
 
             let name = if let Token::Identifier(name) = self.eat() {
                 name
@@ -1550,7 +1616,10 @@ impl Compiler {
             };
 
             if let Err(_) = blob.add_field(&name, ty) {
-                error!(self, "A field named '{}' is defined twice for '{}'", name, blob.name);
+                error!(
+                    self,
+                    "A field named '{}' is defined twice for '{}'", name, blob.name
+                );
             }
         }
 
@@ -1568,12 +1637,14 @@ impl Compiler {
         if let Some(_) = self.find_namespace(&name) {
             self.expression(block);
         } else {
-            if rest_of_line_contains!(self,
-                  Token::Equal
-                | Token::PlusEqual
-                | Token::MinusEqual
-                | Token::StarEqual
-                | Token::SlashEqual) {
+            if rest_of_line_contains!(
+                self,
+                Token::Equal
+                    | Token::PlusEqual
+                    | Token::MinusEqual
+                    | Token::StarEqual
+                    | Token::SlashEqual
+            ) {
                 self.blob_field(block)
             } else {
                 self.expression(block)
@@ -1689,17 +1760,17 @@ impl Compiler {
                 self.eat();
                 self.eat();
                 self.definition_statement(&name, Type::Unknown, block);
-            },
+            }
 
             (Token::Identifier(_), Token::ColonColon, Token::Blob, ..) => {
                 self.blob_statement(block);
-            },
+            }
 
             (Token::Identifier(name), Token::ColonColon, ..) => {
                 self.eat();
                 self.eat();
                 self.constant_statement(&name, Type::Unknown, block);
-            },
+            }
 
             (Token::Identifier(name), Token::Colon, ..) => {
                 self.eat();
@@ -1715,7 +1786,10 @@ impl Compiler {
             (Token::Newline, ..) => {}
 
             (a, b, c, d) => {
-                error!(self, "Unknown outer token sequence: {:?} {:?} {:?} {:?}", a, b, c, d)
+                error!(
+                    self,
+                    "Unknown outer token sequence: {:?} {:?} {:?} {:?}", a, b, c, d
+                )
             }
         }
     }
@@ -1730,13 +1804,11 @@ impl Compiler {
                 add_op(self, block, Op::Print);
             }
 
-            (Token::Identifier(_), Token::Equal, ..) |
-            (Token::Identifier(_), Token::PlusEqual, ..) |
-            (Token::Identifier(_), Token::MinusEqual, ..) |
-            (Token::Identifier(_), Token::SlashEqual, ..) |
-            (Token::Identifier(_), Token::StarEqual, ..)
-
-                => {
+            (Token::Identifier(_), Token::Equal, ..)
+            | (Token::Identifier(_), Token::PlusEqual, ..)
+            | (Token::Identifier(_), Token::MinusEqual, ..)
+            | (Token::Identifier(_), Token::SlashEqual, ..)
+            | (Token::Identifier(_), Token::StarEqual, ..) => {
                 self.assign(block);
             }
 
@@ -1828,7 +1900,12 @@ impl Compiler {
         }
     }
 
-    pub(crate) fn compile(&mut self, name: &str, file: &Path, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
+    pub(crate) fn compile(
+        &mut self,
+        name: &str,
+        file: &Path,
+        functions: &[(String, RustFunction)],
+    ) -> Result<Prog, Vec<Error>> {
         let main = Variable::new("/preamble", false, Type::Void);
         let slot = self.define(main).unwrap();
         self.frame_mut().stack[slot].read = true;
@@ -1836,30 +1913,36 @@ impl Compiler {
         for section in 0..self.sections.len() {
             self.init_section(section);
             let section = &mut self.sections[section];
-            match (section.tokens.get(0), section.tokens.get(1), section.tokens.get(2))  {
-                (Some((Token::Use, _)),
-                 Some((Token::Identifier(name), _)), ..) => {
+            match (
+                section.tokens.get(0),
+                section.tokens.get(1),
+                section.tokens.get(2),
+            ) {
+                (Some((Token::Use, _)), Some((Token::Identifier(name), _)), ..) => {
                     let path = path_to_module(file, &name);
                     let name = name.to_string();
                     self.add_namespace(name, path);
                 }
 
-                (Some((Token::Identifier(name), _)),
-                 Some((Token::ColonColon, _)),
-                 Some((Token::Fn, _))) => {
+                (
+                    Some((Token::Identifier(name), _)),
+                    Some((Token::ColonColon, _)),
+                    Some((Token::Fn, _)),
+                ) => {
                     let name = name.to_string();
                     self.forward_constant(name);
                 }
 
-                (Some((Token::Identifier(name), _)),
-                 Some((Token::ColonColon, _)),
-                 Some((Token::Blob, _))) => {
+                (
+                    Some((Token::Identifier(name), _)),
+                    Some((Token::ColonColon, _)),
+                    Some((Token::Blob, _)),
+                ) => {
                     let name = name.to_string();
                     self.forward_constant(name);
                 }
 
-                (Some((Token::Identifier(name), _)),
-                 Some((Token::Colon, _)), ..) => {
+                (Some((Token::Identifier(name), _)), Some((Token::Colon, _)), ..) => {
                     let name = name.to_string();
                     self.eat();
                     self.eat();
@@ -1872,18 +1955,15 @@ impl Compiler {
                     }
                 }
 
-                (Some((Token::Identifier(name), _)),
-                 Some((Token::ColonColon, _)), ..) => {
+                (Some((Token::Identifier(name), _)), Some((Token::ColonColon, _)), ..) => {
                     let var = Variable::new(name, false, Type::Unknown);
                     let _ = self.define(var).unwrap();
                 }
 
-                (Some((Token::Identifier(name), _)),
-                 Some((Token::ColonEqual, _)), ..) => {
+                (Some((Token::Identifier(name), _)), Some((Token::ColonEqual, _)), ..) => {
                     let var = Variable::new(name, true, Type::Unknown);
                     let _ = self.define(var).unwrap();
                 }
-
 
                 (None, ..) => {}
 
@@ -1908,21 +1988,31 @@ impl Compiler {
             }
             while !matches!(self.peek(), Token::EOF | Token::Use) {
                 self.outer_statement(&mut block);
-                expect!(self, Token::Newline | Token::EOF,
-                        "Expect newline or EOF after expression");
+                expect!(
+                    self,
+                    Token::Newline | Token::EOF,
+                    "Expect newline or EOF after expression"
+                );
             }
         }
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
 
         if self.names().len() != 0 {
-            let errors: Vec<_> = self.names().iter().filter_map(|(name, kind)|
-                if let Name::Unknown(_, line) = kind {
-                    Some((ErrorKind::SyntaxError(*line, Token::Identifier(name.clone())),
-                    *line,
-                    format!("Usage of undefined value: '{}'", name,)))
-                } else {
-                    None
-                }) .collect();
+            let errors: Vec<_> = self
+                .names()
+                .iter()
+                .filter_map(|(name, kind)| {
+                    if let Name::Unknown(_, line) = kind {
+                        Some((
+                            ErrorKind::SyntaxError(*line, Token::Identifier(name.clone())),
+                            *line,
+                            format!("Usage of undefined value: '{}'", name,),
+                        ))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             for (e, l, m) in errors.iter() {
                 self.error_on_line(e.clone(), *l, Some(m.clone()));
             }
