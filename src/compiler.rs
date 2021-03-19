@@ -1740,8 +1740,7 @@ impl Compiler {
                 self.assign(block);
             }
 
-            (Token::Identifier(_), Token::Dot, ..)
-                => {
+            (Token::Identifier(_), Token::Dot, ..) => {
                 self.access_dotted(block);
             }
 
