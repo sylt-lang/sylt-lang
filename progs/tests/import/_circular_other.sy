@@ -1,0 +1,5 @@
+use circular_main
+
+g :: fn a: int -> int {
+    ret circular_main.f(a)
+}
