@@ -1137,7 +1137,7 @@ impl Compiler {
                             Token::Equal => {
                                 self.eat();
                                 self.expression(block);
-                                add_op(self, block, Op::SetIndex);
+                                add_op(self, block, Op::AssignIndex);
                                 add_op(self, block, Op::Constant(nil));
                                 return;
                             }
@@ -1148,17 +1148,17 @@ impl Compiler {
                             Token::SlashEqual => Op::Div,
 
                             _ => {
-                                add_op(self, block, Op::Index);
+                                add_op(self, block, Op::GetIndex);
                                 continue;
                             }
                         };
 
                         add_op(self, block, Op::Copy(2));
-                        add_op(self, block, Op::Index);
+                        add_op(self, block, Op::GetIndex);
                         self.eat();
                         self.expression(block);
                         add_op(self, block, op);
-                        add_op(self, block, Op::SetIndex);
+                        add_op(self, block, Op::AssignIndex);
                         add_op(self, block, Op::Constant(nil));
                         return;
                     }
@@ -1642,7 +1642,7 @@ impl Compiler {
                             Token::Equal => {
                                 self.eat();
                                 self.expression(block);
-                                add_op(self, block, Op::SetIndex);
+                                add_op(self, block, Op::AssignIndex);
                                 return;
                             }
 
@@ -1652,17 +1652,17 @@ impl Compiler {
                             Token::SlashEqual => Op::Div,
 
                             _ => {
-                                add_op(self, block, Op::Index);
+                                add_op(self, block, Op::GetIndex);
                                 continue;
                             }
                         };
 
                         add_op(self, block, Op::Copy(2));
-                        add_op(self, block, Op::Index);
+                        add_op(self, block, Op::GetIndex);
                         self.eat();
                         self.expression(block);
                         add_op(self, block, op);
-                        add_op(self, block, Op::SetIndex);
+                        add_op(self, block, Op::AssignIndex);
                         return;
                     }
                     Token::Newline => {

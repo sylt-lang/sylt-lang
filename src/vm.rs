@@ -295,7 +295,7 @@ impl VM {
                 self.constants[slot] = constant;
             }
 
-            Op::Index => {
+            Op::GetIndex => {
                 let slot = self.stack.pop().unwrap();
                 let val = self.stack.pop().unwrap();
                 match (val, slot) {
@@ -326,7 +326,7 @@ impl VM {
                 }
             }
 
-            Op::SetIndex => {
+            Op::AssignIndex => {
                 let value = self.stack.pop().unwrap();
                 let slot = self.stack.pop().unwrap();
                 let indexable = self.stack.pop().unwrap();
@@ -774,7 +774,7 @@ impl VM {
                 };
             }
 
-            Op::Index => {
+            Op::GetIndex => {
                 // We don't have any information about the slot and the indexable might contain
                 // mixed types.
                 self.stack.pop().unwrap();
@@ -782,7 +782,7 @@ impl VM {
                 self.stack.push(Value::Unknown);
             }
 
-            Op::SetIndex => {
+            Op::AssignIndex => {
                 let value = Type::from(self.stack.pop().unwrap());
                 let slot = Type::from(self.stack.pop().unwrap());
                 let indexable = Type::from(self.stack.pop().unwrap());
@@ -800,7 +800,7 @@ impl VM {
                     }
                     (indexable, slot, _) => {
                         self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::TypeError(Op::SetIndex,
+                        error!(self, ErrorKind::TypeError(Op::AssignIndex,
                                     vec![indexable, slot.into()]));
                     }
                 }
