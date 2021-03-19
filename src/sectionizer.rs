@@ -1,9 +1,11 @@
 use crate::error::{Error, ErrorKind};
 use crate::tokenizer::{PlacedToken, Token, file_to_tokens};
+use crate::path_to_module;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+#[derive(Debug)]
 pub struct Section {
     pub tokens: Vec<PlacedToken>,
     pub path: PathBuf,
@@ -47,9 +49,9 @@ pub fn sectionize(path: &Path) -> Result<Vec<Section>, Vec<Error>> {
                     },
 
                 (Some((Token::Use, _)),
-                 Some((Token::Identifier(use_file), _)),
+                 Some((Token::Identifier(file), _)),
                  Some((Token::Newline, line))) => {
-                    let use_file: PathBuf = format!("{}.sy", use_file).into();
+                    let use_file = path_to_module(&path, file);
                     if !read_files.contains(&use_file) {
                         read_files.insert(use_file.clone());
                         match file_to_tokens(&use_file) {
