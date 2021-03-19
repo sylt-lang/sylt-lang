@@ -1,15 +1,11 @@
+use owo_colors::OwoColorize;
 use std::cell::RefCell;
-use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt::Debug;
 use std::rc::Rc;
 
-use owo_colors::OwoColorize;
-
 use crate::error::{Error, ErrorKind};
-use crate::RustFunction;
-use crate::Type;
-use crate::{op, Block, BlockLinkState, Op, Prog, UpValue, Value};
+use crate::{op, Block, BlockLinkState, Op, Prog, RustFunction, Type, UpValue, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {

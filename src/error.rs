@@ -1,13 +1,10 @@
+use owo_colors::OwoColorize;
 use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
 
-use owo_colors::OwoColorize;
-
-use crate::tokenizer::Token;
-use crate::Type;
-use crate::{Op, Value};
+use crate::{tokenizer::Token, Op, Type, Value};
 
 #[derive(Debug, Clone)]
 pub enum ErrorKind {

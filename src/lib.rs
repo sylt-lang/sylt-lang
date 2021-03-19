@@ -1,3 +1,4 @@
+use owo_colors::OwoColorize;
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
@@ -6,8 +7,6 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-
-use owo_colors::OwoColorize;
 
 use error::Error;
 

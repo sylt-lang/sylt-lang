@@ -1,9 +1,9 @@
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+
 use crate::error::{Error, ErrorKind};
 use crate::path_to_module;
 use crate::tokenizer::{file_to_tokens, PlacedToken, Token};
-
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct Section {
