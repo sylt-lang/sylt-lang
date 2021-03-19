@@ -291,3 +291,27 @@ pub fn derive_enumerate(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
     };
     proc_macro::TokenStream::from(item)
 }
+
+#[proc_macro_derive(Next)]
+pub fn derive_next(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    assert!(!item.is_empty());
+    let parsed: syn::ItemEnum = parse_macro_input!(item);
+
+    let ident = parsed.ident.clone();
+    let match_arm: Vec<_> = parsed.variants.iter().zip(parsed.variants.iter().skip(1).chain(::std::iter::once(parsed.variants.iter().last().unwrap()))).map(|(var1, var2)| {
+        quote! {
+            #ident::#var1 => #ident::#var2,
+        }
+    }).collect();
+
+    let item = quote! {
+        impl ::sylt::Next for #ident {
+            fn next(&self) -> Self {
+                match self {
+                    #(#match_arm)*
+                }
+            }
+        }
+    };
+    proc_macro::TokenStream::from(item)
+}
