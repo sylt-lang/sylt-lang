@@ -228,10 +228,9 @@ impl VM {
                 self.drop_upvalue(slot, value);
             }
 
-            Op::Copy => {
-                let v = self.pop();
-                self.push(v.clone());
-                self.push(v);
+            Op::Copy(n) => {
+                let end = Vec::from(&self.stack[self.stack.len()-n..]);
+                self.stack.extend(end);
             }
 
             Op::Yield => {
@@ -298,7 +297,7 @@ impl VM {
                 self.constants[slot] = constant;
             }
 
-            Op::Index => {
+            Op::GetIndex => {
                 let slot = self.stack.pop().unwrap();
                 let val = self.stack.pop().unwrap();
                 match (val, slot) {
@@ -329,25 +328,69 @@ impl VM {
                 }
             }
 
+            Op::AssignIndex => {
+                let value = self.stack.pop().unwrap();
+                let slot = self.stack.pop().unwrap();
+                let indexable = self.stack.pop().unwrap();
+                match (indexable, slot, value) {
+                    (Value::List(rc_v), Value::Int(slot), n) => {
+                        let slot = slot as usize;
+                        let v = rc_v.borrow();
+                        if v.len() <= slot {
+                            self.stack.push(Value::Nil);
+                            let len = v.len();
+                            drop(v);
+                            error!(self, ErrorKind::IndexOutOfBounds(Value::List(rc_v), len, slot));
+                        }
+                        drop(v);
+                        rc_v.borrow_mut()[slot] = n;
+                    }
+                    (indexable, slot, _) => {
+                        self.stack.push(Value::Nil);
+                        error!(self, ErrorKind::IndexError(indexable, slot.into()));
+                    }
+                }
+            }
+
             Op::Get(field) => {
                 let inst = self.pop();
-                let field = self.string(field);
-                if let Value::Instance(ty, values) = inst {
-                    let slot = ty.fields.get(field).unwrap().0;
-                    self.push(values.borrow()[slot].clone());
-                } else {
-                    error!(self, ErrorKind::UnknownField(inst, field.clone()));
+                match inst {
+                    Value::Instance(ty, values) => {
+                        let field = self.string(field);
+                        match ty.fields.get(field) {
+                            Some((slot, _)) => {
+                                self.push(values.borrow()[*slot].clone());
+                            }
+                            _ => {
+                                let err = Err(self.error(ErrorKind::UnknownField(ty.name.clone(), field.clone()), None));
+                                self.push(Value::Nil);
+                                return err;
+                            }
+                        };
+                    }
+                    inst => {
+                        error!(self, ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)]));
+                    }
                 }
             }
 
             Op::Set(field) => {
                 let (inst, value) = self.poppop();
-                let field = self.string(field);
-                if let Value::Instance(ty, values) = inst {
-                    let slot = ty.fields.get(field).unwrap().0;
-                    values.borrow_mut()[slot] = value;
-                } else {
-                    error!(self, ErrorKind::UnknownField(inst, field.clone()));
+                match inst {
+                    Value::Instance(ty, values) => {
+                        let field = self.string(field);
+                        match ty.fields.get(field) {
+                            Some((slot, _)) => {
+                                values.borrow_mut()[*slot] = value;
+                            }
+                            _ => {
+                                error!(self, ErrorKind::UnknownField(ty.name.clone(), field.clone()));
+                            }
+                        };
+                    }
+                    inst => {
+                        error!(self, ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)]));
+                    }
                 }
             }
 
@@ -443,11 +486,7 @@ impl VM {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {
                     Value::Blob(blob) => {
-                        let mut values = Vec::with_capacity(blob.fields.len());
-                        for _ in 0..values.capacity() {
-                            values.push(Value::Nil);
-                        }
-
+                        let values = self.stack.split_off(new_base+1);
                         self.pop();
                         self.push(Value::Instance(blob, Rc::new(RefCell::new(values))));
                     }
@@ -620,34 +659,30 @@ impl VM {
                 }
             }
 
-            Op::Get(field) => {
-                let inst = self.pop();
-                let field = self.string(field);
-                if let Value::Instance(ty, _) = inst {
-                    let value = Value::from(ty.fields.get(field).unwrap().1.clone());
-                    self.push(value);
-                } else {
-                    let field = field.clone();
-                    self.push(Value::Nil);
-                    error!(self, ErrorKind::UnknownField(inst, field));
-                }
-            }
-
             Op::Set(field) => {
                 let (inst, value) = self.poppop();
-                let field = self.string(field);
-
-                if let Value::Instance(ty, _) = inst {
-                    let ty = &ty.fields.get(field).unwrap().1;
-                    let expected = Type::from(&value);
-                    if ty != &expected {
-                        error!(self, ErrorKind::TypeMismatch(expected, ty.clone()),
-                               "Types of field and variable do not match");
+                match inst {
+                    Value::Instance(ty, _) => {
+                        let field = self.string(field);
+                        match ty.fields.get(field) {
+                            Some((_, ty)) => {
+                                let expected = Type::from(&value);
+                                if ty != &expected {
+                                    error!(self, ErrorKind::TypeMismatch(expected, ty.clone()),
+                                    "Types of field and variable do not match");
+                                }
+                            }
+                            _ => {
+                                error!(self, ErrorKind::UnknownField(ty.name.clone(), field.clone()));
+                            }
+                        };
                     }
-                } else {
-                    error!(self, ErrorKind::UnknownField(inst, field.clone()));
+                    inst => {
+                        error!(self, ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)]));
+                    }
                 }
             }
+
 
             Op::PopUpvalue => {
                 self.pop();
@@ -745,7 +780,7 @@ impl VM {
                 };
             }
 
-            Op::Index => {
+            Op::GetIndex => {
                 let (a, b) = self.poppop();
                 match (Type::from(a), Type::from(b)) {
                     (Type::List(a), b) if b.fits(&Type::Int) => {
@@ -762,6 +797,30 @@ impl VM {
                 }
             }
 
+            Op::AssignIndex => {
+                let value = Type::from(self.stack.pop().unwrap());
+                let slot = Type::from(self.stack.pop().unwrap());
+                let indexable = Type::from(self.stack.pop().unwrap());
+                match (indexable, slot, value) {
+                    (Type::List(v), Type::Int, n) => {
+                        match (v.as_ref(), &n) {
+                            (Type::Unknown, top_type)
+                                if top_type != &Type::Unknown => {}
+                            (a, b) if a.fits(b) => {}
+                            (a, b) => {
+                                error!(self, ErrorKind::TypeMismatch(a.clone(), b.clone()),
+                                       "Cannot assign mismatching types");
+                            }
+                        }
+                    }
+                    (indexable, slot, _) => {
+                        self.stack.push(Value::Nil);
+                        error!(self, ErrorKind::TypeError(Op::AssignIndex,
+                                    vec![indexable, slot.into()]));
+                    }
+                }
+            }
+
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 let callable = &self.stack[new_base];
@@ -771,12 +830,20 @@ impl VM {
                     let args: Vec<_> = args.iter().map(|x| x.into()).collect();
                     match callable {
                         Value::Blob(blob) => {
+                            if blob.fields.len() != num_args {
+                                return Err(ErrorKind::ArgumentCount(blob.fields.len(), num_args));
+                            }
+
                             let mut values = Vec::with_capacity(blob.fields.len());
                             for _ in 0..values.capacity() {
                                 values.push(Value::Nil);
                             }
 
                             for (slot, ty) in blob.fields.values() {
+                                let given_ty = Type::from(&self.stack[new_base+1+slot]);
+                                if !ty.fits(&given_ty) {
+                                    return Err(ErrorKind::TypeMismatch(ty.clone(), given_ty))
+                                }
                                 values[*slot] = ty.into();
                             }
 

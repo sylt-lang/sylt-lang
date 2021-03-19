@@ -1,0 +1,11 @@
+A :: blob {
+    a: int
+    b: int
+}
+
+start :: fn {
+    a :: A(1, 2, 3)
+    a
+}
+
+// errors: [ErrorKind::ArgumentCount(2, 3)]

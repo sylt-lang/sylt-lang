@@ -1,6 +1,6 @@
 A :: blob { a: int }
 
 start :: fn {
-    a := A()
+    a := A(1)
     a.a = 2
 }

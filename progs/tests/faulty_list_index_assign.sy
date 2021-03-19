@@ -1,0 +1,13 @@
+Q :: blob {
+    a : [int]
+}
+
+start :: fn {
+    a :: [1]
+    a[0] = "fail"
+
+    q :: Q([4])
+    q.a[0] = "fail"
+}
+
+// errors: [ErrorKind::TypeMismatch(Type::Int, Type::String), ErrorKind::TypeMismatch(Type::Int, Type::String)]
