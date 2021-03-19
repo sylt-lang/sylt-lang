@@ -4,9 +4,7 @@ A :: blob {
 }
 
 start :: fn {
-    a := A()
-    a.a = 2
-    a.b = 3
-    a.a + a.b <=> 5
-    5 <=> a.a + a.b
+    a := A(1, 2)
+    a.a + a.b <=> 3
+    3 <=> a.a + a.b
 }

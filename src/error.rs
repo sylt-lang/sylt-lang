@@ -20,7 +20,7 @@ pub enum ErrorKind {
     /// (External function, parameters)
     ExternTypeMismatch(String, Vec<Type>),
     ValueError(Op, Vec<Value>),
-    UnknownField(Value, String),
+    UnknownField(String, String),
     ArgumentCount(usize, usize),
 
     /// (Indexed value, length, index)
@@ -86,7 +86,7 @@ impl fmt::Display for ErrorKind {
                 write!(f, "Cannot apply {:?} to values {}", op, values)
             }
             ErrorKind::UnknownField(obj, field) => {
-                write!(f, "Cannot find field '{}' on {:?}", field, obj)
+                write!(f, "Cannot find field '{}' on blob {:?}", field, obj)
             }
             ErrorKind::ArgumentCount(expected, given) => {
                 write!(f, "Incorrect argument count, expected {} but got {}",

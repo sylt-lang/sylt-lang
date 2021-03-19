@@ -1,15 +1,19 @@
+// TODO(ed): This test only passes if C is placed first,
+// this is because the compiler hasn't resolved the type
+// and cannot write a define for that type. We could solve
+// this by resolving all Op::Defines later.
+C :: blob { }
+
 A :: blob {
     c: C
 }
 
-C :: blob { }
-
 B :: blob { }
 
 start :: fn {
-    a := A()
-    b := B()
     c := C()
+    a := A(c)
+    b := B()
     b2 := B()
 
     a

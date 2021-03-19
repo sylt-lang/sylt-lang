@@ -617,8 +617,6 @@ impl Compiler {
             Token::And | Token::Or
                 => self.binary_bool(block),
 
-            Token::LeftBracket => self.index(block),
-
             _ => { return false; },
         }
         return true;
@@ -712,15 +710,6 @@ impl Compiler {
         expect!(self, Token::RightParen, "Expected ')' after tuple");
     }
 
-    fn index(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftBracket, "Expected '[' around index");
-
-        self.expression(block);
-        add_op(self, block, Op::Index);
-
-        expect!(self, Token::RightBracket, "Expected ']' around index");
-    }
-
     fn unary(&mut self, block: &mut Block) {
         let op = match self.eat() {
             Token::Minus => Op::Neg,
@@ -736,7 +725,7 @@ impl Compiler {
 
         match op {
             Token::And => {
-                add_op(self, block, Op::Copy);
+                add_op(self, block, Op::Copy(1));
                 let jump = add_op(self, block, Op::Illegal);
 
                 self.parse_precedence(block, self.precedence(op.clone()).next());
@@ -745,7 +734,7 @@ impl Compiler {
             }
 
             Token::Or => {
-                add_op(self, block, Op::Copy);
+                add_op(self, block, Op::Copy(1));
                 let skipp = add_op(self, block, Op::Illegal);
                 let jump = add_op(self, block, Op::Illegal);
                 block.patch(Op::JmpFalse(block.curr()), skipp);
@@ -1134,6 +1123,44 @@ impl Compiler {
                             error!(self, "Expected fieldname after '.'");
                             return;
                         }
+                    }
+                    Token::LeftBracket => {
+                        // TODO(ed): The code here is very duplicated from blob_field,
+                        // which is a wierd name, we can refactor this out and get something
+                        // more readable.
+                        self.eat();
+                        self.expression(block);
+                        expect!(self, Token::RightBracket, "Expected ']' after indexing");
+
+                        let nil = self.add_constant(Value::Nil);
+                        let op = match self.peek() {
+                            Token::Equal => {
+                                self.eat();
+                                self.expression(block);
+                                add_op(self, block, Op::AssignIndex);
+                                add_op(self, block, Op::Constant(nil));
+                                return;
+                            }
+
+                            Token::PlusEqual => Op::Add,
+                            Token::MinusEqual => Op::Sub,
+                            Token::StarEqual => Op::Mul,
+                            Token::SlashEqual => Op::Div,
+
+                            _ => {
+                                add_op(self, block, Op::GetIndex);
+                                continue;
+                            }
+                        };
+
+                        add_op(self, block, Op::Copy(2));
+                        add_op(self, block, Op::GetIndex);
+                        self.eat();
+                        self.expression(block);
+                        add_op(self, block, op);
+                        add_op(self, block, Op::AssignIndex);
+                        add_op(self, block, Op::Constant(nil));
+                        return;
                     }
                     _ => {
                         if !self.call_maybe(block) {
@@ -1598,12 +1625,44 @@ impl Compiler {
                                 continue;
                             }
                         };
-                        add_op(self, block, Op::Copy);
+                        add_op(self, block, Op::Copy(1));
                         add_op(self, block, Op::Get(field));
                         self.eat();
                         self.expression(block);
                         add_op(self, block, op);
                         add_op(self, block, Op::Set(field));
+                        return;
+                    }
+                    Token::LeftBracket => {
+                        self.eat();
+                        self.expression(block);
+                        expect!(self, Token::RightBracket, "Expected ']' after indexing");
+
+                        let op = match self.peek() {
+                            Token::Equal => {
+                                self.eat();
+                                self.expression(block);
+                                add_op(self, block, Op::AssignIndex);
+                                return;
+                            }
+
+                            Token::PlusEqual => Op::Add,
+                            Token::MinusEqual => Op::Sub,
+                            Token::StarEqual => Op::Mul,
+                            Token::SlashEqual => Op::Div,
+
+                            _ => {
+                                add_op(self, block, Op::GetIndex);
+                                continue;
+                            }
+                        };
+
+                        add_op(self, block, Op::Copy(2));
+                        add_op(self, block, Op::GetIndex);
+                        self.eat();
+                        self.expression(block);
+                        add_op(self, block, op);
+                        add_op(self, block, Op::AssignIndex);
                         return;
                     }
                     Token::Newline => {
@@ -1685,17 +1744,6 @@ impl Compiler {
                 self.access_dotted(block);
             }
 
-            (Token::Identifier(name), Token::Colon, ..) => {
-                self.eat();
-                self.eat();
-                if let Ok(typ) = self.parse_type() {
-                    expect!(self, Token::Equal, "Expected assignment");
-                    self.definition_statement(&name, typ, block);
-                } else {
-                    error!(self, "Expected type found '{:?}'", self.peek());
-                }
-            }
-
             (Token::Yield, ..) => {
                 self.eat();
                 add_op(self, block, Op::Yield);
@@ -1711,6 +1759,17 @@ impl Compiler {
                 self.eat();
                 self.eat();
                 self.constant_statement(&name, Type::Unknown, block);
+            }
+
+            (Token::Identifier(name), Token::Colon, ..) => {
+                self.eat();
+                self.eat();
+                if let Ok(typ) = self.parse_type() {
+                    expect!(self, Token::Equal, "Expected assignment");
+                    self.definition_statement(&name, typ, block);
+                } else {
+                    error!(self, "Expected type found '{:?}'", self.peek());
+                }
             }
 
             (Token::If, ..) => {
