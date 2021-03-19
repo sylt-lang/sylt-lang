@@ -305,7 +305,7 @@ pub fn derive_next(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     }).collect();
 
     let item = quote! {
-        impl ::sylt::Next for #ident {
+        impl Next for #ident {
             fn next(&self) -> Self {
                 match self {
                     #(#match_arm)*
