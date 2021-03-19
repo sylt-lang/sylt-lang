@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::rc::Rc;
 
-use crate::{Blob, Block, Op, Prog, RustFunction, Type, Value};
+use crate::{Blob, Block, Op, Prog, RustFunction, Type, Value, path_to_module};
 use crate::error::{Error, ErrorKind};
 use crate::sectionizer::Section;
 use crate::tokenizer::Token;
@@ -284,6 +284,7 @@ impl Frame {
 
 type Namespace = HashMap<String, Name>;
 
+#[derive(Debug)]
 struct CompilerContext {
     frames: Vec<Frame>,
     namespace: Namespace,
@@ -366,8 +367,7 @@ impl Compiler {
         id
     }
 
-    fn add_namespace(&mut self, name: String) {
-        let path = Path::new(&format!("{}.sy", name)).to_path_buf();
+    fn add_namespace(&mut self, name: String, path: PathBuf) {
         match self.names_mut().entry(name.clone()) {
             Entry::Vacant(v) => {
                 v.insert(Name::Namespace(path));
@@ -1780,8 +1780,9 @@ impl Compiler {
             match (section.tokens.get(0), section.tokens.get(1), section.tokens.get(2))  {
                 (Some((Token::Use, _)),
                  Some((Token::Identifier(name), _)), ..) => {
+                    let path = path_to_module(file, &name);
                     let name = name.to_string();
-                    self.add_namespace(name);
+                    self.add_namespace(name, path);
                 }
 
                 (Some((Token::Identifier(name), _)),
