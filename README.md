@@ -22,8 +22,11 @@ Sylt is written entirely in Rust. There are two main ways of using it.
 Currently, Sylt can only run single files. The last filename given is
 run.
 
-The `-p` flag also lets you see a lot of debug output. If you want
+The `-v` flag also lets you see a lot of debug output. If you want
 to debug the compiler and runtime this might be helpful.
+
+The `-vv` flag gives even more debug output. Don't count seeing anything
+from your own program!
 
 ## Endgame
 
