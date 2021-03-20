@@ -588,6 +588,7 @@ impl Compiler {
             Token::LeftParen => self.grouping_or_tuple(block),
             Token::Minus => self.unary(block),
             Token::LeftBracket => self.list(block),
+            Token::LeftBrace => self.set_or_dict(block),
 
             Token::Float(_) | Token::Int(_) | Token::Bool(_) | Token::String(_) | Token::Nil => {
                 self.value(block)
@@ -662,9 +663,6 @@ impl Compiler {
                     match self.peek() {
                         Token::Comma => {
                             self.eat();
-                            if matches!(self.peek(), Token::RightBracket) {
-                                break;
-                            }
                         }
                         Token::RightBracket => {}
                         _ => {
@@ -677,6 +675,99 @@ impl Compiler {
         }
         expect!(self, Token::RightBracket, "Expected ']' after list");
         add_op(self, block, Op::List(num_args));
+    }
+
+    fn set_or_dict(&mut self, block: &mut Block) {
+        expect!(
+            self,
+            Token::LeftBrace,
+            "Expected '{{' for set or dictionary."
+        );
+
+        let mut is_dict: Option<bool> = None;
+        let mut num_args = 0;
+        loop {
+            match self.peek() {
+                Token::RightBrace | Token::EOF => {
+                    break;
+                }
+                Token::Newline => {
+                    self.eat();
+                }
+                _ => {
+                    self.expression(block);
+                    num_args += 1;
+                    match is_dict {
+                        Some(false) => {
+                            match self.peek() {
+                                Token::Comma => {
+                                    self.eat();
+                                }
+                                Token::RightBrace => {}
+                                _ => {
+                                    error!(self, "Expected ',' or '}}' after set element");
+                                }
+                            }
+                        }
+                        Some(true) => {
+                            expect!(self, Token::Colon, "Expected ':' after dict element");
+                            self.expression(block);
+                            num_args += 1;
+                            match self.peek() {
+                                Token::Comma => {
+                                    self.eat();
+                                }
+                                Token::RightBrace => {}
+                                _ => {
+                                    error!(self, "Expected ',' or '}}' after set element");
+                                }
+                            }
+                        }
+                        None => {
+                            match self.peek() {
+                                Token::Comma => {
+                                    is_dict = Some(false);
+                                    self.eat();
+                                }
+                                Token::RightBrace => {
+                                    is_dict = Some(false);
+                                }
+                                Token::Colon => {
+                                    is_dict = Some(true);
+                                    expect!(self, Token::Colon, "Expected ':' after dict element");
+                                    self.expression(block);
+                                    num_args += 1;
+                                    match self.peek() {
+                                        Token::Comma => {
+                                            self.eat();
+                                        }
+                                        Token::RightBrace => {}
+                                        _ => {
+                                            error!(self, "Expected ',' or '}}' after set element");
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    error!(self, "Expected ',' ':' or '}}' after element");
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        expect!(
+            self,
+            Token::RightBrace,
+            "Expected '}}' after set or dictionary."
+        );
+        match is_dict {
+            Some(true) => unimplemented!(),
+            Some(false) => { add_op(self, block, Op::Set(num_args)); },
+            None => error!(self, "Don't know if set or dict"),
+        }
     }
 
     fn grouping_or_tuple(&mut self, block: &mut Block) {

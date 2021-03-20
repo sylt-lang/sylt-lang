@@ -226,6 +226,14 @@ impl VM {
                 self.stack.push(Value::List(Rc::new(RefCell::new(values))));
             }
 
+            Op::Set(size) => {
+                let values: HashSet<_> = self.stack
+                    .split_off(self.stack.len() - size)
+                    .into_iter()
+                    .collect();
+                self.stack.push(Value::Set(Rc::new(RefCell::new(values))));
+            }
+
             Op::PopUpvalue => {
                 let value = self.pop();
                 let slot = self.stack.len();

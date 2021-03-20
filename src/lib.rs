@@ -94,6 +94,7 @@ pub enum Type {
     Tuple(Vec<Type>),
     Union(HashSet<Type>),
     List(Box<Type>),
+    Set(Box<Type>),
     Function(Vec<Type>, Box<Type>),
     Blob(Rc<Blob>),
     Instance(Rc<Blob>),
@@ -117,6 +118,10 @@ impl Hash for Type {
             Type::List(t) => {
                 t.as_ref().hash(h);
                 12
+            }
+            Type::Set(t) => {
+                t.as_ref().hash(h);
+                13
             }
             Type::Union(ts) => {
                 for t in ts {
@@ -161,6 +166,7 @@ impl PartialEq for Type {
             (Type::Tuple(a), Type::Tuple(b)) => a.iter().zip(b.iter()).all(|(a, b)| a == b),
             (Type::Union(a), b) | (b, Type::Union(a)) => a.iter().any(|x| x == b),
             (Type::List(a), Type::List(b)) => a == b,
+            (Type::Set(a), Type::Set(b)) => a == b,
             (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
                 a_args == b_args && a_ret == b_ret
             }
@@ -171,6 +177,21 @@ impl PartialEq for Type {
 
 impl Eq for Type {}
 
+macro_rules! maybe_union {
+    ($v:expr) => {
+        {
+            let v: &RefCell<_> = $v.borrow();
+            let v = &v.borrow();
+            let set: HashSet<_> = v.iter().map(|x| Type::from(x)).collect();
+            match set.len() {
+                0 => Type::Unknown,
+                1 => set.into_iter().next().unwrap(),
+                _ => Type::Union(set),
+            }
+        }
+    };
+}
+
 impl From<&Value> for Type {
     fn from(value: &Value) -> Type {
         match value {
@@ -178,15 +199,12 @@ impl From<&Value> for Type {
             Value::Blob(b) => Type::Blob(Rc::clone(b)),
             Value::Tuple(v) => Type::Tuple(v.iter().map(|x| Type::from(x)).collect()),
             Value::List(v) => {
-                let v: &RefCell<_> = v.borrow();
-                let v: &Vec<_> = &v.borrow();
-                let set: HashSet<_> = v.iter().map(|x| Type::from(x)).collect();
-                let t = match set.len() {
-                    0 => Type::Unknown,
-                    1 => set.into_iter().next().unwrap(),
-                    _ => Type::Union(set),
-                };
+                let t = maybe_union!(v);
                 Type::List(Box::new(t))
+            }
+            Value::Set(v) => {
+                let t = maybe_union!(v);
+                Type::Set(Box::new(t))
             }
             Value::Union(v) => Type::Union(v.iter().map(|x| Type::from(x)).collect()),
             Value::Int(_) => Type::Int,
@@ -218,8 +236,13 @@ impl From<&Type> for Value {
             Type::Instance(b) => Value::Instance(Rc::clone(b), Rc::new(RefCell::new(Vec::new()))),
             Type::Tuple(fields) => Value::Tuple(Rc::new(fields.iter().map(Value::from).collect())),
             Type::Union(v) => Value::Union(v.iter().map(Value::from).collect()),
-            Type::List(fields) => {
-                Value::List(Rc::new(RefCell::new(vec![Value::from(fields.as_ref())])))
+            Type::List(v) => {
+                Value::List(Rc::new(RefCell::new(vec![Value::from(v.as_ref())])))
+            }
+            Type::Set(v) => {
+                let mut s = HashSet::new();
+                s.insert(Value::from(v.as_ref()));
+                Value::Set(Rc::new(RefCell::new(s)))
             }
             Type::Unknown => Value::Unknown,
             Type::Int => Value::Int(1),
@@ -261,6 +284,7 @@ pub enum Value {
     Instance(Rc<Blob>, Rc<RefCell<Vec<Value>>>),
     Tuple(Rc<Vec<Value>>),
     List(Rc<RefCell<Vec<Value>>>),
+    Set(Rc<RefCell<HashSet<Value>>>),
     Union(HashSet<Value>),
     Float(f64),
     Int(i64),
@@ -286,6 +310,7 @@ impl Debug for Value {
             Value::Bool(b) => write!(fmt, "(bool {})", b),
             Value::String(s) => write!(fmt, "(string \"{}\")", s),
             Value::List(v) => write!(fmt, "(array {:?})", v),
+            Value::Set(v) => write!(fmt, "(set {:?})", v),
             Value::Function(_, block) => {
                 let block: &RefCell<_> = block.borrow();
                 let block = &block.borrow();
@@ -308,6 +333,7 @@ impl PartialEq<Value> for Value {
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::String(a), Value::String(b)) => a == b,
             (Value::List(a), Value::List(b)) => a == b,
+            (Value::Set(a), Value::Set(b)) => a == b,
             (Value::Tuple(a), Value::Tuple(b)) => {
                 a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| a == b)
             }
@@ -479,6 +505,11 @@ pub enum Op {
     ///
     /// {A, B, C} - List(3) - {D(A, B, C)}
     List(usize),
+    /// Creates a new [Set] with the given elements and place it on the top
+    /// of the stack.
+    ///
+    /// {A, B, A} - Set(3) - {D(A, B)}
+    Set(usize),
 
     /// Indexes something indexable,
     /// and adds that element to the stack.
