@@ -1,0 +1,11 @@
+start :: fn {
+    q : {int: str} = {1: "str", 2:"str", 3:"str", 1:"a", 1:"b"}
+    print q
+    print q[1]
+    q[1] = "alksjd"
+    print q
+
+    h : {int} = {1, 2, 3}
+    print h
+    print h[1]
+}
