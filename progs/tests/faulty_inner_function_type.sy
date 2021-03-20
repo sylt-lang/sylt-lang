@@ -5,3 +5,5 @@ f :: fn -> fn -> {
 
 start :: fn {
 }
+
+// errors: [ErrorKind::SyntaxError(1, _)]
