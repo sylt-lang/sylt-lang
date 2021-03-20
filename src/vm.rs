@@ -328,8 +328,8 @@ impl VM {
             }
 
             Op::GetIndex => {
-                let slot = self.stack.pop().unwrap();
-                let val = self.stack.pop().unwrap();
+                let slot = self.pop();
+                let val = self.pop();
                 match (val, slot) {
                     (Value::Tuple(v), Value::Int(slot)) => {
                         let slot = slot as usize;
@@ -902,10 +902,10 @@ impl VM {
                     (Type::Tuple(a), b) if b.fits(&Type::Int) => {
                         self.push(Value::Union(a.iter().map(|x| Value::from(x)).collect()));
                     }
-                    (Type::Set(a), b) if b.fits(&a) => {
+                    (Type::Set(a), b) if a.fits(&b) => {
                         self.push(Value::Bool(true));
                     }
-                    (Type::Dict(k, v), i) if i.fits(&k) => {
+                    (Type::Dict(k, v), i) if k.fits(&i) => {
                         self.push(Value::from(v.as_ref()));
                     }
                     _ => {

@@ -1,0 +1,4 @@
+start :: fn {
+    a: {int | str} = {1, "abc"}
+    a
+}

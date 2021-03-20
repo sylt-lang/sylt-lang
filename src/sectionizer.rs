@@ -90,6 +90,7 @@ pub fn sectionize(path: &Path) -> Result<Vec<Section>, Vec<Error>> {
                                 curr += 1;
                                 blocks -= 1;
                                 if blocks <= 0 {
+                                    curr -= 1;
                                     break;
                                 }
                             }

@@ -1,0 +1,5 @@
+start :: fn {
+    a :: {}
+}
+
+// errors: [ErrorKind::SyntaxError(2, _)]

@@ -287,7 +287,9 @@ impl Type {
         match (self, other) {
             (_, Type::Unknown) => true,
             (Type::List(a), Type::List(b)) => a.fits(b),
-            (Type::Union(a), Type::Union(b)) => a.iter().all(|x| b.contains(x)),
+            (Type::Set(a), Type::Set(b)) => a.fits(b),
+            (Type::Dict(ak, av), Type::Dict(bk, bv)) => ak.fits(bk) && av.fits(bv),
+            (Type::Union(a), Type::Union(b)) => b.iter().all(|x| a.contains(x)),
             (_, Type::Union(_)) => false,
             (a, b) => a == b,
         }
