@@ -1,0 +1,7 @@
+f :: fn -> fn -> {
+    g :: fn {}
+    ret g
+}
+
+start :: fn {
+}

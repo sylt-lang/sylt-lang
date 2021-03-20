@@ -1454,6 +1454,21 @@ impl Compiler {
     }
 
     fn parse_type(&mut self) -> Result<Type, ()> {
+        if self.peek() == Token::LeftBrace {
+            // Hashset
+            // TODO(ed): This is kinda hacky, but the error
+            // messages get really boarked if we don't move back.
+            let start = self.current_token;
+            self.eat();
+            return if let Ok(ty) = self.parse_type() {
+                expect!(self, Token::RightBrace, "Expected '}}' after set type");
+                Ok(Type::Set(Box::new(ty)))
+            } else {
+                self.current_token = start;
+                Err(())
+            };
+        }
+
         let mut tys = HashSet::new();
         tys.insert(self.parse_simple_type()?);
         loop {
@@ -1483,6 +1498,14 @@ impl Compiler {
 
     fn parse_simple_type(&mut self) -> Result<Type, ()> {
         match self.peek() {
+            Token::LeftBrace => {
+                error!(self, "Didn't expect '{{' at start of type");
+                Err(())
+            }
+            Token::RightBrace => {
+                error!(self, "Didn't expect '}}' at start of type");
+                Err(())
+            }
             Token::Fn => {
                 self.eat();
                 let mut params = Vec::new();
@@ -1505,7 +1528,12 @@ impl Compiler {
                         }
                         Token::Arrow => {
                             self.eat();
-                            break self.parse_type().unwrap_or(Type::Void);
+                            let return_type = self.parse_type();
+                            if return_type.is_err() {
+                                error!(self, "Failed to parse return type, try 'void'");
+                                return Err(());
+                            }
+                            break return_type.unwrap();
                         }
                         Token::Comma | Token::Equal => {
                             break Type::Void;
