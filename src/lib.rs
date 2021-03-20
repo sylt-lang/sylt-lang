@@ -496,14 +496,14 @@ pub enum Op {
     /// (name is looked up in the internal string-list)
     ///
     /// {O} - Get(F) - {O.F}
-    Get(usize),
+    GetField(usize),
     /// Looks up a field by the given name
     /// and replaces the current value in the object.
     /// Currently only expects [Value::Blob].
     /// (name is looked up in the internal string-list)
     ///
     /// {O} - Set(F) - {}
-    Set(usize),
+    AssignField(usize),
 
     /// Adds the two top elements on the stack,
     /// using the function [op::add]. The result

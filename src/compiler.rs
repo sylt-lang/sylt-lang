@@ -1150,7 +1150,7 @@ impl Compiler {
                         self.eat();
                         if let Token::Identifier(field) = self.eat() {
                             let string = self.intern_string(String::from(field));
-                            add_op(self, block, Op::Get(string));
+                            add_op(self, block, Op::GetField(string));
                         } else {
                             error!(self, "Expected fieldname after '.'");
                             return;
@@ -1682,7 +1682,7 @@ impl Compiler {
                             Token::Equal => {
                                 self.eat();
                                 self.expression(block);
-                                add_op(self, block, Op::Set(field));
+                                add_op(self, block, Op::AssignField(field));
                                 return;
                             }
 
@@ -1692,16 +1692,16 @@ impl Compiler {
                             Token::SlashEqual => Op::Div,
 
                             _ => {
-                                add_op(self, block, Op::Get(field));
+                                add_op(self, block, Op::GetField(field));
                                 continue;
                             }
                         };
                         add_op(self, block, Op::Copy(1));
-                        add_op(self, block, Op::Get(field));
+                        add_op(self, block, Op::GetField(field));
                         self.eat();
                         self.expression(block);
                         add_op(self, block, op);
-                        add_op(self, block, Op::Set(field));
+                        add_op(self, block, Op::AssignField(field));
                         return;
                     }
                     Token::LeftBracket => {

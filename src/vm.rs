@@ -368,7 +368,7 @@ impl VM {
                 }
             }
 
-            Op::Get(field) => {
+            Op::GetField(field) => {
                 let inst = self.pop();
                 match inst {
                     Value::Instance(ty, values) => {
@@ -390,13 +390,13 @@ impl VM {
                     inst => {
                         error!(
                             self,
-                            ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)])
+                            ErrorKind::TypeError(Op::AssignField(field), vec![Type::from(inst)])
                         );
                     }
                 }
             }
 
-            Op::Set(field) => {
+            Op::AssignField(field) => {
                 let (inst, value) = self.poppop();
                 match inst {
                     Value::Instance(ty, values) => {
@@ -416,7 +416,7 @@ impl VM {
                     inst => {
                         error!(
                             self,
-                            ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)])
+                            ErrorKind::TypeError(Op::AssignField(field), vec![Type::from(inst)])
                         );
                     }
                 }
@@ -714,7 +714,7 @@ impl VM {
                 }
             }
 
-            Op::Set(field) => {
+            Op::AssignField(field) => {
                 let (inst, value) = self.poppop();
                 match inst {
                     Value::Instance(ty, _) => {
@@ -741,7 +741,7 @@ impl VM {
                     inst => {
                         error!(
                             self,
-                            ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)])
+                            ErrorKind::TypeError(Op::AssignField(field), vec![Type::from(inst)])
                         );
                     }
                 }
