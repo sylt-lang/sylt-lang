@@ -298,17 +298,25 @@ pub fn derive_next(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let parsed: syn::ItemEnum = parse_macro_input!(item);
 
     let ident = parsed.ident.clone();
-    let match_arm: Vec<_> = parsed.variants.iter().zip(parsed.variants.iter().skip(1).chain(::std::iter::once(parsed.variants.iter().last().unwrap()))).map(|(var1, var2)| {
-        quote! {
-            #ident::#var1 => #ident::#var2,
-        }
+
+    let mut iter = parsed.variants.iter();
+    let mut prev = iter.next().expect("Empty enum can't be Next");
+    let mut match_arms: Vec<_> = iter.map(|v| {
+        let tokens = quote! {
+            #ident::#prev => #ident::#v,
+        };
+        prev = v;
+        tokens
     }).collect();
+    match_arms.push(quote! {
+        #ident::#prev => #ident::#prev,
+    });
 
     let item = quote! {
         impl Next for #ident {
             fn next(&self) -> Self {
                 match self {
-                    #(#match_arm)*
+                    #(#match_arms)*
                 }
             }
         }
