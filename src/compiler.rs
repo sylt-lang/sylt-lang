@@ -697,6 +697,8 @@ impl Compiler {
                 _ => {
                     self.expression(block);
                     num_args += 1;
+                    // TODO(ed): Someone who's more awake might
+                    // be able to fix this.
                     match is_dict {
                         Some(false) => {
                             match self.peek() {
@@ -712,7 +714,6 @@ impl Compiler {
                         Some(true) => {
                             expect!(self, Token::Colon, "Expected ':' after dict element");
                             self.expression(block);
-                            num_args += 1;
                             match self.peek() {
                                 Token::Comma => {
                                     self.eat();
@@ -736,7 +737,6 @@ impl Compiler {
                                     is_dict = Some(true);
                                     expect!(self, Token::Colon, "Expected ':' after dict element");
                                     self.expression(block);
-                                    num_args += 1;
                                     match self.peek() {
                                         Token::Comma => {
                                             self.eat();
@@ -764,7 +764,7 @@ impl Compiler {
             "Expected '}}' after set or dictionary."
         );
         match is_dict {
-            Some(true) => unimplemented!(),
+            Some(true) => { add_op(self, block, Op::Dict(num_args * 2)); },
             Some(false) => { add_op(self, block, Op::Set(num_args)); },
             None => error!(self, "Don't know if set or dict"),
         }
@@ -1551,13 +1551,19 @@ impl Compiler {
             // messages get really boarked if we don't move back.
             let start = self.current_token;
             self.eat();
-            return if let Ok(ty) = self.parse_type() {
-                expect!(self, Token::RightBrace, "Expected '}}' after set type");
-                Ok(Type::Set(Box::new(ty)))
-            } else {
-                self.current_token = start;
-                Err(())
-            };
+            if let Ok(ty) = self.parse_type() {
+                if self.peek() == Token::RightBrace {
+                    self.eat();
+                    return Ok(Type::Set(Box::new(ty)))
+                }
+                expect!(self, Token::Colon, "Expected ':' for dict type");
+                if let Ok(val) = self.parse_type() {
+                    expect!(self, Token::RightBrace, "Expected '}}' after dict type");
+                    return Ok(Type::Dict(Box::new(ty), Box::new(val)))
+                }
+            }
+            self.current_token = start;
+            return Err(());
         }
 
         let mut tys = HashSet::new();

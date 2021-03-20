@@ -95,6 +95,7 @@ pub enum Type {
     Union(HashSet<Type>),
     List(Box<Type>),
     Set(Box<Type>),
+    Dict(Box<Type>, Box<Type>),
     Function(Vec<Type>, Box<Type>),
     Blob(Rc<Blob>),
     Instance(Rc<Blob>),
@@ -122,6 +123,11 @@ impl Hash for Type {
             Type::Set(t) => {
                 t.as_ref().hash(h);
                 13
+            }
+            Type::Dict(k, v) => {
+                k.as_ref().hash(h);
+                v.as_ref().hash(h);
+                14
             }
             Type::Union(ts) => {
                 for t in ts {
@@ -167,6 +173,7 @@ impl PartialEq for Type {
             (Type::Union(a), b) | (b, Type::Union(a)) => a.iter().any(|x| x == b),
             (Type::List(a), Type::List(b)) => a == b,
             (Type::Set(a), Type::Set(b)) => a == b,
+            (Type::Dict(ak, av), Type::Dict(bk, bv)) => ak == bk && av == bv,
             (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
                 a_args == b_args && a_ret == b_ret
             }
@@ -177,19 +184,13 @@ impl PartialEq for Type {
 
 impl Eq for Type {}
 
-macro_rules! maybe_union {
-    ($v:expr) => {
-        {
-            let v: &RefCell<_> = $v.borrow();
-            let v = &v.borrow();
-            let set: HashSet<_> = v.iter().map(|x| Type::from(x)).collect();
-            match set.len() {
-                0 => Type::Unknown,
-                1 => set.into_iter().next().unwrap(),
-                _ => Type::Union(set),
-            }
-        }
-    };
+fn maybe_union_type<'a>(v: impl Iterator<Item=&'a Value>) -> Type {
+    let set: HashSet<_> = v.map(|x| Type::from(x)).collect();
+    match set.len() {
+        0 => Type::Unknown,
+        1 => set.into_iter().next().unwrap(),
+        _ => Type::Union(set),
+    }
 }
 
 impl From<&Value> for Type {
@@ -199,12 +200,23 @@ impl From<&Value> for Type {
             Value::Blob(b) => Type::Blob(Rc::clone(b)),
             Value::Tuple(v) => Type::Tuple(v.iter().map(|x| Type::from(x)).collect()),
             Value::List(v) => {
-                let t = maybe_union!(v);
+                let v: &RefCell<_> = v.borrow();
+                let v = &v.borrow();
+                let t = maybe_union_type(v.iter());
                 Type::List(Box::new(t))
             }
             Value::Set(v) => {
-                let t = maybe_union!(v);
+                let v: &RefCell<_> = v.borrow();
+                let v = &v.borrow();
+                let t = maybe_union_type(v.iter());
                 Type::Set(Box::new(t))
+            }
+            Value::Dict(v) => {
+                let v: &RefCell<_> = v.borrow();
+                let v = &v.borrow();
+                let k = maybe_union_type(v.keys());
+                let v = maybe_union_type(v.values());
+                Type::Dict(Box::new(k), Box::new(v))
             }
             Value::Union(v) => Type::Union(v.iter().map(|x| Type::from(x)).collect()),
             Value::Int(_) => Type::Int,
@@ -243,6 +255,11 @@ impl From<&Type> for Value {
                 let mut s = HashSet::new();
                 s.insert(Value::from(v.as_ref()));
                 Value::Set(Rc::new(RefCell::new(s)))
+            }
+            Type::Dict(k, v) => {
+                let mut s = HashMap::new();
+                s.insert(Value::from(k.as_ref()), Value::from(v.as_ref()));
+                Value::Dict(Rc::new(RefCell::new(s)))
             }
             Type::Unknown => Value::Unknown,
             Type::Int => Value::Int(1),
@@ -285,6 +302,7 @@ pub enum Value {
     Tuple(Rc<Vec<Value>>),
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
+    Dict(Rc<RefCell<HashMap<Value, Value>>>),
     Union(HashSet<Value>),
     Float(f64),
     Int(i64),
@@ -311,6 +329,7 @@ impl Debug for Value {
             Value::String(s) => write!(fmt, "(string \"{}\")", s),
             Value::List(v) => write!(fmt, "(array {:?})", v),
             Value::Set(v) => write!(fmt, "(set {:?})", v),
+            Value::Dict(v) => write!(fmt, "(dict {:?})", v),
             Value::Function(_, block) => {
                 let block: &RefCell<_> = block.borrow();
                 let block = &block.borrow();
@@ -334,6 +353,7 @@ impl PartialEq<Value> for Value {
             (Value::String(a), Value::String(b)) => a == b,
             (Value::List(a), Value::List(b)) => a == b,
             (Value::Set(a), Value::Set(b)) => a == b,
+            (Value::Dict(a), Value::Dict(b)) => a == b,
             (Value::Tuple(a), Value::Tuple(b)) => {
                 a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| a == b)
             }
@@ -510,6 +530,11 @@ pub enum Op {
     ///
     /// {A, B, A} - Set(3) - {D(A, B)}
     Set(usize),
+    /// Creates a new [Dict] with the given elements and place it on the top
+    /// of the stack.
+    ///
+    /// {A, B, C, D, A, E} - Dict(6) - {D(A:E, C:D)}
+    Dict(usize),
 
     /// Indexes something indexable,
     /// and adds that element to the stack.
@@ -1151,13 +1176,15 @@ mod tests {
 
 // The "standard library"
 use crate as sylt;
-sylt_macro::extern_function!(
-    dbg
-    [x] -> Type::Void => {
-        println!("DBG: {:?}, {:?}", x, Type::from(x));
-        Ok(Value::Nil)
-    },
-);
+
+pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, ErrorKind> {
+    println!("{}: {:?}, {:?}",
+        "DBG".purple(),
+        values.iter().map(Type::from).collect::<Vec<_>>(),
+        values
+    );
+    Ok(Value::Nil)
+}
 
 pub fn push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> {
     match (values, typecheck) {

@@ -234,6 +234,21 @@ impl VM {
                 self.stack.push(Value::Set(Rc::new(RefCell::new(values))));
             }
 
+            Op::Dict(size) => {
+                assert!(size % 2 == 0);
+                let values = self.stack.split_off(self.stack.len() - size);
+                let values: HashMap<_, _> = values.iter()
+                    .step_by(2)
+                    .cloned()
+                    .zip(values
+                         .iter()
+                         .skip(1)
+                         .step_by(2)
+                         .cloned())
+                    .collect();
+                self.stack.push(Value::Dict(Rc::new(RefCell::new(values))));
+            }
+
             Op::PopUpvalue => {
                 let value = self.pop();
                 let slot = self.stack.len();
