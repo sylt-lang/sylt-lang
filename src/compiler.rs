@@ -6,24 +6,7 @@ use std::rc::Rc;
 use crate::error::{Error, ErrorKind};
 use crate::sectionizer::Section;
 use crate::tokenizer::Token;
-use crate::{path_to_module, Blob, Block, Op, Prog, RustFunction, Type, Value};
-
-macro_rules! nextable_enum {
-    ( $name:ident { $( $thing:ident ),* $( , )? } ) => {
-        #[derive(PartialEq, PartialOrd, Clone, Copy, Debug)]
-        enum $name {
-            $( $thing, )*
-        }
-
-        impl $name {
-            pub fn next(&self) -> Self {
-                *[$( $name::$thing, )*].iter()
-                    .find(|x| { x > &self })
-                    .unwrap_or(self)
-            }
-        }
-    };
-}
+use crate::{path_to_module, Blob, Block, Next, Op, Prog, RustFunction, Type, Value};
 
 macro_rules! error {
     ($thing:expr, $( $msg:expr ),* ) => {
@@ -124,7 +107,8 @@ macro_rules! push_scope {
     };
 }
 
-nextable_enum!(Prec {
+#[derive(sylt_macro::Next, PartialEq, PartialOrd, Clone, Copy, Debug)]
+pub enum Prec {
     No,
     Assert,
     BoolOr,
@@ -133,7 +117,7 @@ nextable_enum!(Prec {
     Term,
     Factor,
     Index,
-});
+}
 
 #[derive(Clone, Debug)]
 struct Variable {

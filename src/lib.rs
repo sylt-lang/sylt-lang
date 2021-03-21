@@ -19,6 +19,10 @@ mod compiler;
 mod sectionizer;
 mod tokenizer;
 
+pub trait Next {
+    fn next(&self) -> Self;
+}
+
 /// Compiles, links and runs the given file. Supplied functions are callable
 /// external functions. If you want your program to be able to yield, use
 /// [compile_file].
