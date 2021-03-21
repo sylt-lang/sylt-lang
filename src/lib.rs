@@ -515,6 +515,7 @@ pub enum Op {
     ///
     /// {A} - Constant(B) - {A, B}
     Constant(usize),
+
     /// Creates a new [Value::Tuple] with the given size and place it on the top
     /// of the stack.
     ///
