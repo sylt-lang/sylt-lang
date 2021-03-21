@@ -688,7 +688,24 @@ impl Compiler {
         let mut num_args = 0;
         loop {
             match self.peek() {
-                Token::RightBrace | Token::EOF => {
+                Token::RightBrace => {
+                    if is_dict.is_none() {
+                        is_dict = Some(false);
+                    }
+                    break;
+                }
+
+                Token::Colon => {
+                    if is_dict.is_none() {
+                        is_dict = Some(true);
+                    } else {
+                        error!(self, "Unexpected ':' in set");
+                    }
+                    self.eat();
+                    break;
+                }
+
+                Token::EOF => {
                     break;
                 }
                 Token::Newline => {
