@@ -353,9 +353,6 @@ impl VM {
                         }
                         self.stack.push(v[slot].clone());
                     }
-                    (Value::Set(set), b) => {
-                        self.push(Value::Bool(set.as_ref().borrow().contains(&b)));
-                    }
                     (Value::Dict(dict), i) => {
                         self.push(
                             dict.as_ref()
