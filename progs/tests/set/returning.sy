@@ -10,10 +10,10 @@ h :: fn -> {int | str} {
 
 start :: fn {
     g :: q()
-    g[0] <=> true
-    false <=> g[1]
+    (0 in g) <=> true
+    false <=> (1 in g)
 
     h :: h()
-    h[0] <=> true
-    true <=> h["a"]
+    (0 in h) <=> true
+    true <=> ("a" in h)
 }
