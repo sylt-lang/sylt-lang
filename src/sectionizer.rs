@@ -1,9 +1,9 @@
-use crate::error::{Error, ErrorKind};
-use crate::tokenizer::{PlacedToken, Token, file_to_tokens};
-use crate::path_to_module;
-
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+
+use crate::error::{Error, ErrorKind};
+use crate::path_to_module;
+use crate::tokenizer::{file_to_tokens, PlacedToken, Token};
 
 #[derive(Debug)]
 pub struct Section {
@@ -25,9 +25,12 @@ impl Section {
 pub fn sectionize(path: &Path) -> Result<Vec<Section>, Vec<Error>> {
     let mut read_files = HashSet::new();
     read_files.insert(path.to_path_buf());
-    let tokens = file_to_tokens(path).map_err(|_| vec![
-                 Error::new_nowhere(ErrorKind::FileNotFound(path.to_path_buf()), None)
-    ])?;
+    let tokens = file_to_tokens(path).map_err(|_| {
+        vec![Error::new_nowhere(
+            ErrorKind::FileNotFound(path.to_path_buf()),
+            None,
+        )]
+    })?;
     let mut all_tokens = vec![(path.to_path_buf(), tokens)];
     let mut sections = Vec::new();
     let mut errors = Vec::new();
@@ -39,25 +42,28 @@ pub fn sectionize(path: &Path) -> Result<Vec<Section>, Vec<Error>> {
         let mut last = 0;
         let mut curr = 0;
         while curr < tokens.len() {
-            if match (tokens.get(curr + 0), tokens.get(curr + 1), tokens.get(curr + 2)) {
-                (Some((Token::Newline, _)), ..)
-                    => {
-                        if curr == last {
-                            last += 1;
-                        }
-                        false
-                    },
+            if match (
+                tokens.get(curr + 0),
+                tokens.get(curr + 1),
+                tokens.get(curr + 2),
+            ) {
+                (Some((Token::Newline, _)), ..) => {
+                    if curr == last {
+                        last += 1;
+                    }
+                    false
+                }
 
-                (Some((Token::Use, _)),
-                 Some((Token::Identifier(file), _)),
-                 Some((Token::Newline, line))) => {
+                (
+                    Some((Token::Use, _)),
+                    Some((Token::Identifier(file), _)),
+                    Some((Token::Newline, line)),
+                ) => {
                     let use_file = path_to_module(&path, file);
                     if !read_files.contains(&use_file) {
                         read_files.insert(use_file.clone());
                         match file_to_tokens(&use_file) {
-                            Ok(tokens) => {
-                                all_tokens.push((use_file, tokens))
-                            }
+                            Ok(tokens) => all_tokens.push((use_file, tokens)),
                             Err(_) => {
                                 errors.push(Error {
                                     kind: ErrorKind::FileNotFound(use_file),
@@ -69,45 +75,38 @@ pub fn sectionize(path: &Path) -> Result<Vec<Section>, Vec<Error>> {
                         }
                     }
                     true
-                },
+                }
 
-                (Some((Token::LeftBrace, _)), ..)
-                    => {
-                        let mut blocks = 1;
-                        loop {
-                            curr += 1;
-                            match tokens.get(curr) {
-                                Some((Token::LeftBrace, _)) => {
-                                    blocks += 1;
-                                }
+                (Some((Token::LeftBrace, _)), ..) => {
+                    let mut blocks = 1;
+                    loop {
+                        curr += 1;
+                        match tokens.get(curr) {
+                            Some((Token::LeftBrace, _)) => {
+                                blocks += 1;
+                            }
 
-                                Some((Token::RightBrace, _)) => {
-                                    curr += 1;
-                                    blocks -= 1;
-                                    if blocks <= 0 {
-                                        break;
-                                    }
-                                }
-
-                                None => {
+                            Some((Token::RightBrace, _)) => {
+                                curr += 1;
+                                blocks -= 1;
+                                if blocks <= 0 {
                                     break;
                                 }
-
-                                _ => {}
                             }
+
+                            None => {
+                                break;
+                            }
+
+                            _ => {}
                         }
-                        false
-                    },
+                    }
+                    false
+                }
 
-                (Some((Token::Identifier(_), _)),
-                 Some((Token::ColonColon, _)),
-                 Some(_))
-                    => true,
+                (Some((Token::Identifier(_), _)), Some((Token::ColonColon, _)), Some(_)) => true,
 
-                (Some((Token::Identifier(_), _)),
-                 Some((Token::ColonEqual, _)),
-                 Some(_))
-                    => true,
+                (Some((Token::Identifier(_), _)), Some((Token::ColonEqual, _)), Some(_)) => true,
 
                 _ => false,
             } {
