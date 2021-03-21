@@ -396,8 +396,27 @@ impl VM {
                         rc_v.as_ref().borrow_mut().insert(slot, n);
                     }
                     (indexable, slot, _) => {
-                        self.stack.push(Value::Nil);
+                        self.push(Value::Nil);
                         error!(self, ErrorKind::IndexError(indexable, slot.into()));
+                    }
+                }
+            }
+
+            Op::Contains => {
+                let (element, container) = self.poppop();
+                match (container, element) {
+                    (Value::List(rc_v), e) => {
+                        self.push(Value::Bool(rc_v.as_ref().borrow_mut().contains(&e)));
+                    }
+                    (Value::Dict(rc_v), e) => {
+                        self.push(Value::Bool(rc_v.as_ref().borrow_mut().contains_key(&e)));
+                    }
+                    (Value::Set(rc_v), e) => {
+                        self.push(Value::Bool(rc_v.as_ref().borrow_mut().contains(&e)));
+                    }
+                    (indexable, e) => {
+                        self.push(Value::Nil);
+                        error!(self, ErrorKind::IndexError(indexable, e.into()));
                     }
                 }
             }
@@ -963,6 +982,26 @@ impl VM {
                             self,
                             ErrorKind::TypeError(Op::AssignIndex, vec![indexable, slot.into()])
                         );
+                    }
+                }
+            }
+
+            Op::Contains => {
+                let (element, container) = self.poppop();
+                match (Type::from(container), Type::from(element)) {
+                    (Type::List(v), e) | (Type::Set(v), e) | (Type::Dict(v, _), e) => {
+                        self.push(Value::Bool(true));
+                        if !v.fits(&e) {
+                            error!(
+                                self,
+                                ErrorKind::TypeMismatch(v.as_ref().clone(), e),
+                                "Container does not contain the type"
+                            );
+                        }
+                    }
+                    (indexable, e) => {
+                        self.push(Value::Nil);
+                        error!(self, ErrorKind::IndexError(indexable.into(), e.into()));
                     }
                 }
             }

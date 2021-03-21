@@ -830,7 +830,7 @@ impl Compiler {
     fn contains(&mut self, block: &mut Block) {
         expect!(self, Token::In, "Expected 'in' at start of contains");
         self.parse_precedence(block, Prec::Index);
-        add_op(self, block, Op::Illegal);
+        add_op(self, block, Op::Contains);
     }
 
     fn binary_bool(&mut self, block: &mut Block) {
