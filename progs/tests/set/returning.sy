@@ -1,0 +1,19 @@
+q :: fn -> {int} {
+    g :: {0}
+    ret g
+}
+
+h :: fn -> {int | str} {
+    g :: {0, "a"}
+    ret g
+}
+
+start :: fn {
+    g :: q()
+    g[0] <=> true
+    false <=> g[1]
+
+    h :: h()
+    h[0] <=> true
+    true <=> h["a"]
+}

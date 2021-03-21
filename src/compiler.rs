@@ -572,6 +572,7 @@ impl Compiler {
             Token::LeftParen => self.grouping_or_tuple(block),
             Token::Minus => self.unary(block),
             Token::LeftBracket => self.list(block),
+            Token::LeftBrace => self.set_or_dict(block),
 
             Token::Float(_) | Token::Int(_) | Token::Bool(_) | Token::String(_) | Token::Nil => {
                 self.value(block)
@@ -646,9 +647,6 @@ impl Compiler {
                     match self.peek() {
                         Token::Comma => {
                             self.eat();
-                            if matches!(self.peek(), Token::RightBracket) {
-                                break;
-                            }
                         }
                         Token::RightBracket => {}
                         _ => {
@@ -661,6 +659,116 @@ impl Compiler {
         }
         expect!(self, Token::RightBracket, "Expected ']' after list");
         add_op(self, block, Op::List(num_args));
+    }
+
+    fn set_or_dict(&mut self, block: &mut Block) {
+        expect!(
+            self,
+            Token::LeftBrace,
+            "Expected '{{' for set or dict"
+        );
+
+        let mut is_dict: Option<bool> = None;
+        let mut num_args = 0;
+        loop {
+            match self.peek() {
+                Token::RightBrace => {
+                    if is_dict.is_none() {
+                        is_dict = Some(false);
+                    }
+                    break;
+                }
+
+                Token::Colon => {
+                    if is_dict.is_none() {
+                        is_dict = Some(true);
+                    } else {
+                        error!(self, "Unexpected ':' in set");
+                    }
+                    self.eat();
+                    break;
+                }
+
+                Token::EOF => {
+                    break;
+                }
+                Token::Newline => {
+                    self.eat();
+                }
+                _ => {
+                    self.expression(block);
+                    num_args += 1;
+                    // TODO(ed): Someone who's more awake might
+                    // be able to fix this.
+                    match is_dict {
+                        Some(false) => match self.peek() {
+                            Token::Comma => {
+                                self.eat();
+                            }
+                            Token::RightBrace => {}
+                            _ => {
+                                error!(self, "Expected ',' or '}}' after set element");
+                            }
+                        },
+                        Some(true) => {
+                            expect!(self, Token::Colon, "Expected ':' after dict element");
+                            self.expression(block);
+                            match self.peek() {
+                                Token::Comma => {
+                                    self.eat();
+                                }
+                                Token::RightBrace => {}
+                                _ => {
+                                    error!(self, "Expected ',' or '}}' after set element");
+                                }
+                            }
+                        }
+                        None => match self.peek() {
+                            Token::Comma => {
+                                is_dict = Some(false);
+                                self.eat();
+                            }
+                            Token::RightBrace => {
+                                is_dict = Some(false);
+                            }
+                            Token::Colon => {
+                                is_dict = Some(true);
+                                expect!(self, Token::Colon, "Expected ':' after dict element");
+                                self.expression(block);
+                                match self.peek() {
+                                    Token::Comma => {
+                                        self.eat();
+                                    }
+                                    Token::RightBrace => {}
+                                    _ => {
+                                        error!(self, "Expected ',' or '}}' after set element");
+                                    }
+                                }
+                            }
+                            _ => {
+                                error!(self, "Expected ',' ':' or '}}' after element");
+                                return;
+                            }
+                        },
+                    }
+                }
+            }
+        }
+
+        expect!(
+            self,
+            Token::RightBrace,
+            "Expected '}}' after set or dict"
+        );
+        match is_dict {
+            Some(true) => {
+                add_op(self, block, Op::Dict(num_args * 2));
+            }
+            Some(false) => {
+                add_op(self, block, Op::Set(num_args));
+            }
+            None => error!(self, "Don't know if set or dict"),
+        }
     }
 
     fn grouping_or_tuple(&mut self, block: &mut Block) {
@@ -1134,7 +1242,7 @@ impl Compiler {
                         self.eat();
                         if let Token::Identifier(field) = self.eat() {
                             let string = self.intern_string(String::from(field));
-                            add_op(self, block, Op::Get(string));
+                            add_op(self, block, Op::GetField(string));
                         } else {
                             error!(self, "Expected fieldname after '.'");
                             return;
@@ -1442,6 +1550,27 @@ impl Compiler {
     }
 
     fn parse_type(&mut self) -> Result<Type, ()> {
+        if self.peek() == Token::LeftBrace {
+            // Hashset
+            // TODO(ed): This is kinda hacky, but the error
+            // messages get really borked if we don't move back.
+            let start = self.current_token;
+            self.eat();
+            if let Ok(ty) = self.parse_type() {
+                if self.peek() == Token::RightBrace {
+                    self.eat();
+                    return Ok(Type::Set(Box::new(ty)));
+                }
+                expect!(self, Token::Colon, "Expected ':' for dict type");
+                if let Ok(val) = self.parse_type() {
+                    expect!(self, Token::RightBrace, "Expected '}}' after dict type");
+                    return Ok(Type::Dict(Box::new(ty), Box::new(val)));
+                }
+            }
+            self.current_token = start;
+            return Err(());
+        }
+
         let mut tys = HashSet::new();
         tys.insert(self.parse_simple_type()?);
         loop {
@@ -1493,7 +1622,12 @@ impl Compiler {
                         }
                         Token::Arrow => {
                             self.eat();
-                            break self.parse_type().unwrap_or(Type::Void);
+                            let return_type = self.parse_type();
+                            if return_type.is_err() {
+                                error!(self, "Failed to parse return type, try 'void'");
+                                return Err(());
+                            }
+                            break return_type.unwrap();
                         }
                         Token::Comma | Token::Equal => {
                             break Type::Void;
@@ -1670,7 +1804,7 @@ impl Compiler {
                             Token::Equal => {
                                 self.eat();
                                 self.expression(block);
-                                add_op(self, block, Op::Set(field));
+                                add_op(self, block, Op::AssignField(field));
                                 return;
                             }
 
@@ -1680,16 +1814,16 @@ impl Compiler {
                             Token::SlashEqual => Op::Div,
 
                             _ => {
-                                add_op(self, block, Op::Get(field));
+                                add_op(self, block, Op::GetField(field));
                                 continue;
                             }
                         };
                         add_op(self, block, Op::Copy(1));
-                        add_op(self, block, Op::Get(field));
+                        add_op(self, block, Op::GetField(field));
                         self.eat();
                         self.expression(block);
                         add_op(self, block, op);
-                        add_op(self, block, Op::Set(field));
+                        add_op(self, block, Op::AssignField(field));
                         return;
                     }
                     Token::LeftBracket => {

@@ -1,0 +1,8 @@
+start :: fn {
+    a :: {1, 2, 3, 1}
+    a[1] <=> true
+    a[2] <=> true
+    a[3] <=> true
+    a[0] <=> false
+    false <=> a[4]
+}

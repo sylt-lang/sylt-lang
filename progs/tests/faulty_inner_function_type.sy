@@ -1,0 +1,9 @@
+f :: fn -> fn -> {
+    g :: fn {}
+    ret g
+}
+
+start :: fn {
+}
+
+// errors: [ErrorKind::SyntaxError(1, _)]

@@ -226,6 +226,25 @@ impl VM {
                 self.stack.push(Value::List(Rc::new(RefCell::new(values))));
             }
 
+            Op::Set(size) => {
+                let values: HashSet<_> = self
+                    .stack
+                    .split_off(self.stack.len() - size)
+                    .into_iter()
+                    .collect();
+                self.stack.push(Value::Set(Rc::new(RefCell::new(values))));
+            }
+
+            Op::Dict(size) => {
+                assert!(size % 2 == 0);
+                let values = self.stack.split_off(self.stack.len() - size);
+                let values: HashMap<_, _> = values
+                    .chunks_exact(2)
+                    .map(|a| (a[0].clone(), a[1].clone()))
+                    .collect();
+                self.stack.push(Value::Dict(Rc::new(RefCell::new(values))));
+            }
+
             Op::PopUpvalue => {
                 let value = self.pop();
                 let slot = self.stack.len();
@@ -305,8 +324,8 @@ impl VM {
             }
 
             Op::GetIndex => {
-                let slot = self.stack.pop().unwrap();
-                let val = self.stack.pop().unwrap();
+                let slot = self.pop();
+                let val = self.pop();
                 match (val, slot) {
                     (Value::Tuple(v), Value::Int(slot)) => {
                         let slot = slot as usize;
@@ -334,6 +353,18 @@ impl VM {
                         }
                         self.stack.push(v[slot].clone());
                     }
+                    (Value::Set(set), b) => {
+                        self.push(Value::Bool(set.as_ref().borrow().contains(&b)));
+                    }
+                    (Value::Dict(dict), i) => {
+                        self.push(
+                            dict.as_ref()
+                                .borrow()
+                                .get(&i)
+                                .unwrap_or(&Value::Nil)
+                                .clone(),
+                        );
+                    }
                     (val, slot) => {
                         self.stack.push(Value::Nil);
                         error!(self, ErrorKind::IndexError(val, slot.into()));
@@ -342,9 +373,9 @@ impl VM {
             }
 
             Op::AssignIndex => {
-                let value = self.stack.pop().unwrap();
-                let slot = self.stack.pop().unwrap();
-                let indexable = self.stack.pop().unwrap();
+                let value = self.pop();
+                let slot = self.pop();
+                let indexable = self.pop();
                 match (indexable, slot, value) {
                     (Value::List(rc_v), Value::Int(slot), n) => {
                         let slot = slot as usize;
@@ -361,6 +392,9 @@ impl VM {
                         drop(v);
                         rc_v.borrow_mut()[slot] = n;
                     }
+                    (Value::Dict(rc_v), slot, n) => {
+                        rc_v.as_ref().borrow_mut().insert(slot, n);
+                    }
                     (indexable, slot, _) => {
                         self.stack.push(Value::Nil);
                         error!(self, ErrorKind::IndexError(indexable, slot.into()));
@@ -368,7 +402,7 @@ impl VM {
                 }
             }
 
-            Op::Get(field) => {
+            Op::GetField(field) => {
                 let inst = self.pop();
                 match inst {
                     Value::Instance(ty, values) => {
@@ -390,13 +424,13 @@ impl VM {
                     inst => {
                         error!(
                             self,
-                            ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)])
+                            ErrorKind::TypeError(Op::AssignField(field), vec![Type::from(inst)])
                         );
                     }
                 }
             }
 
-            Op::Set(field) => {
+            Op::AssignField(field) => {
                 let (inst, value) = self.poppop();
                 match inst {
                     Value::Instance(ty, values) => {
@@ -416,7 +450,7 @@ impl VM {
                     inst => {
                         error!(
                             self,
-                            ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)])
+                            ErrorKind::TypeError(Op::AssignField(field), vec![Type::from(inst)])
                         );
                     }
                 }
@@ -716,7 +750,7 @@ impl VM {
                 }
             }
 
-            Op::Set(field) => {
+            Op::AssignField(field) => {
                 let (inst, value) = self.poppop();
                 match inst {
                     Value::Instance(ty, _) => {
@@ -743,7 +777,7 @@ impl VM {
                     inst => {
                         error!(
                             self,
-                            ErrorKind::TypeError(Op::Set(field), vec![Type::from(inst)])
+                            ErrorKind::TypeError(Op::AssignField(field), vec![Type::from(inst)])
                         );
                     }
                 }
@@ -878,6 +912,12 @@ impl VM {
                     (Type::Tuple(a), b) if b.fits(&Type::Int) => {
                         self.push(Value::Union(a.iter().map(|x| Value::from(x)).collect()));
                     }
+                    (Type::Set(a), b) if a.fits(&b) => {
+                        self.push(Value::Bool(true));
+                    }
+                    (Type::Dict(k, v), i) if k.fits(&i) => {
+                        self.push(Value::from(v.as_ref()));
+                    }
                     _ => {
                         self.push(Value::Nil);
                     }
@@ -900,6 +940,23 @@ impl VM {
                             );
                         }
                     },
+                    (Type::Dict(k, v), i, n) => {
+                        if !k.fits(&i) {
+                            error!(
+                                self,
+                                ErrorKind::TypeMismatch(k.as_ref().clone(), i),
+                                "Cannot index mismatching types"
+                            );
+                        }
+
+                        if !v.fits(&n) {
+                            error!(
+                                self,
+                                ErrorKind::TypeMismatch(v.as_ref().clone(), n),
+                                "Cannot assign mismatching types"
+                            );
+                        }
+                    }
                     (indexable, slot, _) => {
                         self.stack.push(Value::Nil);
                         error!(

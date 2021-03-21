@@ -2,7 +2,7 @@ start :: fn {
 
     q : int = 0
 
-    f :: fn -> fn -> {
+    f :: fn -> fn -> void {
         g :: fn {
             q += 1
         }
