@@ -1,0 +1,10 @@
+f :: fn -> int | bool {
+    ret 1
+}
+
+start :: fn {
+    a: int = f!
+    a <=> 1
+}
+
+// errors: [ErrorKind::TypeMismatch(Type::Int, _)]
