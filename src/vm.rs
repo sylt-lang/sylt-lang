@@ -239,10 +239,8 @@ impl VM {
                 assert!(size % 2 == 0);
                 let values = self.stack.split_off(self.stack.len() - size);
                 let values: HashMap<_, _> = values
-                    .iter()
-                    .step_by(2)
-                    .cloned()
-                    .zip(values.iter().skip(1).step_by(2).cloned())
+                    .chunks_exact(2)
+                    .map(|a| (a[0].clone(), a[1].clone()))
                     .collect();
                 self.stack.push(Value::Dict(Rc::new(RefCell::new(values))));
             }
