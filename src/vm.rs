@@ -227,7 +227,8 @@ impl VM {
             }
 
             Op::Set(size) => {
-                let values: HashSet<_> = self.stack
+                let values: HashSet<_> = self
+                    .stack
                     .split_off(self.stack.len() - size)
                     .into_iter()
                     .collect();
@@ -237,14 +238,11 @@ impl VM {
             Op::Dict(size) => {
                 assert!(size % 2 == 0);
                 let values = self.stack.split_off(self.stack.len() - size);
-                let values: HashMap<_, _> = values.iter()
+                let values: HashMap<_, _> = values
+                    .iter()
                     .step_by(2)
                     .cloned()
-                    .zip(values
-                         .iter()
-                         .skip(1)
-                         .step_by(2)
-                         .cloned())
+                    .zip(values.iter().skip(1).step_by(2).cloned())
                     .collect();
                 self.stack.push(Value::Dict(Rc::new(RefCell::new(values))));
             }
@@ -361,7 +359,13 @@ impl VM {
                         self.push(Value::Bool(set.as_ref().borrow().contains(&b)));
                     }
                     (Value::Dict(dict), i) => {
-                        self.push(dict.as_ref().borrow().get(&i).unwrap_or(&Value::Nil).clone());
+                        self.push(
+                            dict.as_ref()
+                                .borrow()
+                                .get(&i)
+                                .unwrap_or(&Value::Nil)
+                                .clone(),
+                        );
                     }
                     (val, slot) => {
                         self.stack.push(Value::Nil);

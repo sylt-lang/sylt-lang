@@ -184,7 +184,7 @@ impl PartialEq for Type {
 
 impl Eq for Type {}
 
-fn maybe_union_type<'a>(v: impl Iterator<Item=&'a Value>) -> Type {
+fn maybe_union_type<'a>(v: impl Iterator<Item = &'a Value>) -> Type {
     let set: HashSet<_> = v.map(|x| Type::from(x)).collect();
     match set.len() {
         0 => Type::Unknown,
@@ -248,9 +248,7 @@ impl From<&Type> for Value {
             Type::Instance(b) => Value::Instance(Rc::clone(b), Rc::new(RefCell::new(Vec::new()))),
             Type::Tuple(fields) => Value::Tuple(Rc::new(fields.iter().map(Value::from).collect())),
             Type::Union(v) => Value::Union(v.iter().map(Value::from).collect()),
-            Type::List(v) => {
-                Value::List(Rc::new(RefCell::new(vec![Value::from(v.as_ref())])))
-            }
+            Type::List(v) => Value::List(Rc::new(RefCell::new(vec![Value::from(v.as_ref())]))),
             Type::Set(v) => {
                 let mut s = HashSet::new();
                 s.insert(Value::from(v.as_ref()));
@@ -1180,7 +1178,8 @@ mod tests {
 use crate as sylt;
 
 pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, ErrorKind> {
-    println!("{}: {:?}, {:?}",
+    println!(
+        "{}: {:?}, {:?}",
         "DBG".purple(),
         values.iter().map(Type::from).collect::<Vec<_>>(),
         values
