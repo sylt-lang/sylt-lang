@@ -681,7 +681,7 @@ impl Compiler {
         expect!(
             self,
             Token::LeftBrace,
-            "Expected '{{' for set or dictionary."
+            "Expected '{{' for set or dict"
         );
 
         let mut is_dict: Option<bool> = None;
@@ -774,7 +774,7 @@ impl Compiler {
         expect!(
             self,
             Token::RightBrace,
-            "Expected '}}' after set or dictionary."
+            "Expected '}}' after set or dict"
         );
         match is_dict {
             Some(true) => {
