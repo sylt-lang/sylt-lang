@@ -1612,14 +1612,6 @@ impl Compiler {
 
     fn parse_simple_type(&mut self) -> Result<Type, ()> {
         match self.peek() {
-            Token::LeftBrace => {
-                error!(self, "Didn't expect '{{' at start of type");
-                Err(())
-            }
-            Token::RightBrace => {
-                error!(self, "Didn't expect '}}' at start of type");
-                Err(())
-            }
             Token::Fn => {
                 self.eat();
                 let mut params = Vec::new();
