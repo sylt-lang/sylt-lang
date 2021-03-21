@@ -601,6 +601,8 @@ impl Compiler {
             | Token::LessEqual
             | Token::NotEqual => self.binary(block),
 
+            Token::In => self.contains(block),
+
             Token::And | Token::Or => self.binary_bool(block),
 
             _ => {
@@ -823,6 +825,12 @@ impl Compiler {
         };
         self.parse_precedence(block, Prec::Factor);
         add_op(self, block, op);
+    }
+
+    fn contains(&mut self, block: &mut Block) {
+        expect!(self, Token::In, "Expected 'in' at start of contains");
+        self.parse_precedence(block, Prec::Index);
+        add_op(self, block, Op::Illegal);
     }
 
     fn binary_bool(&mut self, block: &mut Block) {
