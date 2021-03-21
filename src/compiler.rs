@@ -1565,7 +1565,7 @@ impl Compiler {
         if self.peek() == Token::LeftBrace {
             // Hashset
             // TODO(ed): This is kinda hacky, but the error
-            // messages get really boarked if we don't move back.
+            // messages get really borked if we don't move back.
             let start = self.current_token;
             self.eat();
             if let Ok(ty) = self.parse_type() {
