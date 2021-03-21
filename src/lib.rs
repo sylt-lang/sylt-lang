@@ -515,22 +515,22 @@ pub enum Op {
     ///
     /// {A} - Constant(B) - {A, B}
     Constant(usize),
-    /// Creates a new [Tuple] with the given size and place it on the top
+    /// Creates a new [Value::Tuple] with the given size and place it on the top
     /// of the stack.
     ///
     /// {A, B, C} - Tuple(3) - {D(A, B, C)}
     Tuple(usize),
-    /// Creates a new [List] with the given size and place it on the top
+    /// Creates a new [Value::List] with the given size and place it on the top
     /// of the stack.
     ///
     /// {A, B, C} - List(3) - {D(A, B, C)}
     List(usize),
-    /// Creates a new [Set] with the given elements and place it on the top
+    /// Creates a new [Value::Set] with the given elements and place it on the top
     /// of the stack.
     ///
     /// {A, B, A} - Set(3) - {D(A, B)}
     Set(usize),
-    /// Creates a new [Dict] with the given elements and place it on the top
+    /// Creates a new [Value::Dict] with the given elements and place it on the top
     /// of the stack.
     ///
     /// {A, B, C, D, A, E} - Dict(6) - {D(A:E, C:D)}
