@@ -530,6 +530,8 @@ impl VM {
 
             Op::Define(_) => {}
 
+            Op::Force(_) => {}
+
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {
@@ -815,6 +817,12 @@ impl VM {
                         );
                     }
                 }
+            }
+
+            Op::Force(ty) => {
+                let ty = Value::from(self.ty(ty));
+                self.pop();
+                self.push(ty);
             }
 
             Op::Link(slot) => {

@@ -629,14 +629,22 @@ pub enum Op {
     /// {A} - AssignUpvalue(0) - {}
     AssignUpvalue(usize),
 
-    /// A helper instruction for the typechecker,
-    /// makes sure the top value on the stack
-    /// is of the given type, and is ment to signal
+    /// A helper instruction for the type checker.
+    /// *Makes sure* that the top value on the stack
+    /// is of the given type, and is meant to signal
     /// that the "variable" is added.
-    /// (The type is looked up in the constants vector)
+    /// (The type is looked up in the constants vector.)
     ///
     /// Does not affect the stack.
     Define(usize),
+    /// A helper instruction for the typechecker,
+    /// *assumes* top value on the stack
+    /// is of the given type. Usefull for helping the
+    /// type system where it just can't do it.
+    /// (The type is looked up in the constants vector)
+    ///
+    /// Does not affect the stack.
+    Force(usize),
 
     /// Links the upvalues for the given constant
     /// function. This updates the constant stack.

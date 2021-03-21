@@ -1214,7 +1214,7 @@ impl Compiler {
         Ok(slot)
     }
 
-    fn definition_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
+    fn definition_statement(&mut self, name: &str, typ: Type, force: bool, block: &mut Block) {
         if self.frames().len() <= 1 {
             // Global
             let var = self.frame().find_outer(name);
@@ -1233,7 +1233,11 @@ impl Compiler {
             let slot = self.define(var);
             self.expression(block);
             let constant = self.add_constant(Value::Ty(typ));
-            add_op(self, block, Op::Define(constant));
+            if force {
+                add_op(self, block, Op::Force(constant));
+            } else {
+                add_op(self, block, Op::Define(constant));
+            }
 
             if let Ok(slot) = slot {
                 self.stack_mut()[slot].active = true;
@@ -1392,7 +1396,7 @@ impl Compiler {
                 (Token::Identifier(name), Token::ColonEqual, ..) => {
                     self.eat();
                     self.eat();
-                    self.definition_statement(&name, Type::Unknown, block);
+                    self.definition_statement(&name, Type::Unknown, false, block);
                 }
 
                 (Token::Comma, ..) => {}
@@ -1743,7 +1747,7 @@ impl Compiler {
             (Token::Identifier(name), Token::ColonEqual, ..) => {
                 self.eat();
                 self.eat();
-                self.definition_statement(&name, Type::Unknown, block);
+                self.definition_statement(&name, Type::Unknown, false, block);
             }
 
             (Token::Identifier(_), Token::ColonColon, Token::Blob, ..) => {
@@ -1759,9 +1763,15 @@ impl Compiler {
             (Token::Identifier(name), Token::Colon, ..) => {
                 self.eat();
                 self.eat();
+                let force = if self.peek() == Token::Bang {
+                    self.eat();
+                    true
+                } else {
+                    false
+                };
                 if let Ok(typ) = self.parse_type() {
                     expect!(self, Token::Equal, "Expected assignment");
-                    self.definition_statement(&name, typ, block);
+                    self.definition_statement(&name, typ, force, block);
                 } else {
                     error!(self, "Expected type found '{:?}'", self.peek());
                 }
@@ -1808,7 +1818,7 @@ impl Compiler {
             (Token::Identifier(name), Token::ColonEqual, ..) => {
                 self.eat();
                 self.eat();
-                self.definition_statement(&name, Type::Unknown, block);
+                self.definition_statement(&name, Type::Unknown, false, block);
             }
 
             (Token::Identifier(name), Token::ColonColon, ..) => {
@@ -1820,9 +1830,15 @@ impl Compiler {
             (Token::Identifier(name), Token::Colon, ..) => {
                 self.eat();
                 self.eat();
+                let force = if self.peek() == Token::Bang {
+                    self.eat();
+                    true
+                } else {
+                    false
+                };
                 if let Ok(typ) = self.parse_type() {
                     expect!(self, Token::Equal, "Expected assignment");
-                    self.definition_statement(&name, typ, block);
+                    self.definition_statement(&name, typ, force, block);
                 } else {
                     error!(self, "Expected type found '{:?}'", self.peek());
                 }

@@ -1,0 +1,14 @@
+f :: fn a: int -> int | bool | str {
+    if a == 0 {
+        ret 1
+    }
+    ret true
+}
+
+start :: fn {
+    a: !int | bool = f! 0
+    if a != 1 {
+        <!>
+    }
+    a <=> 1
+}
