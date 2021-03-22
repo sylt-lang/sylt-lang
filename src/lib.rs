@@ -1,4 +1,5 @@
 use owo_colors::OwoColorize;
+use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
@@ -23,15 +24,38 @@ pub trait Next {
     fn next(&self) -> Self;
 }
 
-/// Compiles, links and runs the given file. Supplied functions are callable
-/// external functions. If you want your program to be able to yield, use
-/// [compile_file].
-pub fn run_file(args: Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    run(args, functions)
+/// Compiles, links and runs the given file. The supplied functions are callable
+/// external functions.
+pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
+    run(compile(args, functions)?, args)
 }
 
-fn run(args: Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    let path = match args.file {
+pub fn run(prog: Prog, args: &Args, ) -> Result<(), Vec<Error>> {
+    let mut vm = vm::VM::new();
+    vm.print_bytecode = args.print_bytecode;
+    vm.print_exec = args.print_exec;
+    vm.typecheck(&prog)?;
+    vm.init(&prog);
+    if let Err(e) = vm.run() {
+        Err(vec![e])
+    } else {
+        Ok(())
+    }
+}
+
+/// Compiles and serializes the given file.
+pub fn serialize(args: &Args) -> Result<Vec<u8>, Vec<Error>> {
+    let prog = compile(args, vec![])?;
+    bincode::serialize(&prog).map_err(|_| vec![]) //TODO
+}
+
+/// Deserializes and links the given file.
+pub fn deserialize(bytes: Vec<u8>) -> Result<Prog, Vec<Error>> {
+    bincode::deserialize(&bytes).map_err(|_| vec![])
+}
+
+fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
+    let path = match &args.file {
         Some(file) => file,
         None => {
             return Err(vec![Error {
@@ -43,21 +67,7 @@ fn run(args: Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Err
         }
     };
     let sections = sectionizer::sectionize(&path)?;
-    match compiler::Compiler::new(sections).compile("/preamble", &path, &functions) {
-        Ok(prog) => {
-            let mut vm = vm::VM::new();
-            vm.print_bytecode = args.print_bytecode;
-            vm.print_exec = args.print_exec;
-            vm.typecheck(&prog)?;
-            vm.init(&prog);
-            if let Err(e) = vm.run() {
-                Err(vec![e])
-            } else {
-                Ok(())
-            }
-        }
-        Err(errors) => Err(errors),
-    }
+    compiler::Compiler::new(sections).compile("/preamble", &path, &functions)
 }
 
 pub struct Args {
@@ -87,7 +97,7 @@ pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
 /// [sylt_macro::extern_function].
 pub type RustFunction = fn(&[Value], bool) -> Result<Value, ErrorKind>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Type {
     Void,
     Unknown,
@@ -298,7 +308,7 @@ impl Type {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Deserialize, Serialize)]
 pub enum Value {
     Ty(Type),
     Blob(Rc<Blob>),
@@ -412,7 +422,7 @@ impl Value {
 }
 
 #[doc(hidden)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UpValue {
     slot: usize,
     value: Value,
@@ -452,7 +462,7 @@ impl UpValue {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Blob {
     pub id: usize,
     pub name: String,
@@ -493,7 +503,7 @@ impl Blob {
 /// machine carries out when running the
 /// "byte-code".
 ///
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
 pub enum Op {
     /// This instruction should never be run.
     /// Finding it in a program is a critical error.
@@ -947,14 +957,14 @@ mod op {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 enum BlockLinkState {
     Linked,
     Unlinked,
     Nothing,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Block {
     pub ty: Type,
     upvalues: Vec<(usize, bool, Type)>,
@@ -1094,9 +1104,10 @@ impl Block {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Prog {
     pub blocks: Vec<Rc<RefCell<Block>>>,
+    #[serde(skip)]
     pub functions: Vec<RustFunction>,
     pub constants: Vec<Value>,
     pub strings: Vec<String>,
