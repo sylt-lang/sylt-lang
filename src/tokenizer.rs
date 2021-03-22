@@ -30,8 +30,8 @@ pub enum Token {
     Break,
     #[token("continue")]
     Continue,
-    // #[token("in")]
-    // In,
+    #[token("in")]
+    In,
     // #[token("loop")]
     // Loop,
     #[token("blob")]

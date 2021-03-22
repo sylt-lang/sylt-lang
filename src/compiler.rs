@@ -1492,6 +1492,53 @@ impl Compiler {
         }
     }
 
+    fn for_loop_condition(&mut self, block: &mut Block) {
+        expect!(
+            self,
+            Token::Comma,
+            "Expect ',' between initalizer and loop expression"
+        );
+
+        let cond = block.curr();
+        self.expression(block);
+        let cond_out = add_op(self, block, Op::Illegal);
+        let cond_cont = add_op(self, block, Op::Illegal);
+        expect!(
+            self,
+            Token::Comma,
+            "Expect ',' between initalizer and loop expression"
+        );
+
+        let inc = block.curr();
+        push_scope!(self, block, {
+            self.statement(block);
+        });
+        add_op(self, block, Op::Jmp(cond));
+
+        // patch_jmp!(Op::Jmp, cond_cont => block.curr());
+        block.patch(Op::Jmp(block.curr()), cond_cont);
+        self.scope(block);
+        add_op(self, block, Op::Jmp(inc));
+
+        block.patch(Op::JmpFalse(block.curr()), cond_out);
+
+        let stacksize = self.frame().stack.len();
+        self.frame_mut()
+            .pop_loop(block, stacksize, inc, block.curr());
+    }
+
+    fn for_in_loop(&mut self, block: &mut Block) {
+        add_op(self, block, Op::Illegal);  // Op::Iter
+        let start = add_op(self, block, Op::Illegal);  // Op::JmpNext(loop)
+        self.scope(block);
+        add_op(self, block, Op::Jmp(start));
+        let end = block.curr();
+        block.patch(Op::JmpFalse(end), start);
+
+        let stacksize = self.frame().stack.len();
+        self.frame_mut().pop_loop(block, stacksize, start, end);
+    }
+
     //TODO de-complexify
     fn for_loop(&mut self, block: &mut Block) {
         expect!(self, Token::For, "Expected 'for' at start of for-loop");
@@ -1505,47 +1552,39 @@ impl Compiler {
                     self.eat();
                     self.eat();
                     self.definition_statement(&name, Type::Unknown, false, block);
+                    self.for_loop_condition(block);
                 }
 
-                (Token::Comma, ..) => {}
+                (Token::Comma, ..) => {
+                    self.for_loop_condition(block);
+                }
+
+                (Token::Identifier(name), Token::In, ..) => {
+                    // TODO(ed): Destructure tuples?
+
+                    // The type will always be infered from the iterator.
+                    push_scope!(self, block, {
+                        let var = Variable::new(&name, false, Type::Unknown);
+                        let slot = self.define(var);
+
+                        self.eat();
+                        self.eat();
+
+                        self.expression(block);
+                        if let Ok(slot) = slot {
+                            self.stack_mut()[slot].active = true;
+                        } else {
+                            error!(self, "Failed to define '{}'", name);
+                        }
+                        self.for_in_loop(block);
+                    });
+                }
 
                 _ => {
                     error!(self, "Expected definition at start of for-loop");
                 }
             }
 
-            expect!(
-                self,
-                Token::Comma,
-                "Expect ',' between initalizer and loop expression"
-            );
-
-            let cond = block.curr();
-            self.expression(block);
-            let cond_out = add_op(self, block, Op::Illegal);
-            let cond_cont = add_op(self, block, Op::Illegal);
-            expect!(
-                self,
-                Token::Comma,
-                "Expect ',' between initalizer and loop expression"
-            );
-
-            let inc = block.curr();
-            push_scope!(self, block, {
-                self.statement(block);
-            });
-            add_op(self, block, Op::Jmp(cond));
-
-            // patch_jmp!(Op::Jmp, cond_cont => block.curr());
-            block.patch(Op::Jmp(block.curr()), cond_cont);
-            self.scope(block);
-            add_op(self, block, Op::Jmp(inc));
-
-            block.patch(Op::JmpFalse(block.curr()), cond_out);
-
-            let stacksize = self.frame().stack.len();
-            self.frame_mut()
-                .pop_loop(block, stacksize, inc, block.curr());
         });
     }
 
