@@ -271,7 +271,7 @@ impl From<&Type> for Value {
                 s.insert(Value::from(k.as_ref()), Value::from(v.as_ref()));
                 Value::Dict(Rc::new(RefCell::new(s)))
             }
-            Type::Iter(v) => Value::Iter(v.as_ref().clone(), Rc::new(|| None)),
+            Type::Iter(v) => Value::Iter(v.as_ref().clone(), Rc::new(RefCell::new(|| None))),
             Type::Unknown => Value::Unknown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),
@@ -318,7 +318,7 @@ pub enum Value {
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
     Dict(Rc<RefCell<HashMap<Value, Value>>>),
-    Iter(Type, Rc<IterFn>),
+    Iter(Type, Rc<RefCell<IterFn>>),
     Union(HashSet<Value>),
     Float(f64),
     Int(i64),
@@ -585,7 +585,7 @@ pub enum Op {
     /// one step and pushes the value. If the iterator is consumed,
     /// jump to the address and push [Value::Nil].
     ///
-    /// {A} - Iter - {Iter(A)}
+    /// {I} - JmpNext(line) - {I, A}
     JmpNext(usize),
 
     /// Adds the two top elements on the stack,

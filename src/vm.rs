@@ -501,18 +501,30 @@ impl VM {
             }
 
             Op::Iter => {
-                let iter: Rc<IterFn> = match self.pop() {
+                let iter: Box<IterFn> = match self.pop() {
                     Value::List(rc) => {
                         let mut i = 0;
-                        Rc::new(move || {
-                            let res = rc.borrow().iter().skip(i).next().cloned();
+                        Box::new(move || {
+                            let res = rc.borrow().get(i).cloned();
+                            i += 1;
+                            res
+                        })
+                    }
+                    Value::Tuple(rc) => {
+                        let mut i = 0;
+                        Box::new(move || {
+                            let res = rc.as_ref().get(i).cloned();
                             i += 1;
                             res
                         })
                     }
                     Value::Set(rc) => {
-                        let mut v = rc.borrow().clone().into_iter();
-                        Rc::new(move || v.next())
+                        let mut v = rc.as_ref().borrow().clone().into_iter();
+                        Box::new(move || v.next())
+                    }
+                    Value::Dict(rc) => {
+                        let mut v = rc.as_ref().borrow().clone().into_iter();
+                        Box::new(move || v.next().map(|(k, v)| Value::Tuple(Rc::new(vec![k, v]))))
                     }
                     v => {
                         self.push(Value::Nil);
@@ -525,7 +537,28 @@ impl VM {
                 };
                 // The type is never used during runtime,
                 // so Void is used.
-                self.push(Value::Iter(Type::Void, iter));
+                self.push(Value::Iter(Type::Void, Rc::new(RefCell::new(iter))));
+            }
+
+            Op::JmpNext(line) => {
+                if let Some(Value::Iter(_, f)) = self.stack.last() {
+                    let v = (f.borrow_mut())();
+                    drop(f);
+                    if let Some(v) = v {
+                        self.push(v);
+                    } else {
+                        self.push(Value::Nil);
+                        self.frame_mut().ip = line;
+                        return Ok(OpResult::Continue);
+                    }
+                } else {
+                    self.push(Value::Nil);
+                    error!(
+                        self,
+                        ErrorKind::InvalidProgram,
+                        "Cannot iterate over non-iterator"
+                    );
+                }
             }
 
             Op::Jmp(line) => {
