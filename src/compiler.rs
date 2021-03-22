@@ -828,10 +828,13 @@ impl Compiler {
     fn binary_bool(&mut self, block: &mut Block) {
         let op = self.eat();
 
+        // TODO(ed): If JmpFalseNoPeek would be made, we could
+        // save some instructions and clones.
         match op {
             Token::And => {
                 add_op(self, block, Op::Copy(1));
                 let jump = add_op(self, block, Op::Illegal);
+                add_op(self, block, Op::Pop);
 
                 self.parse_precedence(block, self.precedence(op.clone()).next());
 
@@ -840,9 +843,11 @@ impl Compiler {
 
             Token::Or => {
                 add_op(self, block, Op::Copy(1));
-                let skipp = add_op(self, block, Op::Illegal);
+                let skip = add_op(self, block, Op::Illegal);
                 let jump = add_op(self, block, Op::Illegal);
-                block.patch(Op::JmpFalse(block.curr()), skipp);
+
+                block.patch(Op::JmpFalse(block.curr()), skip);
+                add_op(self, block, Op::Pop);
 
                 self.parse_precedence(block, self.precedence(op.clone()).next());
 
