@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::rc::Rc;
 
 use crate::error::{Error, ErrorKind};
-use crate::{op, Block, BlockLinkState, Op, Prog, RustFunction, Type, UpValue, Value};
+use crate::{op, Block, BlockLinkState, IterFn, Op, Prog, RustFunction, Type, UpValue, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -498,6 +498,34 @@ impl VM {
 
             Op::Not => {
                 one_op!(self, Op::Not, op::not);
+            }
+
+            Op::Iter => {
+                let iter: Rc<IterFn> = match self.pop() {
+                    Value::List(rc) => {
+                        let mut i = 0;
+                        Rc::new(move || {
+                            let res = rc.borrow().iter().skip(i).next().cloned();
+                            i += 1;
+                            res
+                        })
+                    }
+                    Value::Set(rc) => {
+                        let mut v = rc.borrow().clone().into_iter();
+                        Rc::new(move || v.next())
+                    }
+                    v => {
+                        self.push(Value::Nil);
+                        error!(
+                            self,
+                            ErrorKind::TypeError(Op::Iter, vec![Type::from(v)]),
+                            "Cannot turn into iterator"
+                        );
+                    }
+                };
+                // The type is never used during runtime,
+                // so Void is used.
+                self.push(Value::Iter(Type::Void, iter));
             }
 
             Op::Jmp(line) => {

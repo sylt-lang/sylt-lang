@@ -577,6 +577,17 @@ pub enum Op {
     /// {O} - Set(F) - {}
     AssignField(usize),
 
+    /// Turns the top element of the stack into an iterator.
+    ///
+    /// {A} - Iter - {Iter(A)}
+    Iter,
+    /// Assumes the top element is an iterator. Steps the iterator
+    /// one step and pushes the value. If the iterator is consumed,
+    /// jump to the address and push [Value::Nil].
+    ///
+    /// {A} - Iter - {Iter(A)}
+    JmpNext(usize),
+
     /// Adds the two top elements on the stack,
     /// using the function [op::add]. The result
     /// is the pushed.
