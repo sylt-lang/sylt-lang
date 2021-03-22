@@ -1527,18 +1527,6 @@ impl Compiler {
             .pop_loop(block, stacksize, inc, block.curr());
     }
 
-    fn for_in_loop(&mut self, block: &mut Block) {
-        add_op(self, block, Op::Illegal);  // Op::Iter
-        let start = add_op(self, block, Op::Illegal);  // Op::JmpNext(loop)
-        self.scope(block);
-        add_op(self, block, Op::Jmp(start));
-        let end = block.curr();
-        block.patch(Op::JmpFalse(end), start);
-
-        let stacksize = self.frame().stack.len();
-        self.frame_mut().pop_loop(block, stacksize, start, end);
-    }
-
     //TODO de-complexify
     fn for_loop(&mut self, block: &mut Block) {
         expect!(self, Token::For, "Expected 'for' at start of for-loop");
@@ -1560,24 +1548,38 @@ impl Compiler {
                 }
 
                 (Token::Identifier(name), Token::In, ..) => {
-                    // TODO(ed): Destructure tuples?
+                    // TODO(ed): Destructure tuples? Break this out into function?
 
                     // The type will always be infered from the iterator.
+                    let var = Variable::new("/iter", false, Type::Unknown);
+                    let slot = self.define(var).unwrap();
+                    self.stack_mut()[slot].read = true;
+
+                    self.eat();
+                    self.eat();
+
+                    self.expression(block);
+                    add_op(self, block, Op::Iter);
+                    let start = add_op(self, block, Op::Illegal);
+
                     push_scope!(self, block, {
                         let var = Variable::new(&name, false, Type::Unknown);
                         let slot = self.define(var);
 
-                        self.eat();
-                        self.eat();
-
-                        self.expression(block);
                         if let Ok(slot) = slot {
                             self.stack_mut()[slot].active = true;
                         } else {
                             error!(self, "Failed to define '{}'", name);
                         }
-                        self.for_in_loop(block);
+                        self.scope(block);
                     });
+
+                    add_op(self, block, Op::Jmp(start));
+                    let end = block.curr();
+                    block.patch(Op::JmpNext(end), start);
+
+                    let stacksize = self.frame().stack.len();
+                    self.frame_mut().pop_loop(block, stacksize, start, end);
                 }
 
                 _ => {
