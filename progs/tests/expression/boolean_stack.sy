@@ -1,0 +1,14 @@
+start :: fn -> void {
+    if 1 == 0 || 0 == 1 {
+        <!>
+    }
+    i := "PRINT ME"
+    i <=> "PRINT ME"
+
+    if 1 == 0 && 0 == 1 {
+        <!>
+    }
+    j := "PRINT ME"
+    j <=> "PRINT ME"
+}
+
