@@ -530,7 +530,7 @@ impl Compiler {
 
     /// The line of the current token.
     fn line(&self) -> usize {
-        if self.section().tokens.len() == 0 {
+        if self.section().tokens.is_empty() {
             0
         } else {
             self.section().tokens
@@ -2128,7 +2128,7 @@ impl Compiler {
         }
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
 
-        if self.names().len() != 0 {
+        if !self.names().is_empty() {
             let errors: Vec<_> = self
                 .names()
                 .iter()
