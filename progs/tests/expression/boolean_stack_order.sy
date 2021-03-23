@@ -1,0 +1,17 @@
+start :: fn {
+    if false && false && false {
+        <!>
+    }
+    if true && false && false {
+        <!>
+    }
+    if true && true && false {
+        <!>
+    }
+    if true || true {
+    }
+    if false || true {
+    }
+    i := "HELLO!"
+    i <=> "HELLO!"
+}
