@@ -827,7 +827,7 @@ impl Compiler {
                 add_op(self, block, Op::Copy(1));
                 let jump = add_op(self, block, Op::Illegal);
 
-                self.parse_precedence(block, self.precedence(op.clone()).next());
+                self.parse_precedence(block, self.precedence(op).next());
 
                 block.patch(Op::JmpFalse(block.curr()), jump);
             }
@@ -838,7 +838,7 @@ impl Compiler {
                 let jump = add_op(self, block, Op::Illegal);
                 block.patch(Op::JmpFalse(block.curr()), skipp);
 
-                self.parse_precedence(block, self.precedence(op.clone()).next());
+                self.parse_precedence(block, self.precedence(op).next());
 
                 block.patch(Op::Jmp(block.curr()), jump);
             }

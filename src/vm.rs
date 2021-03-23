@@ -267,7 +267,7 @@ impl VM {
                 let value = match constant {
                     Value::Function(ups, block) => {
                         if matches!(block.borrow().linking, BlockLinkState::Linked) {
-                            Value::Function(ups.clone(), block)
+                            Value::Function(ups, block)
                         } else {
                             let mut ups = Vec::new();
                             for (slot, is_up, _) in block.borrow().upvalues.iter() {
@@ -315,7 +315,7 @@ impl VM {
                     }
                     value => error!(
                         self,
-                        ErrorKind::ValueError(op, vec![value.clone()]),
+                        ErrorKind::ValueError(op, vec![value]),
                         "Not a function {:?}",
                         value
                     ),
@@ -361,8 +361,8 @@ impl VM {
                             dict.as_ref()
                                 .borrow()
                                 .get(&i)
-                                .unwrap_or(&Value::Nil)
-                                .clone(),
+                                .cloned()
+                                .unwrap_or(Value::Nil),
                         );
                     }
                     (val, slot) => {
@@ -743,7 +743,7 @@ impl VM {
                         }
                     }
                     value => {
-                        self.push(value.clone());
+                        self.push(value);
                     }
                 }
             }
@@ -844,7 +844,7 @@ impl VM {
                     (a, b) => {
                         error!(
                             self,
-                            ErrorKind::TypeMismatch(a.clone(), b.clone()),
+                            ErrorKind::TypeMismatch(a.clone(), b),
                             "Cannot assign mismatching types"
                         );
                     }
