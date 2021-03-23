@@ -106,7 +106,7 @@ impl VM {
     fn find_upvalue(&mut self, slot: usize) -> &mut Rc<RefCell<UpValue>> {
         self.upvalues
             .entry(slot)
-            .or_insert(Rc::new(RefCell::new(UpValue::new(slot))))
+            .or_insert_with(|| Rc::new(RefCell::new(UpValue::new(slot))))
     }
 
     fn push(&mut self, value: Value) {
@@ -957,7 +957,7 @@ impl VM {
                         self.stack.push(Value::Nil);
                         error!(
                             self,
-                            ErrorKind::TypeError(Op::AssignIndex, vec![indexable, slot.into()])
+                            ErrorKind::TypeError(Op::AssignIndex, vec![indexable, slot])
                         );
                     }
                 }

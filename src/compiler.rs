@@ -1234,7 +1234,7 @@ impl Compiler {
                     Token::Dot => {
                         self.eat();
                         if let Token::Identifier(field) = self.eat() {
-                            let string = self.intern_string(String::from(field));
+                            let string = self.intern_string(field);
                             add_op(self, block, Op::GetField(string));
                         } else {
                             error!(self, "Expected fieldname after '.'");
@@ -1299,7 +1299,7 @@ impl Compiler {
 
         if let Some(res) = frame
             .find_local(&var.name)
-            .or(frame.find_upvalue(&var.name))
+            .or_else(|| frame.find_upvalue(&var.name))
         {
             if res.scope == frame.scope {
                 error!(self, "Multiple definitions of '{}' in this block", res.name);
@@ -1784,7 +1784,7 @@ impl Compiler {
                     Token::Dot => {
                         self.eat();
                         let field = if let Token::Identifier(field) = self.eat() {
-                            String::from(field)
+                            field
                         } else {
                             error!(self, "Expected fieldname after '.'");
                             return;
