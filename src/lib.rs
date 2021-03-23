@@ -557,6 +557,11 @@ pub enum Op {
     /// (name is looked up in the internal string-list)
     ///
     /// {O} - Get(F) - {O.F}
+    Contains,
+    /// Checks if the given value is inside the container.
+    /// Pushes a bool to the stack.
+    ///
+    /// {I, A} - Contains - {I in A}
     GetField(usize),
     /// Looks up a field by the given name
     /// and replaces the current value in the object.
