@@ -173,7 +173,7 @@ impl VM {
                 frame.block.borrow().name.blue()
             );
         }
-        println!("")
+        println!()
     }
 
     /// Stop the program, violently

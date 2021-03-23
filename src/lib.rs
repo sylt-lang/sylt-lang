@@ -466,7 +466,7 @@ impl PartialEq for Blob {
 impl Blob {
     fn new(id: usize, name: &str) -> Self {
         Self {
-            id: id,
+            id,
             name: String::from(name),
             fields: HashMap::new(),
         }
