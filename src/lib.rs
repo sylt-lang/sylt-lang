@@ -1,3 +1,4 @@
+use gumdrop::Options;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
@@ -30,10 +31,10 @@ pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(
     run(compile(args, functions)?, args)
 }
 
-pub fn run(prog: Prog, args: &Args, ) -> Result<(), Vec<Error>> {
+pub fn run(prog: Prog, args: &Args) -> Result<(), Vec<Error>> {
     let mut vm = vm::VM::new();
-    vm.print_bytecode = args.print_bytecode;
-    vm.print_exec = args.print_exec;
+    vm.print_bytecode = args.verbosity >= 1;
+    vm.print_exec = args.verbosity >= 2;
     vm.typecheck(&prog)?;
     vm.init(&prog);
     if let Err(e) = vm.run() {
@@ -70,20 +71,13 @@ fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, 
     compiler::Compiler::new(sections).compile("/preamble", &path, &functions)
 }
 
+#[derive(Debug, Options)]
 pub struct Args {
+    #[options(free)]
     pub file: Option<PathBuf>,
-    pub print_exec: bool,
-    pub print_bytecode: bool,
-}
 
-impl Default for Args {
-    fn default() -> Self {
-        Self {
-            file: None,
-            print_exec: false,
-            print_bytecode: false,
-        }
-    }
+    #[options(short = "v", no_long, count)]
+    pub verbosity: u32,
 }
 
 pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
