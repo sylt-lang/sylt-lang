@@ -559,6 +559,7 @@ pub enum Op {
     /// {O} - Get(F) - {O.F}
     Contains,
     /// Checks if the given value is inside the container.
+    /// Pushes a bool to the stack.
     ///
     /// {I, A} - Contains - {I in A}
     GetField(usize),
