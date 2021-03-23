@@ -1730,7 +1730,7 @@ impl Compiler {
                 continue;
             };
 
-            if let Err(_) = blob.add_field(&name, ty) {
+            if blob.add_field(&name, ty).is_err() {
                 error!(
                     self,
                     "A field named '{}' is defined twice for '{}'", name, blob.name
@@ -1749,7 +1749,7 @@ impl Compiler {
             Token::Identifier(name) => name,
             _ => unreachable!(),
         };
-        if let Some(_) = self.find_namespace(&name) {
+        if self.find_namespace(&name).is_some() {
             self.expression(block);
         } else if rest_of_line_contains!(
             self,
