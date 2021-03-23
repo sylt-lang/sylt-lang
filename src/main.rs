@@ -1,7 +1,7 @@
 use gumdrop::Options;
 use std::io::Write;
 
-use sylt::{run_file, Args};
+use sylt::Args;
 
 fn main() -> Result<(), String> {
     let args = Args::parse_args_default_or_exit();
@@ -14,11 +14,13 @@ fn main() -> Result<(), String> {
         return Err("No file to run".to_string());
     }
 
+    let functions = sylt_macro::link!(sylt::dbg as dbg, sylt::push as push, sylt::len as len);
+
     let res = if args.is_binary {
         let prog = sylt::deserialize(std::fs::read(args.file.clone().unwrap()).unwrap()).unwrap();
         sylt::run(&prog, &args)
     } else if let Some(compile_target) = &args.compile_target {
-        match sylt::serialize(&args) {
+        match sylt::serialize(&args, functions) {
             Ok(bytes) => {
                 let mut dest = std::fs::File::create(compile_target).unwrap();
                 dest.write_all(&bytes).unwrap();
@@ -27,10 +29,7 @@ fn main() -> Result<(), String> {
             Err(e) => Err(e),
         }
     } else {
-        run_file(
-            &args,
-            sylt_macro::link!(sylt::dbg as dbg, sylt::push as push, sylt::len as len,),
-        )
+        sylt::run_file(&args, functions)
     };
 
 
