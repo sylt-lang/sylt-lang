@@ -71,22 +71,22 @@ fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, 
     compiler::Compiler::new(sections).compile("/preamble", &path, &functions)
 }
 
-#[derive(Debug, Options)]
+#[derive(Default, Debug, Options)]
 pub struct Args {
     #[options(free)]
     pub file: Option<PathBuf>,
 
-    #[options(short = "v", no_long, count)]
-    pub verbosity: u32,
-}
+    #[options(short = "r", long = "run", help = "Runs a precompiled sylt binary")]
+    pub is_binary: bool,
 
-impl Default for Args {
-    fn default() -> Self {
-        Self {
-            file: None,
-            verbosity: 0,
-        }
-    }
+    #[options(short = "c", long = "compile", help = "Compile a sylt binary")]
+    pub compile_target: Option<PathBuf>,
+
+    #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
+    pub verbosity: u32,
+
+    #[options(help = "Print this help")]
+    pub help: bool,
 }
 
 pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
