@@ -1,40 +1,45 @@
-use std::path::Path;
+use gumdrop::Options;
+use std::io::Write;
 
-use sylt::{run_file, Args};
+use sylt::{Args, RustFunction};
 
 fn main() -> Result<(), String> {
-    let args = parse_args();
+    let args = Args::parse_args_default_or_exit();
+    if args.help {
+        println!("{}", Args::usage());
+        return Ok(());
+    }
+
     if args.file.is_none() {
         return Err("No file to run".to_string());
     }
-    let errs = match run_file(
-        args,
-        sylt_macro::link!(sylt::dbg as dbg, sylt::push as push, sylt::len as len,),
-    ) {
-        Err(it) => it,
-        _ => return Ok(()),
-    };
-    for err in errs.iter() {
-        println!("{}", err);
-    }
-    Err(format!("{} errors occured.", errs.len()))
-}
 
-fn parse_args() -> Args {
-    let mut args = Args::default();
+    let functions: Vec<(String, RustFunction)> = sylt_macro::link!(sylt::dbg as dbg, sylt::push as push, sylt::len as len);
 
-    for s in std::env::args().skip(1) {
-        let path = Path::new(&s).to_owned();
-        if path.is_file() {
-            args.file = Some(path);
-        } else if s == "-v" {
-            args.print_bytecode = true;
-        } else if s == "-vv" {
-            args.print_bytecode = true;
-            args.print_exec = true;
-        } else {
-            eprintln!("Invalid argument {}.", s);
+    let res = if args.is_binary {
+        match sylt::deserialize(std::fs::read(args.file.clone().unwrap()).unwrap()) {
+            Ok(prog) => sylt::run(&prog, &args),
+            Err(e) => Err(e)
         }
+    } else if let Some(compile_target) = &args.compile_target {
+        match sylt::serialize(&args, functions) {
+            Ok(bytes) => {
+                let mut dest = std::fs::File::create(compile_target).unwrap();
+                dest.write_all(&bytes).unwrap();
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    } else {
+        sylt::run_file(&args, functions)
+    };
+
+
+    if let Err(errs) = res {
+        for err in errs.iter() {
+            println!("{}", err);
+        }
+        return Err(format!("{} errors occured.", errs.len()));
     }
-    args
+    Ok(())
 }
