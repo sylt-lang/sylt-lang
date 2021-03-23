@@ -16,7 +16,7 @@ fn main() -> Result<(), String> {
 
     let res = if args.is_binary {
         let prog = sylt::deserialize(std::fs::read(args.file.clone().unwrap()).unwrap()).unwrap();
-        sylt::run(prog, &args)
+        sylt::run(&prog, &args)
     } else if let Some(compile_target) = &args.compile_target {
         match sylt::serialize(&args) {
             Ok(bytes) => {

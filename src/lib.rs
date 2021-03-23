@@ -1,3 +1,4 @@
+use error::Error;
 use gumdrop::Options;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
@@ -9,8 +10,6 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-
-use error::Error;
 
 use crate::error::ErrorKind;
 
@@ -28,14 +27,22 @@ pub trait Next {
 /// Compiles, links and runs the given file. The supplied functions are callable
 /// external functions.
 pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    run(compile(args, functions)?, args)
+    let prog = compile(args, functions)?;
+    typecheck(&prog, &args)?;
+    run(&prog, &args)
 }
 
-pub fn run(prog: Prog, args: &Args) -> Result<(), Vec<Error>> {
+pub fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
     let mut vm = vm::VM::new();
     vm.print_bytecode = args.verbosity >= 1;
     vm.print_exec = args.verbosity >= 2;
-    vm.typecheck(&prog)?;
+    vm.typecheck(prog)
+}
+
+pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
+    let mut vm = vm::VM::new();
+    vm.print_bytecode = args.verbosity >= 1;
+    vm.print_exec = args.verbosity >= 2;
     vm.init(&prog);
     if let Err(e) = vm.run() {
         Err(vec![e])
@@ -68,7 +75,9 @@ fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, 
         }
     };
     let sections = sectionizer::sectionize(&path)?;
-    compiler::Compiler::new(sections).compile("/preamble", &path, &functions)
+    let prog = compiler::Compiler::new(sections).compile("/preamble", &path, &functions)?;
+    typecheck(&prog, &args)?;
+    Ok(prog)
 }
 
 #[derive(Default, Debug, Options)]
