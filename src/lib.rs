@@ -55,7 +55,12 @@ pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
 pub fn serialize(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Vec<u8>, Vec<Error>> {
     let prog = compile(args, functions)?;
     typecheck(&prog, args)?;
-    bincode::serialize(&prog).map_err(|_| vec![]) //TODO
+    bincode::serialize(&prog).map_err(|_| vec![Error {
+        kind: ErrorKind::BincodeError,
+        file: args.file.as_ref().unwrap().clone(),
+        line: 0,
+        message: None,
+    }]) //TODO
 }
 
 /// Deserializes and links the given file.

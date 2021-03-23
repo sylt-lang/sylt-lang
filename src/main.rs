@@ -17,8 +17,10 @@ fn main() -> Result<(), String> {
     let functions: Vec<(String, RustFunction)> = sylt_macro::link!(sylt::dbg as dbg, sylt::push as push, sylt::len as len);
 
     let res = if args.is_binary {
-        let prog = sylt::deserialize(std::fs::read(args.file.clone().unwrap()).unwrap()).unwrap();
-        sylt::run(&prog, &args)
+        match sylt::deserialize(std::fs::read(args.file.clone().unwrap()).unwrap()) {
+            Ok(prog) => sylt::run(&prog, &args),
+            Err(e) => Err(e)
+        }
     } else if let Some(compile_target) = &args.compile_target {
         match sylt::serialize(&args, functions) {
             Ok(bytes) => {
