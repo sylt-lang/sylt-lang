@@ -80,6 +80,15 @@ pub struct Args {
     pub verbosity: u32,
 }
 
+impl Default for Args {
+    fn default() -> Self {
+        Self {
+            file: None,
+            verbosity: 0,
+        }
+    }
+}
+
 pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
     let mut res = PathBuf::from(current_file);
     res.pop();
@@ -1181,9 +1190,9 @@ mod tests {
             fn $fn() {
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
-                args.print_bytecode = $print;
+                args.verbosity = if $print { 1 } else { 0 };
                 $crate::run_file(
-                    args,
+                    &args,
                     sylt_macro::link!(crate::dbg as dbg, crate::push as push, crate::len as len,),
                 )
                 .unwrap();
@@ -1198,9 +1207,9 @@ mod tests {
 
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
-                args.print_bytecode = $print;
+                args.verbosity = if $print { 1 } else { 0 };
                 let res = $crate::run_file(
-                    args,
+                    &args,
                     sylt_macro::link!(crate::dbg as dbg, crate::push as push, crate::len as len,),
                 );
                 $crate::assert_errs!(res, $errs);
