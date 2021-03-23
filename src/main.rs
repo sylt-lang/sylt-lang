@@ -1,7 +1,7 @@
 use gumdrop::Options;
 use std::io::Write;
 
-use sylt::Args;
+use sylt::{Args, RustFunction};
 
 fn main() -> Result<(), String> {
     let args = Args::parse_args_default_or_exit();
@@ -14,7 +14,7 @@ fn main() -> Result<(), String> {
         return Err("No file to run".to_string());
     }
 
-    let functions = sylt_macro::link!(sylt::dbg as dbg, sylt::push as push, sylt::len as len);
+    let functions: Vec<(String, RustFunction)> = sylt_macro::link!(sylt::dbg as dbg, sylt::push as push, sylt::len as len);
 
     let res = if args.is_binary {
         let prog = sylt::deserialize(std::fs::read(args.file.clone().unwrap()).unwrap()).unwrap();
