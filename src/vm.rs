@@ -910,7 +910,7 @@ impl VM {
                         self.push(Value::from(a.as_ref()));
                     }
                     (Type::Tuple(a), b) if b.fits(&Type::Int) => {
-                        self.push(Value::Union(a.iter().map(|x| Value::from(x)).collect()));
+                        self.push(Value::Union(a.iter().map(Value::from).collect()));
                     }
                     (Type::Set(a), b) if a.fits(&b) => {
                         self.push(Value::Bool(true));

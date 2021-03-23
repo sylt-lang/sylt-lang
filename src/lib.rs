@@ -189,7 +189,7 @@ impl PartialEq for Type {
 impl Eq for Type {}
 
 fn maybe_union_type<'a>(v: impl Iterator<Item = &'a Value>) -> Type {
-    let set: HashSet<_> = v.map(|x| Type::from(x)).collect();
+    let set: HashSet<_> = v.map(Type::from).collect();
     match set.len() {
         0 => Type::Unknown,
         1 => set.into_iter().next().unwrap(),
@@ -202,7 +202,7 @@ impl From<&Value> for Type {
         match value {
             Value::Instance(b, _) => Type::Instance(Rc::clone(b)),
             Value::Blob(b) => Type::Blob(Rc::clone(b)),
-            Value::Tuple(v) => Type::Tuple(v.iter().map(|x| Type::from(x)).collect()),
+            Value::Tuple(v) => Type::Tuple(v.iter().map(Type::from).collect()),
             Value::List(v) => {
                 let v: &RefCell<_> = v.borrow();
                 let v = &v.borrow();
@@ -222,7 +222,7 @@ impl From<&Value> for Type {
                 let v = maybe_union_type(v.values());
                 Type::Dict(Box::new(k), Box::new(v))
             }
-            Value::Union(v) => Type::Union(v.iter().map(|x| Type::from(x)).collect()),
+            Value::Union(v) => Type::Union(v.iter().map(Type::from).collect()),
             Value::Int(_) => Type::Int,
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
@@ -1241,7 +1241,7 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> {
         }
         (values, _) => Err(ErrorKind::ExternTypeMismatch(
             "push".to_string(),
-            values.iter().map(|x| Type::from(x)).collect(),
+            values.iter().map(Type::from).collect(),
         )),
     }
 }
