@@ -1755,19 +1755,17 @@ impl Compiler {
         };
         if let Some(_) = self.find_namespace(&name) {
             self.expression(block);
+        } else if rest_of_line_contains!(
+            self,
+            Token::Equal
+                | Token::PlusEqual
+                | Token::MinusEqual
+                | Token::StarEqual
+                | Token::SlashEqual
+        ) {
+            self.blob_field(block)
         } else {
-            if rest_of_line_contains!(
-                self,
-                Token::Equal
-                    | Token::PlusEqual
-                    | Token::MinusEqual
-                    | Token::StarEqual
-                    | Token::SlashEqual
-            ) {
-                self.blob_field(block)
-            } else {
-                self.expression(block)
-            }
+            self.expression(block)
         }
     }
 

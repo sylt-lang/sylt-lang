@@ -733,13 +733,11 @@ impl VM {
                                 let suggestion = &types[i];
                                 if matches!(ty, Type::Unknown) {
                                     *ty = suggestion.clone();
-                                } else {
-                                    if ty != suggestion {
-                                        error!(
-                                            self,
-                                            ErrorKind::CannotInfer(ty.clone(), suggestion.clone())
-                                        );
-                                    }
+                                } else if ty != suggestion {
+                                    error!(
+                                        self,
+                                        ErrorKind::CannotInfer(ty.clone(), suggestion.clone())
+                                    );
                                 }
                             }
                         }
@@ -882,13 +880,11 @@ impl VM {
                             let suggestion = &types[i];
                             if matches!(ty, Type::Unknown) {
                                 *ty = suggestion.clone();
-                            } else {
-                                if ty != suggestion {
-                                    error!(
-                                        self,
-                                        ErrorKind::CannotInfer(ty.clone(), suggestion.clone())
-                                    );
-                                }
+                            } else if ty != suggestion {
+                                error!(
+                                    self,
+                                    ErrorKind::CannotInfer(ty.clone(), suggestion.clone())
+                                );
                             }
                         }
                     }
