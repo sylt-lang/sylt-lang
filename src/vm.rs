@@ -1036,8 +1036,8 @@ impl VM {
                     },
                 };
                 self.stack.truncate(new_base + 1);
-                if err.is_some() {
-                    error!(self, err.unwrap());
+                if let Some(err) = err {
+                    error!(self, err);
                 }
             }
 

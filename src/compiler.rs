@@ -513,17 +513,14 @@ impl Compiler {
     fn eat(&mut self) -> Token {
         let t = self.peek();
         self.current_token += 1;
-        match t {
-            Token::GitConflictBegin => {
-                self.current_token -= 1;
-                let start = self.line();
-                self.current_token += 1;
-                while !matches!(self.eat(), Token::GitConflictEnd) {}
-                self.panic = false;
-                self.error_on_line(ErrorKind::GitConflictError(start, self.line()), start, None);
-                self.panic = true;
-            }
-            _ => {}
+        if let Token::GitConflictBegin = t {
+            self.current_token -= 1;
+            let start = self.line();
+            self.current_token += 1;
+            while !matches!(self.eat(), Token::GitConflictEnd) {}
+            self.panic = false;
+            self.error_on_line(ErrorKind::GitConflictError(start, self.line()), start, None);
+            self.panic = true;
         }
         t
     }
@@ -1186,10 +1183,9 @@ impl Compiler {
             _ => unreachable!(),
         };
 
-        if let Some(_) = self.find_namespace(&name) {
+        // TODO(ed): This is a clone I would love to get rid of...
+        if let Some(mut namespace) = self.find_namespace(&name).cloned() {
             self.eat();
-            // TODO(ed): This is a clone I would love to get rid of...
-            let mut namespace = self.find_namespace(&name).unwrap().clone();
             loop {
                 if self.eat() != Token::Dot {
                     error!(self, "Expect '.' after namespace");
