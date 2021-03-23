@@ -1030,7 +1030,7 @@ impl Block {
                 return *line;
             }
         }
-        return 0;
+        0
     }
 
     pub fn debug_print(&self) {

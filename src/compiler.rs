@@ -578,7 +578,7 @@ impl Compiler {
                 return false;
             }
         }
-        return true;
+        true
     }
 
     fn infix(&mut self, token: Token, block: &mut Block) -> bool {
@@ -601,7 +601,7 @@ impl Compiler {
                 return false;
             }
         }
-        return true;
+        true
     }
 
     fn value(&mut self, block: &mut Block) {
@@ -1657,10 +1657,10 @@ impl Compiler {
                 self.eat();
                 let ty = self.parse_type();
                 expect!(self, Token::RightBracket, "Expected ']' after list type");
-                return match ty {
+                match ty {
                     Ok(ty) => Ok(Type::List(Box::new(ty))),
                     Err(_) => Err(()),
-                };
+                }
             }
 
             Token::Identifier(x) => {
@@ -1862,7 +1862,6 @@ impl Compiler {
             }
         } else {
             error!(self, "Cannot find variable '{}'", name);
-            return;
         }
     }
 
