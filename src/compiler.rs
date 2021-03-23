@@ -459,10 +459,7 @@ impl Compiler {
         if self.panic {
             self.panic = false;
 
-            while match self.peek() {
-                Token::EOF | Token::Newline => false,
-                _ => true,
-            } {
+            while !matches!(self.peek(), Token::EOF | Token::Newline)  {
                 self.eat();
             }
             self.eat();
