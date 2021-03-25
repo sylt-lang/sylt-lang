@@ -34,6 +34,8 @@ pub enum ErrorKind {
 
     FileNotFound(PathBuf),
     NoFileGiven,
+
+    BincodeError, //TODO(gu) BincodeError(bincode::Error) would be nice but it isn't clone
 }
 
 #[derive(Debug, Clone)]
@@ -129,6 +131,9 @@ impl fmt::Display for ErrorKind {
             }
             ErrorKind::NoFileGiven => {
                 write!(f, "No file to run")
+            }
+            ErrorKind::BincodeError => {
+                write!(f, "Error when (de-)-serializing")
             }
         }
     }

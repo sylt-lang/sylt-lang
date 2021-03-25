@@ -1,0 +1,9 @@
+start :: fn {
+    a :: [1, 2, 3]
+    (0 in a) <=> false
+    (1 in a) <=> true
+    (2 in a) <=> true
+    (3 in a) <=> true
+    (4 in a) <=> false
+    (1231 in a) <=> false
+}

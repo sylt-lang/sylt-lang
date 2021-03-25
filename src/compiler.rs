@@ -459,10 +459,7 @@ impl Compiler {
         if self.panic {
             self.panic = false;
 
-            while match self.peek() {
-                Token::EOF | Token::Newline => false,
-                _ => true,
-            } {
+            while !matches!(self.peek(), Token::EOF | Token::Newline)  {
                 self.eat();
             }
             self.eat();
@@ -516,24 +513,21 @@ impl Compiler {
     fn eat(&mut self) -> Token {
         let t = self.peek();
         self.current_token += 1;
-        match t {
-            Token::GitConflictBegin => {
-                self.current_token -= 1;
-                let start = self.line();
-                self.current_token += 1;
-                while !matches!(self.eat(), Token::GitConflictEnd) {}
-                self.panic = false;
-                self.error_on_line(ErrorKind::GitConflictError(start, self.line()), start, None);
-                self.panic = true;
-            }
-            _ => {}
+        if let Token::GitConflictBegin = t {
+            self.current_token -= 1;
+            let start = self.line();
+            self.current_token += 1;
+            while !matches!(self.eat(), Token::GitConflictEnd) {}
+            self.panic = false;
+            self.error_on_line(ErrorKind::GitConflictError(start, self.line()), start, None);
+            self.panic = true;
         }
         t
     }
 
     /// The line of the current token.
     fn line(&self) -> usize {
-        if self.section().tokens.len() == 0 {
+        if self.section().tokens.is_empty() {
             0
         } else {
             self.section().tokens
@@ -584,7 +578,7 @@ impl Compiler {
                 return false;
             }
         }
-        return true;
+        true
     }
 
     fn infix(&mut self, token: Token, block: &mut Block) -> bool {
@@ -601,13 +595,15 @@ impl Compiler {
             | Token::LessEqual
             | Token::NotEqual => self.binary(block),
 
+            Token::In => self.contains(block),
+
             Token::And | Token::Or => self.binary_bool(block),
 
             _ => {
                 return false;
             }
         }
-        return true;
+        true
     }
 
     fn value(&mut self, block: &mut Block) {
@@ -806,7 +802,7 @@ impl Compiler {
                 }
             }
         };
-        if (trailing_comma && num_args == 1) || num_args != 1 {
+        if trailing_comma || num_args != 1 {
             add_op(self, block, Op::Tuple(num_args));
         }
         expect!(self, Token::RightParen, "Expected ')' after tuple");
@@ -825,26 +821,37 @@ impl Compiler {
         add_op(self, block, op);
     }
 
+    fn contains(&mut self, block: &mut Block) {
+        expect!(self, Token::In, "Expected 'in' at start of contains");
+        self.parse_precedence(block, Prec::Index);
+        add_op(self, block, Op::Contains);
+    }
+
     fn binary_bool(&mut self, block: &mut Block) {
         let op = self.eat();
 
+        // TODO(ed): If JmpFalseNoPeek would be made, we could
+        // save some instructions and clones.
         match op {
             Token::And => {
                 add_op(self, block, Op::Copy(1));
                 let jump = add_op(self, block, Op::Illegal);
+                add_op(self, block, Op::Pop);
 
-                self.parse_precedence(block, self.precedence(op.clone()).next());
+                self.parse_precedence(block, self.precedence(op).next());
 
                 block.patch(Op::JmpFalse(block.curr()), jump);
             }
 
             Token::Or => {
                 add_op(self, block, Op::Copy(1));
-                let skipp = add_op(self, block, Op::Illegal);
+                let skip = add_op(self, block, Op::Illegal);
                 let jump = add_op(self, block, Op::Illegal);
-                block.patch(Op::JmpFalse(block.curr()), skipp);
 
-                self.parse_precedence(block, self.precedence(op.clone()).next());
+                block.patch(Op::JmpFalse(block.curr()), skip);
+                add_op(self, block, Op::Pop);
+
+                self.parse_precedence(block, self.precedence(op).next());
 
                 block.patch(Op::Jmp(block.curr()), jump);
             }
@@ -1189,10 +1196,9 @@ impl Compiler {
             _ => unreachable!(),
         };
 
-        if let Some(_) = self.find_namespace(&name) {
+        // TODO(ed): This is a clone I would love to get rid of...
+        if let Some(mut namespace) = self.find_namespace(&name).cloned() {
             self.eat();
-            // TODO(ed): This is a clone I would love to get rid of...
-            let mut namespace = self.find_namespace(&name).unwrap().clone();
             loop {
                 if self.eat() != Token::Dot {
                     error!(self, "Expect '.' after namespace");
@@ -1241,7 +1247,7 @@ impl Compiler {
                     Token::Dot => {
                         self.eat();
                         if let Token::Identifier(field) = self.eat() {
-                            let string = self.intern_string(String::from(field));
+                            let string = self.intern_string(field);
                             add_op(self, block, Op::GetField(string));
                         } else {
                             error!(self, "Expected fieldname after '.'");
@@ -1306,7 +1312,7 @@ impl Compiler {
 
         if let Some(res) = frame
             .find_local(&var.name)
-            .or(frame.find_upvalue(&var.name))
+            .or_else(|| frame.find_upvalue(&var.name))
         {
             if res.scope == frame.scope {
                 error!(self, "Multiple definitions of '{}' in this block", res.name);
@@ -1705,10 +1711,10 @@ impl Compiler {
                 self.eat();
                 let ty = self.parse_type();
                 expect!(self, Token::RightBracket, "Expected ']' after list type");
-                return match ty {
+                match ty {
                     Ok(ty) => Ok(Type::List(Box::new(ty))),
                     Err(_) => Err(()),
-                };
+                }
             }
 
             Token::Identifier(x) => {
@@ -1778,7 +1784,7 @@ impl Compiler {
                 continue;
             };
 
-            if let Err(_) = blob.add_field(&name, ty) {
+            if blob.add_field(&name, ty).is_err() {
                 error!(
                     self,
                     "A field named '{}' is defined twice for '{}'", name, blob.name
@@ -1797,21 +1803,19 @@ impl Compiler {
             Token::Identifier(name) => name,
             _ => unreachable!(),
         };
-        if let Some(_) = self.find_namespace(&name) {
+        if self.find_namespace(&name).is_some() {
             self.expression(block);
+        } else if rest_of_line_contains!(
+            self,
+            Token::Equal
+                | Token::PlusEqual
+                | Token::MinusEqual
+                | Token::StarEqual
+                | Token::SlashEqual
+        ) {
+            self.blob_field(block)
         } else {
-            if rest_of_line_contains!(
-                self,
-                Token::Equal
-                    | Token::PlusEqual
-                    | Token::MinusEqual
-                    | Token::StarEqual
-                    | Token::SlashEqual
-            ) {
-                self.blob_field(block)
-            } else {
-                self.expression(block)
-            }
+            self.expression(block)
         }
     }
 
@@ -1834,7 +1838,7 @@ impl Compiler {
                     Token::Dot => {
                         self.eat();
                         let field = if let Token::Identifier(field) = self.eat() {
-                            String::from(field)
+                            field
                         } else {
                             error!(self, "Expected fieldname after '.'");
                             return;
@@ -1912,7 +1916,6 @@ impl Compiler {
             }
         } else {
             error!(self, "Cannot find variable '{}'", name);
-            return;
         }
     }
 
@@ -2172,7 +2175,7 @@ impl Compiler {
         }
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
 
-        if self.names().len() != 0 {
+        if !self.names().is_empty() {
             let errors: Vec<_> = self
                 .names()
                 .iter()

@@ -1,4 +1,7 @@
+use error::Error;
+use gumdrop::Options;
 use owo_colors::OwoColorize;
+use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
@@ -7,8 +10,6 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-
-use error::Error;
 
 use crate::error::ErrorKind;
 
@@ -23,15 +24,52 @@ pub trait Next {
     fn next(&self) -> Self;
 }
 
-/// Compiles, links and runs the given file. Supplied functions are callable
-/// external functions. If you want your program to be able to yield, use
-/// [compile_file].
-pub fn run_file(args: Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    run(args, functions)
+/// Compiles, links and runs the given file. The supplied functions are callable
+/// external functions.
+pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
+    let prog = compile(args, functions)?;
+    typecheck(&prog, &args)?;
+    run(&prog, &args)
 }
 
-fn run(args: Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    let path = match args.file {
+pub fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
+    let mut vm = vm::VM::new();
+    vm.print_bytecode = args.verbosity >= 1;
+    vm.print_exec = args.verbosity >= 2;
+    vm.typecheck(prog)
+}
+
+pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
+    let mut vm = vm::VM::new();
+    vm.print_bytecode = args.verbosity >= 1;
+    vm.print_exec = args.verbosity >= 2;
+    vm.init(&prog);
+    if let Err(e) = vm.run() {
+        Err(vec![e])
+    } else {
+        Ok(())
+    }
+}
+
+/// Compiles and serializes the given file.
+pub fn serialize(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Vec<u8>, Vec<Error>> {
+    let prog = compile(args, functions)?;
+    typecheck(&prog, args)?;
+    bincode::serialize(&prog).map_err(|_| vec![Error {
+        kind: ErrorKind::BincodeError,
+        file: args.file.as_ref().unwrap().clone(),
+        line: 0,
+        message: None,
+    }]) //TODO
+}
+
+/// Deserializes and links the given file.
+pub fn deserialize(bytes: Vec<u8>) -> Result<Prog, Vec<Error>> {
+    bincode::deserialize(&bytes).map_err(|_| vec![])
+}
+
+fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
+    let path = match &args.file {
         Some(file) => file,
         None => {
             return Err(vec![Error {
@@ -43,37 +81,27 @@ fn run(args: Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Err
         }
     };
     let sections = sectionizer::sectionize(&path)?;
-    match compiler::Compiler::new(sections).compile("/preamble", &path, &functions) {
-        Ok(prog) => {
-            let mut vm = vm::VM::new();
-            vm.print_bytecode = args.print_bytecode;
-            vm.print_exec = args.print_exec;
-            vm.typecheck(&prog)?;
-            vm.init(&prog);
-            if let Err(e) = vm.run() {
-                Err(vec![e])
-            } else {
-                Ok(())
-            }
-        }
-        Err(errors) => Err(errors),
-    }
+    let prog = compiler::Compiler::new(sections).compile("/preamble", &path, &functions)?;
+    typecheck(&prog, &args)?;
+    Ok(prog)
 }
 
+#[derive(Default, Debug, Options)]
 pub struct Args {
+    #[options(free)]
     pub file: Option<PathBuf>,
-    pub print_exec: bool,
-    pub print_bytecode: bool,
-}
 
-impl Default for Args {
-    fn default() -> Self {
-        Self {
-            file: None,
-            print_exec: false,
-            print_bytecode: false,
-        }
-    }
+    #[options(short = "r", long = "run", help = "Runs a precompiled sylt binary")]
+    pub is_binary: bool,
+
+    #[options(short = "c", long = "compile", help = "Compile a sylt binary")]
+    pub compile_target: Option<PathBuf>,
+
+    #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
+    pub verbosity: u32,
+
+    #[options(help = "Print this help")]
+    pub help: bool,
 }
 
 pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
@@ -87,7 +115,7 @@ pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
 /// [sylt_macro::extern_function].
 pub type RustFunction = fn(&[Value], bool) -> Result<Value, ErrorKind>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Type {
     Void,
     Unknown,
@@ -196,7 +224,7 @@ impl PartialEq for Type {
 impl Eq for Type {}
 
 fn maybe_union_type<'a>(v: impl Iterator<Item = &'a Value>) -> Type {
-    let set: HashSet<_> = v.map(|x| Type::from(x)).collect();
+    let set: HashSet<_> = v.map(Type::from).collect();
     match set.len() {
         0 => Type::Unknown,
         1 => set.into_iter().next().unwrap(),
@@ -209,7 +237,7 @@ impl From<&Value> for Type {
         match value {
             Value::Instance(b, _) => Type::Instance(Rc::clone(b)),
             Value::Blob(b) => Type::Blob(Rc::clone(b)),
-            Value::Tuple(v) => Type::Tuple(v.iter().map(|x| Type::from(x)).collect()),
+            Value::Tuple(v) => Type::Tuple(v.iter().map(Type::from).collect()),
             Value::List(v) => {
                 let v: &RefCell<_> = v.borrow();
                 let v = &v.borrow();
@@ -230,7 +258,7 @@ impl From<&Value> for Type {
                 Type::Dict(Box::new(k), Box::new(v))
             }
             Value::Iter(t, _) => Type::Iter(Box::new(t.clone())),
-            Value::Union(v) => Type::Union(v.iter().map(|x| Type::from(x)).collect()),
+            Value::Union(v) => Type::Union(v.iter().map(Type::from).collect()),
             Value::Int(_) => Type::Int,
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
@@ -309,7 +337,7 @@ impl Type {
 
 pub type IterFn = dyn FnMut() -> Option<Value>;
 
-#[derive(Clone)]
+#[derive(Clone, Deserialize, Serialize)]
 pub enum Value {
     Ty(Type),
     Blob(Rc<Blob>),
@@ -423,7 +451,7 @@ impl Value {
 }
 
 #[doc(hidden)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UpValue {
     slot: usize,
     value: Value,
@@ -463,7 +491,7 @@ impl UpValue {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Blob {
     pub id: usize,
     pub name: String,
@@ -480,7 +508,7 @@ impl PartialEq for Blob {
 impl Blob {
     fn new(id: usize, name: &str) -> Self {
         Self {
-            id: id,
+            id,
             name: String::from(name),
             fields: HashMap::new(),
         }
@@ -504,7 +532,7 @@ impl Blob {
 /// machine carries out when running the
 /// "byte-code".
 ///
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
 pub enum Op {
     /// This instruction should never be run.
     /// Finding it in a program is a critical error.
@@ -568,6 +596,11 @@ pub enum Op {
     /// (name is looked up in the internal string-list)
     ///
     /// {O} - Get(F) - {O.F}
+    Contains,
+    /// Checks if the given value is inside the container.
+    /// Pushes a bool to the stack.
+    ///
+    /// {I, A} - Contains - {I in A}
     GetField(usize),
     /// Looks up a field by the given name
     /// and replaces the current value in the object.
@@ -969,14 +1002,14 @@ mod op {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 enum BlockLinkState {
     Linked,
     Unlinked,
     Nothing,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Block {
     pub ty: Type,
     upvalues: Vec<(usize, bool, Type)>,
@@ -1055,7 +1088,7 @@ impl Block {
                 return *line;
             }
         }
-        return 0;
+        0
     }
 
     pub fn debug_print(&self) {
@@ -1116,9 +1149,10 @@ impl Block {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Prog {
     pub blocks: Vec<Rc<RefCell<Block>>>,
+    #[serde(skip)]
     pub functions: Vec<RustFunction>,
     pub constants: Vec<Value>,
     pub strings: Vec<String>,
@@ -1198,9 +1232,9 @@ mod tests {
             fn $fn() {
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
-                args.print_bytecode = $print;
+                args.verbosity = if $print { 1 } else { 0 };
                 $crate::run_file(
-                    args,
+                    &args,
                     sylt_macro::link!(crate::dbg as dbg, crate::push as push, crate::len as len,),
                 )
                 .unwrap();
@@ -1215,9 +1249,9 @@ mod tests {
 
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
-                args.print_bytecode = $print;
+                args.verbosity = if $print { 1 } else { 0 };
                 let res = $crate::run_file(
-                    args,
+                    &args,
                     sylt_macro::link!(crate::dbg as dbg, crate::push as push, crate::len as len,),
                 );
                 $crate::assert_errs!(res, $errs);
@@ -1263,7 +1297,7 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> {
         }
         (values, _) => Err(ErrorKind::ExternTypeMismatch(
             "push".to_string(),
-            values.iter().map(|x| Type::from(x)).collect(),
+            values.iter().map(Type::from).collect(),
         )),
     }
 }
