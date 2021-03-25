@@ -581,9 +581,9 @@ pub enum Op {
     ///
     /// {A} - Iter - {Iter(A)}
     Iter,
-    /// Assumes the top element is an iterator. Steps the iterator
-    /// one step and pushes the value. If the iterator is consumed,
-    /// jump to the address and push [Value::Nil].
+    /// Steps the iterator on top of the stack one step and pushes
+    /// the new value. If the iterator is consumed, jumps to the address
+    /// and pushes [Value::Nil]. Errors if the top element isn't an iterator.
     ///
     /// {I} - JmpNext(line) - {I, A}
     JmpNext(usize),
