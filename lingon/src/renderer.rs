@@ -168,6 +168,7 @@ pub enum Distribution {
     TwoDice,
     ThreeDice,
     Product,
+    Edges,
 }
 
 impl Distribution {
@@ -186,6 +187,10 @@ impl Distribution {
             }
             Distribution::Product => {
                 rng.gen::<f32>() * rng.gen::<f32>()
+            }
+            Distribution::Edges => {
+                let a = rng.gen::<f32>() - 0.5;
+                a * a * 4.0
             }
         }
     }
@@ -208,7 +213,7 @@ impl Default for RandomProperty {
 impl RandomProperty {
     pub fn new(lo: f32, hi: f32) -> Self {
         Self {
-            distribution: Distribution::Uniform,
+            distribution: Distribution::ThreeDice,
             range: [lo, hi],
         }
     }
@@ -306,7 +311,7 @@ impl ParticleSystem {
         self.particles.push(
             Particle {
                 spawn: PSpawn::new(self.time),
-                lifetime: PLifetime::new(0.4),
+                lifetime: PLifetime::new(self.lifetime.sample()),
 
                 position: PPosition::new([self.x.sample(), self.y.sample()]),
                 velocity: PVelocity::new([
