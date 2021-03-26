@@ -30,11 +30,13 @@ fn main_loop(mut surface: GL33Surface) {
     particle_systems.end_sy = RandomProperty::new(0.0, 0.0);
     particle_systems.v_angle = RandomProperty::new(
         -0.2 + std::f32::consts::PI / 2.0,
-        0.2 + std::f32::consts::PI / 2.0);
+        0.2 + std::f32::consts::PI / 2.0,
+    );
     particle_systems.v_magnitude = RandomProperty::new(-0.5, 0.5);
     particle_systems.acceleration_angle = RandomProperty::new(
         -0.2 + std::f32::consts::PI / 2.0,
-        0.2 + std::f32::consts::PI / 2.0);
+        0.2 + std::f32::consts::PI / 2.0,
+    );
     particle_systems.acceleration_magnitude = RandomProperty::new(0.2, 0.8);
     particle_systems.angle = RandomProperty::new(-2.0, 2.0);
     particle_systems.angle_velocity = RandomProperty::new(-2.0, 2.0);
@@ -71,8 +73,7 @@ fn main_loop(mut surface: GL33Surface) {
                 } => {
                     break 'app;
                 }
-                _ => {
-                }
+                _ => {}
             }
         }
 
@@ -81,18 +82,22 @@ fn main_loop(mut surface: GL33Surface) {
         }
         particle_systems.update(delta);
 
-        renderer.push(Rect::new()
-            .scale(0.3, 0.3)
-            .move_by(-0.3, 0.0)
-            .angle(t)
-            .r(t.sin())
-            .g(t.sin()));
+        renderer.push(
+            Rect::new()
+                .scale(0.3, 0.3)
+                .move_by(-0.3, 0.0)
+                .angle(t)
+                .r(t.sin())
+                .g(t.sin()),
+        );
 
         let region = sheet.grid([0, 1, 2, 3, 2, 1][((t * 10.0) as usize) % 6], 0);
-        renderer.push(Sprite::new(region)
-            .scale(0.3, 0.3)
-            .move_by(0.3, 0.0)
-            .angle(t));
+        renderer.push(
+            Sprite::new(region)
+                .scale(0.3, 0.3)
+                .move_by(0.3, 0.0)
+                .angle(t),
+        );
 
         renderer.push_particlesystem(&particle_systems);
 

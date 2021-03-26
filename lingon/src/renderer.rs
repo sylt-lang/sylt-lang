@@ -1,13 +1,13 @@
+use cgmath::Vector2;
 use luminance::context::GraphicsContext;
 use luminance::pipeline::{PipelineState, TextureBinding};
+use luminance::pixel::{NormRGBA8UI, NormUnsigned};
 use luminance::render_state::RenderState;
 use luminance::shader::Uniform;
-use luminance::texture::{Dim3, GenMipmaps, Sampler, Texture};
-use luminance::pixel::{NormRGBA8UI, NormUnsigned};
 use luminance::tess::Mode;
+use luminance::texture::{Dim3, GenMipmaps, Sampler, Texture};
 use luminance_derive::{Semantics, UniformInterface, Vertex};
 use luminance_sdl2::GL33Surface;
-use cgmath::Vector2;
 use rand::prelude::*;
 
 #[derive(Debug, UniformInterface)]
@@ -138,7 +138,6 @@ impl SpriteSheetBuilder {
     }
 }
 
-
 #[derive(Clone, Copy, Debug)]
 pub struct SpriteSheet {
     id: usize,
@@ -153,7 +152,10 @@ impl SpriteSheet {
             let ylo = ((tile_dim.1 * ty) as f32) / (SPRITESHEET_SIZE[1] as f32);
             let w = (tile_dim.0 as f32) / (SPRITESHEET_SIZE[0] as f32);
             let h = (tile_dim.1 as f32) / (SPRITESHEET_SIZE[1] as f32);
-            (self.id as f32 / (SPRITESHEET_SIZE[2] as f32), [xlo, ylo, xlo + w, ylo + h])
+            (
+                self.id as f32 / (SPRITESHEET_SIZE[2] as f32),
+                [xlo, ylo, xlo + w, ylo + h],
+            )
         } else {
             panic!();
         }
@@ -161,7 +163,8 @@ impl SpriteSheet {
 }
 
 pub type Tex = Texture<<GL33Surface as GraphicsContext>::Backend, Dim3, NormRGBA8UI>;
-pub type RenderFn = dyn FnMut(&[Instance], &[FrozenParticles], &mut Tex, &mut GL33Surface) -> Result<(), ()>;
+pub type RenderFn =
+    dyn FnMut(&[Instance], &[FrozenParticles], &mut Tex, &mut GL33Surface) -> Result<(), ()>;
 
 pub enum Distribution {
     Uniform,
@@ -176,18 +179,12 @@ impl Distribution {
         let mut rng = rand::thread_rng();
 
         match self {
-            Distribution::Uniform => {
-                rng.gen::<f32>()
-            }
-            Distribution::TwoDice => {
-                (rng.gen::<f32>() + rng.gen::<f32>()) / 2.0
-            }
+            Distribution::Uniform => rng.gen::<f32>(),
+            Distribution::TwoDice => (rng.gen::<f32>() + rng.gen::<f32>()) / 2.0,
             Distribution::ThreeDice => {
                 (rng.gen::<f32>() + rng.gen::<f32>() + rng.gen::<f32>()) / 3.0
             }
-            Distribution::Product => {
-                rng.gen::<f32>() * rng.gen::<f32>()
-            }
+            Distribution::Product => rng.gen::<f32>() * rng.gen::<f32>(),
             Distribution::Edges => {
                 let a = rng.gen::<f32>() - 0.5;
                 a * a * 4.0
@@ -229,7 +226,6 @@ pub struct ParticleSystem {
     pub particles: Vec<Particle>,
 
     pub sprites: Vec<SpriteRegion>,
-
 
     pub x: RandomProperty,
     pub y: RandomProperty,
@@ -308,48 +304,49 @@ impl ParticleSystem {
             self.sprites.choose(&mut rand::thread_rng()).unwrap()
         };
 
-        self.particles.push(
-            Particle {
-                spawn: PSpawn::new(self.time),
-                lifetime: PLifetime::new(self.lifetime.sample()),
+        self.particles.push(Particle {
+            spawn: PSpawn::new(self.time),
+            lifetime: PLifetime::new(self.lifetime.sample()),
 
-                position: PPosition::new([self.x.sample(), self.y.sample()]),
-                velocity: PVelocity::new([
-                    velocity_angle.cos() * velocity_magnitude,
-                    velocity_angle.sin() * velocity_magnitude,
-                ]),
-                acceleration: PAcceleration::new([
-                    acceleration_angle.cos() * acceleration_magnitude,
-                    acceleration_angle.sin() * acceleration_magnitude,
-                ]),
-                drag: PDrag::new(self.drag.sample()),
+            position: PPosition::new([self.x.sample(), self.y.sample()]),
+            velocity: PVelocity::new([
+                velocity_angle.cos() * velocity_magnitude,
+                velocity_angle.sin() * velocity_magnitude,
+            ]),
+            acceleration: PAcceleration::new([
+                acceleration_angle.cos() * acceleration_magnitude,
+                acceleration_angle.sin() * acceleration_magnitude,
+            ]),
+            drag: PDrag::new(self.drag.sample()),
 
-                angle_info: PAngleInfo::new([
-                    self.angle.sample(),
-                    self.angle_velocity.sample(),
-                    self.angle_drag.sample(),
-                ]),
+            angle_info: PAngleInfo::new([
+                self.angle.sample(),
+                self.angle_velocity.sample(),
+                self.angle_drag.sample(),
+            ]),
 
-                scale_extreems: PScaleExtreems::new([
-                    self.start_sx.sample(), self.start_sy.sample(),
-                    self.end_sx.sample(), self.end_sy.sample(),
-                ]),
+            scale_extreems: PScaleExtreems::new([
+                self.start_sx.sample(),
+                self.start_sy.sample(),
+                self.end_sx.sample(),
+                self.end_sy.sample(),
+            ]),
 
-                start_color: PStartColor::new([
-                    self.start_red.sample(),
-                    self.start_green.sample(),
-                    self.start_blue.sample(),
-                    self.start_alpha.sample(),
-                ]),
-                end_color: PEndColor::new([
-                    self.end_red.sample(),
-                    self.end_green.sample(),
-                    self.end_blue.sample(),
-                    self.end_alpha.sample(),
-                ]),
+            start_color: PStartColor::new([
+                self.start_red.sample(),
+                self.start_green.sample(),
+                self.start_blue.sample(),
+                self.start_alpha.sample(),
+            ]),
+            end_color: PEndColor::new([
+                self.end_red.sample(),
+                self.end_green.sample(),
+                self.end_blue.sample(),
+                self.end_alpha.sample(),
+            ]),
 
-                sheet: ISheet::new(*sheet),
-                uv: IUV::new(*uv),
+            sheet: ISheet::new(*sheet),
+            uv: IUV::new(*uv),
         });
     }
 
@@ -527,7 +524,6 @@ impl Rect {
             color: [1.0, 1.0, 1.0, 1.0],
         }
     }
-
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -619,9 +615,10 @@ pub fn load_image_from_memory(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
             &mut w,
             &mut h,
             &mut comp,
-            4
+            4,
         );
-        let image = Vec::from_raw_parts(image as *mut u8, (w * h * 4) as usize, (w * h * 4) as usize);
+        let image =
+            Vec::from_raw_parts(image as *mut u8, (w * h * 4) as usize, (w * h * 4) as usize);
         (w as u32, h as u32, image)
     }
 }
@@ -641,16 +638,13 @@ impl Renderer {
             .unwrap()
             .ignore_warnings();
 
+        let tex: Tex =
+            Texture::new(context, SPRITESHEET_SIZE, 0, sampler).expect("texture createtion!");
 
-        let tex: Tex = Texture::new(context, SPRITESHEET_SIZE, 0, sampler)
-            .expect("texture createtion!");
-
-        let render_fn = move |
-            instances: &[Instance],
-            systems: &[FrozenParticles],
-            tex: &mut Tex,
-            context: &mut GL33Surface|
-        {
+        let render_fn = move |instances: &[Instance],
+                              systems: &[FrozenParticles],
+                              tex: &mut Tex,
+                              context: &mut GL33Surface| {
             let triangle = context
                 .new_tess()
                 .set_vertices(&RECT[..])
@@ -659,18 +653,21 @@ impl Renderer {
                 .build()
                 .unwrap();
 
-            let particles: Vec<_> = systems.iter().map(
-                |s| (s.time,
-                    context
-                .new_tess()
-                .set_vertices(&RECT[..])
-                .set_instances(&s.particles[..])
-                .set_mode(Mode::Triangle)
-                .build()
-                .unwrap())
-            ).collect();
-
-
+            let particles: Vec<_> = systems
+                .iter()
+                .map(|s| {
+                    (
+                        s.time,
+                        context
+                            .new_tess()
+                            .set_vertices(&RECT[..])
+                            .set_instances(&s.particles[..])
+                            .set_mode(Mode::Triangle)
+                            .build()
+                            .unwrap(),
+                    )
+                })
+                .collect();
 
             let render = context
                 .new_pipeline_gate()
@@ -730,15 +727,18 @@ impl Renderer {
         self.particles.push(system.freeze());
     }
 
-
     pub fn add_spritesheet(&mut self, builder: SpriteSheetBuilder) -> SpriteSheet {
         let id = self.sprite_sheets.len();
         assert!((id as u32) < SPRITESHEET_SIZE[2]);
 
-        self.tex.upload_part_raw(GenMipmaps::No,
-            [0, 0, id as u32],
-            [builder.image_dim.0 as u32, builder.image_dim.1 as u32, 1],
-            &builder.image).unwrap();
+        self.tex
+            .upload_part_raw(
+                GenMipmaps::No,
+                [0, 0, id as u32],
+                [builder.image_dim.0 as u32, builder.image_dim.1 as u32, 1],
+                &builder.image,
+            )
+            .unwrap();
         // Upload texture to slot
         let sheet = SpriteSheet {
             id,
