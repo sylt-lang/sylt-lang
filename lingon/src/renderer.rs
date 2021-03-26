@@ -283,6 +283,11 @@ impl ParticleSystem {
 
     pub fn update(&mut self, delta: f32) {
         self.time += delta;
+
+        self.particles = std::mem::take(&mut self.particles)
+            .into_iter()
+            .filter(|x| *x.lifetime > (self.time - *x.spawn))
+            .collect();
     }
 
     pub fn spawn(&mut self) {
