@@ -8,6 +8,7 @@ use luminance::tess::Mode;
 use luminance_derive::{Semantics, UniformInterface, Vertex};
 use luminance_sdl2::GL33Surface;
 use cgmath::Vector2;
+use rand::prelude::*;
 
 #[derive(Debug, UniformInterface)]
 pub struct ShaderInterface {
@@ -162,9 +163,102 @@ impl SpriteSheet {
 pub type Tex = Texture<<GL33Surface as GraphicsContext>::Backend, Dim3, NormRGBA8UI>;
 pub type RenderFn = dyn FnMut(&[Instance], &[FrozenParticles], &mut Tex, &mut GL33Surface) -> Result<(), ()>;
 
+pub enum Distribution {
+    Uniform,
+    TwoDice,
+    ThreeDice,
+    Product,
+}
+
+impl Distribution {
+    pub fn sample(&self) -> f32 {
+        let mut rng = rand::thread_rng();
+
+        match self {
+            Distribution::Uniform => {
+                rng.gen::<f32>()
+            }
+            Distribution::TwoDice => {
+                (rng.gen::<f32>() + rng.gen::<f32>()) / 2.0
+            }
+            Distribution::ThreeDice => {
+                (rng.gen::<f32>() + rng.gen::<f32>() + rng.gen::<f32>()) / 3.0
+            }
+            Distribution::Product => {
+                rng.gen::<f32>() * rng.gen::<f32>()
+            }
+        }
+    }
+}
+
+pub struct RandomProperty {
+    pub distribution: Distribution,
+    pub range: [f32; 2],
+}
+
+impl Default for RandomProperty {
+    fn default() -> Self {
+        Self {
+            distribution: Distribution::Uniform,
+            range: [0.0, 1.0],
+        }
+    }
+}
+
+impl RandomProperty {
+    pub fn new(lo: f32, hi: f32) -> Self {
+        Self {
+            distribution: Distribution::Uniform,
+            range: [lo, hi],
+        }
+    }
+
+    pub fn sample(&self) -> f32 {
+        self.range[0] + (self.range[1] - self.range[0]) * self.distribution.sample()
+    }
+}
+
+#[derive(Default)]
 pub struct ParticleSystem {
-    time: f32,
-    particles: Vec<Particle>,
+    pub time: f32,
+    pub particles: Vec<Particle>,
+
+    pub sprites: Vec<SpriteRegion>,
+
+
+    pub x: RandomProperty,
+    pub y: RandomProperty,
+
+    pub lifetime: RandomProperty,
+
+    // TODO(ed): Options for how this is selected
+    pub v_angle: RandomProperty,
+    pub v_magnitude: RandomProperty,
+
+    pub acceleration_angle: RandomProperty,
+    pub acceleration_magnitude: RandomProperty,
+
+    pub drag: RandomProperty,
+
+    pub angle: RandomProperty,
+    pub angle_velocity: RandomProperty,
+    pub angle_drag: RandomProperty,
+
+    pub start_sx: RandomProperty,
+    pub start_sy: RandomProperty,
+
+    pub end_sx: RandomProperty,
+    pub end_sy: RandomProperty,
+
+    pub start_red: RandomProperty,
+    pub start_green: RandomProperty,
+    pub start_blue: RandomProperty,
+    pub start_alpha: RandomProperty,
+
+    pub end_red: RandomProperty,
+    pub end_green: RandomProperty,
+    pub end_blue: RandomProperty,
+    pub end_alpha: RandomProperty,
 }
 
 impl ParticleSystem {
@@ -172,6 +266,18 @@ impl ParticleSystem {
         Self {
             time: 0.0,
             particles: Vec::new(),
+
+            x: RandomProperty::new(-0.1, 0.1),
+            y: RandomProperty::new(-0.1, 0.1),
+
+            v_angle: RandomProperty::new(0.0, 2.0 * std::f32::consts::PI),
+
+            acceleration_angle: RandomProperty::new(0.0, 2.0 * std::f32::consts::PI),
+
+            start_sx: RandomProperty::new(1.0, 1.0),
+            start_sy: RandomProperty::new(1.0, 1.0),
+
+            ..Self::default()
         }
     }
 
@@ -180,25 +286,60 @@ impl ParticleSystem {
     }
 
     pub fn spawn(&mut self) {
+        let velocity_angle = self.v_angle.sample();
+        let velocity_magnitude = self.v_magnitude.sample();
+
+        let acceleration_angle = self.acceleration_angle.sample();
+        let acceleration_magnitude = self.acceleration_magnitude.sample();
+
+        let (sheet, uv) = if self.sprites.is_empty() {
+            &(-1.0, [0.0, 0.0, 0.0, 0.0])
+        } else {
+            self.sprites.choose(&mut rand::thread_rng()).unwrap()
+        };
+
         self.particles.push(
             Particle {
                 spawn: PSpawn::new(self.time),
                 lifetime: PLifetime::new(0.4),
 
-                position: PPosition::new([0.0, 0.0]),
-                velocity: PVelocity::new([0.5, 0.1]),
-                acceleration: PAcceleration::new([0.0, -0.5]),
-                drag: PDrag::new(1.0),
+                position: PPosition::new([self.x.sample(), self.y.sample()]),
+                velocity: PVelocity::new([
+                    velocity_angle.cos() * velocity_magnitude,
+                    velocity_angle.sin() * velocity_magnitude,
+                ]),
+                acceleration: PAcceleration::new([
+                    acceleration_angle.cos() * acceleration_magnitude,
+                    acceleration_angle.sin() * acceleration_magnitude,
+                ]),
+                drag: PDrag::new(self.drag.sample()),
 
-                angle_info: PAngleInfo::new([0.0, 0.5, 1.0]),
+                angle_info: PAngleInfo::new([
+                    self.angle.sample(),
+                    self.angle_velocity.sample(),
+                    self.angle_drag.sample(),
+                ]),
 
-                scale_extreems: PScaleExtreems::new([1.0, 1.0, 0.5, 0.5]),
+                scale_extreems: PScaleExtreems::new([
+                    self.start_sx.sample(), self.start_sy.sample(),
+                    self.end_sx.sample(), self.end_sy.sample(),
+                ]),
 
-                start_color: PStartColor::new([1.0, 0.0, 0.0, 1.0]),
-                end_color: PEndColor::new([0.0, 1.0, 1.0, 0.0]),
+                start_color: PStartColor::new([
+                    self.start_red.sample(),
+                    self.start_green.sample(),
+                    self.start_blue.sample(),
+                    self.start_alpha.sample(),
+                ]),
+                end_color: PEndColor::new([
+                    self.end_red.sample(),
+                    self.end_green.sample(),
+                    self.end_blue.sample(),
+                    self.end_alpha.sample(),
+                ]),
 
-                sheet: ISheet::new(0.0),
-                uv: IUV::new([0.0, 0.0, 0.01, 0.01]),
+                sheet: ISheet::new(*sheet),
+                uv: IUV::new(*uv),
         });
     }
 
