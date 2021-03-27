@@ -371,6 +371,26 @@ pub struct Renderer {
     pub sprite_sheets: Vec<SpriteSheet>,
 }
 
+macro_rules! impl_transform {
+    (deref, $fn:ident, $op:tt, $( $var:ident : $type:ident => $set:tt ),*) => {
+        fn $fn(&mut self, $( $var : $type ),*) -> &mut Self {
+            $(
+                *self.$set() $op $var;
+            )*
+            self
+        }
+    };
+
+    (arr, $fn:ident, $op:tt, $( $var:ident : $type:ident => $arr:tt [ $idx:expr ] ),*) => {
+        fn $fn(&mut self, $( $var : $type ),*) -> &mut Self {
+            $(
+                self.$arr()[$idx] $op $var;
+            )*
+            self
+        }
+    };
+}
+
 pub trait Transform {
     fn x_mut(&mut self) -> &mut f32;
     fn y_mut(&mut self) -> &mut f32;
@@ -382,72 +402,20 @@ pub trait Transform {
 
     fn color_mut(&mut self) -> &mut [f32; 4];
 
-    // TODO(ed): Move these to some form of macro?
-    fn move_by(&mut self, x: f32, y: f32) -> &mut Self {
-        *self.x_mut() += x;
-        *self.y_mut() += y;
-        self
-    }
-
-    fn at(&mut self, x: f32, y: f32) -> &mut Self {
-        *self.x_mut() = x;
-        *self.y_mut() = y;
-        self
-    }
-
-    fn angle(&mut self, angle: f32) -> &mut Self {
-        *self.r_mut() = angle;
-        self
-    }
-
-    fn rotate(&mut self, angle: f32) -> &mut Self {
-        *self.r_mut() += angle;
-        self
-    }
-
-    fn scale(&mut self, sx: f32, sy: f32) -> &mut Self {
-        *self.sx_mut() *= sx;
-        *self.sy_mut() *= sy;
-        self
-    }
-
-    fn rgb(&mut self, r: f32, g: f32, b: f32) -> &mut Self {
-        self.color_mut()[0] = r;
-        self.color_mut()[1] = g;
-        self.color_mut()[2] = b;
-        self
-    }
-
-    fn rgba(&mut self, r: f32, g: f32, b: f32, a: f32) -> &mut Self {
-        self.color_mut()[0] *= r;
-        self.color_mut()[1] *= g;
-        self.color_mut()[2] *= b;
-        self.color_mut()[3] *= a;
-        self
-    }
+    impl_transform!(deref, move_by, +=, x:  f32 => x_mut,         y:  f32 => y_mut);
+    impl_transform!(deref, at,      =,  x:  f32 => x_mut,         y:  f32 => y_mut);
+    impl_transform!(deref, angle,   =,  r:  f32 => r_mut);
+    impl_transform!(deref, rotate,  +=, r:  f32 => r_mut);
+    impl_transform!(deref, scale,   *=, sx: f32 => sx_mut,        sy: f32 => sy_mut);
+    impl_transform!(arr, rgb,       =,  r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2]);
+    impl_transform!(arr, rgba,      *=, r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2], a: f32 => color_mut[3]);
+    impl_transform!(arr, r,         *=, r:  f32 => color_mut[0]);
+    impl_transform!(arr, g,         *=, g:  f32 => color_mut[1]);
+    impl_transform!(arr, b,         *=, b:  f32 => color_mut[2]);
+    impl_transform!(arr, a,         *=, a:  f32 => color_mut[3]);
 
     fn tint(&mut self, r: f32, g: f32, b: f32, a: f32) -> &mut Self {
         self.rgba(r, g, b, a)
-    }
-
-    fn r(&mut self, r: f32) -> &mut Self {
-        self.color_mut()[0] *= r;
-        self
-    }
-
-    fn g(&mut self, g: f32) -> &mut Self {
-        self.color_mut()[1] *= g;
-        self
-    }
-
-    fn b(&mut self, b: f32) -> &mut Self {
-        self.color_mut()[2] *= b;
-        self
-    }
-
-    fn a(&mut self, a: f32) -> &mut Self {
-        self.color_mut()[3] *= a;
-        self
     }
 }
 
