@@ -40,8 +40,6 @@ pub enum VertexSemantics {
     PSpawn,
     #[sem(name = "lifetime", repr = "f32", wrapper = "PLifetime")]
     PLifetime,
-    #[sem(name = "position", repr = "[f32; 2]", wrapper = "PPosition")]
-    PPosition,
     #[sem(name = "velocity", repr = "[f32; 2]", wrapper = "PVelocity")]
     PVelocity,
     #[sem(name = "acceleration", repr = "[f32; 2]", wrapper = "PAcceleration")]
@@ -62,14 +60,14 @@ pub enum VertexSemantics {
 }
 
 #[repr(C)]
-#[derive(Vertex, Copy, Clone, PartialEq)]
+#[derive(Vertex, Copy, Clone, PartialEq, Debug)]
 #[vertex(sem = "VertexSemantics")]
 pub struct Vertex {
     pub position: VPosition,
 }
 
 #[repr(C)]
-#[derive(Vertex, Copy, Clone, PartialEq)]
+#[derive(Vertex, Copy, Clone, PartialEq, Debug)]
 #[vertex(sem = "VertexSemantics", instanced = "true")]
 pub struct Instance {
     pub position: IPosition,
@@ -86,7 +84,7 @@ pub struct Instance {
 pub struct Particle {
     pub spawn: PSpawn,
     pub lifetime: PLifetime,
-    pub position: PPosition,
+    pub position: IPosition,
     pub velocity: PVelocity,
     pub acceleration: PAcceleration,
     pub drag: PDrag,
@@ -308,7 +306,7 @@ impl ParticleSystem {
             spawn: PSpawn::new(self.time),
             lifetime: PLifetime::new(self.lifetime.sample()),
 
-            position: PPosition::new([self.x.sample(), self.y.sample()]),
+            position: IPosition::new([self.x.sample(), self.y.sample()]),
             velocity: PVelocity::new([
                 velocity_angle.cos() * velocity_magnitude,
                 velocity_angle.sin() * velocity_magnitude,
@@ -723,6 +721,7 @@ impl Renderer {
     }
 
     pub fn render(&mut self, context: &mut GL33Surface) -> Result<(), ()> {
+        println!("{:#?}", self.instances);
         let res = (*self.render_fn)(&self.instances, &self.particles, &mut self.tex, context);
         self.instances.clear();
         self.particles.clear();
