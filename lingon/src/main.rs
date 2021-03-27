@@ -44,7 +44,7 @@ fn main_loop(mut surface: GL33Surface) {
 
     let (w, h, image) = load_image_from_memory(include_bytes!("../res/coin.png")).unwrap();
     let builder = SpriteSheetBuilder::new(w as usize, h as usize, image).tile_size(16, 16);
-    let sheet = renderer.add_spritesheet(builder);
+    let sheet = renderer.add_sprite_sheet(builder);
 
     let start_t = Instant::now();
 
@@ -99,7 +99,7 @@ fn main_loop(mut surface: GL33Surface) {
                 .angle(t),
         );
 
-        renderer.push_particlesystem(&particle_systems);
+        renderer.push_particle_system(&particle_systems);
 
         if renderer.render(&mut surface).is_err() {
             break 'app;

@@ -105,7 +105,7 @@ pub struct Particle {
 const VS_STR: &str = include_str!("vs.glsl");
 const FS_STR: &str = include_str!("fs.glsl");
 const VS_PARTICLE_STR: &str = include_str!("vs_particle.glsl");
-const SPRITESHEET_SIZE: [u32; 3] = [512, 512, 512];
+const SPRITE_SHEET_SIZE: [u32; 3] = [512, 512, 512];
 
 const RECT: [Vertex; 6] = [
     Vertex::new(VPosition::new([-0.5, -0.5])),
@@ -148,12 +148,12 @@ pub struct SpriteSheet {
 impl SpriteSheet {
     pub fn grid(&self, tx: usize, ty: usize) -> SpriteRegion {
         if let Some(tile_dim) = self.tile_dim {
-            let xlo = ((tile_dim.0 * tx) as f32) / (SPRITESHEET_SIZE[0] as f32);
-            let ylo = ((tile_dim.1 * ty) as f32) / (SPRITESHEET_SIZE[1] as f32);
-            let w = (tile_dim.0 as f32) / (SPRITESHEET_SIZE[0] as f32);
-            let h = (tile_dim.1 as f32) / (SPRITESHEET_SIZE[1] as f32);
+            let xlo = ((tile_dim.0 * tx) as f32) / (SPRITE_SHEET_SIZE[0] as f32);
+            let ylo = ((tile_dim.1 * ty) as f32) / (SPRITE_SHEET_SIZE[1] as f32);
+            let w = (tile_dim.0 as f32) / (SPRITE_SHEET_SIZE[0] as f32);
+            let h = (tile_dim.1 as f32) / (SPRITE_SHEET_SIZE[1] as f32);
             (
-                self.id as f32 / (SPRITESHEET_SIZE[2] as f32),
+                self.id as f32 / (SPRITE_SHEET_SIZE[2] as f32),
                 [xlo, ylo, xlo + w, ylo + h],
             )
         } else {
@@ -612,7 +612,7 @@ impl Renderer {
             .ignore_warnings();
 
         let tex: Tex =
-            Texture::new(context, SPRITESHEET_SIZE, 0, sampler).expect("texture createtion!");
+            Texture::new(context, SPRITE_SHEET_SIZE, 0, sampler).expect("texture createtion!");
 
         let render_fn = move |instances: &[Instance],
                               systems: &[FrozenParticles],
@@ -682,7 +682,7 @@ impl Renderer {
         Self {
             render_fn: Box::new(render_fn),
             instances: Vec::new(),
-            tex: tex,
+            tex,
             sprite_sheets: Vec::new(),
             particles: Vec::new(),
         }
@@ -696,13 +696,13 @@ impl Renderer {
         self.push_instance(stamp.stamp());
     }
 
-    pub fn push_particlesystem(&mut self, system: &ParticleSystem) {
+    pub fn push_particle_system(&mut self, system: &ParticleSystem) {
         self.particles.push(system.freeze());
     }
 
-    pub fn add_spritesheet(&mut self, builder: SpriteSheetBuilder) -> SpriteSheet {
+    pub fn add_sprite_sheet(&mut self, builder: SpriteSheetBuilder) -> SpriteSheet {
         let id = self.sprite_sheets.len();
-        assert!((id as u32) < SPRITESHEET_SIZE[2]);
+        assert!((id as u32) < SPRITE_SHEET_SIZE[2]);
 
         self.tex
             .upload_part_raw(
