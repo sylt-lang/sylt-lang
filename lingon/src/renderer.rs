@@ -570,13 +570,14 @@ impl Sprite {
     }
 }
 
-pub fn load_image_from_memory(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
+pub fn load_image_from_memory(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    // SAFETY: stbi either succeeds or returns a null pointer
+    let mut w: i32 = 0;
+    let mut h: i32 = 0;
+    let mut comp: i32 = 4;
     unsafe {
         use stb_image::stb_image::bindgen::*;
         stbi_set_flip_vertically_on_load(1);
-        let mut w: i32 = 0;
-        let mut h: i32 = 0;
-        let mut comp: i32 = 4;
         let image = stbi_load_from_memory(
             bytes.as_ptr(),
             bytes.len() as i32,
@@ -585,9 +586,13 @@ pub fn load_image_from_memory(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
             &mut comp,
             4,
         );
-        let image =
-            Vec::from_raw_parts(image as *mut u8, (w * h * 4) as usize, (w * h * 4) as usize);
-        (w as u32, h as u32, image)
+        if image.is_null() {
+            None
+        } else {
+            let image =
+                Vec::from_raw_parts(image as *mut u8, (w * h * 4) as usize, (w * h * 4) as usize);
+            Some((w as u32, h as u32, image))
+        }
     }
 }
 

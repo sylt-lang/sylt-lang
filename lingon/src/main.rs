@@ -42,7 +42,7 @@ fn main_loop(mut surface: GL33Surface) {
     particle_systems.angle_velocity = RandomProperty::new(-2.0, 2.0);
     particle_systems.angle_drag = RandomProperty::new(0.0, 2.0);
 
-    let (w, h, image) = load_image_from_memory(include_bytes!("../res/coin.png"));
+    let (w, h, image) = load_image_from_memory(include_bytes!("../res/coin.png")).unwrap();
     let builder = SpriteSheetBuilder::new(w as usize, h as usize, image).tile_size(16, 16);
     let sheet = renderer.add_spritesheet(builder);
 
