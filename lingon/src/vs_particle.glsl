@@ -1,4 +1,6 @@
+uniform mat4 view;
 uniform float t;
+
 in vec2 co;
 
 in float spawn;
@@ -47,5 +49,5 @@ void main() {
             mix(uv.y, uv.w, co.y + 0.5),
             sheet);
 
-    gl_Position = vec4(rotate(co * s, a) + p, 0.0, 1.0);
+    gl_Position = view * vec4(rotate(co * s, a) + p, 0.0, 1.0);
 }

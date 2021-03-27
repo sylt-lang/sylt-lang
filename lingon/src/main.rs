@@ -29,10 +29,10 @@ fn main_loop(mut surface: GL33Surface) {
     particle_systems.end_sx = RandomProperty::new(0.0, 0.0);
     particle_systems.end_sy = RandomProperty::new(0.0, 0.0);
     particle_systems.v_angle = RandomProperty::new(
-        -0.2 + std::f32::consts::PI / 2.0,
-        0.2 + std::f32::consts::PI / 2.0,
+        -0.2 + std::f32::consts::PI / 1.0,
+        0.2 + std::f32::consts::PI / 1.0,
     );
-    particle_systems.v_magnitude = RandomProperty::new(-0.5, 0.5);
+    particle_systems.v_magnitude = RandomProperty::new(-2.0, 2.0);
     particle_systems.acceleration_angle = RandomProperty::new(
         -0.2 + std::f32::consts::PI / 2.0,
         0.2 + std::f32::consts::PI / 2.0,
@@ -77,27 +77,48 @@ fn main_loop(mut surface: GL33Surface) {
             }
         }
 
-        for _ in 0..100 {
+        for _ in 0..2000 {
             particle_systems.spawn();
         }
         particle_systems.update(delta);
 
+        println!("{}", particle_systems.particles.len());
+
         renderer.push(
             Rect::new()
                 .scale(0.3, 0.3)
-                .move_by(-0.3, 0.0)
+                .at(-0.3, 0.0)
                 .angle(t)
                 .r(t.sin())
                 .g(t.sin()),
         );
 
-        let region = sheet.grid([0, 1, 2, 3, 2, 1][((t * 10.0) as usize) % 6], 0);
         renderer.push(
-            Sprite::new(region)
-                .scale(0.3, 0.3)
-                .move_by(0.3, 0.0)
-                .angle(t),
+            Rect::new()
+                .scale(0.2, 0.2)
+                .at(0.3, 0.0)
+                .angle(t)
+                .r(t.cos())
+                .g(t.cos()),
         );
+
+        let region = sheet.grid([0, 1, 2, 3, 2, 1][((t * 10.0) as usize) % 6], 0);
+        for x in -5..5 {
+            for y in -5..5 {
+                renderer.push(
+                    Sprite::new(region)
+                        .at(x as f32, y as f32)
+                        .scale(0.3, 0.3)
+                        .angle(t),
+                );
+            }
+        }
+
+        renderer.camera
+            // .at(t.cos(), t.sin())
+            .scale(t.sin(), t.sin())
+            .angle(t)
+        ;
 
         renderer.push_particle_system(&particle_systems);
 

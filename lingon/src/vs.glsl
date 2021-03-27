@@ -1,3 +1,5 @@
+uniform mat4 view;
+
 in vec2 co;
 
 in vec2 position;
@@ -23,5 +25,5 @@ void main() {
         mix(uv.y, uv.w, co.y + 0.5),
         sheet);
 
-  gl_Position = vec4(rotate(co * scale, rotation) + position, 0., 1.);
+  gl_Position = view * vec4(rotate(co * scale, rotation) + position, 0., 1.);
 }

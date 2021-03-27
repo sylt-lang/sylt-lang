@@ -15,6 +15,8 @@ pub struct ShaderInterface {
     #[uniform(unbound)]
     t: Uniform<f32>,
 
+    view: Uniform<[[f32; 4]; 4]>,
+
     tex: Uniform<TextureBinding<Dim3, NormUnsigned>>,
 }
 
@@ -202,7 +204,7 @@ macro_rules! impl_transform_for {
                 &mut self.rotation
             }
         }
-    }
+    };
 }
 
 pub trait Transform {
@@ -218,7 +220,8 @@ pub trait Transform {
     impl_transform!(deref, at,      =,  x:  f32 => x_mut,         y:  f32 => y_mut);
     impl_transform!(deref, angle,   =,  r:  f32 => r_mut);
     impl_transform!(deref, rotate,  +=, r:  f32 => r_mut);
-    impl_transform!(deref, scale,   *=, sx: f32 => sx_mut,        sy: f32 => sy_mut);
+    impl_transform!(deref, scale_by,*=, sx: f32 => sx_mut,        sy: f32 => sy_mut);
+    impl_transform!(deref, scale,    =, sx: f32 => sx_mut,        sy: f32 => sy_mut);
 }
 
 pub trait Tint {
@@ -236,10 +239,14 @@ pub trait Tint {
     }
 }
 
-
 pub type Tex = Texture<<GL33Surface as GraphicsContext>::Backend, Dim3, NormRGBA8UI>;
-pub type RenderFn =
-    dyn FnMut(&[Instance], &[FrozenParticles], &mut Tex, &mut GL33Surface) -> Result<(), ()>;
+pub type RenderFn = dyn FnMut(
+    &[Instance],
+    &[FrozenParticles],
+    &mut Tex,
+    cgmath::Matrix4<f32>,
+    &mut GL33Surface,
+) -> Result<(), ()>;
 
 pub enum Distribution {
     Uniform,
@@ -454,6 +461,15 @@ impl Camera {
             rotation: 0.0,
         }
     }
+
+    pub fn matrix(&self) -> cgmath::Matrix4<f32> {
+        use cgmath::{Matrix4, Rad, Vector3};
+        let scale = Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, 0.0);
+        let rotation = Matrix4::from_angle_z(Rad(self.rotation));
+        let translation =
+            Matrix4::from_translation(Vector3::new(self.position.x, self.position.y, 0.0));
+        translation * rotation * scale
+    }
 }
 
 pub struct Renderer {
@@ -629,6 +645,7 @@ impl Renderer {
         let render_fn = move |instances: &[Instance],
                               systems: &[FrozenParticles],
                               tex: &mut Tex,
+                              view: cgmath::Matrix4<f32>,
                               context: &mut GL33Surface| {
             let triangle = context
                 .new_tess()
@@ -665,12 +682,14 @@ impl Renderer {
                         let state = RenderState::default().set_depth_test(None);
                         shd_gate.shade(&mut sprite_program, |mut iface, uni, mut rdr_gate| {
                             iface.set(&uni.tex, bound_tex.binding());
+                            iface.set(&uni.view, view.into());
 
                             rdr_gate.render(&state, |mut tess_gate| tess_gate.render(&triangle))
                         })?;
 
                         shd_gate.shade(&mut particle_program, |mut iface, uni, mut rdr_gate| {
                             iface.set(&uni.tex, bound_tex.binding());
+                            iface.set(&uni.view, view.into());
                             rdr_gate.render(&state, |mut tess_gate| {
                                 for (t, p) in particles {
                                     iface.set(&uni.t, t);
@@ -736,8 +755,13 @@ impl Renderer {
     }
 
     pub fn render(&mut self, context: &mut GL33Surface) -> Result<(), ()> {
-        println!("{:#?}", self.instances);
-        let res = (*self.render_fn)(&self.instances, &self.particles, &mut self.tex, context);
+        let res = (*self.render_fn)(
+            &self.instances,
+            &self.particles,
+            &mut self.tex,
+            self.camera.matrix(),
+            context,
+        );
         self.instances.clear();
         self.particles.clear();
         res
