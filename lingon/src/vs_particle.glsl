@@ -11,7 +11,7 @@ in float drag;
 
 in vec3 angle_info;
 
-in vec4 scale_extreems;
+in vec4 scale_extrems;
 
 in vec4 start_color;
 in vec4 end_color;
@@ -39,7 +39,7 @@ void main() {
     float a = angle + angle_velocity * angle_drag_sum;
 
     float lerp = min(1.0, l / lifetime);
-    vec2 s = mix(scale_extreems.xy, scale_extreems.zw, lerp);
+    vec2 s = mix(scale_extrems.xy, scale_extrems.zw, lerp);
 
     v_color = mix(start_color, end_color, lerp) + vec4(0.0, 1.0, 0.0, 1.0);
     v_uv = vec3(
