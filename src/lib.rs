@@ -128,6 +128,7 @@ pub enum Type {
     List(Box<Type>),
     Set(Box<Type>),
     Dict(Box<Type>, Box<Type>),
+    Iter(Box<Type>),
     Function(Vec<Type>, Box<Type>),
     Blob(Rc<Blob>),
     Instance(Rc<Blob>),
@@ -135,6 +136,7 @@ pub enum Type {
 
 impl Hash for Type {
     fn hash<H: Hasher>(&self, h: &mut H) {
+        // TODO(ed): We can use the fancy macro here instead.
         match self {
             Type::Void => 0,
             Type::Unknown => 1,
@@ -160,6 +162,10 @@ impl Hash for Type {
                 k.as_ref().hash(h);
                 v.as_ref().hash(h);
                 14
+            }
+            Type::Iter(t) => {
+                t.as_ref().hash(h);
+                15
             }
             Type::Union(ts) => {
                 for t in ts {
@@ -206,6 +212,7 @@ impl PartialEq for Type {
             (Type::List(a), Type::List(b)) => a == b,
             (Type::Set(a), Type::Set(b)) => a == b,
             (Type::Dict(ak, av), Type::Dict(bk, bv)) => ak == bk && av == bv,
+            (Type::Iter(a), Type::Iter(b)) => a == b,
             (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
                 a_args == b_args && a_ret == b_ret
             }
@@ -250,6 +257,7 @@ impl From<&Value> for Type {
                 let v = maybe_union_type(v.values());
                 Type::Dict(Box::new(k), Box::new(v))
             }
+            Value::Iter(t, _) => Type::Iter(Box::new(t.clone())),
             Value::Union(v) => Type::Union(v.iter().map(Type::from).collect()),
             Value::Int(_) => Type::Int,
             Value::Float(_) => Type::Float,
@@ -261,7 +269,7 @@ impl From<&Value> for Type {
                 block.borrow().ty.clone()
             }
             Value::Unknown => Type::Unknown,
-            _ => Type::Void,
+            Value::Nil | Value::Ty(_) | Value::ExternFunction(_) => Type::Void,
         }
     }
 }
@@ -291,6 +299,7 @@ impl From<&Type> for Value {
                 s.insert(Value::from(k.as_ref()), Value::from(v.as_ref()));
                 Value::Dict(Rc::new(RefCell::new(s)))
             }
+            Type::Iter(v) => Value::Iter(v.as_ref().clone(), Rc::new(RefCell::new(|| None))),
             Type::Unknown => Value::Unknown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),
@@ -326,6 +335,17 @@ impl Type {
     }
 }
 
+pub type IterFn = dyn FnMut() -> Option<Value>;
+
+// What is this U? No one knows.
+fn se_abort<S, T, U>(_t: &T, _u: U, _s: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+    panic!("Tried to serialize a non-serializable value");
+}
+
+fn de_abort<'de, D, T>(_d: D) -> Result<T, D::Error> where D: serde::Deserializer<'de> {
+    panic!("Tried to deserialize a non-serializable value");
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub enum Value {
     Ty(Type),
@@ -335,6 +355,8 @@ pub enum Value {
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
     Dict(Rc<RefCell<HashMap<Value, Value>>>),
+    #[serde(deserialize_with="de_abort", serialize_with="se_abort")]
+    Iter(Type, Rc<RefCell<IterFn>>),
     Union(HashSet<Value>),
     Float(f64),
     Int(i64),
@@ -351,6 +373,7 @@ pub enum Value {
 
 impl Debug for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // TODO(ed): This needs some cleaning
         match self {
             Value::Ty(ty) => write!(fmt, "(type {:?})", ty),
             Value::Blob(b) => write!(fmt, "(blob {})", b.name),
@@ -362,6 +385,7 @@ impl Debug for Value {
             Value::List(v) => write!(fmt, "(array {:?})", v),
             Value::Set(v) => write!(fmt, "(set {:?})", v),
             Value::Dict(v) => write!(fmt, "(dict {:?})", v),
+            Value::Iter(v, _) => write!(fmt, "(iter {:?})", v),
             Value::Function(_, block) => {
                 let block: &RefCell<_> = block.borrow();
                 let block = &block.borrow();
@@ -383,12 +407,12 @@ impl PartialEq<Value> for Value {
             (Value::Int(a), Value::Int(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::String(a), Value::String(b)) => a == b,
-            (Value::List(a), Value::List(b)) => a == b,
-            (Value::Set(a), Value::Set(b)) => a == b,
-            (Value::Dict(a), Value::Dict(b)) => a == b,
             (Value::Tuple(a), Value::Tuple(b)) => {
                 a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| a == b)
             }
+            (Value::List(a), Value::List(b)) => a == b,
+            (Value::Set(a), Value::Set(b)) => a == b,
+            (Value::Dict(a), Value::Dict(b)) => a == b,
             (Value::Union(a), b) | (b, Value::Union(a)) => a.iter().any(|x| x == b),
             (Value::Nil, Value::Nil) => true,
             _ => false,
@@ -595,6 +619,17 @@ pub enum Op {
     ///
     /// {O} - Set(F) - {}
     AssignField(usize),
+
+    /// Turns the top element on the stack into an iterator.
+    ///
+    /// {A} - Iter - {Iter(A)}
+    Iter,
+    /// Steps the iterator on top of the stack one step and pushes
+    /// the new value. If the iterator is consumed, jumps to the address
+    /// and pushes [Value::Nil]. Errors if the top element isn't an iterator.
+    ///
+    /// {I} - JmpNext(line) - {I, A}
+    JmpNext(usize),
 
     /// Adds the two top elements on the stack,
     /// using the function [op::add]. The result
@@ -1197,7 +1232,7 @@ mod tests {
             Err(mpsc::RecvTimeoutError::Disconnected) => "Test produced incorrect result",
         };
         eprintln!("    #### {} ####", msg.red());
-        panic!(msg);
+        panic!("{}", msg);
     }
 
     #[macro_export]

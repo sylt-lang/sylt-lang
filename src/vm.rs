@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::rc::Rc;
 
 use crate::error::{Error, ErrorKind};
-use crate::{op, Block, BlockLinkState, Op, Prog, RustFunction, Type, UpValue, Value};
+use crate::{op, Block, BlockLinkState, IterFn, Op, Prog, RustFunction, Type, UpValue, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -516,6 +516,67 @@ impl VM {
                 one_op!(self, Op::Not, op::not);
             }
 
+            Op::Iter => {
+                let iter: Box<IterFn> = match self.pop() {
+                    Value::List(rc) => {
+                        let mut i = 0;
+                        Box::new(move || {
+                            let res = rc.borrow().get(i).cloned();
+                            i += 1;
+                            res
+                        })
+                    }
+                    Value::Tuple(rc) => {
+                        let mut i = 0;
+                        Box::new(move || {
+                            let res = rc.as_ref().get(i).cloned();
+                            i += 1;
+                            res
+                        })
+                    }
+                    Value::Set(rc) => {
+                        let mut v = rc.as_ref().borrow().clone().into_iter();
+                        Box::new(move || v.next())
+                    }
+                    Value::Dict(rc) => {
+                        let mut v = rc.as_ref().borrow().clone().into_iter();
+                        Box::new(move || v.next().map(|(k, v)| Value::Tuple(Rc::new(vec![k, v]))))
+                    }
+                    v => {
+                        self.push(Value::Nil);
+                        error!(
+                            self,
+                            ErrorKind::TypeError(Op::Iter, vec![Type::from(v)]),
+                            "Cannot turn into iterator"
+                        );
+                    }
+                };
+                // The type is never used during runtime,
+                // so Void is used.
+                self.push(Value::Iter(Type::Void, Rc::new(RefCell::new(iter))));
+            }
+
+            Op::JmpNext(line) => {
+                if let Some(Value::Iter(_, f)) = self.stack.last() {
+                    let v = (f.borrow_mut())();
+                    drop(f);
+                    if let Some(v) = v {
+                        self.push(v);
+                    } else {
+                        self.push(Value::Nil);
+                        self.frame_mut().ip = line;
+                        return Ok(OpResult::Continue);
+                    }
+                } else {
+                    self.push(Value::Nil);
+                    error!(
+                        self,
+                        ErrorKind::InvalidProgram,
+                        "Cannot iterate over non-iterator"
+                    );
+                }
+            }
+
             Op::Jmp(line) => {
                 self.frame_mut().ip = line;
                 return Ok(OpResult::Continue);
@@ -864,6 +925,50 @@ impl VM {
                             "Cannot assign mismatching types"
                         );
                     }
+                }
+            }
+
+            Op::Iter => {
+                let ty: Type = match Type::from(self.pop()) {
+                    Type::List(e) => {
+                        e.as_ref().clone()
+                    }
+                    Type::Tuple(v) => {
+                        let set: HashSet<_> = v.into_iter().collect();
+                        match set.len() {
+                            0 => Type::Unknown,
+                            1 => set.into_iter().next().unwrap(),
+                            _ => Type::Union(set),
+                        }
+                    }
+                    Type::Set(v) => {
+                        v.as_ref().clone()
+                    }
+                    Type::Dict(k, v) => {
+                        Type::Tuple(vec![k.as_ref().clone(), v.as_ref().clone()])
+                    }
+                    i => {
+                        error!(
+                            self,
+                            ErrorKind::TypeError(Op::Iter, vec![i]),
+                            "Cannot convert to iterator"
+                        );
+                    }
+                };
+                self.push(Value::Iter(ty, Rc::new(RefCell::new(|| None))));
+            }
+
+            Op::JmpNext(_) => {
+                if let Some(Value::Iter(ty, _)) = self.stack.last() {
+                    let v = Value::from(ty);
+                    self.push(v);
+                } else {
+                    self.push(Value::Nil);
+                    error!(
+                        self,
+                        ErrorKind::InvalidProgram,
+                        "Can only 'next' iterators"
+                    );
                 }
             }
 
