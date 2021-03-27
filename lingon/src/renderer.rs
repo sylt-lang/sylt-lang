@@ -477,7 +477,7 @@ impl Camera {
         let rotation = Matrix4::from_angle_z(Rad(self.rotation));
         let translation =
             Matrix4::from_translation(Vector3::new(self.position.x, self.position.y, 0.0));
-        translation * rotation * scale
+        scale * rotation * translation
     }
 }
 
