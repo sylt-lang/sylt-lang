@@ -307,6 +307,10 @@ pub struct ParticleSystem {
     pub time: f32,
     pub particles: Vec<Particle>,
 
+    // TODO(ed): GRR!! I want this to be Vector2
+    // and implement Transform
+    pub position: [f32; 2],
+
     pub sprites: Vec<SpriteRegion>,
 
     pub x: RandomProperty,
@@ -390,7 +394,10 @@ impl ParticleSystem {
             spawn: PSpawn::new(self.time),
             lifetime: PLifetime::new(self.lifetime.sample()),
 
-            position: IPosition::new([self.x.sample(), self.y.sample()]),
+            position: IPosition::new([
+                self.x.sample() + self.position[0],
+                self.y.sample() + self.position[1]
+            ]),
             velocity: PVelocity::new([
                 velocity_angle.cos() * velocity_magnitude,
                 velocity_angle.sin() * velocity_magnitude,
@@ -434,6 +441,7 @@ impl ParticleSystem {
 
     pub fn freeze(&self) -> FrozenParticles {
         FrozenParticles {
+            position: self.position,
             time: self.time,
             particles: self.particles.clone(),
         }
@@ -441,6 +449,7 @@ impl ParticleSystem {
 }
 
 pub struct FrozenParticles {
+    pub position: [f32; 2],
     pub time: f32,
     pub particles: Vec<Particle>,
 }
