@@ -160,6 +160,83 @@ impl SpriteSheet {
     }
 }
 
+macro_rules! impl_transform {
+    (deref, $fn:ident, $op:tt, $( $var:ident : $type:ident => $set:tt ),*) => {
+        fn $fn(&mut self, $( $var : $type ),*) -> &mut Self {
+            $(
+                *self.$set() $op $var;
+            )*
+            self
+        }
+    };
+
+    (arr, $fn:ident, $op:tt, $( $var:ident : $type:ident => $arr:tt [ $idx:expr ] ),*) => {
+        fn $fn(&mut self, $( $var : $type ),*) -> &mut Self {
+            $(
+                self.$arr()[$idx] $op $var;
+            )*
+            self
+        }
+    };
+}
+
+macro_rules! impl_transform_for {
+    ($ty:ident) => {
+        impl Transform for $ty {
+            fn x_mut(&mut self) -> &mut f32 {
+                &mut self.position.x
+            }
+            fn y_mut(&mut self) -> &mut f32 {
+                &mut self.position.y
+            }
+
+            fn sx_mut(&mut self) -> &mut f32 {
+                &mut self.scale.x
+            }
+
+            fn sy_mut(&mut self) -> &mut f32 {
+                &mut self.scale.y
+            }
+
+            fn r_mut(&mut self) -> &mut f32 {
+                &mut self.rotation
+            }
+        }
+    }
+}
+
+pub trait Transform {
+    fn x_mut(&mut self) -> &mut f32;
+    fn y_mut(&mut self) -> &mut f32;
+
+    fn sx_mut(&mut self) -> &mut f32;
+    fn sy_mut(&mut self) -> &mut f32;
+
+    fn r_mut(&mut self) -> &mut f32;
+
+    impl_transform!(deref, move_by, +=, x:  f32 => x_mut,         y:  f32 => y_mut);
+    impl_transform!(deref, at,      =,  x:  f32 => x_mut,         y:  f32 => y_mut);
+    impl_transform!(deref, angle,   =,  r:  f32 => r_mut);
+    impl_transform!(deref, rotate,  +=, r:  f32 => r_mut);
+    impl_transform!(deref, scale,   *=, sx: f32 => sx_mut,        sy: f32 => sy_mut);
+}
+
+pub trait Tint {
+    fn color_mut(&mut self) -> &mut [f32; 4];
+
+    impl_transform!(arr, rgb,       =,  r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2]);
+    impl_transform!(arr, rgba,      *=, r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2], a: f32 => color_mut[3]);
+    impl_transform!(arr, r,         *=, r:  f32 => color_mut[0]);
+    impl_transform!(arr, g,         *=, g:  f32 => color_mut[1]);
+    impl_transform!(arr, b,         *=, b:  f32 => color_mut[2]);
+    impl_transform!(arr, a,         *=, a:  f32 => color_mut[3]);
+
+    fn tint(&mut self, r: f32, g: f32, b: f32, a: f32) -> &mut Self {
+        self.rgba(r, g, b, a)
+    }
+}
+
+
 pub type Tex = Texture<<GL33Surface as GraphicsContext>::Backend, Dim3, NormRGBA8UI>;
 pub type RenderFn =
     dyn FnMut(&[Instance], &[FrozenParticles], &mut Tex, &mut GL33Surface) -> Result<(), ()>;
@@ -361,60 +438,31 @@ pub struct FrozenParticles {
     pub particles: Vec<Particle>,
 }
 
+pub struct Camera {
+    position: Vector2<f32>,
+    scale: Vector2<f32>,
+    rotation: f32,
+}
+
+impl_transform_for!(Camera);
+
+impl Camera {
+    pub fn new() -> Self {
+        Self {
+            position: Vector2::new(0.0, 0.0),
+            scale: Vector2::new(1.0, 1.0),
+            rotation: 0.0,
+        }
+    }
+}
+
 pub struct Renderer {
+    pub camera: Camera,
     pub render_fn: Box<RenderFn>,
     pub instances: Vec<Instance>,
     pub particles: Vec<FrozenParticles>,
     pub tex: Tex,
     pub sprite_sheets: Vec<SpriteSheet>,
-}
-
-macro_rules! impl_transform {
-    (deref, $fn:ident, $op:tt, $( $var:ident : $type:ident => $set:tt ),*) => {
-        fn $fn(&mut self, $( $var : $type ),*) -> &mut Self {
-            $(
-                *self.$set() $op $var;
-            )*
-            self
-        }
-    };
-
-    (arr, $fn:ident, $op:tt, $( $var:ident : $type:ident => $arr:tt [ $idx:expr ] ),*) => {
-        fn $fn(&mut self, $( $var : $type ),*) -> &mut Self {
-            $(
-                self.$arr()[$idx] $op $var;
-            )*
-            self
-        }
-    };
-}
-
-pub trait Transform {
-    fn x_mut(&mut self) -> &mut f32;
-    fn y_mut(&mut self) -> &mut f32;
-
-    fn sx_mut(&mut self) -> &mut f32;
-    fn sy_mut(&mut self) -> &mut f32;
-
-    fn r_mut(&mut self) -> &mut f32;
-
-    fn color_mut(&mut self) -> &mut [f32; 4];
-
-    impl_transform!(deref, move_by, +=, x:  f32 => x_mut,         y:  f32 => y_mut);
-    impl_transform!(deref, at,      =,  x:  f32 => x_mut,         y:  f32 => y_mut);
-    impl_transform!(deref, angle,   =,  r:  f32 => r_mut);
-    impl_transform!(deref, rotate,  +=, r:  f32 => r_mut);
-    impl_transform!(deref, scale,   *=, sx: f32 => sx_mut,        sy: f32 => sy_mut);
-    impl_transform!(arr, rgb,       =,  r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2]);
-    impl_transform!(arr, rgba,      *=, r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2], a: f32 => color_mut[3]);
-    impl_transform!(arr, r,         *=, r:  f32 => color_mut[0]);
-    impl_transform!(arr, g,         *=, g:  f32 => color_mut[1]);
-    impl_transform!(arr, b,         *=, b:  f32 => color_mut[2]);
-    impl_transform!(arr, a,         *=, a:  f32 => color_mut[3]);
-
-    fn tint(&mut self, r: f32, g: f32, b: f32, a: f32) -> &mut Self {
-        self.rgba(r, g, b, a)
-    }
 }
 
 pub trait Stamp {
@@ -429,26 +477,9 @@ pub struct Rect {
     color: [f32; 4],
 }
 
-impl Transform for Rect {
-    fn x_mut(&mut self) -> &mut f32 {
-        &mut self.position.x
-    }
-    fn y_mut(&mut self) -> &mut f32 {
-        &mut self.position.y
-    }
+impl_transform_for!(Rect);
 
-    fn sx_mut(&mut self) -> &mut f32 {
-        &mut self.scale.x
-    }
-
-    fn sy_mut(&mut self) -> &mut f32 {
-        &mut self.scale.y
-    }
-
-    fn r_mut(&mut self) -> &mut f32 {
-        &mut self.rotation
-    }
-
+impl Tint for Rect {
     fn color_mut(&mut self) -> &mut [f32; 4] {
         &mut self.color
     }
@@ -502,26 +533,9 @@ pub struct Sprite {
     rect: [f32; 4],
 }
 
-impl Transform for Sprite {
-    fn x_mut(&mut self) -> &mut f32 {
-        &mut self.position.x
-    }
-    fn y_mut(&mut self) -> &mut f32 {
-        &mut self.position.y
-    }
+impl_transform_for!(Sprite);
 
-    fn sx_mut(&mut self) -> &mut f32 {
-        &mut self.scale.x
-    }
-
-    fn sy_mut(&mut self) -> &mut f32 {
-        &mut self.scale.y
-    }
-
-    fn r_mut(&mut self) -> &mut f32 {
-        &mut self.rotation
-    }
-
+impl Tint for Sprite {
     fn color_mut(&mut self) -> &mut [f32; 4] {
         &mut self.color
     }
@@ -678,6 +692,7 @@ impl Renderer {
         };
 
         Self {
+            camera: Camera::new(),
             render_fn: Box::new(render_fn),
             instances: Vec::new(),
             tex,
