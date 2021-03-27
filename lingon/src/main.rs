@@ -82,8 +82,6 @@ fn main_loop(mut surface: GL33Surface) {
         }
         particle_systems.update(delta);
 
-        println!("{}", particle_systems.particles.len());
-
         renderer.push(
             Rect::new()
                 .scale(0.3, 0.3)
