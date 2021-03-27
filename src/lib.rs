@@ -1232,7 +1232,7 @@ mod tests {
             Err(mpsc::RecvTimeoutError::Disconnected) => "Test produced incorrect result",
         };
         eprintln!("    #### {} ####", msg.red());
-        panic!(msg);
+        panic!("{}", msg);
     }
 
     #[macro_export]
