@@ -337,6 +337,15 @@ impl Type {
 
 pub type IterFn = dyn FnMut() -> Option<Value>;
 
+// What is this U? No one knows.
+fn se_abort<S, T, U>(_t: &T, _u: U, _s: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+    panic!("Tried to serialize a non-serializable value");
+}
+
+fn de_abort<'de, D, T>(_d: D) -> Result<T, D::Error> where D: serde::Deserializer<'de> {
+    panic!("Tried to deserialize a non-serializable value");
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub enum Value {
     Ty(Type),
@@ -346,6 +355,7 @@ pub enum Value {
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
     Dict(Rc<RefCell<HashMap<Value, Value>>>),
+    #[serde(deserialize_with="de_abort", serialize_with="se_abort")]
     Iter(Type, Rc<RefCell<IterFn>>),
     Union(HashSet<Value>),
     Float(f64),
