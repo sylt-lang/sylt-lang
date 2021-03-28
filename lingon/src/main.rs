@@ -1,11 +1,5 @@
-// use glfw::{Action, Context as _, Key, WindowEvent};
 use luminance_sdl2::{sdl2, GL33Surface};
 use std::time::Instant;
-
-// TODO(ed):
-//  - Upload textures
-//  - Send texture coordinates
-//  - Write the API. :)
 
 mod renderer;
 mod semantics;
