@@ -216,23 +216,23 @@ pub trait Transform {
 
     fn r_mut(&mut self) -> &mut f32;
 
-    impl_transform!(deref, move_by, +=, x:  f32 => x_mut,         y:  f32 => y_mut);
-    impl_transform!(deref, at,      =,  x:  f32 => x_mut,         y:  f32 => y_mut);
-    impl_transform!(deref, angle,   =,  r:  f32 => r_mut);
-    impl_transform!(deref, rotate,  +=, r:  f32 => r_mut);
-    impl_transform!(deref, scale_by,*=, sx: f32 => sx_mut,        sy: f32 => sy_mut);
-    impl_transform!(deref, scale,    =, sx: f32 => sx_mut,        sy: f32 => sy_mut);
+    impl_transform!(deref, move_by,  +=, x:  f32 => x_mut,         y:  f32 => y_mut);
+    impl_transform!(deref, at,       =,  x:  f32 => x_mut,         y:  f32 => y_mut);
+    impl_transform!(deref, angle,    =,  r:  f32 => r_mut);
+    impl_transform!(deref, rotate,   +=, r:  f32 => r_mut);
+    impl_transform!(deref, scale_by, *=, sx: f32 => sx_mut,        sy: f32 => sy_mut);
+    impl_transform!(deref, scale,     =, sx: f32 => sx_mut,        sy: f32 => sy_mut);
 }
 
 pub trait Tint {
     fn color_mut(&mut self) -> &mut [f32; 4];
 
-    impl_transform!(arr, rgb,       =,  r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2]);
-    impl_transform!(arr, rgba,      *=, r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2], a: f32 => color_mut[3]);
-    impl_transform!(arr, r,         *=, r:  f32 => color_mut[0]);
-    impl_transform!(arr, g,         *=, g:  f32 => color_mut[1]);
-    impl_transform!(arr, b,         *=, b:  f32 => color_mut[2]);
-    impl_transform!(arr, a,         *=, a:  f32 => color_mut[3]);
+    impl_transform!(arr, rgb,  =,  r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2]);
+    impl_transform!(arr, rgba, *=, r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2], a: f32 => color_mut[3]);
+    impl_transform!(arr, r,    *=, r:  f32 => color_mut[0]);
+    impl_transform!(arr, g,    *=, g:  f32 => color_mut[1]);
+    impl_transform!(arr, b,    *=, b:  f32 => color_mut[2]);
+    impl_transform!(arr, a,    *=, a:  f32 => color_mut[3]);
 
     fn tint(&mut self, r: f32, g: f32, b: f32, a: f32) -> &mut Self {
         self.rgba(r, g, b, a)
