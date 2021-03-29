@@ -22,6 +22,10 @@ fn main_loop(mut surface: GL33Surface) {
     sampler.mag_filter = luminance::texture::MagFilter::Nearest;
     let mut renderer = Renderer::new(&mut surface, sampler);
 
+    let (w, h, image) = load_image_from_memory(include_bytes!("../res/coin.png")).unwrap();
+    let builder = SpriteSheetBuilder::new(w as usize, h as usize, image).tile_size(16, 16);
+    let sheet = renderer.add_sprite_sheet(builder);
+
     let mut particle_systems = ParticleSystem::new();
     particle_systems.lifetime = RandomProperty::new(1.0, 2.0);
     particle_systems.start_sx = RandomProperty::new(0.01, 0.015);
@@ -29,22 +33,18 @@ fn main_loop(mut surface: GL33Surface) {
     particle_systems.end_sx = RandomProperty::new(0.0, 0.0);
     particle_systems.end_sy = RandomProperty::new(0.0, 0.0);
     particle_systems.v_angle = RandomProperty::new(
-        -0.2 + std::f32::consts::PI / 2.0,
-        0.2 + std::f32::consts::PI / 2.0,
+        -std::f32::consts::PI,
+        std::f32::consts::PI,
     );
-    particle_systems.v_magnitude = RandomProperty::new(-0.5, 0.5);
+    particle_systems.v_magnitude = RandomProperty::new(-2.0, 2.0);
     particle_systems.acceleration_angle = RandomProperty::new(
-        -0.2 + std::f32::consts::PI / 2.0,
-        0.2 + std::f32::consts::PI / 2.0,
+        -std::f32::consts::PI,
+        std::f32::consts::PI,
     );
     particle_systems.acceleration_magnitude = RandomProperty::new(0.2, 0.8);
     particle_systems.angle = RandomProperty::new(-2.0, 2.0);
     particle_systems.angle_velocity = RandomProperty::new(-2.0, 2.0);
     particle_systems.angle_drag = RandomProperty::new(0.0, 2.0);
-
-    let (w, h, image) = load_image_from_memory(include_bytes!("../res/coin.png")).unwrap();
-    let builder = SpriteSheetBuilder::new(w as usize, h as usize, image).tile_size(16, 16);
-    let sheet = renderer.add_sprite_sheet(builder);
 
     let start_t = Instant::now();
 
@@ -77,7 +77,9 @@ fn main_loop(mut surface: GL33Surface) {
             }
         }
 
-        for _ in 0..100 {
+        particle_systems.position[0] = t.cos() * 0.5;
+        particle_systems.position[1] = t.sin() * 0.5;
+        for _ in 0..5 {
             particle_systems.spawn();
         }
         particle_systems.update(delta);
@@ -85,21 +87,38 @@ fn main_loop(mut surface: GL33Surface) {
         renderer.push(
             Rect::new()
                 .scale(0.3, 0.3)
-                .move_by(-0.3, 0.0)
+                .at(-0.3, 0.0)
                 .angle(t)
                 .r(t.sin())
                 .g(t.sin()),
         );
 
-        let region = sheet.grid([0, 1, 2, 3, 2, 1][((t * 10.0) as usize) % 6], 0);
         renderer.push(
-            Sprite::new(region)
-                .scale(0.3, 0.3)
-                .move_by(0.3, 0.0)
-                .angle(t),
+            Rect::new()
+                .scale(0.2, 0.2)
+                .at(0.3, 0.0)
+                .angle(t)
+                .r(t.cos())
+                .g(t.cos()),
         );
 
+        let region = sheet.grid([0, 1, 2, 3, 2, 1][((t * 10.0) as usize) % 6], 0);
+        for x in -5..5 {
+            for y in -5..5 {
+                renderer.push(
+                    Sprite::new(region)
+                        .at(x as f32, y as f32)
+                        .scale(0.3, 0.3)
+                        .angle(t),
+                );
+            }
+        }
+
         renderer.push_particle_system(&particle_systems);
+
+        renderer.camera
+            .scale(t.sin() + 1.5, t.sin() + 1.5)
+            .at(t.sin(), t.sin());
 
         if renderer.render(&mut surface).is_err() {
             break 'app;

@@ -1,4 +1,6 @@
+uniform mat4 view;
 uniform float t;
+
 in vec2 co;
 
 in float spawn;
@@ -41,11 +43,11 @@ void main() {
     float lerp = min(1.0, l / lifetime);
     vec2 s = mix(scale_extrems.xy, scale_extrems.zw, lerp);
 
-    v_color = mix(start_color, end_color, lerp) + vec4(0.0, 1.0, 0.0, 1.0);
+    v_color = mix(start_color, end_color, lerp);
     v_uv = vec3(
             mix(uv.x, uv.z, co.x + 0.5),
             mix(uv.y, uv.w, co.y + 0.5),
             sheet);
 
-    gl_Position = vec4(rotate(co * s, a) + p, 0.0, 1.0);
+    gl_Position = view * vec4(rotate(co * s, a) + p, 0.0, 1.0);
 }

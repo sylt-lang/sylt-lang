@@ -15,6 +15,8 @@ pub struct ShaderInterface {
     #[uniform(unbound)]
     t: Uniform<f32>,
 
+    view: Uniform<[[f32; 4]; 4]>,
+
     tex: Uniform<TextureBinding<Dim3, NormUnsigned>>,
 }
 
@@ -40,8 +42,6 @@ pub enum VertexSemantics {
     PSpawn,
     #[sem(name = "lifetime", repr = "f32", wrapper = "PLifetime")]
     PLifetime,
-    #[sem(name = "position", repr = "[f32; 2]", wrapper = "PPosition")]
-    PPosition,
     #[sem(name = "velocity", repr = "[f32; 2]", wrapper = "PVelocity")]
     PVelocity,
     #[sem(name = "acceleration", repr = "[f32; 2]", wrapper = "PAcceleration")]
@@ -62,14 +62,14 @@ pub enum VertexSemantics {
 }
 
 #[repr(C)]
-#[derive(Vertex, Copy, Clone, PartialEq)]
+#[derive(Vertex, Copy, Clone, PartialEq, Debug)]
 #[vertex(sem = "VertexSemantics")]
 pub struct Vertex {
     pub position: VPosition,
 }
 
 #[repr(C)]
-#[derive(Vertex, Copy, Clone, PartialEq)]
+#[derive(Vertex, Copy, Clone, PartialEq, Debug)]
 #[vertex(sem = "VertexSemantics", instanced = "true")]
 pub struct Instance {
     pub position: IPosition,
@@ -86,7 +86,7 @@ pub struct Instance {
 pub struct Particle {
     pub spawn: PSpawn,
     pub lifetime: PLifetime,
-    pub position: PPosition,
+    pub position: IPosition,
     pub velocity: PVelocity,
     pub acceleration: PAcceleration,
     pub drag: PDrag,
@@ -162,9 +162,91 @@ impl SpriteSheet {
     }
 }
 
+macro_rules! impl_transform {
+    (deref, $fn:ident, $op:tt, $( $var:ident : $type:ident => $set:tt ),*) => {
+        fn $fn(&mut self, $( $var : $type ),*) -> &mut Self {
+            $(
+                *self.$set() $op $var;
+            )*
+            self
+        }
+    };
+
+    (arr, $fn:ident, $op:tt, $( $var:ident : $type:ident => $arr:tt [ $idx:expr ] ),*) => {
+        fn $fn(&mut self, $( $var : $type ),*) -> &mut Self {
+            $(
+                self.$arr()[$idx] $op $var;
+            )*
+            self
+        }
+    };
+}
+
+macro_rules! impl_transform_for {
+    ($ty:ident) => {
+        impl Transform for $ty {
+            fn x_mut(&mut self) -> &mut f32 {
+                &mut self.position.x
+            }
+            fn y_mut(&mut self) -> &mut f32 {
+                &mut self.position.y
+            }
+
+            fn sx_mut(&mut self) -> &mut f32 {
+                &mut self.scale.x
+            }
+
+            fn sy_mut(&mut self) -> &mut f32 {
+                &mut self.scale.y
+            }
+
+            fn r_mut(&mut self) -> &mut f32 {
+                &mut self.rotation
+            }
+        }
+    };
+}
+
+pub trait Transform {
+    fn x_mut(&mut self) -> &mut f32;
+    fn y_mut(&mut self) -> &mut f32;
+
+    fn sx_mut(&mut self) -> &mut f32;
+    fn sy_mut(&mut self) -> &mut f32;
+
+    fn r_mut(&mut self) -> &mut f32;
+
+    impl_transform!(deref, move_by,  +=, x:  f32 => x_mut,         y:  f32 => y_mut);
+    impl_transform!(deref, at,       =,  x:  f32 => x_mut,         y:  f32 => y_mut);
+    impl_transform!(deref, angle,    =,  r:  f32 => r_mut);
+    impl_transform!(deref, rotate,   +=, r:  f32 => r_mut);
+    impl_transform!(deref, scale_by, *=, sx: f32 => sx_mut,        sy: f32 => sy_mut);
+    impl_transform!(deref, scale,     =, sx: f32 => sx_mut,        sy: f32 => sy_mut);
+}
+
+pub trait Tint {
+    fn color_mut(&mut self) -> &mut [f32; 4];
+
+    impl_transform!(arr, rgb,  =,  r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2]);
+    impl_transform!(arr, rgba, *=, r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2], a: f32 => color_mut[3]);
+    impl_transform!(arr, r,    *=, r:  f32 => color_mut[0]);
+    impl_transform!(arr, g,    *=, g:  f32 => color_mut[1]);
+    impl_transform!(arr, b,    *=, b:  f32 => color_mut[2]);
+    impl_transform!(arr, a,    *=, a:  f32 => color_mut[3]);
+
+    fn tint(&mut self, r: f32, g: f32, b: f32, a: f32) -> &mut Self {
+        self.rgba(r, g, b, a)
+    }
+}
+
 pub type Tex = Texture<<GL33Surface as GraphicsContext>::Backend, Dim3, NormRGBA8UI>;
-pub type RenderFn =
-    dyn FnMut(&[Instance], &[FrozenParticles], &mut Tex, &mut GL33Surface) -> Result<(), ()>;
+pub type RenderFn = dyn FnMut(
+    &[Instance],
+    &[FrozenParticles],
+    &mut Tex,
+    cgmath::Matrix4<f32>,
+    &mut GL33Surface,
+) -> Result<(), ()>;
 
 pub enum Distribution {
     Uniform,
@@ -224,6 +306,10 @@ impl RandomProperty {
 pub struct ParticleSystem {
     pub time: f32,
     pub particles: Vec<Particle>,
+
+    // TODO(ed): GRR!! I want this to be Vector2
+    // and implement Transform
+    pub position: [f32; 2],
 
     pub sprites: Vec<SpriteRegion>,
 
@@ -308,7 +394,10 @@ impl ParticleSystem {
             spawn: PSpawn::new(self.time),
             lifetime: PLifetime::new(self.lifetime.sample()),
 
-            position: PPosition::new([self.x.sample(), self.y.sample()]),
+            position: IPosition::new([
+                self.x.sample() + self.position[0],
+                self.y.sample() + self.position[1]
+            ]),
             velocity: PVelocity::new([
                 velocity_angle.cos() * velocity_magnitude,
                 velocity_angle.sin() * velocity_magnitude,
@@ -352,6 +441,7 @@ impl ParticleSystem {
 
     pub fn freeze(&self) -> FrozenParticles {
         FrozenParticles {
+            position: self.position,
             time: self.time,
             particles: self.particles.clone(),
         }
@@ -359,64 +449,45 @@ impl ParticleSystem {
 }
 
 pub struct FrozenParticles {
+    pub position: [f32; 2],
     pub time: f32,
     pub particles: Vec<Particle>,
 }
 
+pub struct Camera {
+    position: Vector2<f32>,
+    scale: Vector2<f32>,
+    rotation: f32,
+}
+
+impl_transform_for!(Camera);
+
+impl Camera {
+    pub fn new() -> Self {
+        Self {
+            position: Vector2::new(0.0, 0.0),
+            scale: Vector2::new(1.0, 1.0),
+            rotation: 0.0,
+        }
+    }
+
+    pub fn matrix(&self) -> cgmath::Matrix4<f32> {
+        use cgmath::{Matrix4, Rad, Vector3};
+        let scale = Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, 0.0);
+        let rotation = Matrix4::from_angle_z(Rad(self.rotation));
+        let translation =
+            Matrix4::from_translation(Vector3::new(self.position.x, self.position.y, 0.0));
+        scale * rotation * translation
+    }
+}
+
 pub struct Renderer {
+    pub camera: Camera,
     pub render_fn: Box<RenderFn>,
     pub instances: Vec<Instance>,
     pub particles: Vec<FrozenParticles>,
     pub tex: Tex,
     pub sprite_sheets: Vec<SpriteSheet>,
-}
-
-macro_rules! impl_transform {
-    (deref, $fn:ident, $op:tt, $( $var:ident : $type:ident => $set:tt ),*) => {
-        fn $fn(&mut self, $( $var : $type ),*) -> &mut Self {
-            $(
-                *self.$set() $op $var;
-            )*
-            self
-        }
-    };
-
-    (arr, $fn:ident, $op:tt, $( $var:ident : $type:ident => $arr:tt [ $idx:expr ] ),*) => {
-        fn $fn(&mut self, $( $var : $type ),*) -> &mut Self {
-            $(
-                self.$arr()[$idx] $op $var;
-            )*
-            self
-        }
-    };
-}
-
-pub trait Transform {
-    fn x_mut(&mut self) -> &mut f32;
-    fn y_mut(&mut self) -> &mut f32;
-
-    fn sx_mut(&mut self) -> &mut f32;
-    fn sy_mut(&mut self) -> &mut f32;
-
-    fn r_mut(&mut self) -> &mut f32;
-
-    fn color_mut(&mut self) -> &mut [f32; 4];
-
-    impl_transform!(deref, move_by, +=, x:  f32 => x_mut,         y:  f32 => y_mut);
-    impl_transform!(deref, at,      =,  x:  f32 => x_mut,         y:  f32 => y_mut);
-    impl_transform!(deref, angle,   =,  r:  f32 => r_mut);
-    impl_transform!(deref, rotate,  +=, r:  f32 => r_mut);
-    impl_transform!(deref, scale,   *=, sx: f32 => sx_mut,        sy: f32 => sy_mut);
-    impl_transform!(arr, rgb,       =,  r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2]);
-    impl_transform!(arr, rgba,      *=, r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2], a: f32 => color_mut[3]);
-    impl_transform!(arr, r,         *=, r:  f32 => color_mut[0]);
-    impl_transform!(arr, g,         *=, g:  f32 => color_mut[1]);
-    impl_transform!(arr, b,         *=, b:  f32 => color_mut[2]);
-    impl_transform!(arr, a,         *=, a:  f32 => color_mut[3]);
-
-    fn tint(&mut self, r: f32, g: f32, b: f32, a: f32) -> &mut Self {
-        self.rgba(r, g, b, a)
-    }
 }
 
 pub trait Stamp {
@@ -431,26 +502,9 @@ pub struct Rect {
     color: [f32; 4],
 }
 
-impl Transform for Rect {
-    fn x_mut(&mut self) -> &mut f32 {
-        &mut self.position.x
-    }
-    fn y_mut(&mut self) -> &mut f32 {
-        &mut self.position.y
-    }
+impl_transform_for!(Rect);
 
-    fn sx_mut(&mut self) -> &mut f32 {
-        &mut self.scale.x
-    }
-
-    fn sy_mut(&mut self) -> &mut f32 {
-        &mut self.scale.y
-    }
-
-    fn r_mut(&mut self) -> &mut f32 {
-        &mut self.rotation
-    }
-
+impl Tint for Rect {
     fn color_mut(&mut self) -> &mut [f32; 4] {
         &mut self.color
     }
@@ -504,26 +558,9 @@ pub struct Sprite {
     rect: [f32; 4],
 }
 
-impl Transform for Sprite {
-    fn x_mut(&mut self) -> &mut f32 {
-        &mut self.position.x
-    }
-    fn y_mut(&mut self) -> &mut f32 {
-        &mut self.position.y
-    }
+impl_transform_for!(Sprite);
 
-    fn sx_mut(&mut self) -> &mut f32 {
-        &mut self.scale.x
-    }
-
-    fn sy_mut(&mut self) -> &mut f32 {
-        &mut self.scale.y
-    }
-
-    fn r_mut(&mut self) -> &mut f32 {
-        &mut self.rotation
-    }
-
+impl Tint for Sprite {
     fn color_mut(&mut self) -> &mut [f32; 4] {
         &mut self.color
     }
@@ -617,6 +654,7 @@ impl Renderer {
         let render_fn = move |instances: &[Instance],
                               systems: &[FrozenParticles],
                               tex: &mut Tex,
+                              view: cgmath::Matrix4<f32>,
                               context: &mut GL33Surface| {
             let triangle = context
                 .new_tess()
@@ -653,12 +691,14 @@ impl Renderer {
                         let state = RenderState::default().set_depth_test(None);
                         shd_gate.shade(&mut sprite_program, |mut iface, uni, mut rdr_gate| {
                             iface.set(&uni.tex, bound_tex.binding());
+                            iface.set(&uni.view, view.into());
 
                             rdr_gate.render(&state, |mut tess_gate| tess_gate.render(&triangle))
                         })?;
 
                         shd_gate.shade(&mut particle_program, |mut iface, uni, mut rdr_gate| {
                             iface.set(&uni.tex, bound_tex.binding());
+                            iface.set(&uni.view, view.into());
                             rdr_gate.render(&state, |mut tess_gate| {
                                 for (t, p) in particles {
                                     iface.set(&uni.t, t);
@@ -680,6 +720,7 @@ impl Renderer {
         };
 
         Self {
+            camera: Camera::new(),
             render_fn: Box::new(render_fn),
             instances: Vec::new(),
             tex,
@@ -723,7 +764,13 @@ impl Renderer {
     }
 
     pub fn render(&mut self, context: &mut GL33Surface) -> Result<(), ()> {
-        let res = (*self.render_fn)(&self.instances, &self.particles, &mut self.tex, context);
+        let res = (*self.render_fn)(
+            &self.instances,
+            &self.particles,
+            &mut self.tex,
+            self.camera.matrix(),
+            context,
+        );
         self.instances.clear();
         self.particles.clear();
         res
