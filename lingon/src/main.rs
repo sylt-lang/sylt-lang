@@ -113,7 +113,7 @@ fn main_loop(mut surface: GL33Surface) {
 
         for (i, v) in buckets.iter().enumerate() {
             let w = 1.0 / (NUM_BUCKETS as f32);
-            let h = (*v as f32) * w;
+            let h = (*v as f32) * w * 0.1;
             renderer.push(Rect::new().scale(w, h).at((i as f32) * w, h / 2.0));
         }
 

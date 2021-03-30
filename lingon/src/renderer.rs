@@ -221,13 +221,17 @@ pub type RenderFn = dyn FnMut(
 
 /// A way to handle random variables.
 pub enum Distribution {
+    /// Always returns 0.
+    NoDice,
     /// All values are equally likely, no bias.
     Uniform,
-    /// The sum of 2 uniform samples, creates a bias towards the middle.
+    /// The fun name for Uniform.
+    Die,
+    /// Biased towards 0.5. Looks like a triangle.
     TwoDice,
-    /// The sum of 3 uniform samples, creates a stronger bias towards the middle.
+    /// Biased towards 0.5. Looks like a bellcurve.
     ThreeDice,
-    /// The product of 2 uniform samples, bias towards the low values.
+    /// Biased towards 0. Looks like 1/x.
     Square,
 }
 
@@ -237,7 +241,8 @@ impl Distribution {
         let mut rng = rand::thread_rng();
 
         match self {
-            Distribution::Uniform => rng.gen::<f32>(),
+            Distribution::NoDice => 0.0,
+            Distribution::Uniform | Distribution::Die => rng.gen::<f32>(),
             Distribution::TwoDice => (rng.gen::<f32>() + rng.gen::<f32>()) / 2.0,
             Distribution::ThreeDice => {
                 (rng.gen::<f32>() + rng.gen::<f32>() + rng.gen::<f32>()) / 3.0
