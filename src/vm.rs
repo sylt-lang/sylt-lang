@@ -193,7 +193,7 @@ impl VM {
     fn error(&self, kind: ErrorKind, message: Option<String>) -> Error {
         let frame = self.frames.last().unwrap();
         self.print_stacktrace();
-        Error {
+        Error::RuntimeError {
             kind,
             file: frame.block.borrow().file.clone(),
             line: frame.block.borrow().line(frame.ip),

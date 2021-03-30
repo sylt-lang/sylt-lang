@@ -475,10 +475,10 @@ impl Compiler {
             return;
         }
         self.panic = true;
-        self.errors.push(Error {
+        self.errors.push(Error::CompileError {
             kind,
-            file: self.current_file().to_path_buf(),
-            line,
+            file: Some(self.current_file().to_path_buf()),
+            line: Some(line),
             message,
         });
     }

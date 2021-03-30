@@ -26,10 +26,12 @@ pub fn sectionize(path: &Path) -> Result<Vec<Section>, Vec<Error>> {
     let mut read_files = HashSet::new();
     read_files.insert(path.to_path_buf());
     let tokens = file_to_tokens(path).map_err(|_| {
-        vec![Error::new_nowhere(
-            ErrorKind::FileNotFound(path.to_path_buf()),
-            None,
-        )]
+        vec![Error::CompileError {
+            kind: ErrorKind::FileNotFound(path.to_path_buf()),
+            file: None,
+            line: None,
+            message: None,
+        }]
     })?;
     let mut all_tokens = vec![(path.to_path_buf(), tokens)];
     let mut sections = Vec::new();
@@ -65,10 +67,10 @@ pub fn sectionize(path: &Path) -> Result<Vec<Section>, Vec<Error>> {
                         match file_to_tokens(&use_file) {
                             Ok(tokens) => all_tokens.push((use_file, tokens)),
                             Err(_) => {
-                                errors.push(Error {
+                                errors.push(Error::CompileError {
                                     kind: ErrorKind::FileNotFound(use_file),
-                                    file: path.to_path_buf(),
-                                    line: *line,
+                                    file: Some(path.to_path_buf()),
+                                    line: Some(*line),
                                     message: None,
                                 });
                             }

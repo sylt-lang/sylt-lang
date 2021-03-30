@@ -55,12 +55,7 @@ pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
 pub fn serialize(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Vec<u8>, Vec<Error>> {
     let prog = compile(args, functions)?;
     typecheck(&prog, args)?;
-    bincode::serialize(&prog).map_err(|_| vec![Error {
-        kind: ErrorKind::BincodeError,
-        file: args.file.as_ref().unwrap().clone(),
-        line: 0,
-        message: None,
-    }]) //TODO
+    bincode::serialize(&prog).map_err(|_| vec![Error::BincodeError])
 }
 
 /// Deserializes and links the given file.
@@ -72,10 +67,10 @@ fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, 
     let path = match &args.file {
         Some(file) => file,
         None => {
-            return Err(vec![Error {
+            return Err(vec![Error::CompileError {
                 kind: ErrorKind::NoFileGiven,
-                file: PathBuf::from(""),
-                line: 0,
+                file: None,
+                line: None,
                 message: None,
             }]);
         }
@@ -1168,20 +1163,23 @@ pub struct Prog {
     pub strings: Vec<String>,
 }
 
+// errors: [ CompileError: SyntaxError(_, _), 
+
 #[cfg(test)]
 mod tests {
     #[macro_export]
     macro_rules! assert_errs {
-        ($result:expr, [ $( $kind:pat ),* ]) => {
+        ($result:expr, [ $( $type:tt : $kind:tt ),* ]) => {
             let errs = if let Err(errs) = $result {
                 errs
             } else {
                 eprintln!("    Program succeeded when it should've failed");
                 unreachable!();
             };
+
             if !matches!(
                 errs.as_slice(),
-                &[$($crate::error::Error {
+                &[$($crate::error::Error::$type {
                     kind: $kind,
                     file: _,
                     line: _,
@@ -1192,11 +1190,11 @@ mod tests {
                 eprintln!("Unexpected errors");
                 eprint!("    Got:  [");
                 for err in errs {
-                    eprint!(" ErrorKind::{:?} ", err.kind);
+                    eprint!(" {:?} ", err);
                 }
                 eprint!("]\n    Want: [");
                 $(
-                eprint!(" {} ", stringify!($kind));
+                eprint!(" {} {{ kind: {} }} ", stringify!($type), stringify!($kind));
                 )*
                 eprintln!("]");
                 assert!(false);

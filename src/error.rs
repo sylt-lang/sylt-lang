@@ -2,9 +2,47 @@ use owo_colors::OwoColorize;
 use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::{tokenizer::Token, Op, Type, Value};
+
+/// Returns the line in the source code and some context before it.
+/// Fails if the line can't be found for some reason.
+///
+/// This logic is shared between most (but not all) errors. It handles
+/// the [Option]s as well since that logic is also shared.
+fn source_line_at(file: &Option<PathBuf>, line: Option<usize>) -> Option<String> {
+    match (file, line) {
+        (Some(file), Some(line)) => {
+            if let Ok(file) = File::open(file) {
+                Some(io::BufReader::new(file)
+                   .lines()
+                   .enumerate()
+                   .filter(|(n, _)| line <= *n + 3 && *n + 3 <= line + 2)
+                   .fold(String::from("\n"), |a, (n, l)| {
+                       format!("{} {:3} | {}\n", a, (n + 1).blue(), l.unwrap())
+                   }))
+            } else {
+                None
+            }
+        }
+        // This doesn't need to be an error if you want to report an error on a line
+        // number without specifying a file.
+        (None, Some(_)) => unimplemented!("Line number without corresponding file"),
+
+        // Either only a file or no info at all
+        _ => None,
+    }
+}
+
+fn file_line_display(file: &Option<PathBuf>, line: Option<usize>) -> Option<String> {
+    match (file, line) {
+        (Some(file), Some(line)) => Some(format!("{}:{}", file.display().blue(), line.blue())),
+        // As with source_line_at, might not be an error.
+        (None, Some(_)) => unimplemented!("Line number without corresponding file"),
+        _ => None,
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum ErrorKind {
@@ -34,16 +72,83 @@ pub enum ErrorKind {
 
     FileNotFound(PathBuf),
     NoFileGiven,
-
-    BincodeError, //TODO(gu) BincodeError(bincode::Error) would be nice but it isn't clone
 }
 
-#[derive(Debug, Clone)]
-pub struct Error {
-    pub kind: ErrorKind,
-    pub file: PathBuf,
-    pub line: usize,
-    pub message: Option<String>,
+#[derive(Clone)]
+pub enum Error {
+    CompileError {
+        kind: ErrorKind,
+        file: Option<PathBuf>,
+        line: Option<usize>,
+        message: Option<String>,
+    },
+    TypecheckError {
+        kind: ErrorKind,
+        file: PathBuf,
+        line: usize,
+        message: Option<String>,
+    },
+    RuntimeError {
+        kind: ErrorKind,
+        file: PathBuf,
+        line: usize,
+        message: Option<String>,
+    },
+    BincodeError,
+}
+
+impl Error {
+    fn kind(&self) -> ErrorKind {
+        match self {
+            Error::CompileError     { kind, .. }
+            | Error::TypecheckError { kind, .. }
+            | Error::RuntimeError   { kind, .. }
+            => kind.clone(),
+            _ => unimplemented!(),
+        }
+    }
+}
+
+impl fmt::Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            //TODO debug_non_exhaustive
+            Error::CompileError { kind, .. }
+                => write!(f, "CompileError {{ kind: {:?}, .. }}", kind),
+            Error::TypecheckError { kind, .. }
+                => write!(f, "TypecheckError {{ kind: {:?}, .. }}", kind),
+            Error::RuntimeError { kind, .. }
+                => write!(f, "RuntimeError {{ kind: {:?}, .. }}", kind),
+            Error::BincodeError
+                => write!(f, "BincodeError"),
+        }
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let prompt = "      ";
+
+        match self {
+            Error::CompileError { kind, file, line, message } => {
+                let message = match message {
+                    Some(s) => format!("{}{}\n", prompt, s),
+                    None => String::new(),
+                };
+
+                write!(
+                    f,
+                    "{} {}\n{}\n{}{}",
+                    "Compilation error".red(),
+                    file_line_display(file, *line).unwrap_or_else(String::new),
+                    kind,
+                    message,
+                    source_line_at(file, *line).unwrap_or_else(String::new),
+                )
+            }
+            _ => todo!(),
+        }
+    }
 }
 
 impl fmt::Display for ErrorKind {
@@ -132,54 +237,7 @@ impl fmt::Display for ErrorKind {
             ErrorKind::NoFileGiven => {
                 write!(f, "No file to run")
             }
-            ErrorKind::BincodeError => {
-                write!(f, "Error when (de-)-serializing")
-            }
         }
     }
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let prompt = "     ";
-        let message = match &self.message {
-            Some(s) => format!("\n{} {}", prompt, s),
-            None => String::from(""),
-        };
-
-        let line = if let Ok(file) = File::open(&self.file) {
-            io::BufReader::new(file)
-                .lines()
-                .enumerate()
-                .filter(|(n, _)| self.line <= *n + 3 && *n + 3 <= self.line + 2)
-                .fold(String::from("\n"), |a, (n, l)| {
-                    format!("{} {:3} | {}\n", a, (n + 1).blue(), l.unwrap())
-                })
-        } else {
-            String::new()
-        };
-
-        write!(
-            f,
-            "{} {}:{}\n{} {}{}{}",
-            "ERROR".red(),
-            self.file.display().blue(),
-            self.line.blue(),
-            prompt,
-            self.kind,
-            message,
-            line
-        )
-    }
-}
-
-impl Error {
-    pub fn new_nowhere(kind: ErrorKind, message: Option<String>) -> Self {
-        Self {
-            kind,
-            message,
-            file: PathBuf::from("!compiler!"),
-            line: 0,
-        }
-    }
-}
