@@ -35,13 +35,11 @@ use rand::prelude::*;
 // Me no likey, but at least it's not documented.
 use crate::semantics::*;
 
-/// The big struct of all vertex information!
-/// Used internally.
 /// Vertex shader source code.
 const VS_STR: &str = include_str!("vs.glsl");
 /// Fragment shader source code.
 const FS_STR: &str = include_str!("fs.glsl");
-/// The particle vertex shader source code.
+/// Particle vertex shader source code.
 const VS_PARTICLE_STR: &str = include_str!("vs_particle.glsl");
 /// The maximum size of a sprite sheet, and the maximum number of
 /// sprite sheets.
@@ -57,13 +55,13 @@ const RECT: [Vertex; 6] = [
     Vertex::new(VPosition::new([-0.5, -0.5])),
 ];
 
-/// Used to wrap the construction of a SpriteSheet.
-///
-/// I have some ideas of typing this harder to make sure
-/// you place a tile dimension on it. #CatchThoseMistakes
-///
-/// The struct might also be useless, and we could easily just
-/// give out a SpriteSheet directly.
+/// Wraps the construction of a SpriteSheet.
+//
+// I have some ideas of typing this harder to make sure
+// you place a tile dimension on it. #CatchThoseMistakes
+//
+// The struct might also be useless, and we could easily just
+// give out a SpriteSheet directly.
 #[derive(Clone, Debug)]
 pub struct SpriteSheetBuilder {
     pub image: Vec<u8>,
@@ -89,8 +87,7 @@ impl SpriteSheetBuilder {
     }
 }
 
-/// A light reference to a SpriteSheet that lives on the GPU,
-/// it's practically free to pass around.
+/// A light reference to a SpriteSheet that lives on the GPU.
 #[derive(Clone, Copy, Debug)]
 pub struct SpriteSheet {
     id: usize,
@@ -99,7 +96,7 @@ pub struct SpriteSheet {
 }
 
 impl SpriteSheet {
-    /// Returns the SpriteRegion of a tile, given the specified tile sizes,
+    /// Returns the SpriteRegion of a tile given the specified tile sizes,
     /// starting from the top left.
     pub fn grid(&self, tx: usize, ty: usize) -> SpriteRegion {
         if let Some(tile_dim) = self.tile_dim {
@@ -122,7 +119,7 @@ impl SpriteSheet {
     }
 }
 
-// Helper macro for fast writing of boilerplait code.
+// Helper macro for fast writing of boilerplate code.
 macro_rules! impl_transform {
     (deref, $fn:ident, $op:tt, $( $var:ident : $type:ident => $set:tt ),*) => {
         fn $fn(&mut self, $( $var : $type ),*) -> &mut Self {
@@ -170,8 +167,8 @@ macro_rules! impl_transform_for {
     };
 }
 
-/// Manipulating and moving things around.
-/// They are designed to be chainable.
+/// Manipulate and move things around.
+/// Designed to be chainable.
 pub trait Transform {
     /// The x-component of the position.
     fn x_mut(&mut self) -> &mut f32;
@@ -197,7 +194,6 @@ pub trait Transform {
 
 /// Colorable things are Tint-able!
 pub trait Tint {
-    /// The universal getter and setter.
     fn color_mut(&mut self) -> &mut [f32; 4];
 
     // TODO(ed): Comment on the functions the macro implement?
@@ -215,7 +211,7 @@ pub trait Tint {
 
 /// Type used to simplify some types.
 pub type Tex = Texture<<GL33Surface as GraphicsContext>::Backend, Dim3, NormRGBA8UI>;
-/// A function that renders looks like this.
+/// A function that renders.
 pub type RenderFn = dyn FnMut(
     &[Instance],
     &[FrozenParticles],
@@ -252,8 +248,7 @@ impl Distribution {
     }
 }
 
-/// A lower bound and an upper bound, and then randomly selects values
-/// inbetween.
+/// Takes a lower bound and an upper bound and randomly selects values in-between.
 pub struct RandomProperty {
     pub distribution: Distribution,
     pub range: [f32; 2],
@@ -282,9 +277,10 @@ impl RandomProperty {
     }
 }
 
-/// The real son of a ParticleSystem, contains a lot of
-/// knobs. Particles are rendered only on the GPU so are 'almost'
-/// free.
+/// An actual particle system. Contains a lot of
+/// knobs.
+///
+/// Particles are rendered only on the GPU and as such are 'almost' free.
 #[derive(Default)]
 pub struct ParticleSystem {
     pub time: f32,
@@ -307,7 +303,7 @@ pub struct ParticleSystem {
     // TODO(ed): Options for how this is selected
     /// The angle of the velocity in radians.
     pub v_angle: RandomProperty,
-    /// How fast it should move when it spawns.
+    /// How fast a particle should move when it spawns.
     pub v_magnitude: RandomProperty,
 
     /// What direction to accelerate in.
@@ -315,15 +311,15 @@ pub struct ParticleSystem {
     /// How strong the acceleration is in that direction.
     pub acceleration_magnitude: RandomProperty,
 
-    /// A fake 'air-resistance', lower means less resistance.
+    /// A fake 'air-resistance'. Lower values mean less resistance.
     /// Negative values give energy over time.
     pub drag: RandomProperty,
 
     /// The rotation to spawn with.
     pub angle: RandomProperty,
-    /// How fast the angle should change when it spawns.
+    /// How fast the angle should change when the particle spawns.
     pub angle_velocity: RandomProperty,
-    /// A fake 'energy-loss', lower means less resistance.
+    /// A fake 'energy-loss'. Lower values mean less resistance.
     /// Negative values give energy over time.
     pub angle_drag: RandomProperty,
 
@@ -376,7 +372,7 @@ impl ParticleSystem {
         }
     }
 
-    /// Steps the particle system 1 step forward, removes dead particles.
+    /// Steps the particle system some delta-time forward. Removes dead particles.
     pub fn update(&mut self, delta: f32) {
         self.time += delta;
 
@@ -386,7 +382,7 @@ impl ParticleSystem {
             .collect();
     }
 
-    /// Spawns a new particle with the given metrics.
+    /// Spawns a new particle.
     pub fn spawn(&mut self) {
         let velocity_angle = self.v_angle.sample();
         let velocity_magnitude = self.v_magnitude.sample();
@@ -468,8 +464,7 @@ pub struct FrozenParticles {
     pub particles: Vec<Particle>,
 }
 
-/// From where you see the world, can be moved around
-/// like most [Transform]-able things.
+/// From where you see the world. Can be moved around via [Transform].
 pub struct Camera {
     position: Vector2<f32>,
     scale: Vector2<f32>,
@@ -568,7 +563,7 @@ impl Rect {
     }
 }
 
-/// A rectangle that has a nice image on it!
+/// A rectangle that has a nice image on it.
 #[derive(Clone, Copy, Debug)]
 pub struct Sprite {
     position: Vector2<f32>,
@@ -764,9 +759,9 @@ impl Renderer {
         self.particles.push(system.freeze());
     }
 
-    /// Takes the SpriteSheetBuilder and generates a new SpriteSheet,
-    /// theres a hard limit on the number of SpriteSheets that can be
-    /// added, see [SPRITE_SHEET_SIZE].
+    /// Takes the SpriteSheetBuilder and generates a new SpriteSheet.
+    /// There's a hard limit on the number of SpriteSheets that can be
+    /// added: see [SPRITE_SHEET_SIZE].
     pub fn add_sprite_sheet(&mut self, builder: SpriteSheetBuilder) -> SpriteSheet {
         let id = self.sprite_sheets.len();
         assert!((id as u32) < SPRITE_SHEET_SIZE[2]);

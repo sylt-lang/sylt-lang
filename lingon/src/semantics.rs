@@ -1,5 +1,4 @@
-//! Stuff used internally for rendering, probably
-//! not that interesting.
+//! Stuff used internally for rendering. Probably not that interesting for normal usage.
 
 use luminance::pipeline::TextureBinding;
 use luminance::pixel::NormUnsigned;
@@ -48,7 +47,7 @@ pub enum VertexSemantics {
     PEndColor,
 }
 
-/// What is placed in a simple vertex, only used for the simple Rect.
+/// What is placed in a simple vertex. Only used for the simple Rect.
 /// Used internally.
 #[repr(C)]
 #[derive(Vertex, Copy, Clone, PartialEq, Debug)]
@@ -95,7 +94,7 @@ pub struct Particle {
     pub uv: IUV,
 }
 
-/// Interface for passing uniforms
+/// Interface for passing uniforms.
 /// Used internally.
 #[derive(Debug, UniformInterface)]
 pub struct ShaderInterface {
