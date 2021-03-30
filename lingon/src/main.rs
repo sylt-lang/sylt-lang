@@ -8,6 +8,7 @@ use std::time::Instant;
 //  - Write the API. :)
 
 mod renderer;
+mod input;
 
 fn main() {
     let surface = GL33Surface::build_with(|video| video.window("game", 800, 600))
@@ -48,33 +49,22 @@ fn main_loop(mut surface: GL33Surface) {
 
     let start_t = Instant::now();
 
+    let mut input = input::InputManager::new();
+    input.bind(input::Device::Key(input::Keycode::A), input::Name::Left);
+    input.bind(input::Device::Key(input::Keycode::D), input::Name::Right);
+    input.bind(input::Device::Key(input::Keycode::W), input::Name::Up);
+    input.bind(input::Device::Key(input::Keycode::S), input::Name::Down);
+    input.bind(input::Device::Key(input::Keycode::Escape), input::Name::Quit);
+
     let mut old_t = start_t.elapsed().as_millis() as f32 * 1e-3;
     'app: loop {
         let t = start_t.elapsed().as_millis() as f32 * 1e-3;
         let delta = t - old_t;
         old_t = t;
 
-        for event in surface.sdl().event_pump().unwrap().poll_iter() {
-            use sdl2::event::{Event, WindowEvent};
-            use sdl2::keyboard::Keycode;
-            match event {
-                Event::Quit { .. } => {
-                    break 'app;
-                }
-                Event::Window {
-                    win_event: WindowEvent::Close,
-                    ..
-                } => {
-                    break 'app;
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => {
-                    break 'app;
-                }
-                _ => {}
-            }
+        input.poll(surface.sdl());
+        if input.pressed(input::Name::Quit) {
+            break 'app;
         }
 
         particle_systems.position[0] = t.cos() * 0.5;
@@ -102,6 +92,14 @@ fn main_loop(mut surface: GL33Surface) {
                 .g(t.cos()),
         );
 
+        let mut q = Rect::new();
+        q.at(0.4, 0.4);
+
+        renderer.push(q);
+        renderer.push(q.at(0.4, 0.4));
+        renderer.push(q.scale(0.1, 0.1));
+
+
         let region = sheet.grid([0, 1, 2, 3, 2, 1][((t * 10.0) as usize) % 6], 0);
         for x in -5..5 {
             for y in -5..5 {
@@ -116,9 +114,11 @@ fn main_loop(mut surface: GL33Surface) {
 
         renderer.push_particle_system(&particle_systems);
 
-        renderer.camera
-            .scale(t.sin() + 1.5, t.sin() + 1.5)
-            .at(t.sin(), t.sin());
+        renderer.camera.move_by(
+            (input.value(input::Name::Right) - input.value(input::Name::Left)) * delta,
+            (input.value(input::Name::Up) - input.value(input::Name::Down)) * delta,
+        );
+
 
         if renderer.render(&mut surface).is_err() {
             break 'app;
