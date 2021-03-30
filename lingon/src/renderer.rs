@@ -1,26 +1,25 @@
-//!
-//! The renderer is responsible for putting pixels on your screen.
-//! This renderer is all based around instancing, and sending all
-//! information as buffers. If you didn't understand that sentence,
-//! that's okay, it's perfectly usable without it. But some
-//! things are harder to do, like skewing.
+//! Puts pixels on your screen.
 //!
 //! A basic example:
 //! ```ignore
 //! let mut renderer = Renderer::new(&mut context, sampler);
 //! loop {
-//!     renderer.push(Rect::new()
-//!         .at(0.5, 0.1)
-//!         .angle(0.5)
-//!         .scale(0.1, 2.0)
-//!     );
+//! renderer.push(Rect::new()
+//! .at(0.5, 0.1)
+//! .angle(0.5)
+//! .scale(0.1, 2.0)
+//! );
 //!
-//!     renderer.renderer(&mut context).unwrap();
+//! renderer.renderer(&mut context).unwrap();
 //! }
 //! ```
 //!
 //! Here we instance a Rect, and then place it using some
 //! convenience functions. We then tell the renderer to render it.
+//!
+//! Since the renderer is based around
+//! [instancing](https://www.khronos.org/opengl/wiki/Vertex_Rendering#Instancing),
+//! some things (like skewing) are harder to do.
 
 use cgmath::Vector2;
 use luminance::context::GraphicsContext;
