@@ -396,7 +396,7 @@ impl ParticleSystem {
 
             position: IPosition::new([
                 self.x.sample() + self.position[0],
-                self.y.sample() + self.position[1]
+                self.y.sample() + self.position[1],
             ]),
             velocity: PVelocity::new([
                 velocity_angle.cos() * velocity_magnitude,

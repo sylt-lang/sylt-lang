@@ -2,8 +2,8 @@ use luminance_sdl2::sdl2;
 use sdl2::event::{Event, WindowEvent};
 use std::collections::HashMap;
 
-pub use sdl2::keyboard::Keycode;
 pub use sdl2::controller::{Axis, Button};
+pub use sdl2::keyboard::Keycode;
 pub use sdl2::mouse::MouseButton;
 
 #[derive(Hash, Copy, Clone, Debug, Eq, PartialEq)]
@@ -42,7 +42,6 @@ fn remap(value: i16) -> f32 {
     // this garantees that the values in [-1, 1).
     -(value as f32) / (i16::MIN as f32)
 }
-
 
 const TRIGGER_LIMIT: f32 = 0.1;
 
@@ -125,66 +124,37 @@ impl InputManager {
                 Event::Window {
                     win_event: WindowEvent::Close,
                     ..
-                } => {
-                    (Device::Quit, KeyState::Down(frame))
-                }
-                Event::KeyDown {
-                    keycode,
-                    ..
-                } => {
-                    if keycode.is_some() {
-                        (Device::Key(keycode.unwrap()), KeyState::Down(frame))
+                } => (Device::Quit, KeyState::Down(frame)),
+                Event::KeyDown { keycode, .. } => {
+                    if let Some(keycode) = keycode {
+                        (Device::Key(keycode), KeyState::Down(frame))
                     } else {
                         continue;
                     }
                 }
-                Event::KeyUp {
-                    keycode,
-                    ..
-                } => {
-                    if keycode.is_some() {
-                        (Device::Key(keycode.unwrap()), KeyState::Up(frame))
+                Event::KeyUp { keycode, .. } => {
+                    if let Some(keycode) = keycode {
+                        (Device::Key(keycode), KeyState::Up(frame))
                     } else {
                         continue;
                     }
                 }
                 Event::ControllerAxisMotion {
-                    which,
-                    axis,
-                    value,
-                    ..
-                } => {
-                    (Device::Axis(which, axis), KeyState::Analog(remap(value)))
-                }
-                Event::ControllerButtonDown {
-                    which,
-                    button,
-                    ..
-                } => {
+                    which, axis, value, ..
+                } => (Device::Axis(which, axis), KeyState::Analog(remap(value))),
+                Event::ControllerButtonDown { which, button, .. } => {
                     (Device::Button(which, button), KeyState::Down(frame))
                 }
-                Event::ControllerButtonUp {
-                    which,
-                    button,
-                    ..
-                } => {
+                Event::ControllerButtonUp { which, button, .. } => {
                     (Device::Button(which, button), KeyState::Up(frame))
                 }
-                Event::MouseButtonDown {
-                    mouse_btn,
-                    ..
-                } => {
+                Event::MouseButtonDown { mouse_btn, .. } => {
                     (Device::Mouse(mouse_btn), KeyState::Down(frame))
                 }
-                Event::MouseButtonUp {
-                    mouse_btn,
-                    ..
-                } => {
+                Event::MouseButtonUp { mouse_btn, .. } => {
                     (Device::Mouse(mouse_btn), KeyState::Up(frame))
                 }
-                Event::MouseMotion {
-                    ..
-                } => {
+                Event::MouseMotion { .. } => {
                     // TODO
                     continue;
                 }
@@ -196,6 +166,6 @@ impl InputManager {
             if let Some(slot) = self.physical_inputs.get(&input) {
                 self.virtual_inputs.insert(*slot, down);
             }
-        };
+        }
     }
 }

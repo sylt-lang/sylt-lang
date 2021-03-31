@@ -7,8 +7,8 @@ use std::time::Instant;
 //  - Send texture coordinates
 //  - Write the API. :)
 
-mod renderer;
 mod input;
+mod renderer;
 
 fn main() {
     let surface = GL33Surface::build_with(|video| video.window("game", 800, 600))
@@ -33,15 +33,10 @@ fn main_loop(mut surface: GL33Surface) {
     particle_systems.start_sy = RandomProperty::new(0.01, 0.015);
     particle_systems.end_sx = RandomProperty::new(0.0, 0.0);
     particle_systems.end_sy = RandomProperty::new(0.0, 0.0);
-    particle_systems.v_angle = RandomProperty::new(
-        -std::f32::consts::PI,
-        std::f32::consts::PI,
-    );
+    particle_systems.v_angle = RandomProperty::new(-std::f32::consts::PI, std::f32::consts::PI);
     particle_systems.v_magnitude = RandomProperty::new(-2.0, 2.0);
-    particle_systems.acceleration_angle = RandomProperty::new(
-        -std::f32::consts::PI,
-        std::f32::consts::PI,
-    );
+    particle_systems.acceleration_angle =
+        RandomProperty::new(-std::f32::consts::PI, std::f32::consts::PI);
     particle_systems.acceleration_magnitude = RandomProperty::new(0.2, 0.8);
     particle_systems.angle = RandomProperty::new(-2.0, 2.0);
     particle_systems.angle_velocity = RandomProperty::new(-2.0, 2.0);
@@ -54,7 +49,10 @@ fn main_loop(mut surface: GL33Surface) {
     input.bind(input::Device::Key(input::Keycode::D), input::Name::Right);
     input.bind(input::Device::Key(input::Keycode::W), input::Name::Up);
     input.bind(input::Device::Key(input::Keycode::S), input::Name::Down);
-    input.bind(input::Device::Key(input::Keycode::Escape), input::Name::Quit);
+    input.bind(
+        input::Device::Key(input::Keycode::Escape),
+        input::Name::Quit,
+    );
 
     let mut old_t = start_t.elapsed().as_millis() as f32 * 1e-3;
     'app: loop {
@@ -99,7 +97,6 @@ fn main_loop(mut surface: GL33Surface) {
         renderer.push(q.at(0.4, 0.4));
         renderer.push(q.scale(0.1, 0.1));
 
-
         let region = sheet.grid([0, 1, 2, 3, 2, 1][((t * 10.0) as usize) % 6], 0);
         for x in -5..5 {
             for y in -5..5 {
@@ -118,7 +115,6 @@ fn main_loop(mut surface: GL33Surface) {
             (input.value(input::Name::Right) - input.value(input::Name::Left)) * delta,
             (input.value(input::Name::Up) - input.value(input::Name::Down)) * delta,
         );
-
 
         if renderer.render(&mut surface).is_err() {
             break 'app;
