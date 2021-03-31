@@ -101,23 +101,36 @@ pub enum Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let prompt = "      ";
+        let indent = "      ";
 
         match self {
             Error::RuntimeError { kind, phase, file, line, message } => {
-                let message = match message {
-                    Some(s) => format!("{}{}\n", prompt, s),
-                    None => String::new(),
-                };
-                
-                write!(
-                    f,
-                    "{} {}\n{}\n{}{}",
-                    format!("{} error:", phase).red(),
-                    file_line_display(file, Some(*line)),
-                    kind,
-                    message,
-                    source_line_at(file, Some(*line)).unwrap_or_else(String::new),
+                write!(f, "{}: {}", phase.red(), "error".red())?;
+                write!(f, "{}\n", file_line_display(file, Some(*line)))?;
+                write!(f, "{}{}\n", indent, kind)?;
+
+                if let Some(message) = message {
+                    write!(f, "{}{}\n", indent, message)?;
+                }
+                write!(f, "{}\n",
+                    source_line_at(file, Some(*line)).unwrap_or_else(String::new)
+                )
+            }
+            Error::SyntaxError {
+                file,
+                line,
+                token,
+                message,
+            } => {
+                write!(f, "{}: ", "Syntax error".red())?;
+                write!(f, "{}\n", file_line_display(file, Some(*line)))?;
+                write!(f, "{}Syntax Error on line {} at token {:?}", indent, line, token)?;
+
+                if let Some(message) = message {
+                    write!(f, "{}{}\n", indent, message)?;
+                }
+                write!(f, "{}\n",
+                    source_line_at(file, Some(*line)).unwrap_or_else(String::new)
                 )
             }
             _ => todo!(),
@@ -196,9 +209,6 @@ impl fmt::Display for RuntimeError {
                 write!(f, "Reached unreachable code")
             }
             /*
-            RuntimeError::SyntaxError(line, token) => {
-                write!(f, "Syntax Error on line {} at token {:?}", line, token)
-            }
             RuntimeError::GitConflictError(start_line, end_line) => {
                 write!(
                     f,

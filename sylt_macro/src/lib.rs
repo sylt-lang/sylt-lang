@@ -68,13 +68,13 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
         pub fn #function (
             __values: &[sylt::Value],
             __typecheck: bool
-        ) -> ::std::result::Result<sylt::Value, sylt::error::ErrorKind>
+        ) -> ::std::result::Result<sylt::Value, sylt::error::RuntimeError>
         {
             if __typecheck {
                 #[allow(unused_variables)]
                 match __values {
                     #(#typecheck_blocks),*
-                    _ => Err(sylt::error::ErrorKind::ExternTypeMismatch(
+                    _ => Err(sylt::error::RuntimeError::ExternTypeMismatch(
                         stringify!(#function).to_string(),
                         __values.iter().map(|v| sylt::Type::from(v)).collect()
                     ))
@@ -82,7 +82,7 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
             } else {
                 match __values {
                     #(#eval_blocks),*
-                    _ => Err(sylt::error::ErrorKind::ExternTypeMismatch(
+                    _ => Err(sylt::error::RuntimeError::ExternTypeMismatch(
                         stringify!(#function).to_string(),
                         __values.iter().map(|v| sylt::Type::from(v)).collect()
                     ))

@@ -1,4 +1,4 @@
-use error::Error;
+use error::{Error, RuntimeError};
 use gumdrop::Options;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
@@ -101,7 +101,7 @@ pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
 
 /// A linkable external function. Created either manually or using
 /// [sylt_macro::extern_function].
-pub type RustFunction = fn(&[Value], bool) -> Result<Value, ErrorKind>;
+pub type RustFunction = fn(&[Value], bool) -> Result<Value, RuntimeError>;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Type {
@@ -1244,7 +1244,7 @@ mod tests {
         ($fn:ident, $path:literal, $print:expr, $errs:tt) => {
             #[test]
             fn $fn() {
-                use $crate::error::ErrorKind;
+                use $crate::error::RuntimeError;
                 #[allow(unused_imports)]
                 use $crate::Type;
 
@@ -1266,7 +1266,7 @@ mod tests {
 // The "standard library"
 use crate as sylt;
 
-pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, ErrorKind> {
+pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
     println!(
         "{}: {:?}, {:?}",
         "DBG".purple(),
@@ -1276,7 +1276,7 @@ pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, ErrorKind> {
     Ok(Value::Nil)
 }
 
-pub fn push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> {
+pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
         ([Value::List(ls), v], true) => {
             let ls: &RefCell<_> = ls.borrow();
@@ -1287,7 +1287,7 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> {
             if ls == v {
                 Ok(Value::Nil)
             } else {
-                Err(ErrorKind::TypeMismatch(ls, v))
+                Err(RuntimeError::TypeMismatch(ls, v))
             }
         }
         ([Value::List(ls), v], false) => {
@@ -1296,7 +1296,7 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> {
             ls.borrow_mut().push(v.clone());
             Ok(Value::Nil)
         }
-        (values, _) => Err(ErrorKind::ExternTypeMismatch(
+        (values, _) => Err(RuntimeError::ExternTypeMismatch(
             "push".to_string(),
             values.iter().map(Type::from).collect(),
         )),

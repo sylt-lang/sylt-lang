@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use crate::error::{Error, ErrorKind};
+use crate::error::Error;
 use crate::path_to_module;
 use crate::tokenizer::{file_to_tokens, PlacedToken, Token};
 
@@ -26,12 +26,7 @@ pub fn sectionize(path: &Path) -> Result<Vec<Section>, Vec<Error>> {
     let mut read_files = HashSet::new();
     read_files.insert(path.to_path_buf());
     let tokens = file_to_tokens(path).map_err(|_| {
-        vec![Error::CompileError {
-            kind: ErrorKind::FileNotFound(path.to_path_buf()),
-            file: path.to_path_buf(),
-            line: None,
-            message: None,
-        }]
+        vec![Error::FileNotFound(path.to_path_buf())]
     })?;
     let mut all_tokens = vec![(path.to_path_buf(), tokens)];
     let mut sections = Vec::new();
@@ -59,7 +54,7 @@ pub fn sectionize(path: &Path) -> Result<Vec<Section>, Vec<Error>> {
                 (
                     Some((Token::Use, _)),
                     Some((Token::Identifier(file), _)),
-                    Some((Token::Newline, line)),
+                    Some((Token::Newline, _line)),
                 ) => {
                     let use_file = path_to_module(&path, file);
                     if !read_files.contains(&use_file) {
@@ -67,12 +62,9 @@ pub fn sectionize(path: &Path) -> Result<Vec<Section>, Vec<Error>> {
                         match file_to_tokens(&use_file) {
                             Ok(tokens) => all_tokens.push((use_file, tokens)),
                             Err(_) => {
-                                errors.push(Error::CompileError {
-                                    kind: ErrorKind::FileNotFound(use_file),
-                                    file: path.to_path_buf(),
-                                    line: Some(*line),
-                                    message: None,
-                                });
+                                // TODO(ed): We discard line and current file
+                                // error info here, might be usefull!
+                                errors.push(Error::FileNotFound(use_file))
                             }
                         }
                     }

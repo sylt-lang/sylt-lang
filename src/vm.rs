@@ -4,7 +4,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt::Debug;
 use std::rc::Rc;
 
-use crate::error::{Error, RuntimeError};
+use crate::error::{Error, RuntimeError, RuntimePhase};
 use crate::{op, Block, BlockLinkState, IterFn, Op, Prog, RustFunction, Type, UpValue, Value};
 
 macro_rules! error {
@@ -195,7 +195,7 @@ impl VM {
         self.print_stacktrace();
         Error::RuntimeError {
             kind,
-            phase: self.phase,
+            phase: if self.runtime { RuntimePhase::Runtime } else { RuntimePhase::Typecheck },
             file: frame.block.borrow().file.clone(),
             line: frame.block.borrow().line(frame.ip),
             message,
