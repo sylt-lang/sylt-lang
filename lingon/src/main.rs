@@ -53,6 +53,7 @@ fn main_loop(mut surface: GL33Surface) {
         input::Device::Key(input::Keycode::Escape),
         input::Name::Quit,
     );
+    input.bind(input::Device::Quit, input::Name::Quit);
 
     let mut old_t = start_t.elapsed().as_millis() as f32 * 1e-3;
     'app: loop {
