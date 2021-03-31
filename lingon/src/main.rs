@@ -1,13 +1,8 @@
-// use glfw::{Action, Context as _, Key, WindowEvent};
 use luminance_sdl2::{sdl2, GL33Surface};
 use std::time::Instant;
 
-// TODO(ed):
-//  - Upload textures
-//  - Send texture coordinates
-//  - Write the API. :)
-
 mod renderer;
+mod semantics;
 
 fn main() {
     let surface = GL33Surface::build_with(|video| video.window("game", 800, 600))
@@ -32,15 +27,10 @@ fn main_loop(mut surface: GL33Surface) {
     particle_systems.start_sy = RandomProperty::new(0.01, 0.015);
     particle_systems.end_sx = RandomProperty::new(0.0, 0.0);
     particle_systems.end_sy = RandomProperty::new(0.0, 0.0);
-    particle_systems.v_angle = RandomProperty::new(
-        -std::f32::consts::PI,
-        std::f32::consts::PI,
-    );
+    particle_systems.v_angle = RandomProperty::new(-std::f32::consts::PI, std::f32::consts::PI);
     particle_systems.v_magnitude = RandomProperty::new(-2.0, 2.0);
-    particle_systems.acceleration_angle = RandomProperty::new(
-        -std::f32::consts::PI,
-        std::f32::consts::PI,
-    );
+    particle_systems.acceleration_angle =
+        RandomProperty::new(-std::f32::consts::PI, std::f32::consts::PI);
     particle_systems.acceleration_magnitude = RandomProperty::new(0.2, 0.8);
     particle_systems.angle = RandomProperty::new(-2.0, 2.0);
     particle_systems.angle_velocity = RandomProperty::new(-2.0, 2.0);
@@ -114,11 +104,22 @@ fn main_loop(mut surface: GL33Surface) {
             }
         }
 
+        const NUM_BUCKETS: usize = 100;
+        let mut buckets = [0; NUM_BUCKETS];
+        for _ in 0..10000 {
+            let sample = Distribution::Square.sample();
+            buckets[(sample * (NUM_BUCKETS as f32)) as usize] += 1;
+        }
+
+        for (i, v) in buckets.iter().enumerate() {
+            let w = 1.0 / (NUM_BUCKETS as f32);
+            let h = (*v as f32) * w * 0.1;
+            renderer.push(Rect::new().scale(w, h).at((i as f32) * w, h / 2.0));
+        }
+
         renderer.push_particle_system(&particle_systems);
 
-        renderer.camera
-            .scale(t.sin() + 1.5, t.sin() + 1.5)
-            .at(t.sin(), t.sin());
+        renderer.camera.at(-0.5, -0.5);
 
         if renderer.render(&mut surface).is_err() {
             break 'app;
