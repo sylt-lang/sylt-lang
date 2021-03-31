@@ -4,13 +4,13 @@
 //! ```ignore
 //! let mut renderer = Renderer::new(&mut context, sampler);
 //! loop {
-//! renderer.push(Rect::new()
-//! .at(0.5, 0.1)
-//! .angle(0.5)
-//! .scale(0.1, 2.0)
-//! );
+//!     renderer.push(Rect::new()
+//!         .at(0.5, 0.1)
+//!         .angle(0.5)
+//!         .scale(0.1, 2.0)
+//!     );
 //!
-//! renderer.renderer(&mut context).unwrap();
+//!     renderer.renderer(&mut context).unwrap();
 //! }
 //! ```
 //!
