@@ -4,4 +4,4 @@ start :: fn {
     a
 }
 
-// errors: [ErrorKind::TypeMismatch(Type::Int, Type::Float)]
+// error: #TypeMismatch(Type::Int, Type::Float)

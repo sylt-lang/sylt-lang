@@ -2,4 +2,4 @@ start :: fn {
     <!>
 }
 
-// errors: [ErrorKind::Unreachable]
+// error: #Unreachable

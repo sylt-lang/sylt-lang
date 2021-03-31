@@ -5,4 +5,4 @@ start :: fn {
     a <=> b + 1
 }
 
-// errors: [ErrorKind::SyntaxError(1, _)]
+// errors: @1

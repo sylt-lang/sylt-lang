@@ -13,4 +13,5 @@ start :: fn {
     }
 }
 
-// errors: [ErrorKind::TypeError(_, _), ErrorKind::TypeError(_, _)]
+// error: #TypeError(_, _)
+// error: #TypeError(_, _)

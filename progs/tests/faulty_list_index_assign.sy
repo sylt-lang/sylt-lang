@@ -10,4 +10,5 @@ start :: fn {
     q.a[0] = "fail"
 }
 
-// errors: [ErrorKind::TypeMismatch(Type::Int, Type::String), ErrorKind::TypeMismatch(Type::Int, Type::String)]
+// error: #TypeMismatch(Type::Int, Type::String)
+// error: #TypeMismatch(Type::Int, Type::String)
