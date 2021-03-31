@@ -177,9 +177,20 @@ impl Default for TestSettings {
 fn parse_test_settings(contents: String) -> TestSettings {
     let mut settings = TestSettings::default();
 
+    let mut errors = Vec::new();
     for line in contents.split("\n") {
-        if line.starts_with("// errors: ") {
-            settings.errors = Some(line.strip_prefix("// errors: ").unwrap().to_string());
+        if line.starts_with("// error: ") {
+            let mut line = line
+                .strip_prefix("// error: ")
+                .unwrap()
+                .to_string();
+            if line.starts_with("#") {
+                line = format!("Error::RuntimeError {{ kind: RuntimeError::{}, .. }}", &line[1..]);
+            }
+            if line.starts_with("@") {
+                line = format!("Error::SyntaxError {{ line: {}, .. }}", &line[1..]);
+            }
+            errors.push(line);
         } else if line.starts_with("// flags: ") {
             for flag in line.split(" ").skip(2) {
                 match flag {
@@ -192,6 +203,10 @@ fn parse_test_settings(contents: String) -> TestSettings {
                 }
             }
         }
+    }
+
+    if !errors.is_empty() {
+        settings.errors = Some(format!("[ {} ]", errors.join(", ")));
     }
 
     settings

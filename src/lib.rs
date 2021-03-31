@@ -1156,13 +1156,11 @@ pub struct Prog {
     pub strings: Vec<String>,
 }
 
-// errors: [ CompileError: SyntaxError(_, _) ]
-
 #[cfg(test)]
 mod tests {
     #[macro_export]
     macro_rules! assert_errs {
-        ($result:expr, [ $( $type:pat : $kind:pat ),* ]) => {
+        ($result:expr, $expect:pat) => {
             let errs = if let Err(errs) = $result {
                 errs
             } else {
@@ -1170,25 +1168,15 @@ mod tests {
                 unreachable!();
             };
 
-            if !matches!(
-                errs.as_slice(),
-                &[$($type {
-                    kind: $kind,
-                    file: _,
-                    line: _,
-                    message: _,
-                },
-                )*]
-            ) {
+            use $crate::error::Error;
+            if !matches!(errs.as_slice(), $expect) {
                 eprintln!("Unexpected errors");
                 eprint!("    Got:  [");
                 for err in errs {
                     eprint!(" {:?} ", err);
                 }
                 eprint!("]\n    Want: [");
-                $(
-                eprint!(" {} {{ kind: {} }} ", stringify!($type), stringify!($kind));
-                )*
+                eprint!(" {} ", stringify!($expect));
                 eprintln!("]");
                 assert!(false);
             }
@@ -1234,11 +1222,16 @@ mod tests {
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
                 args.verbosity = if $print { 1 } else { 0 };
-                $crate::run_file(
+                if let Err(errs) = $crate::run_file(
                     &args,
                     sylt_macro::link!(crate::dbg as dbg, crate::push as push, crate::len as len,),
-                )
-                .unwrap();
+                ) {
+                    eprintln!("errs: {:#?}", errs);
+                    for e in errs {
+                        eprintln!("{}", e);
+                    }
+                    panic!("Program failed");
+                }
             }
         };
         ($fn:ident, $path:literal, $print:expr, $errs:tt) => {
