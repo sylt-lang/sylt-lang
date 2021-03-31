@@ -105,12 +105,12 @@ impl fmt::Display for Error {
 
         match self {
             Error::RuntimeError { kind, phase, file, line, message } => {
-                write!(f, "{}: {}", phase.red(), "error".red())?;
+                write!(f, "{} {}: ", phase.red(), "error".red())?;
                 write!(f, "{}\n", file_line_display(file, Some(*line)))?;
                 write!(f, "{}{}\n", indent, kind)?;
 
                 if let Some(message) = message {
-                    write!(f, "{}{}\n", indent, message)?;
+                    write!(f, "{}\n", message)?;
                 }
                 write!(f, "{}\n",
                     source_line_at(file, Some(*line)).unwrap_or_else(String::new)
@@ -122,9 +122,9 @@ impl fmt::Display for Error {
                 token,
                 message,
             } => {
-                write!(f, "{}: ", "Syntax error".red())?;
+                write!(f, "{}: ", "syntax error".red())?;
                 write!(f, "{}\n", file_line_display(file, Some(*line)))?;
-                write!(f, "{}Syntax Error on line {} at token {:?}", indent, line, token)?;
+                write!(f, "{}Syntax Error on line {} at token {:?}\n", indent, line, token)?;
 
                 if let Some(message) = message {
                     write!(f, "{}{}\n", indent, message)?;
@@ -133,7 +133,33 @@ impl fmt::Display for Error {
                     source_line_at(file, Some(*line)).unwrap_or_else(String::new)
                 )
             }
-            _ => todo!(),
+            Error::GitConflictError {
+                file,
+                start,
+                end,
+            } => {
+                write!(f, "{}: ", "git conflict error".red())?;
+                write!(f, "{}\n", file_line_display(file, Some(*start)))?;
+
+                write!(f,
+                    "{}Git conflict markers found between lines {} and {}\n",
+                    indent, start, end)?;
+
+                write!(f, "{}   ---{}",
+                    source_line_at(file, Some(*start + 1))
+                    .unwrap_or_else(String::new),
+                    source_line_at(file, Some(*end + 1))
+                    .unwrap_or_else(String::new))
+            }
+            Error::FileNotFound(path) => {
+                write!(f, "File '{}' not found", path.display())
+            }
+            Error::NoFileGiven => {
+                write!(f, "No file to run")
+            }
+            Error::BincodeError => {
+                write!(f, "Failed to serialize or deserialize")
+            }
         }
     }
 }
@@ -209,19 +235,6 @@ impl fmt::Display for RuntimeError {
                 write!(f, "Reached unreachable code")
             }
             /*
-            RuntimeError::GitConflictError(start_line, end_line) => {
-                write!(
-                    f,
-                    "Git conflict markers found between lines {} and {}",
-                    start_line, end_line
-                )
-            }
-            RuntimeError::FileNotFound(path) => {
-                write!(f, "File '{}' not found", path.display())
-            }
-            RuntimeError::NoFileGiven => {
-                write!(f, "No file to run")
-            }
             */
         }
     }
