@@ -234,8 +234,6 @@ impl fmt::Display for RuntimeError {
             RuntimeError::Unreachable => {
                 write!(f, "Reached unreachable code")
             }
-            /*
-            */
         }
     }
 }
