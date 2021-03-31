@@ -1,14 +1,9 @@
-// use glfw::{Action, Context as _, Key, WindowEvent};
 use luminance_sdl2::{sdl2, GL33Surface};
 use std::time::Instant;
 
-// TODO(ed):
-//  - Upload textures
-//  - Send texture coordinates
-//  - Write the API. :)
-
 mod input;
 mod renderer;
+mod semantics;
 
 fn main() {
     let surface = GL33Surface::build_with(|video| video.window("game", 800, 600))
@@ -73,31 +68,6 @@ fn main_loop(mut surface: GL33Surface) {
         }
         particle_systems.update(delta);
 
-        renderer.push(
-            Rect::new()
-                .scale(0.3, 0.3)
-                .at(-0.3, 0.0)
-                .angle(t)
-                .r(t.sin())
-                .g(t.sin()),
-        );
-
-        renderer.push(
-            Rect::new()
-                .scale(0.2, 0.2)
-                .at(0.3, 0.0)
-                .angle(t)
-                .r(t.cos())
-                .g(t.cos()),
-        );
-
-        let mut q = Rect::new();
-        q.at(0.4, 0.4);
-
-        renderer.push(q);
-        renderer.push(q.at(0.4, 0.4));
-        renderer.push(q.scale(0.1, 0.1));
-
         let region = sheet.grid([0, 1, 2, 3, 2, 1][((t * 10.0) as usize) % 6], 0);
         for x in -5..5 {
             for y in -5..5 {
@@ -108,6 +78,19 @@ fn main_loop(mut surface: GL33Surface) {
                         .angle(t),
                 );
             }
+        }
+
+        const NUM_BUCKETS: usize = 100;
+        let mut buckets = [0; NUM_BUCKETS];
+        for _ in 0..10000 {
+            let sample = Distribution::Square.sample();
+            buckets[(sample * (NUM_BUCKETS as f32)) as usize] += 1;
+        }
+
+        for (i, v) in buckets.iter().enumerate() {
+            let w = 1.0 / (NUM_BUCKETS as f32);
+            let h = (*v as f32) * w * 0.1;
+            renderer.push(Rect::new().scale(w, h).at((i as f32) * w, h / 2.0));
         }
 
         renderer.push_particle_system(&particle_systems);

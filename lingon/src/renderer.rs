@@ -1,112 +1,50 @@
+//! Puts pixels on your screen.
+//!
+//! A basic example:
+//! ```ignore
+//! let mut renderer = Renderer::new(&mut context, sampler);
+//! loop {
+//!     renderer.push(Rect::new()
+//!         .at(0.5, 0.1)
+//!         .angle(0.5)
+//!         .scale(0.1, 2.0)
+//!     );
+//!
+//!     renderer.renderer(&mut context).unwrap();
+//! }
+//! ```
+//!
+//! Here we instance a Rect, and then place it using some
+//! convenience functions. We then tell the renderer to render it.
+//!
+//! Since the renderer is based around
+//! [instancing](https://www.khronos.org/opengl/wiki/Vertex_Rendering#Instancing),
+//! some things (like skewing) are harder to do.
+
 use cgmath::Vector2;
 use luminance::context::GraphicsContext;
-use luminance::pipeline::{PipelineState, TextureBinding};
-use luminance::pixel::{NormRGBA8UI, NormUnsigned};
+use luminance::pipeline::PipelineState;
+use luminance::pixel::NormRGBA8UI;
 use luminance::render_state::RenderState;
-use luminance::shader::Uniform;
 use luminance::tess::Mode;
 use luminance::texture::{Dim3, GenMipmaps, Sampler, Texture};
-use luminance_derive::{Semantics, UniformInterface, Vertex};
 use luminance_sdl2::GL33Surface;
 use rand::prelude::*;
 
-#[derive(Debug, UniformInterface)]
-pub struct ShaderInterface {
-    #[uniform(unbound)]
-    t: Uniform<f32>,
+// Me no likey, but at least it's not documented.
+use crate::semantics::*;
 
-    view: Uniform<[[f32; 4]; 4]>,
-
-    tex: Uniform<TextureBinding<Dim3, NormUnsigned>>,
-}
-
-#[derive(Copy, Clone, Debug, Semantics)]
-pub enum VertexSemantics {
-    #[sem(name = "co", repr = "[f32; 2]", wrapper = "VPosition")]
-    VPosition,
-
-    #[sem(name = "position", repr = "[f32; 2]", wrapper = "IPosition")]
-    IPosition,
-    #[sem(name = "rotation", repr = "f32", wrapper = "IRotation")]
-    IRotation,
-    #[sem(name = "scale", repr = "[f32; 2]", wrapper = "IScale")]
-    IScale,
-    #[sem(name = "color", repr = "[f32; 4]", wrapper = "IColor")]
-    IColor,
-    #[sem(name = "sheet", repr = "f32", wrapper = "ISheet")]
-    ISheet,
-    #[sem(name = "uv", repr = "[f32; 4]", wrapper = "IUV")]
-    IUV,
-
-    #[sem(name = "spawn", repr = "f32", wrapper = "PSpawn")]
-    PSpawn,
-    #[sem(name = "lifetime", repr = "f32", wrapper = "PLifetime")]
-    PLifetime,
-    #[sem(name = "velocity", repr = "[f32; 2]", wrapper = "PVelocity")]
-    PVelocity,
-    #[sem(name = "acceleration", repr = "[f32; 2]", wrapper = "PAcceleration")]
-    PAcceleration,
-    #[sem(name = "drag", repr = "f32", wrapper = "PDrag")]
-    PDrag,
-
-    #[sem(name = "angle_info", repr = "[f32; 3]", wrapper = "PAngleInfo")]
-    PAngleInfo,
-
-    #[sem(name = "scale_extrems", repr = "[f32; 4]", wrapper = "PScaleExtrems")]
-    PScaleExtrems,
-
-    #[sem(name = "start_color", repr = "[f32; 4]", wrapper = "PStartColor")]
-    PStartColor,
-    #[sem(name = "end_color", repr = "[f32; 4]", wrapper = "PEndColor")]
-    PEndColor,
-}
-
-#[repr(C)]
-#[derive(Vertex, Copy, Clone, PartialEq, Debug)]
-#[vertex(sem = "VertexSemantics")]
-pub struct Vertex {
-    pub position: VPosition,
-}
-
-#[repr(C)]
-#[derive(Vertex, Copy, Clone, PartialEq, Debug)]
-#[vertex(sem = "VertexSemantics", instanced = "true")]
-pub struct Instance {
-    pub position: IPosition,
-    pub rotation: IRotation,
-    pub scale: IScale,
-    pub color: IColor,
-    pub sheet: ISheet,
-    pub uv: IUV,
-}
-
-#[repr(C)]
-#[derive(Vertex, Copy, Clone, PartialEq)]
-#[vertex(sem = "VertexSemantics", instanced = "true")]
-pub struct Particle {
-    pub spawn: PSpawn,
-    pub lifetime: PLifetime,
-    pub position: IPosition,
-    pub velocity: PVelocity,
-    pub acceleration: PAcceleration,
-    pub drag: PDrag,
-
-    pub angle_info: PAngleInfo,
-
-    pub scale_extrems: PScaleExtrems,
-
-    pub start_color: PStartColor,
-    pub end_color: PEndColor,
-
-    pub sheet: ISheet,
-    pub uv: IUV,
-}
-
+/// Vertex shader source code.
 const VS_STR: &str = include_str!("vs.glsl");
+/// Fragment shader source code.
 const FS_STR: &str = include_str!("fs.glsl");
+/// Particle vertex shader source code.
 const VS_PARTICLE_STR: &str = include_str!("vs_particle.glsl");
+/// The maximum size of a sprite sheet, and the maximum number of
+/// sprite sheets.
 const SPRITE_SHEET_SIZE: [u32; 3] = [512, 512, 512];
 
+/// A simple rectangle for rendering sprites and the like.
 const RECT: [Vertex; 6] = [
     Vertex::new(VPosition::new([-0.5, -0.5])),
     Vertex::new(VPosition::new([0.5, -0.5])),
@@ -116,15 +54,25 @@ const RECT: [Vertex; 6] = [
     Vertex::new(VPosition::new([-0.5, -0.5])),
 ];
 
+/// Wraps the construction of a SpriteSheet.
+//
+// I have some ideas of typing this harder to make sure
+// you place a tile dimension on it. #CatchThoseMistakes
+//
+// The struct might also be useless, and we could easily just
+// give out a SpriteSheet directly.
 #[derive(Clone, Debug)]
 pub struct SpriteSheetBuilder {
     pub image: Vec<u8>,
-    pub image_dim: (usize, usize),
-    pub tile_dim: Option<(usize, usize)>,
+    pub image_dim: (Pixels, Pixels),
+    pub tile_dim: Option<(Pixels, Pixels)>,
 }
 
+/// A marker type for the unit pixels.
+pub type Pixels = usize;
+
 impl SpriteSheetBuilder {
-    pub fn new(width: usize, height: usize, image: Vec<u8>) -> Self {
+    pub fn new(width: Pixels, height: Pixels, image: Vec<u8>) -> Self {
         Self {
             image,
             image_dim: (width, height),
@@ -132,20 +80,23 @@ impl SpriteSheetBuilder {
         }
     }
 
-    pub fn tile_size(mut self, tile_width: usize, tile_height: usize) -> Self {
+    pub fn tile_size(mut self, tile_width: Pixels, tile_height: Pixels) -> Self {
         self.tile_dim = Some((tile_width, tile_height));
         self
     }
 }
 
+/// A light reference to a SpriteSheet that lives on the GPU.
 #[derive(Clone, Copy, Debug)]
 pub struct SpriteSheet {
     id: usize,
-    image_dim: (usize, usize),
-    tile_dim: Option<(usize, usize)>,
+    image_dim: (Pixels, Pixels),
+    tile_dim: Option<(Pixels, Pixels)>,
 }
 
 impl SpriteSheet {
+    /// Returns the SpriteRegion of a tile given the specified tile sizes,
+    /// starting from the top left.
     pub fn grid(&self, tx: usize, ty: usize) -> SpriteRegion {
         if let Some(tile_dim) = self.tile_dim {
             let xlo = ((tile_dim.0 * tx) as f32) / (SPRITE_SHEET_SIZE[0] as f32);
@@ -157,11 +108,17 @@ impl SpriteSheet {
                 [xlo, ylo, xlo + w, ylo + h],
             )
         } else {
+            // TODO(ed): We could potentially catch this as a type error
+            // using the SpriteSheet as an enum?
+            // TODO(ed):
+            // We could also find grid slices that are out of bounds,
+            // if we checked the image dimension.
             panic!();
         }
     }
 }
 
+// Helper macro for fast writing of boilerplate code.
 macro_rules! impl_transform {
     (deref, $fn:ident, $op:tt, $( $var:ident : $type:ident => $set:tt ),*) => {
         fn $fn(&mut self, $( $var : $type ),*) -> &mut Self {
@@ -182,6 +139,8 @@ macro_rules! impl_transform {
     };
 }
 
+// A fast and hacky way to implement the Transform trait when
+// the fields are named the same. Maybe make it a bit more robust?
 macro_rules! impl_transform_for {
     ($ty:ident) => {
         impl Transform for $ty {
@@ -207,15 +166,23 @@ macro_rules! impl_transform_for {
     };
 }
 
+/// Manipulate and move things around.
+/// Designed to be chainable.
 pub trait Transform {
+    /// The x-component of the position.
     fn x_mut(&mut self) -> &mut f32;
+    /// The y-component of the position.
     fn y_mut(&mut self) -> &mut f32;
 
+    /// The x-component of the scale.
     fn sx_mut(&mut self) -> &mut f32;
+    /// The y-component of the scale.
     fn sy_mut(&mut self) -> &mut f32;
 
+    /// The rotation.
     fn r_mut(&mut self) -> &mut f32;
 
+    // TODO(ed): Comment on the functions the macro implement?
     impl_transform!(deref, move_by,  +=, x:  f32 => x_mut,         y:  f32 => y_mut);
     impl_transform!(deref, at,       =,  x:  f32 => x_mut,         y:  f32 => y_mut);
     impl_transform!(deref, angle,    =,  r:  f32 => r_mut);
@@ -224,9 +191,11 @@ pub trait Transform {
     impl_transform!(deref, scale,     =, sx: f32 => sx_mut,        sy: f32 => sy_mut);
 }
 
+/// Colorable things are Tint-able!
 pub trait Tint {
     fn color_mut(&mut self) -> &mut [f32; 4];
 
+    // TODO(ed): Comment on the functions the macro implement?
     impl_transform!(arr, rgb,  =,  r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2]);
     impl_transform!(arr, rgba, *=, r:  f32 => color_mut[0],  g:  f32 => color_mut[1], b: f32 => color_mut[2], a: f32 => color_mut[3]);
     impl_transform!(arr, r,    *=, r:  f32 => color_mut[0]);
@@ -239,7 +208,9 @@ pub trait Tint {
     }
 }
 
+/// Type used to simplify some types.
 pub type Tex = Texture<<GL33Surface as GraphicsContext>::Backend, Dim3, NormRGBA8UI>;
+/// A function that renders.
 pub type RenderFn = dyn FnMut(
     &[Instance],
     &[FrozenParticles],
@@ -248,33 +219,40 @@ pub type RenderFn = dyn FnMut(
     &mut GL33Surface,
 ) -> Result<(), ()>;
 
+/// A way to handle random variables.
 pub enum Distribution {
+    /// Always returns 0.
+    NoDice,
+    /// All values are equally likely, no bias.
     Uniform,
+    /// The fun name for Uniform.
+    Die,
+    /// Biased towards 0.5. Looks like a triangle.
     TwoDice,
+    /// Biased towards 0.5. Looks like a bellcurve.
     ThreeDice,
-    Product,
-    Edges,
+    /// Biased towards 0. Looks like 1/x.
+    Square,
 }
 
 impl Distribution {
+    /// Returns a random value from the given distribution.
     pub fn sample(&self) -> f32 {
         let mut rng = rand::thread_rng();
 
         match self {
-            Distribution::Uniform => rng.gen::<f32>(),
+            Distribution::NoDice => 0.0,
+            Distribution::Uniform | Distribution::Die => rng.gen::<f32>(),
             Distribution::TwoDice => (rng.gen::<f32>() + rng.gen::<f32>()) / 2.0,
             Distribution::ThreeDice => {
                 (rng.gen::<f32>() + rng.gen::<f32>() + rng.gen::<f32>()) / 3.0
             }
-            Distribution::Product => rng.gen::<f32>() * rng.gen::<f32>(),
-            Distribution::Edges => {
-                let a = rng.gen::<f32>() - 0.5;
-                a * a * 4.0
-            }
+            Distribution::Square => rng.gen::<f32>() * rng.gen::<f32>(),
         }
     }
 }
 
+/// Takes a lower bound and an upper bound and randomly selects values in-between.
 pub struct RandomProperty {
     pub distribution: Distribution,
     pub range: [f32; 2],
@@ -297,11 +275,16 @@ impl RandomProperty {
         }
     }
 
+    /// Samples a random value in the given range.
     pub fn sample(&self) -> f32 {
         self.range[0] + (self.range[1] - self.range[0]) * self.distribution.sample()
     }
 }
 
+/// An actual particle system. Contains a lot of
+/// knobs.
+///
+/// Particles are rendered only on the GPU and as such are 'almost' free.
 #[derive(Default)]
 pub struct ParticleSystem {
     pub time: f32,
@@ -313,38 +296,63 @@ pub struct ParticleSystem {
 
     pub sprites: Vec<SpriteRegion>,
 
+    /// Allowed x-coordinates to spawn on, relative to 'position'.
     pub x: RandomProperty,
+    /// Allowed y-coordinates to spawn on, relative to 'position'.
     pub y: RandomProperty,
 
+    /// How long, in seconds, the particle should live.
     pub lifetime: RandomProperty,
 
     // TODO(ed): Options for how this is selected
+    /// The angle of the velocity in radians.
     pub v_angle: RandomProperty,
+    /// How fast a particle should move when it spawns.
     pub v_magnitude: RandomProperty,
 
+    /// What direction to accelerate in.
     pub acceleration_angle: RandomProperty,
+    /// How strong the acceleration is in that direction.
     pub acceleration_magnitude: RandomProperty,
 
+    /// A fake 'air-resistance'. Lower values mean less resistance.
+    /// Negative values give energy over time.
     pub drag: RandomProperty,
 
+    /// The rotation to spawn with.
     pub angle: RandomProperty,
+    /// How fast the angle should change when the particle spawns.
     pub angle_velocity: RandomProperty,
+    /// A fake 'energy-loss'. Lower values mean less resistance.
+    /// Negative values give energy over time.
     pub angle_drag: RandomProperty,
 
+    /// How large the particle should be in X when it starts.
     pub start_sx: RandomProperty,
+    /// How large the particle should be in Y when it starts.
     pub start_sy: RandomProperty,
 
+    /// How large the particle should be in X when it dies.
     pub end_sx: RandomProperty,
+    /// How large the particle should be in Y when it dies.
     pub end_sy: RandomProperty,
 
+    /// How red the particle should be when it spawns.
     pub start_red: RandomProperty,
+    /// How green the particle should be when it spawns.
     pub start_green: RandomProperty,
+    /// How blue the particle should be when it spawns.
     pub start_blue: RandomProperty,
+    /// How transparent the particle should be when it spawns.
     pub start_alpha: RandomProperty,
 
+    /// How red the particle should be when it dies.
     pub end_red: RandomProperty,
+    /// How green the particle should be when it dies.
     pub end_green: RandomProperty,
+    /// How blue the particle should be when it dies.
     pub end_blue: RandomProperty,
+    /// How transparent the particle should be when it dies.
     pub end_alpha: RandomProperty,
 }
 
@@ -368,6 +376,7 @@ impl ParticleSystem {
         }
     }
 
+    /// Steps the particle system some delta-time forward. Removes dead particles.
     pub fn update(&mut self, delta: f32) {
         self.time += delta;
 
@@ -377,6 +386,7 @@ impl ParticleSystem {
             .collect();
     }
 
+    /// Spawns a new particle.
     pub fn spawn(&mut self) {
         let velocity_angle = self.v_angle.sample();
         let velocity_magnitude = self.v_magnitude.sample();
@@ -439,7 +449,9 @@ impl ParticleSystem {
         });
     }
 
+    /// Copies out the rendering information.
     pub fn freeze(&self) -> FrozenParticles {
+        // TODO(ed): Can we get rid of this clone?
         FrozenParticles {
             position: self.position,
             time: self.time,
@@ -448,12 +460,15 @@ impl ParticleSystem {
     }
 }
 
+/// A particle system that can be rendered.
+/// Used internally.
 pub struct FrozenParticles {
     pub position: [f32; 2],
     pub time: f32,
     pub particles: Vec<Particle>,
 }
 
+/// From where you see the world. Can be moved around via [Transform].
 pub struct Camera {
     position: Vector2<f32>,
     scale: Vector2<f32>,
@@ -471,6 +486,7 @@ impl Camera {
         }
     }
 
+    /// Converts the camera to a matrix for sending to the GPU.
     pub fn matrix(&self) -> cgmath::Matrix4<f32> {
         use cgmath::{Matrix4, Rad, Vector3};
         let scale = Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, 0.0);
@@ -481,6 +497,7 @@ impl Camera {
     }
 }
 
+/// A big struct holding all the rendering state.
 pub struct Renderer {
     pub camera: Camera,
     pub render_fn: Box<RenderFn>,
@@ -490,10 +507,12 @@ pub struct Renderer {
     pub sprite_sheets: Vec<SpriteSheet>,
 }
 
+/// If something can be rendered, it has to be Stamp.
 pub trait Stamp {
     fn stamp(self) -> Instance;
 }
 
+/// A rectangle that can be rendered to the screen.
 #[derive(Clone, Copy, Debug)]
 pub struct Rect {
     position: Vector2<f32>,
@@ -548,6 +567,7 @@ impl Rect {
     }
 }
 
+/// A rectangle that has a nice image on it.
 #[derive(Clone, Copy, Debug)]
 pub struct Sprite {
     position: Vector2<f32>,
@@ -591,6 +611,7 @@ impl Stamp for &mut Sprite {
     }
 }
 
+/// A piece of a SpriteSheet to render.
 type SpriteRegion = (f32, [f32; 4]);
 
 #[allow(dead_code)]
@@ -607,6 +628,9 @@ impl Sprite {
     }
 }
 
+// TODO(ed): This should return an image type, so we can separate bytes
+// from an image.
+/// A fast and easy way to convert bytes to an image.
 pub fn load_image_from_memory(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     // SAFETY: stbi either succeeds or returns a null pointer
     let mut w: i32 = 0;
@@ -729,18 +753,19 @@ impl Renderer {
         }
     }
 
-    pub fn push_instance(&mut self, instance: Instance) {
-        self.instances.push(instance);
-    }
-
+    /// Queues the stamp for rendering.
     pub fn push<T: Stamp>(&mut self, stamp: T) {
-        self.push_instance(stamp.stamp());
+        self.instances.push(stamp.stamp());
     }
 
+    /// Queues the particle_systems for rendering.
     pub fn push_particle_system(&mut self, system: &ParticleSystem) {
         self.particles.push(system.freeze());
     }
 
+    /// Takes the SpriteSheetBuilder and generates a new SpriteSheet.
+    /// There's a hard limit on the number of SpriteSheets that can be
+    /// added: see [SPRITE_SHEET_SIZE].
     pub fn add_sprite_sheet(&mut self, builder: SpriteSheetBuilder) -> SpriteSheet {
         let id = self.sprite_sheets.len();
         assert!((id as u32) < SPRITE_SHEET_SIZE[2]);
