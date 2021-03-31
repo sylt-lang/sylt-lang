@@ -67,12 +67,7 @@ fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, 
     let path = match &args.file {
         Some(file) => file,
         None => {
-            return Err(vec![Error::CompileError {
-                kind: ErrorKind::NoFileGiven,
-                file: None,
-                line: None,
-                message: None,
-            }]);
+            return Err(vec![Error::NoFileGiven]);
         }
     };
     let sections = sectionizer::sectionize(&path)?;

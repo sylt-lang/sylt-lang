@@ -477,7 +477,7 @@ impl Compiler {
         self.panic = true;
         self.errors.push(Error::CompileError {
             kind,
-            file: Some(self.current_file().to_path_buf()),
+            file: self.current_file().to_path_buf(),
             line: Some(line),
             message,
         });

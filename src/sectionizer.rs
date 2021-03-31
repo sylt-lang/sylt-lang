@@ -28,7 +28,7 @@ pub fn sectionize(path: &Path) -> Result<Vec<Section>, Vec<Error>> {
     let tokens = file_to_tokens(path).map_err(|_| {
         vec![Error::CompileError {
             kind: ErrorKind::FileNotFound(path.to_path_buf()),
-            file: None,
+            file: path.to_path_buf(),
             line: None,
             message: None,
         }]
@@ -69,7 +69,7 @@ pub fn sectionize(path: &Path) -> Result<Vec<Section>, Vec<Error>> {
                             Err(_) => {
                                 errors.push(Error::CompileError {
                                     kind: ErrorKind::FileNotFound(use_file),
-                                    file: Some(path.to_path_buf()),
+                                    file: path.to_path_buf(),
                                     line: Some(*line),
                                     message: None,
                                 });

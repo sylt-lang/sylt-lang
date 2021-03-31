@@ -6,42 +6,31 @@ use std::path::{Path, PathBuf};
 
 use crate::{tokenizer::Token, Op, Type, Value};
 
-/// Returns the line in the source code and some context before it.
-/// Fails if the line can't be found for some reason.
-///
-/// This logic is shared between most (but not all) errors. It handles
-/// the [Option]s as well since that logic is also shared.
-fn source_line_at(file: &Option<PathBuf>, line: Option<usize>) -> Option<String> {
-    match (file, line) {
-        (Some(file), Some(line)) => {
-            if let Ok(file) = File::open(file) {
-                Some(io::BufReader::new(file)
-                   .lines()
-                   .enumerate()
-                   .filter(|(n, _)| line <= *n + 3 && *n + 3 <= line + 2)
-                   .fold(String::from("\n"), |a, (n, l)| {
-                       format!("{} {:3} | {}\n", a, (n + 1).blue(), l.unwrap())
-                   }))
-            } else {
-                None
-            }
+fn source_line_at(file: &Path, line: Option<usize>) -> Option<String> {
+    match (File::open(file), line) {
+        (Ok(file), Some(line)) => {
+            Some(io::BufReader::new(file)
+                .lines()
+                .enumerate()
+                .filter(|(n, _)| line <= *n + 3 && *n + 3 <= line + 2)
+                .fold(String::from("\n"), |a, (n, l)| {
+                    format!("{} {:3} | {}\n", a, (n + 1).blue(), l.unwrap())
+                })
+            )
         }
-        // This doesn't need to be an error if you want to report an error on a line
-        // number without specifying a file.
-        (None, Some(_)) => unimplemented!("Line number without corresponding file"),
-
-        // Either only a file or no info at all
         _ => None,
     }
 }
 
-fn file_line_display(file: &Option<PathBuf>, line: Option<usize>) -> Option<String> {
-    match (file, line) {
-        (Some(file), Some(line)) => Some(format!("{}:{}", file.display().blue(), line.blue())),
-        // As with source_line_at, might not be an error.
-        (None, Some(_)) => unimplemented!("Line number without corresponding file"),
-        _ => None,
-    }
+fn file_line_display(file: &Path, line: Option<usize>) -> String {
+    format!("{}:{}",
+        file.display().blue(),
+        if let Some(line) = line {
+            line.blue().to_string()
+        } else {
+            "??".blue().to_string()
+        }
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -78,7 +67,7 @@ pub enum ErrorKind {
 pub enum Error {
     CompileError {
         kind: ErrorKind,
-        file: Option<PathBuf>,
+        file: PathBuf,
         line: Option<usize>,
         message: Option<String>,
     },
@@ -94,6 +83,7 @@ pub enum Error {
         line: usize,
         message: Option<String>,
     },
+    NoFileGiven,
     BincodeError,
 }
 
@@ -119,6 +109,8 @@ impl fmt::Debug for Error {
                 => write!(f, "TypecheckError {{ kind: {:?}, .. }}", kind),
             Error::RuntimeError { kind, .. }
                 => write!(f, "RuntimeError {{ kind: {:?}, .. }}", kind),
+            Error::NoFileGiven
+                => write!(f, "NoFileGiven"),
             Error::BincodeError
                 => write!(f, "BincodeError"),
         }
@@ -140,7 +132,7 @@ impl fmt::Display for Error {
                     f,
                     "{} {}\n{}\n{}{}",
                     "Compilation error".red(),
-                    file_line_display(file, *line).unwrap_or_else(String::new),
+                    file_line_display(file, *line),
                     kind,
                     message,
                     source_line_at(file, *line).unwrap_or_else(String::new),
