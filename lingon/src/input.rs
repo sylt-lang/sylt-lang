@@ -125,20 +125,14 @@ impl InputManager {
                     win_event: WindowEvent::Close,
                     ..
                 } => (Device::Quit, KeyState::Down(frame)),
-                Event::KeyDown { keycode, .. } => {
-                    if let Some(keycode) = keycode {
-                        (Device::Key(keycode), KeyState::Down(frame))
-                    } else {
-                        continue;
-                    }
-                }
-                Event::KeyUp { keycode, .. } => {
-                    if let Some(keycode) = keycode {
-                        (Device::Key(keycode), KeyState::Up(frame))
-                    } else {
-                        continue;
-                    }
-                }
+                Event::KeyDown {
+                    keycode: Some(keycode),
+                    ..
+                } => (Device::Key(keycode), KeyState::Down(frame)),
+                Event::KeyUp {
+                    keycode: Some(keycode),
+                    ..
+                } => (Device::Key(keycode), KeyState::Up(frame)),
                 Event::ControllerAxisMotion {
                     which, axis, value, ..
                 } => (Device::Axis(which, axis), KeyState::Analog(remap(value))),
