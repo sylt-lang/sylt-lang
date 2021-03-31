@@ -11,8 +11,6 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use crate::error::ErrorKind;
-
 pub mod error;
 pub mod vm;
 
@@ -1158,13 +1156,13 @@ pub struct Prog {
     pub strings: Vec<String>,
 }
 
-// errors: [ CompileError: SyntaxError(_, _), 
+// errors: [ CompileError: SyntaxError(_, _) ]
 
 #[cfg(test)]
 mod tests {
     #[macro_export]
     macro_rules! assert_errs {
-        ($result:expr, [ $( $type:tt : $kind:tt ),* ]) => {
+        ($result:expr, [ $( $type:pat : $kind:pat ),* ]) => {
             let errs = if let Err(errs) = $result {
                 errs
             } else {
@@ -1174,7 +1172,7 @@ mod tests {
 
             if !matches!(
                 errs.as_slice(),
-                &[$($crate::error::Error::$type {
+                &[$($type {
                     kind: $kind,
                     file: _,
                     line: _,

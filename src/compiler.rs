@@ -3,7 +3,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use crate::error::{Error, ErrorKind};
+use crate::error::Error;
 use crate::sectionizer::Section;
 use crate::tokenizer::Token;
 use crate::{path_to_module, Blob, Block, Next, Op, Prog, RustFunction, Type, Value};
@@ -12,7 +12,6 @@ macro_rules! error {
     ($thing:expr, $( $msg:expr ),* ) => {
         {
             let msg = Some(format!($( $msg ),*).into());
-            let err = ErrorKind::SyntaxError($thing.line(), $thing.peek());
             $thing.error(err, msg);
         }
     };
@@ -466,21 +465,12 @@ impl Compiler {
         }
     }
 
-    fn error(&mut self, kind: ErrorKind, message: Option<String>) {
-        self.error_on_line(kind, self.line(), message);
-    }
-
-    fn error_on_line(&mut self, kind: ErrorKind, line: usize, message: Option<String>) {
+    fn error(&mut self, error: Error) {
         if self.panic {
             return;
         }
         self.panic = true;
-        self.errors.push(Error::CompileError {
-            kind,
-            file: self.current_file().to_path_buf(),
-            line: Some(line),
-            message,
-        });
+        self.errors.push(error);
     }
 
     fn init_section(&mut self, section: usize) {
