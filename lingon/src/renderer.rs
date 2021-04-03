@@ -220,6 +220,7 @@ pub type RenderFn = dyn FnMut(
 ) -> Result<(), ()>;
 
 /// A way to handle random variables.
+#[allow(dead_code)]
 pub enum Distribution {
     /// Always returns 0.
     NoDice,

@@ -1,4 +1,4 @@
-use luminance_sdl2::{sdl2, GL33Surface};
+use luminance_sdl2::GL33Surface;
 use std::time::Instant;
 
 mod input;
@@ -39,7 +39,7 @@ fn main_loop(mut surface: GL33Surface) {
 
     let start_t = Instant::now();
 
-    let mut input = input::InputManager::new();
+    let mut input = input::InputManager::new(surface.sdl());
     input.bind(input::Device::Key(input::Keycode::A), input::Name::Left);
     input.bind(input::Device::Key(input::Keycode::D), input::Name::Right);
     input.bind(input::Device::Key(input::Keycode::W), input::Name::Up);
@@ -49,6 +49,8 @@ fn main_loop(mut surface: GL33Surface) {
         input::Name::Quit,
     );
     input.bind(input::Device::Quit, input::Name::Quit);
+    input.bind(input::Device::Axis(0, input::Axis::LeftX), input::Name::Right);
+    input.bind(input::Device::Axis(0, input::Axis::RightY), input::Name::Up);
 
     let mut old_t = start_t.elapsed().as_millis() as f32 * 1e-3;
     'app: loop {
@@ -94,7 +96,7 @@ fn main_loop(mut surface: GL33Surface) {
         }
 
         renderer.push_particle_system(&particle_systems);
-
+        input.rumble(0, input.value(input::Name::Right), input.value(input::Name::Up), 1.0).unwrap();
         renderer.camera.move_by(
             (input.value(input::Name::Right) - input.value(input::Name::Left)) * delta,
             (input.value(input::Name::Up) - input.value(input::Name::Down)) * delta,
