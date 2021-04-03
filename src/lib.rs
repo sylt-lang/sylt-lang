@@ -1161,23 +1161,16 @@ mod tests {
     #[macro_export]
     macro_rules! assert_errs {
         ($result:expr, $expect:pat) => {
-            let errs = if let Err(errs) = $result {
-                errs
-            } else {
-                eprintln!("    Program succeeded when it should've failed");
-                unreachable!();
-            };
+            let errs = $result.err().unwrap_or(Vec::new());
 
             use $crate::error::Error;
             if !matches!(errs.as_slice(), $expect) {
-                eprintln!("Unexpected errors");
-                eprint!("    Got:  [");
+                eprintln!("===== Got =====");
                 for err in errs {
-                    eprint!(" {:?} ", err);
+                    eprint!("{}", err);
                 }
-                eprint!("]\n    Want: [");
-                eprint!(" {} ", stringify!($expect));
-                eprintln!("]");
+                eprintln!("===== Expect =====");
+                eprint!("{}\n\n", stringify!($expect));
                 assert!(false);
             }
         };
@@ -1188,55 +1181,12 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    // Shamelessly stolen from https://github.com/rust-lang/rfcs/issues/2798
-    #[allow(dead_code)]
-    pub fn panic_after<T, F>(d: Duration, f: F) -> T
-    where
-        T: Send + 'static,
-        F: FnOnce() -> T,
-        F: Send + 'static,
-    {
-        let (done_tx, done_rx) = mpsc::channel();
-        let handle = thread::spawn(move || {
-            let val = f();
-            done_tx.send(()).expect("Unable to send completion signal");
-            val
-        });
-
-        let msg = match done_rx.recv_timeout(d) {
-            Ok(_) => {
-                return handle.join().expect("Thread panicked");
-            }
-            Err(mpsc::RecvTimeoutError::Timeout) => "Test took too long to complete",
-            Err(mpsc::RecvTimeoutError::Disconnected) => "Test produced incorrect result",
-        };
-        eprintln!("    #### {} ####", msg.red());
-        panic!("{}", msg);
-    }
-
     #[macro_export]
     macro_rules! test_file {
-        ($fn:ident, $path:literal, $print:expr) => {
+        ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
             #[test]
             fn $fn() {
-                let mut args = $crate::Args::default();
-                args.file = Some(std::path::PathBuf::from($path));
-                args.verbosity = if $print { 1 } else { 0 };
-                if let Err(errs) = $crate::run_file(
-                    &args,
-                    sylt_macro::link!(crate::dbg as dbg, crate::push as push, crate::len as len,),
-                ) {
-                    eprintln!("errs: {:#?}", errs);
-                    for e in errs {
-                        eprintln!("{}", e);
-                    }
-                    panic!("Program failed");
-                }
-            }
-        };
-        ($fn:ident, $path:literal, $print:expr, $errs:tt) => {
-            #[test]
-            fn $fn() {
+                #[allow(unused_imports)]
                 use $crate::error::RuntimeError;
                 #[allow(unused_imports)]
                 use $crate::Type;

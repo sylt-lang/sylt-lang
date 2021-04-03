@@ -161,14 +161,14 @@ pub fn link(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 struct TestSettings {
-    errors: Option<String>,
+    errors: String,
     print: bool,
 }
 
 impl Default for TestSettings {
     fn default() -> Self {
         Self {
-            errors: None,
+            errors: String::new(),
             print: true,
         }
     }
@@ -205,10 +205,7 @@ fn parse_test_settings(contents: String) -> TestSettings {
         }
     }
 
-    if !errors.is_empty() {
-        settings.errors = Some(format!("[ {} ]", errors.join(", ")));
-    }
-
+    settings.errors = format!("[ {} ]", errors.join(", "));
     settings
 }
 
@@ -233,15 +230,9 @@ fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
 
             let settings = parse_test_settings(std::fs::read_to_string(path.clone()).unwrap());
             let print = settings.print;
-            let tokens = if let Some(wanted_errs) = settings.errors {
-                let wanted_errs: proc_macro2::TokenStream = wanted_errs.parse().unwrap();
-                quote! {
-                    test_file!(#test_name, #path_string, #print, #wanted_errs);
-                }
-            } else {
-                quote! {
-                    test_file!(#test_name, #path_string, #print);
-                }
+            let wanted_errs: proc_macro2::TokenStream = settings.errors.parse().unwrap();
+            let tokens = quote! {
+                test_file!(#test_name, #path_string, #print, #wanted_errs);
             };
 
             tests.extend(tokens);
