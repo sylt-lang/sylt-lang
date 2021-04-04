@@ -96,7 +96,7 @@ fn main_loop(mut surface: GL33Surface) {
         }
 
         renderer.push_particle_system(&particle_systems);
-        input.rumble(0, input.value(input::Name::Right), input.value(input::Name::Up), 1.0).unwrap();
+        //input.rumble(0, input.value(input::Name::Right), input.value(input::Name::Up), 1.0).unwrap();
         renderer.camera.move_by(
             (input.value(input::Name::Right) - input.value(input::Name::Left)) * delta,
             (input.value(input::Name::Up) - input.value(input::Name::Down)) * delta,
