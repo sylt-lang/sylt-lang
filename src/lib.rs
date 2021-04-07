@@ -1,7 +1,8 @@
+#![allow(unused_variables, dead_code)]
+
 use error::{Error, RuntimeError};
 use gumdrop::Options;
 use owo_colors::OwoColorize;
-use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
@@ -12,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 pub mod error;
-pub mod vm;
+// pub mod vm;
 
 mod compiler;
 mod sectionizer;
@@ -26,39 +27,34 @@ pub trait Next {
 /// external functions.
 pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
     let prog = compile(args, functions)?;
-    typecheck(&prog, &args)?;
-    run(&prog, &args)
+    for block in prog.blocks.iter() {
+        let block: &RefCell<Block> = block.borrow();
+        block.borrow().debug_print();
+    }
+    Ok(())
+    // typecheck(&prog, &args)?;
+    // run(&prog, &args)
 }
 
 pub fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
-    let mut vm = vm::VM::new();
-    vm.print_bytecode = args.verbosity >= 1;
-    vm.print_exec = args.verbosity >= 2;
-    vm.typecheck(prog)
+    // let mut vm = vm::VM::new();
+    // vm.print_bytecode = args.verbosity >= 1;
+    // vm.print_exec = args.verbosity >= 2;
+    // vm.typecheck(prog)
+    Ok(())
 }
 
 pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
-    let mut vm = vm::VM::new();
-    vm.print_bytecode = args.verbosity >= 1;
-    vm.print_exec = args.verbosity >= 2;
-    vm.init(&prog);
-    if let Err(e) = vm.run() {
-        Err(vec![e])
-    } else {
-        Ok(())
-    }
-}
-
-/// Compiles and serializes the given file.
-pub fn serialize(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Vec<u8>, Vec<Error>> {
-    let prog = compile(args, functions)?;
-    typecheck(&prog, args)?;
-    bincode::serialize(&prog).map_err(|_| vec![Error::BincodeError])
-}
-
-/// Deserializes and links the given file.
-pub fn deserialize(bytes: Vec<u8>) -> Result<Prog, Vec<Error>> {
-    bincode::deserialize(&bytes).map_err(|_| vec![])
+    Ok(())
+    // let mut vm = vm::VM::new();
+    // vm.print_bytecode = args.verbosity >= 1;
+    // vm.print_exec = args.verbosity >= 2;
+    // vm.init(&prog);
+    // if let Err(e) = vm.run() {
+    //     Err(vec![e])
+    // } else {
+    //     Ok(())
+    // }
 }
 
 fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
@@ -103,7 +99,7 @@ pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
 /// [sylt_macro::extern_function].
 pub type RustFunction = fn(&[Value], bool) -> Result<Value, RuntimeError>;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub enum Type {
     Void,
     Unknown,
@@ -325,16 +321,7 @@ impl Type {
 
 pub type IterFn = dyn FnMut() -> Option<Value>;
 
-// What is this U? No one knows.
-fn se_abort<S, T, U>(_t: &T, _u: U, _s: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
-    panic!("Tried to serialize a non-serializable value");
-}
-
-fn de_abort<'de, D, T>(_d: D) -> Result<T, D::Error> where D: serde::Deserializer<'de> {
-    panic!("Tried to deserialize a non-serializable value");
-}
-
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone)]
 pub enum Value {
     Ty(Type),
     Blob(Rc<Blob>),
@@ -343,7 +330,6 @@ pub enum Value {
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
     Dict(Rc<RefCell<HashMap<Value, Value>>>),
-    #[serde(deserialize_with="de_abort", serialize_with="se_abort")]
     Iter(Type, Rc<RefCell<IterFn>>),
     Union(HashSet<Value>),
     Float(f64),
@@ -449,7 +435,7 @@ impl Value {
 }
 
 #[doc(hidden)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct UpValue {
     slot: usize,
     value: Value,
@@ -489,7 +475,7 @@ impl UpValue {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub struct Blob {
     pub id: usize,
     pub name: String,
@@ -541,9 +527,9 @@ pub enum Op {
     ///
     /// {A} - OpenScope - {A}
     OpenScope,
-    /// Closes the scope and drops the number of variables given.
+    /// Closes the scope and sets the stacksize, discarding the top values.
     ///
-    /// {A, B} - CloseScope - {A}
+    /// {A, B} - CloseScope(1) - {A}
     CloseScope(usize),
     /// Copies the N values on the top of the stack
     /// and puts them on top of the stack.
@@ -606,11 +592,6 @@ pub enum Op {
     ///
     /// {O} - Set(F) - {}
     AssignField(usize),
-
-    /// Turns the top element on the stack into an iterator.
-    ///
-    /// {A} - Iter - {Iter(A)}
-    Iter,
 
     /// Adds the two top elements on the stack,
     /// using the function [op::add]. The result
@@ -693,7 +674,9 @@ pub enum Op {
     /// If the top stack value is true, the following
     /// scope (between OpenScope and CloseScope) is skipped.
     Else,
-    // TODO(ed): For-loop
+    /// Marks the next scope a for-loop, and uses the top
+    /// stack value as an iterator.
+    For,
 
     /// Reads the value counted from the
     /// bottom of the stack and adds it
@@ -974,14 +957,14 @@ mod op {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug)]
 enum BlockLinkState {
     Linked,
     Unlinked,
     Nothing,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct Block {
     pub ty: Type,
     upvalues: Vec<(usize, bool, Type)>,
@@ -1080,26 +1063,7 @@ impl Block {
     }
 
     fn add(&mut self, op: Op, token_position: usize) -> usize {
-        let mut len = self.curr();
-        if matches!(op, Op::Pop) && len > 1 {
-            len -= 1;
-            match self.ops.last().unwrap() {
-                Op::Copy(n) => {
-                    if *n == 1 {
-                        self.ops.pop();
-                        return len - 1;
-                    } else {
-                        self.ops[len] = Op::Copy(*n - 1);
-                        return len;
-                    }
-                }
-                Op::Constant(_) | Op::ReadLocal(_) | Op::ReadUpvalue(_) => {
-                    self.ops.pop();
-                    return len - 1;
-                }
-                _ => {}
-            }
-        }
+        let len = self.curr();
         self.add_line(token_position);
         self.ops.push(op);
         len
@@ -1121,10 +1085,9 @@ impl Block {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Prog {
     pub blocks: Vec<Rc<RefCell<Block>>>,
-    #[serde(skip)]
     pub functions: Vec<RustFunction>,
     pub constants: Vec<Value>,
     pub strings: Vec<String>,

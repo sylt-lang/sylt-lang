@@ -83,29 +83,12 @@ macro_rules! push_scope {
     ($compiler:expr, $block:expr, $code:tt) => {
         let ss = $compiler.stack().len();
         $compiler.frame_mut().scope += 1;
+        add_op($compiler, $block, Op::OpenScope);
 
         $code;
 
         $compiler.frame_mut().scope -= 1;
-
-        let mut errors = Vec::new();
-        for var in $compiler.frame().stack.iter().skip(ss).rev() {
-            if !(var.read || var.upvalue) {
-                errors.push(Error::SyntaxError {
-                    file: $compiler.current_file().into(),
-                    line: var.line,
-                    token: Token::Identifier(var.name.clone()),
-                    message: Some(format!("Unused value '{}'", var.name)),
-                });
-            }
-            if var.captured {
-                add_op($compiler, $block, Op::PopUpvalue);
-            } else {
-                add_op($compiler, $block, Op::Pop);
-            }
-        }
-
-        errors.into_iter().for_each(|e| $compiler.error(e));
+        add_op($compiler, $block, Op::CloseScope(ss));
         $compiler.stack_mut().truncate(ss);
     };
 }
@@ -159,6 +142,11 @@ impl Variable {
             read: false,
         }
     }
+
+    fn activate(mut self) -> Self {
+        self.active = true;
+        self
+    }
 }
 
 #[derive(Debug)]
@@ -169,7 +157,6 @@ enum LoopOp {
 
 #[derive(Debug)]
 struct Frame {
-    loops: Vec<Vec<(usize, usize, LoopOp)>>,
     stack: Vec<Variable>,
     upvalues: Vec<Variable>,
     scope: usize,
@@ -178,44 +165,9 @@ struct Frame {
 impl Frame {
     fn new() -> Self {
         Self {
-            loops: Vec::new(),
             stack: Vec::new(),
             upvalues: Vec::new(),
             scope: 0,
-        }
-    }
-
-    fn push_loop(&mut self) {
-        self.loops.push(Vec::new());
-    }
-
-    fn pop_loop(&mut self, block: &mut Block, stacktarget: usize, start: usize, end: usize) {
-        // Compiler error if this fails
-        for (addr, stacksize, op) in self.loops.pop().unwrap().iter() {
-            let to_pop = stacksize - stacktarget;
-            let op = match op {
-                LoopOp::Continue => Op::JmpNPop(start, to_pop),
-                LoopOp::Break => Op::JmpNPop(end, to_pop),
-            };
-            block.patch(op, *addr);
-        }
-    }
-
-    fn add_continue(&mut self, addr: usize, stacksize: usize) -> Result<(), ()> {
-        if let Some(top) = self.loops.last_mut() {
-            top.push((addr, stacksize, LoopOp::Continue));
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-
-    fn add_break(&mut self, addr: usize, stacksize: usize) -> Result<(), ()> {
-        if let Some(top) = self.loops.last_mut() {
-            top.push((addr, stacksize, LoopOp::Break));
-            Ok(())
-        } else {
-            Err(())
         }
     }
 
@@ -826,38 +778,38 @@ impl Compiler {
     }
 
     fn binary_bool(&mut self, block: &mut Block) {
-        let op = self.eat();
+        // TODO(ed):
+        // let op = self.eat();
 
-        // TODO(ed): If JmpFalseNoPeek would be made, we could
-        // save some instructions and clones.
-        match op {
-            Token::And => {
-                add_op(self, block, Op::Copy(1));
-                let jump = add_op(self, block, Op::Illegal);
-                add_op(self, block, Op::Pop);
+        // // TODO(ed): If JmpFalseNoPeek would be made, we could
+        // // save some instructions and clones.
+        // match op {
+        //     Token::And => {
+        //         add_op(self, block, Op::Copy(1));
+        //         let jump = add_op(self, block, Op::Illegal);
+        //         add_op(self, block, Op::Pop);
 
-                self.parse_precedence(block, self.precedence(op).next());
+        //         self.parse_precedence(block, self.precedence(op).next());
 
-                block.patch(Op::JmpFalse(block.curr()), jump);
-            }
+        //         block.patch(Op::JmpFalse(block.curr()), jump);
+        //     }
 
-            Token::Or => {
-                add_op(self, block, Op::Copy(1));
-                let skip = add_op(self, block, Op::Illegal);
-                let jump = add_op(self, block, Op::Illegal);
+        //     Token::Or => {
+        //         add_op(self, block, Op::Copy(1));
+        //         let skip = add_op(self, block, Op::Illegal);
+        //         let jump = add_op(self, block, Op::Illegal);
 
-                block.patch(Op::JmpFalse(block.curr()), skip);
-                add_op(self, block, Op::Pop);
+        //         block.patch(Op::JmpFalse(block.curr()), skip);
+        //         add_op(self, block, Op::Pop);
 
-                self.parse_precedence(block, self.precedence(op).next());
+        //         self.parse_precedence(block, self.precedence(op).next());
 
-                block.patch(Op::Jmp(block.curr()), jump);
-            }
-
-            _ => {
-                syntax_error!(self, "Illegal operator");
-            }
-        }
+        //         block.patch(Op::Jmp(block.curr()), jump);
+        //     }
+        //     _ => {
+        //         syntax_error!(self, "Illegal operator");
+        //     }
+        // }
     }
 
     fn binary(&mut self, block: &mut Block) {
@@ -1156,7 +1108,7 @@ impl Compiler {
         let nil = self.add_constant(Value::Nil);
         for op in function_block.ops.iter().rev() {
             match op {
-                Op::Pop | Op::PopUpvalue => {}
+                // Op::Pop | Op::PopUpvalue => {}
                 Op::Return => {
                     break;
                 }
@@ -1483,114 +1435,40 @@ impl Compiler {
             self.eat();
 
             let else_jmp = add_op(self, block, Op::Illegal);
-            block.patch(Op::JmpFalse(block.curr()), jump);
+            // block.patch(Op::JmpFalse(block.curr()), jump);
 
             match self.peek() {
                 Token::If => self.if_statment(block),
                 Token::LeftBrace => self.scope(block),
                 _ => syntax_error!(self, "Epected 'if' or '{{' after else"),
             }
-            block.patch(Op::Jmp(block.curr()), else_jmp);
+            // block.patch(Op::Jmp(block.curr()), else_jmp);
         } else {
-            block.patch(Op::JmpFalse(block.curr()), jump);
+            // block.patch(Op::JmpFalse(block.curr()), jump);
         }
     }
 
-    fn for_loop_condition(&mut self, block: &mut Block) {
-        expect!(
-            self,
-            Token::Comma,
-            "Expect ',' between initalizer and loop expression"
-        );
-
-        let cond = block.curr();
-        self.expression(block);
-        let cond_out = add_op(self, block, Op::Illegal);
-        let cond_cont = add_op(self, block, Op::Illegal);
-        expect!(
-            self,
-            Token::Comma,
-            "Expect ',' between initalizer and loop expression"
-        );
-
-        let inc = block.curr();
-        push_scope!(self, block, {
-            self.statement(block);
-        });
-        add_op(self, block, Op::Jmp(cond));
-
-        // patch_jmp!(Op::Jmp, cond_cont => block.curr());
-        block.patch(Op::Jmp(block.curr()), cond_cont);
-        self.scope(block);
-        add_op(self, block, Op::Jmp(inc));
-
-        block.patch(Op::JmpFalse(block.curr()), cond_out);
-
-        let stacksize = self.frame().stack.len();
-        self.frame_mut()
-            .pop_loop(block, stacksize, inc, block.curr());
-    }
-
-    //TODO de-complexify
     fn for_loop(&mut self, block: &mut Block) {
         expect!(self, Token::For, "Expected 'for' at start of for-loop");
 
+        // TODO(ed): Destructure tuples? Break this out into function?
+        let name = if let Token::Identifier(name) = self.eat() {
+            name
+        } else {
+            syntax_error!(self, "Expected identifier in for-loop");
+            return;
+        };
+
+        expect!(self, Token::In, "Expected 'in' when parsing for-loop");
+
+        self.expression(block);
+        add_op(self, block, Op::For);
+
         push_scope!(self, block, {
-            self.frame_mut().push_loop();
-            // Definition
-            match self.peek_four() {
-                // TODO(ed): Typed definitions aswell!
-                (Token::Identifier(name), Token::ColonEqual, ..) => {
-                    self.eat();
-                    self.eat();
-                    self.definition_statement(&name, Type::Unknown, false, block);
-                    self.for_loop_condition(block);
-                }
+            let var = Variable::new(&name, false, Type::Unknown).activate();
+            let slot = self.define(var);
 
-                (Token::Comma, ..) => {
-                    self.for_loop_condition(block);
-                }
-
-                (Token::Identifier(name), Token::In, ..) => {
-                    // TODO(ed): Destructure tuples? Break this out into function?
-
-                    // The type will always be infered from the iterator.
-                    let var = Variable::new("/iter", false, Type::Unknown);
-                    let slot = self.define(var).unwrap();
-                    self.stack_mut()[slot].read = true;
-
-                    self.eat();
-                    self.eat();
-
-                    self.expression(block);
-                    add_op(self, block, Op::Iter);
-                    let start = add_op(self, block, Op::Illegal);
-
-                    push_scope!(self, block, {
-                        let var = Variable::new(&name, false, Type::Unknown);
-                        let slot = self.define(var);
-
-                        if let Ok(slot) = slot {
-                            self.stack_mut()[slot].active = true;
-                        } else {
-                            syntax_error!(self, "Failed to define '{}'", name);
-                        }
-                        self.scope(block);
-                    });
-
-                    add_op(self, block, Op::Jmp(start));
-                    let end = block.curr();
-                    block.patch(Op::JmpNext(end), start);
-
-                    let stacksize = self.frame().stack.len();
-                    self.frame_mut().pop_loop(block, stacksize, start, end);
-                }
-
-                _ => {
-                    syntax_error!(self, "Expected definition at start of for-loop");
-                }
-            }
-
+            self.scope(block);
         });
     }
 
@@ -1986,11 +1864,6 @@ impl Compiler {
                 self.access_dotted(block);
             }
 
-            (Token::Yield, ..) => {
-                self.eat();
-                add_op(self, block, Op::Yield);
-            }
-
             (Token::Identifier(name), Token::ColonEqual, ..) => {
                 self.eat();
                 self.eat();
@@ -2032,18 +1905,12 @@ impl Compiler {
                 self.eat();
                 let addr = add_op(self, block, Op::Illegal);
                 let stack_size = self.frame().stack.len();
-                if self.frame_mut().add_break(addr, stack_size).is_err() {
-                    syntax_error!(self, "Cannot place 'break' outside of loop");
-                }
             }
 
             (Token::Continue, ..) => {
                 self.eat();
                 let addr = add_op(self, block, Op::Illegal);
                 let stack_size = self.frame().stack.len();
-                if self.frame_mut().add_continue(addr, stack_size).is_err() {
-                    syntax_error!(self, "Cannot place 'continue' outside of loop");
-                }
             }
 
             (Token::Ret, ..) => {
@@ -2071,7 +1938,7 @@ impl Compiler {
 
             _ => {
                 self.expression(block);
-                add_op(self, block, Op::Pop);
+                // add_op(self, block, Op::Pop);
             }
         }
     }
