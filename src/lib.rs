@@ -1177,15 +1177,6 @@ mod tests {
         };
     }
 
-    #[allow(unused_imports)]
-    use owo_colors::OwoColorize;
-    #[allow(unused_imports)]
-    use std::sync::mpsc;
-    #[allow(unused_imports)]
-    use std::thread;
-    #[allow(unused_imports)]
-    use std::time::Duration;
-
     #[macro_export]
     macro_rules! test_file {
         ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
