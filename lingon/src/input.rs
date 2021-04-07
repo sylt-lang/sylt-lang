@@ -1,4 +1,4 @@
-//! The easiest way to get the use to make decisions.
+//! The easiest way to get the user to make decisions.
 //!
 //! A small example:
 //! ```ignore
@@ -13,7 +13,7 @@
 //!     }
 //! }
 //! ```
-//! Here we bind the "A" key to the input "Left", and tells the plyaer to jump when the
+//! Here we bind the "A" key to the input "Left", and tell the player to jump when the
 //! button is first pressed.
 //!
 //! For this to work the InputManager needs to be passed around everywhere it's used,
@@ -91,7 +91,7 @@ impl InputManager {
         }
     }
 
-    /// Craetes a new binding to listen to.
+    /// Creates a new binding to listen to.
     pub fn bind(&mut self, device: Device, name: Name) {
         self.physical_inputs.insert(device, name);
         self.virtual_inputs.insert(name, KeyState::Up(0));
