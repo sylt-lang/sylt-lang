@@ -29,7 +29,7 @@ use luminance::render_state::RenderState;
 use luminance::tess::Mode;
 use luminance::texture::{Dim3, GenMipmaps, Sampler, Texture};
 use luminance_sdl2::GL33Surface;
-use rand::prelude::*;
+use sungod::Ra;
 
 // Me no likey, but at least it's not documented.
 use crate::semantics::*;
@@ -239,16 +239,14 @@ pub enum Distribution {
 impl Distribution {
     /// Returns a random value from the given distribution.
     pub fn sample(&self) -> f32 {
-        let mut rng = rand::thread_rng();
-
         match self {
             Distribution::NoDice => 0.0,
-            Distribution::Uniform | Distribution::Die => rng.gen::<f32>(),
-            Distribution::TwoDice => (rng.gen::<f32>() + rng.gen::<f32>()) / 2.0,
+            Distribution::Uniform | Distribution::Die => Ra::ggen::<f32>(),
+            Distribution::TwoDice => (Ra::ggen::<f32>() + Ra::ggen::<f32>()) / 2.0,
             Distribution::ThreeDice => {
-                (rng.gen::<f32>() + rng.gen::<f32>() + rng.gen::<f32>()) / 3.0
+                (Ra::ggen::<f32>() + Ra::ggen::<f32>() + Ra::ggen::<f32>()) / 3.0
             }
-            Distribution::Square => rng.gen::<f32>() * rng.gen::<f32>(),
+            Distribution::Square => Ra::ggen::<f32>() * Ra::ggen::<f32>(),
         }
     }
 }
@@ -398,7 +396,9 @@ impl ParticleSystem {
         let (sheet, uv) = if self.sprites.is_empty() {
             &(-1.0, [0.0, 0.0, 0.0, 0.0])
         } else {
-            self.sprites.choose(&mut rand::thread_rng()).unwrap()
+            let i = Ra::ggen::<usize>();
+            let i = i % self.sprites.len();
+            &self.sprites[i]
         };
 
         self.particles.push(Particle {
