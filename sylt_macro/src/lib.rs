@@ -68,13 +68,13 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
         pub fn #function (
             __values: &[sylt::Value],
             __typecheck: bool
-        ) -> ::std::result::Result<sylt::Value, sylt::error::ErrorKind>
+        ) -> ::std::result::Result<sylt::Value, sylt::error::RuntimeError>
         {
             if __typecheck {
                 #[allow(unused_variables)]
                 match __values {
                     #(#typecheck_blocks),*
-                    _ => Err(sylt::error::ErrorKind::ExternTypeMismatch(
+                    _ => Err(sylt::error::RuntimeError::ExternTypeMismatch(
                         stringify!(#function).to_string(),
                         __values.iter().map(|v| sylt::Type::from(v)).collect()
                     ))
@@ -82,7 +82,7 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
             } else {
                 match __values {
                     #(#eval_blocks),*
-                    _ => Err(sylt::error::ErrorKind::ExternTypeMismatch(
+                    _ => Err(sylt::error::RuntimeError::ExternTypeMismatch(
                         stringify!(#function).to_string(),
                         __values.iter().map(|v| sylt::Type::from(v)).collect()
                     ))
@@ -161,14 +161,14 @@ pub fn link(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 struct TestSettings {
-    errors: Option<String>,
+    errors: String,
     print: bool,
 }
 
 impl Default for TestSettings {
     fn default() -> Self {
         Self {
-            errors: None,
+            errors: String::new(),
             print: true,
         }
     }
@@ -177,9 +177,20 @@ impl Default for TestSettings {
 fn parse_test_settings(contents: String) -> TestSettings {
     let mut settings = TestSettings::default();
 
+    let mut errors = Vec::new();
     for line in contents.split("\n") {
-        if line.starts_with("// errors: ") {
-            settings.errors = Some(line.strip_prefix("// errors: ").unwrap().to_string());
+        if line.starts_with("// error: ") {
+            let mut line = line
+                .strip_prefix("// error: ")
+                .unwrap()
+                .to_string();
+            if line.starts_with("#") {
+                line = format!("Error::RuntimeError {{ kind: RuntimeError::{}, .. }}", &line[1..]);
+            }
+            if line.starts_with("@") {
+                line = format!("Error::SyntaxError {{ line: {}, .. }}", &line[1..]);
+            }
+            errors.push(line);
         } else if line.starts_with("// flags: ") {
             for flag in line.split(" ").skip(2) {
                 match flag {
@@ -194,6 +205,7 @@ fn parse_test_settings(contents: String) -> TestSettings {
         }
     }
 
+    settings.errors = format!("[ {} ]", errors.join(", "));
     settings
 }
 
@@ -218,15 +230,9 @@ fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
 
             let settings = parse_test_settings(std::fs::read_to_string(path.clone()).unwrap());
             let print = settings.print;
-            let tokens = if let Some(wanted_errs) = settings.errors {
-                let wanted_errs: proc_macro2::TokenStream = wanted_errs.parse().unwrap();
-                quote! {
-                    test_file!(#test_name, #path_string, #print, #wanted_errs);
-                }
-            } else {
-                quote! {
-                    test_file!(#test_name, #path_string, #print);
-                }
+            let wanted_errs: proc_macro2::TokenStream = settings.errors.parse().unwrap();
+            let tokens = quote! {
+                test_file!(#test_name, #path_string, #print, #wanted_errs);
             };
 
             tests.extend(tokens);

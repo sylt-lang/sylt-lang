@@ -2,12 +2,39 @@ use owo_colors::OwoColorize;
 use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::{tokenizer::Token, Op, Type, Value};
 
+fn source_line_at(file: &Path, line: Option<usize>) -> Option<String> {
+    match (File::open(file), line) {
+        (Ok(file), Some(line)) => {
+            Some(io::BufReader::new(file)
+                .lines()
+                .enumerate()
+                .filter(|(n, _)| line <= *n + 3 && *n + 3 <= line + 2)
+                .fold(String::from("\n"), |a, (n, l)| {
+                    format!("{} {:3} | {}\n", a, (n + 1).blue(), l.unwrap())
+                })
+            )
+        }
+        _ => None,
+    }
+}
+
+fn file_line_display(file: &Path, line: Option<usize>) -> String {
+    format!("{}:{}",
+        file.display().blue(),
+        if let Some(line) = line {
+            line.blue().to_string()
+        } else {
+            "??".blue().to_string()
+        }
+    )
+}
+
 #[derive(Debug, Clone)]
-pub enum ErrorKind {
+pub enum RuntimeError {
     TypeError(Op, Vec<Type>),
     TypeMismatch(Type, Type),
     CannotInfer(Type, Type),
@@ -26,42 +53,133 @@ pub enum ErrorKind {
     AssertFailed,
     InvalidProgram,
     Unreachable,
+}
 
-    /// (line, token)
-    SyntaxError(usize, Token),
-    /// (start, end)
-    GitConflictError(usize, usize),
+#[derive(Clone, Copy, Debug)]
+pub enum RuntimePhase {
+    Runtime,
+    Typecheck,
+}
+
+impl fmt::Display for RuntimePhase {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RuntimePhase::Runtime => write!(f, "runtime"),
+            RuntimePhase::Typecheck => write!(f, "typecheck"),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum Error {
+    RuntimeError {
+        kind: RuntimeError,
+        phase: RuntimePhase,
+        file: PathBuf,
+        line: usize,
+        message: Option<String>,
+    },
+
+    SyntaxError {
+        file: PathBuf,
+        line: usize,
+        token: Token,
+        message: Option<String>,
+    },
+
+    GitConflictError {
+        file: PathBuf,
+        start: usize,
+        end: usize,
+    },
 
     FileNotFound(PathBuf),
     NoFileGiven,
 
-    BincodeError, //TODO(gu) BincodeError(bincode::Error) would be nice but it isn't clone
+    BincodeError,
 }
 
-#[derive(Debug, Clone)]
-pub struct Error {
-    pub kind: ErrorKind,
-    pub file: PathBuf,
-    pub line: usize,
-    pub message: Option<String>,
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let indent = "      ";
+
+        match self {
+            Error::RuntimeError { kind, phase, file, line, message } => {
+                write!(f, "{} {}: ", phase.red(), "error".red())?;
+                write!(f, "{}\n", file_line_display(file, Some(*line)))?;
+                write!(f, "{}{}\n", indent, kind)?;
+
+                if let Some(message) = message {
+                    write!(f, "{}\n", message)?;
+                }
+                write!(f, "{}\n",
+                    source_line_at(file, Some(*line)).unwrap_or_else(String::new)
+                )
+            }
+            Error::SyntaxError {
+                file,
+                line,
+                token,
+                message,
+            } => {
+                write!(f, "{}: ", "syntax error".red())?;
+                write!(f, "{}\n", file_line_display(file, Some(*line)))?;
+                write!(f, "{}Syntax Error on line {} at token {:?}\n", indent, line, token)?;
+
+                if let Some(message) = message {
+                    write!(f, "{}{}\n", indent, message)?;
+                }
+                write!(f, "{}\n",
+                    source_line_at(file, Some(*line)).unwrap_or_else(String::new)
+                )
+            }
+            Error::GitConflictError {
+                file,
+                start,
+                end,
+            } => {
+                write!(f, "{}: ", "git conflict error".red())?;
+                write!(f, "{}\n", file_line_display(file, Some(*start)))?;
+
+                write!(f,
+                    "{}Git conflict markers found between lines {} and {}\n",
+                    indent, start, end)?;
+
+                write!(f, "{}   ---{}",
+                    source_line_at(file, Some(*start + 1))
+                    .unwrap_or_else(String::new),
+                    source_line_at(file, Some(*end + 1))
+                    .unwrap_or_else(String::new))
+            }
+            Error::FileNotFound(path) => {
+                write!(f, "File '{}' not found", path.display())
+            }
+            Error::NoFileGiven => {
+                write!(f, "No file to run")
+            }
+            Error::BincodeError => {
+                write!(f, "Failed to serialize or deserialize")
+            }
+        }
+    }
 }
 
-impl fmt::Display for ErrorKind {
+impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ErrorKind::TypeError(op, types) => {
+            RuntimeError::TypeError(op, types) => {
                 let types = types
                     .iter()
                     .fold(String::new(), |a, v| format!("{}{:?}, ", a, v));
                 write!(f, "Cannot apply {:?} to types {}", op, types)
             }
-            ErrorKind::TypeMismatch(a, b) => {
+            RuntimeError::TypeMismatch(a, b) => {
                 write!(f, "Expected '{:?}' and got '{:?}'", a, b)
             }
-            ErrorKind::CannotInfer(a, b) => {
+            RuntimeError::CannotInfer(a, b) => {
                 write!(f, "Failed to infer type '{:?}' from '{:?}'", a, b)
             }
-            ErrorKind::ArgumentType(a, b) => {
+            RuntimeError::ArgumentType(a, b) => {
                 let expected = a
                     .iter()
                     .fold(String::new(), |a, v| format!("{}{:?}, ", a, v));
@@ -74,112 +192,49 @@ impl fmt::Display for ErrorKind {
                     expected, given
                 )
             }
-            ErrorKind::IndexError(value, slot) => {
+            RuntimeError::IndexError(value, slot) => {
                 write!(f, "Cannot index value '{:?}' with type '{:?}'", value, slot)
             }
-            ErrorKind::ExternTypeMismatch(name, types) => {
+            RuntimeError::ExternTypeMismatch(name, types) => {
                 write!(
                     f,
                     "Extern function '{}' doesn't accept argument(s) with type(s) {:?}",
                     name, types
                 )
             }
-            ErrorKind::ValueError(op, values) => {
+            RuntimeError::ValueError(op, values) => {
                 let values = values
                     .iter()
                     .fold(String::new(), |a, v| format!("{}{:?}, ", a, v));
                 write!(f, "Cannot apply {:?} to values {}", op, values)
             }
-            ErrorKind::UnknownField(obj, field) => {
+            RuntimeError::UnknownField(obj, field) => {
                 write!(f, "Cannot find field '{}' on blob {:?}", field, obj)
             }
-            ErrorKind::ArgumentCount(expected, given) => {
+            RuntimeError::ArgumentCount(expected, given) => {
                 write!(
                     f,
                     "Incorrect argument count, expected {} but got {}",
                     expected, given
                 )
             }
-            ErrorKind::IndexOutOfBounds(value, len, slot) => {
+            RuntimeError::IndexOutOfBounds(value, len, slot) => {
                 write!(
                     f,
                     "Failed to index for {:?} - length is {} but index is {}",
                     value, len, slot
                 )
             }
-            ErrorKind::AssertFailed => {
+            RuntimeError::AssertFailed => {
                 write!(f, "Assertion failed")
             }
-            ErrorKind::InvalidProgram => {
+            RuntimeError::InvalidProgram => {
                 write!(f, "{}", "[!!] Invalid program [!!]".bold())
             }
-            ErrorKind::Unreachable => {
+            RuntimeError::Unreachable => {
                 write!(f, "Reached unreachable code")
             }
-            ErrorKind::SyntaxError(line, token) => {
-                write!(f, "Syntax Error on line {} at token {:?}", line, token)
-            }
-            ErrorKind::GitConflictError(start_line, end_line) => {
-                write!(
-                    f,
-                    "Git conflict markers found between lines {} and {}",
-                    start_line, end_line
-                )
-            }
-            ErrorKind::FileNotFound(path) => {
-                write!(f, "File '{}' not found", path.display())
-            }
-            ErrorKind::NoFileGiven => {
-                write!(f, "No file to run")
-            }
-            ErrorKind::BincodeError => {
-                write!(f, "Error when (de-)-serializing")
-            }
         }
     }
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let prompt = "     ";
-        let message = match &self.message {
-            Some(s) => format!("\n{} {}", prompt, s),
-            None => String::from(""),
-        };
-
-        let line = if let Ok(file) = File::open(&self.file) {
-            io::BufReader::new(file)
-                .lines()
-                .enumerate()
-                .filter(|(n, _)| self.line <= *n + 3 && *n + 3 <= self.line + 2)
-                .fold(String::from("\n"), |a, (n, l)| {
-                    format!("{} {:3} | {}\n", a, (n + 1).blue(), l.unwrap())
-                })
-        } else {
-            String::new()
-        };
-
-        write!(
-            f,
-            "{} {}:{}\n{} {}{}{}",
-            "ERROR".red(),
-            self.file.display().blue(),
-            self.line.blue(),
-            prompt,
-            self.kind,
-            message,
-            line
-        )
-    }
-}
-
-impl Error {
-    pub fn new_nowhere(kind: ErrorKind, message: Option<String>) -> Self {
-        Self {
-            kind,
-            message,
-            file: PathBuf::from("!compiler!"),
-            line: 0,
-        }
-    }
-}

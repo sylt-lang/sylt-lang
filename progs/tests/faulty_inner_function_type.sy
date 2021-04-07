@@ -6,4 +6,4 @@ f :: fn -> fn -> {
 start :: fn {
 }
 
-// errors: [ErrorKind::SyntaxError(1, _)]
+// error: @1

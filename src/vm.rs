@@ -4,7 +4,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt::Debug;
 use std::rc::Rc;
 
-use crate::error::{Error, ErrorKind};
+use crate::error::{Error, RuntimeError, RuntimePhase};
 use crate::{op, Block, BlockLinkState, IterFn, Op, Prog, RustFunction, Type, UpValue, Value};
 
 macro_rules! error {
@@ -25,7 +25,7 @@ macro_rules! one_op {
         let b = $fun(&a);
         if b.is_nil() {
             $self.push(b);
-            error!($self, ErrorKind::TypeError($op, vec![a.into()]));
+            error!($self, RuntimeError::TypeError($op, vec![a.into()]));
         }
         $self.push(b);
     };
@@ -37,7 +37,7 @@ macro_rules! two_op {
         let c = $fun(&a, &b);
         if c.is_nil() {
             $self.push(c);
-            error!($self, ErrorKind::TypeError($op, vec![a.into(), b.into()]));
+            error!($self, RuntimeError::TypeError($op, vec![a.into(), b.into()]));
         }
         $self.push(c);
     };
@@ -190,11 +190,12 @@ impl VM {
         unreachable!();
     }
 
-    fn error(&self, kind: ErrorKind, message: Option<String>) -> Error {
+    fn error(&self, kind: RuntimeError, message: Option<String>) -> Error {
         let frame = self.frames.last().unwrap();
         self.print_stacktrace();
-        Error {
+        Error::RuntimeError {
             kind,
+            phase: if self.runtime { RuntimePhase::Runtime } else { RuntimePhase::Typecheck },
             file: frame.block.borrow().file.clone(),
             line: frame.block.borrow().line(frame.ip),
             message,
@@ -205,11 +206,11 @@ impl VM {
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error> {
         match op {
             Op::Illegal => {
-                error!(self, ErrorKind::InvalidProgram);
+                error!(self, RuntimeError::InvalidProgram);
             }
 
             Op::Unreachable => {
-                error!(self, ErrorKind::Unreachable);
+                error!(self, RuntimeError::Unreachable);
             }
 
             Op::Pop => {
@@ -315,7 +316,7 @@ impl VM {
                     }
                     value => error!(
                         self,
-                        ErrorKind::ValueError(op, vec![value]),
+                        RuntimeError::ValueError(op, vec![value]),
                         "Not a function {:?}",
                         value
                     ),
@@ -334,7 +335,7 @@ impl VM {
                             let len = v.len();
                             error!(
                                 self,
-                                ErrorKind::IndexOutOfBounds(Value::Tuple(v), len, slot)
+                                RuntimeError::IndexOutOfBounds(Value::Tuple(v), len, slot)
                             );
                         }
                         self.stack.push(v[slot].clone());
@@ -348,7 +349,7 @@ impl VM {
                             drop(v);
                             error!(
                                 self,
-                                ErrorKind::IndexOutOfBounds(Value::List(rc_v), len, slot)
+                                RuntimeError::IndexOutOfBounds(Value::List(rc_v), len, slot)
                             );
                         }
                         self.stack.push(v[slot].clone());
@@ -364,7 +365,7 @@ impl VM {
                     }
                     (val, slot) => {
                         self.stack.push(Value::Nil);
-                        error!(self, ErrorKind::IndexError(val, slot.into()));
+                        error!(self, RuntimeError::IndexError(val, slot.into()));
                     }
                 }
             }
@@ -383,7 +384,7 @@ impl VM {
                             drop(v);
                             error!(
                                 self,
-                                ErrorKind::IndexOutOfBounds(Value::List(rc_v), len, slot)
+                                RuntimeError::IndexOutOfBounds(Value::List(rc_v), len, slot)
                             );
                         }
                         drop(v);
@@ -394,7 +395,7 @@ impl VM {
                     }
                     (indexable, slot, _) => {
                         self.push(Value::Nil);
-                        error!(self, ErrorKind::IndexError(indexable, slot.into()));
+                        error!(self, RuntimeError::IndexError(indexable, slot.into()));
                     }
                 }
             }
@@ -413,7 +414,7 @@ impl VM {
                     }
                     (indexable, e) => {
                         self.push(Value::Nil);
-                        error!(self, ErrorKind::IndexError(indexable, e.into()));
+                        error!(self, RuntimeError::IndexError(indexable, e.into()));
                     }
                 }
             }
@@ -429,7 +430,7 @@ impl VM {
                             }
                             _ => {
                                 let err = Err(self.error(
-                                    ErrorKind::UnknownField(ty.name.clone(), field.clone()),
+                                    RuntimeError::UnknownField(ty.name.clone(), field.clone()),
                                     None,
                                 ));
                                 self.push(Value::Nil);
@@ -440,7 +441,7 @@ impl VM {
                     inst => {
                         error!(
                             self,
-                            ErrorKind::TypeError(Op::AssignField(field), vec![Type::from(inst)])
+                            RuntimeError::TypeError(Op::AssignField(field), vec![Type::from(inst)])
                         );
                     }
                 }
@@ -458,7 +459,7 @@ impl VM {
                             _ => {
                                 error!(
                                     self,
-                                    ErrorKind::UnknownField(ty.name.clone(), field.clone())
+                                    RuntimeError::UnknownField(ty.name.clone(), field.clone())
                                 );
                             }
                         };
@@ -466,7 +467,7 @@ impl VM {
                     inst => {
                         error!(
                             self,
-                            ErrorKind::TypeError(Op::AssignField(field), vec![Type::from(inst)])
+                            RuntimeError::TypeError(Op::AssignField(field), vec![Type::from(inst)])
                         );
                     }
                 }
@@ -546,7 +547,7 @@ impl VM {
                         self.push(Value::Nil);
                         error!(
                             self,
-                            ErrorKind::TypeError(Op::Iter, vec![Type::from(v)]),
+                            RuntimeError::TypeError(Op::Iter, vec![Type::from(v)]),
                             "Cannot turn into iterator"
                         );
                     }
@@ -571,7 +572,7 @@ impl VM {
                     self.push(Value::Nil);
                     error!(
                         self,
-                        ErrorKind::InvalidProgram,
+                        RuntimeError::InvalidProgram,
                         "Cannot iterate over non-iterator"
                     );
                 }
@@ -605,7 +606,7 @@ impl VM {
 
             Op::Assert => {
                 if matches!(self.pop(), Value::Bool(false)) {
-                    error!(self, ErrorKind::AssertFailed);
+                    error!(self, RuntimeError::AssertFailed);
                 }
                 self.push(Value::Bool(true));
             }
@@ -655,7 +656,7 @@ impl VM {
                         let inner = block.borrow();
                         let args = inner.args();
                         if args.len() != num_args {
-                            error!(self, ErrorKind::ArgumentCount(args.len(), num_args));
+                            error!(self, RuntimeError::ArgumentCount(args.len(), num_args));
                         }
 
                         #[cfg(debug_assertions)]
@@ -787,7 +788,7 @@ impl VM {
                         if !matches!(block.borrow().linking, BlockLinkState::Linked) {
                             if block.borrow().needs_linking() {
                                 error!(self,
-                                       ErrorKind::InvalidProgram,
+                                       RuntimeError::InvalidProgram,
                                        "Calling function '{}' before all captured variables are declared",
                                                block.borrow().name);
                             }
@@ -813,7 +814,7 @@ impl VM {
                                 } else if ty != suggestion {
                                     error!(
                                         self,
-                                        ErrorKind::CannotInfer(ty.clone(), suggestion.clone())
+                                        RuntimeError::CannotInfer(ty.clone(), suggestion.clone())
                                     );
                                 }
                             }
@@ -836,7 +837,7 @@ impl VM {
                                 if ty != &expected {
                                     error!(
                                         self,
-                                        ErrorKind::TypeMismatch(expected, ty.clone()),
+                                        RuntimeError::TypeMismatch(expected, ty.clone()),
                                         "Types of field and variable do not match"
                                     );
                                 }
@@ -844,7 +845,7 @@ impl VM {
                             _ => {
                                 error!(
                                     self,
-                                    ErrorKind::UnknownField(ty.name.clone(), field.clone())
+                                    RuntimeError::UnknownField(ty.name.clone(), field.clone())
                                 );
                             }
                         };
@@ -852,7 +853,7 @@ impl VM {
                     inst => {
                         error!(
                             self,
-                            ErrorKind::TypeError(Op::AssignField(field), vec![Type::from(inst)])
+                            RuntimeError::TypeError(Op::AssignField(field), vec![Type::from(inst)])
                         );
                     }
                 }
@@ -873,7 +874,7 @@ impl VM {
                 if var != up {
                     error!(
                         self,
-                        ErrorKind::TypeMismatch(up, var),
+                        RuntimeError::TypeMismatch(up, var),
                         "Captured varibles type doesn't match upvalue"
                     );
                 }
@@ -886,7 +887,7 @@ impl VM {
                 if curr != other {
                     error!(
                         self,
-                        ErrorKind::TypeMismatch(curr, other),
+                        RuntimeError::TypeMismatch(curr, other),
                         "Cannot assign to different type"
                     );
                 }
@@ -899,7 +900,7 @@ impl VM {
                 if Type::from(&a) != *ret {
                     error!(
                         self,
-                        ErrorKind::TypeMismatch(ret.clone(), a.into()),
+                        RuntimeError::TypeMismatch(ret.clone(), a.into()),
                         "Value does not match return type"
                     );
                 }
@@ -921,7 +922,7 @@ impl VM {
                     (a, b) => {
                         error!(
                             self,
-                            ErrorKind::TypeMismatch(a.clone(), b),
+                            RuntimeError::TypeMismatch(a.clone(), b),
                             "Cannot assign mismatching types"
                         );
                     }
@@ -950,7 +951,7 @@ impl VM {
                     i => {
                         error!(
                             self,
-                            ErrorKind::TypeError(Op::Iter, vec![i]),
+                            RuntimeError::TypeError(Op::Iter, vec![i]),
                             "Cannot convert to iterator"
                         );
                     }
@@ -966,7 +967,7 @@ impl VM {
                     self.push(Value::Nil);
                     error!(
                         self,
-                        ErrorKind::InvalidProgram,
+                        RuntimeError::InvalidProgram,
                         "Can only 'next' iterators"
                     );
                 }
@@ -1004,7 +1005,7 @@ impl VM {
                             } else if ty != suggestion {
                                 error!(
                                     self,
-                                    ErrorKind::CannotInfer(ty.clone(), suggestion.clone())
+                                    RuntimeError::CannotInfer(ty.clone(), suggestion.clone())
                                 );
                             }
                         }
@@ -1012,7 +1013,7 @@ impl VM {
                     value => {
                         error!(
                             self,
-                            ErrorKind::TypeError(op, vec![Type::from(&value)]),
+                            RuntimeError::TypeError(op, vec![Type::from(&value)]),
                             "Cannot link non-function {:?}",
                             value
                         );
@@ -1052,7 +1053,7 @@ impl VM {
                         (a, b) => {
                             error!(
                                 self,
-                                ErrorKind::TypeMismatch(a.clone(), b.clone()),
+                                RuntimeError::TypeMismatch(a.clone(), b.clone()),
                                 "Cannot assign mismatching types"
                             );
                         }
@@ -1061,7 +1062,7 @@ impl VM {
                         if !k.fits(&i) {
                             error!(
                                 self,
-                                ErrorKind::TypeMismatch(k.as_ref().clone(), i),
+                                RuntimeError::TypeMismatch(k.as_ref().clone(), i),
                                 "Cannot index mismatching types"
                             );
                         }
@@ -1069,7 +1070,7 @@ impl VM {
                         if !v.fits(&n) {
                             error!(
                                 self,
-                                ErrorKind::TypeMismatch(v.as_ref().clone(), n),
+                                RuntimeError::TypeMismatch(v.as_ref().clone(), n),
                                 "Cannot assign mismatching types"
                             );
                         }
@@ -1078,7 +1079,7 @@ impl VM {
                         self.stack.push(Value::Nil);
                         error!(
                             self,
-                            ErrorKind::TypeError(Op::AssignIndex, vec![indexable, slot])
+                            RuntimeError::TypeError(Op::AssignIndex, vec![indexable, slot])
                         );
                     }
                 }
@@ -1092,14 +1093,14 @@ impl VM {
                         if !v.fits(&e) {
                             error!(
                                 self,
-                                ErrorKind::TypeMismatch(v.as_ref().clone(), e),
+                                RuntimeError::TypeMismatch(v.as_ref().clone(), e),
                                 "Container does not contain the type"
                             );
                         }
                     }
                     (indexable, e) => {
                         self.push(Value::Nil);
-                        error!(self, ErrorKind::IndexError(indexable.into(), e.into()));
+                        error!(self, RuntimeError::IndexError(indexable.into(), e.into()));
                     }
                 }
             }
@@ -1114,7 +1115,7 @@ impl VM {
                     match callable {
                         Value::Blob(blob) => {
                             if blob.fields.len() != num_args {
-                                return Err(ErrorKind::ArgumentCount(blob.fields.len(), num_args));
+                                return Err(RuntimeError::ArgumentCount(blob.fields.len(), num_args));
                             }
 
                             let mut values = Vec::with_capacity(blob.fields.len());
@@ -1125,7 +1126,7 @@ impl VM {
                             for (slot, ty) in blob.fields.values() {
                                 let given_ty = Type::from(&self.stack[new_base + 1 + slot]);
                                 if !ty.fits(&given_ty) {
-                                    return Err(ErrorKind::TypeMismatch(ty.clone(), given_ty));
+                                    return Err(RuntimeError::TypeMismatch(ty.clone(), given_ty));
                                 }
                                 values[*slot] = ty.into();
                             }
@@ -1137,7 +1138,7 @@ impl VM {
                             let inner = block.borrow();
                             let fargs = inner.args();
                             if fargs != &args {
-                                Err(ErrorKind::ArgumentType(args.clone(), args))
+                                Err(RuntimeError::ArgumentType(args.clone(), args))
                             } else {
                                 Ok(inner.ret().into())
                             }
@@ -1148,7 +1149,7 @@ impl VM {
                             extern_func(&self.stack[new_base + 1..], true)
                         }
 
-                        _ => Err(ErrorKind::InvalidProgram),
+                        _ => Err(RuntimeError::InvalidProgram),
                     }
                 };
 
@@ -1162,7 +1163,7 @@ impl VM {
                             }
                         }
                         if returns.is_empty() {
-                            err = Some(ErrorKind::InvalidProgram);
+                            err = Some(RuntimeError::InvalidProgram);
                             Value::Nil
                         } else {
                             Value::Union(returns)
@@ -1185,7 +1186,7 @@ impl VM {
             Op::JmpFalse(_) => match self.pop() {
                 Value::Bool(_) => {}
                 a => {
-                    error!(self, ErrorKind::TypeError(op, vec![a.into()]))
+                    error!(self, RuntimeError::TypeError(op, vec![a.into()]))
                 }
             },
 

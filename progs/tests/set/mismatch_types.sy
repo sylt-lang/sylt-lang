@@ -3,4 +3,4 @@ start :: fn {
     a
 }
 
-// errors: [ErrorKind::TypeMismatch(_, _)]
+// error: #TypeMismatch(_, _)

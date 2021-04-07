@@ -8,4 +8,4 @@ start :: fn {
     a
 }
 
-// errors: [ErrorKind::ArgumentCount(2, 3)]
+// error: #ArgumentCount(2, 3)

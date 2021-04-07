@@ -5,4 +5,5 @@ start :: fn {
     (2 in a) <=> "123"
 }
 
-// errors: [ErrorKind::TypeMismatch(Type::Int, Type::String), ErrorKind::TypeError(_, _)]
+// error: #TypeMismatch(Type::Int, Type::String)
+// error: #TypeError(_, _)

@@ -22,4 +22,7 @@ start :: fn {
     f(true) <=> g(true)
 }
 
-// errors: [ ErrorKind::TypeMismatch(_, _), ErrorKind::TypeMismatch(_, _), ErrorKind::TypeError(_, _), ErrorKind::TypeError(_, _) ]
+// error: #TypeMismatch(_, _)
+// error: #TypeMismatch(_, _)
+// error: #TypeError(_, _)
+// error: #TypeError(_, _)

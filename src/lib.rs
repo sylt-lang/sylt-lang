@@ -1,4 +1,4 @@
-use error::Error;
+use error::{Error, RuntimeError};
 use gumdrop::Options;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
@@ -10,8 +10,6 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-
-use crate::error::ErrorKind;
 
 pub mod error;
 pub mod vm;
@@ -55,12 +53,7 @@ pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
 pub fn serialize(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Vec<u8>, Vec<Error>> {
     let prog = compile(args, functions)?;
     typecheck(&prog, args)?;
-    bincode::serialize(&prog).map_err(|_| vec![Error {
-        kind: ErrorKind::BincodeError,
-        file: args.file.as_ref().unwrap().clone(),
-        line: 0,
-        message: None,
-    }]) //TODO
+    bincode::serialize(&prog).map_err(|_| vec![Error::BincodeError])
 }
 
 /// Deserializes and links the given file.
@@ -72,12 +65,7 @@ fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, 
     let path = match &args.file {
         Some(file) => file,
         None => {
-            return Err(vec![Error {
-                kind: ErrorKind::NoFileGiven,
-                file: PathBuf::from(""),
-                line: 0,
-                message: None,
-            }]);
+            return Err(vec![Error::NoFileGiven]);
         }
     };
     let sections = sectionizer::sectionize(&path)?;
@@ -113,7 +101,7 @@ pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
 
 /// A linkable external function. Created either manually or using
 /// [sylt_macro::extern_function].
-pub type RustFunction = fn(&[Value], bool) -> Result<Value, ErrorKind>;
+pub type RustFunction = fn(&[Value], bool) -> Result<Value, RuntimeError>;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Type {
@@ -1172,88 +1160,30 @@ pub struct Prog {
 mod tests {
     #[macro_export]
     macro_rules! assert_errs {
-        ($result:expr, [ $( $kind:pat ),* ]) => {
-            let errs = if let Err(errs) = $result {
-                errs
-            } else {
-                eprintln!("    Program succeeded when it should've failed");
-                unreachable!();
-            };
-            if !matches!(
-                errs.as_slice(),
-                &[$($crate::error::Error {
-                    kind: $kind,
-                    file: _,
-                    line: _,
-                    message: _,
-                },
-                )*]
-            ) {
-                eprintln!("Unexpected errors");
-                eprint!("    Got:  [");
+        ($result:expr, $expect:pat) => {
+            let errs = $result.err().unwrap_or(Vec::new());
+
+            #[allow(unused_imports)]
+            use $crate::error::Error;
+            if !matches!(errs.as_slice(), $expect) {
+                eprintln!("===== Got =====");
                 for err in errs {
-                    eprint!(" ErrorKind::{:?} ", err.kind);
+                    eprint!("{}", err);
                 }
-                eprint!("]\n    Want: [");
-                $(
-                eprint!(" {} ", stringify!($kind));
-                )*
-                eprintln!("]");
+                eprintln!("===== Expect =====");
+                eprint!("{}\n\n", stringify!($expect));
                 assert!(false);
             }
         };
     }
 
-    use owo_colors::OwoColorize;
-    use std::sync::mpsc;
-    use std::thread;
-    use std::time::Duration;
-
-    // Shamelessly stolen from https://github.com/rust-lang/rfcs/issues/2798
-    #[allow(dead_code)]
-    pub fn panic_after<T, F>(d: Duration, f: F) -> T
-    where
-        T: Send + 'static,
-        F: FnOnce() -> T,
-        F: Send + 'static,
-    {
-        let (done_tx, done_rx) = mpsc::channel();
-        let handle = thread::spawn(move || {
-            let val = f();
-            done_tx.send(()).expect("Unable to send completion signal");
-            val
-        });
-
-        let msg = match done_rx.recv_timeout(d) {
-            Ok(_) => {
-                return handle.join().expect("Thread panicked");
-            }
-            Err(mpsc::RecvTimeoutError::Timeout) => "Test took too long to complete",
-            Err(mpsc::RecvTimeoutError::Disconnected) => "Test produced incorrect result",
-        };
-        eprintln!("    #### {} ####", msg.red());
-        panic!("{}", msg);
-    }
-
     #[macro_export]
     macro_rules! test_file {
-        ($fn:ident, $path:literal, $print:expr) => {
+        ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
             #[test]
             fn $fn() {
-                let mut args = $crate::Args::default();
-                args.file = Some(std::path::PathBuf::from($path));
-                args.verbosity = if $print { 1 } else { 0 };
-                $crate::run_file(
-                    &args,
-                    sylt_macro::link!(crate::dbg as dbg, crate::push as push, crate::len as len,),
-                )
-                .unwrap();
-            }
-        };
-        ($fn:ident, $path:literal, $print:expr, $errs:tt) => {
-            #[test]
-            fn $fn() {
-                use $crate::error::ErrorKind;
+                #[allow(unused_imports)]
+                use $crate::error::RuntimeError;
                 #[allow(unused_imports)]
                 use $crate::Type;
 
@@ -1275,7 +1205,7 @@ mod tests {
 // The "standard library"
 use crate as sylt;
 
-pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, ErrorKind> {
+pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
     println!(
         "{}: {:?}, {:?}",
         "DBG".purple(),
@@ -1285,7 +1215,7 @@ pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, ErrorKind> {
     Ok(Value::Nil)
 }
 
-pub fn push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> {
+pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
         ([Value::List(ls), v], true) => {
             let ls: &RefCell<_> = ls.borrow();
@@ -1296,7 +1226,7 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> {
             if ls == v {
                 Ok(Value::Nil)
             } else {
-                Err(ErrorKind::TypeMismatch(ls, v))
+                Err(RuntimeError::TypeMismatch(ls, v))
             }
         }
         ([Value::List(ls), v], false) => {
@@ -1305,7 +1235,7 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, ErrorKind> {
             ls.borrow_mut().push(v.clone());
             Ok(Value::Nil)
         }
-        (values, _) => Err(ErrorKind::ExternTypeMismatch(
+        (values, _) => Err(RuntimeError::ExternTypeMismatch(
             "push".to_string(),
             values.iter().map(Type::from).collect(),
         )),
