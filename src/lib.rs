@@ -1163,6 +1163,7 @@ mod tests {
         ($result:expr, $expect:pat) => {
             let errs = $result.err().unwrap_or(Vec::new());
 
+            #[allow(unused_imports)]
             use $crate::error::Error;
             if !matches!(errs.as_slice(), $expect) {
                 eprintln!("===== Got =====");
@@ -1176,9 +1177,13 @@ mod tests {
         };
     }
 
+    #[allow(unused_imports)]
     use owo_colors::OwoColorize;
+    #[allow(unused_imports)]
     use std::sync::mpsc;
+    #[allow(unused_imports)]
     use std::thread;
+    #[allow(unused_imports)]
     use std::time::Duration;
 
     #[macro_export]
