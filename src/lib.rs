@@ -522,6 +522,11 @@ pub enum Op {
     /// Finding it in a program is a critical error.
     Illegal,
 
+    /// Remove the top value from the stack.
+    ///
+    /// {A} - Pop - {}
+    Pop,
+
     /// Opens a new scope for variables, a semantic marker to
     /// aid compilation and analysis.
     ///

@@ -533,7 +533,9 @@ impl Compiler {
 
     fn infix(&mut self, token: Token, block: &mut Block) -> bool {
         match token {
-            Token::Minus
+            Token::And
+            | Token::Or
+            | Token::Minus
             | Token::Plus
             | Token::Slash
             | Token::Star
@@ -546,8 +548,6 @@ impl Compiler {
             | Token::NotEqual => self.binary(block),
 
             Token::In => self.contains(block),
-
-            Token::And | Token::Or => self.binary_bool(block),
 
             _ => {
                 return false;
@@ -777,47 +777,14 @@ impl Compiler {
         add_op(self, block, Op::Contains);
     }
 
-    fn binary_bool(&mut self, block: &mut Block) {
-        // TODO(ed):
-        // let op = self.eat();
-
-        // // TODO(ed): If JmpFalseNoPeek would be made, we could
-        // // save some instructions and clones.
-        // match op {
-        //     Token::And => {
-        //         add_op(self, block, Op::Copy(1));
-        //         let jump = add_op(self, block, Op::Illegal);
-        //         add_op(self, block, Op::Pop);
-
-        //         self.parse_precedence(block, self.precedence(op).next());
-
-        //         block.patch(Op::JmpFalse(block.curr()), jump);
-        //     }
-
-        //     Token::Or => {
-        //         add_op(self, block, Op::Copy(1));
-        //         let skip = add_op(self, block, Op::Illegal);
-        //         let jump = add_op(self, block, Op::Illegal);
-
-        //         block.patch(Op::JmpFalse(block.curr()), skip);
-        //         add_op(self, block, Op::Pop);
-
-        //         self.parse_precedence(block, self.precedence(op).next());
-
-        //         block.patch(Op::Jmp(block.curr()), jump);
-        //     }
-        //     _ => {
-        //         syntax_error!(self, "Illegal operator");
-        //     }
-        // }
-    }
-
     fn binary(&mut self, block: &mut Block) {
         let op = self.eat();
 
         self.parse_precedence(block, self.precedence(op.clone()).next());
 
         let op: &[Op] = match op {
+            Token::And => &[Op::And],
+            Token::Or => &[Op::Or],
             Token::Plus => &[Op::Add],
             Token::Minus => &[Op::Sub],
             Token::Star => &[Op::Mul],
@@ -1428,24 +1395,27 @@ impl Compiler {
     fn if_statment(&mut self, block: &mut Block) {
         expect!(self, Token::If, "Expected 'if' at start of if-statement");
         self.expression(block);
-        let jump = add_op(self, block, Op::Illegal);
-        self.scope(block);
+        add_op(self, block, Op::If);
+        push_scope!(self, block, {
+            add_op(self, block, Op::Pop);
+            self.scope(block);
+        });
 
-        if Token::Else == self.peek() {
-            self.eat();
+        if Token::Else != self.peek() {
+            return;
+        }
 
-            let else_jmp = add_op(self, block, Op::Illegal);
-            // block.patch(Op::JmpFalse(block.curr()), jump);
+        self.eat();
 
+        add_op(self, block, Op::Else);
+        push_scope!(self, block, {
+            add_op(self, block, Op::Pop);
             match self.peek() {
                 Token::If => self.if_statment(block),
                 Token::LeftBrace => self.scope(block),
                 _ => syntax_error!(self, "Epected 'if' or '{{' after else"),
             }
-            // block.patch(Op::Jmp(block.curr()), else_jmp);
-        } else {
-            // block.patch(Op::JmpFalse(block.curr()), jump);
-        }
+        });
     }
 
     fn for_loop(&mut self, block: &mut Block) {
@@ -1938,7 +1908,7 @@ impl Compiler {
 
             _ => {
                 self.expression(block);
-                // add_op(self, block, Op::Pop);
+                add_op(self, block, Op::Pop);
             }
         }
     }
