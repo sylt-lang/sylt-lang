@@ -150,12 +150,6 @@ impl Variable {
 }
 
 #[derive(Debug)]
-enum LoopOp {
-    Continue,
-    Break,
-}
-
-#[derive(Debug)]
 struct Frame {
     stack: Vec<Variable>,
     upvalues: Vec<Variable>,
@@ -1436,7 +1430,7 @@ impl Compiler {
 
         push_scope!(self, block, {
             let var = Variable::new(&name, false, Type::Unknown).activate();
-            let slot = self.define(var);
+            self.define(var).unwrap();
 
             self.scope(block);
         });
@@ -1869,18 +1863,6 @@ impl Compiler {
 
             (Token::For, ..) => {
                 self.for_loop(block);
-            }
-
-            (Token::Break, ..) => {
-                self.eat();
-                let addr = add_op(self, block, Op::Illegal);
-                let stack_size = self.frame().stack.len();
-            }
-
-            (Token::Continue, ..) => {
-                self.eat();
-                let addr = add_op(self, block, Op::Illegal);
-                let stack_size = self.frame().stack.len();
             }
 
             (Token::Ret, ..) => {
