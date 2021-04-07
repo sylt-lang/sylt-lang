@@ -530,22 +530,21 @@ impl Blob {
 /// machine carries out when running the
 /// "byte-code".
 ///
-#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub enum Op {
     /// This instruction should never be run.
     /// Finding it in a program is a critical error.
     Illegal,
 
-    /// Pops one value from the stack.
+    /// Opens a new scope for variables, a semantic marker to
+    /// aid compilation and analysis.
     ///
-    /// {A, B} - Pop - {A}
-    Pop,
-    /// Assumes the value on the top of the
-    /// stack has an upvalue, and closes that
-    /// upvalue.
+    /// {A} - OpenScope - {A}
+    OpenScope,
+    /// Closes the scope and drops the number of variables given.
     ///
-    /// {A, B} - Pop - {A}
-    PopUpvalue,
+    /// {A, B} - CloseScope - {A}
+    CloseScope(usize),
     /// Copies the N values on the top of the stack
     /// and puts them on top of the stack.
     ///
@@ -612,12 +611,6 @@ pub enum Op {
     ///
     /// {A} - Iter - {Iter(A)}
     Iter,
-    /// Steps the iterator on top of the stack one step and pushes
-    /// the new value. If the iterator is consumed, jumps to the address
-    /// and pushes [Value::Nil]. Errors if the top element isn't an iterator.
-    ///
-    /// {I} - JmpNext(line) - {I, A}
-    JmpNext(usize),
 
     /// Adds the two top elements on the stack,
     /// using the function [op::add]. The result
@@ -664,27 +657,6 @@ pub enum Op {
     /// {A} - Not - {!A}
     Not,
 
-    /// Sets the instruction pointer
-    /// to the given value.
-    ///
-    /// Does not affect the stack.
-    Jmp(usize),
-    /// Sets the instruction pointer
-    /// to the given value, if the
-    /// topmost value is false, also
-    /// pops this value.
-    ///
-    /// {A} - JmpFalse(n) - {}
-    JmpFalse(usize),
-    /// Sets the instruction pointer
-    /// to the given value and pops
-    /// the given amount of values.
-    ///
-    /// Used for 'break' and 'continue'.
-    ///
-    /// {A, B, C} - JmpNPop(n, 2) - {A}
-    JmpNPop(usize, usize),
-
     /// Compares the two topmost elements
     /// on the stack for equality, and pushes
     /// the result. Compares using [op::eq].
@@ -714,6 +686,14 @@ pub enum Op {
     ///
     /// Does not affect the stack.
     Unreachable,
+
+    /// If the top stack value is true, the following
+    /// scope (between OpenScope and CloseScope) is run.
+    If,
+    /// If the top stack value is true, the following
+    /// scope (between OpenScope and CloseScope) is skipped.
+    Else,
+    // TODO(ed): For-loop
 
     /// Reads the value counted from the
     /// bottom of the stack and adds it
@@ -783,12 +763,6 @@ pub enum Op {
     ///
     /// {F, A, B} - Return - {..., B}
     Return,
-
-    /// Temporarily stops execution and returns
-    /// to the call site.
-    ///
-    /// Does not affect the stack.
-    Yield,
 }
 
 ///
