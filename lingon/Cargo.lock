@@ -340,9 +340,9 @@ dependencies = [
 
 [[package]]
 name = "sungod"
-version = "0.2.2"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2eee8eb6e8040ce1fcd07d72e39d89efc59121b9b1187c6b9d4030d8ddad0f61"
+checksum = "b351cad1154eca506fab7bc868ffa732e641171a53d6e75aeaae0a042269c6f4"
 
 [[package]]
 name = "syn"
