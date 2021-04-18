@@ -564,7 +564,6 @@ impl VM {
                     if let Some(v) = v {
                         self.push(v);
                     } else {
-                        self.push(Value::Nil);
                         self.frame_mut().ip = line;
                         return Ok(OpResult::Continue);
                     }
