@@ -626,23 +626,28 @@ impl VM {
             Op::JmpNPop(_, _) => {}
 
             Op::Tuple(n) => {
-                let end = Vec::from(&self.stack[self.stack.len() - n..]);
+                let n = self.stack.len() - n;
+                let end = self.stack.split_off(n);
                 self.push(Type::Tuple(end));
             }
 
             Op::List(n) => {
-                let ty = Type::maybe_union(self.stack[self.stack.len() - n..].iter());
+                let n = self.stack.len() - n;
+                let ty = Type::maybe_union(self.stack.split_off(n).iter());
                 self.push(Type::List(Box::new(ty)));
             }
 
             Op::Set(n) => {
-                let ty = Type::maybe_union(self.stack[self.stack.len() - n..].iter());
+                let n = self.stack.len() - n;
+                let ty = Type::maybe_union(self.stack.split_off(n).iter());
                 self.push(Type::Set(Box::new(ty)));
             }
 
             Op::Dict(n) => {
-                let key = Type::maybe_union(self.stack[self.stack.len() - n..].iter().step_by(2));
-                let value = Type::maybe_union(self.stack[self.stack.len() - n..].iter().skip(1).step_by(2));
+                let n = self.stack.len() - n;
+                let elems = self.stack.split_off(n);
+                let key = Type::maybe_union(elems.iter().step_by(2));
+                let value = Type::maybe_union(elems.iter().skip(1).step_by(2));
                 self.push(Type::Dict(Box::new(key), Box::new(value)));
             }
 

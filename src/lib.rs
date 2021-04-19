@@ -255,7 +255,9 @@ impl From<&Value> for Type {
                 block.borrow().ty.clone()
             }
             Value::Unknown => Type::Unknown,
-            Value::Nil | Value::Ty(_) | Value::ExternFunction(_) => Type::Void,
+            Value::ExternFunction(n) => Type::ExternFunction(*n),
+            Value::Nil => Type::Void,
+            Value::Ty(_) => unreachable!(),
         }
     }
 }
