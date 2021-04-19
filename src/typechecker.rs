@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use crate::error::{Error, RuntimeError, RuntimePhase};
 use crate::{Type, Value, Prog, Args, Block, Op};
 use std::rc::Rc;
@@ -43,7 +43,7 @@ macro_rules! two_op {
 
 
 pub struct VM {
-    upvalues: HashMap<usize, Type>,
+    upvalues: Vec<Type>,
     stack: Vec<Type>,
     ip: usize,
     block: Rc<RefCell<Block>>,
@@ -107,7 +107,7 @@ fn typecheck_block(block: Rc<RefCell<Block>>, prog: &Prog, args: &Args) -> Vec<E
 impl VM {
     pub(crate) fn new(block: &Rc<RefCell<Block>>) -> Self {
         let mut vm = Self {
-            upvalues: block.borrow().upvalues.iter().map(|(slot, _, ty)| (*slot, ty.clone())).collect(),
+            upvalues: block.borrow().upvalues.iter().map(|(_, _, ty)| ty).cloned().collect(),
             stack: Vec::new(),
             ip: 0,
             block: Rc::clone(block),
@@ -296,12 +296,14 @@ impl VM {
             }
 
             Op::ReadUpvalue(slot) => {
-                let ty = self.upvalues.get(&slot).unwrap().clone();
+                eprintln!("{}", slot);
+                eprintln!("{:?}", self.upvalues);
+                let ty = self.upvalues.get(slot).unwrap().clone();
                 self.push(ty);
             }
 
             Op::AssignUpvalue(slot) => {
-                let var = self.upvalues.get(&slot).unwrap().clone();
+                let var = self.upvalues.get(slot).unwrap().clone();
                 let up = self.pop();
                 if var != up {
                     error!(
@@ -409,8 +411,11 @@ impl VM {
 
             Op::Force(ty) => {
                 self.pop();
-                let ty = Type::from(&prog.constants[ty]);
-                self.push(ty);
+                if let Value::Ty(ty) = &prog.constants[ty] {
+                    self.push(ty.clone());
+                } else {
+                    error!(self, RuntimeError::InvalidProgram, "Can only force types");
+                }
             }
 
             Op::Link(slot) => {

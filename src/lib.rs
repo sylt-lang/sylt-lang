@@ -99,6 +99,7 @@ pub type RustFunction = fn(&[Value], bool) -> Result<Value, RuntimeError>;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Type {
+    Ty,
     Void,
     Unknown,
     Int,
@@ -121,6 +122,7 @@ impl Hash for Type {
     fn hash<H: Hasher>(&self, h: &mut H) {
         // TODO(ed): We can use the fancy macro here instead.
         match self {
+            Type::Ty => 18,
             Type::Void => 0,
             Type::Unknown => 1,
             Type::Int => 2,
@@ -257,7 +259,7 @@ impl From<&Value> for Type {
             Value::Unknown => Type::Unknown,
             Value::ExternFunction(n) => Type::ExternFunction(*n),
             Value::Nil => Type::Void,
-            Value::Ty(_) => unreachable!(),
+            Value::Ty(_) => Type::Ty,
         }
     }
 }
@@ -298,6 +300,7 @@ impl From<&Type> for Value {
                 Rc::new(RefCell::new(Block::stubbed_block(ty))),
             ),
             Type::ExternFunction(x) => Value::ExternFunction(*x),
+            Type::Ty => Value::Ty(Type::Void),
         }
     }
 }
