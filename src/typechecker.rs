@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use crate::error::{Error, RuntimeError, RuntimePhase};
-use crate::{Type, Value, Prog, Args, Block, Op};
+use crate::{Type, Value, Prog, Args, Block, Op, BlockLinkState};
 use std::rc::Rc;
 use std::cell::RefCell;
 use owo_colors::OwoColorize;
@@ -195,43 +195,49 @@ impl VM {
             }
 
             Op::Constant(slot) => {
-                self.push(Type::from(&prog.constants[slot]));
-                        /* TODO(ed): Linking stage
-                        if !matches!(block.borrow().linking, BlockLinkState::Linked) {
-                            if block.borrow().needs_linking() {
-                                error!(self,
-                                       RuntimeError::InvalidProgram,
-                                       "Calling function '{}' before all captured variables are declared",
-                                               block.borrow().name);
-                            }
+                let value = &prog.constants[slot];
+                self.push(Type::from(value));
 
-                            let mut types = Vec::new();
-                            for (slot, is_up, ty) in block.borrow().upvalues.iter() {
-                                if *is_up {
-                                    types.push(ty.clone());
-                                } else {
-                                    types.push(Type::from(&self.stack[*slot]));
-                                }
-                            }
-
-                            let mut block_mut = block.borrow_mut();
-                            for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
-                                if *is_up {
-                                    continue;
-                                }
-
-                                let suggestion = &types[i];
-                                if matches!(ty, Type::Unknown) {
-                                    *ty = suggestion.clone();
-                                } else if ty != suggestion {
-                                    error!(
-                                        self,
-                                        RuntimeError::CannotInfer(ty.clone(), suggestion.clone())
-                                    );
-                                }
-                            }
+                while let Value::Function(_, block) = value {
+                    match block.borrow().linking {
+                        BlockLinkState::Linked => break,
+                        BlockLinkState::Unlinked => {
+                            error!(self,
+                                RuntimeError::InvalidProgram,
+                                "Calling function '{}' before all captured variables are declared",
+                                block.borrow().name);
                         }
-                        */
+                        BlockLinkState::Nothing => {},
+                    }
+
+                    let mut types = Vec::new();
+                    for (slot, is_up, ty) in block.borrow().upvalues.iter() {
+                        if *is_up {
+                            types.push(ty.clone());
+                        } else {
+                            types.push((&self.stack[*slot]).clone());
+                        }
+                    }
+
+                    let mut block_mut = block.borrow_mut();
+                    for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
+                        if *is_up {
+                            continue;
+                        }
+
+                        let suggestion = &types[i];
+                        if matches!(ty, Type::Unknown) {
+                            *ty = suggestion.clone();
+                        } else if ty != suggestion {
+                            error!(
+                                self,
+                                RuntimeError::CannotInfer(ty.clone(), suggestion.clone())
+                            );
+                        }
+                    }
+                    break;
+                }
+
             }
 
             Op::AssignField(field) => {
@@ -419,22 +425,20 @@ impl VM {
             }
 
             Op::Link(slot) => {
-                match Type::from(&prog.constants[slot]) {
-                    Type::Function(_, _) => {
-
-                        /* TODO(ed): Linking stage
-                        block.borrow_mut().link();
+                match &prog.constants[slot] {
+                    Value::Function(_, block) => {
+                        (*block).borrow_mut().linking = BlockLinkState::Linked;
 
                         let mut types = Vec::new();
-                        for (slot, is_up, ty) in block.borrow().upvalues.iter() {
+                        for (slot, is_up, ty) in (*block).borrow().upvalues.iter() {
                             if *is_up {
                                 types.push(ty.clone());
                             } else {
-                                types.push(Type::from(&self.stack[*slot]));
+                                types.push(self.stack[*slot].clone());
                             }
                         }
 
-                        let mut block_mut = block.borrow_mut();
+                        let mut block_mut = (*block).borrow_mut();
                         for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
                             if *is_up {
                                 continue;
@@ -450,14 +454,13 @@ impl VM {
                                 );
                             }
                         }
-                        */
 
                     }
 
                     value => {
                         error!(
                             self,
-                            RuntimeError::TypeError(op, vec![value]),
+                            RuntimeError::TypeError(op, vec![]),
                             "Cannot link non-function {:?}",
                             value
                         );
