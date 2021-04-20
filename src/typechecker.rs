@@ -598,8 +598,8 @@ impl VM {
                                         return Err(RuntimeError::FieldTypeMismatch(
                                                 blob.name.clone(),
                                                 field.clone(),
-                                                t.clone(),
                                                 ty.clone(),
+                                                t.clone(),
                                         ))
                                     }
                                     (None, ty) if ty.fits(&Type::Void) => {}
@@ -607,8 +607,8 @@ impl VM {
                                         return Err(RuntimeError::FieldTypeMismatch(
                                                 blob.name.clone(),
                                                 field.clone(),
-                                                Type::Void,
                                                 ty.clone(),
+                                                Type::Void,
                                         ));
                                     }
                                 }
