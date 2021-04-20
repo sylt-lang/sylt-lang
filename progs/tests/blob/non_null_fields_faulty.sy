@@ -1,0 +1,11 @@
+A :: blob {
+    a: int
+}
+
+start :: fn {
+    a := A!
+    print a.a
+}
+
+// error: #FieldTypeMismatch(_, _, _, _)
+// error: #TypeError(_, _)
