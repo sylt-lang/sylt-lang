@@ -4,8 +4,8 @@ A :: blob {
 }
 
 start :: fn {
-    a :: A(1, 2, 3)
+    a :: A { a: 1, b: 2, c: 3 }
     a
 }
 
-// error: #ArgumentCount(2, 3)
+// error: #UnknownField(_, _)

@@ -3,8 +3,6 @@ A :: blob {
 }
 
 start :: fn {
-
-    a := A(1)
+    a := A { a: 1 }
     a
-
 }
