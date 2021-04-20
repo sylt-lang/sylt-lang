@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use crate::error::{Error, RuntimeError, RuntimePhase};
 use crate::{Type, Value, Prog, Args, Block, Op, BlockLinkState};
 use std::rc::Rc;
@@ -246,7 +246,7 @@ impl VM {
                     Type::Instance(ty) => {
                         let field = &prog.strings[field];
                         match ty.fields.get(field) {
-                            Some((_, ty)) => {
+                            Some(ty) => {
                                 if ty != &expect {
                                     error!(
                                         self,
@@ -275,18 +275,23 @@ impl VM {
             Op::GetField(field) => {
                 match self.pop() {
                     Type::Instance(ty) => {
-                        let field = &prog.strings[field];
-                        match ty.fields.get(field) {
-                            Some((_, ty)) => {
-                                self.push(ty.clone());
+                        match &*prog.strings[field] {
+                            "_id" => { self.push(Type::Int); }
+                            "_name" => { self.push(Type::String); }
+                            field => {
+                                match ty.fields.get(field) {
+                                    Some(ty) => {
+                                        self.push(ty.clone());
+                                    }
+                                    _ => {
+                                        error!(
+                                            self,
+                                            RuntimeError::UnknownField(ty.name.clone(), field.to_string())
+                                        );
+                                    }
+                                }
                             }
-                            _ => {
-                                error!(
-                                    self,
-                                    RuntimeError::UnknownField(ty.name.clone(), field.clone())
-                                );
-                            }
-                        };
+                        }
                     }
                     inst => {
                         error!(
@@ -556,21 +561,56 @@ impl VM {
                     let args = self.stack[new_base + 1..].to_vec();
                     match callable {
                         Type::Blob(blob) => {
-                            if blob.fields.len() != num_args {
-                                return Err(RuntimeError::ArgumentCount(blob.fields.len(), num_args));
-                            }
+                            let values = self.stack[new_base+1..]
+                                .chunks_exact(2)
+                                .map(|b| {
+                                    if let Type::Field(f) = &b[0] {
+                                        (f.clone(), b[1].clone())
+                                    } else {
+                                        unreachable!("Got {:?} when I expected field", b[0]);
+                                    }
+                                }).collect::<HashMap<String, Type>>();
 
-                            let mut values = Vec::with_capacity(blob.fields.len());
-                            for _ in 0..values.capacity() {
-                                values.push(Value::Nil);
-                            }
-
-                            for (slot, ty) in blob.fields.values() {
-                                let given_ty = self.stack[new_base + 1 + slot].clone();
-                                if !ty.fits(&given_ty) {
-                                    return Err(RuntimeError::TypeMismatch(ty.clone(), given_ty));
+                            for (field, ty) in values.iter() {
+                                match blob.fields.get(field) {
+                                    Some(given_ty) if ty == given_ty => {}
+                                    Some(given_ty) => {
+                                        return Err(RuntimeError::FieldTypeMismatch(
+                                                blob.name.clone(),
+                                                field.clone(),
+                                                given_ty.clone(),
+                                                ty.clone(),
+                                        ));
+                                    }
+                                    None => {
+                                        return Err(RuntimeError::FieldTypeMismatch(
+                                                blob.name.clone(),
+                                                field.clone(),
+                                                Type::Void,
+                                                ty.clone(),
+                                        ));
+                                    }
                                 }
-                                values[*slot] = ty.into();
+                            }
+
+                            for (field, ty) in blob.fields.iter() {
+                                match (values.get(field), ty) {
+                                    (Some(ty), t) if ty == t => {}
+                                    (Some(ty), t) => {
+                                        return Err(RuntimeError::FieldTypeMismatch(
+                                                blob.name.clone(),
+                                                field.clone(),
+                                                ty.clone(),
+                                                t.clone(),
+                                        ))
+                                    }
+                                    (None, _) => {
+                                        return Err(RuntimeError::UnknownField(
+                                                blob.name.clone(),
+                                                field.clone(),
+                                        ))
+                                    }
+                                }
                             }
 
                             Ok(Type::Instance(Rc::clone(blob)))
