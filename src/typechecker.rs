@@ -113,7 +113,7 @@ impl VM {
             block: Rc::clone(block),
         };
 
-        vm.push((**block).borrow().ty.clone());
+        vm.push(block.borrow().ty.clone());
         for arg in block.borrow().args() {
             vm.push(arg.clone());
         }
@@ -427,10 +427,10 @@ impl VM {
             Op::Link(slot) => {
                 match &prog.constants[slot] {
                     Value::Function(_, block) => {
-                        (*block).borrow_mut().linking = BlockLinkState::Linked;
+                        block.borrow_mut().linking = BlockLinkState::Linked;
 
                         let mut types = Vec::new();
-                        for (slot, is_up, ty) in (*block).borrow().upvalues.iter() {
+                        for (slot, is_up, ty) in block.borrow().upvalues.iter() {
                             if *is_up {
                                 types.push(ty.clone());
                             } else {
@@ -438,7 +438,7 @@ impl VM {
                             }
                         }
 
-                        let mut block_mut = (*block).borrow_mut();
+                        let mut block_mut = block.borrow_mut();
                         for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
                             if *is_up {
                                 continue;
