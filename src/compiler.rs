@@ -1014,12 +1014,42 @@ impl Compiler {
     }
 
     fn call_maybe(&mut self, block: &mut Block) -> bool {
-        if matches!(self.peek(), Token::Bang | Token::LeftParen) {
-            self.call(block);
-            true
-        } else {
-            false
+        match self.peek() {
+            Token::Bang | Token::LeftParen => self.call(block),
+            Token::LeftBrace => self.blob_initalizer(block),
+            _ => { return false; }
         }
+        return true;
+    }
+
+    fn blob_initalizer(&mut self, block: &mut Block) {
+        expect!(self, Token::LeftBrace, "Exptected '{{' at start of blob initalizer");
+        let mut num_fields = 0;
+        loop {
+            match self.peek() {
+                Token::Newline => {
+                    self.eat();
+                }
+                Token::Identifier(field) => {
+                    self.eat();
+                    num_fields += 1;
+                    let field = self.add_constant(Value::Field(field));
+                    add_op(self, block, Op::Constant(field));
+                    expect!(self, Token::Colon, "Exptected ':' after field name");
+                    self.expression(block);
+                    expect!(self, Token::Newline, "Exptected 'CR' after field expression");
+                }
+                Token::RightBrace => {
+                    break;
+                }
+                _ => {
+                    syntax_error!(self, "Expected field name in initalizer");
+                    break;
+                }
+            }
+        }
+        add_op(self, block, Op::Call(num_fields * 2));
+        expect!(self, Token::RightBrace, "Exptected '}}' after blob initalizer");
     }
 
     fn call(&mut self, block: &mut Block) {
