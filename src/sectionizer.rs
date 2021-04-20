@@ -72,29 +72,18 @@ pub fn sectionize(path: &Path) -> Result<Vec<Section>, Vec<Error>> {
                 }
 
                 (Some((Token::LeftBrace, _)), ..) => {
-                    let mut blocks = 1;
+                    let mut blocks = 0;
                     loop {
-                        curr += 1;
                         match tokens.get(curr) {
-                            Some((Token::LeftBrace, _)) => {
-                                blocks += 1;
-                            }
-
-                            Some((Token::RightBrace, _)) => {
-                                curr += 1;
-                                blocks -= 1;
-                                if blocks <= 0 {
-                                    curr -= 1;
-                                    break;
-                                }
-                            }
-
-                            None => {
-                                break;
-                            }
-
+                            Some((Token::LeftBrace, _)) => { blocks += 1; }
+                            Some((Token::RightBrace, _)) => { blocks -= 1; }
+                            None => { break; }
                             _ => {}
                         }
+                        if blocks == 0 {
+                            break;
+                        }
+                        curr += 1;
                     }
                     false
                 }
