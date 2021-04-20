@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::rc::Rc;
 
 use crate::error::{Error, RuntimeError, RuntimePhase};
-use crate::{op, Block, BlockLinkState, IterFn, Op, Prog, RustFunction, Type, UpValue, Value};
+use crate::{Block, BlockLinkState, IterFn, Op, Prog, RustFunction, Type, UpValue, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -62,7 +62,6 @@ pub struct VM {
 
     pub print_bytecode: bool,
     pub print_exec: bool,
-    runtime: bool,
 
     extern_functions: Vec<RustFunction>,
 }
@@ -90,7 +89,6 @@ impl VM {
 
             print_bytecode: false,
             print_exec: false,
-            runtime: false,
 
             extern_functions: Vec::new(),
         }
@@ -142,13 +140,6 @@ impl VM {
         &self.constants[slot]
     }
 
-    fn ty(&self, slot: usize) -> &Type {
-        match &self.constants[slot] {
-            Value::Ty(ty) => ty,
-            _ => self.crash_and_burn(),
-        }
-    }
-
     fn string(&self, slot: usize) -> &String {
         &self.strings[slot]
     }
@@ -159,10 +150,6 @@ impl VM {
     }
 
     fn print_stacktrace(&self) {
-        if !self.runtime {
-            return;
-        }
-
         println!("\n<{}>", "STACK".red());
         for (i, frame) in self.frames.iter().enumerate() {
             println!(
@@ -195,7 +182,7 @@ impl VM {
         self.print_stacktrace();
         Error::RuntimeError {
             kind,
-            phase: if self.runtime { RuntimePhase::Runtime } else { RuntimePhase::Typecheck },
+            phase: RuntimePhase::Runtime,
             file: frame.block.borrow().file.clone(),
             line: frame.block.borrow().line(frame.ip),
             message,
@@ -473,6 +460,8 @@ impl VM {
                 }
             }
 
+            // TODO(ed): These look the same as in typechecker.rs, since the macros and functions hide the
+            // rest, maybe merge them?
             Op::Neg => {
                 one_op!(self, Op::Neg, op::neg);
             }
@@ -739,7 +728,6 @@ impl VM {
         self.extern_functions = prog.functions.clone();
         self.stack.clear();
         self.frames.clear();
-        self.runtime = true;
 
         self.push(Value::Function(Rc::new(Vec::new()), Rc::clone(&block)));
 
@@ -770,503 +758,214 @@ impl VM {
             }
         }
     }
+}
 
-    /// Checks the current operation for type errors.
-    fn check_op(&mut self, op: Op) -> Result<(), Error> {
-        match op {
-            Op::Unreachable => {}
+///
+/// Module with all the operators that can be applied
+/// to values.
+///
+/// Broken out because they need to be recursive.
+mod op {
+    use super::Value;
+    use std::collections::HashSet;
+    use std::rc::Rc;
 
-            Op::Jmp(_line) => {}
+    fn tuple_bin_op(
+        a: &Rc<Vec<Value>>,
+        b: &Rc<Vec<Value>>,
+        f: fn(&Value, &Value) -> Value,
+    ) -> Value {
+        Value::Tuple(Rc::new(
+            a.iter().zip(b.iter()).map(|(a, b)| f(a, b)).collect(),
+        ))
+    }
 
-            Op::Yield => {}
+    fn tuple_un_op(a: &Rc<Vec<Value>>, f: fn(&Value) -> Value) -> Value {
+        Value::Tuple(Rc::new(a.iter().map(f).collect()))
+    }
 
-            Op::Constant(value) => {
-                match self.constant(value).clone() {
-                    Value::Function(_, block) => {
-                        self.push(Value::Function(Rc::new(Vec::new()), block.clone()));
-                        if !matches!(block.borrow().linking, BlockLinkState::Linked) {
-                            if block.borrow().needs_linking() {
-                                error!(self,
-                                       RuntimeError::InvalidProgram,
-                                       "Calling function '{}' before all captured variables are declared",
-                                               block.borrow().name);
-                            }
-
-                            let mut types = Vec::new();
-                            for (slot, is_up, ty) in block.borrow().upvalues.iter() {
-                                if *is_up {
-                                    types.push(ty.clone());
-                                } else {
-                                    types.push(Type::from(&self.stack[*slot]));
-                                }
-                            }
-
-                            let mut block_mut = block.borrow_mut();
-                            for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
-                                if *is_up {
-                                    continue;
-                                }
-
-                                let suggestion = &types[i];
-                                if matches!(ty, Type::Unknown) {
-                                    *ty = suggestion.clone();
-                                } else if ty != suggestion {
-                                    error!(
-                                        self,
-                                        RuntimeError::CannotInfer(ty.clone(), suggestion.clone())
-                                    );
-                                }
-                            }
-                        }
-                    }
-                    value => {
-                        self.push(value);
-                    }
-                }
-            }
-
-            Op::AssignField(field) => {
-                let (inst, value) = self.poppop();
-                match inst {
-                    Value::Instance(ty, _) => {
-                        let field = self.string(field);
-                        match ty.fields.get(field) {
-                            Some((_, ty)) => {
-                                let expected = Type::from(&value);
-                                if ty != &expected {
-                                    error!(
-                                        self,
-                                        RuntimeError::TypeMismatch(expected, ty.clone()),
-                                        "Types of field and variable do not match"
-                                    );
-                                }
-                            }
-                            _ => {
-                                error!(
-                                    self,
-                                    RuntimeError::UnknownField(ty.name.clone(), field.clone())
-                                );
-                            }
-                        };
-                    }
-                    inst => {
-                        error!(
-                            self,
-                            RuntimeError::TypeError(Op::AssignField(field), vec![Type::from(inst)])
-                        );
-                    }
-                }
-            }
-
-            Op::PopUpvalue => {
-                self.pop();
-            }
-
-            Op::ReadUpvalue(slot) => {
-                let value = Value::from(&self.frame().block.borrow().upvalues[slot].2);
-                self.push(value);
-            }
-
-            Op::AssignUpvalue(slot) => {
-                let var = self.frame().block.borrow().upvalues[slot].2.clone();
-                let up = self.pop().into();
-                if var != up {
-                    error!(
-                        self,
-                        RuntimeError::TypeMismatch(up, var),
-                        "Captured varibles type doesn't match upvalue"
-                    );
-                }
-            }
-
-            Op::AssignLocal(slot) => {
-                let slot = self.frame().stack_offset + slot;
-                let curr = Type::from(&self.stack[slot]);
-                let other = Type::from(self.pop());
-                if curr != other {
-                    error!(
-                        self,
-                        RuntimeError::TypeMismatch(curr, other),
-                        "Cannot assign to different type"
-                    );
-                }
-            }
-
-            Op::Return => {
-                let a = self.pop();
-                let inner = self.frame().block.borrow();
-                let ret = inner.ret();
-                if Type::from(&a) != *ret {
-                    error!(
-                        self,
-                        RuntimeError::TypeMismatch(ret.clone(), a.into()),
-                        "Value does not match return type"
-                    );
-                }
-            }
-
-            Op::Print => {
-                self.pop();
-            }
-
-            Op::Define(ty) => {
-                let ty = self.ty(ty);
-                let top_type = self.stack.last().unwrap().into();
-                match (ty, top_type) {
-                    (Type::Unknown, top_type) if top_type != Type::Unknown => {}
-                    (a, b) if a.fits(&b) => {
-                        let last = self.stack.len() - 1;
-                        self.stack[last] = Value::from(a);
-                    }
-                    (a, b) => {
-                        error!(
-                            self,
-                            RuntimeError::TypeMismatch(a.clone(), b),
-                            "Cannot assign mismatching types"
-                        );
-                    }
-                }
-            }
-
-            Op::Iter => {
-                let ty: Type = match Type::from(self.pop()) {
-                    Type::List(e) => {
-                        e.as_ref().clone()
-                    }
-                    Type::Tuple(v) => {
-                        let set: HashSet<_> = v.into_iter().collect();
-                        match set.len() {
-                            0 => Type::Unknown,
-                            1 => set.into_iter().next().unwrap(),
-                            _ => Type::Union(set),
-                        }
-                    }
-                    Type::Set(v) => {
-                        v.as_ref().clone()
-                    }
-                    Type::Dict(k, v) => {
-                        Type::Tuple(vec![k.as_ref().clone(), v.as_ref().clone()])
-                    }
-                    i => {
-                        error!(
-                            self,
-                            RuntimeError::TypeError(Op::Iter, vec![i]),
-                            "Cannot convert to iterator"
-                        );
-                    }
-                };
-                self.push(Value::Iter(ty, Rc::new(RefCell::new(|| None))));
-            }
-
-            Op::JmpNext(_) => {
-                if let Some(Value::Iter(ty, _)) = self.stack.last() {
-                    let v = Value::from(ty);
-                    self.push(v);
+    fn union_un_op(a: &HashSet<Value>, f: fn(&Value) -> Value) -> Value {
+        a.iter()
+            .find_map(|x| {
+                let x = f(x);
+                if x.is_nil() {
+                    None
                 } else {
-                    self.push(Value::Nil);
-                    error!(
-                        self,
-                        RuntimeError::InvalidProgram,
-                        "Can only 'next' iterators"
-                    );
+                    Some(x)
                 }
-            }
-
-            Op::Force(ty) => {
-                let ty = Value::from(self.ty(ty));
-                self.pop();
-                self.push(ty);
-            }
-
-            Op::Link(slot) => {
-                match self.constant(slot).clone() {
-                    Value::Function(_, block) => {
-                        block.borrow_mut().link();
-
-                        let mut types = Vec::new();
-                        for (slot, is_up, ty) in block.borrow().upvalues.iter() {
-                            if *is_up {
-                                types.push(ty.clone());
-                            } else {
-                                types.push(Type::from(&self.stack[*slot]));
-                            }
-                        }
-
-                        let mut block_mut = block.borrow_mut();
-                        for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
-                            if *is_up {
-                                continue;
-                            }
-
-                            let suggestion = &types[i];
-                            if matches!(ty, Type::Unknown) {
-                                *ty = suggestion.clone();
-                            } else if ty != suggestion {
-                                error!(
-                                    self,
-                                    RuntimeError::CannotInfer(ty.clone(), suggestion.clone())
-                                );
-                            }
-                        }
-                    }
-                    value => {
-                        error!(
-                            self,
-                            RuntimeError::TypeError(op, vec![Type::from(&value)]),
-                            "Cannot link non-function {:?}",
-                            value
-                        );
-                    }
-                };
-            }
-
-            Op::GetIndex => {
-                let (a, b) = self.poppop();
-                match (Type::from(a), Type::from(b)) {
-                    (Type::List(a), b) if b.fits(&Type::Int) => {
-                        self.push(Value::from(a.as_ref()));
-                    }
-                    (Type::Tuple(a), b) if b.fits(&Type::Int) => {
-                        self.push(Value::Union(a.iter().map(Value::from).collect()));
-                    }
-                    (Type::Set(a), b) if a.fits(&b) => {
-                        self.push(Value::Bool(true));
-                    }
-                    (Type::Dict(k, v), i) if k.fits(&i) => {
-                        self.push(Value::from(v.as_ref()));
-                    }
-                    _ => {
-                        self.push(Value::Nil);
-                    }
-                }
-            }
-
-            Op::AssignIndex => {
-                let value = Type::from(self.stack.pop().unwrap());
-                let slot = Type::from(self.stack.pop().unwrap());
-                let indexable = Type::from(self.stack.pop().unwrap());
-                match (indexable, slot, value) {
-                    (Type::List(v), Type::Int, n) => match (v.as_ref(), &n) {
-                        (Type::Unknown, top_type) if top_type != &Type::Unknown => {}
-                        (a, b) if a.fits(b) => {}
-                        (a, b) => {
-                            error!(
-                                self,
-                                RuntimeError::TypeMismatch(a.clone(), b.clone()),
-                                "Cannot assign mismatching types"
-                            );
-                        }
-                    },
-                    (Type::Dict(k, v), i, n) => {
-                        if !k.fits(&i) {
-                            error!(
-                                self,
-                                RuntimeError::TypeMismatch(k.as_ref().clone(), i),
-                                "Cannot index mismatching types"
-                            );
-                        }
-
-                        if !v.fits(&n) {
-                            error!(
-                                self,
-                                RuntimeError::TypeMismatch(v.as_ref().clone(), n),
-                                "Cannot assign mismatching types"
-                            );
-                        }
-                    }
-                    (indexable, slot, _) => {
-                        self.stack.push(Value::Nil);
-                        error!(
-                            self,
-                            RuntimeError::TypeError(Op::AssignIndex, vec![indexable, slot])
-                        );
-                    }
-                }
-            }
-
-            Op::Contains => {
-                let (element, container) = self.poppop();
-                match (Type::from(container), Type::from(element)) {
-                    (Type::List(v), e) | (Type::Set(v), e) | (Type::Dict(v, _), e) => {
-                        self.push(Value::Bool(true));
-                        if !v.fits(&e) {
-                            error!(
-                                self,
-                                RuntimeError::TypeMismatch(v.as_ref().clone(), e),
-                                "Container does not contain the type"
-                            );
-                        }
-                    }
-                    (indexable, e) => {
-                        self.push(Value::Nil);
-                        error!(self, RuntimeError::IndexError(indexable.into(), e.into()));
-                    }
-                }
-            }
-
-            Op::Call(num_args) => {
-                let new_base = self.stack.len() - 1 - num_args;
-                let callable = &self.stack[new_base];
-
-                let call_callable = |callable: &Value| {
-                    let args = &self.stack[new_base + 1..];
-                    let args: Vec<_> = args.iter().map(|x| x.into()).collect();
-                    match callable {
-                        Value::Blob(blob) => {
-                            if blob.fields.len() != num_args {
-                                return Err(RuntimeError::ArgumentCount(blob.fields.len(), num_args));
-                            }
-
-                            let mut values = Vec::with_capacity(blob.fields.len());
-                            for _ in 0..values.capacity() {
-                                values.push(Value::Nil);
-                            }
-
-                            for (slot, ty) in blob.fields.values() {
-                                let given_ty = Type::from(&self.stack[new_base + 1 + slot]);
-                                if !ty.fits(&given_ty) {
-                                    return Err(RuntimeError::TypeMismatch(ty.clone(), given_ty));
-                                }
-                                values[*slot] = ty.into();
-                            }
-
-                            Ok(Value::Instance(blob.clone(), Rc::new(RefCell::new(values))))
-                        }
-
-                        Value::Function(_, block) => {
-                            let inner = block.borrow();
-                            let fargs = inner.args();
-                            if fargs != &args {
-                                Err(RuntimeError::ArgumentType(args.clone(), args))
-                            } else {
-                                Ok(inner.ret().into())
-                            }
-                        }
-
-                        Value::ExternFunction(slot) => {
-                            let extern_func = self.extern_functions[*slot];
-                            extern_func(&self.stack[new_base + 1..], true)
-                        }
-
-                        _ => Err(RuntimeError::InvalidProgram),
-                    }
-                };
-
-                let mut err = None;
-                self.stack[new_base] = match callable {
-                    Value::Union(alts) => {
-                        let mut returns = HashSet::new();
-                        for alt in alts.iter() {
-                            if let Ok(res) = call_callable(&alt) {
-                                returns.insert(res);
-                            }
-                        }
-                        if returns.is_empty() {
-                            err = Some(RuntimeError::InvalidProgram);
-                            Value::Nil
-                        } else {
-                            Value::Union(returns)
-                        }
-                    }
-                    _ => match call_callable(callable) {
-                        Err(e) => {
-                            err = Some(e);
-                            Value::Nil
-                        }
-                        Ok(v) => v,
-                    },
-                };
-                self.stack.truncate(new_base + 1);
-                if let Some(err) = err {
-                    error!(self, err);
-                }
-            }
-
-            Op::JmpFalse(_) => match self.pop() {
-                Value::Bool(_) => {}
-                a => {
-                    error!(self, RuntimeError::TypeError(op, vec![a.into()]))
-                }
-            },
-
-            Op::JmpNPop(_, _) => {}
-
-            _ => {
-                self.eval_op(op)?;
-                return Ok(());
-            }
-        }
-        self.frame_mut().ip += 1;
-        Ok(())
+            })
+            .unwrap_or(Value::Nil)
     }
 
-    fn typecheck_block(&mut self, block: Rc<RefCell<Block>>) -> Vec<Error> {
-        self.stack.clear();
-        self.frames.clear();
-
-        self.push(Value::Function(Rc::new(Vec::new()), Rc::clone(&block)));
-        for arg in block.borrow().args() {
-            self.push(arg.into());
-        }
-
-        self.frames.push(Frame {
-            stack_offset: 0,
-            block,
-            ip: 0,
-            contains_upvalues: false,
-        });
-
-        if self.print_bytecode {
-            println!(
-                "\n    [[{} - {}]]\n",
-                "TYPECHECKING".purple(),
-                self.frame().block.borrow().name
-            );
-            self.frame().block.borrow().debug_print();
-        }
-
-        let mut errors = Vec::new();
-        loop {
-            let ip = self.frame().ip;
-            if ip >= self.frame().block.borrow().ops.len() {
-                break;
-            }
-
-            #[cfg(debug_assertions)]
-            if self.print_exec {
-                self.print_stack()
-            }
-
-            if let Err(e) = self.check_op(self.op()) {
-                errors.push(e);
-                self.frame_mut().ip += 1;
-            }
-
-            if !self.stack.is_empty() {
-                let ident = self.pop().identity();
-                self.push(ident);
-            }
-        }
-        errors
+    fn union_bin_op(a: &HashSet<Value>, b: &Value, f: fn(&Value, &Value) -> Value) -> Value {
+        a.iter()
+            .find_map(|x| {
+                let x = f(x, b);
+                if x.is_nil() {
+                    None
+                } else {
+                    Some(x)
+                }
+            })
+            .unwrap_or(Value::Nil)
     }
 
-    // Checks the program for type errors.
-    pub(crate) fn typecheck(&mut self, prog: &Prog) -> Result<(), Vec<Error>> {
-        let mut errors = Vec::new();
-
-        self.constants = prog.constants.clone();
-        self.strings = prog.strings.clone();
-        self.runtime = false;
-
-        self.extern_functions = prog.functions.clone();
-        for block in prog.blocks.iter() {
-            errors.append(&mut self.typecheck_block(Rc::clone(block)));
+    pub fn neg(value: &Value) -> Value {
+        match value {
+            Value::Float(a) => Value::Float(-*a),
+            Value::Int(a) => Value::Int(-*a),
+            Value::Tuple(a) => tuple_un_op(a, neg),
+            Value::Union(v) => union_un_op(&v, neg),
+            Value::Unknown => Value::Unknown,
+            _ => Value::Nil,
         }
+    }
 
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(errors)
+    pub fn not(value: &Value) -> Value {
+        match value {
+            Value::Bool(a) => Value::Bool(!*a),
+            Value::Tuple(a) => tuple_un_op(a, not),
+            Value::Union(v) => union_un_op(&v, not),
+            Value::Unknown => Value::Bool(true),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn add(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Float(a), Value::Float(b)) => Value::Float(a + b),
+            (Value::Int(a), Value::Int(b)) => Value::Int(a + b),
+            (Value::String(a), Value::String(b)) => Value::String(Rc::from(format!("{}{}", a, b))),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, add),
+            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => add(a, a),
+            (Value::Unknown, Value::Unknown) => Value::Unknown,
+            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, add),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn sub(a: &Value, b: &Value) -> Value {
+        add(a, &neg(b))
+    }
+
+    pub fn mul(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
+            (Value::Int(a), Value::Int(b)) => Value::Int(a * b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, mul),
+            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => mul(a, a),
+            (Value::Unknown, Value::Unknown) => Value::Unknown,
+            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, mul),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn div(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
+            (Value::Int(a), Value::Int(b)) => Value::Int(a / b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, div),
+            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => div(a, a),
+            (Value::Unknown, Value::Unknown) => Value::Unknown,
+            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, div),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn eq(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Float(a), Value::Float(b)) => Value::Bool(a == b),
+            (Value::Int(a), Value::Int(b)) => Value::Bool(a == b),
+            (Value::String(a), Value::String(b)) => Value::Bool(a == b),
+            (Value::Bool(a), Value::Bool(b)) => Value::Bool(a == b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => {
+                for (a, b) in a.iter().zip(b.iter()) {
+                    match eq(a, b) {
+                        Value::Bool(true) => {}
+                        Value::Bool(false) => {
+                            return Value::Bool(false);
+                        }
+                        Value::Nil => {
+                            return Value::Nil;
+                        }
+                        _ => unreachable!("Equality should only return bool or nil."),
+                    }
+                }
+                Value::Bool(true)
+            }
+            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => eq(a, a),
+            (Value::Unknown, Value::Unknown) => Value::Unknown,
+            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, eq),
+            (Value::Nil, Value::Nil) => Value::Bool(true),
+            (Value::List(a), Value::List(b)) => {
+                let a = a.borrow();
+                let b = b.borrow();
+                if a.len() != b.len() {
+                    return Value::Bool(false);
+                }
+                for (a, b) in a.iter().zip(b.iter()) {
+                    match eq(a, b) {
+                        Value::Bool(true) => {}
+                        Value::Bool(false) => {
+                            return Value::Bool(false);
+                        }
+                        Value::Nil => {
+                            return Value::Nil;
+                        }
+                        _ => unreachable!("Equality should only return bool or nil."),
+                    }
+                }
+                Value::Bool(true)
+            }
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn less(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Float(a), Value::Float(b)) => Value::Bool(a < b),
+            (Value::Int(a), Value::Int(b)) => Value::Bool(a < b),
+            (Value::String(a), Value::String(b)) => Value::Bool(a < b),
+            (Value::Bool(a), Value::Bool(b)) => Value::Bool(a < b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => a
+                .iter()
+                .zip(b.iter())
+                .find_map(|(a, b)| match less(a, b) {
+                    Value::Bool(true) => None,
+                    a => Some(a),
+                })
+                .unwrap_or(Value::Bool(true)),
+            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => less(a, a),
+            (Value::Unknown, Value::Unknown) => Value::Unknown,
+            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, less),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn greater(a: &Value, b: &Value) -> Value {
+        less(b, a)
+    }
+
+    pub fn and(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a && *b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, and),
+            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => and(a, a),
+            (Value::Unknown, Value::Unknown) => Value::Unknown,
+            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, and),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn or(a: &Value, b: &Value) -> Value {
+        match (a, b) {
+            (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a || *b),
+            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, or),
+            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => or(a, a),
+            (Value::Unknown, Value::Unknown) => Value::Unknown,
+            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, or),
+            _ => Value::Nil,
         }
     }
 }
+

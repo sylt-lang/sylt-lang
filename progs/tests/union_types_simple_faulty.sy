@@ -25,4 +25,6 @@ start :: fn {
 // error: #TypeMismatch(_, _)
 // error: #TypeMismatch(_, _)
 // error: #TypeError(_, _)
+// error: #TypeMismatch(_, _)
 // error: #TypeError(_, _)
+// error: #TypeMismatch(_, _)

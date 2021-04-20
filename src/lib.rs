@@ -13,6 +13,7 @@ use std::rc::Rc;
 
 pub mod error;
 pub mod vm;
+pub mod typechecker;
 
 mod compiler;
 mod sectionizer;
@@ -26,15 +27,8 @@ pub trait Next {
 /// external functions.
 pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
     let prog = compile(args, functions)?;
-    typecheck(&prog, &args)?;
+    typechecker::typecheck(&prog, &args)?;
     run(&prog, &args)
-}
-
-pub fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
-    let mut vm = vm::VM::new();
-    vm.print_bytecode = args.verbosity >= 1;
-    vm.print_exec = args.verbosity >= 2;
-    vm.typecheck(prog)
 }
 
 pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
@@ -52,7 +46,7 @@ pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
 /// Compiles and serializes the given file.
 pub fn serialize(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Vec<u8>, Vec<Error>> {
     let prog = compile(args, functions)?;
-    typecheck(&prog, args)?;
+    typechecker::typecheck(&prog, args)?;
     bincode::serialize(&prog).map_err(|_| vec![Error::BincodeError])
 }
 
@@ -70,7 +64,7 @@ fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, 
     };
     let sections = sectionizer::sectionize(&path)?;
     let prog = compiler::Compiler::new(sections).compile("/preamble", &path, &functions)?;
-    typecheck(&prog, &args)?;
+    typechecker::typecheck(&prog, &args)?;
     Ok(prog)
 }
 
@@ -105,6 +99,7 @@ pub type RustFunction = fn(&[Value], bool) -> Result<Value, RuntimeError>;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Type {
+    Ty,
     Void,
     Unknown,
     Int,
@@ -120,12 +115,14 @@ pub enum Type {
     Function(Vec<Type>, Box<Type>),
     Blob(Rc<Blob>),
     Instance(Rc<Blob>),
+    ExternFunction(usize),
 }
 
 impl Hash for Type {
     fn hash<H: Hasher>(&self, h: &mut H) {
         // TODO(ed): We can use the fancy macro here instead.
         match self {
+            Type::Ty => 18,
             Type::Void => 0,
             Type::Unknown => 1,
             Type::Int => 2,
@@ -179,6 +176,9 @@ impl Hash for Type {
                     t.hash(h);
                 }
                 11
+            }
+            Type::ExternFunction(_) => {
+                16
             }
         }
         .hash(h);
@@ -257,7 +257,9 @@ impl From<&Value> for Type {
                 block.borrow().ty.clone()
             }
             Value::Unknown => Type::Unknown,
-            Value::Nil | Value::Ty(_) | Value::ExternFunction(_) => Type::Void,
+            Value::ExternFunction(n) => Type::ExternFunction(*n),
+            Value::Nil => Type::Void,
+            Value::Ty(_) => Type::Ty,
         }
     }
 }
@@ -297,6 +299,8 @@ impl From<&Type> for Value {
                 Rc::new(Vec::new()),
                 Rc::new(RefCell::new(Block::stubbed_block(ty))),
             ),
+            Type::ExternFunction(x) => Value::ExternFunction(*x),
+            Type::Ty => Value::Ty(Type::Void),
         }
     }
 }
@@ -319,6 +323,19 @@ impl Type {
             (Type::Union(a), Type::Union(b)) => b.iter().all(|x| a.contains(x)),
             (_, Type::Union(_)) => false,
             (a, b) => a == b,
+        }
+    }
+
+    fn is_nil(&self) -> bool {
+        matches!(self, Type::Void)
+    }
+
+    fn maybe_union<'a>(v: impl Iterator<Item = &'a Type>) -> Type {
+        let set: HashSet<_> = v.cloned().collect();
+        match set.len() {
+            0 => Type::Unknown,
+            1 => set.into_iter().next().unwrap(),
+            _ => Type::Union(set),
         }
     }
 }
@@ -430,19 +447,6 @@ impl Hash for Value {
 }
 
 impl Value {
-    fn identity(self) -> Self {
-        match self {
-            Value::Float(_) => Value::Float(1.0),
-            Value::Int(_) => Value::Int(1),
-            Value::Bool(_) => Value::Bool(true),
-            x if matches!(x, Value::List(_)) => {
-                let x = Type::from(x);
-                Value::from(&x)
-            }
-            a => a,
-        }
-    }
-
     fn is_nil(&self) -> bool {
         matches!(self, Value::Nil)
     }
@@ -791,215 +795,6 @@ pub enum Op {
     Yield,
 }
 
-///
-/// Module with all the operators that can be applied
-/// to values.
-///
-/// Broken out because they need to be recursive.
-mod op {
-    use super::{Type, Value};
-    use std::collections::HashSet;
-    use std::rc::Rc;
-
-    fn tuple_bin_op(
-        a: &Rc<Vec<Value>>,
-        b: &Rc<Vec<Value>>,
-        f: fn(&Value, &Value) -> Value,
-    ) -> Value {
-        Value::Tuple(Rc::new(
-            a.iter().zip(b.iter()).map(|(a, b)| f(a, b)).collect(),
-        ))
-    }
-
-    fn tuple_un_op(a: &Rc<Vec<Value>>, f: fn(&Value) -> Value) -> Value {
-        Value::Tuple(Rc::new(a.iter().map(f).collect()))
-    }
-
-    fn union_un_op(a: &HashSet<Value>, f: fn(&Value) -> Value) -> Value {
-        a.iter()
-            .find_map(|x| {
-                let x = f(x);
-                if x.is_nil() {
-                    None
-                } else {
-                    Some(x)
-                }
-            })
-            .unwrap_or(Value::Nil)
-    }
-
-    fn union_bin_op(a: &HashSet<Value>, b: &Value, f: fn(&Value, &Value) -> Value) -> Value {
-        a.iter()
-            .find_map(|x| {
-                let x = f(x, b);
-                if x.is_nil() {
-                    None
-                } else {
-                    Some(x)
-                }
-            })
-            .unwrap_or(Value::Nil)
-    }
-
-    pub fn neg(value: &Value) -> Value {
-        match value {
-            Value::Float(a) => Value::Float(-*a),
-            Value::Int(a) => Value::Int(-*a),
-            Value::Tuple(a) => tuple_un_op(a, neg),
-            Value::Union(v) => union_un_op(&v, neg),
-            Value::Unknown => Value::Unknown,
-            _ => Value::Nil,
-        }
-    }
-
-    pub fn not(value: &Value) -> Value {
-        match value {
-            Value::Bool(a) => Value::Bool(!*a),
-            Value::Tuple(a) => tuple_un_op(a, not),
-            Value::Union(v) => union_un_op(&v, not),
-            Value::Unknown => Value::from(Type::Bool),
-            _ => Value::Nil,
-        }
-    }
-
-    pub fn add(a: &Value, b: &Value) -> Value {
-        match (a, b) {
-            (Value::Float(a), Value::Float(b)) => Value::Float(a + b),
-            (Value::Int(a), Value::Int(b)) => Value::Int(a + b),
-            (Value::String(a), Value::String(b)) => Value::String(Rc::from(format!("{}{}", a, b))),
-            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, add),
-            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => add(a, a),
-            (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, add),
-            _ => Value::Nil,
-        }
-    }
-
-    pub fn sub(a: &Value, b: &Value) -> Value {
-        add(a, &neg(b))
-    }
-
-    pub fn mul(a: &Value, b: &Value) -> Value {
-        match (a, b) {
-            (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
-            (Value::Int(a), Value::Int(b)) => Value::Int(a * b),
-            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, mul),
-            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => mul(a, a),
-            (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, mul),
-            _ => Value::Nil,
-        }
-    }
-
-    pub fn div(a: &Value, b: &Value) -> Value {
-        match (a, b) {
-            (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
-            (Value::Int(a), Value::Int(b)) => Value::Int(a / b),
-            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, div),
-            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => div(a, a),
-            (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, div),
-            _ => Value::Nil,
-        }
-    }
-
-    pub fn eq(a: &Value, b: &Value) -> Value {
-        match (a, b) {
-            (Value::Float(a), Value::Float(b)) => Value::Bool(a == b),
-            (Value::Int(a), Value::Int(b)) => Value::Bool(a == b),
-            (Value::String(a), Value::String(b)) => Value::Bool(a == b),
-            (Value::Bool(a), Value::Bool(b)) => Value::Bool(a == b),
-            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => {
-                for (a, b) in a.iter().zip(b.iter()) {
-                    match eq(a, b) {
-                        Value::Bool(true) => {}
-                        Value::Bool(false) => {
-                            return Value::Bool(false);
-                        }
-                        Value::Nil => {
-                            return Value::Nil;
-                        }
-                        _ => unreachable!("Equality should only return bool or nil."),
-                    }
-                }
-                Value::Bool(true)
-            }
-            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => eq(a, a),
-            (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, eq),
-            (Value::Nil, Value::Nil) => Value::Bool(true),
-            (Value::List(a), Value::List(b)) => {
-                let a = a.borrow();
-                let b = b.borrow();
-                if a.len() != b.len() {
-                    return Value::Bool(false);
-                }
-                for (a, b) in a.iter().zip(b.iter()) {
-                    match eq(a, b) {
-                        Value::Bool(true) => {}
-                        Value::Bool(false) => {
-                            return Value::Bool(false);
-                        }
-                        Value::Nil => {
-                            return Value::Nil;
-                        }
-                        _ => unreachable!("Equality should only return bool or nil."),
-                    }
-                }
-                Value::Bool(true)
-            }
-            _ => Value::Nil,
-        }
-    }
-
-    pub fn less(a: &Value, b: &Value) -> Value {
-        match (a, b) {
-            (Value::Float(a), Value::Float(b)) => Value::Bool(a < b),
-            (Value::Int(a), Value::Int(b)) => Value::Bool(a < b),
-            (Value::String(a), Value::String(b)) => Value::Bool(a < b),
-            (Value::Bool(a), Value::Bool(b)) => Value::Bool(a < b),
-            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => a
-                .iter()
-                .zip(b.iter())
-                .find_map(|(a, b)| match less(a, b) {
-                    Value::Bool(true) => None,
-                    a => Some(a),
-                })
-                .unwrap_or(Value::Bool(true)),
-            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => less(a, a),
-            (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, less),
-            _ => Value::Nil,
-        }
-    }
-
-    pub fn greater(a: &Value, b: &Value) -> Value {
-        less(b, a)
-    }
-
-    pub fn and(a: &Value, b: &Value) -> Value {
-        match (a, b) {
-            (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a && *b),
-            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, and),
-            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => and(a, a),
-            (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, and),
-            _ => Value::Nil,
-        }
-    }
-
-    pub fn or(a: &Value, b: &Value) -> Value {
-        match (a, b) {
-            (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a || *b),
-            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, or),
-            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => or(a, a),
-            (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, or),
-            _ => Value::Nil,
-        }
-    }
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 enum BlockLinkState {
     Linked,
@@ -1040,14 +835,6 @@ impl Block {
             return;
         }
         self.linking = BlockLinkState::Unlinked;
-    }
-
-    fn link(&mut self) {
-        self.linking = BlockLinkState::Linked;
-    }
-
-    fn needs_linking(&self) -> bool {
-        matches!(self.linking, BlockLinkState::Unlinked)
     }
 
     // Used to create empty functions.
