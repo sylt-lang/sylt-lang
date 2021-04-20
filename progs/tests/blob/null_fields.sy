@@ -1,0 +1,8 @@
+A :: blob {
+    a: int?
+}
+
+start :: fn {
+    a := A!
+    print a.a
+}

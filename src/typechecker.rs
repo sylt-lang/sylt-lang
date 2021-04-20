@@ -573,13 +573,13 @@ impl VM {
 
                             for (field, ty) in values.iter() {
                                 match blob.fields.get(field) {
-                                    Some(given_ty) if ty == given_ty => {}
+                                    Some(given_ty) if given_ty.fits(ty) => {}
                                     Some(given_ty) => {
                                         return Err(RuntimeError::FieldTypeMismatch(
                                                 blob.name.clone(),
                                                 field.clone(),
-                                                given_ty.clone(),
                                                 ty.clone(),
+                                                given_ty.clone(),
                                         ));
                                     }
                                     None => {
@@ -593,16 +593,17 @@ impl VM {
 
                             for (field, ty) in blob.fields.iter() {
                                 match (values.get(field), ty) {
-                                    (Some(ty), t) if ty == t => {}
-                                    (Some(ty), t) => {
+                                    (Some(t), ty) if ty.fits(t) => {}
+                                    (Some(t), ty) => {
                                         return Err(RuntimeError::FieldTypeMismatch(
                                                 blob.name.clone(),
                                                 field.clone(),
-                                                ty.clone(),
                                                 t.clone(),
+                                                ty.clone(),
                                         ))
                                     }
-                                    (None, _) => {
+                                    (None, ty) if ty.fits(&Type::Void) => {}
+                                    (None, ty) => {
                                         return Err(RuntimeError::FieldTypeMismatch(
                                                 blob.name.clone(),
                                                 field.clone(),

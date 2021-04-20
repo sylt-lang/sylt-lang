@@ -1,0 +1,13 @@
+A :: blob {
+}
+
+B :: blob {
+    a: int?
+}
+
+start :: fn {
+    a : !B = A!
+    print a.a
+}
+
+// error: #UnknownField(_, _)

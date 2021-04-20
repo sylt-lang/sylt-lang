@@ -640,6 +640,9 @@ impl VM {
                             })
                             .collect::<HashMap<_, _>>();
                         self.stack.truncate(new_base);
+                        for name in blob.fields.keys() {
+                            values.entry(name.clone()).or_insert(Value::Nil);
+                        }
                         values.insert("_id".to_string(), Value::Int(blob.id as i64));
                         values.insert("_name".to_string(), Value::String(Rc::new(blob.name.clone())));
                         self.push(Value::Instance(blob, Rc::new(RefCell::new(values))));
