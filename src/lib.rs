@@ -100,6 +100,7 @@ pub type RustFunction = fn(&[Value], bool) -> Result<Value, RuntimeError>;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Type {
     Ty,
+    Field(String),
     Void,
     Unknown,
     Int,
@@ -123,6 +124,7 @@ impl Hash for Type {
         // TODO(ed): We can use the fancy macro here instead.
         match self {
             Type::Ty => 18,
+            Type::Field(_) => unimplemented!(),
             Type::Void => 0,
             Type::Unknown => 1,
             Type::Int => 2,
@@ -223,6 +225,7 @@ fn maybe_union_type<'a>(v: impl Iterator<Item = &'a Value>) -> Type {
 impl From<&Value> for Type {
     fn from(value: &Value) -> Type {
         match value {
+            Value::Field(s) => Type::Field(s.clone()),
             Value::Instance(b, _) => Type::Instance(Rc::clone(b)),
             Value::Blob(b) => Type::Blob(Rc::clone(b)),
             Value::Tuple(v) => Type::Tuple(v.iter().map(Type::from).collect()),
@@ -273,6 +276,7 @@ impl From<Value> for Type {
 impl From<&Type> for Value {
     fn from(ty: &Type) -> Self {
         match ty {
+            Type::Field(s) => Value::Field(s.clone()),
             Type::Void => Value::Nil,
             Type::Blob(b) => Value::Blob(Rc::clone(b)),
             Type::Instance(b) => Value::Instance(Rc::clone(b), Rc::new(RefCell::new(Vec::new()))),
@@ -353,6 +357,7 @@ fn de_abort<'de, D, T>(_d: D) -> Result<T, D::Error> where D: serde::Deserialize
 
 #[derive(Clone, Deserialize, Serialize)]
 pub enum Value {
+    Field(String),
     Ty(Type),
     Blob(Rc<Blob>),
     Instance(Rc<Blob>, Rc<RefCell<Vec<Value>>>),
@@ -380,6 +385,7 @@ impl Debug for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // TODO(ed): This needs some cleaning
         match self {
+            Value::Field(s) => write!(fmt, "( .{} )", s),
             Value::Ty(ty) => write!(fmt, "(type {:?})", ty),
             Value::Blob(b) => write!(fmt, "(blob {})", b.name),
             Value::Instance(b, v) => write!(fmt, "(inst {} {:?})", b.name, v),
