@@ -1027,7 +1027,7 @@ impl Compiler {
         let mut num_fields = 0;
         loop {
             match self.peek() {
-                Token::Newline => {
+                Token::Newline | Token::Comma => {
                     self.eat();
                 }
                 Token::Identifier(field) => {
@@ -1037,7 +1037,9 @@ impl Compiler {
                     add_op(self, block, Op::Constant(field));
                     expect!(self, Token::Colon, "Exptected ':' after field name");
                     self.expression(block);
-                    expect!(self, Token::Newline, "Exptected 'CR' after field expression");
+                    if !matches!(self.peek(), Token::Newline | Token::Comma | Token::RightBrace) {
+                        syntax_error!(self, "Trash at end of line");
+                    }
                 }
                 Token::RightBrace => {
                     break;
