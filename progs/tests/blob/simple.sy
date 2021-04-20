@@ -3,6 +3,6 @@ A :: blob {
 }
 
 start :: fn {
-    a := A { a: 1 }
+    a := A! { a: 1 }
     a
 }

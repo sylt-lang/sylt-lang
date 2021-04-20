@@ -1014,15 +1014,18 @@ impl Compiler {
     }
 
     fn call_maybe(&mut self, block: &mut Block) -> bool {
-        match self.peek() {
-            Token::Bang | Token::LeftParen => self.call(block),
-            Token::LeftBrace => self.blob_initalizer(block),
+        match self.peek_four() {
+            (Token::Bang, Token::LeftBrace, ..) => {
+                self.blob_initalizer(block)
+            }
+            (Token::Bang, ..) | (Token::LeftParen, ..) => self.call(block),
             _ => { return false; }
         }
         return true;
     }
 
     fn blob_initalizer(&mut self, block: &mut Block) {
+        expect!(self, Token::Bang, "Exptected '!' at start of blob initalizer");
         expect!(self, Token::LeftBrace, "Exptected '{{' at start of blob initalizer");
         let mut num_fields = 0;
         loop {
