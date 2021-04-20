@@ -583,11 +583,9 @@ impl VM {
                                         ));
                                     }
                                     None => {
-                                        return Err(RuntimeError::FieldTypeMismatch(
+                                        return Err(RuntimeError::UnknownField(
                                                 blob.name.clone(),
                                                 field.clone(),
-                                                Type::Void,
-                                                ty.clone(),
                                         ));
                                     }
                                 }
@@ -605,10 +603,12 @@ impl VM {
                                         ))
                                     }
                                     (None, _) => {
-                                        return Err(RuntimeError::UnknownField(
+                                        return Err(RuntimeError::FieldTypeMismatch(
                                                 blob.name.clone(),
                                                 field.clone(),
-                                        ))
+                                                Type::Void,
+                                                ty.clone(),
+                                        ));
                                     }
                                 }
                             }
