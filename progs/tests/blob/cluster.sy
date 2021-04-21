@@ -2,7 +2,7 @@ A :: blob { a: int }
 
 start :: fn {
 
-    a := A(0)
+    a := A! { a: 0 }
     a.a = 0
     a.a += 1
     a.a <=> 1

@@ -1,11 +1,13 @@
 A :: blob {
-    a: int
-    b: int
+}
+
+B :: blob {
+    a: int?
 }
 
 start :: fn {
-    a :: A! { a: 1, b: 2, c: 3 }
-    a
+    a : !B = A!
+    print a.a
 }
 
 // error: #UnknownField(_, _)

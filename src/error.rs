@@ -35,6 +35,7 @@ fn file_line_display(file: &Path, line: Option<usize>) -> String {
 
 #[derive(Debug, Clone)]
 pub enum RuntimeError {
+    FieldTypeMismatch(String, String, Type, Type),
     TypeError(Op, Vec<Type>),
     TypeMismatch(Type, Type),
     CannotInfer(Type, Type),
@@ -167,6 +168,9 @@ impl fmt::Display for Error {
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            RuntimeError::FieldTypeMismatch(obj, field, a, b) => {
+                write!(f, "Field {}.{} expected {:?} but got {:?}", obj, field, a, b)
+            }
             RuntimeError::TypeError(op, types) => {
                 let types = types
                     .iter()

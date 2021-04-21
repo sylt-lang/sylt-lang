@@ -100,6 +100,7 @@ pub type RustFunction = fn(&[Value], bool) -> Result<Value, RuntimeError>;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Type {
     Ty,
+    Field(String),
     Void,
     Unknown,
     Int,
@@ -123,6 +124,7 @@ impl Hash for Type {
         // TODO(ed): We can use the fancy macro here instead.
         match self {
             Type::Ty => 18,
+            Type::Field(_) => unimplemented!(),
             Type::Void => 0,
             Type::Unknown => 1,
             Type::Int => 2,
@@ -166,13 +168,13 @@ impl Hash for Type {
                 8
             }
             Type::Blob(b) => {
-                for (_, t) in b.fields.values() {
+                for t in b.fields.values() {
                     t.hash(h);
                 }
                 10
             }
             Type::Instance(b) => {
-                for (_, t) in b.fields.values() {
+                for t in b.fields.values() {
                     t.hash(h);
                 }
                 11
@@ -223,6 +225,7 @@ fn maybe_union_type<'a>(v: impl Iterator<Item = &'a Value>) -> Type {
 impl From<&Value> for Type {
     fn from(value: &Value) -> Type {
         match value {
+            Value::Field(s) => Type::Field(s.clone()),
             Value::Instance(b, _) => Type::Instance(Rc::clone(b)),
             Value::Blob(b) => Type::Blob(Rc::clone(b)),
             Value::Tuple(v) => Type::Tuple(v.iter().map(Type::from).collect()),
@@ -273,9 +276,10 @@ impl From<Value> for Type {
 impl From<&Type> for Value {
     fn from(ty: &Type) -> Self {
         match ty {
+            Type::Field(s) => Value::Field(s.clone()),
             Type::Void => Value::Nil,
             Type::Blob(b) => Value::Blob(Rc::clone(b)),
-            Type::Instance(b) => Value::Instance(Rc::clone(b), Rc::new(RefCell::new(Vec::new()))),
+            Type::Instance(b) => Value::Instance(Rc::clone(b), Rc::new(RefCell::new(HashMap::new()))),
             Type::Tuple(fields) => Value::Tuple(Rc::new(fields.iter().map(Value::from).collect())),
             Type::Union(v) => Value::Union(v.iter().map(Value::from).collect()),
             Type::List(v) => Value::List(Rc::new(RefCell::new(vec![Value::from(v.as_ref())]))),
@@ -353,9 +357,10 @@ fn de_abort<'de, D, T>(_d: D) -> Result<T, D::Error> where D: serde::Deserialize
 
 #[derive(Clone, Deserialize, Serialize)]
 pub enum Value {
+    Field(String),
     Ty(Type),
     Blob(Rc<Blob>),
-    Instance(Rc<Blob>, Rc<RefCell<Vec<Value>>>),
+    Instance(Rc<Blob>, Rc<RefCell<HashMap<String, Value>>>),
     Tuple(Rc<Vec<Value>>),
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
@@ -380,6 +385,7 @@ impl Debug for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // TODO(ed): This needs some cleaning
         match self {
+            Value::Field(s) => write!(fmt, "( .{} )", s),
             Value::Ty(ty) => write!(fmt, "(type {:?})", ty),
             Value::Blob(b) => write!(fmt, "(blob {})", b.name),
             Value::Instance(b, v) => write!(fmt, "(inst {} {:?})", b.name, v),
@@ -498,7 +504,7 @@ pub struct Blob {
     pub id: usize,
     pub name: String,
     /// Maps field names to their slot and type.
-    pub fields: HashMap<String, (usize, Type)>,
+    pub fields: HashMap<String, Type>,
 }
 
 impl PartialEq for Blob {
@@ -517,12 +523,11 @@ impl Blob {
     }
 
     fn add_field(&mut self, name: &str, ty: Type) -> Result<(), ()> {
-        let size = self.fields.len();
         let entry = self.fields.entry(String::from(name));
         match entry {
             Entry::Occupied(_) => Err(()),
             Entry::Vacant(v) => {
-                v.insert((size, ty));
+                v.insert(ty);
                 Ok(())
             }
         }

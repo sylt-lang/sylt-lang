@@ -411,9 +411,9 @@ impl VM {
                 match inst {
                     Value::Instance(ty, values) => {
                         let field = self.string(field);
-                        match ty.fields.get(field) {
-                            Some((slot, _)) => {
-                                self.push(values.borrow()[*slot].clone());
+                        match (*values).borrow().get(field) {
+                            Some(value) => {
+                                self.push(value.clone());
                             }
                             _ => {
                                 let err = Err(self.error(
@@ -438,18 +438,11 @@ impl VM {
                 let (inst, value) = self.poppop();
                 match inst {
                     Value::Instance(ty, values) => {
-                        let field = self.string(field);
-                        match ty.fields.get(field) {
-                            Some((slot, _)) => {
-                                values.borrow_mut()[*slot] = value;
-                            }
-                            _ => {
-                                error!(
-                                    self,
-                                    RuntimeError::UnknownField(ty.name.clone(), field.clone())
-                                );
-                            }
-                        };
+                        let field_name = self.string(field).clone();
+                        if !(*ty).fields.contains_key(&field_name) {
+                            error!(self, RuntimeError::UnknownField(ty.name.to_string(), field_name));
+                        }
+                        (*values).borrow_mut().insert(field_name, value);
                     }
                     inst => {
                         error!(
@@ -636,8 +629,22 @@ impl VM {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {
                     Value::Blob(blob) => {
-                        let values = self.stack.split_off(new_base + 1);
-                        self.pop();
+                        let mut values = self.stack[new_base+1..]
+                            .chunks_exact(2)
+                            .map(|b| {
+                                if let Value::Field(name) = &b[0] {
+                                    (name.clone(), b[1].clone())
+                                } else {
+                                    panic!("Expected Field but got {:?} for field names", b[0]);
+                                }
+                            })
+                            .collect::<HashMap<_, _>>();
+                        self.stack.truncate(new_base);
+                        for name in blob.fields.keys() {
+                            values.entry(name.clone()).or_insert(Value::Nil);
+                        }
+                        values.insert("_id".to_string(), Value::Int(blob.id as i64));
+                        values.insert("_name".to_string(), Value::String(Rc::new(blob.name.clone())));
                         self.push(Value::Instance(blob, Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, block) => {
