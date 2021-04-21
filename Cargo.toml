@@ -23,6 +23,9 @@ lingon = { git = "https://github.com/sornas/lingon.git", branch = "main", option
 [profile.release]
 lto = "thin"
 
+[features]
+default = ["lingon"]
+
 [[bench]]
 name = "sylt_benchmark"
 harness = false

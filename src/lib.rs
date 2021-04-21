@@ -1051,3 +1051,16 @@ sylt_macro::extern_function!(
         Ok(Value::Int(ls.len() as i64))
     },
 );
+
+#[cfg(feature = "lingon")]
+use lingon::random::Uniform;
+#[cfg(feature = "lingon")]
+use lingon::random::Distribute;
+
+#[cfg(feature = "lingon")]
+sylt_macro::extern_function!(
+    random
+    [] -> Type::Float => {
+        Ok(Value::Float(Uniform.sample().into()))
+    },
+);

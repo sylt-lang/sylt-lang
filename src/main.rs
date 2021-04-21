@@ -14,7 +14,7 @@ fn main() -> Result<(), String> {
         return Err("No file to run".to_string());
     }
 
-    let functions: Vec<(String, RustFunction)> = sylt_macro::link!(sylt::dbg as dbg, sylt::push as push, sylt::len as len);
+    let functions: Vec<(String, RustFunction)> = sylt_macro::link!(sylt::dbg as dbg, sylt::push as push, sylt::len as len, sylt::random as random);
 
     let res = if args.is_binary {
         match sylt::deserialize(std::fs::read(args.file.clone().unwrap()).unwrap()) {
