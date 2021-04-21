@@ -73,7 +73,7 @@ fn typecheck_block(block: Rc<RefCell<Block>>, prog: &Prog, args: &Args) -> Vec<E
             "TYPECHECKING".purple(),
             block.borrow().name
         );
-        block.borrow().debug_print();
+        block.borrow().debug_print(Some(&prog.constants));
     }
 
     let mut vm = VM::new(&block);
@@ -97,7 +97,6 @@ fn typecheck_block(block: Rc<RefCell<Block>>, prog: &Prog, args: &Args) -> Vec<E
             "DONE".purple(),
             block.borrow().name
         );
-        block.borrow().debug_print();
     }
 
     errors

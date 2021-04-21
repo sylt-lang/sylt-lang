@@ -881,17 +881,23 @@ impl Block {
         0
     }
 
-    pub fn debug_print(&self) {
+    pub fn debug_print(&self, constants: Option<&[Value]>) {
         println!("     === {} ===", self.name.blue());
         for (i, s) in self.ops.iter().enumerate() {
             println!(
-                "{}{}",
+                "{}{:05} {:?}{}",
                 if self.line_offsets.contains_key(&i) {
                     format!("{:5} ", self.line_offsets[&i].blue())
                 } else {
                     format!("    {} ", "|".blue())
                 },
-                format!("{:05} {:?}", i.red(), s)
+                i.red(),
+                s,
+                if let (Op::Constant(c), Some(constants)) = (s, constants) {
+                    format!("    => {:?}", &constants[*c])
+                } else {
+                    "".to_string()
+                }
             );
         }
         println!();

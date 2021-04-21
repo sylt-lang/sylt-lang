@@ -168,7 +168,7 @@ impl VM {
         self.print_stack();
         println!("\n");
         self.print_stacktrace();
-        self.frame().block.borrow().debug_print();
+        self.frame().block.borrow().debug_print(Some(&self.constants));
         println!(
             "    ip: {}, line: {}\n",
             self.frame().ip.blue(),
@@ -656,7 +656,7 @@ impl VM {
 
                         #[cfg(debug_assertions)]
                         if self.print_bytecode {
-                            inner.debug_print();
+                            inner.debug_print(Some(&self.constants));
                         }
                         self.frames.push(Frame {
                             stack_offset: new_base,
@@ -750,7 +750,7 @@ impl VM {
     pub fn run(&mut self) -> Result<OpResult, Error> {
         if self.print_bytecode {
             println!("\n    [[{}]]\n", "RUNNING".red());
-            self.frame().block.borrow().debug_print();
+            self.frame().block.borrow().debug_print(Some(&self.constants));
         }
 
         loop {
