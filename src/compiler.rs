@@ -1016,7 +1016,7 @@ impl Compiler {
     fn call_maybe(&mut self, block: &mut Block) -> bool {
         match self.peek_four() {
             (Token::Bang, Token::LeftBrace, ..) => {
-                self.blob_initalizer(block)
+                self.blob_initializer(block)
             }
             (Token::Bang, ..) | (Token::LeftParen, ..) => self.call(block),
             _ => { return false; }
@@ -1024,9 +1024,9 @@ impl Compiler {
         return true;
     }
 
-    fn blob_initalizer(&mut self, block: &mut Block) {
-        expect!(self, Token::Bang, "Exptected '!' at start of blob initalizer");
-        expect!(self, Token::LeftBrace, "Exptected '{{' at start of blob initalizer");
+    fn blob_initializer(&mut self, block: &mut Block) {
+        expect!(self, Token::Bang, "Expected '!' at start of blob initializer");
+        expect!(self, Token::LeftBrace, "Expected '{{' at start of blob initializer");
         let mut num_fields = 0;
         loop {
             match self.peek() {
@@ -1038,7 +1038,7 @@ impl Compiler {
                     num_fields += 1;
                     let field = self.add_constant(Value::Field(field));
                     add_op(self, block, Op::Constant(field));
-                    expect!(self, Token::Colon, "Exptected ':' after field name");
+                    expect!(self, Token::Colon, "Expected ':' after field name");
                     self.expression(block);
                     if !matches!(self.peek(), Token::Newline | Token::Comma | Token::RightBrace) {
                         syntax_error!(self, "Trash at end of line");
@@ -1048,13 +1048,13 @@ impl Compiler {
                     break;
                 }
                 _ => {
-                    syntax_error!(self, "Expected field name in initalizer");
+                    syntax_error!(self, "Expected field name in initializer");
                     break;
                 }
             }
         }
         add_op(self, block, Op::Call(num_fields * 2));
-        expect!(self, Token::RightBrace, "Exptected '}}' after blob initalizer");
+        expect!(self, Token::RightBrace, "Expected '}}' after blob initializer");
     }
 
     fn call(&mut self, block: &mut Block) {

@@ -567,7 +567,7 @@ impl VM {
                                     if let Type::Field(f) = &b[0] {
                                         (f.clone(), b[1].clone())
                                     } else {
-                                        unreachable!("Got {:?} when I expected field", b[0]);
+                                        unreachable!("Got {:?}, expected field", b[0]);
                                     }
                                 }).collect::<HashMap<String, Type>>();
 
@@ -941,4 +941,3 @@ mod op {
         }
     }
 }
-
