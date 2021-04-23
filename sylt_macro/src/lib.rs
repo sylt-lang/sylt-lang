@@ -14,7 +14,10 @@ struct ExternBlock {
 }
 
 struct ExternFunction {
+    module: syn::LitStr,
     function: syn::Ident,
+    _as: Option<Token![as]>,
+    name: Option<syn::Ident>,
     blocks: Vec<ExternBlock>
 }
 
@@ -34,7 +37,10 @@ impl Parse for ExternBlock {
 impl Parse for ExternFunction {
     fn parse(input: ParseStream) -> Result<Self> {
         let mut res = Self {
+            module: input.parse()?,
             function: input.parse()?,
+            _as: input.parse()?,
+            name: input.parse()?,
             blocks: Vec::new(),
         };
         while !input.is_empty() {
@@ -47,7 +53,9 @@ impl Parse for ExternFunction {
 #[proc_macro]
 pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let parsed: ExternFunction = parse_macro_input!(tokens);
+    let module = parsed.module;
     let function = parsed.function;
+    let link_name = parsed.name.unwrap_or_else(|| function.clone());
 
     let typecheck_blocks: Vec<_> = parsed.blocks.iter().map(|block| {
         let pat = block.pattern.clone();
@@ -66,7 +74,7 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
     }).collect();
 
     let tokens = quote! {
-        #[sylt_macro::sylt_link(#function, "sylt::lingon_sylt")]
+        #[sylt_macro::sylt_link(#link_name, #module)]
         pub fn #function (
             __values: &[sylt::Value],
             __typecheck: bool

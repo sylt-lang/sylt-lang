@@ -994,7 +994,7 @@ mod tests {
                 args.verbosity = if $print { 1 } else { 0 };
                 let res = $crate::run_file(
                     &args,
-                    sylt_macro::link!(crate::dbg as dbg, crate::push as push, crate::len as len,),
+                    super::_sylt_link(),
                 );
                 $crate::assert_errs!(res, $errs);
             }
@@ -1007,7 +1007,7 @@ mod tests {
 // The "standard library"
 use crate as sylt;
 
-/*
+#[sylt_macro::sylt_link(push, "sylt")]
 pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
     println!(
         "{}: {:?}, {:?}",
@@ -1018,6 +1018,7 @@ pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
     Ok(Value::Nil)
 }
 
+#[sylt_macro::sylt_link(push, "sylt")]
 pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
         ([Value::List(ls), v], true) => {
@@ -1046,6 +1047,7 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
 }
 
 sylt_macro::extern_function!(
+    "sylt"
     len
     [Value::List(ls)] -> Type::Int => {
         let ls: &RefCell<Vec<Value>> = ls.borrow();
@@ -1057,4 +1059,4 @@ sylt_macro::extern_function!(
     },
 );
 
-*/
+sylt_macro::sylt_link_gen!("sylt");
