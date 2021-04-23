@@ -19,6 +19,10 @@ mod compiler;
 mod sectionizer;
 mod tokenizer;
 
+// Lingon linking layer
+#[cfg(feature = "lingon")]
+pub mod lingon_sylt;
+
 pub trait Next {
     fn next(&self) -> Self;
 }
@@ -1003,6 +1007,7 @@ mod tests {
 // The "standard library"
 use crate as sylt;
 
+/*
 pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
     println!(
         "{}: {:?}, {:?}",
@@ -1052,15 +1057,4 @@ sylt_macro::extern_function!(
     },
 );
 
-#[cfg(feature = "lingon")]
-use lingon::random::Uniform;
-#[cfg(feature = "lingon")]
-use lingon::random::Distribute;
-
-#[cfg(feature = "lingon")]
-sylt_macro::extern_function!(
-    random
-    [] -> Type::Float => {
-        Ok(Value::Float(Uniform.sample().into()))
-    },
-);
+*/
