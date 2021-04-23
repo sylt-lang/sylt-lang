@@ -1,5 +1,4 @@
 use lingon::random::{Uniform, Distribute};
-use sylt_macro::{sylt_link, sylt_link_gen};
 use crate::*;
 
 sylt_macro::extern_function!(
@@ -18,4 +17,4 @@ sylt_macro::extern_function!(
     },
 );
 
-sylt_link_gen!("sylt::lingon_sylt");
+sylt_macro::sylt_link_gen!("sylt::lingon_sylt");

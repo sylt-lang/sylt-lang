@@ -4,6 +4,11 @@ use std::str::FromStr;
 use quote::{format_ident, quote};
 use syn::{Expr, Pat, Token, parse::{Parse, ParseStream, Result}, parse_macro_input};
 
+use lazy_static::lazy_static;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+
 struct ExternBlock {
     pattern: Pat,
     _arrow: Token![->],
@@ -339,19 +344,51 @@ pub fn derive_next(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     proc_macro::TokenStream::from(item)
 }
 
-use lazy_static::lazy_static;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+enum LinkState {
+    Open,
+    Written,
+}
+
+struct ModuleLink {
+    state: LinkState,
+    mapping: Vec<(String, String)>,
+}
+
+impl ModuleLink {
+    fn new() -> Self {
+        Self {
+            state: LinkState::Open,
+            mapping: Vec::new(),
+        }
+    }
+}
+
 lazy_static! {
-    static ref LINKS: Arc<Mutex<HashMap<String, Vec<(String, String)>>>> = Arc::new(Mutex::new(HashMap::new()));
+    static ref LINKS: Arc<Mutex<HashMap<String, ModuleLink>>> = Arc::new(Mutex::new(HashMap::new()));
 }
 
 #[proc_macro]
 pub fn sylt_link_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let module: syn::LitStr = parse_macro_input!(tokens);
     let module = module.value();
-    let funs: Vec<_> = LINKS.lock().unwrap().get(&module)
-        .expect("No sylt functions are linked!")
+
+    let mut link = LINKS.lock().unwrap();
+    let mut link = if let Some(link) = link.get_mut(&module) {
+        link
+    } else {
+        let tokens = quote! {
+            std::compile_error!("No functions to link, this call produces nothing.");
+        };
+        return proc_macro::TokenStream::from(tokens);
+    };
+    if matches!(link.state, LinkState::Written) {
+        let tokens = quote! {
+            std::compile_error!("Trying to write linked sylt functions twice, this is probably an error.");
+        };
+        return proc_macro::TokenStream::from(tokens);
+    }
+    link.state = LinkState::Written;
+    let funs: Vec<_> = link.mapping
         .iter()
         .map(|(ident, name)| {
             let ident = proc_macro2::TokenStream::from_str(&ident).unwrap();
@@ -365,7 +402,6 @@ pub fn sylt_link_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
             vec! [ #(#funs)* ]
         }
     };
-    eprintln!("RES\n {}", tokens.to_string());
     proc_macro::TokenStream::from(tokens)
 }
 
@@ -391,7 +427,16 @@ pub fn sylt_link(attrib: proc_macro::TokenStream, tokens: proc_macro::TokenStrea
     let fun = parsed.sig.ident.clone();
     let link: SyltLink = parse_macro_input!(attrib);
 
-    LINKS.lock().unwrap().entry(link.module.value()).or_insert(Vec::new()).push(
+    let mut links = LINKS.lock().unwrap();
+    let links = links.entry(link.module.value()).or_insert(ModuleLink::new());
+    if matches!(links.state, LinkState::Written) {
+        let tokens = quote! {
+            std::compile_error!("Trying to write linked sylt functions twice, this is probably an error.");
+        };
+        return proc_macro::TokenStream::from(tokens);
+    }
+
+    links.mapping.push(
         (
             format!("{}::{}", link.module.value(), fun),
             link.name.to_string().clone()
