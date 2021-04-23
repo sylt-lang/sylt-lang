@@ -1,5 +1,6 @@
 use lingon::random::{Uniform, Distribute};
 use crate::*;
+use crate as sylt;
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
