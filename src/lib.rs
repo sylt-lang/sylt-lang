@@ -22,6 +22,19 @@ mod tokenizer;
 // Lingon linking layer
 #[cfg(feature = "lingon")]
 pub mod lingon_sylt;
+pub mod lib_sylt;
+
+/// Generates the linking for the standard library, and lingon if it's active.
+pub fn lib_bindings() -> Vec<(String, RustFunction)> {
+    let mut lib = Vec::new();
+
+    lib.append(&mut lib_sylt::_sylt_link());
+
+    #[cfg(feature = "lingon")]
+    lib.append(&mut lingon_sylt::_sylt_link());
+
+    lib
+}
 
 pub trait Next {
     fn next(&self) -> Self;
