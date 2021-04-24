@@ -1007,7 +1007,7 @@ mod tests {
                 args.verbosity = if $print { 1 } else { 0 };
                 let res = $crate::run_file(
                     &args,
-                    super::_sylt_link(),
+                    $crate::lib_sylt::_sylt_link(),
                 );
                 $crate::assert_errs!(res, $errs);
             }
