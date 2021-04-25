@@ -377,13 +377,13 @@ pub fn sylt_link_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
         link
     } else {
         let tokens = quote! {
-            std::compile_error!("No functions to link, this call produces nothing.");
+            std::compile_error!("No functions to link. This call produces nothing.");
         };
         return proc_macro::TokenStream::from(tokens);
     };
     if matches!(link.state, LinkState::Written) {
         let tokens = quote! {
-            std::compile_error!("Trying to write linked sylt functions twice, this is probably an error.");
+            std::compile_error!("Tried to write linked sylt functions twice.");
         };
         return proc_macro::TokenStream::from(tokens);
     }
@@ -431,7 +431,7 @@ pub fn sylt_link(attrib: proc_macro::TokenStream, tokens: proc_macro::TokenStrea
     let links = links.entry(link.module.value()).or_insert(ModuleLink::new());
     if matches!(links.state, LinkState::Written) {
         let tokens = quote! {
-            std::compile_error!("Trying to write linked sylt functions twice, this is probably an error.");
+            std::compile_error!("Tried to write linked sylt functions twice.");
         };
         return proc_macro::TokenStream::from(tokens);
     }
