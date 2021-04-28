@@ -49,7 +49,7 @@ sylt_macro::extern_function!(
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
-    l_draw
+    l_render
     [] -> Type::Void => {
         game!().draw().unwrap();
         Ok(Value::Nil)
@@ -72,6 +72,5 @@ sylt_macro::extern_function!(
         Ok(Value::Float(Uniform.sample().into()))
     },
 );
-
 
 sylt_macro::sylt_link_gen!("sylt::lingon_sylt");
