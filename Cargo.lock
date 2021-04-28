@@ -730,6 +730,7 @@ dependencies = [
  "bincode",
  "criterion",
  "gumdrop",
+ "lazy_static",
  "lingon",
  "logos",
  "owo-colors",
