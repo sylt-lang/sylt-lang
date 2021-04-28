@@ -1,6 +1,7 @@
 use lingon::{Game, random::{Uniform, Distribute}};
+use lingon::renderer::{Rect, Transform, Tint};
 use std::sync::{Arc, Mutex};
-use crate::*;
+use crate::{*, error::RuntimeError};
 use crate as sylt;
 
 // TODO(ed): Make the trait only clone, not copy.
@@ -58,12 +59,51 @@ sylt_macro::extern_function!(
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
+    l_gfx_rect
+    [Value::Float(x), Value::Float(y), Value::Float(w), Value::Float(h)] -> Type::Void => {
+        game!().renderer.push(Rect::new().at(*x as f32, *y as f32).scale(*w as f32, *h as f32));
+        Ok(Value::Nil)
+    },
+    [Value::Float(x), Value::Float(y), Value::Float(w), Value::Float(h), Value::Tuple(value)] -> Type::Void => {
+        let mut rect = Rect::new();
+        match value.as_slice() {
+            [Value::Float(r), Value::Float(g), Value::Float(b)] =>
+                rect.rgb(*r as f32, *g as f32, *b as f32),
+            [Value::Float(r), Value::Float(g), Value::Float(b), Value::Float(a)] =>
+                rect.rgba(*r as f32, *g as f32, *b as f32, *a as f32),
+            values => {
+                return Err(RuntimeError::ExternTypeMismatch(
+                    "l_gfx_rect - color argument".to_string(),
+                    values.iter().map(Type::from).collect(),
+                ))
+            },
+        };
+        rect.at(*x as f32, *y as f32);
+        rect.scale(*w as f32, *h as f32);
+
+       game!().renderer.push(rect);
+        Ok(Value::Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
     l_delta
     [] -> Type::Float => {
         let delta = game!().time_tick() as f64;
         Ok(Value::Float(delta))
     },
 );
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_time
+    [] -> Type::Float => {
+        let time = game!().total_time() as f64;
+        Ok(Value::Float(time))
+    },
+);
+
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
