@@ -1,13 +1,10 @@
+use lazy_static::lazy_static;
+use quote::{format_ident, quote};
+use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
-
-use quote::{format_ident, quote};
-use syn::{Expr, Pat, Token, parse::{Parse, ParseStream, Result}, parse_macro_input};
-
-use lazy_static::lazy_static;
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-
+use syn::{Expr, Pat, Token, parse::{Parse, ParseStream, Result}, parse_macro_input};
 
 struct ExternBlock {
     pattern: Pat,
