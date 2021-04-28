@@ -378,6 +378,10 @@ impl VM {
 
             Op::Iter => {
                 let ty: Type = match Type::from(self.pop()) {
+                    i if matches!(i, Type::Iter(_)) => {
+                        self.push(i);
+                        return Ok(());
+                    }
                     Type::List(e) => {
                         e.as_ref().clone()
                     }

@@ -53,4 +53,20 @@ sylt_macro::extern_function!(
     },
 );
 
+#[sylt_macro::sylt_link(inf, "sylt::lib_sylt")]
+pub fn inf(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
+    match values {
+        [x] => {
+            let t: Type = Type::from(&*x);
+            let x = x.clone();
+            Ok(Value::Iter(t, Rc::new(RefCell::new(move || Some(x.clone())))))
+        }
+        values => Err(RuntimeError::ExternTypeMismatch(
+            "push".to_string(),
+            values.iter().map(Type::from).collect(),
+        )),
+    }
+}
+
+
 sylt_macro::sylt_link_gen!("sylt::lib_sylt");
