@@ -1,6 +1,9 @@
-use std::path::Path;
-
+use lazy_static::lazy_static;
 use quote::{format_ident, quote};
+use std::collections::HashMap;
+use std::path::Path;
+use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 use syn::{Expr, Pat, Token, parse::{Parse, ParseStream, Result}, parse_macro_input};
 
 struct ExternBlock {
@@ -13,7 +16,10 @@ struct ExternBlock {
 }
 
 struct ExternFunction {
+    module: syn::LitStr,
     function: syn::Ident,
+    _as: Option<Token![as]>,
+    name: Option<syn::Ident>,
     blocks: Vec<ExternBlock>
 }
 
@@ -33,7 +39,10 @@ impl Parse for ExternBlock {
 impl Parse for ExternFunction {
     fn parse(input: ParseStream) -> Result<Self> {
         let mut res = Self {
+            module: input.parse()?,
             function: input.parse()?,
+            _as: input.parse()?,
+            name: input.parse()?,
             blocks: Vec::new(),
         };
         while !input.is_empty() {
@@ -46,7 +55,9 @@ impl Parse for ExternFunction {
 #[proc_macro]
 pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let parsed: ExternFunction = parse_macro_input!(tokens);
+    let module = parsed.module;
     let function = parsed.function;
+    let link_name = parsed.name.unwrap_or_else(|| function.clone());
 
     let typecheck_blocks: Vec<_> = parsed.blocks.iter().map(|block| {
         let pat = block.pattern.clone();
@@ -65,6 +76,7 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
     }).collect();
 
     let tokens = quote! {
+        #[sylt_macro::sylt_link(#link_name, #module)]
         pub fn #function (
             __values: &[sylt::Value],
             __typecheck: bool
@@ -141,7 +153,6 @@ impl Parse for Links {
 #[proc_macro]
 pub fn link(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let links: Links = parse_macro_input!(tokens);
-
     let links: Vec<_> = links.links.iter().map(|link| {
         let name = if let Some(rename) = &link.rename {
             &rename.name
@@ -328,4 +339,109 @@ pub fn derive_next(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         }
     };
     proc_macro::TokenStream::from(item)
+}
+
+enum LinkState {
+    Open,
+    Written,
+}
+
+struct ModuleLink {
+    state: LinkState,
+    mapping: Vec<(String, String)>,
+}
+
+impl ModuleLink {
+    fn new() -> Self {
+        Self {
+            state: LinkState::Open,
+            mapping: Vec::new(),
+        }
+    }
+}
+
+lazy_static! {
+    static ref LINKS: Arc<Mutex<HashMap<String, ModuleLink>>> = Arc::new(Mutex::new(HashMap::new()));
+}
+
+#[proc_macro]
+pub fn sylt_link_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let module: syn::LitStr = parse_macro_input!(tokens);
+    let module = module.value();
+
+    let mut link = LINKS.lock().unwrap();
+    let mut link = if let Some(link) = link.get_mut(&module) {
+        link
+    } else {
+        let tokens = quote! {
+            std::compile_error!("No functions to link. This call produces nothing.");
+        };
+        return proc_macro::TokenStream::from(tokens);
+    };
+    if matches!(link.state, LinkState::Written) {
+        let tokens = quote! {
+            std::compile_error!("Tried to write linked sylt functions twice.");
+        };
+        return proc_macro::TokenStream::from(tokens);
+    }
+    link.state = LinkState::Written;
+    let funs: Vec<_> = link.mapping
+        .iter()
+        .map(|(ident, name)| {
+            let ident = proc_macro2::TokenStream::from_str(&ident).unwrap();
+            quote! {
+                (#name.to_string(), #ident),
+            }
+    }).collect();
+
+    let tokens = quote! {
+        pub fn _sylt_link() -> Vec<(String, RustFunction)> {
+            vec! [ #(#funs)* ]
+        }
+    };
+    proc_macro::TokenStream::from(tokens)
+}
+
+struct SyltLink {
+    name: syn::Ident,
+    _comma: Token![,],
+    module: syn::LitStr,
+}
+
+impl Parse for SyltLink {
+    fn parse(input: ParseStream) -> Result<Self> {
+        Ok(Self {
+            name: input.parse()?,
+            _comma: input.parse()?,
+            module: input.parse()?,
+        })
+    }
+}
+
+#[proc_macro_attribute]
+pub fn sylt_link(attrib: proc_macro::TokenStream, tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let parsed: syn::ItemFn = parse_macro_input!(tokens);
+    let fun = parsed.sig.ident.clone();
+    let link: SyltLink = parse_macro_input!(attrib);
+
+    let mut links = LINKS.lock().unwrap();
+    let links = links.entry(link.module.value()).or_insert(ModuleLink::new());
+    if matches!(links.state, LinkState::Written) {
+        let tokens = quote! {
+            std::compile_error!("Tried to write linked sylt functions twice.");
+        };
+        return proc_macro::TokenStream::from(tokens);
+    }
+
+    links.mapping.push(
+        (
+            format!("{}::{}", link.module.value(), fun),
+            link.name.to_string().clone()
+        )
+    );
+
+    let tokens = quote! {
+        #parsed
+    };
+    proc_macro::TokenStream::from(tokens)
 }

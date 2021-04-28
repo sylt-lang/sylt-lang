@@ -12,16 +12,19 @@ name = "sylt"
 [dependencies]
 bincode = "1"
 logos = "0.12"
-owo-colors = { git="https://github.com/FredTheDino/owo-colors.git" }
+owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
 serde = { version = "1", features = [ "derive", "rc" ] }
 sylt_macro = { path = "sylt_macro" }
-
 gumdrop = "0.8"
 
 criterion = { version = "0.3", optional = true }
+lingon = { git = "https://github.com/sornas/lingon.git", branch = "main", optional = true }
 
 [profile.release]
 lto = "thin"
+
+[features]
+default = ["lingon"]
 
 [[bench]]
 name = "sylt_benchmark"
