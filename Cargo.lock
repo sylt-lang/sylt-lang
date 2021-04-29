@@ -343,7 +343,7 @@ checksum = "18794a8ad5b29321f790b55d93dfba91e125cb1a9edbd4f8e3150acc771c1a5e"
 [[package]]
 name = "lingon"
 version = "0.1.0"
-source = "git+https://github.com/sornas/lingon.git?branch=main#3de6e716222e8191de23a94547c1c0c5f5716cc6"
+source = "git+https://github.com/sornas/lingon.git?branch=fix-clone-for-real#2d28eb47db53904b550ae6e8c154f677b9e54023"
 dependencies = [
  "cgmath",
  "lazy_static",
@@ -360,7 +360,7 @@ dependencies = [
 [[package]]
 name = "lingon_macro"
 version = "0.1.0"
-source = "git+https://github.com/sornas/lingon.git?branch=main#3de6e716222e8191de23a94547c1c0c5f5716cc6"
+source = "git+https://github.com/sornas/lingon.git?branch=fix-clone-for-real#2d28eb47db53904b550ae6e8c154f677b9e54023"
 dependencies = [
  "lazy_static",
  "proc-macro2",
