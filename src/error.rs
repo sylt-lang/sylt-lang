@@ -44,6 +44,7 @@ pub enum RuntimeError {
 
     /// (External function, parameters)
     ExternTypeMismatch(String, Vec<Type>),
+    ExternError(String, String),
     ValueError(Op, Vec<Value>),
     UnknownField(String, String),
     ArgumentCount(usize, usize),
@@ -205,6 +206,9 @@ impl fmt::Display for RuntimeError {
                     "Extern function '{}' doesn't accept argument(s) with type(s) {:?}",
                     name, types
                 )
+            }
+            RuntimeError::ExternError(fun, msg) => {
+                write!(f, "Extern function '{}': {:?}", fun, msg)
             }
             RuntimeError::ValueError(op, values) => {
                 let values = values

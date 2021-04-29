@@ -117,10 +117,7 @@ sylt_macro::extern_function!(
         let key = if let Some(key) = Keycode::from_name(key) {
             key
         } else {
-            return Err(RuntimeError::ExternTypeMismatch(
-                    format!("l_bind_key - invalid key: '{}'", key),
-                    Vec::new(),
-            ))
+            return error!("l_bind_key", "'{}' is an invalid key", key);
         };
 
         use lingon::input::{Device::Key, Keycode};
@@ -148,10 +145,7 @@ sylt_macro::extern_function!(
         let button = if let Some(button) = Button::from_string(button) {
             button
         } else {
-            return Err(RuntimeError::ExternTypeMismatch(
-                    format!("l_bind_key - invalid button: '{}'", button),
-                    Vec::new(),
-            ))
+            return error!("l_bind_button", "'{}' is an invalid button", button);
         };
 
         game!().input.bind(Device::Button(*controller as u32, button), String::clone(name));
@@ -167,10 +161,7 @@ sylt_macro::extern_function!(
         let axis = if let Some(axis) = Axis::from_string(axis) {
             axis
         } else {
-            return Err(RuntimeError::ExternTypeMismatch(
-                    format!("l_bind_key - invalid axis: '{}'", axis),
-                    Vec::new(),
-            ))
+            return error!("l_bind_axis", "'{}' is an invalid axis", axis);
         };
 
         game!().input.bind(Device::Axis(*controller as u32, axis), String::clone(name));
@@ -189,10 +180,7 @@ sylt_macro::extern_function!(
             "right" => Right,
             "x1" => X1,
             "x2" => X2,
-            x => return Err(RuntimeError::ExternTypeMismatch(
-                    format!("l_bind_key - invalid mouse button: '{}'", x),
-                    Vec::new(),
-            ))
+            _ => { return error!("l_bind_mouse", "'{}' is an invalid mouse button", button); }
         };
 
         game!().input.bind(Mouse(button), String::clone(name));
