@@ -31,10 +31,7 @@ fn new_game() -> Arc<Mutex<GG>> {
 
 macro_rules! game {
     () => {
-        {
-            let mutex: &Mutex<GG> = Arc::borrow(&GAME);
-            &mut mutex.lock().unwrap().game
-        }
+        &mut GAME.lock().unwrap().game
     };
 }
 

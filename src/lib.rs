@@ -635,6 +635,7 @@ pub enum Op {
     AssignField(usize),
 
     /// Turns the top element on the stack into an iterator.
+    ///
     /// Iter(Iter(A)) = Iter(A)
     ///
     /// {A} - Iter - {Iter(A)}
