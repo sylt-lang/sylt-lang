@@ -4,9 +4,13 @@ init :: fn {
     l_bind_key("w", "up")
     l_bind_key("s", "down")
 
+    l_bind_axis(0, "LeftX", "left")
+    l_bind_axis(0, "LeftY", "up")
+
     l_bind_mouse("left", "down")
 
     l_bind_quit("quit")
+    l_bind_button(0, "Start", "quit")
     l_bind_key("ESCAPE", "quit")
 }
 
