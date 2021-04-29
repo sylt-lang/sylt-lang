@@ -1,0 +1,24 @@
+update :: fn delta: float -> void {
+}
+
+draw :: fn {
+    rgb :: (sin(l_time()) , cos(l_time()) , 0.0)
+    l_gfx_rect! 0.0, 0.0, 1.0, 1.0, rgb
+}
+
+start :: fn {
+    iter := inf(0)
+    n := 0
+    for _ in iter {
+        n += 1
+        if n > 100 {
+            break
+        }
+        _
+        l_update!
+        update! l_delta!
+        draw!
+        l_render!
+
+    }
+}

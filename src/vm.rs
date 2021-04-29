@@ -500,30 +500,34 @@ impl VM {
             }
 
             Op::Iter => {
-                let iter: Box<IterFn> = match self.pop() {
+                let iter: Option<Box<IterFn>> = match self.pop() {
+                    x if matches!(x, Value::Iter(_, _)) => {
+                        self.push(x);
+                        None
+                    }
                     Value::List(rc) => {
                         let mut i = 0;
-                        Box::new(move || {
+                        Some(Box::new(move || {
                             let res = rc.borrow().get(i).cloned();
                             i += 1;
                             res
-                        })
+                        }))
                     }
                     Value::Tuple(rc) => {
                         let mut i = 0;
-                        Box::new(move || {
+                        Some(Box::new(move || {
                             let res = rc.as_ref().get(i).cloned();
                             i += 1;
                             res
-                        })
+                        }))
                     }
                     Value::Set(rc) => {
                         let mut v = rc.as_ref().borrow().clone().into_iter();
-                        Box::new(move || v.next())
+                        Some(Box::new(move || v.next()))
                     }
                     Value::Dict(rc) => {
                         let mut v = rc.as_ref().borrow().clone().into_iter();
-                        Box::new(move || v.next().map(|(k, v)| Value::Tuple(Rc::new(vec![k, v]))))
+                        Some(Box::new(move || v.next().map(|(k, v)| Value::Tuple(Rc::new(vec![k, v])))))
                     }
                     v => {
                         self.push(Value::Nil);
@@ -534,9 +538,10 @@ impl VM {
                         );
                     }
                 };
-                // The type is never used during runtime,
-                // so Void is used.
-                self.push(Value::Iter(Type::Void, Rc::new(RefCell::new(iter))));
+                if let Some(iter) = iter {
+                    // The type is never used during runtime, so Void is used.
+                    self.push(Value::Iter(Type::Void, Rc::new(RefCell::new(iter))));
+                }
             }
 
             Op::JmpNext(line) => {

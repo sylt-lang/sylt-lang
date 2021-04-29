@@ -636,6 +636,8 @@ pub enum Op {
 
     /// Turns the top element on the stack into an iterator.
     ///
+    /// Iter(Iter(A)) = Iter(A)
+    ///
     /// {A} - Iter - {Iter(A)}
     Iter,
     /// Steps the iterator on top of the stack one step and pushes
