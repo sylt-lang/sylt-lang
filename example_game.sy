@@ -1,4 +1,13 @@
+init :: fn {
+    l_bind_key("a", "left")
+    l_bind_key("d", "right")
+    l_bind_key("w", "up")
+    l_bind_key("s", "down")
+    l_bind_key("ESCAPE", "quit")
+}
+
 update :: fn delta: float -> void {
+
 }
 
 draw :: fn {
@@ -7,11 +16,16 @@ draw :: fn {
 }
 
 start :: fn {
+    init!
+
     iter := inf(0)
     n := 0
     for _ in iter {
         n += 1
-        if n > 100 {
+        if n > 200 {
+            break
+        }
+        if l_input_down("quit") {
             break
         }
         _

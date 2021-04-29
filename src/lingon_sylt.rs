@@ -6,7 +6,7 @@ use crate as sylt;
 
 // TODO(ed): Make the trait only clone, not copy.
 struct GG {
-    pub game: Game<i64>,
+    pub game: Game<String>,
 }
 
 // If you see this, you should stop your inital instinct to puke.
@@ -107,6 +107,66 @@ sylt_macro::extern_function!(
     l_random
     [] -> Type::Float => {
         Ok(Value::Float(Uniform.sample().into()))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_bind_key
+    [Value::String(key), Value::String(name)] -> Type::Void => {
+        let key = if let Some(key) = string_to_sdl_scancode(key) {
+            key
+        } else {
+            return Err(RuntimeError::ExternTypeMismatch(
+                    format!("l_bind_key - invalid key: '{}'", key),
+                    Vec::new(),
+            ))
+        };
+
+        use lingon::input::Device::Key;
+        game!().input.bind(Key(key), String::clone(name));
+
+        Ok(Value::Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_input_down
+    [Value::String(name)] -> Type::Bool => {
+        Ok(Value::Bool(game!().input.down(String::clone(name))))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_input_up
+    [Value::String(name)] -> Type::Bool => {
+        Ok(Value::Bool(game!().input.up(String::clone(name))))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_input_pressed
+    [Value::String(name)] -> Type::Bool => {
+        Ok(Value::Bool(game!().input.pressed(String::clone(name))))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_input_released
+    [Value::String(name)] -> Type::Bool => {
+        Ok(Value::Bool(game!().input.released(String::clone(name))))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_input_value
+    [Value::String(name)] -> Type::Float => {
+        Ok(Value::Float(game!().input.value(String::clone(name)) as f64))
     },
 );
 
