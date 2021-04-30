@@ -17,6 +17,7 @@ init :: fn {
     l_bind_key("ESCAPE", "quit")
 
     l_gfx_particle_add_sprite! particles, sprite, (0, 0)
+    l_gfx_particle_x! particles, (-1.0, 1.0), "Uniform"
 }
 
 x := 0.0

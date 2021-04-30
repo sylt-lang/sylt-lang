@@ -20,6 +20,28 @@ fn unpack_int_int_tuple(value: &Value) -> (i64, i64) {
     unreachable!("Expected tuple (int, int) but got '{:?}'", value);
 }
 
+fn unpack_float_float_tuple(value: &Value) -> (f64, f64) {
+    if let Value::Tuple(tuple) = value {
+        if let (Some(Value::Float(w)), Some(Value::Float(h))) = (tuple.get(0), tuple.get(1)) {
+            return (*w, *h);
+        }
+    };
+    unreachable!("Expected tuple (int, int) but got '{:?}'", value);
+}
+
+fn parse_dist(name: &String) -> Option<Box<dyn lingon::random::Distribute>> {
+    use lingon::random::*;
+
+    Some(match name.as_str() {
+        "Square" => Box::new(Square),
+        "ThreeDice" => Box::new(ThreeDice),
+        "TwoDice" => Box::new(TwoDice),
+        "Uniform" => Box::new(Uniform),
+        "NoDice" => Box::new(NoDice),
+        _ => { return None; }
+    })
+}
+
 fn unpack_and_tint<T: Tint>(target: &mut T, tint: &Value) {
     if let Value::Tuple(tuple) = tint {
         match (tuple.get(0), tuple.get(1), tuple.get(2), tuple.get(3)) {
@@ -238,6 +260,32 @@ sylt_macro::extern_function!(
         Ok(Value::Nil)
     },
 );
+
+macro_rules! particle_prop {
+    { $name:ident, $prop:ident } => {
+        sylt_macro::extern_function!(
+            "sylt::lingon_sylt"
+            $name
+            [Value::Tuple(system), Value::Tuple(range), Value::String(dist)] -> Type::Void => {
+                let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
+                let range = unpack_float_float_tuple(&Value::Tuple(Rc::clone(range)));
+                if let Some(dist) = parse_dist(dist) {
+                    PARTICLES.with(|ps| {
+                        let prop = lingon::random::RandomProperty::new(range.0 as f32, range.1 as f32, dist);
+                        ps.lock().unwrap()[system].$prop = prop;
+                    });
+                    Ok(Value::Nil)
+                } else {
+                    error!(stringify!($name), "Failed to parse distribution '{}'", dist)
+                }
+            },
+        );
+    };
+}
+
+particle_prop! { l_gfx_particle_x, x }
+
+
 
 
 
