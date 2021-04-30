@@ -4,6 +4,8 @@ init :: fn {
     l_bind_key("w", "up")
     l_bind_key("s", "down")
 
+    l_bind_key("f", "play")
+
     l_bind_axis(0, "LeftX", "left")
     l_bind_axis(0, "LeftY", "up")
 
@@ -17,13 +19,19 @@ init :: fn {
 x := 0.0
 y := 0.0
 
-sprite := l_load_image("coin.png", (16, 16))
+sprite := l_load_image! "coin.png", (16, 16)
+bloop := l_load_audio! "bloop.wav"
 
 update :: fn delta: float -> void {
     x += (l_input_value("right") - l_input_value("left")) * delta
     y += (l_input_value("up") - l_input_value("down")) * delta
     rgb :: (sin(l_time()), cos(l_time()), 0.0)
     l_gfx_rect! 0.0, 0.0, 1.0, 1.0, rgb
+
+    if l_input_pressed("play") {
+        print "Playing sound"
+        l_audio_play(bloop, false, 0.4, 0.2, 1.0, 0.2)
+    }
 
     l_gfx_sprite! sprite, (0, 0), x, y, 1.0, 1.0, rgb
 }
