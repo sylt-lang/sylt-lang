@@ -1,3 +1,6 @@
+sprite := l_load_image("coin.png", (16, 16))
+particles := l_gfx_particle_new()
+
 init :: fn {
     l_bind_key("a", "left")
     l_bind_key("d", "right")
@@ -12,13 +15,12 @@ init :: fn {
     l_bind_quit("quit")
     l_bind_button(0, "Start", "quit")
     l_bind_key("ESCAPE", "quit")
+
+    l_gfx_particle_add_sprite! particles, sprite, (0, 0)
 }
 
 x := 0.0
 y := 0.0
-
-sprite := l_load_image("coin.png", (16, 16))
-particles := l_gfx_particle_new()
 
 update :: fn delta: float -> void {
     x += (l_input_value("right") - l_input_value("left")) * delta

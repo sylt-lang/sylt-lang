@@ -44,6 +44,7 @@ fn unpack_and_tint<T: Tint>(target: &mut T, tint: &Value) {
     unreachable!("Expected tint tuple but got '{:?}'", tint);
 }
 
+// TODO(ed): These should accept an Rc<Vec<_>>.
 fn unpack_sprite_id(sprite: &Value) -> usize {
     if let Value::Tuple(tuple) = sprite {
         match (tuple.get(0), tuple.get(1)) {
@@ -191,8 +192,8 @@ sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_particle_spawn
     [Value::Tuple(system)] -> Type::Void => {
+        let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
         PARTICLES.with(|ps| {
-            let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
             ps.lock().unwrap()[system].spawn();
         });
         Ok(Value::Nil)
@@ -203,8 +204,8 @@ sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_particle_update
     [Value::Tuple(system), Value::Float(delta)] -> Type::Void => {
+        let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
         PARTICLES.with(|ps| {
-            let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
             ps.lock().unwrap()[system].update(*delta as f32);
         });
         Ok(Value::Nil)
@@ -215,9 +216,24 @@ sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_particle_render
     [Value::Tuple(system)] -> Type::Void => {
+        let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
         PARTICLES.with(|ps| {
-            let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
             game!().renderer.push_particle_system(&ps.lock().unwrap()[system]);
+        });
+        Ok(Value::Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_particle_add_sprite
+    [Value::Tuple(system), Value::Tuple(sprite), Value::Tuple(grid)] -> Type::Void => {
+        let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
+        let sprite = unpack_sprite_id(&Value::Tuple(Rc::clone(sprite)));
+        let grid = unpack_int_int_tuple(&Value::Tuple(Rc::clone(grid)));
+        PARTICLES.with(|ps| {
+            let sprite = game!().renderer.sprite_sheets[sprite].grid(grid.0 as usize, grid.1 as usize);
+            ps.lock().unwrap()[system].sprites.push(sprite);
         });
         Ok(Value::Nil)
     },
