@@ -20,6 +20,15 @@ fn unpack_int_int_tuple(value: &Value) -> (i64, i64) {
     unreachable!("Expected tuple (int, int) but got '{:?}'", value);
 }
 
+fn unpack_float_float_tuple(value: &Value) -> (f64, f64) {
+    if let Value::Tuple(tuple) = value {
+        if let (Some(Value::Float(w)), Some(Value::Float(h))) = (tuple.get(0), tuple.get(1)) {
+            return (*w, *h);
+        }
+    };
+    unreachable!("Expected tuple (float, float) but got '{:?}'", value);
+}
+
 fn unpack_and_tint<T: Tint>(target: &mut T, tint: &Value) {
     if let Value::Tuple(tuple) = tint {
         match (tuple.get(0), tuple.get(1), tuple.get(2), tuple.get(3)) {
@@ -157,6 +166,74 @@ sylt_macro::extern_function!(
     },
 );
 
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_camera_at
+    [] -> Type::Tuple(vec![Type::Float, Type::Float]) => {
+        let game = &mut game!().renderer.camera;
+        let x = *game.x_mut();
+        let y = *game.y_mut();
+        Ok(Value::Tuple(Rc::new(vec![Value::Float(x as f64), Value::Float(y as f64)])))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_camera_place
+    [Value::Tuple(at)] -> Type::Void => {
+        let at = unpack_float_float_tuple(&Value::Tuple(at.clone()));
+        game!().renderer.camera.at(at.0 as f32, at.1 as f32);
+        Ok(Value::Nil)
+    },
+    [Value::Float(x), Value::Float(y)] -> Type::Void => {
+        game!().renderer.camera.at(*x as f32, *y as f32);
+        Ok(Value::Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_camera_angle
+    [Value::Float(angle)] -> Type::Void => {
+        game!().renderer.camera.angle(*angle as f32);
+        Ok(Value::Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_camera_rotate
+    [Value::Float(by)] -> Type::Void => {
+        game!().renderer.camera.rotate(*by as f32);
+        Ok(Value::Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_camera_set_zoom
+    [Value::Float(to)] -> Type::Void => {
+        game!().renderer.camera.scale(*to as f32, *to as f32);
+        Ok(Value::Nil)
+    },
+    [Value::Float(sx), Value::Float(sy)] -> Type::Void => {
+        game!().renderer.camera.scale(*sx as f32, *sy as f32);
+        Ok(Value::Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_camera_zoom_by
+    [Value::Float(to)] -> Type::Void => {
+        game!().renderer.camera.scale_by(*to as f32, *to as f32);
+        Ok(Value::Nil)
+    },
+    [Value::Float(sx), Value::Float(sy)] -> Type::Void => {
+        game!().renderer.camera.scale_by(*sx as f32, *sy as f32);
+        Ok(Value::Nil)
+    },
+);
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
