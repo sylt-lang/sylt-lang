@@ -172,9 +172,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-epoch"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2584f639eb95fea8c798496315b297cf81b9b58b6d30ab066a75455333cf4b12"
+checksum = "52fb27eab85b17fbb9f6fd667089e07d6a2eb8743d02639ee7f6a7a7729c9c94"
 dependencies = [
  "cfg-if 1.0.0",
  "crossbeam-utils",
@@ -185,9 +185,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-utils"
-version = "0.8.3"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7e9d99fa91428effe99c5c6d4634cdeba32b8cf784fc428a2a687f61a952c49"
+checksum = "4feb231f0d4d6af81aed15928e58ecf5816aa62a2393e2c82f46973e92a9a278"
 dependencies = [
  "autocfg",
  "cfg-if 1.0.0",
@@ -343,7 +343,7 @@ checksum = "18794a8ad5b29321f790b55d93dfba91e125cb1a9edbd4f8e3150acc771c1a5e"
 [[package]]
 name = "lingon"
 version = "0.1.0"
-source = "git+https://github.com/sornas/lingon.git?branch=main#350e194147ef5b05d8b0529f655fc79e8c89e310"
+source = "git+https://github.com/sornas/lingon.git?branch=main#caebc821bfbf7aaa1af607e36edaff0ab15bf62f"
 dependencies = [
  "cgmath",
  "lazy_static",
@@ -360,7 +360,7 @@ dependencies = [
 [[package]]
 name = "lingon_macro"
 version = "0.1.0"
-source = "git+https://github.com/sornas/lingon.git?branch=main#350e194147ef5b05d8b0529f655fc79e8c89e310"
+source = "git+https://github.com/sornas/lingon.git?branch=main#caebc821bfbf7aaa1af607e36edaff0ab15bf62f"
 dependencies = [
  "lazy_static",
  "proc-macro2",
@@ -786,9 +786,9 @@ checksum = "9337591893a19b88d8d87f2cec1e73fad5cdfd10e5a6f349f498ad6ea2ffb1e3"
 
 [[package]]
 name = "unicode-xid"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7fe0bb3479651439c9112f72b6c505038574c9fbb575ed1bf3b797fa39dd564"
+checksum = "8ccb82d61f80a663efe1f787a51b16b5a51e3314d6ac365b08639f52387b33f3"
 
 [[package]]
 name = "utf8-ranges"

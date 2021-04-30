@@ -359,7 +359,6 @@ impl VM {
                     unreachable!("Cannot define variable to non-type");
                 };
                 let top_type = self.stack.last().unwrap().clone();
-                println!("{:?} def {:?}", ty, top_type);
                 match (ty, top_type) {
                     (Type::Unknown, top_type) if top_type != Type::Unknown => {}
                     (a, b) if a.fits(&b) => {
