@@ -284,9 +284,35 @@ macro_rules! particle_prop {
 }
 
 particle_prop! { l_gfx_particle_x, x }
+particle_prop! { l_gfx_particle_y, y }
 
+particle_prop! { l_gfx_particle_lifetime, lifetime }
 
+particle_prop! { l_gfx_particle_vel_angle, vel_angle }
+particle_prop! { l_gfx_particle_vel_magnitude, vel_magnitude }
 
+particle_prop! { l_gfx_particle_acc_angle, acc_angle }
+particle_prop! { l_gfx_particle_acc_magnitude, acc_magnitude }
+particle_prop! { l_gfx_particle_drag, drag }
+
+particle_prop! { l_gfx_particle_angle, angle }
+particle_prop! { l_gfx_particle_angle_velocity, angle_velocity }
+particle_prop! { l_gfx_particle_angle_drag, angle_drag }
+
+particle_prop! { l_gfx_particle_start_sx, start_sx }
+particle_prop! { l_gfx_particle_start_sy, start_sy }
+particle_prop! { l_gfx_particle_end_sx, end_sx }
+particle_prop! { l_gfx_particle_end_sy, end_sy }
+
+particle_prop! { l_gfx_particle_start_red, start_red }
+particle_prop! { l_gfx_particle_start_green, start_green }
+particle_prop! { l_gfx_particle_start_blue, start_blue }
+particle_prop! { l_gfx_particle_start_alpha, start_alpha }
+
+particle_prop! { l_gfx_particle_end_red, end_red }
+particle_prop! { l_gfx_particle_end_green, end_green }
+particle_prop! { l_gfx_particle_end_blue, end_blue }
+particle_prop! { l_gfx_particle_end_alpha, end_alpha }
 
 
 sylt_macro::extern_function!(
