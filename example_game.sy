@@ -18,6 +18,7 @@ x := 0.0
 y := 0.0
 
 sprite := l_load_image("coin.png", (16, 16))
+particles := l_gfx_particle_new()
 
 update :: fn delta: float -> void {
     x += (l_input_value("right") - l_input_value("left")) * delta
@@ -26,6 +27,10 @@ update :: fn delta: float -> void {
     l_gfx_rect! 0.0, 0.0, 1.0, 1.0, rgb
 
     l_gfx_sprite! sprite, (0, 0), x, y, 1.0, 1.0, rgb
+
+    l_gfx_particle_spawn! particles
+    l_gfx_particle_update! particles, delta
+    l_gfx_particle_render! particles
 }
 
 draw :: fn {

@@ -56,6 +56,17 @@ fn unpack_sprite_id(sprite: &Value) -> usize {
     unreachable!("Expected sprite id tuple but got '{:?}'", sprite);
 }
 
+fn unpack_particle_id(particle: &Value) -> usize {
+    if let Value::Tuple(tuple) = particle {
+        match (tuple.get(0), tuple.get(1)) {
+            (Some(Value::String(kind)), Some(Value::Int(id))) if kind.as_str() == "particle" => {
+                return *id as usize;
+            }
+            _ => {}
+        }
+    }
+    unreachable!("Expected particle id tuple but got '{:?}'", particle);
+}
 
 // TODO(ed): Make the trait only clone, not copy.
 struct GG {
@@ -76,6 +87,10 @@ unsafe impl Sync for GG {}
 
 lazy_static::lazy_static! {
     static ref GAME: Arc<Mutex<GG>> = new_game();
+}
+
+std::thread_local! {
+    static PARTICLES: Mutex<Vec<lingon::renderer::ParticleSystem>> = Mutex::new(Vec::new());
 }
 
 fn new_game() -> Arc<Mutex<GG>> {
@@ -156,6 +171,58 @@ sylt_macro::extern_function!(
          Ok(Value::Nil)
     },
 );
+
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_particle_new
+    [] -> Type::Tuple(vec![Type::String, Type::Int]) => {
+        let slot = PARTICLES.with(|ps| {
+            let mut ps = ps.lock().unwrap();
+            let slot = ps.len();
+            ps.push(lingon::renderer::ParticleSystem::new());
+            slot
+        });
+        Ok(Value::Tuple(Rc::new(vec![sylt_str("particle"), Value::Int(slot as i64)])))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_particle_spawn
+    [Value::Tuple(system)] -> Type::Void => {
+        PARTICLES.with(|ps| {
+            let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
+            ps.lock().unwrap()[system].spawn();
+        });
+        Ok(Value::Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_particle_update
+    [Value::Tuple(system), Value::Float(delta)] -> Type::Void => {
+        PARTICLES.with(|ps| {
+            let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
+            ps.lock().unwrap()[system].update(*delta as f32);
+        });
+        Ok(Value::Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_particle_render
+    [Value::Tuple(system)] -> Type::Void => {
+        PARTICLES.with(|ps| {
+            let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
+            game!().renderer.push_particle_system(&ps.lock().unwrap()[system]);
+        });
+        Ok(Value::Nil)
+    },
+);
+
 
 
 sylt_macro::extern_function!(
