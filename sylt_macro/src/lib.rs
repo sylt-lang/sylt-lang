@@ -1,4 +1,4 @@
-use lazy_static::{lazy, lazy_static};
+use lazy_static::{lazy_static};
 use quote::{format_ident, quote};
 use std::collections::HashMap;
 use std::path::Path;
@@ -42,11 +42,18 @@ impl Parse for ExternFunction {
         let mut res = Self {
             module: input.parse()?,
             function: input.parse()?,
-            _as: input.parse()?,
-            name: input.parse()?,
-            doc: input.parse()?,
+            _as: None,
+            name: None,
+            doc: None,
             blocks: Vec::new(),
         };
+        if input.peek(Token![as]) {
+            res._as = input.parse()?;
+            res.name = input.parse()?;
+        }
+        if input.peek(syn::LitStr) {
+            res.doc = input.parse()?;
+        }
         while !input.is_empty() {
             res.blocks.push(input.parse()?);
         }
