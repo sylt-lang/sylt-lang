@@ -20,6 +20,7 @@ struct ExternFunction {
     function: syn::Ident,
     _as: Option<Token![as]>,
     name: Option<syn::Ident>,
+    doc: Option<syn::LitStr>,
     blocks: Vec<ExternBlock>
 }
 
@@ -43,6 +44,7 @@ impl Parse for ExternFunction {
             function: input.parse()?,
             _as: input.parse()?,
             name: input.parse()?,
+            doc: input.parse()?,
             blocks: Vec::new(),
         };
         while !input.is_empty() {
@@ -57,6 +59,9 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
     let parsed: ExternFunction = parse_macro_input!(tokens);
     let module = parsed.module;
     let function = parsed.function;
+    if parsed.doc.is_none() {
+        eprintln!("Missing doc-string: {} :: {}", module.value(), function.to_string());
+    }
     let link_name = parsed.name.unwrap_or_else(|| function.clone());
 
     let typecheck_blocks: Vec<_> = parsed.blocks.iter().map(|block| {
