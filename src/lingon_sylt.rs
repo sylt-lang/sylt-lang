@@ -65,8 +65,18 @@ fn unpack_sprite_id(sprite: &Value) -> usize {
     unreachable!("Expected sprite id tuple but got '{:?}'", sprite);
 }
 
+fn unpack_audio_id(sprite: &Value) -> usize {
+    if let Value::Tuple(tuple) = sprite {
+        match (tuple.get(0), tuple.get(1)) {
+            (Some(Value::String(kind)), Some(Value::Int(id))) if kind.as_str() == "audio" => {
+                return *id as usize;
+            }
+            _ => {}
+        }
+    }
+    unreachable!("Expected sprite id tuple but got '{:?}'", sprite);
+}
 
-// TODO(ed): Make the trait only clone, not copy.
 struct GG {
     pub game: Game<String>,
 }
@@ -380,6 +390,38 @@ sylt_macro::extern_function!(
     },
 );
 
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_audio_play
+    [Value::Tuple(audio_source),
+     Value::Bool(looping),
+     Value::Float(gain), Value::Float(gain_variance),
+     Value::Float(pitch), Value::Float(pitch_variance),
+    ] -> Type::Void => {
+        let game = game!();
+        let sound = unpack_audio_id(&Value::Tuple(audio_source.clone()));
+        // SAFETY: unpack_audio_id checks that audio_source was previously received as an audio id
+        let sound = &game.assets[unsafe { lingon::asset::AudioAssetID::from_usize(sound) }];
+        let source = lingon::audio::AudioSource::new(sound)
+            .looping(*looping)
+            .gain(*gain as f32).gain_variance(*gain_variance as f32)
+            .pitch(*pitch as f32).pitch_variance(*pitch_variance as f32);
+        game.audio.lock().play(source);
+
+        Ok(Value::Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_audio_master_gain
+    [Value::Float(gain)] -> Type::Void => {
+        *game!().audio.lock().gain_mut() = *gain as f32;
+        Ok(Value::Nil)
+    },
+);
+
+
 pub fn sylt_str(s: &str) -> Value {
     Value::String(Rc::new(s.to_string()))
 }
@@ -401,6 +443,25 @@ pub fn l_load_image(values: &[Value], typecheck: bool) -> Result<Value, RuntimeE
         ([Value::String(_), tilesize], true) => {
             unpack_int_int_tuple(tilesize);
             Ok(Value::Tuple(Rc::new(vec![sylt_str("image"), Value::Int(0)])))
+        }
+        (values, _) => Err(RuntimeError::ExternTypeMismatch(
+            "l_load_image".to_string(),
+            values.iter().map(Type::from).collect(),
+        )),
+    }
+}
+
+#[sylt_macro::sylt_link(l_load_audio, "sylt::lingon_sylt")]
+pub fn l_load_audio(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
+    match (values, typecheck) {
+        ([Value::String(path)], false) => {
+            let game = game!();
+            let path = PathBuf::from(path.as_ref());
+            let audio = game.assets.load_audio(path);
+            Ok(Value::Tuple(Rc::new(vec![sylt_str("audio"), Value::Int(*audio as i64)])))
+        }
+        ([Value::String(_)], true) => {
+            Ok(Value::Tuple(Rc::new(vec![sylt_str("audio"), Value::Int(0)])))
         }
         (values, _) => Err(RuntimeError::ExternTypeMismatch(
             "l_load_image".to_string(),
