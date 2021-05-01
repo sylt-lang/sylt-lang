@@ -68,8 +68,10 @@ pub fn serialize(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<
 }
 
 /// Deserializes and links the given file.
-pub fn deserialize(bytes: Vec<u8>) -> Result<Prog, Vec<Error>> {
-    bincode::deserialize(&bytes).map_err(|_| vec![])
+pub fn deserialize(bytes: Vec<u8>, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
+    let mut prog: Prog = bincode::deserialize(&bytes).map_err(|_| vec![])?;
+    prog.functions = functions.into_iter().map(|(_, f)| f).collect();
+    Ok(prog)
 }
 
 fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
