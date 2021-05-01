@@ -411,7 +411,7 @@ impl VM {
                 match inst {
                     Value::Instance(ty, values) => {
                         let field = self.string(field);
-                        match (*values).borrow().get(field) {
+                        match values.borrow().get(field) {
                             Some(value) => {
                                 self.push(value.clone());
                             }
