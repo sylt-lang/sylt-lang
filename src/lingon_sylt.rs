@@ -29,6 +29,19 @@ fn unpack_float_float_tuple(value: &Value) -> (f64, f64) {
     unreachable!("Expected tuple (float, float) but got '{:?}'", value);
 }
 
+fn parse_dist(name: &String) -> Option<Box<dyn lingon::random::Distribute>> {
+    use lingon::random::*;
+
+    Some(match name.as_str() {
+        "Square" => Box::new(Square),
+        "ThreeDice" => Box::new(ThreeDice),
+        "TwoDice" => Box::new(TwoDice),
+        "Uniform" => Box::new(Uniform),
+        "NoDice" => Box::new(NoDice),
+        _ => { return None; }
+    })
+}
+
 fn unpack_and_tint<T: Tint>(target: &mut T, tint: &Value) {
     if let Value::Tuple(tuple) = tint {
         match (tuple.get(0), tuple.get(1), tuple.get(2), tuple.get(3)) {
@@ -53,6 +66,7 @@ fn unpack_and_tint<T: Tint>(target: &mut T, tint: &Value) {
     unreachable!("Expected tint tuple but got '{:?}'", tint);
 }
 
+// TODO(ed): These should accept an Rc<Vec<_>>.
 fn unpack_sprite_id(sprite: &Value) -> usize {
     if let Value::Tuple(tuple) = sprite {
         match (tuple.get(0), tuple.get(1)) {
@@ -77,6 +91,18 @@ fn unpack_audio_id(sprite: &Value) -> usize {
     unreachable!("Expected sprite id tuple but got '{:?}'", sprite);
 }
 
+fn unpack_particle_id(particle: &Value) -> usize {
+    if let Value::Tuple(tuple) = particle {
+        match (tuple.get(0), tuple.get(1)) {
+            (Some(Value::String(kind)), Some(Value::Int(id))) if kind.as_str() == "particle" => {
+                return *id as usize;
+            }
+            _ => {}
+        }
+    }
+    unreachable!("Expected particle id tuple but got '{:?}'", particle);
+}
+
 struct GG {
     pub game: Game<String>,
 }
@@ -95,6 +121,10 @@ unsafe impl Sync for GG {}
 
 lazy_static::lazy_static! {
     static ref GAME: Arc<Mutex<GG>> = new_game();
+}
+
+std::thread_local! {
+    static PARTICLES: Mutex<Vec<lingon::renderer::ParticleSystem>> = Mutex::new(Vec::new());
 }
 
 fn new_game() -> Arc<Mutex<GG>> {
@@ -244,6 +274,125 @@ sylt_macro::extern_function!(
         Ok(Value::Nil)
     },
 );
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_particle_new
+    [] -> Type::Tuple(vec![Type::String, Type::Int]) => {
+        let slot = PARTICLES.with(|ps| {
+            let mut ps = ps.lock().unwrap();
+            let slot = ps.len();
+            ps.push(lingon::renderer::ParticleSystem::new());
+            slot
+        });
+        Ok(Value::Tuple(Rc::new(vec![sylt_str("particle"), Value::Int(slot as i64)])))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_particle_spawn
+    [Value::Tuple(system)] -> Type::Void => {
+        let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
+        PARTICLES.with(|ps| {
+            ps.lock().unwrap()[system].spawn();
+        });
+        Ok(Value::Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_particle_update
+    [Value::Tuple(system), Value::Float(delta)] -> Type::Void => {
+        let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
+        PARTICLES.with(|ps| {
+            ps.lock().unwrap()[system].update(*delta as f32);
+        });
+        Ok(Value::Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_particle_render
+    [Value::Tuple(system)] -> Type::Void => {
+        let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
+        PARTICLES.with(|ps| {
+            game!().renderer.push_particle_system(&ps.lock().unwrap()[system]);
+        });
+        Ok(Value::Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_particle_add_sprite
+    [Value::Tuple(system), Value::Tuple(sprite), Value::Tuple(grid)] -> Type::Void => {
+        let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
+        let sprite = unpack_sprite_id(&Value::Tuple(Rc::clone(sprite)));
+        let grid = unpack_int_int_tuple(&Value::Tuple(Rc::clone(grid)));
+        PARTICLES.with(|ps| {
+            let sprite = game!().renderer.sprite_sheets[sprite].grid(grid.0 as usize, grid.1 as usize);
+            ps.lock().unwrap()[system].sprites.push(sprite);
+        });
+        Ok(Value::Nil)
+    },
+);
+
+macro_rules! particle_prop {
+    { $name:ident, $prop:ident } => {
+        sylt_macro::extern_function!(
+            "sylt::lingon_sylt"
+            $name
+            [Value::Tuple(system), Value::Tuple(range), Value::String(dist)] -> Type::Void => {
+                let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
+                let range = unpack_float_float_tuple(&Value::Tuple(Rc::clone(range)));
+                if let Some(dist) = parse_dist(dist) {
+                    PARTICLES.with(|ps| {
+                        let prop = lingon::random::RandomProperty::new(range.0 as f32, range.1 as f32, dist);
+                        ps.lock().unwrap()[system].$prop = prop;
+                    });
+                    Ok(Value::Nil)
+                } else {
+                    error!(stringify!($name), "Failed to parse distribution '{}'", dist)
+                }
+            },
+        );
+    };
+}
+
+particle_prop! { l_gfx_particle_x, x }
+particle_prop! { l_gfx_particle_y, y }
+
+particle_prop! { l_gfx_particle_lifetime, lifetime }
+
+particle_prop! { l_gfx_particle_vel_angle, vel_angle }
+particle_prop! { l_gfx_particle_vel_magnitude, vel_magnitude }
+
+particle_prop! { l_gfx_particle_acc_angle, acc_angle }
+particle_prop! { l_gfx_particle_acc_magnitude, acc_magnitude }
+particle_prop! { l_gfx_particle_drag, drag }
+
+particle_prop! { l_gfx_particle_angle, angle }
+particle_prop! { l_gfx_particle_angle_velocity, angle_velocity }
+particle_prop! { l_gfx_particle_angle_drag, angle_drag }
+
+particle_prop! { l_gfx_particle_start_sx, start_sx }
+particle_prop! { l_gfx_particle_start_sy, start_sy }
+particle_prop! { l_gfx_particle_end_sx, end_sx }
+particle_prop! { l_gfx_particle_end_sy, end_sy }
+
+particle_prop! { l_gfx_particle_start_red, start_red }
+particle_prop! { l_gfx_particle_start_green, start_green }
+particle_prop! { l_gfx_particle_start_blue, start_blue }
+particle_prop! { l_gfx_particle_start_alpha, start_alpha }
+
+particle_prop! { l_gfx_particle_end_red, end_red }
+particle_prop! { l_gfx_particle_end_green, end_green }
+particle_prop! { l_gfx_particle_end_blue, end_blue }
+particle_prop! { l_gfx_particle_end_alpha, end_alpha }
+
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
