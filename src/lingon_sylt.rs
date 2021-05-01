@@ -423,6 +423,15 @@ sylt_macro::extern_function!(
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
+    l_random_range
+    [Value::Int(lo), Value::Int(hi)] -> Type::Int => {
+        Ok(Value::Int(*lo + (Uniform.sample() * ((hi - lo) as f32)) as i64))
+    },
+);
+
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
     l_bind_key
     [Value::String(key), Value::String(name)] -> Type::Void => {
         let key = if let Some(key) = Keycode::from_name(key) {
