@@ -1,4 +1,4 @@
-use lazy_static::lazy_static;
+use lazy_static::{lazy, lazy_static};
 use quote::{format_ident, quote};
 use std::collections::HashMap;
 use std::path::Path;
@@ -42,11 +42,18 @@ impl Parse for ExternFunction {
         let mut res = Self {
             module: input.parse()?,
             function: input.parse()?,
-            _as: input.parse()?,
-            name: input.parse()?,
-            doc: input.parse()?,
+            _as: None,
+            name: None,
+            doc: None,
             blocks: Vec::new(),
         };
+        if input.peek(Token![as]) {
+            res._as = input.parse()?;
+            res.name = input.parse()?;
+        }
+        if input.peek(syn::LitStr) {
+            res.doc = input.parse()?;
+        }
         while !input.is_empty() {
             res.blocks.push(input.parse()?);
         }
@@ -59,9 +66,17 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
     let parsed: ExternFunction = parse_macro_input!(tokens);
     let module = parsed.module;
     let function = parsed.function;
-    if parsed.doc.is_none() {
+    let doc = if parsed.doc.is_some() {
+        quote! { parsed.doc }
+    } else {
         eprintln!("Missing doc-string: {} :: {}", module.value(), function.to_string());
-    }
+        quote! { "Undocumented" }
+    };
+
+    let matches: Vec<_> = parsed.blocks.iter()
+        .map(|ExternBlock { pattern, ..}| pattern)
+        .collect();
+
     let link_name = parsed.name.unwrap_or_else(|| function.clone());
 
     let typecheck_blocks: Vec<_> = parsed.blocks.iter().map(|block| {
@@ -81,6 +96,7 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
     }).collect();
 
     let tokens = quote! {
+        #[sylt_macro::sylt_doc(#function, #doc , #( #matches ),*)]
         #[sylt_macro::sylt_link(#link_name, #module)]
         pub fn #function (
             __values: &[sylt::Value],
@@ -409,6 +425,61 @@ pub fn sylt_link_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
         }
     };
     proc_macro::TokenStream::from(tokens)
+}
+
+struct SyltDoc {
+    name: syn::Ident,
+    comment: syn::LitStr,
+    args: Vec<syn::Pat>,
+}
+
+impl Parse for SyltDoc {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let name: syn::Ident = input.parse()?;
+        let _comma: Token![,] = input.parse()?;
+        let comment = input.parse()?;
+
+        let mut args = Vec::new();
+        while !input.is_empty() {
+            let _comma: Token![,] = input.parse()?;
+            let arg = input.parse()?;
+            args.push(arg);
+        }
+
+        Ok(SyltDoc {
+            name,
+            comment,
+            args,
+        })
+    }
+}
+
+lazy_static! {
+    static ref DOC: Arc<Mutex<bool>> = doc_file();
+}
+
+fn doc_file() -> Arc<Mutex<bool>> {
+    Arc::new(Mutex::new(true))
+}
+
+#[proc_macro_attribute]
+pub fn sylt_doc(attrib: proc_macro::TokenStream, tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let doc: SyltDoc = parse_macro_input!(attrib);
+
+    let lock = DOC.lock().unwrap();
+    let doc = format!("# {}\n{}\n{}\n",
+        doc.name.to_string(),
+        doc.comment.value(),
+        doc.args.iter().map(|x| format!(" - {}", quote! { #x }.to_string())).collect::<Vec<_>>().join("\n"),
+    );
+    use std::fs::OpenOptions;
+    use std::io::prelude::*;
+    let mut file = OpenOptions::new().append(true).create(true).open("doc.txt").unwrap();
+    file.write_all(doc.as_bytes()).unwrap();
+    drop(doc_file);
+    drop(lock);
+
+    tokens
 }
 
 struct SyltLink {
