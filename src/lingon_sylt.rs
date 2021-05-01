@@ -68,7 +68,6 @@ fn unpack_audio_id(sprite: &Value) -> usize {
     unreachable!("Expected sprite id tuple but got '{:?}'", sprite);
 }
 
-// TODO(ed): Make the trait only clone, not copy.
 struct GG {
     pub game: Game<String>,
 }
@@ -324,7 +323,8 @@ sylt_macro::extern_function!(
     ] -> Type::Void => {
         let game = game!();
         let sound = unpack_audio_id(&Value::Tuple(audio_source.clone()));
-        let sound = &game.assets[lingon::asset::AudioAssetID(sound)];
+        // SAFETY: unpack_audio_id checks that audio_source was previously received as an audio id
+        let sound = &game.assets[unsafe { lingon::asset::AudioAssetID::from_usize(sound) }];
         let source = lingon::audio::AudioSource::new(sound)
             .looping(*looping)
             .gain(*gain as f32).gain_variance(*gain_variance as f32)
@@ -381,7 +381,7 @@ pub fn l_load_audio(values: &[Value], typecheck: bool) -> Result<Value, RuntimeE
             let game = game!();
             let path = PathBuf::from(path.as_ref());
             let audio = game.assets.load_audio(path);
-            Ok(Value::Tuple(Rc::new(vec![sylt_str("audio"), Value::Int(audio.0 as i64)])))
+            Ok(Value::Tuple(Rc::new(vec![sylt_str("audio"), Value::Int(*audio as i64)])))
         }
         ([Value::String(_)], true) => {
             Ok(Value::Tuple(Rc::new(vec![sylt_str("audio"), Value::Int(0)])))
