@@ -2,6 +2,7 @@ use lingon::{Game, random::{Uniform, Distribute}};
 use lingon::renderer::{Rect, Sprite, Transform, Tint};
 use std::sync::{Arc, Mutex};
 use crate::{*, error::RuntimeError};
+use crate::Value::*;
 use crate as sylt;
 
 // Errors are important, they should be easy to write!
@@ -12,27 +13,18 @@ macro_rules! error {
 }
 
 fn unpack_int_int_tuple(value: &Value) -> (i64, i64) {
-    if let Value::Tuple(tuple) = value {
-        if let (Some(Value::Int(w)), Some(Value::Int(h))) = (tuple.get(0), tuple.get(1)) {
+    if let Tuple(tuple) = value {
+        if let (Some(Int(w)), Some(Int(h))) = (tuple.get(0), tuple.get(1)) {
             return (*w, *h);
         }
     };
     unreachable!("Expected tuple (int, int) but got '{:?}'", value);
 }
 
-fn unpack_float_float_tuple(value: &Value) -> (f64, f64) {
-    if let Value::Tuple(tuple) = value {
-        if let (Some(Value::Float(w)), Some(Value::Float(h))) = (tuple.get(0), tuple.get(1)) {
-            return (*w, *h);
-        }
-    };
-    unreachable!("Expected tuple (float, float) but got '{:?}'", value);
-}
-
-fn parse_dist(name: &String) -> Option<Box<dyn lingon::random::Distribute>> {
+fn parse_dist(name: &str) -> Option<Box<dyn lingon::random::Distribute>> {
     use lingon::random::*;
 
-    Some(match name.as_str() {
+    Some(match name{
         "Square" => Box::new(Square),
         "ThreeDice" => Box::new(ThreeDice),
         "TwoDice" => Box::new(TwoDice),
@@ -42,69 +34,8 @@ fn parse_dist(name: &String) -> Option<Box<dyn lingon::random::Distribute>> {
     })
 }
 
-fn unpack_and_tint<T: Tint>(target: &mut T, tint: &Value) {
-    if let Value::Tuple(tuple) = tint {
-        match (tuple.get(0), tuple.get(1), tuple.get(2), tuple.get(3)) {
-            (Some(Value::Float(r)), Some(Value::Float(g)), Some(Value::Float(b)), Some(Value::Float(a))) => {
-                target.rgba(*r as f32, *g as f32, *b as f32, *a as f32);
-                return;
-            }
-
-            (Some(Value::Float(r)), Some(Value::Float(g)), Some(Value::Float(b)), ..) => {
-                target.rgb(*r as f32, *g as f32, *b as f32);
-                return;
-            }
-
-            (Some(Value::Float(v)), ..) => {
-                target.rgb(*v as f32, *v as f32, *v as f32);
-                return;
-            }
-
-            _ => {}
-        }
-    }
-    unreachable!("Expected tint tuple but got '{:?}'", tint);
-}
-
-// TODO(ed): These should accept an Rc<Vec<_>>.
-fn unpack_sprite_id(sprite: &Value) -> usize {
-    if let Value::Tuple(tuple) = sprite {
-        match (tuple.get(0), tuple.get(1)) {
-            (Some(Value::String(kind)), Some(Value::Int(id))) if kind.as_str() == "image" => {
-                return *id as usize;
-            }
-            _ => {}
-        }
-    }
-    unreachable!("Expected sprite id tuple but got '{:?}'", sprite);
-}
-
-fn unpack_audio_id(sprite: &Value) -> usize {
-    if let Value::Tuple(tuple) = sprite {
-        match (tuple.get(0), tuple.get(1)) {
-            (Some(Value::String(kind)), Some(Value::Int(id))) if kind.as_str() == "audio" => {
-                return *id as usize;
-            }
-            _ => {}
-        }
-    }
-    unreachable!("Expected sprite id tuple but got '{:?}'", sprite);
-}
-
-fn unpack_particle_id(particle: &Value) -> usize {
-    if let Value::Tuple(tuple) = particle {
-        match (tuple.get(0), tuple.get(1)) {
-            (Some(Value::String(kind)), Some(Value::Int(id))) if kind.as_str() == "particle" => {
-                return *id as usize;
-            }
-            _ => {}
-        }
-    }
-    unreachable!("Expected particle id tuple but got '{:?}'", particle);
-}
-
 struct GG {
-    pub game: Game<String>,
+    pub game: Game<std::string::String>,
 }
 
 
@@ -144,7 +75,7 @@ sylt_macro::extern_function!(
     [] -> Type::Void => {
         // TODO(ed): Unused for now
         game!().update(0.0);
-        Ok(Value::Nil)
+        Ok(Nil)
     },
 );
 
@@ -153,56 +84,101 @@ sylt_macro::extern_function!(
     l_render
     [] -> Type::Void => {
         game!().draw().unwrap();
-        Ok(Value::Nil)
+        Ok(Nil)
     },
 );
+
+fn l_gfx_rect_internal(x: &f64, y: &f64, w: &f64, h: &f64, r: &f64, g: &f64, b: &f64, a: &f64) {
+    let mut rect = Rect::new();
+    rect.at(*x as f32, *y as f32);
+    rect.scale(*w as f32, *h as f32);
+    rect.rgba(*r as f32, *g as f32, *b as f32, *a as f32);
+
+    game!().renderer.push(rect);
+}
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_rect
-    [Value::Float(x), Value::Float(y), Value::Float(w), Value::Float(h)] -> Type::Void => {
-        game!().renderer.push(Rect::new().at(*x as f32, *y as f32).scale(*w as f32, *h as f32));
-        Ok(Value::Nil)
+    [One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h))]
+    -> Type::Void => {
+        l_gfx_rect_internal(x, y, w, h, &1.0, &1.0, &1.0, &1.0);
+        Ok(Nil)
     },
-    [Value::Float(x), Value::Float(y), Value::Float(w), Value::Float(h), Value::Tuple(tint)] -> Type::Void => {
-        let mut rect = Rect::new();
-        unpack_and_tint(&mut rect, &Value::Tuple(tint.clone()));
-        rect.at(*x as f32, *y as f32);
-        rect.scale(*w as f32, *h as f32);
-
-       game!().renderer.push(rect);
-        Ok(Value::Nil)
+    [Two(Float(x), Float(y)), Two(Float(w), Float(h))]
+    -> Type::Void => {
+        l_gfx_rect_internal(x, y, w, h, &1.0, &1.0, &1.0, &1.0);
+        Ok(Nil)
+    },
+    [One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), Three(Float(r), Float(g), Float(b))]
+    -> Type::Void => {
+        l_gfx_rect_internal(x, y, w, h, r, g, b, &1.0);
+        Ok(Nil)
+    },
+    [Two(Float(x), Float(y)), Two(Float(w), Float(h)), Three(Float(r), Float(g), Float(b))]
+    -> Type::Void => {
+        l_gfx_rect_internal(x, y, w, h, r, g, b, &1.0);
+        Ok(Nil)
+    },
+    [One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), Four(Float(r), Float(g), Float(b), Float(a))]
+    -> Type::Void => {
+        l_gfx_rect_internal(x, y, w, h, r, g, b, a);
+        Ok(Nil)
+    },
+    [Two(Float(x), Float(y)), Two(Float(w), Float(h)), Four(Float(r), Float(g), Float(b), Float(a))]
+    -> Type::Void => {
+        l_gfx_rect_internal(x, y, w, h, r, g, b, a);
+        Ok(Nil)
     },
 );
+
+fn l_gfx_sprite_internal(sprite: &i64, x: &f64, y: &f64, w: &f64, h: &f64, gx: &i64, gy: &i64, r: &f64, g: &f64, b: &f64, a: &f64) -> Value {
+    let sprite = game!().renderer.sprite_sheets[*sprite as usize].grid(*gx as usize, *gy as usize);
+    let mut sprite = Sprite::new(sprite);
+    sprite.at(*x as f32, *y as f32).scale(*w as f32, *h as f32);
+    sprite.rgba(*r as f32, *g as f32, *b as f32, *a as f32);
+    game!().renderer.push(sprite);
+    Nil
+}
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_sprite
-    [Value::Tuple(sprite), Value::Tuple(grid),
-     Value::Float(x), Value::Float(y),
-     Value::Float(w), Value::Float(h)] -> Type::Void => {
-        let grid = unpack_int_int_tuple(&Value::Tuple(grid.clone()));
-        let sprite = unpack_sprite_id(&Value::Tuple(sprite.clone()));
-        let sprite = game!().renderer.sprite_sheets[sprite].grid(grid.0 as usize, grid.1 as usize);
-        let mut sprite = Sprite::new(sprite);
-
-        sprite.at(*x as f32, *y as f32).scale(*w as f32, *h as f32);
-        game!().renderer.push(sprite);
-         Ok(Value::Nil)
+    [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h))] -> Type::Void => {
+        if name.as_ref() != "sprite" {
+            return error!("l_gfx_sprite", "Expected a sprite ID");
+        }
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &1.0, &1.0, &1.0, &1.0))
     },
-    [Value::Tuple(sprite), Value::Tuple(grid),
-     Value::Float(x), Value::Float(y),
-     Value::Float(w), Value::Float(h),
-     Value::Tuple(tint)] -> Type::Void => {
-        let grid = unpack_int_int_tuple(&Value::Tuple(grid.clone()));
-        let sprite = unpack_sprite_id(&Value::Tuple(sprite.clone()));
-        let sprite = game!().renderer.sprite_sheets[sprite].grid(grid.0 as usize, grid.1 as usize);
-        let mut sprite = Sprite::new(sprite);
-
-        unpack_and_tint(&mut sprite, &Value::Tuple(tint.clone()));
-        sprite.at(*x as f32, *y as f32).scale(*w as f32, *h as f32);
-        game!().renderer.push(sprite);
-         Ok(Value::Nil)
+    [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h))] -> Type::Void => {
+        if name.as_ref() != "sprite" {
+            return error!("l_gfx_sprite", "Expected a sprite ID");
+        }
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &1.0, &1.0, &1.0, &1.0))
+    },
+    [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
+        if name.as_ref() != "sprite" {
+            return error!("l_gfx_sprite", "Expected a sprite ID")
+        }
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, &1.0))
+    },
+    [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
+        if name.as_ref() != "sprite" {
+            return error!("l_gfx_sprite", "Expected a sprite ID")
+        }
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, &1.0))
+    },
+    [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), Four(Float(r), Float(g), Float(b), Float(a))] -> Type::Void => {
+        if name.as_ref() != "sprite" {
+            return error!("l_gfx_sprite", "Expected a sprite ID")
+        }
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, a))
+    },
+    [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), Four(Float(r), Float(g), Float(b), Float(a))] -> Type::Void => {
+        if name.as_ref() != "sprite" {
+            return error!("l_gfx_sprite", "Expected a sprite ID")
+        }
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, a))
     },
 );
 
@@ -213,65 +189,72 @@ sylt_macro::extern_function!(
         let game = &mut game!().renderer.camera;
         let x = *game.x_mut();
         let y = *game.y_mut();
-        Ok(Value::Tuple(Rc::new(vec![Value::Float(x as f64), Value::Float(y as f64)])))
+        Ok(Tuple(Rc::new(vec![Float(x as f64), Float(y as f64)])))
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_camera_place
-    [Value::Tuple(at)] -> Type::Void => {
-        let at = unpack_float_float_tuple(&Value::Tuple(at.clone()));
-        game!().renderer.camera.at(at.0 as f32, at.1 as f32);
-        Ok(Value::Nil)
-    },
-    [Value::Float(x), Value::Float(y)] -> Type::Void => {
+    [Two(Float(x), Float(y))] -> Type::Void => {
         game!().renderer.camera.at(*x as f32, *y as f32);
-        Ok(Value::Nil)
+        Ok(Nil)
+    },
+    [One(Float(x)), One(Float(y))] -> Type::Void => {
+        game!().renderer.camera.at(*x as f32, *y as f32);
+        Ok(Nil)
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_camera_angle
-    [Value::Float(angle)] -> Type::Void => {
+    [One(Float(angle))] -> Type::Void => {
         game!().renderer.camera.angle(*angle as f32);
-        Ok(Value::Nil)
+        Ok(Nil)
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_camera_rotate
-    [Value::Float(by)] -> Type::Void => {
+    [One(Float(by))] -> Type::Void => {
         game!().renderer.camera.rotate(*by as f32);
-        Ok(Value::Nil)
+        Ok(Nil)
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_camera_set_zoom
-    [Value::Float(to)] -> Type::Void => {
+    [One(Float(to))] -> Type::Void => {
         game!().renderer.camera.scale(*to as f32, *to as f32);
-        Ok(Value::Nil)
+        Ok(Nil)
     },
-    [Value::Float(sx), Value::Float(sy)] -> Type::Void => {
+    [One(Float(sx)), One(Float(sy))] -> Type::Void => {
         game!().renderer.camera.scale(*sx as f32, *sy as f32);
-        Ok(Value::Nil)
+        Ok(Nil)
+    },
+    [Two(Float(sx), Float(sy))] -> Type::Void => {
+        game!().renderer.camera.scale(*sx as f32, *sy as f32);
+        Ok(Nil)
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_camera_zoom_by
-    [Value::Float(to)] -> Type::Void => {
+    [One(Float(to))] -> Type::Void => {
         game!().renderer.camera.scale_by(*to as f32, *to as f32);
-        Ok(Value::Nil)
+        Ok(Nil)
     },
-    [Value::Float(sx), Value::Float(sy)] -> Type::Void => {
+    [One(Float(sx)), One(Float(sy))] -> Type::Void => {
         game!().renderer.camera.scale_by(*sx as f32, *sy as f32);
-        Ok(Value::Nil)
+        Ok(Nil)
+    },
+    [Two(Float(sx), Float(sy))] -> Type::Void => {
+        game!().renderer.camera.scale_by(*sx as f32, *sy as f32);
+        Ok(Nil)
     },
 );
 
@@ -285,58 +268,68 @@ sylt_macro::extern_function!(
             ps.push(lingon::renderer::ParticleSystem::new());
             slot
         });
-        Ok(Value::Tuple(Rc::new(vec![sylt_str("particle"), Value::Int(slot as i64)])))
+        Ok(Tuple(Rc::new(vec![sylt_str("particle"), Int(slot as i64)])))
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_particle_spawn
-    [Value::Tuple(system)] -> Type::Void => {
-        let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
+    [Two(String(name), Int(system))] -> Type::Void => {
+        if name.as_ref() != "particle" {
+            return error!("l_gfx_particle_spawn", "Expected a particle system ID");
+        }
         PARTICLES.with(|ps| {
-            ps.lock().unwrap()[system].spawn();
+            ps.lock().unwrap()[*system as usize].spawn();
         });
-        Ok(Value::Nil)
+        Ok(Nil)
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_particle_update
-    [Value::Tuple(system), Value::Float(delta)] -> Type::Void => {
-        let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
+    [Two(String(name), Int(system)), One(Float(delta))] -> Type::Void => {
+        if name.as_ref() != "particle" {
+            return error!("l_gfx_particle_spawn", "Expected a particle system ID");
+        }
         PARTICLES.with(|ps| {
-            ps.lock().unwrap()[system].update(*delta as f32);
+            ps.lock().unwrap()[*system as usize].update(*delta as f32);
         });
-        Ok(Value::Nil)
+        Ok(Nil)
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_particle_render
-    [Value::Tuple(system)] -> Type::Void => {
-        let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
+    [Two(String(name), Int(system))] -> Type::Void => {
+        if name.as_ref() != "particle" {
+            return error!("l_gfx_particle_spawn", "Expected a particle system ID");
+        }
         PARTICLES.with(|ps| {
-            game!().renderer.push_particle_system(&ps.lock().unwrap()[system]);
+            game!().renderer.push_particle_system(&ps.lock().unwrap()[*system as usize]);
         });
-        Ok(Value::Nil)
+        Ok(Nil)
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_particle_add_sprite
-    [Value::Tuple(system), Value::Tuple(sprite), Value::Tuple(grid)] -> Type::Void => {
-        let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
-        let sprite = unpack_sprite_id(&Value::Tuple(Rc::clone(sprite)));
-        let grid = unpack_int_int_tuple(&Value::Tuple(Rc::clone(grid)));
+    [Two(String(s_name), Int(system)), Two(String(sp_name), Int(sprite)), Two(Int(gx), Int(gy))] -> Type::Void => {
+        if s_name.as_ref() != "particle" {
+            return error!("l_gfx_particle_spawn", "Expected a particle system ID");
+        }
+        if sp_name.as_ref() != "sprite" {
+            return error!("l_gfx_sprite", "Expected a sprite ID");
+        }
+
+        let sprite = game!().renderer.sprite_sheets[*sprite as usize].grid(*gx as usize, *gy as usize);
         PARTICLES.with(|ps| {
-            let sprite = game!().renderer.sprite_sheets[sprite].grid(grid.0 as usize, grid.1 as usize);
-            ps.lock().unwrap()[system].sprites.push(sprite);
+            ps.lock().unwrap()[*system as usize].sprites.push(sprite);
         });
-        Ok(Value::Nil)
+        Ok(Nil)
     },
 );
 
@@ -345,15 +338,26 @@ macro_rules! particle_prop {
         sylt_macro::extern_function!(
             "sylt::lingon_sylt"
             $name
-            [Value::Tuple(system), Value::Tuple(range), Value::String(dist)] -> Type::Void => {
-                let system = unpack_particle_id(&Value::Tuple(Rc::clone(system)));
-                let range = unpack_float_float_tuple(&Value::Tuple(Rc::clone(range)));
+            [Two(String(name), Int(system)), Two(Int(lo), Int(hi))] -> Type::Void => {
+                if name.as_ref() != "particle" {
+                    return error!("l_gfx_particle_spawn", "Expected a particle system ID");
+                }
+                let prop = lingon::random::RandomProperty::new(*lo as f32, *hi as f32, Box::new(Uniform));
+                PARTICLES.with(|ps| {
+                    ps.lock().unwrap()[*system as usize].$prop = prop;
+                });
+                Ok(Nil)
+            },
+            [Two(String(name), Int(system)), Two(Int(lo), Int(hi)), One(String(dist))] -> Type::Void => {
+                if name.as_ref() != "particle" {
+                    return error!("l_gfx_particle_spawn", "Expected a particle system ID");
+                }
                 if let Some(dist) = parse_dist(dist) {
+                    let prop = lingon::random::RandomProperty::new(*lo as f32, *hi as f32, dist);
                     PARTICLES.with(|ps| {
-                        let prop = lingon::random::RandomProperty::new(range.0 as f32, range.1 as f32, dist);
-                        ps.lock().unwrap()[system].$prop = prop;
+                        ps.lock().unwrap()[*system as usize].$prop = prop;
                     });
-                    Ok(Value::Nil)
+                    Ok(Nil)
                 } else {
                     error!(stringify!($name), "Failed to parse distribution '{}'", dist)
                 }
@@ -399,7 +403,7 @@ sylt_macro::extern_function!(
     l_delta
     [] -> Type::Float => {
         let delta = game!().time_tick() as f64;
-        Ok(Value::Float(delta))
+        Ok(Float(delta))
     },
 );
 
@@ -408,7 +412,7 @@ sylt_macro::extern_function!(
     l_time
     [] -> Type::Float => {
         let time = game!().total_time() as f64;
-        Ok(Value::Float(time))
+        Ok(Float(time))
     },
 );
 
@@ -417,15 +421,18 @@ sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_random
     [] -> Type::Float => {
-        Ok(Value::Float(Uniform.sample().into()))
+        Ok(Float(Uniform.sample().into()))
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_random_range
-    [Value::Int(lo), Value::Int(hi)] -> Type::Int => {
-        Ok(Value::Int(*lo + (Uniform.sample() * ((hi - lo) as f32)) as i64))
+    [One(Int(lo)), One(Int(hi))] -> Type::Int => {
+        Ok(Int(*lo + (Uniform.sample() * ((hi - lo) as f32)) as i64))
+    },
+    [Two(Int(lo), Int(hi))] -> Type::Int => {
+        Ok(Int(*lo + (Uniform.sample() * ((hi - lo) as f32)) as i64))
     },
 );
 
@@ -433,7 +440,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_bind_key
-    [Value::String(key), Value::String(name)] -> Type::Void => {
+    [One(String(key)), One(String(name))] -> Type::Void => {
         let key = if let Some(key) = Keycode::from_name(key) {
             key
         } else {
@@ -441,26 +448,26 @@ sylt_macro::extern_function!(
         };
 
         use lingon::input::{Device::Key, Keycode};
-        game!().input.bind(Key(key), String::clone(name));
+        game!().input.bind(Key(key), std::string::String::clone(name));
 
-        Ok(Value::Nil)
+        Ok(Nil)
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_bind_quit
-    [Value::String(name)] -> Type::Void => {
+    [One(String(name))] -> Type::Void => {
         use lingon::input::Device::Quit;
-        game!().input.bind(Quit, String::clone(name));
-        Ok(Value::Nil)
+        game!().input.bind(Quit, std::string::String::clone(name));
+        Ok(Nil)
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_bind_button
-    [Value::Int(controller), Value::String(button), Value::String(name)] -> Type::Void => {
+    [One(Int(controller)), One(String(button)), One(String(name))] -> Type::Void => {
         use lingon::input::{Device, Button};
         let button = if let Some(button) = Button::from_string(button) {
             button
@@ -468,15 +475,15 @@ sylt_macro::extern_function!(
             return error!("l_bind_button", "'{}' is an invalid button", button);
         };
 
-        game!().input.bind(Device::Button(*controller as u32, button), String::clone(name));
-        Ok(Value::Nil)
+        game!().input.bind(Device::Button(*controller as u32, button), std::string::String::clone(name));
+        Ok(Nil)
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_bind_axis
-    [Value::Int(controller), Value::String(axis), Value::String(name)] -> Type::Void => {
+    [One(Int(controller)), One(String(axis)), One(String(name))] -> Type::Void => {
         use lingon::input::{Device, Axis};
         let axis = if let Some(axis) = Axis::from_string(axis) {
             axis
@@ -484,15 +491,15 @@ sylt_macro::extern_function!(
             return error!("l_bind_axis", "'{}' is an invalid axis", axis);
         };
 
-        game!().input.bind(Device::Axis(*controller as u32, axis), String::clone(name));
-        Ok(Value::Nil)
+        game!().input.bind(Device::Axis(*controller as u32, axis), std::string::String::clone(name));
+        Ok(Nil)
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_bind_mouse
-    [Value::String(button), Value::String(name)] -> Type::Void => {
+    [One(String(button)), One(String(name))] -> Type::Void => {
         use lingon::input::{Device::Mouse, MouseButton::*};
         let button = match button.as_str() {
             "left" => Left,
@@ -503,91 +510,111 @@ sylt_macro::extern_function!(
             _ => { return error!("l_bind_mouse", "'{}' is an invalid mouse button", button); }
         };
 
-        game!().input.bind(Mouse(button), String::clone(name));
-        Ok(Value::Nil)
+        game!().input.bind(Mouse(button), std::string::String::clone(name));
+        Ok(Nil)
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_input_down
-    [Value::String(name)] -> Type::Bool => {
-        Ok(Value::Bool(game!().input.down(String::clone(name))))
+    [One(String(name))] -> Type::Bool => {
+        Ok(Bool(game!().input.down(std::string::String::clone(name))))
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_input_up
-    [Value::String(name)] -> Type::Bool => {
-        Ok(Value::Bool(game!().input.up(String::clone(name))))
+    [One(String(name))] -> Type::Bool => {
+        Ok(Bool(game!().input.up(std::string::String::clone(name))))
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_input_pressed
-    [Value::String(name)] -> Type::Bool => {
-        Ok(Value::Bool(game!().input.pressed(String::clone(name))))
+    [One(String(name))] -> Type::Bool => {
+        Ok(Bool(game!().input.pressed(std::string::String::clone(name))))
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_input_released
-    [Value::String(name)] -> Type::Bool => {
-        Ok(Value::Bool(game!().input.released(String::clone(name))))
+    [One(String(name))] -> Type::Bool => {
+        Ok(Bool(game!().input.released(std::string::String::clone(name))))
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_input_value
-    [Value::String(name)] -> Type::Float => {
-        Ok(Value::Float(game!().input.value(String::clone(name)) as f64))
+    [One(String(name))] -> Type::Float => {
+        Ok(Float(game!().input.value(std::string::String::clone(name)) as f64))
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_audio_play
-    [Value::Tuple(audio_source),
-     Value::Bool(looping),
-     Value::Float(gain), Value::Float(gain_variance),
-     Value::Float(pitch), Value::Float(pitch_variance),
+    [Two(String(name), Int(sound)),
+     One(Bool(looping)),
+     One(Float(gain)),
+     One(Float(pitch)),
     ] -> Type::Void => {
+        if name.as_ref() != "audio" {
+            return error!("l_audio_play", "");
+        }
+
         let game = game!();
-        let sound = unpack_audio_id(&Value::Tuple(audio_source.clone()));
-        // SAFETY: unpack_audio_id checks that audio_source was previously received as an audio id
-        let sound = &game.assets[unsafe { lingon::asset::AudioAssetID::from_usize(sound) }];
+        let sound = &game.assets[unsafe { lingon::asset::AudioAssetID::from_usize(*sound as usize) }];
+        let source = lingon::audio::AudioSource::new(sound)
+            .looping(*looping)
+            .gain(*gain as f32)
+            .pitch(*pitch as f32);
+        game.audio.lock().play(source);
+
+        Ok(Nil)
+    },
+    [Two(String(name), Int(sound)),
+     One(Bool(looping)),
+     Two(Float(gain), Float(gain_variance)),
+     Two(Float(pitch), Float(pitch_variance)),
+    ] -> Type::Void => {
+        if name.as_ref() != "audio" {
+            return error!("l_audio_play", "");
+        }
+
+        let game = game!();
+        let sound = &game.assets[unsafe { lingon::asset::AudioAssetID::from_usize(*sound as usize) }];
         let source = lingon::audio::AudioSource::new(sound)
             .looping(*looping)
             .gain(*gain as f32).gain_variance(*gain_variance as f32)
             .pitch(*pitch as f32).pitch_variance(*pitch_variance as f32);
         game.audio.lock().play(source);
 
-        Ok(Value::Nil)
+        Ok(Nil)
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_audio_master_gain
-    [Value::Float(gain)] -> Type::Void => {
+    [One(Float(gain))] -> Type::Void => {
         *game!().audio.lock().gain_mut() = *gain as f32;
-        Ok(Value::Nil)
+        Ok(Nil)
     },
 );
 
-
 pub fn sylt_str(s: &str) -> Value {
-    Value::String(Rc::new(s.to_string()))
+    String(Rc::new(s.to_string()))
 }
 
 #[sylt_macro::sylt_link(l_load_image, "sylt::lingon_sylt")]
 pub fn l_load_image(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
-        ([Value::String(path), tilesize], false) => {
+        ([String(path), tilesize], false) => {
             let game = game!();
             let path = PathBuf::from(path.as_ref());
             let image = game.assets.load_image(path);
@@ -596,11 +623,11 @@ pub fn l_load_image(values: &[Value], typecheck: bool) -> Result<Value, RuntimeE
             let dim = unpack_int_int_tuple(tilesize);
             let slot = game.renderer.add_sprite_sheet(image.clone(), (dim.0 as usize, dim.1 as usize));
 
-            Ok(Value::Tuple(Rc::new(vec![sylt_str("image"), Value::Int(slot as i64)])))
+            Ok(Tuple(Rc::new(vec![sylt_str("image"), Int(slot as i64)])))
         }
-        ([Value::String(_), tilesize], true) => {
+        ([String(_), tilesize], true) => {
             unpack_int_int_tuple(tilesize);
-            Ok(Value::Tuple(Rc::new(vec![sylt_str("image"), Value::Int(0)])))
+            Ok(Tuple(Rc::new(vec![sylt_str("image"), Int(0)])))
         }
         (values, _) => Err(RuntimeError::ExternTypeMismatch(
             "l_load_image".to_string(),
@@ -612,14 +639,14 @@ pub fn l_load_image(values: &[Value], typecheck: bool) -> Result<Value, RuntimeE
 #[sylt_macro::sylt_link(l_load_audio, "sylt::lingon_sylt")]
 pub fn l_load_audio(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
-        ([Value::String(path)], false) => {
+        ([String(path)], false) => {
             let game = game!();
             let path = PathBuf::from(path.as_ref());
             let audio = game.assets.load_audio(path);
-            Ok(Value::Tuple(Rc::new(vec![sylt_str("audio"), Value::Int(*audio as i64)])))
+            Ok(Tuple(Rc::new(vec![sylt_str("audio"), Int(*audio as i64)])))
         }
-        ([Value::String(_)], true) => {
-            Ok(Value::Tuple(Rc::new(vec![sylt_str("audio"), Value::Int(0)])))
+        ([String(_)], true) => {
+            Ok(Tuple(Rc::new(vec![sylt_str("audio"), Int(0)])))
         }
         (values, _) => Err(RuntimeError::ExternTypeMismatch(
             "l_load_image".to_string(),
