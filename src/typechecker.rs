@@ -283,6 +283,7 @@ impl VM {
                                         self.push(ty.clone());
                                     }
                                     _ => {
+                                        self.push(Type::Unknown);
                                         error!(
                                             self,
                                             RuntimeError::UnknownField(ty.name.clone(), field.to_string())
