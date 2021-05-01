@@ -26,6 +26,7 @@ lto = "thin"
 
 [features]
 default = ["lingon"]
+bundled = ["lingon/bundled"]
 
 [[bench]]
 name = "sylt_benchmark"
