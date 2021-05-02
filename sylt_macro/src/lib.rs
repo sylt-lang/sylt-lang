@@ -42,18 +42,11 @@ impl Parse for ExternFunction {
         let mut res = Self {
             module: input.parse()?,
             function: input.parse()?,
-            _as: None,
-            name: None,
-            doc: None,
+            _as: input.parse()?,
+            name: input.parse()?,
+            doc: input.parse()?,
             blocks: Vec::new(),
         };
-        if input.peek(Token![as]) {
-            res._as = input.parse()?;
-            res.name = input.parse()?;
-        }
-        if input.peek(syn::LitStr) {
-            res.doc = input.parse()?;
-        }
         while !input.is_empty() {
             res.blocks.push(input.parse()?);
         }
@@ -67,7 +60,8 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
     let module = parsed.module;
     let function = parsed.function;
     let doc = if parsed.doc.is_some() {
-        quote! { parsed.doc }
+        let doc = parsed.doc.unwrap();
+        quote! { #doc }
     } else {
         eprintln!("Missing doc-string: {} :: {}", module.value(), function.to_string());
         quote! { "Undocumented" }

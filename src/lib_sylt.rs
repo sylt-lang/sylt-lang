@@ -1,6 +1,7 @@
 use crate::*;
 use crate as sylt;
 
+#[sylt_macro::sylt_doc(dbg, "Writes the type and value of any thing you enter", [One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(push, "sylt::lib_sylt")]
 pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
     println!(
@@ -12,6 +13,7 @@ pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
     Ok(Value::Nil)
 }
 
+#[sylt_macro::sylt_doc(push, "Appends an element to the end of a list", [One(List(ls)), One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(push, "sylt::lib_sylt")]
 pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
@@ -40,6 +42,7 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     }
 }
 
+#[sylt_macro::sylt_doc(prepend, "Adds an element to the start of a list", [One(List(ls)), One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(prepend, "sylt::lib_sylt")]
 pub fn prepend(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
@@ -68,6 +71,7 @@ pub fn prepend(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError>
     }
 }
 
+#[sylt_macro::sylt_doc(len, "Gives the length of tuples and lists", [One(Tuple(ls))] Type::Int, [One(List(ls))] Type::Int)]
 #[sylt_macro::sylt_link(len, "sylt::lib_sylt")]
 pub fn len(values: &[Value], _: bool) -> Result<Value, RuntimeError> {
     match values {
@@ -87,6 +91,7 @@ pub fn len(values: &[Value], _: bool) -> Result<Value, RuntimeError> {
 sylt_macro::extern_function!(
     "sylt::lib_sylt"
     sin
+    "The sinus function you know and love from trigenometry class"
     [One(Float(t))] -> Type::Float => {
         Ok(Float(t.sin()))
     },
@@ -95,6 +100,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lib_sylt"
     cos
+    "The cosinus function you know and love from trigenometry class"
     [One(Float(t))] -> Type::Float => {
         Ok(Float(t.cos()))
     },
@@ -103,6 +109,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lib_sylt"
     as_float
+    "Converts the to a float"
     [One(Int(t))] -> Type::Float => {
         Ok(Float(*t as f64))
     },
@@ -154,7 +161,7 @@ pub fn pop(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     }
 }
 
-
+#[sylt_macro::sylt_doc(inf, "Returns an infinet iterator, spitting out the value you give it", [One(Value(val))] Type::Iter)]
 #[sylt_macro::sylt_link(inf, "sylt::lib_sylt")]
 pub fn inf(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
     match values {
@@ -172,4 +179,3 @@ pub fn inf(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
 
 
 sylt_macro::sylt_link_gen!("sylt::lib_sylt");
-
