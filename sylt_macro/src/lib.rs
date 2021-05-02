@@ -74,7 +74,7 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
     };
 
     let matches: Vec<_> = parsed.blocks.iter()
-        .map(|ExternBlock { pattern, ..}| pattern)
+        .map(|ExternBlock { pattern, return_ty, ..}| quote! { #pattern #return_ty })
         .collect();
 
     let link_name = parsed.name.unwrap_or_else(|| function.clone());
@@ -430,7 +430,7 @@ pub fn sylt_link_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
 struct SyltDoc {
     name: syn::Ident,
     comment: syn::LitStr,
-    args: Vec<syn::Pat>,
+    args: Vec<(syn::Pat, syn::Expr)>,
 }
 
 impl Parse for SyltDoc {
@@ -442,7 +442,7 @@ impl Parse for SyltDoc {
         let mut args = Vec::new();
         while !input.is_empty() {
             let _comma: Token![,] = input.parse()?;
-            let arg = input.parse()?;
+            let arg = (input.parse()?, input.parse()?);
             args.push(arg);
         }
 
@@ -454,30 +454,44 @@ impl Parse for SyltDoc {
     }
 }
 
-lazy_static! {
-    static ref DOC: Arc<Mutex<bool>> = doc_file();
+struct DocFile {
+    docs: Vec<String>,
 }
 
-fn doc_file() -> Arc<Mutex<bool>> {
-    Arc::new(Mutex::new(true))
+lazy_static! {
+    static ref DOC: Arc<Mutex<DocFile>> = doc_file();
+}
+
+fn doc_file() -> Arc<Mutex<DocFile>> {
+    Arc::new(Mutex::new(DocFile { docs: Vec::new() }))
+}
+
+impl DocFile {
+    fn dump(&mut self) {
+        use std::fs::File;
+        use std::io::prelude::*;
+        match File::create(&Path::new("docs/docs.json")) {
+            Err(msg) => eprintln!("Failed to write docs: {}", msg),
+            Ok(mut file) => {
+                write!(file, "[\n{}\n]", self.docs.join(",\n")).unwrap();
+            }
+        }
+    }
 }
 
 #[proc_macro_attribute]
 pub fn sylt_doc(attrib: proc_macro::TokenStream, tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let doc: SyltDoc = parse_macro_input!(attrib);
 
-    let lock = DOC.lock().unwrap();
-    let doc = format!("# {}\n{}\n{}\n",
+    let doc = format!("{{ \"name\": \"{}\", \"comment\": \"{}\", \"signature\": [{}]}}",
         doc.name.to_string(),
-        doc.comment.value(),
-        doc.args.iter().map(|x| format!(" - {}", quote! { #x }.to_string())).collect::<Vec<_>>().join("\n"),
+        doc.comment.value().replace("\n", "\\n"),
+        doc.args.iter().map(|(p, r)| format!("\"{}\"", quote! { #p -> #r }.to_string())).collect::<Vec<_>>().join(",").replace("\n", ""),
     );
-    use std::fs::OpenOptions;
-    use std::io::prelude::*;
-    let mut file = OpenOptions::new().append(true).create(true).open("doc.txt").unwrap();
-    file.write_all(doc.as_bytes()).unwrap();
+    let mut doc_file = DOC.lock().unwrap();
+    doc_file.docs.push(doc);
+    doc_file.dump();
     drop(doc_file);
-    drop(lock);
 
     tokens
 }
