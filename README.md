@@ -13,14 +13,44 @@ Pfft! We objectively have the best logo.
 
 Sylt is written entirely in Rust. There are two main ways of using it.
 
-1. Depend on this repository in your Cargo.toml.
-2. Clone this repository and cargo build. You can then pass .sy-files to the
-   resulting binary. Currently this way won't give you any kind of game.
+### New repository
+
+1. `$ cargo new <game name>`
+2. Add this to your Cargo.toml:
+```toml
+[dependencies.sylt]
+git = "https://github.com/FredTheDino/sylt-lang.git"
+branch = "main"
+features = [ "lingon" ]
+```
+3. Add something like this to your `src/main.rs`:
+```rust
+use std::path::Path;
+
+fn main() {
+    let args = sylt::Args {
+        file: Some(Path::new("game.sy").to_path_buf()),  // or read from args
+        is_binary: false,
+        compile_target: None,
+        verbosity: 0,
+        help: false,
+    };
+
+    sylt::run_file(&args, sylt::lib_bindings()).unwrap();
+}
+```
+4. `$ cargo run` to your heart's content.
+
+### Fork
+
+Forking sylt and hacking away makes it easy to do changes to the language and
+(probably more useful) standard library and bindings to Lingon.
+
+0. Setup a fork. (Optional)
+1. Clone the repository.
+2. `$ cargo run <your-game.sy>`
 
 ## Basic Usage
-
-Currently, Sylt can only run single files. The last filename given is
-run.
 
 The `-v` flag also lets you see some debug output. If you want
 to debug the compiler and runtime this might be helpful.
