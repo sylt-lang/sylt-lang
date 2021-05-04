@@ -77,7 +77,7 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
         let pat = block.pattern.clone();
         let ty = block.return_ty.clone();
         quote! {
-            #pat => { Ok(sylt::Value::from(#ty)) }
+            #pat => { Ok(self::sylt::Value::from(#ty)) }
         }
     }).collect();
 
@@ -93,29 +93,29 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
         #[sylt_macro::sylt_doc(#function, #doc , #( #matches ),*)]
         #[sylt_macro::sylt_link(#link_name, #module)]
         pub fn #function (
-            __values: &[sylt::Value],
+            __values: &[self::sylt::Value],
             __typecheck: bool
-        ) -> ::std::result::Result<sylt::Value, sylt::error::RuntimeError>
+        ) -> ::std::result::Result<self::sylt::Value, self::sylt::error::RuntimeError>
         {
-            use sylt::Value::*;
-            use sylt::MatchableValue::*;
+            use self::sylt::Value::*;
+            use self::sylt::MatchableValue::*;
             if __typecheck {
                 let matching: Vec<_> = __values.iter().map(make_matchable).collect();
                 #[allow(unused_variables)]
                 match matching.as_slice() {
                     #(#typecheck_blocks),*
-                    _ => Err(sylt::error::RuntimeError::ExternTypeMismatch(
+                    _ => Err(self::sylt::error::RuntimeError::ExternTypeMismatch(
                         stringify!(#function).to_string(),
-                        __values.iter().map(|v| sylt::Type::from(v)).collect()
+                        __values.iter().map(|v| self::sylt::Type::from(v)).collect()
                     ))
                 }
             } else {
                 let matching: Vec<_> = __values.iter().map(make_matchable).collect();
                 match matching.as_slice() {
                     #(#eval_blocks),*
-                    _ => Err(sylt::error::RuntimeError::ExternTypeMismatch(
+                    _ => Err(self::sylt::error::RuntimeError::ExternTypeMismatch(
                         stringify!(#function).to_string(),
-                        __values.iter().map(|v| sylt::Type::from(v)).collect()
+                        __values.iter().map(|v| self::sylt::Type::from(v)).collect()
                     ))
                 }
             }
