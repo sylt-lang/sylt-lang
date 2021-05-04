@@ -64,12 +64,12 @@ pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
 pub fn serialize(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Vec<u8>, Vec<Error>> {
     let prog = compile(args, functions)?;
     typechecker::typecheck(&prog, args)?;
-    bincode::serialize(&prog).map_err(|_| vec![Error::BincodeError])
+    bincode::serialize(&prog).map_err(|e| vec![Error::BincodeError(Rc::new(e))])
 }
 
 /// Deserializes and links the given file.
 pub fn deserialize(bytes: Vec<u8>, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
-    let mut prog: Prog = bincode::deserialize(&bytes).map_err(|_| vec![])?;
+    let mut prog: Prog = bincode::deserialize(&bytes).map_err(|e| vec![Error::BincodeError(Rc::new(e))])?;
     prog.functions = functions.into_iter().map(|(_, f)| f).collect();
     Ok(prog)
 }
