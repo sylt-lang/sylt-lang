@@ -1,4 +1,4 @@
-use lazy_static::lazy_static;
+use lazy_static::{lazy_static};
 use quote::{format_ident, quote};
 use std::collections::HashMap;
 use std::path::Path;
@@ -20,6 +20,7 @@ struct ExternFunction {
     function: syn::Ident,
     _as: Option<Token![as]>,
     name: Option<syn::Ident>,
+    doc: Option<syn::LitStr>,
     blocks: Vec<ExternBlock>
 }
 
@@ -41,10 +42,18 @@ impl Parse for ExternFunction {
         let mut res = Self {
             module: input.parse()?,
             function: input.parse()?,
-            _as: input.parse()?,
-            name: input.parse()?,
+            _as: None,
+            name: None,
+            doc: None,
             blocks: Vec::new(),
         };
+        if input.peek(Token![as]) {
+            res._as = input.parse()?;
+            res.name = input.parse()?;
+        }
+        if input.peek(syn::LitStr) {
+            res.doc = input.parse()?;
+        }
         while !input.is_empty() {
             res.blocks.push(input.parse()?);
         }
@@ -57,6 +66,18 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
     let parsed: ExternFunction = parse_macro_input!(tokens);
     let module = parsed.module;
     let function = parsed.function;
+    let doc = if parsed.doc.is_some() {
+        let doc = parsed.doc.unwrap();
+        quote! { #doc }
+    } else {
+        eprintln!("Missing doc-string: {} :: {}", module.value(), function.to_string());
+        quote! { "Undocumented" }
+    };
+
+    let matches: Vec<_> = parsed.blocks.iter()
+        .map(|ExternBlock { pattern, return_ty, ..}| quote! { #pattern #return_ty })
+        .collect();
+
     let link_name = parsed.name.unwrap_or_else(|| function.clone());
 
     let typecheck_blocks: Vec<_> = parsed.blocks.iter().map(|block| {
@@ -76,6 +97,7 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
     }).collect();
 
     let tokens = quote! {
+        #[sylt_macro::sylt_doc(#function, #doc , #( #matches ),*)]
         #[sylt_macro::sylt_link(#link_name, #module)]
         pub fn #function (
             __values: &[self::sylt::Value],
@@ -404,6 +426,75 @@ pub fn sylt_link_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
         }
     };
     proc_macro::TokenStream::from(tokens)
+}
+
+struct SyltDoc {
+    name: syn::Ident,
+    comment: syn::LitStr,
+    args: Vec<(syn::Pat, syn::Expr)>,
+}
+
+impl Parse for SyltDoc {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let name: syn::Ident = input.parse()?;
+        let _comma: Token![,] = input.parse()?;
+        let comment = input.parse()?;
+
+        let mut args = Vec::new();
+        while !input.is_empty() {
+            let _comma: Token![,] = input.parse()?;
+            let arg = (input.parse()?, input.parse()?);
+            args.push(arg);
+        }
+
+        Ok(SyltDoc {
+            name,
+            comment,
+            args,
+        })
+    }
+}
+
+struct DocFile {
+    docs: Vec<String>,
+}
+
+lazy_static! {
+    static ref DOC: Arc<Mutex<DocFile>> = doc_file();
+}
+
+fn doc_file() -> Arc<Mutex<DocFile>> {
+    Arc::new(Mutex::new(DocFile { docs: Vec::new() }))
+}
+
+impl DocFile {
+    fn dump(&mut self) {
+        use std::fs::File;
+        use std::io::prelude::*;
+        match File::create(&Path::new("docs/docs.json")) {
+            Err(msg) => eprintln!("Failed to write docs: {}", msg),
+            Ok(mut file) => {
+                write!(file, "[\n{}\n]", self.docs.join(",\n")).unwrap();
+            }
+        }
+    }
+}
+
+#[proc_macro_attribute]
+pub fn sylt_doc(attrib: proc_macro::TokenStream, tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let doc: SyltDoc = parse_macro_input!(attrib);
+
+    let doc = format!("{{ \"name\": \"{}\", \"comment\": \"{}\", \"signature\": [{}]}}",
+        doc.name.to_string(),
+        doc.comment.value().replace("\n", "\\n"),
+        doc.args.iter().map(|(p, r)| format!("\"{}\"", quote! { #p -> #r }.to_string())).collect::<Vec<_>>().join(",").replace("\n", ""),
+    );
+    let mut doc_file = DOC.lock().unwrap();
+    doc_file.docs.push(doc);
+    doc_file.dump();
+    drop(doc_file);
+
+    tokens
 }
 
 struct SyltLink {

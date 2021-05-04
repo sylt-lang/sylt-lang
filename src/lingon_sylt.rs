@@ -72,6 +72,7 @@ macro_rules! game {
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_update
+    "Updates the engine. Needs to be called once per frame"
     [] -> Type::Void => {
         // TODO(ed): Unused for now
         game!().update(0.0);
@@ -82,6 +83,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_render
+    "Draws all render calls to the screen. Needs to be called once per frame"
     [] -> Type::Void => {
         game!().draw().unwrap();
         Ok(Nil)
@@ -100,6 +102,7 @@ fn l_gfx_rect_internal(x: &f64, y: &f64, w: &f64, h: &f64, r: &f64, g: &f64, b: 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_rect
+    "Draws a rectangle on the screen, in many different ways"
     [One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h))]
     -> Type::Void => {
         l_gfx_rect_internal(x, y, w, h, &1.0, &1.0, &1.0, &1.0);
@@ -144,6 +147,8 @@ fn l_gfx_sprite_internal(sprite: &i64, x: &f64, y: &f64, w: &f64, h: &f64, gx: &
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_sprite
+    "Draws a sprite on the screen, in many different ways.
+     Note that the first argument is a sprite id from <a href='#l_load_image'>l_load_image</a>"
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h))] -> Type::Void => {
         if name.as_ref() != "sprite" {
             return error!("l_gfx_sprite", "Expected a sprite ID");
@@ -185,6 +190,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_camera_at
+    "Gives out the position of the camera"
     [] -> Type::Tuple(vec![Type::Float, Type::Float]) => {
         let game = &mut game!().renderer.camera;
         let x = *game.x_mut();
@@ -196,6 +202,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_camera_place
+    "Positions the camera at a specific point in space"
     [Two(Float(x), Float(y))] -> Type::Void => {
         game!().renderer.camera.at(*x as f32, *y as f32);
         Ok(Nil)
@@ -209,6 +216,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_camera_angle
+    "Sets the angle of the camera - in absolute terms"
     [One(Float(angle))] -> Type::Void => {
         game!().renderer.camera.angle(*angle as f32);
         Ok(Nil)
@@ -218,6 +226,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_camera_rotate
+    "Rotates the camera - relative to the current rotation"
     [One(Float(by))] -> Type::Void => {
         game!().renderer.camera.rotate(*by as f32);
         Ok(Nil)
@@ -227,6 +236,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_camera_set_zoom
+    "Specifies the zoom level"
     [One(Float(to))] -> Type::Void => {
         game!().renderer.camera.scale(*to as f32, *to as f32);
         Ok(Nil)
@@ -244,6 +254,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_camera_zoom_by
+    "Zoomes relative to the current zoom level"
     [One(Float(to))] -> Type::Void => {
         game!().renderer.camera.scale_by(*to as f32, *to as f32);
         Ok(Nil)
@@ -261,6 +272,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_particle_new
+    "Creates a new particle system. Note specially the return type. Don't edit the return value."
     [] -> Type::Tuple(vec![Type::String, Type::Int]) => {
         let slot = PARTICLES.with(|ps| {
             let mut ps = ps.lock().unwrap();
@@ -275,6 +287,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_particle_spawn
+    "Spawn a new particle for the given particle system"
     [Two(String(name), Int(system))] -> Type::Void => {
         if name.as_ref() != "particle" {
             return error!("l_gfx_particle_spawn", "Expected a particle system ID");
@@ -289,6 +302,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_particle_update
+    "Updates the particle system, stepping it forward in time"
     [Two(String(name), Int(system)), One(Float(delta))] -> Type::Void => {
         if name.as_ref() != "particle" {
             return error!("l_gfx_particle_spawn", "Expected a particle system ID");
@@ -303,6 +317,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_particle_render
+    "Renders the particle system, has to be called each frame"
     [Two(String(name), Int(system))] -> Type::Void => {
         if name.as_ref() != "particle" {
             return error!("l_gfx_particle_spawn", "Expected a particle system ID");
@@ -317,6 +332,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_particle_add_sprite
+    "Adds a sprite to the particle system as an alternative when spawning. If nothing is added it's colored rectangles all the way"
     [Two(String(s_name), Int(system)), Two(String(sp_name), Int(sprite)), Two(Int(gx), Int(gy))] -> Type::Void => {
         if s_name.as_ref() != "particle" {
             return error!("l_gfx_particle_spawn", "Expected a particle system ID");
@@ -338,6 +354,7 @@ macro_rules! particle_prop {
         sylt_macro::extern_function!(
             "sylt::lingon_sylt"
             $name
+            "Sets the given particle prop"
             [Two(String(name), Int(system)), Two(Int(lo), Int(hi))] -> Type::Void => {
                 if name.as_ref() != "particle" {
                     return error!("l_gfx_particle_spawn", "Expected a particle system ID");
@@ -401,6 +418,7 @@ particle_prop! { l_gfx_particle_end_alpha, end_alpha }
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_delta
+    "The time since last the frame in seconds"
     [] -> Type::Float => {
         let delta = game!().time_tick() as f64;
         Ok(Float(delta))
@@ -410,6 +428,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_time
+    "An absolute time messurement, but the start time is ill defined"
     [] -> Type::Float => {
         let time = game!().total_time() as f64;
         Ok(Float(time))
@@ -420,6 +439,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_random
+    "Returns a uniformly sampled random float between 0 and 1"
     [] -> Type::Float => {
         Ok(Float(Uniform.sample().into()))
     },
@@ -428,6 +448,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_random_range
+    "Returns a randomized integer in the given range"
     [One(Int(lo)), One(Int(hi))] -> Type::Int => {
         Ok(Int(*lo + (Uniform.sample() * ((hi - lo) as f32)) as i64))
     },
@@ -440,6 +461,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_bind_key
+    "Binds a keyboard key to an input name"
     [One(String(key)), One(String(name))] -> Type::Void => {
         let key = if let Some(key) = Keycode::from_name(key) {
             key
@@ -457,6 +479,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_bind_quit
+    "Binds the windows quit action (pressing the X in the corner) - plus points if you make it jump"
     [One(String(name))] -> Type::Void => {
         use lingon::input::Device::Quit;
         game!().input.bind(Quit, std::string::String::clone(name));
@@ -467,6 +490,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_bind_button
+    "Binds a controller button to an input name"
     [One(Int(controller)), One(String(button)), One(String(name))] -> Type::Void => {
         use lingon::input::{Device, Button};
         let button = if let Some(button) = Button::from_string(button) {
@@ -483,6 +507,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_bind_axis
+    "Binds a controller axis to an input name"
     [One(Int(controller)), One(String(axis)), One(String(name))] -> Type::Void => {
         use lingon::input::{Device, Axis};
         let axis = if let Some(axis) = Axis::from_string(axis) {
@@ -499,6 +524,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_bind_mouse
+    "Binds a mouse button, allows the following keys: ['left', 'middle', 'right', 'x1', 'x2']"
     [One(String(button)), One(String(name))] -> Type::Void => {
         use lingon::input::{Device::Mouse, MouseButton::*};
         let button = match button.as_str() {
@@ -518,6 +544,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_input_down
+    "Returns true if the input name is down this frame, e.g. pressed"
     [One(String(name))] -> Type::Bool => {
         Ok(Bool(game!().input.down(std::string::String::clone(name))))
     },
@@ -526,6 +553,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_input_up
+    "Returns true if the input name is up this frame, e.g. not pressed"
     [One(String(name))] -> Type::Bool => {
         Ok(Bool(game!().input.up(std::string::String::clone(name))))
     },
@@ -534,6 +562,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_input_pressed
+    "Returns true if the input name started being down this frame, e.g. a tap"
     [One(String(name))] -> Type::Bool => {
         Ok(Bool(game!().input.pressed(std::string::String::clone(name))))
     },
@@ -542,6 +571,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_input_released
+    "Returns true if the input name started being up this frame, e.g. a release"
     [One(String(name))] -> Type::Bool => {
         Ok(Bool(game!().input.released(std::string::String::clone(name))))
     },
@@ -550,6 +580,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_input_value
+    "Returns the float representation of the input name, usefull for reading controller inputs"
     [One(String(name))] -> Type::Float => {
         Ok(Float(game!().input.value(std::string::String::clone(name)) as f64))
     },
@@ -558,6 +589,8 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_audio_play
+    "Plays an audio source. Expects the first value to be a
+     return value from <a href='#l_load_sound'>l_load_sound</a>"
     [Two(String(name), Int(sound)),
      One(Bool(looping)),
      One(Float(gain)),
@@ -601,6 +634,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_audio_master_gain
+    "Controls the master gain of the audio mixer"
     [One(Float(gain))] -> Type::Void => {
         *game!().audio.lock().gain_mut() = *gain as f32;
         Ok(Nil)
@@ -611,6 +645,9 @@ pub fn sylt_str(s: &str) -> Value {
     String(Rc::new(s.to_string()))
 }
 
+
+#[sylt_macro::sylt_doc(l_load_image, "Loads an image and turns it into a sprite sheet",
+  [One(String(path))] Type::Tuple)]
 #[sylt_macro::sylt_link(l_load_image, "sylt::lingon_sylt")]
 pub fn l_load_image(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
@@ -636,6 +673,9 @@ pub fn l_load_image(values: &[Value], typecheck: bool) -> Result<Value, RuntimeE
     }
 }
 
+#[sylt_macro::sylt_doc(l_load_image,
+  "Loads a sound and lets you play it using <a href='l_audio_play'>l_audio_play</a>",
+  [One(String(path))] Type::Tuple)]
 #[sylt_macro::sylt_link(l_load_audio, "sylt::lingon_sylt")]
 pub fn l_load_audio(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
