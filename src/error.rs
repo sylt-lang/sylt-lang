@@ -3,6 +3,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use crate::{tokenizer::Token, Op, Type, Value};
 
@@ -98,7 +99,7 @@ pub enum Error {
     FileNotFound(PathBuf),
     NoFileGiven,
 
-    BincodeError,
+    BincodeError(Rc<bincode::Error>),
 }
 
 impl fmt::Display for Error {
@@ -159,8 +160,8 @@ impl fmt::Display for Error {
             Error::NoFileGiven => {
                 write!(f, "No file to run")
             }
-            Error::BincodeError => {
-                write!(f, "Failed to serialize or deserialize")
+            Error::BincodeError(e) => {
+                write!(f, "Failed to serialize or deserialize: {}", e)
             }
         }
     }
