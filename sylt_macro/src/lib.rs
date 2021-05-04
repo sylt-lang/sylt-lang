@@ -63,7 +63,7 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
         let pat = block.pattern.clone();
         let ty = block.return_ty.clone();
         quote! {
-            #pat => { Ok(sylt::Value::from(#ty)) }
+            #pat => { Ok(self::sylt::Value::from(#ty)) }
         }
     }).collect();
 
@@ -78,25 +78,29 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
     let tokens = quote! {
         #[sylt_macro::sylt_link(#link_name, #module)]
         pub fn #function (
-            __values: &[sylt::Value],
+            __values: &[self::sylt::Value],
             __typecheck: bool
-        ) -> ::std::result::Result<sylt::Value, sylt::error::RuntimeError>
+        ) -> ::std::result::Result<self::sylt::Value, self::sylt::error::RuntimeError>
         {
+            use self::sylt::Value::*;
+            use self::sylt::MatchableValue::*;
             if __typecheck {
+                let matching: Vec<_> = __values.iter().map(make_matchable).collect();
                 #[allow(unused_variables)]
-                match __values {
+                match matching.as_slice() {
                     #(#typecheck_blocks),*
-                    _ => Err(sylt::error::RuntimeError::ExternTypeMismatch(
+                    _ => Err(self::sylt::error::RuntimeError::ExternTypeMismatch(
                         stringify!(#function).to_string(),
-                        __values.iter().map(|v| sylt::Type::from(v)).collect()
+                        __values.iter().map(|v| self::sylt::Type::from(v)).collect()
                     ))
                 }
             } else {
-                match __values {
+                let matching: Vec<_> = __values.iter().map(make_matchable).collect();
+                match matching.as_slice() {
                     #(#eval_blocks),*
-                    _ => Err(sylt::error::RuntimeError::ExternTypeMismatch(
+                    _ => Err(self::sylt::error::RuntimeError::ExternTypeMismatch(
                         stringify!(#function).to_string(),
-                        __values.iter().map(|v| sylt::Type::from(v)).collect()
+                        __values.iter().map(|v| self::sylt::Type::from(v)).collect()
                     ))
                 }
             }
@@ -288,7 +292,7 @@ pub fn derive_enumerate(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
 
     let item = quote! {
         impl ::std::convert::TryFrom<usize> for #ident {
-            type Error = String;
+            type Error = std::string::String;
 
             fn try_from(u: usize) -> ::std::result::Result<Self, Self::Error> {
                 match u {
@@ -395,7 +399,7 @@ pub fn sylt_link_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
     }).collect();
 
     let tokens = quote! {
-        pub fn _sylt_link() -> Vec<(String, RustFunction)> {
+        pub fn _sylt_link() -> Vec<(std::string::String, RustFunction)> {
             vec! [ #(#funs)* ]
         }
     };

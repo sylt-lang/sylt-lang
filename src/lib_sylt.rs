@@ -68,41 +68,43 @@ pub fn prepend(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError>
     }
 }
 
-
-sylt_macro::extern_function!(
-    "sylt::lib_sylt"
-    len
-    [Value::List(ls)] -> Type::Int => {
-        let ls: &RefCell<Vec<Value>> = ls.borrow();
-        let ls = ls.borrow();
-        Ok(Value::Int(ls.len() as i64))
-    },
-    [Value::Tuple(ls)] -> Type::Int => {
-        Ok(Value::Int(ls.len() as i64))
-    },
-);
+#[sylt_macro::sylt_link(len, "sylt::lib_sylt")]
+pub fn len(values: &[Value], _: bool) -> Result<Value, RuntimeError> {
+    match values {
+        [Value::Tuple(ls)] => {
+            Ok(Value::Int(ls.len() as i64))
+        }
+        [Value::List(ls)] => {
+            Ok(Value::Int(RefCell::borrow(ls).len() as i64))
+        }
+        values => Err(RuntimeError::ExternTypeMismatch(
+            "len".to_string(),
+            values.iter().map(Type::from).collect(),
+        )),
+    }
+}
 
 sylt_macro::extern_function!(
     "sylt::lib_sylt"
     sin
-    [Value::Float(t)] -> Type::Float => {
-        Ok(Value::Float(t.sin()))
+    [One(Float(t))] -> Type::Float => {
+        Ok(Float(t.sin()))
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lib_sylt"
     cos
-    [Value::Float(t)] -> Type::Float => {
-        Ok(Value::Float(t.cos()))
+    [One(Float(t))] -> Type::Float => {
+        Ok(Float(t.cos()))
     },
 );
 
 sylt_macro::extern_function!(
     "sylt::lib_sylt"
     as_float
-    [Value::Int(t)] -> Type::Float => {
-        Ok(Value::Float(*t as f64))
+    [One(Int(t))] -> Type::Float => {
+        Ok(Float(*t as f64))
     },
 );
 
@@ -170,3 +172,4 @@ pub fn inf(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
 
 
 sylt_macro::sylt_link_gen!("sylt::lib_sylt");
+

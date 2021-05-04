@@ -398,6 +398,35 @@ pub enum Value {
     Nil,
 }
 
+#[derive(Clone)]
+pub enum MatchableValue<'t> {
+    Empty,
+    One(&'t Value),
+    Two(&'t Value, &'t Value),
+    Three(&'t Value, &'t Value, &'t Value),
+    Four(&'t Value, &'t Value, &'t Value, &'t Value),
+    Five(&'t Value, &'t Value, &'t Value, &'t Value, &'t Value),
+}
+
+pub fn make_matchable<'t>(value: &'t Value) -> MatchableValue<'t> {
+    use crate::Value::*;
+    use MatchableValue::*;
+
+    match value {
+        Tuple(inner) => {
+            match (inner.get(0), inner.get(1), inner.get(2), inner.get(3), inner.get(4)) {
+                (Some(a), Some(b), Some(c), Some(d), Some(e), ..) => Five(a, b, c, d, e),
+                (Some(a), Some(b), Some(c), Some(d), ..) => Four(a, b, c, d),
+                (Some(a), Some(b), Some(c), ..) => Three(a, b, c),
+                (Some(a), Some(b), ..) => Two(a, b),
+                (Some(a), ..) => One(a),
+                _ => Empty,
+            }
+        },
+        x => One(x),
+    }
+}
+
 impl Debug for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // TODO(ed): This needs some cleaning
