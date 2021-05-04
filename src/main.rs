@@ -16,7 +16,7 @@ fn main() -> Result<(), String> {
 
     let functions = lib_bindings();
     let res = if args.is_binary {
-        match sylt::deserialize(std::fs::read(args.file.clone().unwrap()).unwrap()) {
+        match sylt::deserialize(std::fs::read(args.file.clone().unwrap()).unwrap(), functions) {
             Ok(prog) => sylt::run(&prog, &args),
             Err(e) => Err(e)
         }
