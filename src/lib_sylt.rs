@@ -1,7 +1,7 @@
 use crate::*;
 use crate as sylt;
 
-#[sylt_macro::sylt_doc(dbg, "Writes the type and value of any thing you enter", [One(Value(val))] Type::Void)]
+#[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", [One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(push, "sylt::lib_sylt")]
 pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
     println!(
@@ -91,7 +91,7 @@ pub fn len(values: &[Value], _: bool) -> Result<Value, RuntimeError> {
 sylt_macro::extern_function!(
     "sylt::lib_sylt"
     sin
-    "The sinus function you know and love from trigenometry class"
+    "The sine function you know and love from trigonometry class"
     [One(Float(t))] -> Type::Float => {
         Ok(Float(t.sin()))
     },
@@ -100,7 +100,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lib_sylt"
     cos
-    "The cosinus function you know and love from trigenometry class"
+    "The cosine function you know and love from trigonometry class"
     [One(Float(t))] -> Type::Float => {
         Ok(Float(t.cos()))
     },
@@ -109,7 +109,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lib_sylt"
     as_float
-    "Converts the to a float"
+    "Converts the int to a float"
     [One(Int(t))] -> Type::Float => {
         Ok(Float(*t as f64))
     },
@@ -161,7 +161,7 @@ pub fn pop(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     }
 }
 
-#[sylt_macro::sylt_doc(inf, "Returns an infinet iterator, spitting out the value you give it", [One(Value(val))] Type::Iter)]
+#[sylt_macro::sylt_doc(inf, "Returns an infinite iterator, spitting out the value you give it", [One(Value(val))] Type::Iter)]
 #[sylt_macro::sylt_link(inf, "sylt::lib_sylt")]
 pub fn inf(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
     match values {

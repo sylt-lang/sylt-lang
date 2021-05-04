@@ -72,7 +72,7 @@ macro_rules! game {
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_update
-    "Updates the engine, needs to be called once per frame"
+    "Updates the engine. Needs to be called once per frame"
     [] -> Type::Void => {
         // TODO(ed): Unused for now
         game!().update(0.0);
@@ -83,7 +83,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_render
-    "Draws all render calls to the screen, needs to be called once per frame"
+    "Draws all render calls to the screen. Needs to be called once per frame"
     [] -> Type::Void => {
         game!().draw().unwrap();
         Ok(Nil)
@@ -272,7 +272,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_gfx_particle_new
-    "Creates a new particle system. Note specially the return type, don't edit the return value."
+    "Creates a new particle system. Note specially the return type. Don't edit the return value."
     [] -> Type::Tuple(vec![Type::String, Type::Int]) => {
         let slot = PARTICLES.with(|ps| {
             let mut ps = ps.lock().unwrap();
