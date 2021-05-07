@@ -28,4 +28,3 @@ jobs:
         name: docs
         path: |
           docs/docs.html
-          docs/docs.css
