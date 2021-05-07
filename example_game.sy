@@ -21,6 +21,9 @@ init :: fn {
     l_gfx_particle_add_sprite! particles, sprite, (0, 0)
     l_gfx_particle_x! particles, (-1.0, 1.0), "Uniform"
     l_gfx_particle_y! particles, (0.0, 1.0), "Square"
+
+    l_gfx_particle_start_color! particles, (1.0, 1.0, 1.0)
+    l_gfx_particle_end_color! particles, (0.0, 0.0, 0.0)
 }
 
 x := 0.0
