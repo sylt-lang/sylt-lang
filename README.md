@@ -39,12 +39,52 @@ fn main() {
     sylt::run_file(&args, sylt::lib_bindings()).unwrap();
 }
 ```
-4. `$ cargo run` to your heart's content.
+4. Write your game! Here's an example to get you started:
+```
+x := 0.0
+y := 0.0
+
+init :: fn {
+    l_bind_key("w", "up")
+    l_bind_key("a", "left")
+    l_bind_key("s", "down")
+    l_bind_key("d", "right")
+
+    l_bind_quit("quit")
+    l_bind_key("ESCAPE", "quit")
+}
+
+update :: fn delta: float -> void {
+    x += (l_input_value("right") - l_input_value("left")) * delta
+    y += (l_input_value("up") - l_input_value("down")) * delta
+}
+
+draw :: fn {
+    rgb :: (sin(l_time()), cos(l_time()), 0.0)
+    l_gfx_rect! x, y, 1.0, 1.0, rgb
+}
+
+start :: fn {
+    init!
+    for _ in inf(0) {
+        _
+        if l_input_down("quit") {
+            break
+        }
+        l_update!
+        update! l_delta!
+        draw!
+        l_render!
+    }
+}
+```
+5. `$ cargo run` to your heart's content.
 
 ### Fork
 
-Forking sylt and hacking away makes it easy to do changes to the language and
-(probably more useful) standard library and bindings to Lingon.
+Forking sylt and hacking away makes it easy to do changes to the language, the
+standard library and the bindings to Lingon, of which the latter two are
+probablu more interesting.
 
 0. Setup a fork. (Optional)
 1. Clone the repository.
