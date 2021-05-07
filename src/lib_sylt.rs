@@ -2,7 +2,7 @@ use crate::*;
 use crate as sylt;
 
 #[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", [One(Value(val))] Type::Void)]
-#[sylt_macro::sylt_link(push, "sylt::lib_sylt")]
+#[sylt_macro::sylt_link(dbg, "sylt::lib_sylt")]
 pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
     println!(
         "{}: {:?}, {:?}",
@@ -23,7 +23,7 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
             assert!(ls.len() == 1);
             let ls = Type::from(&ls[0]);
             let v: Type = Type::from(&*v);
-            if ls == v {
+            if ls == v || matches!(ls, Type::Unknown) {
                 Ok(Value::Nil)
             } else {
                 Err(RuntimeError::TypeMismatch(ls, v))
