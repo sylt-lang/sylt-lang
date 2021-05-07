@@ -1,4 +1,4 @@
-use lingon::{Game, random::{Uniform, Distribute}};
+use lingon::{Game, random::{Uniform, Distribute, NoDice}};
 use lingon::renderer::{Rect, Sprite, Transform, Tint};
 use std::sync::{Arc, Mutex};
 use crate::{*, error::RuntimeError};
@@ -150,37 +150,37 @@ sylt_macro::extern_function!(
     "Draws a sprite on the screen, in many different ways.
      Note that the first argument is a sprite id from <a href='#l_load_image'>l_load_image</a>"
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h))] -> Type::Void => {
-        if name.as_ref() != "sprite" {
+        if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID");
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &1.0, &1.0, &1.0, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h))] -> Type::Void => {
-        if name.as_ref() != "sprite" {
+        if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID");
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &1.0, &1.0, &1.0, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
-        if name.as_ref() != "sprite" {
+        if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
-        if name.as_ref() != "sprite" {
+        if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), Four(Float(r), Float(g), Float(b), Float(a))] -> Type::Void => {
-        if name.as_ref() != "sprite" {
+        if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, a))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), Four(Float(r), Float(g), Float(b), Float(a))] -> Type::Void => {
-        if name.as_ref() != "sprite" {
+        if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, a))
@@ -337,7 +337,7 @@ sylt_macro::extern_function!(
         if s_name.as_ref() != "particle" {
             return error!("l_gfx_particle_spawn", "Expected a particle system ID");
         }
-        if sp_name.as_ref() != "sprite" {
+        if sp_name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID");
         }
 
@@ -355,7 +355,7 @@ macro_rules! particle_prop {
             "sylt::lingon_sylt"
             $name
             "Sets the given particle prop"
-            [Two(String(name), Int(system)), Two(Int(lo), Int(hi))] -> Type::Void => {
+            [Two(String(name), Int(system)), Two(Float(lo), Float(hi))] -> Type::Void => {
                 if name.as_ref() != "particle" {
                     return error!("l_gfx_particle_spawn", "Expected a particle system ID");
                 }
@@ -365,7 +365,7 @@ macro_rules! particle_prop {
                 });
                 Ok(Nil)
             },
-            [Two(String(name), Int(system)), Two(Int(lo), Int(hi)), One(String(dist))] -> Type::Void => {
+            [Two(String(name), Int(system)), Two(Float(lo), Float(hi)), One(String(dist))] -> Type::Void => {
                 if name.as_ref() != "particle" {
                     return error!("l_gfx_particle_spawn", "Expected a particle system ID");
                 }
@@ -414,6 +414,81 @@ particle_prop! { l_gfx_particle_end_green, end_green }
 particle_prop! { l_gfx_particle_end_blue, end_blue }
 particle_prop! { l_gfx_particle_end_alpha, end_alpha }
 
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_particle_start_color
+    "Sets the spawn color of the particles"
+    [Two(String(name), Int(system)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
+        if name.as_ref() != "particle" {
+            return error!("l_gfx_particle_spawn", "Expected a particle system ID");
+        }
+        let r = lingon::random::RandomProperty::new(*r as f32, *r as f32, Box::new(NoDice));
+        let g = lingon::random::RandomProperty::new(*g as f32, *g as f32, Box::new(NoDice));
+        let b = lingon::random::RandomProperty::new(*b as f32, *b as f32, Box::new(NoDice));
+        PARTICLES.with(|ps| {
+            let mut ps = ps.lock().unwrap();
+            ps[*system as usize].start_red = r;
+            ps[*system as usize].start_green = g;
+            ps[*system as usize].start_blue = b;
+        });
+        Ok(Nil)
+    },
+    [Two(String(name), Int(system)), Four(Float(r), Float(g), Float(b), Float(a))] -> Type::Void => {
+        if name.as_ref() != "particle" {
+            return error!("l_gfx_particle_spawn", "Expected a particle system ID");
+        }
+        let r = lingon::random::RandomProperty::new(*r as f32, *r as f32, Box::new(NoDice));
+        let g = lingon::random::RandomProperty::new(*g as f32, *g as f32, Box::new(NoDice));
+        let b = lingon::random::RandomProperty::new(*b as f32, *b as f32, Box::new(NoDice));
+        let a = lingon::random::RandomProperty::new(*a as f32, *a as f32, Box::new(NoDice));
+        PARTICLES.with(|ps| {
+            let mut ps = ps.lock().unwrap();
+            ps[*system as usize].start_red = r;
+            ps[*system as usize].start_green = g;
+            ps[*system as usize].start_blue = b;
+            ps[*system as usize].start_alpha = a;
+        });
+        Ok(Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_particle_end_color
+    "Sets the spawn color of the particles"
+    [Two(String(name), Int(system)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
+        if name.as_ref() != "particle" {
+            return error!("l_gfx_particle_spawn", "Expected a particle system ID");
+        }
+        let r = lingon::random::RandomProperty::new(*r as f32, *r as f32, Box::new(NoDice));
+        let g = lingon::random::RandomProperty::new(*g as f32, *g as f32, Box::new(NoDice));
+        let b = lingon::random::RandomProperty::new(*b as f32, *b as f32, Box::new(NoDice));
+        PARTICLES.with(|ps| {
+            let mut ps = ps.lock().unwrap();
+            ps[*system as usize].end_red = r;
+            ps[*system as usize].end_green = g;
+            ps[*system as usize].end_blue = b;
+        });
+        Ok(Nil)
+    },
+    [Two(String(name), Int(system)), Four(Float(r), Float(g), Float(b), Float(a))] -> Type::Void => {
+        if name.as_ref() != "particle" {
+            return error!("l_gfx_particle_spawn", "Expected a particle system ID");
+        }
+        let r = lingon::random::RandomProperty::new(*r as f32, *r as f32, Box::new(NoDice));
+        let g = lingon::random::RandomProperty::new(*g as f32, *g as f32, Box::new(NoDice));
+        let b = lingon::random::RandomProperty::new(*b as f32, *b as f32, Box::new(NoDice));
+        let a = lingon::random::RandomProperty::new(*a as f32, *a as f32, Box::new(NoDice));
+        PARTICLES.with(|ps| {
+            let mut ps = ps.lock().unwrap();
+            ps[*system as usize].end_red = r;
+            ps[*system as usize].end_green = g;
+            ps[*system as usize].end_blue = b;
+            ps[*system as usize].end_alpha = a;
+        });
+        Ok(Nil)
+    },
+);
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"

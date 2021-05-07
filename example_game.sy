@@ -21,6 +21,9 @@ init :: fn {
     l_gfx_particle_add_sprite! particles, sprite, (0, 0)
     l_gfx_particle_x! particles, (-1.0, 1.0), "Uniform"
     l_gfx_particle_y! particles, (0.0, 1.0), "Square"
+
+    l_gfx_particle_start_color! particles, (1.0, 1.0, 1.0)
+    l_gfx_particle_end_color! particles, (0.0, 0.0, 0.0)
 }
 
 x := 0.0
@@ -36,7 +39,7 @@ update :: fn delta: float -> void {
 
     if l_input_pressed("play") {
         print "Playing sound"
-        l_audio_play(bloop, false, 0.4, 0.2, 1.0, 0.2)
+        l_audio_play! bloop, false, (0.4, 0.2), (1.0, 0.2)
     }
 
     l_gfx_sprite! sprite, (0, 0), x, y, 1.0, 1.0, rgb
