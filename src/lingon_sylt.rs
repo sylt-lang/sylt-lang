@@ -150,37 +150,37 @@ sylt_macro::extern_function!(
     "Draws a sprite on the screen, in many different ways.
      Note that the first argument is a sprite id from <a href='#l_load_image'>l_load_image</a>"
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h))] -> Type::Void => {
-        if name.as_ref() != "sprite" {
+        if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID");
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &1.0, &1.0, &1.0, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h))] -> Type::Void => {
-        if name.as_ref() != "sprite" {
+        if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID");
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &1.0, &1.0, &1.0, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
-        if name.as_ref() != "sprite" {
+        if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
-        if name.as_ref() != "sprite" {
+        if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), Four(Float(r), Float(g), Float(b), Float(a))] -> Type::Void => {
-        if name.as_ref() != "sprite" {
+        if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, a))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), Four(Float(r), Float(g), Float(b), Float(a))] -> Type::Void => {
-        if name.as_ref() != "sprite" {
+        if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, a))
@@ -337,7 +337,7 @@ sylt_macro::extern_function!(
         if s_name.as_ref() != "particle" {
             return error!("l_gfx_particle_spawn", "Expected a particle system ID");
         }
-        if sp_name.as_ref() != "sprite" {
+        if sp_name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID");
         }
 
