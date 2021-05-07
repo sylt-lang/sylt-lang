@@ -530,6 +530,12 @@ sylt_macro::extern_function!(
     [Two(Int(lo), Int(hi))] -> Type::Int => {
         Ok(Int(*lo + (Uniform.sample() * ((hi - lo) as f32)) as i64))
     },
+    [One(Float(lo)), One(Float(hi))] -> Type::Float => {
+        Ok(Float(*lo + Uniform.sample() as f64 * (hi - lo)))
+    },
+    [Two(Float(lo), Float(hi))] -> Type::Float => {
+        Ok(Float(*lo + Uniform.sample() as f64 * (hi - lo)))
+    },
 );
 
 
