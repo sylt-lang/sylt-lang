@@ -84,7 +84,7 @@ start :: fn {
 
 Forking sylt and hacking away makes it easy to do changes to the language, the
 standard library and the bindings to Lingon, of which the latter two are
-probablu more interesting.
+probably more interesting.
 
 0. Setup a fork. (Optional)
 1. Clone the repository.
