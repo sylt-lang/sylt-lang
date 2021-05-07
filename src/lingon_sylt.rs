@@ -732,6 +732,16 @@ sylt_macro::extern_function!(
     },
 );
 
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_mouse_rel
+    "Gets the relative mouse position since the last frame"
+    [] -> Type::Tuple(vec!(Type::Int, Type::Int)) => {
+        let mouse = game!().input.mouse_rel();
+        Ok(Tuple(Rc::new(vec!(Int(mouse.0 as i64), Int(mouse.1 as i64)))))
+    },
+);
+
 pub fn sylt_str(s: &str) -> Value {
     String(Rc::new(s.to_string()))
 }
