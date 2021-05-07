@@ -1,4 +1,4 @@
-use lingon::{Game, random::{Uniform, Distribute}};
+use lingon::{Game, random::{Uniform, Distribute, NoDice}};
 use lingon::renderer::{Rect, Sprite, Transform, Tint};
 use std::sync::{Arc, Mutex};
 use crate::{*, error::RuntimeError};
@@ -414,6 +414,81 @@ particle_prop! { l_gfx_particle_end_green, end_green }
 particle_prop! { l_gfx_particle_end_blue, end_blue }
 particle_prop! { l_gfx_particle_end_alpha, end_alpha }
 
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_particle_start_color
+    "Sets the spawn color of the particles"
+    [Two(String(name), Int(system)), Three(Int(r), Int(g), Int(b))] -> Type::Void => {
+        if name.as_ref() != "particle" {
+            return error!("l_gfx_particle_spawn", "Expected a particle system ID");
+        }
+        let r = lingon::random::RandomProperty::new(*r as f32, *r as f32, Box::new(NoDice));
+        let g = lingon::random::RandomProperty::new(*g as f32, *g as f32, Box::new(NoDice));
+        let b = lingon::random::RandomProperty::new(*b as f32, *b as f32, Box::new(NoDice));
+        PARTICLES.with(|ps| {
+            let mut ps = ps.lock().unwrap();
+            ps[*system as usize].start_red = r;
+            ps[*system as usize].start_green = g;
+            ps[*system as usize].start_blue = b;
+        });
+        Ok(Nil)
+    },
+    [Two(String(name), Int(system)), Four(Int(r), Int(g), Int(b), Int(a))] -> Type::Void => {
+        if name.as_ref() != "particle" {
+            return error!("l_gfx_particle_spawn", "Expected a particle system ID");
+        }
+        let r = lingon::random::RandomProperty::new(*r as f32, *r as f32, Box::new(NoDice));
+        let g = lingon::random::RandomProperty::new(*g as f32, *g as f32, Box::new(NoDice));
+        let b = lingon::random::RandomProperty::new(*b as f32, *b as f32, Box::new(NoDice));
+        let a = lingon::random::RandomProperty::new(*a as f32, *a as f32, Box::new(NoDice));
+        PARTICLES.with(|ps| {
+            let mut ps = ps.lock().unwrap();
+            ps[*system as usize].start_red = r;
+            ps[*system as usize].start_green = g;
+            ps[*system as usize].start_blue = b;
+            ps[*system as usize].start_alpha = a;
+        });
+        Ok(Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_gfx_particle_end_color
+    "Sets the spawn color of the particles"
+    [Two(String(name), Int(system)), Three(Int(r), Int(g), Int(b))] -> Type::Void => {
+        if name.as_ref() != "particle" {
+            return error!("l_gfx_particle_spawn", "Expected a particle system ID");
+        }
+        let r = lingon::random::RandomProperty::new(*r as f32, *r as f32, Box::new(NoDice));
+        let g = lingon::random::RandomProperty::new(*g as f32, *g as f32, Box::new(NoDice));
+        let b = lingon::random::RandomProperty::new(*b as f32, *b as f32, Box::new(NoDice));
+        PARTICLES.with(|ps| {
+            let mut ps = ps.lock().unwrap();
+            ps[*system as usize].end_red = r;
+            ps[*system as usize].end_green = g;
+            ps[*system as usize].end_blue = b;
+        });
+        Ok(Nil)
+    },
+    [Two(String(name), Int(system)), Four(Int(r), Int(g), Int(b), Int(a))] -> Type::Void => {
+        if name.as_ref() != "particle" {
+            return error!("l_gfx_particle_spawn", "Expected a particle system ID");
+        }
+        let r = lingon::random::RandomProperty::new(*r as f32, *r as f32, Box::new(NoDice));
+        let g = lingon::random::RandomProperty::new(*g as f32, *g as f32, Box::new(NoDice));
+        let b = lingon::random::RandomProperty::new(*b as f32, *b as f32, Box::new(NoDice));
+        let a = lingon::random::RandomProperty::new(*a as f32, *a as f32, Box::new(NoDice));
+        PARTICLES.with(|ps| {
+            let mut ps = ps.lock().unwrap();
+            ps[*system as usize].start_red = r;
+            ps[*system as usize].start_green = g;
+            ps[*system as usize].start_blue = b;
+            ps[*system as usize].start_alpha = a;
+        });
+        Ok(Nil)
+    },
+);
 
 sylt_macro::extern_function!(
     "sylt::lingon_sylt"
