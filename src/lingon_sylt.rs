@@ -722,10 +722,19 @@ sylt_macro::extern_function!(
     },
 );
 
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_mouse
+    "Gets the current mouse position"
+    [] -> Type::Tuple(vec!(Type::Int, Type::Int)) => {
+        let mouse = game!().input.mouse();
+        Ok(Tuple(Rc::new(vec!(Int(mouse.0 as i64), Int(mouse.1 as i64)))))
+    },
+);
+
 pub fn sylt_str(s: &str) -> Value {
     String(Rc::new(s.to_string()))
 }
-
 
 #[sylt_macro::sylt_doc(l_load_image, "Loads an image and turns it into a sprite sheet",
   [One(String(path))] Type::Tuple)]
