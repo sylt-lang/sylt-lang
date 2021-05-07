@@ -481,10 +481,10 @@ sylt_macro::extern_function!(
         let a = lingon::random::RandomProperty::new(*a as f32, *a as f32, Box::new(NoDice));
         PARTICLES.with(|ps| {
             let mut ps = ps.lock().unwrap();
-            ps[*system as usize].start_red = r;
-            ps[*system as usize].start_green = g;
-            ps[*system as usize].start_blue = b;
-            ps[*system as usize].start_alpha = a;
+            ps[*system as usize].end_red = r;
+            ps[*system as usize].end_green = g;
+            ps[*system as usize].end_blue = b;
+            ps[*system as usize].end_alpha = a;
         });
         Ok(Nil)
     },
