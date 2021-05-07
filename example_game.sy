@@ -35,7 +35,7 @@ update :: fn delta: float -> void {
     x += (l_input_value("right") - l_input_value("left")) * delta
     y += (l_input_value("up") - l_input_value("down")) * delta
     rgb :: (sin(l_time()), cos(l_time()), 0.0)
-    l_gfx_rect! 0.0, 0.0, 1.0, 1.0, rgb
+    l_gfx_rect! 0.0, 0.0, 1.0, 1.0, cos(l_time()), rgb
 
     if l_input_pressed("play") {
         print "Playing sound"
