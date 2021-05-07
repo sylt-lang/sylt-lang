@@ -135,10 +135,11 @@ sylt_macro::extern_function!(
     },
 );
 
-fn l_gfx_sprite_internal(sprite: &i64, x: &f64, y: &f64, w: &f64, h: &f64, gx: &i64, gy: &i64, r: &f64, g: &f64, b: &f64, a: &f64) -> Value {
+fn l_gfx_sprite_internal(sprite: &i64, x: &f64, y: &f64, w: &f64, h: &f64, gx: &i64, gy: &i64, rot: &f64, r: &f64, g: &f64, b: &f64, a: &f64) -> Value {
     let sprite = game!().renderer.sprite_sheets[*sprite as usize].grid(*gx as usize, *gy as usize);
     let mut sprite = Sprite::new(sprite);
     sprite.at(*x as f32, *y as f32).scale(*w as f32, *h as f32);
+    sprite.angle(*rot as f32);
     sprite.rgba(*r as f32, *g as f32, *b as f32, *a as f32);
     game!().renderer.push(sprite);
     Nil
@@ -150,40 +151,88 @@ sylt_macro::extern_function!(
     "Draws a sprite on the screen, in many different ways.
      Note that the first argument is a sprite id from <a href='#l_load_image'>l_load_image</a>"
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h))] -> Type::Void => {
+        // (id, (gx, gy), (x), (y), (w), (h))
         if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID");
         }
-        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &1.0, &1.0, &1.0, &1.0))
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &0.0, &1.0, &1.0, &1.0, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h))] -> Type::Void => {
+        // (id, (gx, gy), (x, y), (w, h))
         if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID");
         }
-        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &1.0, &1.0, &1.0, &1.0))
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &0.0, &1.0, &1.0, &1.0, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
+        // (id, (gx, gy), (x), (y), (w), (h), (r, g, b))
         if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
-        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, &1.0))
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &0.0, r, g, b, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
+        // (id, (gx, gy), (x, y), (w), (h), (r, g, b))
         if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
-        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, &1.0))
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &0.0, r, g, b, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), Four(Float(r), Float(g), Float(b), Float(a))] -> Type::Void => {
+        // (id, (gx, gy), (x), (y), (w), (h), (r, g, b, a))
         if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
-        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, a))
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &0.0, r, g, b, a))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), Four(Float(r), Float(g), Float(b), Float(a))] -> Type::Void => {
+        // (id, (gx, gy), (x, y), (w), (h), (r, g, b, a))
         if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
-        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, r, g, b, a))
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &0.0, r, g, b, a))
+    },
+    [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), One(Float(rot))] -> Type::Void => {
+        // (id, (gx, gy), (x), (y), (w), (h))
+        if name.as_ref() != "image" {
+            return error!("l_gfx_sprite", "Expected a sprite ID");
+        }
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, rot, &1.0, &1.0, &1.0, &1.0))
+    },
+    [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), One(Float(rot))] -> Type::Void => {
+        // (id, (gx, gy), (x, y), (w, h))
+        if name.as_ref() != "image" {
+            return error!("l_gfx_sprite", "Expected a sprite ID");
+        }
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, rot, &1.0, &1.0, &1.0, &1.0))
+    },
+    [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), One(Float(rot)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
+        // (id, (gx, gy), (x), (y), (w), (h), (r, g, b))
+        if name.as_ref() != "image" {
+            return error!("l_gfx_sprite", "Expected a sprite ID")
+        }
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, rot, r, g, b, &1.0))
+    },
+    [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), One(Float(rot)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
+        // (id, (gx, gy), (x, y), (w), (h), (r, g, b))
+        if name.as_ref() != "image" {
+            return error!("l_gfx_sprite", "Expected a sprite ID")
+        }
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, rot, r, g, b, &1.0))
+    },
+    [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), One(Float(rot)), Four(Float(r), Float(g), Float(b), Float(a))] -> Type::Void => {
+        // (id, (gx, gy), (x), (y), (w), (h), (r, g, b, a))
+        if name.as_ref() != "image" {
+            return error!("l_gfx_sprite", "Expected a sprite ID")
+        }
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, rot, r, g, b, a))
+    },
+    [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), One(Float(rot)), Four(Float(r), Float(g), Float(b), Float(a))] -> Type::Void => {
+        // (id, (gx, gy), (x, y), (w), (h), (r, g, b, a))
+        if name.as_ref() != "image" {
+            return error!("l_gfx_sprite", "Expected a sprite ID")
+        }
+        Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, rot, r, g, b, a))
     },
 );
 

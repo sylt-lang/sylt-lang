@@ -42,14 +42,14 @@ update :: fn delta: float -> void {
         l_audio_play! bloop, false, (0.4, 0.2), (1.0, 0.2)
     }
 
-    l_gfx_sprite! sprite, (0, 0), x, y, 1.0, 1.0, rgb
+    l_gfx_sprite! sprite, (0, 0), x, y, 1.0, 1.0, sin(l_time()), rgb
 
     x : !float = rgb[0]
     y : !float = rgb[1]
     l_gfx_camera_place! x, y
-    l_gfx_camera_angle! 2.0 * l_time!
+    // l_gfx_camera_angle! 2.0 * l_time!
 
-    l_gfx_particle_spawn! particles
+    // l_gfx_particle_spawn! particles
     l_gfx_particle_update! particles, delta
     l_gfx_particle_render! particles
 }
