@@ -36,7 +36,7 @@ update :: fn delta: float -> void {
 
     if l_input_pressed("play") {
         print "Playing sound"
-        l_audio_play(bloop, false, 0.4, 0.2, 1.0, 0.2)
+        l_audio_play! bloop, false, (0.4, 0.2), (1.0, 0.2)
     }
 
     l_gfx_sprite! sprite, (0, 0), x, y, 1.0, 1.0, rgb
