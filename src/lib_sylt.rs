@@ -120,6 +120,15 @@ sylt_macro::extern_function!(
 
 sylt_macro::extern_function!(
     "sylt::lib_sylt"
+    as_int
+    "Converts the int to a float"
+    [One(Float(t))] -> Type::Int => {
+        Ok(Int(*t as i64))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
     sqrt
     "Returns the square root"
     [One(Float(x))] -> Type::Float => {
