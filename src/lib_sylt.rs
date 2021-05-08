@@ -132,6 +132,9 @@ sylt_macro::extern_function!(
     [One(Int(t))] -> Type::Float => {
         Ok(Float(*t as f64))
     },
+    [Two(Int(t), Int(u))] -> Type::Tuple(vec![Type::Float, Type::Float]) => {
+        Ok(Tuple(Rc::new(vec![Float(*t as f64), Float(*u as f64)])))
+    },
 );
 
 sylt_macro::extern_function!(
