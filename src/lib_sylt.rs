@@ -115,6 +115,25 @@ sylt_macro::extern_function!(
     },
 );
 
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
+    sqrt
+    "Returns the square root"
+    [One(Float(x))] -> Type::Float => {
+        Ok(Float(x.sqrt()))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
+    abs
+    "Returns the square root"
+    [One(Float(x))] -> Type::Float => {
+        Ok(Float(x.abs()))
+    },
+);
+
+
 pub fn union_type(a: Type, b: Type) -> Type{
     if a.fits(&b) {
         a
