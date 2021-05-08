@@ -137,6 +137,7 @@ pub fn union_type(a: Type, b: Type) -> Type{
     }
 }
 
+#[sylt_macro::sylt_doc(pop, "Removes the last element in the list, and returns it", [One(List(l))] Type::Value)]
 #[sylt_macro::sylt_link(pop, "sylt::lib_sylt")]
 pub fn pop(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
