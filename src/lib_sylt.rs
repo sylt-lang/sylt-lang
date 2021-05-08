@@ -81,6 +81,9 @@ pub fn len(values: &[Value], _: bool) -> Result<Value, RuntimeError> {
         [Value::List(ls)] => {
             Ok(Value::Int(RefCell::borrow(ls).len() as i64))
         }
+        [_] => {
+            Ok(Value::Int(0))
+        }
         values => Err(RuntimeError::ExternTypeMismatch(
             "len".to_string(),
             values.iter().map(Type::from).collect(),
