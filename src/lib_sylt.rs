@@ -171,6 +171,9 @@ sylt_macro::extern_function!(
     [One(Float(a)), One(Float(lo)), One(Float(hi))] -> Type::Float => {
         Ok(Float(a.min(*hi).max(*lo)))
     },
+    [One(Int(a)), One(Int(lo)), One(Int(hi))] -> Type::Int => {
+        Ok(Int(*a.min(hi).max(lo))) //TODO Other borrows than above
+    },
 );
 
 sylt_macro::extern_function!(
@@ -185,19 +188,21 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt::lib_sylt"
     max
-    "Returns the smallest"
+    "Returns the largest"
     [One(Float(a)), One(Float(b))] -> Type::Float => {
         Ok(Float(a.max(*b)))
     },
 );
 
-
 sylt_macro::extern_function!(
     "sylt::lib_sylt"
     rem
-    "Returns the remained after collision"
+    "Returns the remainder after division"
     [One(Float(x)), One(Float(y))] -> Type::Float => {
         Ok(Float(x % y))
+    },
+    [One(Int(x)), One(Int(y))] -> Type::Int => {
+        Ok(Int(x % y))
     },
 );
 
