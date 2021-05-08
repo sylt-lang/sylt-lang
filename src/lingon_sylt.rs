@@ -60,7 +60,7 @@ std::thread_local! {
 
 fn new_game() -> Arc<Mutex<GG>> {
     // TODO(ed): Maybe make these settable from the game itself.
-    Arc::new(Mutex::new(GG { game: Game::new("Lingon - Sylt", 500, 500) }))
+    Arc::new(Mutex::new(GG { game: Game::new("Ultimate Fishbee - Game of the Year Edition ", 900, 900) }))
 }
 
 macro_rules! game {
@@ -638,10 +638,10 @@ sylt_macro::extern_function!(
     l_random_range
     "Returns a randomized integer in the given range"
     [One(Int(lo)), One(Int(hi))] -> Type::Int => {
-        Ok(Int(*lo + (Uniform.sample() * ((hi - lo) as f32)) as i64))
+        Ok(Int(*lo + (Uniform.sample() * ((hi - lo + 1) as f32)) as i64))
     },
     [Two(Int(lo), Int(hi))] -> Type::Int => {
-        Ok(Int(*lo + (Uniform.sample() * ((hi - lo) as f32)) as i64))
+        Ok(Int(*lo + (Uniform.sample() * ((hi - lo + 1) as f32)) as i64))
     },
     [One(Float(lo)), One(Float(hi))] -> Type::Float => {
         Ok(Float(*lo + Uniform.sample() as f64 * (hi - lo)))

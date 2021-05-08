@@ -109,6 +109,16 @@ pub fn len(values: &[Value], _: bool) -> Result<Value, RuntimeError> {
 
 sylt_macro::extern_function!(
     "sylt::lib_sylt"
+    atan2
+    ""
+    [One(Float(x)), One(Float(y))] -> Type::Float => {
+        Ok(Float(y.atan2(*x)))
+    },
+);
+
+
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
     sin
     "The sine function you know and love from trigonometry class"
     [One(Float(t))] -> Type::Float => {
