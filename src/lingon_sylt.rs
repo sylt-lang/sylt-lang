@@ -90,6 +90,26 @@ sylt_macro::extern_function!(
     },
 );
 
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_window_size
+    "Returns the size of the game window"
+    [] -> Type::Tuple(vec![Type::Int, Type::Int]) => {
+        let (x, y) = game!().window_size();
+        Ok(Value::Tuple(Rc::new(vec![Value::Int(x as i64), Value::Int(y as i64)])))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_set_window_size
+    "Sets the dimension of the game window"
+    [Two(Int(x), Int(y))] -> Type::Void => {
+        game!().set_window_size(*x as u32, *y as u32).unwrap();
+        Ok(Value::Nil)
+    },
+);
+
 fn l_gfx_rect_internal(x: &f64, y: &f64, w: &f64, h: &f64, rot: &f64, r: &f64, g: &f64, b: &f64, a: &f64) {
     let mut rect = Rect::new();
     rect.at(*x as f32, *y as f32);

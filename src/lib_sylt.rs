@@ -138,6 +138,34 @@ sylt_macro::extern_function!(
 
 sylt_macro::extern_function!(
     "sylt::lib_sylt"
+    clamp
+    "Clamps the value 'a' between 'lo' and 'hi'"
+    [One(Float(a)), One(Float(lo)), One(Float(hi))] -> Type::Float => {
+        Ok(Float(a.min(*hi).max(*lo)))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
+    min
+    "Returns the smallest"
+    [One(Float(a)), One(Float(b))] -> Type::Float => {
+        Ok(Float(a.min(*b)))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
+    max
+    "Returns the smallest"
+    [One(Float(a)), One(Float(b))] -> Type::Float => {
+        Ok(Float(a.max(*b)))
+    },
+);
+
+
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
     rem
     "Returns the remained after collision"
     [One(Float(x)), One(Float(y))] -> Type::Float => {
