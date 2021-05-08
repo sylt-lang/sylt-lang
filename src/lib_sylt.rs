@@ -42,6 +42,22 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     }
 }
 
+#[sylt_macro::sylt_doc(empty, "Removes all elements from the list", [One(List(ls))] Type::Void)]
+#[sylt_macro::sylt_link(empty, "sylt::lib_sylt")]
+pub fn empty(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
+    match (values, typecheck) {
+        ([Value::List(ls)], _) => {
+            let ls: &RefCell<_> = ls.borrow();
+            Ok(Value::Bool(ls.borrow().is_empty()))
+        }
+        (values, _) => Err(RuntimeError::ExternTypeMismatch(
+            "empty".to_string(),
+            values.iter().map(Type::from).collect(),
+        )),
+    }
+}
+
+
 #[sylt_macro::sylt_doc(prepend, "Adds an element to the start of a list", [One(List(ls)), One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(prepend, "sylt::lib_sylt")]
 pub fn prepend(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
