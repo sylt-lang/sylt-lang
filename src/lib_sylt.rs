@@ -133,6 +133,16 @@ sylt_macro::extern_function!(
     },
 );
 
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
+    rem
+    "Returns the remained after collision"
+    [One(Float(x)), One(Float(y))] -> Type::Float => {
+        Ok(Float(x % y))
+    },
+);
+
+
 
 pub fn union_type(a: Type, b: Type) -> Type{
     if a.fits(&b) {
