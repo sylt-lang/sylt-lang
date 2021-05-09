@@ -793,7 +793,7 @@ sylt_macro::extern_function!(
     "sylt::lingon_sylt"
     l_audio_play
     "Plays an audio source. Expects the first value to be a
-     return value from <a href='#l_load_sound'>l_load_sound</a>"
+     return value from <a href='#l_load_audio'>l_load_audio</a>"
     [Two(String(name), Int(sound)),
      One(Bool(looping)),
      One(Float(gain)),
@@ -895,7 +895,7 @@ pub fn l_load_image(values: &[Value], typecheck: bool) -> Result<Value, RuntimeE
     }
 }
 
-#[sylt_macro::sylt_doc(l_load_image,
+#[sylt_macro::sylt_doc(l_load_audio,
   "Loads a sound and lets you play it using <a href='l_audio_play'>l_audio_play</a>",
   [One(String(path))] Type::Tuple)]
 #[sylt_macro::sylt_link(l_load_audio, "sylt::lingon_sylt")]
