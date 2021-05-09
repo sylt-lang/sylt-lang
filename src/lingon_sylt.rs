@@ -110,6 +110,16 @@ sylt_macro::extern_function!(
     },
 );
 
+sylt_macro::extern_function!(
+    "sylt::lingon_sylt"
+    l_set_window_icon
+    "Sets the window icon of the game window"
+    [One(String(path))] -> Type::Void => {
+        game!().set_window_icon(path.as_ref());
+        Ok(Nil)
+    },
+);
+
 fn l_gfx_rect_internal(x: &f64, y: &f64, w: &f64, h: &f64, rot: &f64, r: &f64, g: &f64, b: &f64, a: &f64) {
     let mut rect = Rect::new();
     rect.at(*x as f32, *y as f32);
