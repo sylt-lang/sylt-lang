@@ -410,6 +410,15 @@ sylt_macro::extern_function!(
         });
         Ok(Nil)
     },
+    [Two(String(name), Int(system)), One(Int(amount))] -> Type::Void => {
+        if name.as_ref() != "particle" {
+            return error!("l_gfx_particle_spawn", "Expected a particle system ID");
+        }
+        PARTICLES.with(|ps| {
+            ps.lock().unwrap()[*system as usize].spawn_many(*amount as u32);
+        });
+        Ok(Nil)
+    },
 );
 
 sylt_macro::extern_function!(
