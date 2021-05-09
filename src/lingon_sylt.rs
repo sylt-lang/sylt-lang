@@ -75,7 +75,7 @@ sylt_macro::extern_function!(
     "Updates the engine. Needs to be called once per frame"
     [] -> Type::Void => {
         // TODO(ed): Unused for now
-        game!().update(0.0);
+        game!().update();
         Ok(Nil)
     },
 );
@@ -608,7 +608,7 @@ sylt_macro::extern_function!(
     l_delta
     "The time since last the frame in seconds"
     [] -> Type::Float => {
-        let delta = game!().time_tick() as f64;
+        let delta = game!().delta() as f64;
         Ok(Float(delta))
     },
 );
