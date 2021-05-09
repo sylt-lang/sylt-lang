@@ -42,13 +42,14 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     }
 }
 
-#[sylt_macro::sylt_doc(empty, "Removes all elements from the list", [One(List(ls))] Type::Void)]
-#[sylt_macro::sylt_link(empty, "sylt::lib_sylt")]
-pub fn empty(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
+#[sylt_macro::sylt_doc(clear, "Removes all elements from the list", [One(List(ls))] Type::Void)]
+#[sylt_macro::sylt_link(clear, "sylt::lib_sylt")]
+pub fn clear(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
         ([Value::List(ls)], _) => {
             let ls: &RefCell<_> = ls.borrow();
-            Ok(Value::Bool(ls.borrow().is_empty()))
+            ls.borrow_mut().clear();
+            Ok(Value::Nil)
         }
         (values, _) => Err(RuntimeError::ExternTypeMismatch(
             "empty".to_string(),
