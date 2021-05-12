@@ -308,8 +308,6 @@ impl VM {
             }
 
             Op::ReadUpvalue(slot) => {
-                eprintln!("{}", slot);
-                eprintln!("{:?}", self.upvalues);
                 let ty = self.upvalues.get(slot).unwrap().clone();
                 self.push(ty);
             }
