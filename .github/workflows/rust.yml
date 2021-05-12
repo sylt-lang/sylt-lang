@@ -15,7 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install SDL and Python
-      run: sudo apt install -y libsdl2-dev python
+      run: sudo apt update && sudo apt install -y libsdl2-dev python
     - name: Build
       run: cargo build --verbose
     - name: Run tests
