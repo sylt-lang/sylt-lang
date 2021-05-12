@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 
 use crate::error::Error;
+use crate::rc::Rc;
 use crate::sectionizer::Section;
 use crate::tokenizer::Token;
 use crate::{path_to_module, Blob, Block, Next, Op, Prog, RustFunction, Type, Value};
