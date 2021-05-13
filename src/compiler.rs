@@ -54,7 +54,7 @@ macro_rules! push_frame {
             $compiler.frames_mut().push(Frame::new());
 
             // Return value stored as a variable
-            let var = Variable::new("", true, Type::Unknown);
+            let var = Variable::new("/frame", true, Type::Unknown);
             $compiler.define(var).unwrap();
 
             $code
