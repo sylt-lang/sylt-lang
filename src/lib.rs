@@ -798,6 +798,21 @@ pub enum Op {
     /// {A} - AssignUpvalue(0) - {}
     AssignUpvalue(usize),
 
+    /// Reads the global, and adds it
+    /// to the top of the stack.
+    ///
+    /// Constants are stored at the bottom
+    /// of the stack and initalized when
+    /// the program starts.
+    ///
+    /// {} - ReadGlobal(0) - {C}
+    ReadGlobal(usize),
+    /// Sets the given constant, and pops
+    /// the topmost element.
+    ///
+    /// {A} - AssignGlobal(0) - {}
+    AssignGlobal(usize),
+
     /// A helper instruction for the type checker.
     /// *Makes sure* that the top value on the stack
     /// is of the given type, and is meant to signal

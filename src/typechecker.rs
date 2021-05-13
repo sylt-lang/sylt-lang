@@ -45,15 +45,19 @@ macro_rules! two_op {
 pub struct VM {
     upvalues: Vec<Type>,
     stack: Vec<Type>,
+    global_types: Vec<Type>,
     ip: usize,
     block: Rc<RefCell<Block>>,
 }
 
 // Checks the program for type errors.
 pub(crate) fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
-    let mut errors = Vec::new();
-    for block in prog.blocks.iter() {
-        errors.append(&mut typecheck_block(Rc::clone(block), prog, &args));
+    let (globals, mut errors) = typecheck_block(Rc::clone(&prog.blocks[0]), prog, Vec::new(), &args);
+    println!("{:?}", globals);
+    for block in prog.blocks.iter().skip(1) {
+        errors.append(
+            &mut typecheck_block(Rc::clone(block), prog, globals.clone(), &args).1
+        );
     }
 
     if errors.is_empty() {
@@ -64,7 +68,8 @@ pub(crate) fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
 }
 
 
-fn typecheck_block(block: Rc<RefCell<Block>>, prog: &Prog, args: &Args) -> Vec<Error> {
+fn typecheck_block(block: Rc<RefCell<Block>>, prog: &Prog, global_types: Vec<Type>, args: &Args)
+    -> (Vec<Type>, Vec<Error>) {
     let print_bytecode = args.verbosity > 0;
     let print_exec = args.verbosity > 0;
     if print_bytecode {
@@ -76,7 +81,7 @@ fn typecheck_block(block: Rc<RefCell<Block>>, prog: &Prog, args: &Args) -> Vec<E
         block.borrow().debug_print(Some(&prog.constants));
     }
 
-    let mut vm = VM::new(&block);
+    let mut vm = VM::new(&block, global_types);
     let mut errors = Vec::new();
     for (ip, op) in (*block).borrow().ops.iter().enumerate() {
         vm.ip = ip;
@@ -99,15 +104,16 @@ fn typecheck_block(block: Rc<RefCell<Block>>, prog: &Prog, args: &Args) -> Vec<E
         );
     }
 
-    errors
+    (vm.stack, errors)
 }
 
 
 impl VM {
-    pub(crate) fn new(block: &Rc<RefCell<Block>>) -> Self {
+    pub(crate) fn new(block: &Rc<RefCell<Block>>, global_types: Vec<Type>) -> Self {
         let mut vm = Self {
             upvalues: block.borrow().upvalues.iter().map(|(_, _, ty)| ty).cloned().collect(),
             stack: Vec::new(),
+            global_types,
             ip: 0,
             block: Rc::clone(block),
         };
@@ -188,9 +194,39 @@ impl VM {
                 let end = Vec::from(&self.stack[self.stack.len() - n..]);
                 self.stack.extend(end);
             }
+
             Op::ReadLocal(n) => {
                 let ty = self.stack[n].clone();
                 self.push(ty);
+            }
+
+            Op::AssignLocal(slot) => {
+                let var = self.stack[slot].clone();
+                let other = self.pop();
+                if var != other {
+                    error!(
+                        self,
+                        RuntimeError::TypeMismatch(var, other),
+                        "Cannot assign to different type"
+                    );
+                }
+            }
+
+            Op::ReadGlobal(slot) => {
+                let ty = self.global_types[slot].clone();
+                self.push(ty);
+            }
+
+            Op::AssignGlobal(slot) => {
+                let var = self.global_types[slot].clone();
+                let other = self.pop();
+                if var != other {
+                    error!(
+                        self,
+                        RuntimeError::TypeMismatch(var, other),
+                        "Cannot assign to different type"
+                    );
+                }
             }
 
             Op::Constant(slot) => {
@@ -319,18 +355,6 @@ impl VM {
                         self,
                         RuntimeError::TypeMismatch(up, var),
                         "Captured varibles type doesn't match upvalue"
-                    );
-                }
-            }
-
-            Op::AssignLocal(slot) => {
-                let var = self.stack[slot].clone();
-                let other = self.pop();
-                if var != other {
-                    error!(
-                        self,
-                        RuntimeError::TypeMismatch(var, other),
-                        "Cannot assign to different type"
                     );
                 }
             }

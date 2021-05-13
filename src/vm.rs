@@ -387,6 +387,15 @@ impl VM {
                 }
             }
 
+            Op::ReadGlobal(slot) => {
+                let global = self.stack[slot].clone();
+                self.push(global);
+            }
+
+            Op::AssignGlobal(slot) => {
+                self.stack[slot] = self.pop();
+            }
+
             Op::Contains => {
                 let (element, container) = self.poppop();
                 match (container, element) {
