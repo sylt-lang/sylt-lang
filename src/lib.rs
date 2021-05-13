@@ -943,10 +943,11 @@ impl Block {
                 },
                 i.red(),
                 s,
-                if let (Op::Constant(c), Some(constants)) = (s, constants) {
-                    format!("    => {:?}", &constants[*c])
-                } else {
-                    "".to_string()
+                match (s, constants) {
+                    (Op::Constant(c), Some(constants))
+                    | (Op::Link(c), Some(constants))
+                      => format!("    => {:?}", &constants[*c]),
+                    _ => "".to_string()
                 }
             );
         }
