@@ -1,7 +1,8 @@
+use crate::rc::Rc;
+
 use error::{Error, RuntimeError};
 use gumdrop::Options;
 use owo_colors::OwoColorize;
-use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
@@ -9,13 +10,13 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 
 pub mod error;
 pub mod vm;
 pub mod typechecker;
 
 mod compiler;
+mod rc;
 mod sectionizer;
 mod tokenizer;
 
@@ -60,20 +61,6 @@ pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
     }
 }
 
-/// Compiles and serializes the given file.
-pub fn serialize(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Vec<u8>, Vec<Error>> {
-    let prog = compile(args, functions)?;
-    typechecker::typecheck(&prog, args)?;
-    bincode::serialize(&prog).map_err(|e| vec![Error::BincodeError(Rc::new(e))])
-}
-
-/// Deserializes and links the given file.
-pub fn deserialize(bytes: Vec<u8>, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
-    let mut prog: Prog = bincode::deserialize(&bytes).map_err(|e| vec![Error::BincodeError(Rc::new(e))])?;
-    prog.functions = functions.into_iter().map(|(_, f)| f).collect();
-    Ok(prog)
-}
-
 fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
     let path = match &args.file {
         Some(file) => file,
@@ -116,7 +103,7 @@ pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
 /// [sylt_macro::extern_function].
 pub type RustFunction = fn(&[Value], bool) -> Result<Value, RuntimeError>;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub enum Type {
     Ty,
     Field(String),
@@ -312,7 +299,7 @@ impl From<&Type> for Value {
                 s.insert(Value::from(k.as_ref()), Value::from(v.as_ref()));
                 Value::Dict(Rc::new(RefCell::new(s)))
             }
-            Type::Iter(v) => Value::Iter(v.as_ref().clone(), Rc::new(RefCell::new(|| None))),
+            Type::Iter(v) => Value::Iter(v.as_ref().clone(), Rc::new(RefCell::new(Box::new(|| None)))),
             Type::Unknown => Value::Unknown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),
@@ -365,16 +352,7 @@ impl Type {
 
 pub type IterFn = dyn FnMut() -> Option<Value>;
 
-// What is this U? No one knows.
-fn se_abort<S, T, U>(_t: &T, _u: U, _s: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
-    panic!("Tried to serialize a non-serializable value");
-}
-
-fn de_abort<'de, D, T>(_d: D) -> Result<T, D::Error> where D: serde::Deserializer<'de> {
-    panic!("Tried to deserialize a non-serializable value");
-}
-
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone)]
 pub enum Value {
     Field(String),
     Ty(Type),
@@ -384,8 +362,7 @@ pub enum Value {
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
     Dict(Rc<RefCell<HashMap<Value, Value>>>),
-    #[serde(deserialize_with="de_abort", serialize_with="se_abort")]
-    Iter(Type, Rc<RefCell<IterFn>>),
+    Iter(Type, Rc<RefCell<Box<IterFn>>>),
     Union(HashSet<Value>),
     Float(f64),
     Int(i64),
@@ -507,7 +484,7 @@ impl Value {
 }
 
 #[doc(hidden)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct UpValue {
     slot: usize,
     value: Value,
@@ -547,7 +524,7 @@ impl UpValue {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub struct Blob {
     pub id: usize,
     pub name: String,
@@ -587,7 +564,7 @@ impl Blob {
 /// machine carries out when running the
 /// "byte-code".
 ///
-#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
+#[derive(Debug, Copy, Clone)]
 pub enum Op {
     /// This instruction should never be run.
     /// Finding it in a program is a critical error.
@@ -850,14 +827,14 @@ pub enum Op {
     Yield,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug)]
 enum BlockLinkState {
     Linked,
     Unlinked,
     Nothing,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct Block {
     pub ty: Type,
     upvalues: Vec<(usize, bool, Type)>,
@@ -995,10 +972,9 @@ impl Block {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Prog {
     pub blocks: Vec<Rc<RefCell<Block>>>,
-    #[serde(skip)]
     pub functions: Vec<RustFunction>,
     pub constants: Vec<Value>,
     pub strings: Vec<String>,

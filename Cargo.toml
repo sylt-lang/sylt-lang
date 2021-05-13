@@ -10,10 +10,8 @@ name = "sylt"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bincode = "1"
 logos = "0.12"
 owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
-serde = { version = "1", features = [ "derive", "rc" ] }
 sylt_macro = { path = "sylt_macro" }
 gumdrop = "0.8"
 

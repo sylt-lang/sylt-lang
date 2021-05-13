@@ -273,7 +273,7 @@ pub fn inf(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
         [x] => {
             let t: Type = Type::from(&*x);
             let x = x.clone();
-            Ok(Value::Iter(t, Rc::new(RefCell::new(move || Some(x.clone())))))
+            Ok(Value::Iter(t, Rc::new(RefCell::new(Box::new(move || Some(x.clone()))))))
         }
         values => Err(RuntimeError::ExternTypeMismatch(
             "inf".to_string(),

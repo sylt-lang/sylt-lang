@@ -2,9 +2,9 @@ use owo_colors::OwoColorize;
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt::Debug;
-use std::rc::Rc;
 
 use crate::error::{Error, RuntimeError, RuntimePhase};
+use crate::rc::Rc;
 use crate::{Block, BlockLinkState, IterFn, Op, Prog, RustFunction, Type, UpValue, Value};
 
 macro_rules! error {
@@ -778,9 +778,9 @@ impl VM {
 ///
 /// Broken out because they need to be recursive.
 mod op {
+    use super::Rc;
     use super::Value;
     use std::collections::HashSet;
-    use std::rc::Rc;
 
     fn tuple_bin_op(
         a: &Rc<Vec<Value>>,
