@@ -54,7 +54,8 @@ macro_rules! push_frame {
             $compiler.frames_mut().push(Frame::new());
 
             // Return value stored as a variable
-            let var = Variable::new("/frame", true, Type::Unknown);
+            let mut var = Variable::new("/frame", true, Type::Unknown);
+            var.read = true;
             $compiler.define(var).unwrap();
 
             $code
@@ -133,8 +134,6 @@ struct Variable {
     outer_slot: usize,
     outer_upvalue: bool,
 
-    global: bool,
-
     active: bool,
     upvalue: bool,
     captured: bool,
@@ -154,21 +153,12 @@ impl Variable {
             outer_slot: 0,
             outer_upvalue: false,
 
-            global: false,
-
             active: false,
             upvalue: false,
             captured: false,
             mutable,
             read: false,
         }
-    }
-
-
-    fn new_global(name: &str, mutable: bool, typ: Type) -> Self {
-        let mut var = Self::new(name, mutable, typ);
-        var.global = true;
-        return var;
     }
 }
 
@@ -300,6 +290,7 @@ enum Name {
 pub(crate) struct Compiler {
     current_token: usize,
     current_section: usize,
+
     sections: Vec<Section>,
 
     contextes: HashMap<PathBuf, CompilerContext>,
@@ -1373,75 +1364,73 @@ impl Compiler {
         Ok(slot)
     }
 
+    fn outer_definition_statement(&mut self, name: &str, _typ: Type, _force: bool, block: &mut Block) {
+        let var = self.frame().find_outer(name);
+        if var.is_none() {
+            syntax_error!(self, "Couldn't find variable '{}' during prepass", name);
+            return;
+        }
+        let var = var.unwrap();
+        assert!(var.mutable);
+
+        self.expression(block);
+        self.stack_mut()[var.slot].active = true;
+    }
+
     fn definition_statement(&mut self, name: &str, typ: Type, force: bool, block: &mut Block) {
-        if self.frames().len() <= 1 {
-            // Global
-            let var = self.frame().find_outer(name);
-            if var.is_none() {
-                syntax_error!(self, "Couldn't find variable '{}' during prepass", name);
-                return;
-            }
-            let var = var.unwrap();
-            assert!(var.mutable);
-
-            self.expression(block);
-            self.stack_mut()[var.slot].active = true;
+        // Local
+        let var = Variable::new(name, true, typ.clone());
+        let slot = self.define(var);
+        self.expression(block);
+        let constant = self.add_constant(Value::Ty(typ));
+        if force {
+            add_op(self, block, Op::Force(constant));
         } else {
-            // Local
-            let var = Variable::new(name, true, typ.clone());
-            let slot = self.define(var);
-            self.expression(block);
-            let constant = self.add_constant(Value::Ty(typ));
-            if force {
-                add_op(self, block, Op::Force(constant));
-            } else {
-                add_op(self, block, Op::Define(constant));
-            }
+            add_op(self, block, Op::Define(constant));
+        }
 
-            if let Ok(slot) = slot {
-                self.stack_mut()[slot].active = true;
-            }
+        if let Ok(slot) = slot {
+            self.stack_mut()[slot].active = true;
         }
     }
 
-    fn constant_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
-        // Magical global constants
-        if self.frames().len() <= 1 && self.peek() == Token::Fn {
-            self.function(block, Some(name));
-            // Remove the function, since it's a constant and we already
-            // added it.
-            block.ops.pop().unwrap();
-            let slot = self.find_constant(name);
-            add_op(self, block, Op::Link(slot));
-            if let Value::Function(_, block) = &self.constants[slot] {
-                block.borrow_mut().mark_constant();
-            } else {
-                unreachable!();
-            }
+    fn outer_function(&mut self, name: &str, _typ: Type, block: &mut Block) {
+        assert!(self.frames().len() <= 1, "Not in global namespace");
+        self.function(block, Some(name));
+        // Remove the function, since it's a constant and we already
+        // added it.
+        block.ops.pop().unwrap();
+        let slot = self.find_constant(name);
+        add_op(self, block, Op::Link(slot));
+        if let Value::Function(_, block) = &self.constants[slot] {
+            block.borrow_mut().mark_constant();
+        } else {
+            unreachable!();
+        }
+        return;
+    }
+
+    fn outer_constant_statement(&mut self, name: &str, _typ: Type, block: &mut Block) {
+        let var = self.frame().find_outer(name);
+        if var.is_none() {
+            syntax_error!(self, "Couldn't find constant '{}' during prepass", name);
             return;
         }
+        let var = var.unwrap();
+        assert!(!var.mutable);
 
-        if self.frames().len() <= 1 {
-            // Global
-            let var = self.frame().find_outer(name);
-            if var.is_none() {
-                syntax_error!(self, "Couldn't find constant '{}' during prepass", name);
-                return;
-            }
-            let var = var.unwrap();
-            assert!(!var.mutable);
+        self.expression(block);
+        self.stack_mut()[var.slot].active = true;
+    }
 
-            self.expression(block);
-            self.stack_mut()[var.slot].active = true;
-        } else {
-            // Local
-            let var = Variable::new(name, false, typ);
-            let slot = self.define(var);
-            self.expression(block);
+    fn constant_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
+        // Local
+        let var = Variable::new(name, false, typ);
+        let slot = self.define(var);
+        self.expression(block);
 
-            if let Ok(slot) = slot {
-                self.stack_mut()[slot].active = true;
-            }
+        if let Ok(slot) = slot {
+            self.stack_mut()[slot].active = true;
         }
     }
 
@@ -1970,17 +1959,23 @@ impl Compiler {
             (Token::Identifier(name), Token::ColonEqual, ..) => {
                 self.eat();
                 self.eat();
-                self.definition_statement(&name, Type::Unknown, false, block);
+                self.outer_definition_statement(&name, Type::Unknown, false, block);
             }
 
             (Token::Identifier(_), Token::ColonColon, Token::Blob, ..) => {
                 self.blob_statement(block);
             }
 
+            (Token::Identifier(name), Token::ColonColon, Token::Fn, ..) => {
+                self.eat();
+                self.eat();
+                self.outer_function(&name, Type::Unknown, block);
+            }
+
             (Token::Identifier(name), Token::ColonColon, ..) => {
                 self.eat();
                 self.eat();
-                self.constant_statement(&name, Type::Unknown, block);
+                self.outer_constant_statement(&name, Type::Unknown, block);
             }
 
             (Token::Identifier(name), Token::Colon, ..) => {
@@ -1994,7 +1989,7 @@ impl Compiler {
                 };
                 if let Ok(typ) = self.parse_type() {
                     expect!(self, Token::Equal, "Expected assignment");
-                    self.definition_statement(&name, typ, force, block);
+                    self.outer_definition_statement(&name, typ, force, block);
                 } else {
                     syntax_error!(self, "Expected type found '{:?}'", self.peek());
                 }
@@ -2129,6 +2124,7 @@ impl Compiler {
         file: &Path,
         functions: &[(String, RustFunction)],
     ) -> Result<Prog, Vec<Error>> {
+
         let main = Variable::new("/preamble", false, Type::Void);
         let slot = self.define(main).unwrap();
         self.frame_mut().stack[slot].read = true;
@@ -2172,7 +2168,7 @@ impl Compiler {
                     if let Ok(ty) = self.parse_type() {
                         println!("DEFINING GLOBAL: {}", name);
                         let is_mut = self.peek() == Token::Equal;
-                        let var = Variable::new_global(&name, is_mut, ty);
+                        let var = Variable::new(&name, is_mut, ty);
                         let _ = self.define(var).unwrap();
                     } else {
                         syntax_error!(self, "Failed to parse type global '{}'", name);
@@ -2180,12 +2176,12 @@ impl Compiler {
                 }
 
                 (Some((Token::Identifier(name), _)), Some((Token::ColonColon, _)), ..) => {
-                    let var = Variable::new_global(name, false, Type::Unknown);
+                    let var = Variable::new(name, false, Type::Unknown);
                     let _ = self.define(var).unwrap();
                 }
 
                 (Some((Token::Identifier(name), _)), Some((Token::ColonEqual, _)), ..) => {
-                    let var = Variable::new_global(name, true, Type::Unknown);
+                    let var = Variable::new(name, true, Type::Unknown);
                     let _ = self.define(var).unwrap();
                 }
 
