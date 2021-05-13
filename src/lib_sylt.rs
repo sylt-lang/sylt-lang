@@ -2,7 +2,7 @@ use crate::*;
 use crate as sylt;
 
 #[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", [One(Value(val))] Type::Void)]
-#[sylt_macro::sylt_link(push, "sylt::lib_sylt")]
+#[sylt_macro::sylt_link(dbg, "sylt::lib_sylt")]
 pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
     println!(
         "{}: {:?}, {:?}",
@@ -23,7 +23,7 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
             assert!(ls.len() == 1);
             let ls = Type::from(&ls[0]);
             let v: Type = Type::from(&*v);
-            if ls == v {
+            if ls == v || matches!(ls, Type::Unknown) {
                 Ok(Value::Nil)
             } else {
                 Err(RuntimeError::TypeMismatch(ls, v))
@@ -41,6 +41,23 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
         )),
     }
 }
+
+#[sylt_macro::sylt_doc(clear, "Removes all elements from the list", [One(List(ls))] Type::Void)]
+#[sylt_macro::sylt_link(clear, "sylt::lib_sylt")]
+pub fn clear(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
+    match (values, typecheck) {
+        ([Value::List(ls)], _) => {
+            let ls: &RefCell<_> = ls.borrow();
+            ls.borrow_mut().clear();
+            Ok(Value::Nil)
+        }
+        (values, _) => Err(RuntimeError::ExternTypeMismatch(
+            "empty".to_string(),
+            values.iter().map(Type::from).collect(),
+        )),
+    }
+}
+
 
 #[sylt_macro::sylt_doc(prepend, "Adds an element to the start of a list", [One(List(ls)), One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(prepend, "sylt::lib_sylt")]
@@ -81,12 +98,25 @@ pub fn len(values: &[Value], _: bool) -> Result<Value, RuntimeError> {
         [Value::List(ls)] => {
             Ok(Value::Int(RefCell::borrow(ls).len() as i64))
         }
+        [_] => {
+            Ok(Value::Int(0))
+        }
         values => Err(RuntimeError::ExternTypeMismatch(
             "len".to_string(),
             values.iter().map(Type::from).collect(),
         )),
     }
 }
+
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
+    atan2
+    ""
+    [One(Float(x)), One(Float(y))] -> Type::Float => {
+        Ok(Float(y.atan2(*x)))
+    },
+);
+
 
 sylt_macro::extern_function!(
     "sylt::lib_sylt"
@@ -113,7 +143,81 @@ sylt_macro::extern_function!(
     [One(Int(t))] -> Type::Float => {
         Ok(Float(*t as f64))
     },
+    [Two(Int(t), Int(u))] -> Type::Tuple(vec![Type::Float, Type::Float]) => {
+        Ok(Tuple(Rc::new(vec![Float(*t as f64), Float(*u as f64)])))
+    },
 );
+
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
+    as_int
+    "Converts the int to a float"
+    [One(Float(t))] -> Type::Int => {
+        Ok(Int(*t as i64))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
+    sqrt
+    "Returns the square root"
+    [One(Float(x))] -> Type::Float => {
+        Ok(Float(x.sqrt()))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
+    abs
+    "Returns the square root"
+    [One(Float(x))] -> Type::Float => {
+        Ok(Float(x.abs()))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
+    clamp
+    "Clamps the value 'a' between 'lo' and 'hi'"
+    [One(Float(a)), One(Float(lo)), One(Float(hi))] -> Type::Float => {
+        Ok(Float(a.min(*hi).max(*lo)))
+    },
+    [One(Int(a)), One(Int(lo)), One(Int(hi))] -> Type::Int => {
+        Ok(Int(*a.min(hi).max(lo))) //TODO Other borrows than above
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
+    min
+    "Returns the smallest"
+    [One(Float(a)), One(Float(b))] -> Type::Float => {
+        Ok(Float(a.min(*b)))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
+    max
+    "Returns the largest"
+    [One(Float(a)), One(Float(b))] -> Type::Float => {
+        Ok(Float(a.max(*b)))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt::lib_sylt"
+    rem
+    "Returns the remainder after division"
+    [One(Float(x)), One(Float(y))] -> Type::Float => {
+        Ok(Float(x % y))
+    },
+    [One(Int(x)), One(Int(y))] -> Type::Int => {
+        Ok(Int(x % y))
+    },
+);
+
+
 
 pub fn union_type(a: Type, b: Type) -> Type{
     if a.fits(&b) {
@@ -137,6 +241,7 @@ pub fn union_type(a: Type, b: Type) -> Type{
     }
 }
 
+#[sylt_macro::sylt_doc(pop, "Removes the last element in the list, and returns it", [One(List(l))] Type::Value)]
 #[sylt_macro::sylt_link(pop, "sylt::lib_sylt")]
 pub fn pop(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {

@@ -1838,6 +1838,7 @@ impl Compiler {
         };
         if self.find_namespace(&name).is_some() {
             self.expression(block);
+            add_op(self, block, Op::Pop);
         } else if rest_of_line_contains!(
             self,
             Token::Equal
@@ -1846,9 +1847,10 @@ impl Compiler {
                 | Token::StarEqual
                 | Token::SlashEqual
         ) {
-            self.blob_field(block)
+            self.blob_field(block);
         } else {
-            self.expression(block)
+            self.expression(block);
+            add_op(self, block, Op::Pop);
         }
     }
 
