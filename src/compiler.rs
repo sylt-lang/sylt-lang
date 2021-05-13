@@ -133,6 +133,8 @@ struct Variable {
     outer_slot: usize,
     outer_upvalue: bool,
 
+    global: bool,
+
     active: bool,
     upvalue: bool,
     captured: bool,
@@ -152,12 +154,21 @@ impl Variable {
             outer_slot: 0,
             outer_upvalue: false,
 
+            global: false,
+
             active: false,
             upvalue: false,
             captured: false,
             mutable,
             read: false,
         }
+    }
+
+
+    fn new_global(name: &str, mutable: bool, typ: Type) -> Self {
+        let mut var = Self::new(name, mutable, typ);
+        var.global = true;
+        return var;
     }
 }
 
@@ -1341,7 +1352,8 @@ impl Compiler {
     }
 
     fn define(&mut self, mut var: Variable) -> Result<usize, ()> {
-        let frame = self.frame();
+        let line = self.line();
+        let frame = self.frame_mut();
 
         if let Some(res) = frame
             .find_local(&var.name)
@@ -1353,11 +1365,11 @@ impl Compiler {
             }
         }
 
-        let slot = self.stack().len();
+        let slot = frame.stack.len();
         var.slot = slot;
+        var.line = line;
         var.scope = frame.scope;
-        var.line = self.line();
-        self.stack_mut().push(var);
+        frame.stack.push(var);
         Ok(slot)
     }
 
@@ -2158,8 +2170,9 @@ impl Compiler {
                     self.eat();
                     self.eat();
                     if let Ok(ty) = self.parse_type() {
+                        println!("DEFINING GLOBAL: {}", name);
                         let is_mut = self.peek() == Token::Equal;
-                        let var = Variable::new(&name, is_mut, ty);
+                        let var = Variable::new_global(&name, is_mut, ty);
                         let _ = self.define(var).unwrap();
                     } else {
                         syntax_error!(self, "Failed to parse type global '{}'", name);
@@ -2167,12 +2180,12 @@ impl Compiler {
                 }
 
                 (Some((Token::Identifier(name), _)), Some((Token::ColonColon, _)), ..) => {
-                    let var = Variable::new(name, false, Type::Unknown);
+                    let var = Variable::new_global(name, false, Type::Unknown);
                     let _ = self.define(var).unwrap();
                 }
 
                 (Some((Token::Identifier(name), _)), Some((Token::ColonEqual, _)), ..) => {
-                    let var = Variable::new(name, true, Type::Unknown);
+                    let var = Variable::new_global(name, true, Type::Unknown);
                     let _ = self.define(var).unwrap();
                 }
 
