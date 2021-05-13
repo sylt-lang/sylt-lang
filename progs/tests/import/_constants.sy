@@ -1,0 +1,14 @@
+
+_one :: 1
+one :: fn -> int {
+    ret _one
+}
+
+_two := 2.0
+two :: fn -> float {
+    ret _two
+}
+
+three :: fn -> int {
+    ret _one + _one + _one
+}
