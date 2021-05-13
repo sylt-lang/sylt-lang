@@ -94,3 +94,101 @@ impl<T: fmt::Display> fmt::Display for Rc<T> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Rc;
+    #[test]
+    fn new_empty() {
+        let rc = Rc::new(());
+        unsafe {
+            assert_eq!((*rc.0).0, 1);
+        }
+    }
+
+    #[test]
+    fn clone() {
+        let rc1 = Rc::new(());
+        let rc2 = Rc::clone(&rc1);
+        unsafe {
+            assert_eq!((*rc1.0).0, 2);
+            assert_eq!((*rc2.0).0, 2);
+        }
+    }
+
+    #[test]
+    fn explicit_drop() {
+        let rc1 = Rc::new(());
+        let rc2 = Rc::clone(&rc1);
+        drop(rc1);
+        unsafe {
+            assert_eq!((*rc2.0).0, 1);
+        }
+    }
+
+    #[test]
+    fn implicit_drop() {
+        let rc1 = Rc::new(());
+        {
+            let rc2 = Rc::clone(&rc1);
+            unsafe {
+                assert_eq!((*rc1.0).0, 2);
+                assert_eq!((*rc2.0).0, 2);
+            }
+        }
+        unsafe {
+            assert_eq!((*rc1.0).0, 1);
+        }
+    }
+
+    #[test]
+    fn from() {
+        let rc = Rc::from(1usize);
+        unsafe {
+            assert_eq!((*rc.0).1, 1usize);
+        }
+    }
+
+    #[test]
+    fn deref() {
+        let rc = Rc::new(1usize);
+        assert_eq!(*rc, 1usize);
+    }
+
+    #[derive(Debug, PartialEq)]
+    struct A(usize);
+
+    #[test]
+    fn partial_eq() {
+        let rc = Rc::new(A(1usize));
+        assert!(rc == Rc::new(A(1usize)));
+    }
+
+    #[test]
+    fn as_ref() {
+        let rc = Rc::new(A(1usize));
+        assert_eq!(rc.as_ref(), &A(1usize));
+    }
+
+    #[test]
+    fn partial_ord() {
+        let rc1 = Rc::new(1usize);
+        let rc2 = Rc::new(2usize);
+        assert_eq!(rc1.partial_cmp(&rc2), 1usize.partial_cmp(&2usize));
+        assert_eq!(rc2.partial_cmp(&rc1), 2usize.partial_cmp(&1usize));
+        assert_eq!(rc1.partial_cmp(&rc1), 1usize.partial_cmp(&1usize));
+
+        let f1 = Rc::new(std::f32::NAN);
+        let f2 = Rc::new(1.0f32);
+        assert_eq!(f1.partial_cmp(&f2), std::f32::NAN.partial_cmp(&1.0f32));
+    }
+
+    #[test]
+    fn ord() {
+        let rc1 = Rc::new(1usize);
+        let rc2 = Rc::new(2usize);
+        assert_eq!(rc1.cmp(&rc2), 1usize.cmp(&2usize));
+        assert_eq!(rc2.cmp(&rc1), 2usize.cmp(&1usize));
+        assert_eq!(rc1.cmp(&rc1), 1usize.cmp(&1usize));
+    }
+}
