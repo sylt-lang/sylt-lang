@@ -60,7 +60,7 @@ std::thread_local! {
 
 fn new_game() -> Arc<Mutex<GG>> {
     // TODO(ed): Maybe make these settable from the game itself.
-    Arc::new(Mutex::new(GG { game: Game::new("Ultimate Fishbee - Game of the Year Edition ", 900, 900) }))
+    Arc::new(Mutex::new(GG { game: Game::new("Lingon - Sylt", 500, 500) }))
 }
 
 macro_rules! game {
@@ -74,7 +74,6 @@ sylt_macro::extern_function!(
     l_update
     "Updates the engine. Needs to be called once per frame"
     [] -> Type::Void => {
-        // TODO(ed): Unused for now
         game!().update();
         Ok(Nil)
     },
