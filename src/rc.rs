@@ -12,7 +12,7 @@ impl<T> Drop for Rc<T> {
     fn drop(&mut self) {
         unsafe {
             if (*self.0).0 == 1 {
-                drop(Box::from_raw(self.0));
+                drop(self.0);
                 return;
             }
             (*self.0).0 -= 1;
