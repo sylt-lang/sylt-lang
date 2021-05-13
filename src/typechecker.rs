@@ -213,8 +213,11 @@ impl VM {
             }
 
             Op::ReadGlobal(slot) => {
-                let ty = self.global_types[slot].clone();
-                self.push(ty);
+                if let Some(ty) = self.global_types.get(slot).cloned() {
+                    self.push(ty);
+                } else {
+                    self.push(Type::Unknown);
+                }
             }
 
             Op::AssignGlobal(slot) => {
