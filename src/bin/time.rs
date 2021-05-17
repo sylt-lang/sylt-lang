@@ -1,14 +1,11 @@
 use gumdrop::Options;
-use std::{io::{Write, stdout}, path::PathBuf};
+use std::path::PathBuf;
 use std::time::Instant;
 
 #[derive(Default, Debug, Options)]
 pub struct Args {
     #[options(free, required, help = "The file to run")]
     pub run_file: PathBuf,
-
-    #[options(free, help = "The file to write the runtimes to (omit or '-' for stdout)")]
-    pub stat_file: Option<PathBuf>,
 
     #[options(short = "r", long = "runs", help = "If set, how many times the program should be run at most")]
     pub max_runs: Option<u32>,
@@ -83,18 +80,8 @@ fn main() -> std::io::Result<()> {
         runtimes.push(runtime.as_micros());
     }
 
-    eprintln!("Saving to file");
-    match args.stat_file {
-        Some(file) => write_stats(&mut std::fs::File::create(file).unwrap(), &runtimes)?,
-        None => write_stats(&mut stdout(), &runtimes)?,
-    }
-
-    Ok(())
-}
-
-fn write_stats<W: Write>(to: &mut W, stats: &[u128]) -> std::io::Result<()> {
-    for stat in stats {
-        writeln!(to, "{}", stat)?;
+    for runtime in runtimes {
+        println!("{}", runtime);
     }
     Ok(())
 }
