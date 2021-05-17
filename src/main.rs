@@ -1,6 +1,4 @@
-use gumdrop::Options;
-
-use sylt::{Args, lib_bindings};
+use sylt::{Args, Options, lib_bindings};
 
 fn main() -> Result<(), String> {
     let args = Args::parse_args_default_or_exit();
