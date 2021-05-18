@@ -1,7 +1,9 @@
 use crate::rc::Rc;
 
+/// Re-export of derived functions for [Args].
+pub use gumdrop::Options;
+
 use error::{Error, RuntimeError};
-use gumdrop::Options;
 use owo_colors::OwoColorize;
 use std::borrow::Borrow;
 use std::cell::RefCell;
@@ -90,6 +92,13 @@ pub struct Args {
 
     #[options(help = "Print this help")]
     pub help: bool,
+}
+
+impl Args {
+    /// Wraps the function with the same name from [gumdrop] for convenience.
+    pub fn parse_args_default_or_exit() -> Args {
+        <Args as Options>::parse_args_default_or_exit()
+    }
 }
 
 pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
