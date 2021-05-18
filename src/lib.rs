@@ -63,7 +63,7 @@ pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
     }
 }
 
-fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
+pub fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
     let path = match &args.file {
         Some(file) => file,
         None => {

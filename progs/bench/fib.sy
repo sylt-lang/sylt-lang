@@ -8,6 +8,7 @@ fib :: fn a:int -> int {
 }
 // 23 is around where things start getting slow.
 start :: fn {
+    // fib(22) <=> 17711
     fib(23) <=> 28657
 }
 
