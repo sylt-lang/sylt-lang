@@ -17,9 +17,13 @@ stats = list(map(scipy_stats.describe, values))
 p_eq_var = scipy_stats.ttest_ind(*values, equal_var=True).pvalue
 p_uneq_var = scipy_stats.ttest_ind(*values, equal_var=False).pvalue
 
-print("Mean   Standard deviation")
+print("Mean")
 for stat in stats:
-    print(f"{stat.mean:.3f}  {stat.variance:.3f}")
+    print(f"{stat.mean:.3f}")
+print()
+print("Standard deviation")
+for stat in stats:
+    print(f"{stat.variance**(1/2):.3f}")
 print()
 print("P values (small values -> reject equal mean hypothesis):")
 print("Equal variance   Unequal variance")
