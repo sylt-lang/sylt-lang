@@ -8,7 +8,7 @@ pub struct Args {
     pub run_file: PathBuf,
 
     #[options(short = "r", long = "runs", help = "If set, how many times the program should be run at most")]
-    pub max_runs: Option<u32>,
+    pub max_runs: Option<usize>,
 
     #[options(short = "t", long = "time", help = "If set, stop running when this amount of seconds have passed")]
     pub max_time: Option<u64>,
@@ -18,7 +18,7 @@ pub struct Args {
 }
 
 fn main() -> std::io::Result<()> {
-    let args = Args::parse_args_or_exit(gumdrop::ParsingStyle::AllOptions);
+    let args = Args::parse_args_default_or_exit();
     if args.help {
         eprintln!("{}", Args::usage());
         return Ok(());
@@ -60,10 +60,9 @@ fn main() -> std::io::Result<()> {
 
     eprintln!("Starting runs");
     let outer_start = Instant::now();
-    let mut runs = 0;
     loop {
         if let Some(max_runs) = args.max_runs {
-            if runs >= max_runs {
+            if runtimes.len() >= max_runs {
                 break;
             }
         }
@@ -72,7 +71,6 @@ fn main() -> std::io::Result<()> {
                 break;
             }
         }
-        runs += 1;
 
         let start = Instant::now();
         let _ = sylt::run(&prog, &sylt_args).unwrap();
