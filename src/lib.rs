@@ -784,6 +784,21 @@ pub enum Op {
     /// {A} - AssignUpvalue(0) - {}
     AssignUpvalue(usize),
 
+    /// Reads the global, and adds it
+    /// to the top of the stack.
+    ///
+    /// Constants are stored at the bottom
+    /// of the stack and initalized when
+    /// the program starts.
+    ///
+    /// {} - ReadGlobal(0) - {C}
+    ReadGlobal(usize),
+    /// Sets the given constant, and pops
+    /// the topmost element.
+    ///
+    /// {A} - AssignGlobal(0) - {}
+    AssignGlobal(usize),
+
     /// A helper instruction for the type checker.
     /// *Makes sure* that the top value on the stack
     /// is of the given type, and is meant to signal
@@ -929,10 +944,11 @@ impl Block {
                 },
                 i.red(),
                 s,
-                if let (Op::Constant(c), Some(constants)) = (s, constants) {
-                    format!("    => {:?}", &constants[*c])
-                } else {
-                    "".to_string()
+                match (s, constants) {
+                    (Op::Constant(c), Some(constants))
+                    | (Op::Link(c), Some(constants))
+                      => format!("    => {:?}", &constants[*c]),
+                    _ => "".to_string()
                 }
             );
         }

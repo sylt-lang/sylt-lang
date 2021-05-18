@@ -387,6 +387,19 @@ impl VM {
                 }
             }
 
+            Op::ReadGlobal(slot) => {
+                if self.stack.len() > slot {
+                    let global = self.stack[slot].clone();
+                    self.push(global);
+                } else {
+                    error!(self, RuntimeError::InvalidProgram);
+                }
+            }
+
+            Op::AssignGlobal(slot) => {
+                self.stack[slot] = self.pop();
+            }
+
             Op::Contains => {
                 let (element, container) = self.poppop();
                 match (container, element) {

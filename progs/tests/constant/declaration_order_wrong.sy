@@ -5,4 +5,4 @@ start :: fn {
     a <=> b + 1
 }
 
-// error: @1
+// error: #InvalidProgram

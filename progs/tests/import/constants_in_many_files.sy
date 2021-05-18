@@ -1,0 +1,8 @@
+use _constants
+use _constants2
+
+
+start :: fn {
+    _constants2.zero() <=> 0
+    _constants.one() <=> 1
+}

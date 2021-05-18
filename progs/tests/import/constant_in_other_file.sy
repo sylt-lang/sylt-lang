@@ -1,0 +1,7 @@
+use _constants
+
+start :: fn {
+    _constants.one() <=> 1
+    _constants.two() <=> 2.0
+    _constants.three() <=> 3
+}
