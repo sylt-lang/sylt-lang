@@ -12,7 +12,7 @@ impl<T> Drop for Rc<T> {
     fn drop(&mut self) {
         unsafe {
             if (*self.0).0 == 1 {
-                drop(self.0);
+                drop(Box::from_raw(self.0));
                 return;
             }
             (*self.0).0 -= 1;
@@ -139,6 +139,45 @@ mod tests {
         unsafe {
             assert_eq!((*rc1.0).0, 1);
         }
+    }
+
+    #[test]
+    fn calls_drop() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        struct A<'a>(&'a AtomicBool);
+
+        impl<'a> Drop for A<'a> {
+            fn drop(&mut self) {
+                // Panics if the value has been dropped before
+                assert_eq!(
+                    // Store true iff current value is false
+                    self.0.compare_exchange(
+                        false,
+                        true,
+                        Ordering::Acquire,
+                        Ordering::Relaxed),
+                    Ok(false)
+                );
+            }
+        }
+
+        let a = AtomicBool::new(false);
+        let rc = Rc::new(A(&a));
+        assert_eq!(a.load(Ordering::Relaxed), false);
+        drop(rc);
+        assert_eq!(a.load(Ordering::Relaxed), true);
+
+        let a = AtomicBool::new(false);
+        let rc1 = Rc::new(A(&a));
+        let rc2 = Rc::clone(&rc1);
+        assert_eq!(a.load(Ordering::Relaxed), false);
+        drop(rc2);
+        assert_eq!(a.load(Ordering::Relaxed), false);
+        unsafe {
+            assert_eq!((*rc1.0).0, 1);
+        }
+        drop(rc1);
+        assert_eq!(a.load(Ordering::Relaxed), true);
     }
 
     #[test]
