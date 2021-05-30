@@ -44,6 +44,10 @@ pub trait Next {
     fn next(&self) -> Self;
 }
 
+pub fn construct_tree(args: &Args) -> Result<syntree::Prog, Vec<Error>> {
+    Err(Vec::new())
+}
+
 /// Compiles, links and runs the given file. The supplied functions are callable
 /// external functions.
 pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
@@ -87,6 +91,9 @@ pub struct Args {
 
     #[options(short = "c", long = "compile", help = "Compile a sylt binary")]
     pub compile_target: Option<PathBuf>,
+
+    #[options(short = "t", long = "tree", help = "Use the syntax tree backend (WIP)")]
+    pub tree_mode: bool,
 
     #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
     pub verbosity: u32,
