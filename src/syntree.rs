@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 use std::collections::HashMap;
+use crate::error::Error;
+use crate::tokenizer::TokenStream;
 use super::Type as runtimeType;
 
 #[derive(Debug, Copy, Clone)]
@@ -185,4 +187,8 @@ pub enum TypeKind {
 pub struct Type {
     span: Span,
     kind: TypeKind,
+}
+
+pub fn construct(tokens: TokenStream) -> Result<Prog, Vec<Error>> {
+    Err(Vec::new())
 }
