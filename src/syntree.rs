@@ -3,9 +3,11 @@ use std::collections::HashMap;
 use super::Type as runtimeType;
 
 #[derive(Debug, Copy, Clone)]
-struct Range {
-    start: usize,
-    end: usize,
+struct Span {
+    // TODO(ed): Do this more intelligent, so
+    // we can show ranges. Maybe even go back
+    // to offsets from start of the file.
+    line: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -15,7 +17,7 @@ struct Prog {
 
 #[derive(Debug, Clone)]
 struct Module {
-    range: Range,
+    span: Span,
     statements: Vec<Statement>,
 }
 
@@ -92,13 +94,13 @@ enum StatementKind {
 
 #[derive(Debug, Clone)]
 struct Statement {
-    range: Range,
+    span: Span,
     kind: StatementKind,
 }
 
 #[derive(Debug, Clone)]
 struct Identifier {
-    range: Range,
+    span: Span,
     name: String,
 }
 
@@ -111,7 +113,7 @@ enum AssignableKind {
 
 #[derive(Debug, Clone)]
 struct Assignable {
-    range: Range,
+    span: Span,
     expression: Vec<AssignableKind>,
 }
 
@@ -169,7 +171,7 @@ enum ExpressionKind {
 
 #[derive(Debug, Clone)]
 struct Expression {
-    range: Range,
+    span: Span,
     kind: ExpressionKind,
 }
 
@@ -181,6 +183,6 @@ enum TypeKind {
 
 #[derive(Debug, Clone)]
 struct Type {
-    range: Range,
+    span: Span,
     kind: TypeKind,
 }
