@@ -21,7 +21,7 @@ fn main() -> Result<(), String> {
                 Err(format!("{} errors occured.", errs.len()))
             }
             Ok(tree) => {
-                println!("{:?}", tree);
+                println!("{:#?}", tree);
                 Ok(())
             }
         }
