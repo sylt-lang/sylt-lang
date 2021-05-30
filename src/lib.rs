@@ -44,7 +44,7 @@ pub trait Next {
     fn next(&self) -> Self;
 }
 
-pub fn construct_tree(args: &Args) -> Result<syntree::Prog, Vec<Error>> {
+pub fn construct_tree(args: &Args) -> Result<syntree::Module, Vec<Error>> {
     let path = match &args.file {
         Some(file) => file,
         None => {
@@ -54,7 +54,7 @@ pub fn construct_tree(args: &Args) -> Result<syntree::Prog, Vec<Error>> {
     let tokens = tokenizer::file_to_tokens(path).map_err(|_| {
         vec![Error::FileNotFound(path.to_path_buf())]
     })?;
-    syntree::construct(tokens)
+    syntree::construct(tokens.as_slice())
 }
 
 /// Compiles, links and runs the given file. The supplied functions are callable
