@@ -17,6 +17,7 @@ pub mod error;
 pub mod vm;
 pub mod typechecker;
 
+mod syntree;
 mod compiler;
 mod rc;
 mod sectionizer;
