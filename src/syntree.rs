@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::Type as runtimeType;
 
 #[derive(Debug, Copy, Clone)]
-struct Span {
+pub struct Span {
     // TODO(ed): Do this more intelligent, so
     // we can show ranges. Maybe even go back
     // to offsets from start of the file.
@@ -11,18 +11,18 @@ struct Span {
 }
 
 #[derive(Debug, Clone)]
-struct Prog {
+pub struct Prog {
     files: Vec<(PathBuf, Module)>,
 }
 
 #[derive(Debug, Clone)]
-struct Module {
+pub struct Module {
     span: Span,
     statements: Vec<Statement>,
 }
 
 #[derive(Debug, Copy, Clone)]
-enum VarKind {
+pub enum VarKind {
     Const,
     Mutable,
     GlobalConst,
@@ -30,7 +30,7 @@ enum VarKind {
 }
 
 #[derive(Debug, Copy, Clone)]
-enum AssignmentOp {
+pub enum AssignmentOp {
     Add,
     Sub,
     Mul,
@@ -38,7 +38,7 @@ enum AssignmentOp {
 }
 
 #[derive(Debug, Clone)]
-enum StatementKind {
+pub enum StatementKind {
     Use {
         file: Identifier,
     },
@@ -93,32 +93,32 @@ enum StatementKind {
 }
 
 #[derive(Debug, Clone)]
-struct Statement {
+pub struct Statement {
     span: Span,
     kind: StatementKind,
 }
 
 #[derive(Debug, Clone)]
-struct Identifier {
+pub struct Identifier {
     span: Span,
     name: String,
 }
 
 #[derive(Debug, Clone)]
-enum AssignableKind {
+pub enum AssignableKind {
     Identifier(Identifier),
     Access(Identifier),
     Index(Expression),
 }
 
 #[derive(Debug, Clone)]
-struct Assignable {
+pub struct Assignable {
     span: Span,
     expression: Vec<AssignableKind>,
 }
 
 #[derive(Debug, Clone)]
-enum ExpressionKind {
+pub enum ExpressionKind {
     Increment(Assignable),
     Decrement(Assignable),
     Add(Box<Expression>, Box<Expression>),
@@ -170,19 +170,19 @@ enum ExpressionKind {
 }
 
 #[derive(Debug, Clone)]
-struct Expression {
+pub struct Expression {
     span: Span,
     kind: ExpressionKind,
 }
 
 #[derive(Debug, Clone)]
-enum TypeKind {
+pub enum TypeKind {
     Resolved(runtimeType),
     Unresolved(String),
 }
 
 #[derive(Debug, Clone)]
-struct Type {
+pub struct Type {
     span: Span,
     kind: TypeKind,
 }
