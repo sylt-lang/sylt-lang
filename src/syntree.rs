@@ -251,6 +251,21 @@ macro_rules! raise_syntax_error {
     };
 }
 
+macro_rules! expect {
+    ($ctx:expr, $token:pat, $( $msg:expr ),+ ) => {
+        {
+            if !matches!($ctx.token(), $token) {
+                raise_syntax_error!($ctx, $( $msg ),*);
+            }
+            $ctx.skip(1)
+        }
+    };
+
+    ($ctx:expr, $token:pat) => {
+        expect!($ctx, $token, concat!("Expected ", stringify!($token)))
+    };
+}
+
 fn expression<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Expression), (Context<'t>, Vec<Error>)> {
     use Token as T;
     use ExpressionKind::*;
@@ -268,6 +283,8 @@ fn outer_statement<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Statement), (Co
     let span = ctx.span();
     let (ctx, value) = expression(ctx)?;
 
+    let ctx = expect!(ctx, Token::Newline, "Expected newline after statement");
+
     use StatementKind::*;
     Ok((ctx, Statement { span, kind: StatementExpression { value } }))
 }
@@ -278,11 +295,6 @@ pub fn construct(tokens: &Tokens) -> Result<Module, Vec<Error>> {
     let mut errors = Vec::new();
     let mut statements = Vec::new();
     while !matches!(ctx.token(), Token::EOF) {
-        if matches!(ctx.peek().0, Token::Newline) {
-            ctx = ctx.skip(1);
-            continue;
-        }
-        println!("A {:?}", ctx.peek());
         ctx = match outer_statement(ctx) {
             Ok((_ctx, statement)) => {
                 statements.push(statement);
