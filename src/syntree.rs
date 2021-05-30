@@ -2,20 +2,24 @@ use std::path::PathBuf;
 use std::collections::HashMap;
 use super::Type as runtimeType;
 
+#[derive(Debug, Copy, Clone)]
 struct Range {
     start: usize,
     end: usize,
 }
 
+#[derive(Debug, Clone)]
 struct Prog {
     files: Vec<(PathBuf, Module)>,
 }
 
+#[derive(Debug, Clone)]
 struct Module {
     range: Range,
     statements: Vec<Statement>,
 }
 
+#[derive(Debug, Copy, Clone)]
 enum VarKind {
     Const,
     Mutable,
@@ -23,6 +27,7 @@ enum VarKind {
     GlobalMutable,
 }
 
+#[derive(Debug, Copy, Clone)]
 enum AssignmentOp {
     Add,
     Sub,
@@ -30,6 +35,7 @@ enum AssignmentOp {
     Div,
 }
 
+#[derive(Debug, Clone)]
 enum StatementKind {
     Use {
         file: Identifier,
@@ -84,27 +90,32 @@ enum StatementKind {
     },
 }
 
+#[derive(Debug, Clone)]
 struct Statement {
     range: Range,
     kind: StatementKind,
 }
 
+#[derive(Debug, Clone)]
 struct Identifier {
     range: Range,
     name: String,
 }
 
+#[derive(Debug, Clone)]
 enum AssignableKind {
     Identifier(Identifier),
     Access(Identifier),
     Index(Expression),
 }
 
+#[derive(Debug, Clone)]
 struct Assignable {
     range: Range,
     expression: Vec<AssignableKind>,
 }
 
+#[derive(Debug, Clone)]
 enum ExpressionKind {
     Increment(Assignable),
     Decrement(Assignable),
@@ -156,16 +167,19 @@ enum ExpressionKind {
 
 }
 
+#[derive(Debug, Clone)]
 struct Expression {
     range: Range,
     kind: ExpressionKind,
 }
 
+#[derive(Debug, Clone)]
 enum TypeKind {
     Resolved(runtimeType),
     Unresolved(String),
 }
 
+#[derive(Debug, Clone)]
 struct Type {
     range: Range,
     kind: TypeKind,
