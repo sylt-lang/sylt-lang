@@ -12,13 +12,28 @@ fn main() -> Result<(), String> {
     }
 
     let functions = lib_bindings();
-    let res = sylt::run_file(&args, functions);
-
-    if let Err(errs) = res {
-        for err in errs.iter() {
-            println!("{}", err);
+    if args.tree_mode {
+        match sylt::construct_tree(&args) {
+            Err(errs) => {
+                for err in errs.iter() {
+                    println!("{}", err);
+                }
+                Err(format!("{} errors occured.", errs.len()))
+            }
+            Ok(tree) => {
+                println!("{:?}", tree);
+                Ok(())
+            }
         }
-        return Err(format!("{} errors occured.", errs.len()));
+    } else {
+        let res = sylt::run_file(&args, functions);
+
+        if let Err(errs) = res {
+            for err in errs.iter() {
+                println!("{}", err);
+            }
+            return Err(format!("{} errors occured.", errs.len()));
+        }
+        Ok(())
     }
-    Ok(())
 }
