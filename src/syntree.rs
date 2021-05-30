@@ -1,8 +1,10 @@
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use crate::error::Error;
-use crate::tokenizer::{TokenStream, Token};
-use super::Type as runtimeType;
+use crate::tokenizer::Token;
+use crate::Type as RuntimeType;
+use crate::compiler::Prec;
+use crate::Next;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Span {
@@ -134,6 +136,7 @@ pub enum ExpressionKind {
     Gteq(Box<Expression>, Box<Expression>),
     Lt(Box<Expression>, Box<Expression>),
     Lteq(Box<Expression>, Box<Expression>),
+    AssertEq(Box<Expression>, Box<Expression>),
 
     And(Box<Expression>, Box<Expression>),
     Or(Box<Expression>, Box<Expression>),
@@ -143,8 +146,6 @@ pub enum ExpressionKind {
         function: usize,
         args: Vec<Expression>,
     },
-
-    Group(Box<Expression>),
 
     // Composite
     Function {
@@ -168,7 +169,6 @@ pub enum ExpressionKind {
     String(String),
     Bool(bool),
     Nil,
-
 }
 
 #[derive(Debug, Clone)]
@@ -179,7 +179,7 @@ pub struct Expression {
 
 #[derive(Debug, Clone)]
 pub enum TypeKind {
-    Resolved(runtimeType),
+    Resolved(RuntimeType),
     Unresolved(String),
 }
 
@@ -190,6 +190,7 @@ pub struct Type {
 }
 
 type Tokens = [(Token, usize)];
+type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>,  Vec<Error>)>;
 
 #[derive(Debug, Copy, Clone)]
 struct Context<'a> {
@@ -226,8 +227,11 @@ impl<'a> Context<'a> {
         &self.peek().0
     }
 
-    fn eat(&self) -> (&Token, Span, Context) {
-        (self.token(), self.span(), self.skip(1))
+}
+
+macro_rules! eat {
+    ($ctx:expr) => {
+        ($ctx.token(), $ctx.span(), $ctx.skip(1))
     }
 }
 
@@ -266,20 +270,129 @@ macro_rules! expect {
     };
 }
 
-fn expression<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Expression), (Context<'t>, Vec<Error>)> {
+fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use Token as T;
     use ExpressionKind::*;
-    let span = ctx.span();
-    Ok(match ctx.token() {
-        T::Float(v) => (ctx.skip(1), Expression { span, kind: Float(*v), }),
-        T::Int(v) => (ctx.skip(1), Expression { span, kind: Int(*v), }),
-        _ => {
-            raise_syntax_error!(ctx.skip(1), "Failed to parse expression");
+
+    fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+        unimplemented!("Function parsing is not implemented");
+    }
+
+    fn parse_precedence<'t>(ctx: Context<'t>, prec: Prec) -> ParseResult<'t, Expression> {
+        fn precedence(token: &Token) -> Prec {
+            match token {
+                Token::LeftBracket => Prec::Index,
+
+                Token::Star | Token::Slash => Prec::Factor,
+
+                Token::Minus | Token::Plus => Prec::Term,
+
+                Token::EqualEqual
+                | Token::Greater
+                | Token::GreaterEqual
+                | Token::Less
+                | Token::LessEqual
+                | Token::NotEqual => Prec::Comp,
+
+                Token::And => Prec::BoolAnd,
+                Token::Or => Prec::BoolOr,
+
+                Token::AssertEqual => Prec::Assert,
+
+                _ => Prec::No,
+            }
         }
-    })
+
+        fn value<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+            let (token, span, ctx) = eat!(ctx);
+            let kind = match token.clone() {
+                T::Float(f) => Float(f),
+                T::Int(i) => Int(i),
+                T::Bool(b) => Bool(b),
+                T::Nil => Nil,
+                T::String(s) => String(s),
+                t => {
+                    raise_syntax_error!(ctx, "Cannot parse value, '{:?}' is not a valid value", t);
+                }
+            };
+            Ok((ctx, Expression { span, kind }))
+        }
+
+        fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+            match ctx.token() {
+                //T::Identifier(_) => variable_expression(ctx)?,
+                //T::LeftParen => grouping_or_tuple(ctx)?,
+                //T::Minus => unary(ctx)?,
+                //T::LeftBracket => list(ctx)?,
+                //T::LeftBrace => set_or_dict(ctx)?,
+
+                T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
+
+                //T::Bang => unary(ctx)?,
+
+                t => {
+                    raise_syntax_error!(ctx, "No valid expression starts with '{:?}'", t);
+                }
+            }
+        }
+
+        fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
+            let (op, span, ctx) = eat!(ctx);
+
+            let (ctx, rhs) = parse_precedence(ctx, precedence(op).next())?;
+
+            let lhs = Box::new(lhs.clone());
+            let rhs = Box::new(rhs);
+
+            let kind = match op {
+                T::Plus => Add(lhs, rhs),
+                T::Minus => Sub(lhs, rhs),
+                T::Star => Mul(lhs, rhs),
+                T::Slash => Div(lhs, rhs),
+                T::EqualEqual => Eq(lhs, rhs),
+                T::NotEqual => Neq(lhs, rhs),
+                T::Greater => Gt(lhs, rhs),
+                T::GreaterEqual => Gteq(lhs, rhs),
+                T::Less => Lt(lhs, rhs),
+                T::LessEqual => Lteq(lhs, rhs),
+
+                T::And => And(lhs, rhs),
+                T::Or => Or(lhs, rhs),
+
+                T::AssertEqual => AssertEq(lhs, rhs),
+
+                _ => {
+                    return Err((ctx, Vec::new()));
+                }
+            };
+            Ok((ctx, Expression { span, kind }))
+        }
+
+        let pre = prefix(ctx);
+        if let Err((ctx, mut errs)) = pre {
+            errs.push(syntax_error!(ctx, "Invalid expression"));
+            return Err((ctx, errs));
+        }
+
+        let (mut ctx, mut expr) = pre.unwrap();
+        while prec <= precedence(ctx.token()) {
+            if let Ok((_ctx, _expr)) = infix(ctx, &expr) {
+                ctx = _ctx;
+                expr = _expr;
+            } else {
+                break;
+            }
+        }
+        Ok((ctx, expr))
+    }
+
+    match ctx.token() {
+        T::Fn => function(ctx),
+        _ => parse_precedence(ctx, Prec::No),
+    }
 }
 
-fn outer_statement<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Statement), (Context<'t>, Vec<Error>)> {
+fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
     let span = ctx.span();
     let (ctx, value) = expression(ctx)?;
 
