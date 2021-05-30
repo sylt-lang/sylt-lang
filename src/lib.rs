@@ -45,7 +45,16 @@ pub trait Next {
 }
 
 pub fn construct_tree(args: &Args) -> Result<syntree::Prog, Vec<Error>> {
-    Err(Vec::new())
+    let path = match &args.file {
+        Some(file) => file,
+        None => {
+            return Err(vec![Error::NoFileGiven]);
+        }
+    };
+    let tokens = tokenizer::file_to_tokens(path).map_err(|_| {
+        vec![Error::FileNotFound(path.to_path_buf())]
+    })?;
+    syntree::construct(tokens)
 }
 
 /// Compiles, links and runs the given file. The supplied functions are callable
