@@ -266,6 +266,18 @@ macro_rules! expect {
     };
 }
 
+macro_rules! skip_if {
+    ($ctx:expr, $( $token:pat )|+ ) => {
+        {
+            if matches!($ctx.token(), $( $token )|* ) {
+                $ctx.skip(1)
+            } else {
+                $ctx
+            }
+        }
+    };
+}
+
 fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use T as T;
     use ExpressionKind::*;
@@ -388,12 +400,25 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 return Ok((ctx, calle))
             }
 
-            let banger = matches!(ctx.token(), T::Bang);
             let span = ctx.span();
-            let ctx = expect!(ctx, T::Bang | T::LeftParen, "Expected '(' or '!' when calling function");
+            let banger = matches!(ctx.token(), T::Bang);
+            let mut ctx = expect!(ctx, T::Bang | T::LeftParen, "Expected '(' or '!' when calling function");
             let mut args = Vec::new();
 
-            // TODO(ed)
+            loop {
+                match (ctx.token(), banger) {
+                    (T::EOF, _) | (T::RightParen, false) | (T::Dot, true) | (T::Newline, true)
+                        => { break; }
+
+                    _ => {
+                        let (_ctx, expr) = expression(ctx)?;
+                        ctx = _ctx;
+                        args.push(expr);
+
+                        ctx = skip_if!(ctx, T::Comma);
+                    }
+                }
+            }
 
             let ctx = if !banger {
                 expect!(ctx, T::RightParen, "Expected ')' after calling function")
@@ -446,9 +471,7 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
             let tuple = matches!(ctx.token(), T::Comma);
             while tuple {
-                if matches!(ctx.token(), T::Comma) {
-                    ctx = ctx.skip(1);
-                }
+                ctx = skip_if!(ctx, T::Comma);
                 match ctx.token() {
                     T::EOF | T::RightParen => {
                         break;
@@ -485,11 +508,7 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                     _ => {
                         let (_ctx, expr) = expression(ctx)?;
                         exprs.push(expr);
-                        ctx = _ctx;
-
-                        if matches!(ctx.token(), T::Comma) {
-                            ctx = ctx.skip(1);
-                        }
+                        ctx = skip_if!(_ctx, T::Comma);
                     }
                 }
             }
@@ -539,9 +558,7 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                             exprs.push(expr);
                         }
 
-                        if matches!(ctx.token(), T::Comma) {
-                            ctx = ctx.skip(1);
-                        }
+                        ctx = skip_if!(ctx, T::Comma);
                     }
                 }
             }
@@ -675,4 +692,10 @@ mod test {
     test_expression!(call_simple_bang: "a!" => Expression { kind: Get(_), .. });
     test_expression!(call_chaining_paren: "a().b" => Expression { kind: Get(_), .. });
     test_expression!(call_chaining_bang: "a!.b" => Expression { kind: Get(_), .. });
+    test_expression!(call_args_paren: "a(1, 2, 3)" => Expression { kind: Get(_), .. });
+    test_expression!(call_args_bang: "a! 1, 2, 3" => Expression { kind: Get(_), .. });
+    test_expression!(call_args_chaining_paren: "a(1, 2, 3).b" => Expression { kind: Get(_), .. });
+    test_expression!(call_args_chaining_paren_trailing: "a(1, 2, 3,).b" => Expression { kind: Get(_), .. });
+    test_expression!(call_args_chaining_bang: "a! 1, 2, 3 .b" => Expression { kind: Get(_), .. });
+    test_expression!(call_args_chaining_bang_trailing: "a! 1, 2, 3, .b" => Expression { kind: Get(_), .. });
 }
