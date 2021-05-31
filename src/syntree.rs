@@ -383,7 +383,11 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             Ok((ctx, Expression { span, kind }))
         }
 
-        fn call<'t>(ctx: Context<'t>, calle: Assignable) -> ParseResult<'t, Assignable> {
+        fn maybe_call<'t>(ctx: Context<'t>, calle: Assignable) -> ParseResult<'t, Assignable> {
+            if !matches!(ctx.token(), T::LeftParen | T::Bang) {
+                return Ok((ctx, calle))
+            }
+
             let banger = matches!(ctx.token(), T::Bang);
             let span = ctx.span();
             let ctx = expect!(ctx, T::Bang | T::LeftParen, "Expected '(' or '!' when calling function");
@@ -399,11 +403,7 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
             use AssignableKind::Call;
             let result = Assignable { span, kind: Call(Box::new(calle), args) };
-            if matches!(ctx.token(), T::Bang | T::LeftParen) {
-                call(ctx, result)
-            } else {
-                Ok((ctx, result))
-            }
+            maybe_call(ctx, result)
         }
 
         fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
@@ -415,17 +415,13 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 raise_syntax_error!(ctx, "Assignable expressions have to start with an identifier");
             };
 
-            let ctx = ctx.skip(1);
+            let (ctx, ident) = maybe_call(ctx.skip(1), ident)?;
             let span = ctx.span();
             let result = match ctx.token() {
                 T::Dot => {
                     let (ctx, rest) = assignable(ctx.skip(1))?;
                     let kind = Access(Box::new(ident), Box::new(rest));
                     (ctx, Assignable { span, kind })
-                }
-
-                T::LeftParen | T::Bang => {
-                    call(ctx, ident)?
                 }
 
                 T::LeftBracket => {
@@ -650,6 +646,8 @@ mod test {
         }
     }
 
+    // TODO(ed): It's really hard to write good tests, Rust refuses to deref the boxes
+    // automatically.
     test_expression!(simple_expr: "0" => Expression { kind: Int(0), .. });
     test_expression!(simple_add: "0 + 1.0" => Expression { kind: Add(_, _), ..  });
     test_expression!(simple_mul: "\"abc\" * \"abc\"" => Expression { kind: Mul(_, _), ..  });
@@ -674,6 +672,7 @@ mod test {
     test_expression!(zero_set: "{}" => Expression { kind: Set(_), .. });
     test_expression!(zero_dict: "{:}" => Expression { kind: Dict(_), .. });
     test_expression!(call_simple_paren: "a()" => Expression { kind: Get(_), .. });
-    test_expression!(call_simple_paren: "a().b" => Expression { kind: Get(_), .. });
     test_expression!(call_simple_bang: "a!" => Expression { kind: Get(_), .. });
+    test_expression!(call_chaining_paren: "a().b" => Expression { kind: Get(_), .. });
+    test_expression!(call_chaining_bang: "a!.b" => Expression { kind: Get(_), .. });
 }
