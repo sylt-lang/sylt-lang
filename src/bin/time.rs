@@ -30,6 +30,7 @@ fn main() -> std::io::Result<()> {
         compile_target: None,
         verbosity: 0,
         help: false,
+        ..Default::default()
     };
 
     eprintln!("Compiling");
