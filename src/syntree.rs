@@ -1,7 +1,7 @@
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use crate::error::Error;
-use crate::tokenizer::Token;
+use crate::tokenizer::Token as T;
 use crate::Type as RuntimeType;
 use crate::compiler::Prec;
 use crate::Next;
@@ -189,7 +189,7 @@ pub struct Type {
     kind: TypeKind,
 }
 
-type Tokens = [(Token, usize)];
+type Tokens = [(T, usize)];
 type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>,  Vec<Error>)>;
 
 #[derive(Debug, Copy, Clone)]
@@ -201,7 +201,7 @@ struct Context<'a> {
 
 impl<'a> Context<'a> {
 
-    fn new(tokens: &'a [(Token, usize)], file: &'a Path) -> Self {
+    fn new(tokens: &'a [(T, usize)], file: &'a Path) -> Self {
         Self { tokens, curr: 0, file, }
     }
 
@@ -219,11 +219,11 @@ impl<'a> Context<'a> {
         new
     }
 
-    fn peek(&self) -> &(Token, usize) {
-        &self.tokens.get(self.curr).unwrap_or(&(Token::EOF, 0))
+    fn peek(&self) -> &(T, usize) {
+        &self.tokens.get(self.curr).unwrap_or(&(T::EOF, 0))
     }
 
-    fn token(&self) -> &Token {
+    fn token(&self) -> &T {
         &self.peek().0
     }
 
@@ -271,7 +271,6 @@ macro_rules! expect {
 }
 
 fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-    use Token as T;
     use ExpressionKind::*;
 
     fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
@@ -279,25 +278,25 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     }
 
     fn parse_precedence<'t>(ctx: Context<'t>, prec: Prec) -> ParseResult<'t, Expression> {
-        fn precedence(token: &Token) -> Prec {
+        fn precedence(token: &T) -> Prec {
             match token {
-                Token::LeftBracket => Prec::Index,
+                T::LeftBracket => Prec::Index,
 
-                Token::Star | Token::Slash => Prec::Factor,
+                T::Star | T::Slash => Prec::Factor,
 
-                Token::Minus | Token::Plus => Prec::Term,
+                T::Minus | T::Plus => Prec::Term,
 
-                Token::EqualEqual
-                | Token::Greater
-                | Token::GreaterEqual
-                | Token::Less
-                | Token::LessEqual
-                | Token::NotEqual => Prec::Comp,
+                T::EqualEqual
+                | T::Greater
+                | T::GreaterEqual
+                | T::Less
+                | T::LessEqual
+                | T::NotEqual => Prec::Comp,
 
-                Token::And => Prec::BoolAnd,
-                Token::Or => Prec::BoolOr,
+                T::And => Prec::BoolAnd,
+                T::Or => Prec::BoolOr,
 
-                Token::AssertEqual => Prec::Assert,
+                T::AssertEqual => Prec::Assert,
 
                 _ => Prec::No,
             }
@@ -566,7 +565,7 @@ fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
     let span = ctx.span();
     let (ctx, value) = expression(ctx)?;
 
-    let ctx = expect!(ctx, Token::Newline, "Expected newline after statement");
+    let ctx = expect!(ctx, T::Newline, "Expected newline after statement");
 
     use StatementKind::*;
     Ok((ctx, Statement { span, kind: StatementExpression { value } }))
@@ -577,8 +576,8 @@ pub fn construct(tokens: &Tokens) -> Result<Module, Vec<Error>> {
     let mut ctx = Context::new(tokens, &path);
     let mut errors = Vec::new();
     let mut statements = Vec::new();
-    while !matches!(ctx.token(), Token::EOF) {
-        if matches!(ctx.token(), Token::Newline) {
+    while !matches!(ctx.token(), T::EOF) {
+        if matches!(ctx.token(), T::Newline) {
             ctx = ctx.skip(1);
             continue;
         }
