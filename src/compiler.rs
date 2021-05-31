@@ -121,6 +121,7 @@ pub enum Prec {
     Term,
     Factor,
     Index,
+    Arrow,
 }
 
 #[derive(Clone, Debug)]
