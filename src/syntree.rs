@@ -459,6 +459,10 @@ pub fn construct(tokens: &Tokens) -> Result<Module, Vec<Error>> {
     let mut errors = Vec::new();
     let mut statements = Vec::new();
     while !matches!(ctx.token(), Token::EOF) {
+        if matches!(ctx.token(), Token::Newline) {
+            ctx = ctx.skip(1);
+            continue;
+        }
         ctx = match outer_statement(ctx) {
             Ok((_ctx, statement)) => {
                 statements.push(statement);
@@ -476,4 +480,33 @@ pub fn construct(tokens: &Tokens) -> Result<Module, Vec<Error>> {
     } else {
         Err(errors)
     }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::tokenizer::string_to_tokens;
+    use super::*;
+    use StatementKind::*;
+    use ExpressionKind::*;
+
+    macro_rules! test_expression {
+        ($name:ident: $str:expr => $ans:pat) => {
+            #[test]
+            fn $name () {
+                let tokens = string_to_tokens($str);
+                let path = PathBuf::from(stringify!($name));
+                let result = expression(Context::new(&tokens, &path));
+                assert!(result.is_ok(),
+                    "\nSyntax tree test didn't parse for:\n{}\nErrs: {:?}",
+                    $str,
+                    result.unwrap_err().1
+                );
+                let (ctx, result) = result.unwrap();
+                assert!(matches!(result, $ans), "\nExpected: {}, but got: {:?}", stringify!($ans), result);
+                assert_eq!(ctx.curr, ctx.tokens.len(), "Ate past the end of the buffer for:\n{}", $str);
+            }
+        }
+    }
+
+    test_expression!(simple_expr: "0" => Expression { kind: Int(0), .. });
 }
