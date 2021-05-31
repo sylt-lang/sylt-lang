@@ -160,10 +160,8 @@ pub enum ExpressionKind {
     Tuple(Vec<Expression>),
     List(Vec<Expression>),
     Set(Vec<Expression>),
-    Dict {
-        keys: Vec<Expression>,
-        values: Vec<Expression>,
-    },
+    // Has to have even length, listed { k1, v1, k2, v2 }
+    Dict(Vec<Expression>),
 
     // Simple
     Float(f64),
@@ -324,7 +322,7 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             match ctx.token() {
                 T::LeftParen => grouping_or_tuple(ctx),
                 T::LeftBracket => list(ctx),
-                //T::LeftBrace => set_or_dict(ctx)?,
+                T::LeftBrace => set_or_dict(ctx),
 
                 T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
                 T::Minus | T::Bang => unary(ctx),
@@ -481,6 +479,65 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             Ok((ctx, Expression { span, kind: List(exprs) }))
         }
 
+        fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+            let span = ctx.span();
+            let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{'");
+
+            // NOTE(ed): I decided on {:} for empty dicts, and {} for empty sets.
+            let mut exprs = Vec::new();
+            let mut is_dict = None;
+            loop {
+                match ctx.token() {
+                    T::EOF | T::RightBrace => {
+                        break;
+                    }
+
+                    T::Colon => {
+                        if is_dict.is_some() {
+                            raise_syntax_error!(ctx, "Didn't expect empty dict pair since it has to be a {}",
+                                if is_dict.unwrap() { "dict" } else { "set" }
+                            );
+                        }
+                        is_dict = Some(true);
+                        ctx = ctx.skip(1);
+                    }
+
+                    _ => {
+                        let (_ctx, expr) = expression(ctx)?;
+                        ctx = _ctx;
+                        exprs.push(expr);
+
+                        is_dict = if is_dict.is_none() {
+                            Some(matches!(ctx.token(), T::Colon))
+                        } else {
+                            is_dict
+                        };
+
+                        if is_dict.unwrap() {
+                            ctx = expect!(ctx, T::Colon, "Expected ':' for dict pair");
+                            let (_ctx, expr) = expression(ctx)?;
+                            ctx = _ctx;
+                            exprs.push(expr);
+                        }
+
+                        if matches!(ctx.token(), T::Comma) {
+                            ctx = ctx.skip(1);
+                        }
+                    }
+                }
+            }
+
+            ctx = expect!(ctx, T::RightBrace, "Expected '}}'");
+
+            let kind = if is_dict.unwrap_or(false) {
+                Dict(exprs)
+            } else {
+                Set(exprs)
+            };
+
+            Ok((ctx, Expression { span, kind }))
+        }
+
         let pre = prefix(ctx);
         if let Err((ctx, mut errs)) = pre {
             errs.push(syntax_error!(ctx, "Invalid expression"));
@@ -589,4 +646,8 @@ mod test {
     test_expression!(simple_grouping: "(0 * 0) + 1" => Expression { kind: Add(_, _), .. });
     test_expression!(simple_tuple: "(0, 0)" => Expression { kind: Tuple(_), .. });
     test_expression!(simple_list: "[0, 0]" => Expression { kind: List(_), .. });
+    test_expression!(simple_set: "{1, 1}" => Expression { kind: Set(_), .. });
+    test_expression!(simple_dict: "{1: 1}" => Expression { kind: Dict(_), .. });
+    test_expression!(zero_set: "{}" => Expression { kind: Set(_), .. });
+    test_expression!(zero_dict: "{:}" => Expression { kind: Dict(_), .. });
 }
