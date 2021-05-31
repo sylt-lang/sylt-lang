@@ -168,7 +168,7 @@ pub enum ExpressionKind {
     // Simple
     Float(f64),
     Int(i64),
-    String(String),
+    Str(String),
     Bool(bool),
     Nil,
 }
@@ -312,7 +312,7 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 T::Int(i) => Int(i),
                 T::Bool(b) => Bool(b),
                 T::Nil => Nil,
-                T::String(s) => String(s),
+                T::String(s) => Str(s),
                 t => {
                     raise_syntax_error!(ctx, "Cannot parse value, '{:?}' is not a valid value", t);
                 }
@@ -486,8 +486,8 @@ pub fn construct(tokens: &Tokens) -> Result<Module, Vec<Error>> {
 mod test {
     use crate::tokenizer::string_to_tokens;
     use super::*;
-    use StatementKind::*;
     use ExpressionKind::*;
+    use AssignableKind::*;
 
     macro_rules! test_expression {
         ($name:ident: $str:expr => $ans:pat) => {
@@ -509,4 +509,19 @@ mod test {
     }
 
     test_expression!(simple_expr: "0" => Expression { kind: Int(0), .. });
+    test_expression!(simple_add: "0 + 1.0" => Expression { kind: Add(_, _), ..  });
+    test_expression!(simple_mul: "\"abc\" * \"abc\"" => Expression { kind: Mul(_, _), ..  });
+    test_expression!(simple_ident: "a" => Expression {
+        kind: Get(Assignable { kind: Read(_), .. }),
+        ..
+    });
+    test_expression!(simple_access: "a.b" => Expression {
+        kind: Get(Assignable { kind: Access(_, _), .. }), ..
+    });
+    test_expression!(simple_index_ident: "a[a]" => Expression {
+        kind: Get(Assignable { kind: Index(_, _), .. }), ..
+    });
+    test_expression!(simple_index_expr: "a[1 + 2 + 3]" => Expression {
+        kind: Get(Assignable { kind: Index(_, _), .. }), ..
+    });
 }
