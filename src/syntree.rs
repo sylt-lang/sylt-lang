@@ -256,17 +256,17 @@ macro_rules! raise_syntax_error {
 }
 
 macro_rules! expect {
-    ($ctx:expr, $token:pat, $( $msg:expr ),+ ) => {
+    ($ctx:expr, $( $token:pat )|+ , $( $msg:expr ),+ ) => {
         {
-            if !matches!($ctx.token(), $token) {
+            if !matches!($ctx.token(), $( $token )|* ) {
                 raise_syntax_error!($ctx, $( $msg ),*);
             }
             $ctx.skip(1)
         }
     };
 
-    ($ctx:expr, $token:pat) => {
-        expect!($ctx, $token, concat!("Expected ", stringify!($token)))
+    ($ctx:expr, $( $token:pat )|+) => {
+        expect!($ctx, $( $token )|*, concat!("Expected ", stringify!($( $token )|*)))
     };
 }
 
