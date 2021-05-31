@@ -669,7 +669,7 @@ mod test {
                     result.unwrap_err().1
                 );
                 let (ctx, result) = result.unwrap();
-                assert!(matches!(result, $ans), "\nExpected: {}, but got: {:?}", stringify!($ans), result);
+                assert!(matches!(result.kind, $ans), "\nExpected: {}, but got: {:?}", stringify!($ans), result);
                 assert_eq!(ctx.curr, ctx.tokens.len(), "Ate past the end of the buffer for:\n{}", $str);
             }
         }
@@ -677,40 +677,32 @@ mod test {
 
     // TODO(ed): It's really hard to write good tests, Rust refuses to deref the boxes
     // automatically.
-    test_expression!(simple_expr: "0" => Expression { kind: Int(0), .. });
-    test_expression!(simple_add: "0 + 1.0" => Expression { kind: Add(_, _), ..  });
-    test_expression!(simple_mul: "\"abc\" * \"abc\"" => Expression { kind: Mul(_, _), ..  });
-    test_expression!(simple_ident: "a" => Expression {
-        kind: Get(Assignable { kind: Read(_), .. }),
-        ..
-    });
-    test_expression!(simple_access: "a.b" => Expression {
-        kind: Get(Assignable { kind: Access(_, _), .. }), ..
-    });
-    test_expression!(simple_index_ident: "a[a]" => Expression {
-        kind: Get(Assignable { kind: Index(_, _), .. }), ..
-    });
-    test_expression!(simple_index_expr: "a[1 + 2 + 3]" => Expression {
-        kind: Get(Assignable { kind: Index(_, _), .. }), ..
-    });
-    test_expression!(simple_grouping: "(0 * 0) + 1" => Expression { kind: Add(_, _), .. });
-    test_expression!(simple_tuple: "(0, 0)" => Expression { kind: Tuple(_), .. });
-    test_expression!(simple_list: "[0, 0]" => Expression { kind: List(_), .. });
-    test_expression!(simple_set: "{1, 1}" => Expression { kind: Set(_), .. });
-    test_expression!(simple_dict: "{1: 1}" => Expression { kind: Dict(_), .. });
-    test_expression!(zero_set: "{}" => Expression { kind: Set(_), .. });
-    test_expression!(zero_dict: "{:}" => Expression { kind: Dict(_), .. });
+    test_expression!(simple_expr: "0" => Int(0));
+    test_expression!(simple_add: "0 + 1.0" => Add(_, _));
+    test_expression!(simple_mul: "\"abc\" * \"abc\"" => Mul(_, _));
+    test_expression!(simple_ident: "a" => Get(Assignable { kind: Read(_), .. }));
+    test_expression!(simple_access: "a.b" => Get(Assignable { kind: Access(_, _), .. }));
+    test_expression!(simple_index_ident: "a[a]" => Get(Assignable { kind: Index(_, _), .. }));
+    test_expression!(simple_index_expr: "a[1 + 2 + 3]" => Get(Assignable { kind: Index(_, _), .. }));
+    test_expression!(simple_grouping: "(0 * 0) + 1" => Add(_, _));
+    test_expression!(simple_tuple: "(0, 0)" => Tuple(_));
+    test_expression!(simple_list: "[0, 0]" => List(_));
+    test_expression!(simple_set: "{1, 1}" => Set(_));
+    test_expression!(simple_dict: "{1: 1}" => Dict(_));
+    test_expression!(zero_set: "{}" => Set(_));
+    test_expression!(zero_dict: "{:}" => Dict(_));
 
-    test_expression!(call_simple_paren: "a()" => Expression { kind: Get(_), .. });
-    test_expression!(call_simple_bang: "a!" => Expression { kind: Get(_), .. });
-    test_expression!(call_chaining_paren: "a().b" => Expression { kind: Get(_), .. });
-    test_expression!(call_chaining_bang: "a!.b" => Expression { kind: Get(_), .. });
-    test_expression!(call_args_paren: "a(1, 2, 3)" => Expression { kind: Get(_), .. });
-    test_expression!(call_args_bang: "a! 1, 2, 3" => Expression { kind: Get(_), .. });
-    test_expression!(call_args_chaining_paren: "a(1, 2, 3).b" => Expression { kind: Get(_), .. });
-    test_expression!(call_args_chaining_paren_trailing: "a(1, 2, 3,).b" => Expression { kind: Get(_), .. });
-    test_expression!(call_args_chaining_bang: "a! 1, 2, 3 .b" => Expression { kind: Get(_), .. });
-    test_expression!(call_args_chaining_bang_trailing: "a! 1, 2, 3, .b" => Expression { kind: Get(_), .. });
+    test_expression!(call_simple_paren: "a()" => Get(_));
+    test_expression!(call_simple_bang: "a!" => Get(_));
+    test_expression!(call_chaining_paren: "a().b" => Get(_));
+    test_expression!(call_chaining_bang: "a!.b" => Get(_));
+    test_expression!(call_args_paren: "a(1, 2, 3)" => Get(_));
+    test_expression!(call_args_bang: "a! 1, 2, 3" => Get(_));
+    test_expression!(call_args_chaining_paren: "a(1, 2, 3).b" => Get(_));
+    test_expression!(call_args_chaining_paren_trailing: "a(1, 2, 3,).b" => Get(_));
+    test_expression!(call_args_chaining_bang: "a! 1, 2, 3 .b" => Get(_));
+    test_expression!(call_args_chaining_bang_trailing: "a! 1, 2, 3, .b" => Get(_));
 
-    test_expression!(call_arrow: "1 + 0 -> a! 2, 3" => Expression { kind: Add(_), .. });
+    test_expression!(call_arrow: "1 + 0 -> a! 2, 3" => Add(_, _));
+    test_expression!(call_arrow_grouping: "(1 + 0) -> a! 2, 3" => Get(_));
 }
