@@ -419,7 +419,11 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
             loop {
                 match (ctx.token(), banger) {
-                    (T::EOF, _) | (T::RightParen, false) | (T::Dot, true) | (T::Newline, true)
+                    (T::EOF, _)
+                    | (T::RightParen, false)
+                    | (T::Dot, true)
+                    | (T::Newline, true)
+                    | (T::Arrow, true)
                         => { break; }
 
                     _ => {
