@@ -322,7 +322,7 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
         fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             match ctx.token() {
-                //T::LeftParen => grouping_or_tuple(ctx)?,
+                T::LeftParen => grouping_or_tuple(ctx),
                 //T::LeftBracket => list(ctx)?,
                 //T::LeftBrace => set_or_dict(ctx)?,
 
@@ -417,6 +417,41 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 }
             };
             Ok(result)
+        }
+
+        fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+            let span = ctx.span();
+            let ctx = expect!(ctx, T::LeftParen, "Expected '('");
+
+
+            let (mut ctx, expr) = expression(ctx)?;
+            let mut exprs = vec![expr];
+
+            let tuple = matches!(ctx.token(), T::Comma);
+            while tuple {
+                if matches!(ctx.token(), T::Comma) {
+                    ctx = ctx.skip(1);
+                }
+                match ctx.token() {
+                    T::RightParen => {
+                        break;
+                    }
+
+                    _ => {
+                        let (_ctx, expr) = expression(ctx)?;
+                        exprs.push(expr);
+                        ctx = _ctx;
+                    }
+                }
+            }
+
+            ctx = expect!(ctx, T::RightParen, "Expected ')'");
+            let result = if tuple {
+                Expression { span, kind: Tuple(exprs) }
+            } else {
+                exprs.into_iter().next().unwrap()
+            };
+            Ok((ctx, result))
         }
 
         let pre = prefix(ctx);
@@ -524,4 +559,6 @@ mod test {
     test_expression!(simple_index_expr: "a[1 + 2 + 3]" => Expression {
         kind: Get(Assignable { kind: Index(_, _), .. }), ..
     });
+    test_expression!(simple_grouping: "(0 * 0) + 1" => Expression { kind: Add(_, _), .. });
+    test_expression!(simple_tuple: "(0, 0)" => Expression { kind: Tuple(_), .. });
 }
