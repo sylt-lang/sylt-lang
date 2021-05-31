@@ -307,6 +307,8 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
                 T::AssertEqual => Prec::Assert,
 
+                T::Arrow => Prec::Arrow,
+
                 _ => Prec::No,
             }
         }
@@ -387,6 +389,16 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 T::Or => Or(lhs, rhs),
 
                 T::AssertEqual => AssertEq(lhs, rhs),
+
+                T::Arrow => {
+                    use AssignableKind::*;
+                    if let Expression { kind: Get(Assignable { kind: Call(calle, mut args), .. }), span } = *rhs {
+                        args.insert(0, *lhs);
+                        Get(Assignable { kind: Call(calle, args), span })
+                    } else {
+                        raise_syntax_error!(ctx, "Expected a call-expression after '->'");
+                    }
+                },
 
                 _ => {
                     return Err((ctx, Vec::new()));
@@ -688,6 +700,7 @@ mod test {
     test_expression!(simple_dict: "{1: 1}" => Expression { kind: Dict(_), .. });
     test_expression!(zero_set: "{}" => Expression { kind: Set(_), .. });
     test_expression!(zero_dict: "{:}" => Expression { kind: Dict(_), .. });
+
     test_expression!(call_simple_paren: "a()" => Expression { kind: Get(_), .. });
     test_expression!(call_simple_bang: "a!" => Expression { kind: Get(_), .. });
     test_expression!(call_chaining_paren: "a().b" => Expression { kind: Get(_), .. });
@@ -698,4 +711,6 @@ mod test {
     test_expression!(call_args_chaining_paren_trailing: "a(1, 2, 3,).b" => Expression { kind: Get(_), .. });
     test_expression!(call_args_chaining_bang: "a! 1, 2, 3 .b" => Expression { kind: Get(_), .. });
     test_expression!(call_args_chaining_bang_trailing: "a! 1, 2, 3, .b" => Expression { kind: Get(_), .. });
+
+    test_expression!(call_arrow: "1 + 0 -> a! 2, 3" => Expression { kind: Add(_), .. });
 }
