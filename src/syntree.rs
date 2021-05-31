@@ -110,25 +110,26 @@ pub struct Identifier {
 
 #[derive(Debug, Clone)]
 pub enum AssignableKind {
-    Identifier(Identifier),
-    Access(Identifier),
-    Index(Expression),
+    Read(Identifier),
+    Access(Box<Assignable>, Box<Assignable>),
+    Index(Box<Assignable>, Box<Expression>),
 }
 
 #[derive(Debug, Clone)]
 pub struct Assignable {
     span: Span,
-    expression: Vec<AssignableKind>,
+    kind: AssignableKind,
 }
 
 #[derive(Debug, Clone)]
 pub enum ExpressionKind {
-    Increment(Assignable),
-    Decrement(Assignable),
+    Get(Assignable),
+
     Add(Box<Expression>, Box<Expression>),
     Sub(Box<Expression>, Box<Expression>),
     Mul(Box<Expression>, Box<Expression>),
     Div(Box<Expression>, Box<Expression>),
+    Neg(Box<Expression>),
 
     Eq(Box<Expression>, Box<Expression>),
     Neq(Box<Expression>, Box<Expression>),
@@ -138,9 +139,10 @@ pub enum ExpressionKind {
     Lteq(Box<Expression>, Box<Expression>),
     AssertEq(Box<Expression>, Box<Expression>),
 
+
     And(Box<Expression>, Box<Expression>),
     Or(Box<Expression>, Box<Expression>),
-    Neg(Box<Expression>, Box<Expression>),
+    Not(Box<Expression>),
 
     Call {
         function: usize,
@@ -320,20 +322,39 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
         fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             match ctx.token() {
-                //T::Identifier(_) => variable_expression(ctx)?,
                 //T::LeftParen => grouping_or_tuple(ctx)?,
-                //T::Minus => unary(ctx)?,
                 //T::LeftBracket => list(ctx)?,
                 //T::LeftBrace => set_or_dict(ctx)?,
 
                 T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
+                T::Minus | T::Bang => unary(ctx),
 
-                //T::Bang => unary(ctx)?,
+                T::Identifier(_) => {
+                    let span = ctx.span();
+                    let (ctx, assign) = assignable(ctx)?;
+                    Ok((ctx, Expression { span, kind: Get(assign) }))
+                }
 
                 t => {
                     raise_syntax_error!(ctx, "No valid expression starts with '{:?}'", t);
                 }
             }
+        }
+
+        fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+            let (op, span, ctx) = eat!(ctx);
+            let (ctx, expr) = parse_precedence(ctx, Prec::Factor)?;
+            let expr = Box::new(expr);
+
+            let kind = match op {
+                T::Minus => Neg(expr),
+                T::Bang => Not(expr),
+
+                _ => {
+                    raise_syntax_error!(ctx, "Invalid unary operator");
+                }
+            };
+            Ok((ctx, Expression { span, kind }))
         }
 
         fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
@@ -366,6 +387,36 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 }
             };
             Ok((ctx, Expression { span, kind }))
+        }
+
+        fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
+            use AssignableKind::*;
+
+            let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
+                Assignable { span, kind: Read(Identifier { span, name: name.clone() })}
+            } else {
+                raise_syntax_error!(ctx, "Assignable expressions have to start with an identifier");
+            };
+
+            let ctx = ctx.skip(1);
+            let span = ctx.span();
+            let result = match ctx.token() {
+                T::Dot => {
+                    let (ctx, rest) = assignable(ctx.skip(1))?;
+                    let kind = Access(Box::new(ident), Box::new(rest));
+                    (ctx, Assignable { span, kind })
+                }
+
+                T::LeftBracket => {
+                    let (ctx, index) = expression(ctx.skip(1))?;
+                    (ctx.skip(1), Assignable { span, kind: Index(Box::new(ident), Box::new(index))})
+                }
+
+                _ => {
+                    (ctx, ident)
+                }
+            };
+            Ok(result)
         }
 
         let pre = prefix(ctx);
