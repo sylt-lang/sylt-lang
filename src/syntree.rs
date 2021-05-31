@@ -111,6 +111,7 @@ pub struct Identifier {
 #[derive(Debug, Clone)]
 pub enum AssignableKind {
     Read(Identifier),
+    Call(Box<Assignable>, Vec<Expression>),
     Access(Box<Assignable>, Box<Assignable>),
     Index(Box<Assignable>, Box<Expression>),
 }
@@ -144,18 +145,13 @@ pub enum ExpressionKind {
     Or(Box<Expression>, Box<Expression>),
     Not(Box<Expression>),
 
-    Call {
-        function: usize,
-        args: Vec<Expression>,
-    },
-
     // Composite
     Function {
         name: Identifier,
         args: Vec<(Identifier, Type)>,
         ret: Type,
 
-        body: Vec<Statement>,
+        body: Box<Statement>,
     },
     Tuple(Vec<Expression>),
     List(Vec<Expression>),
@@ -271,6 +267,7 @@ macro_rules! expect {
 }
 
 fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+    use T as T;
     use ExpressionKind::*;
 
     fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
@@ -386,6 +383,29 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             Ok((ctx, Expression { span, kind }))
         }
 
+        fn call<'t>(ctx: Context<'t>, calle: Assignable) -> ParseResult<'t, Assignable> {
+            let banger = matches!(ctx.token(), T::Bang);
+            let span = ctx.span();
+            let ctx = expect!(ctx, T::Bang | T::LeftParen, "Expected '(' or '!' when calling function");
+            let mut args = Vec::new();
+
+            // TODO(ed)
+
+            let ctx = if !banger {
+                expect!(ctx, T::RightParen, "Expected ')' after calling function")
+            } else {
+                ctx
+            };
+
+            use AssignableKind::Call;
+            let result = Assignable { span, kind: Call(Box::new(calle), args) };
+            if matches!(ctx.token(), T::Bang | T::LeftParen) {
+                call(ctx, result)
+            } else {
+                Ok((ctx, result))
+            }
+        }
+
         fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
             use AssignableKind::*;
 
@@ -402,6 +422,10 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                     let (ctx, rest) = assignable(ctx.skip(1))?;
                     let kind = Access(Box::new(ident), Box::new(rest));
                     (ctx, Assignable { span, kind })
+                }
+
+                T::LeftParen | T::Bang => {
+                    call(ctx, ident)?
                 }
 
                 T::LeftBracket => {
@@ -649,4 +673,7 @@ mod test {
     test_expression!(simple_dict: "{1: 1}" => Expression { kind: Dict(_), .. });
     test_expression!(zero_set: "{}" => Expression { kind: Set(_), .. });
     test_expression!(zero_dict: "{:}" => Expression { kind: Dict(_), .. });
+    test_expression!(call_simple_paren: "a()" => Expression { kind: Get(_), .. });
+    test_expression!(call_simple_paren: "a().b" => Expression { kind: Get(_), .. });
+    test_expression!(call_simple_bang: "a!" => Expression { kind: Get(_), .. });
 }
