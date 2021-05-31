@@ -323,7 +323,7 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             match ctx.token() {
                 T::LeftParen => grouping_or_tuple(ctx),
-                //T::LeftBracket => list(ctx)?,
+                T::LeftBracket => list(ctx),
                 //T::LeftBrace => set_or_dict(ctx)?,
 
                 T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
@@ -433,7 +433,7 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                     ctx = ctx.skip(1);
                 }
                 match ctx.token() {
-                    T::RightParen => {
+                    T::EOF | T::RightParen => {
                         break;
                     }
 
@@ -452,6 +452,33 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 exprs.into_iter().next().unwrap()
             };
             Ok((ctx, result))
+        }
+
+        fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+            let span = ctx.span();
+            let mut ctx = expect!(ctx, T::LeftBracket, "Expected '['");
+
+            let mut exprs = Vec::new();
+            loop {
+                match ctx.token() {
+                    T::EOF | T::RightBracket => {
+                        break;
+                    }
+
+                    _ => {
+                        let (_ctx, expr) = expression(ctx)?;
+                        exprs.push(expr);
+                        ctx = _ctx;
+
+                        if matches!(ctx.token(), T::Comma) {
+                            ctx = ctx.skip(1);
+                        }
+                    }
+                }
+            }
+
+            ctx = expect!(ctx, T::RightBracket, "Expected ']'");
+            Ok((ctx, Expression { span, kind: List(exprs) }))
         }
 
         let pre = prefix(ctx);
@@ -561,4 +588,5 @@ mod test {
     });
     test_expression!(simple_grouping: "(0 * 0) + 1" => Expression { kind: Add(_, _), .. });
     test_expression!(simple_tuple: "(0, 0)" => Expression { kind: Tuple(_), .. });
+    test_expression!(simple_list: "[0, 0]" => Expression { kind: List(_), .. });
 }
