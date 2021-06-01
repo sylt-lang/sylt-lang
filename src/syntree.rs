@@ -704,13 +704,13 @@ mod test {
     use TypeKind::*;
     use RuntimeType as RT;
 
-    macro_rules! test_expression {
-        ($name:ident: $str:expr => $ans:pat) => {
+    macro_rules! test {
+        ($f:ident, $name:ident: $str:expr => $ans:pat) => {
             #[test]
             fn $name () {
                 let tokens = string_to_tokens($str);
                 let path = PathBuf::from(stringify!($name));
-                let result = expression(Context::new(&tokens, &path));
+                let result = $f(Context::new(&tokens, &path));
                 assert!(result.is_ok(),
                     "\nSyntax tree test didn't parse for:\n{}\nErrs: {:?}",
                     $str,
@@ -725,60 +725,45 @@ mod test {
 
     // TODO(ed): It's really hard to write good tests, Rust refuses to deref the boxes
     // automatically.
-    test_expression!(value: "0" => Int(0));
-    test_expression!(add: "0 + 1.0" => Add(_, _));
-    test_expression!(mul: "\"abc\" * \"abc\"" => Mul(_, _));
-    test_expression!(ident: "a" => Get(Assignable { kind: Read(_), .. }));
-    test_expression!(access: "a.b" => Get(Assignable { kind: Access(_, _), .. }));
-    test_expression!(index_ident: "a[a]" => Get(Assignable { kind: Index(_, _), .. }));
-    test_expression!(index_expr: "a[1 + 2 + 3]" => Get(Assignable { kind: Index(_, _), .. }));
-    test_expression!(grouping: "(0 * 0) + 1" => Add(_, _));
-    test_expression!(tuple: "(0, 0)" => Tuple(_));
-    test_expression!(list: "[0, 0]" => List(_));
-    test_expression!(set: "{1, 1}" => Set(_));
-    test_expression!(dict: "{1: 1}" => Dict(_));
-    test_expression!(zero_set: "{}" => Set(_));
-    test_expression!(zero_dict: "{:}" => Dict(_));
+    test!(expression, value: "0" => Int(0));
+    test!(expression, add: "0 + 1.0" => Add(_, _));
+    test!(expression, mul: "\"abc\" * \"abc\"" => Mul(_, _));
+    test!(expression, ident: "a" => Get(Assignable { kind: Read(_), .. }));
+    test!(expression, access: "a.b" => Get(Assignable { kind: Access(_, _), .. }));
+    test!(expression, index_ident: "a[a]" => Get(Assignable { kind: Index(_, _), .. }));
+    test!(expression, index_expr: "a[1 + 2 + 3]" => Get(Assignable { kind: Index(_, _), .. }));
+    test!(expression, grouping: "(0 * 0) + 1" => Add(_, _));
+    test!(expression, tuple: "(0, 0)" => Tuple(_));
+    test!(expression, list: "[0, 0]" => List(_));
+    test!(expression, set: "{1, 1}" => Set(_));
+    test!(expression, dict: "{1: 1}" => Dict(_));
+    test!(expression, zero_set: "{}" => Set(_));
+    test!(expression, zero_dict: "{:}" => Dict(_));
 
-    test_expression!(call_simple_paren: "a()" => Get(_));
-    test_expression!(call_simple_bang: "a!" => Get(_));
-    test_expression!(call_chaining_paren: "a().b" => Get(_));
-    test_expression!(call_chaining_bang: "a!.b" => Get(_));
-    test_expression!(call_args_paren: "a(1, 2, 3)" => Get(_));
-    test_expression!(call_args_bang: "a! 1, 2, 3" => Get(_));
-    test_expression!(call_args_chaining_paren: "a(1, 2, 3).b" => Get(_));
-    test_expression!(call_args_chaining_paren_trailing: "a(1, 2, 3,).b" => Get(_));
-    test_expression!(call_args_chaining_bang: "a! 1, 2, 3 .b" => Get(_));
-    test_expression!(call_args_chaining_bang_trailing: "a! 1, 2, 3, .b" => Get(_));
+    test!(expression, call_simple_paren: "a()" => Get(_));
+    test!(expression, call_simple_bang: "a!" => Get(_));
+    test!(expression, call_chaining_paren: "a().b" => Get(_));
+    test!(expression, call_chaining_bang: "a!.b" => Get(_));
+    test!(expression, call_args_paren: "a(1, 2, 3)" => Get(_));
+    test!(expression, call_args_bang: "a! 1, 2, 3" => Get(_));
+    test!(expression, call_args_chaining_paren: "a(1, 2, 3).b" => Get(_));
+    test!(expression, call_args_chaining_paren_trailing: "a(1, 2, 3,).b" => Get(_));
+    test!(expression, call_args_chaining_bang: "a! 1, 2, 3 .b" => Get(_));
+    test!(expression, call_args_chaining_bang_trailing: "a! 1, 2, 3, .b" => Get(_));
 
-    test_expression!(call_arrow: "1 + 0 -> a! 2, 3" => Add(_, _));
-    test_expression!(call_arrow_grouping: "(1 + 0) -> a! 2, 3" => Get(_));
+    test!(expression, call_arrow: "1 + 0 -> a! 2, 3" => Add(_, _));
+    test!(expression, call_arrow_grouping: "(1 + 0) -> a! 2, 3" => Get(_));
 
-    macro_rules! test_type {
-        ($name:ident: $str:expr => $ans:pat) => {
-            #[test]
-            fn $name () {
-                let tokens = string_to_tokens($str);
-                let path = PathBuf::from(stringify!($name));
-                let result = parse_type(Context::new(&tokens, &path));
-                assert!(result.is_ok(),
-                    "\nSyntax tree test didn't parse for:\n{}\nErrs: {:?}",
-                    $str,
-                    result.unwrap_err().1
-                );
-                let (ctx, result) = result.unwrap();
-                assert!(matches!(result.kind, $ans), "\nExpected: {}, but got: {:?}", stringify!($ans), result);
-                assert_eq!(ctx.curr, ctx.tokens.len(), "Parsed too few or too many tokens:\n{}", $str);
-            }
-        }
-    }
-
-    test_type!(type_void: "void" => Resolved(RT::Void));
-    test_type!(type_int: "int" => Resolved(RT::Int));
-    test_type!(type_float: "float" => Resolved(RT::Float));
-    test_type!(type_str: "str" => Resolved(RT::String));
-    test_type!(type_unknown: "blargh" => Unresolved(_));
-    test_type!(type_union: "int | int" => Union(_, _));
-    test_type!(type_question: "int?" => Union(_, _));
-    test_type!(type_union_and_question: "int | void | str?" => Union(_, _));
+    test!(parse_type, type_void: "void" => Resolved(RT::Void));
+    test!(parse_type, type_int: "int" => Resolved(RT::Int));
+    test!(parse_type, type_float: "float" => Resolved(RT::Float));
+    test!(parse_type, type_str: "str" => Resolved(RT::String));
+    test!(parse_type, type_unknown: "blargh" => Unresolved(_));
+    test!(parse_type, type_union: "int | int" => Union(_, _));
+    test!(parse_type, type_question: "int?" => Union(_, _));
+    test!(parse_type, type_union_and_question: "int | void | str?" => Union(_, _));
+    test!(parse_type, type_fn_no_params: "fn ->" => Fn(_, _));
+    test!(parse_type, type_fn_one_param: "fn int? -> bool" => Fn(_, _));
+    test!(parse_type, type_fn_two_params: "fn int | void, int? -> str?" => Fn(_, _));
+    test!(parse_type, type_fn_only_ret: "fn -> bool?" => Fn(_, _));
 }
