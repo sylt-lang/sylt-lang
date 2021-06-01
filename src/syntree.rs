@@ -824,8 +824,6 @@ pub fn construct(tokens: &Tokens) -> Result<Module, Vec<Error>> {
 mod test {
     use crate::tokenizer::string_to_tokens;
     use super::*;
-    use ExpressionKind::*;
-    use AssignableKind::*;
 
     macro_rules! test {
         ($f:ident, $name:ident: $str:expr => $ans:pat) => {
@@ -850,6 +848,8 @@ mod test {
     // automatically.
     mod expression {
         use super::*;
+        use ExpressionKind::*;
+        use AssignableKind::*;
 
         test!(expression, value: "0" => Int(0));
         test!(expression, add: "0 + 1.0" => Add(_, _));
