@@ -32,8 +32,6 @@ pub struct Module {
 pub enum VarKind {
     Const,
     Mutable,
-    GlobalConst,
-    GlobalMutable,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -67,8 +65,9 @@ pub enum StatementKind {
 
     Definition {
         ident: Identifier,
-        value: Expression,
         kind: VarKind,
+        ty: Type,
+        value: Expression,
     },
 
     If {
@@ -90,13 +89,11 @@ pub enum StatementKind {
         statements: Vec<Statement>,
     },
 
-    Assert {
-        expression: Expression,
-    },
-
     StatementExpression {
         value: Expression,
     },
+
+    Unreachable,
 
     EmptyStatement,
 }
@@ -430,6 +427,14 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx, Block { statements })
         }
 
+        [(T::Use, _), (T::Identifier(name), _), ..] => {
+            (ctx.skip(2), Use { file: Identifier { span: ctx.skip(1).span(), name: name.clone() } })
+        }
+
+        [(T::Unreachable, _), ..] => {
+            (ctx.skip(1), Unreachable)
+        }
+
         [(T::Print, _), ..] => {
             let (ctx, value) = expression(ctx.skip(1))?;
             (ctx, Print { value })
@@ -439,6 +444,12 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let ctx = ctx.skip(1);
             let (ctx, value) = expression(ctx)?;
             (ctx, Ret { value })
+        }
+
+        [(T::Loop, _), ..] => {
+            let (ctx, condition) = expression(ctx.skip(1))?;
+            let (ctx, body) = statement(ctx)?;
+            (ctx, Loop { condition, body: Box::new(body) })
         }
 
         [(T::If, _), ..] => {
@@ -457,9 +468,30 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
         [(T::Identifier(name), _), (T::ColonColon, _), ..]
         | [(T::Identifier(name), _), (T::ColonEqual, _), ..]
-        | [(T::Identifier(name), _), (T::Colon, _), ..]
-                => {
-            unimplemented!();
+        | [(T::Identifier(name), _), (T::Colon, _), ..] => {
+            let ident = Identifier {
+                name: name.clone(),
+                span: ctx.span(),
+            };
+            let ctx = ctx.skip(1);
+            let (ctx, kind, ty) = match ctx.token() {
+                T::ColonColon => (ctx.skip(1),
+                                  VarKind::Const,
+                                  Type { span: ctx.span(), kind: TypeKind::Implied }),
+                T::ColonEqual => (ctx.skip(1),
+                                  VarKind::Mutable,
+                                  Type { span: ctx.span(), kind: TypeKind::Implied }),
+                T::Colon => {
+                    let (ctx, ty) = parse_type(ctx.skip(1))?;
+                    (ctx.skip(1), VarKind::Mutable, ty)
+                }
+
+                _ => {
+                    raise_syntax_error!(ctx, "Not an assignment statement");
+                }
+            };
+            let (ctx, value) = expression(ctx)?;
+            (ctx, Definition { ident, kind, ty, value })
         }
 
         _ => {
