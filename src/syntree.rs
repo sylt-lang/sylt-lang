@@ -546,6 +546,76 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     Ok((ctx, Statement { span, kind }))
 }
 
+fn maybe_call<'t>(ctx: Context<'t>, calle: Assignable) -> ParseResult<'t, Assignable> {
+    if !matches!(ctx.token(), T::LeftParen | T::Bang) {
+        return Ok((ctx, calle))
+    }
+
+    let span = ctx.span();
+    let banger = matches!(ctx.token(), T::Bang);
+    let mut ctx = expect!(ctx, T::Bang | T::LeftParen, "Expected '(' or '!' when calling function");
+    let mut args = Vec::new();
+
+    loop {
+        match (ctx.token(), banger) {
+            (T::EOF, _)
+                | (T::RightParen, false)
+                | (T::Dot, true)
+                | (T::Newline, true)
+                | (T::Arrow, true)
+                => { break; }
+
+            _ => {
+                let (_ctx, expr) = expression(ctx)?;
+                ctx = _ctx;
+                args.push(expr);
+
+                ctx = skip_if!(ctx, T::Comma);
+            }
+        }
+    }
+
+    let ctx = if !banger {
+        expect!(ctx, T::RightParen, "Expected ')' after calling function")
+    } else {
+        ctx
+    };
+
+    use AssignableKind::Call;
+    let result = Assignable { span, kind: Call(Box::new(calle), args) };
+    maybe_call(ctx, result)
+}
+
+fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
+    use AssignableKind::*;
+
+    let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
+        Assignable { span, kind: Read(Identifier { span, name: name.clone() })}
+    } else {
+        raise_syntax_error!(ctx, "Assignable expressions have to start with an identifier");
+    };
+
+    let (ctx, ident) = maybe_call(ctx.skip(1), ident)?;
+    let span = ctx.span();
+    let result = match ctx.token() {
+        T::Dot => {
+            let (ctx, rest) = assignable(ctx.skip(1))?;
+            let kind = Access(Box::new(ident), Box::new(rest));
+            (ctx, Assignable { span, kind })
+        }
+
+        T::LeftBracket => {
+            let (ctx, index) = expression(ctx.skip(1))?;
+            (ctx.skip(1), Assignable { span, kind: Index(Box::new(ident), Box::new(index))})
+        }
+
+        _ => {
+            (ctx, ident)
+        }
+    };
+    Ok(result)
+}
+
 fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use ExpressionKind::*;
 
@@ -723,76 +793,6 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 }
             };
             Ok((ctx, Expression { span, kind }))
-        }
-
-        fn maybe_call<'t>(ctx: Context<'t>, calle: Assignable) -> ParseResult<'t, Assignable> {
-            if !matches!(ctx.token(), T::LeftParen | T::Bang) {
-                return Ok((ctx, calle))
-            }
-
-            let span = ctx.span();
-            let banger = matches!(ctx.token(), T::Bang);
-            let mut ctx = expect!(ctx, T::Bang | T::LeftParen, "Expected '(' or '!' when calling function");
-            let mut args = Vec::new();
-
-            loop {
-                match (ctx.token(), banger) {
-                    (T::EOF, _)
-                    | (T::RightParen, false)
-                    | (T::Dot, true)
-                    | (T::Newline, true)
-                    | (T::Arrow, true)
-                        => { break; }
-
-                    _ => {
-                        let (_ctx, expr) = expression(ctx)?;
-                        ctx = _ctx;
-                        args.push(expr);
-
-                        ctx = skip_if!(ctx, T::Comma);
-                    }
-                }
-            }
-
-            let ctx = if !banger {
-                expect!(ctx, T::RightParen, "Expected ')' after calling function")
-            } else {
-                ctx
-            };
-
-            use AssignableKind::Call;
-            let result = Assignable { span, kind: Call(Box::new(calle), args) };
-            maybe_call(ctx, result)
-        }
-
-        fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
-            use AssignableKind::*;
-
-            let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
-                Assignable { span, kind: Read(Identifier { span, name: name.clone() })}
-            } else {
-                raise_syntax_error!(ctx, "Assignable expressions have to start with an identifier");
-            };
-
-            let (ctx, ident) = maybe_call(ctx.skip(1), ident)?;
-            let span = ctx.span();
-            let result = match ctx.token() {
-                T::Dot => {
-                    let (ctx, rest) = assignable(ctx.skip(1))?;
-                    let kind = Access(Box::new(ident), Box::new(rest));
-                    (ctx, Assignable { span, kind })
-                }
-
-                T::LeftBracket => {
-                    let (ctx, index) = expression(ctx.skip(1))?;
-                    (ctx.skip(1), Assignable { span, kind: Index(Box::new(ident), Box::new(index))})
-                }
-
-                _ => {
-                    (ctx, ident)
-                }
-            };
-            Ok(result)
         }
 
         fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
