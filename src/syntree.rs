@@ -466,7 +466,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         [(T::Blob, _), ..] => {
-            let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{' to open blob");
+            let mut ctx = expect!(ctx.skip(1), T::LeftBrace, "Expected '{{' to open blob");
             let mut fields = HashMap::new();
             loop {
                 match ctx.token().clone() {
@@ -481,9 +481,15 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         if fields.contains_key(&field) {
                             raise_syntax_error!(ctx, "Field '{}' is declared twice", field);
                         }
-                        let (_ctx, ty) = parse_type(ctx.skip(1))?;
+                        ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after field name");
+                        let (_ctx, ty) = parse_type(ctx)?;
                         ctx = _ctx;
                         fields.insert(field, ty);
+
+                        if !matches!(ctx.token(), T::Comma | T::Newline | T::RightBrace) {
+                            raise_syntax_error!(ctx, "Expected a field deliminator: newline or ','");
+                        }
+                        ctx = skip_if!(ctx, T::Comma);
                     }
 
                     t => {
@@ -491,6 +497,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     }
                 }
             }
+            let ctx = expect!(ctx, T::RightBrace, "Expected '}}' to close blob fields");
             (ctx, Blob { fields })
         }
 
@@ -1074,5 +1081,9 @@ mod test {
         test!(statement, statement_loop: "loop 1 { print a }" => _);
         test!(statement, statement_ret: "ret 1 + 1" => _);
         test!(statement, statement_unreach: "<!>" => _);
+        test!(statement, statement_blob_empty: "blob {}" => _);
+        test!(statement, statement_blob_comma: "blob { a: int, b: int }" => _);
+        test!(statement, statement_blob_newline: "blob { a: int\n b: int }" => _);
+        test!(statement, statement_blob_comma_newline: "blob { a: int,\n b: int }" => _);
     }
 }
