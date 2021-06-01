@@ -902,5 +902,14 @@ mod test {
 
         test!(parse_type, type_tuple_one: "(int)" => Tuple(_));
         test!(parse_type, type_tuple_complex: "(int | float?, str, str,)" => Tuple(_));
+
+        test!(parse_type, type_list_one: "[int]" => List(_));
+        test!(parse_type, type_list_complex: "[int | float?]" => List(_));
+
+        test!(parse_type, type_set_one: "{int}" => Set(_));
+        test!(parse_type, type_set_complex: "{int | float?}" => Set(_));
+
+        test!(parse_type, type_dict_one: "{int : int}" => Dict(_, _));
+        test!(parse_type, type_dict_complex: "{int | float? : int | int | int?}" => Dict(_, _));
     }
 }
