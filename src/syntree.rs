@@ -683,18 +683,18 @@ mod test {
 
     // TODO(ed): It's really hard to write good tests, Rust refuses to deref the boxes
     // automatically.
-    test_expression!(simple_expr: "0" => Int(0));
-    test_expression!(simple_add: "0 + 1.0" => Add(_, _));
-    test_expression!(simple_mul: "\"abc\" * \"abc\"" => Mul(_, _));
-    test_expression!(simple_ident: "a" => Get(Assignable { kind: Read(_), .. }));
-    test_expression!(simple_access: "a.b" => Get(Assignable { kind: Access(_, _), .. }));
-    test_expression!(simple_index_ident: "a[a]" => Get(Assignable { kind: Index(_, _), .. }));
-    test_expression!(simple_index_expr: "a[1 + 2 + 3]" => Get(Assignable { kind: Index(_, _), .. }));
-    test_expression!(simple_grouping: "(0 * 0) + 1" => Add(_, _));
-    test_expression!(simple_tuple: "(0, 0)" => Tuple(_));
-    test_expression!(simple_list: "[0, 0]" => List(_));
-    test_expression!(simple_set: "{1, 1}" => Set(_));
-    test_expression!(simple_dict: "{1: 1}" => Dict(_));
+    test_expression!(value: "0" => Int(0));
+    test_expression!(add: "0 + 1.0" => Add(_, _));
+    test_expression!(mul: "\"abc\" * \"abc\"" => Mul(_, _));
+    test_expression!(ident: "a" => Get(Assignable { kind: Read(_), .. }));
+    test_expression!(access: "a.b" => Get(Assignable { kind: Access(_, _), .. }));
+    test_expression!(index_ident: "a[a]" => Get(Assignable { kind: Index(_, _), .. }));
+    test_expression!(index_expr: "a[1 + 2 + 3]" => Get(Assignable { kind: Index(_, _), .. }));
+    test_expression!(grouping: "(0 * 0) + 1" => Add(_, _));
+    test_expression!(tuple: "(0, 0)" => Tuple(_));
+    test_expression!(list: "[0, 0]" => List(_));
+    test_expression!(set: "{1, 1}" => Set(_));
+    test_expression!(dict: "{1: 1}" => Dict(_));
     test_expression!(zero_set: "{}" => Set(_));
     test_expression!(zero_dict: "{:}" => Dict(_));
 
