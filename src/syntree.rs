@@ -388,7 +388,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                         ctx = _ctx;
                         types.push(param);
 
-                        ctx = if matches!(ctx.token(), T::Comma | T::LeftParen) {
+                        ctx = if matches!(ctx.token(), T::Comma | T::RightParen) {
                             skip_if!(ctx, T::Comma)
                         } else {
                             raise_syntax_error!(ctx, "Expected ',' or ')' after tuple field")
@@ -899,5 +899,8 @@ mod test {
         test!(parse_type, type_fn_one_param: "fn int? -> bool" => Fn(_, _));
         test!(parse_type, type_fn_two_params: "fn int | void, int? -> str?" => Fn(_, _));
         test!(parse_type, type_fn_only_ret: "fn -> bool?" => Fn(_, _));
+
+        test!(parse_type, type_tuple_one: "(int)" => Tuple(_));
+        test!(parse_type, type_tuple_complex: "(int | float?, str, str,)" => Tuple(_));
     }
 }
