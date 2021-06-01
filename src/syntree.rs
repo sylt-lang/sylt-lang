@@ -1020,13 +1020,26 @@ mod test {
 
         test!(parse_type, type_dict_one: "{int : int}" => Dict(_, _));
         test!(parse_type, type_dict_complex: "{int | float? : int | int | int?}" => Dict(_, _));
+
+        // TODO(ed): Require block or allow all statements?
+        test!(expression, simple: "fn -> {}" => _);
+        test!(expression, argument: "fn a: int -> int ret a + 1" => _);
     }
 
-    mod function {
+    mod statement {
         use super::*;
 
         // NOTE(ed): Expressions are valid statements! :D
-        test!(expression, simple: "fn -> {}" => _);
-        test!(expression, argument: "fn a: int -> int ret a + 1" => _);
+        test!(statement, statement_expression: "1 + 1" => _);
+        test!(statement, statement_print: "print 1" => _);
+        test!(statement, statement_mut_declaration: "a := 1 + 1" => _);
+        test!(statement, statement_const_declaration: "a :: 1 + 1" => _);
+        test!(statement, statement_mut_type_declaration: "a :int= 1 + 1" => _);
+        test!(statement, statement_const_type_declaration: "a :int: 1 + 1" => _);
+        test!(statement, statement_if: "if 1 { print a }" => _);
+        test!(statement, statement_if_else: "if 1 { print a } else { print b }" => _);
+        test!(statement, statement_loop: "loop 1 { print a }" => _);
+        test!(statement, statement_ret: "ret 1 + 1" => _);
+        test!(statement, statement_unreach: "<!>" => _);
     }
 }
