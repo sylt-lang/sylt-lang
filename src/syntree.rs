@@ -56,7 +56,7 @@ pub enum StatementKind {
     },
 
     Print {
-        expr: Expression,
+        value: Expression,
     },
 
     Assignment {
@@ -73,17 +73,17 @@ pub enum StatementKind {
 
     If {
         condition: Expression,
-        pass: Vec<Statement>,
-        fail: Vec<Statement>,
+        pass: Box<Statement>,
+        fail: Box<Statement>,
     },
 
     Loop {
         condition: Expression,
-        body: Vec<Statement>,
+        body: Box<Statement>,
     },
 
     Ret {
-        value: Option<Expression>,
+        value: Expression,
     },
 
     Block {
@@ -97,6 +97,8 @@ pub enum StatementKind {
     StatementExpression {
         value: Expression,
     },
+
+    EmptyStatement,
 }
 
 #[derive(Debug, Clone)]
@@ -149,8 +151,7 @@ pub enum ExpressionKind {
 
     // Composite
     Function {
-        name: Identifier,
-        args: Vec<(Identifier, Type)>,
+        params: Vec<(Identifier, Type)>,
         ret: Type,
 
         body: Box<Statement>,
@@ -338,41 +339,6 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             (ctx, Fn(params, Box::new(ret)))
         }
 
-        T::Fn => {
-            let mut ctx = ctx.skip(1);
-            let mut params = Vec::new();
-            let ret = loop {
-                match ctx.token() {
-                    T::Arrow => {
-                        ctx = ctx.skip(1);
-                        break if let Ok((_ctx, ret)) = parse_type(ctx) {
-                            ctx = _ctx;
-                            ret
-                        } else {
-                            Type { span: ctx.span(), kind: Resolved(Void) }
-                        };
-                    }
-
-                    _ => {
-                        let (_ctx, param) = parse_type(ctx)?;
-                        ctx = _ctx;
-                        params.push(param);
-
-                        ctx = if matches!(ctx.token(), T::Comma | T::Arrow) {
-                            skip_if!(ctx, T::Comma)
-                        } else {
-                            raise_syntax_error!(ctx, "Expected ',' or '->' after type parameter")
-                        };
-                    }
-
-                    T::EOF => {
-                        raise_syntax_error!(ctx, "Didn't expect EOF in type definition");
-                    }
-                }
-            };
-            (ctx, Fn(params, Box::new(ret)))
-        }
-
         T::LeftParen => {
             let mut ctx = ctx.skip(1);
             let mut types = Vec::new();
@@ -446,11 +412,124 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     Ok((ctx, ty))
 }
 
+fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
+    use StatementKind::*;
+
+    let span = ctx.span();
+    let (ctx, kind) = match &ctx.tokens[ctx.curr..] {
+        [(T::LeftBrace, _), ..] => {
+            let mut ctx = ctx.skip(1);
+            let mut statements = Vec::new();
+            while !matches!(ctx.token(), T::RightBrace | T::EOF) {
+                let (_ctx, stmt) = statement(ctx)?;
+                ctx = _ctx;
+                statements.push(stmt);
+            }
+
+            let ctx = expect!(ctx, T::RightBrace);
+            (ctx, Block { statements })
+        }
+
+        [(T::Print, _), ..] => {
+            let (ctx, value) = expression(ctx.skip(1))?;
+            (ctx, Print { value })
+        }
+
+        [(T::Ret, _), ..] => {
+            let ctx = ctx.skip(1);
+            let (ctx, value) = expression(ctx)?;
+            (ctx, Ret { value })
+        }
+
+        [(T::If, _), ..] => {
+            let (ctx, condition) = expression(ctx.skip(1))?;
+
+            let (ctx, pass) = statement(ctx)?;
+            let (ctx, fail) = if matches!(ctx.token(), T::Else) {
+                let (ctx, fail) = statement(ctx.skip(1))?;
+                (ctx, fail)
+            } else {
+                (ctx, Statement { span: ctx.span(), kind: EmptyStatement })
+            };
+
+            (ctx, If { condition, pass: Box::new(pass), fail: Box::new(fail) })
+        }
+
+        [(T::Identifier(name), _), (T::ColonColon, _), ..]
+        | [(T::Identifier(name), _), (T::ColonEqual, _), ..]
+        | [(T::Identifier(name), _), (T::Colon, _), ..]
+                => {
+            unimplemented!();
+        }
+
+        _ => {
+            let (ctx, value) = expression(ctx)?;
+            (ctx, StatementExpression { value })
+        }
+    };
+
+    // TODO(ed): Not sure this is right.
+    // let ctx = expect!(ctx, T::Newline, "Expected newline after statement");
+    let ctx = skip_if!(ctx, T::Newline);
+    Ok((ctx, Statement { span, kind }))
+}
+
 fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use ExpressionKind::*;
 
     fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-        unimplemented!("Function parsing is not implemented");
+        let span = ctx.span();
+        let mut ctx = expect!(ctx, T::Fn, "Expected 'fn' for function expression");
+        let mut params = Vec::new();
+        let ret = loop {
+            match ctx.token() {
+                T::Arrow => {
+                    ctx = ctx.skip(1);
+                    break if let Ok((_ctx, ret)) = parse_type(ctx) {
+                        ctx = _ctx;
+                        ret
+                    } else {
+                        use TypeKind::Resolved;
+                        use RuntimeType::Void;
+                        Type { span: ctx.span(), kind: Resolved(Void) }
+                    };
+                }
+
+                T::Identifier(name) => {
+                    let ident = Identifier {
+                        span: ctx.span(),
+                        name: name.clone(),
+                    };
+                    ctx = expect!(ctx.skip(1), T::Colon);
+                    let (_ctx, param) = parse_type(ctx)?;
+                    ctx = _ctx;
+                    params.push((ident, param));
+
+                    ctx = if matches!(ctx.token(), T::Comma | T::Arrow) {
+                        skip_if!(ctx, T::Comma)
+                    } else {
+                        raise_syntax_error!(ctx, "Expected ',' or '->' after type parameter")
+                    };
+                }
+
+                T::EOF => {
+                    raise_syntax_error!(ctx, "Didn't expect EOF in function");
+                }
+
+                t => {
+                    raise_syntax_error!(ctx, "Didn't expect '{:?}' in function", t);
+                }
+            }
+        };
+
+        let (ctx, statement) = statement(ctx)?;
+        let function = Function {
+            params,
+            ret,
+            body: Box::new(statement),
+        };
+
+        Ok((ctx, Expression { span, kind: function }))
     }
 
     fn parse_precedence<'t>(ctx: Context<'t>, prec: Prec) -> ParseResult<'t, Expression> {
@@ -782,13 +861,8 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 }
 
 fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
-    let span = ctx.span();
-    let (ctx, value) = expression(ctx)?;
-
-    let ctx = expect!(ctx, T::Newline, "Expected newline after statement");
-
-    use StatementKind::*;
-    Ok((ctx, Statement { span, kind: StatementExpression { value } }))
+    // TODO(ed): Filter for invalid outer statements here.
+    statement(ctx)
 }
 
 pub fn construct(tokens: &Tokens) -> Result<Module, Vec<Error>> {
@@ -874,9 +948,12 @@ mod test {
         test!(expression, call_args_bang: "a! 1, 2, 3" => Get(_));
         test!(expression, call_args_chaining_paren: "a(1, 2, 3).b" => Get(_));
         test!(expression, call_args_chaining_paren_trailing: "a(1, 2, 3,).b" => Get(_));
+
+        // TODO(ed): This is controverisal
         test!(expression, call_args_chaining_bang: "a! 1, 2, 3 .b" => Get(_));
         test!(expression, call_args_chaining_bang_trailing: "a! 1, 2, 3, .b" => Get(_));
 
+        // TODO(ed): a! -> b! -> c! == c(b(a()))
         test!(expression, call_arrow: "1 + 0 -> a! 2, 3" => Add(_, _));
         test!(expression, call_arrow_grouping: "(1 + 0) -> a! 2, 3" => Get(_));
     }
@@ -911,5 +988,13 @@ mod test {
 
         test!(parse_type, type_dict_one: "{int : int}" => Dict(_, _));
         test!(parse_type, type_dict_complex: "{int | float? : int | int | int?}" => Dict(_, _));
+    }
+
+    mod function {
+        use super::*;
+
+        // NOTE(ed): Expressions are valid statements! :D
+        test!(expression, simple: "fn -> {}" => _);
+        test!(expression, argument: "fn a: int -> int ret a + 1" => _);
     }
 }
