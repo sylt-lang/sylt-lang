@@ -35,7 +35,8 @@ pub enum VarKind {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub enum AssignmentOp {
+pub enum Op {
+    Nop,
     Add,
     Sub,
     Mul,
@@ -57,8 +58,8 @@ pub enum StatementKind {
     },
 
     Assignment {
+        kind: Op,
         target: Assignable,
-        kind: AssignmentOp,
         value: Expression,
     },
 
@@ -535,8 +536,28 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         _ => {
-            let (ctx, value) = expression(ctx)?;
-            (ctx, StatementExpression { value })
+            // Expression or Assignment, we try assignment first
+            fn assignment<'t>(ctx: Context<'t>) -> ParseResult<'t, StatementKind> {
+                let (ctx, target) = assignable(ctx)?;
+                let kind = match ctx.token() {
+                    T::PlusEqual => Op::Add,
+                    T::MinusEqual => Op::Sub,
+                    T::StarEqual => Op::Mul,
+                    T::SlashEqual => Op::Div,
+                    T::Equal => Op::Nop,
+
+                    t => { raise_syntax_error!(ctx, "No assignment matches '{:?}'", t); }
+                };
+                let (ctx, value) = expression(ctx.skip(1))?;
+                Ok((ctx, Assignment { kind, target, value }))
+            }
+
+            if let Ok((ctx, kind)) = assignment(ctx) {
+                (ctx, kind)
+            } else {
+                let (ctx, value) = expression(ctx)?;
+                (ctx, StatementExpression { value })
+            }
         }
     };
 
@@ -1013,6 +1034,7 @@ mod test {
         test!(expression, zero_dict: "{:}" => Dict(_));
 
         test!(expression, call_simple_paren: "a()" => Get(_));
+        test!(expression, call_call: "a()()" => Get(_));
         test!(expression, call_simple_bang: "a!" => Get(_));
         test!(expression, call_chaining_paren: "a().b" => Get(_));
         test!(expression, call_chaining_bang: "a!.b" => Get(_));
@@ -1085,5 +1107,10 @@ mod test {
         test!(statement, statement_blob_comma: "blob { a: int, b: int }" => _);
         test!(statement, statement_blob_newline: "blob { a: int\n b: int }" => _);
         test!(statement, statement_blob_comma_newline: "blob { a: int,\n b: int }" => _);
+        test!(statement, statement_assign: "a = 1" => _);
+        test!(statement, statement_assign_index: "a.b = 1 + 2" => _);
+        test!(statement, statement_assign_call: "a().b() += 2" => _);
+        test!(statement, statement_assign_call_index: "a.c().c.b /= 4" => _);
+        test!(statement, statement_idek: "a!.c!.c.b()().c = 0" => _);
     }
 }
