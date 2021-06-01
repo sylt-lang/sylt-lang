@@ -128,6 +128,7 @@ pub struct Assignable {
 pub enum ExpressionKind {
     Get(Assignable),
 
+
     Add(Box<Expression>, Box<Expression>),
     Sub(Box<Expression>, Box<Expression>),
     Mul(Box<Expression>, Box<Expression>),
@@ -152,6 +153,10 @@ pub enum ExpressionKind {
         ret: Type,
 
         body: Box<Statement>,
+    },
+    Instance {
+        blob: String,
+        fields: Vec<(String, Expression)>, // Keep calling order
     },
     Tuple(Vec<Expression>),
     List(Vec<Expression>),
@@ -552,6 +557,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 Ok((ctx, Assignment { kind, target, value }))
             }
 
+            // TODO(ed): Potenitally risky - might destroy errors aswell
             if let Ok((ctx, kind)) = assignment(ctx) {
                 (ctx, kind)
             } else {
@@ -747,9 +753,13 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 T::Minus | T::Bang => unary(ctx),
 
                 T::Identifier(_) => {
-                    let span = ctx.span();
-                    let (ctx, assign) = assignable(ctx)?;
-                    Ok((ctx, Expression { span, kind: Get(assign) }))
+                    if let Ok(result) = blob(ctx) {
+                        Ok(result)
+                    } else {
+                        let span = ctx.span();
+                        let (ctx, assign) = assignable(ctx)?;
+                        Ok((ctx, Expression { span, kind: Get(assign) }))
+                    }
                 }
 
                 t => {
@@ -847,6 +857,51 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 exprs.into_iter().next().unwrap()
             };
             Ok((ctx, result))
+        }
+
+        fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+            let span = ctx.span();
+            let blob = if let T::Identifier(blob) = ctx.token() {
+                blob.clone()
+            } else {
+                raise_syntax_error!(ctx, "Expected name of blob");
+            };
+            let mut ctx = expect!(ctx.skip(1), T::LeftBrace, "Expected '{{' after blob name");
+
+            let mut fields = Vec::new();
+            loop {
+                match ctx.token() {
+                    T::Newline => {
+                        ctx = ctx.skip(1);
+                    }
+
+                    T::RightBrace | T::EOF => {
+                        break;
+                    }
+
+                    T::Identifier(name) => {
+                        let name = name.clone();
+
+                        ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after field name");
+                        let (_ctx, expr) = expression(ctx)?;
+                        ctx = _ctx;
+
+                        if !matches!(ctx.token(), T::Comma | T::Newline | T::RightBrace) {
+                            raise_syntax_error!(ctx, "Expected a deliminator: newline or ','");
+                        }
+                        ctx = skip_if!(ctx, T::Comma);
+
+                        fields.push((name, expr));
+                    }
+
+                    t => {
+                        raise_syntax_error!(ctx, "Unexpected token ('{:?}') in blob initalizer", t);
+                    }
+                }
+            }
+            let ctx = expect!(ctx, T::RightBrace, "Expected '}}' after blob initalizer");
+
+            Ok((ctx, Expression { span, kind: Instance { blob, fields } }))
         }
 
         fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
@@ -1050,6 +1105,10 @@ mod test {
         // TODO(ed): a! -> b! -> c! == c(b(a()))
         test!(expression, call_arrow: "1 + 0 -> a! 2, 3" => Add(_, _));
         test!(expression, call_arrow_grouping: "(1 + 0) -> a! 2, 3" => Get(_));
+
+        test!(expression, instance: "A { a: 1 + 1, b: nil }" => Instance { .. });
+        test!(expression, instance_more: "A { a: 2\n c: 2 }" => Instance { .. });
+        test!(expression, instance_empty: "A {}" => Instance { .. });
     }
 
     mod parse_type {
