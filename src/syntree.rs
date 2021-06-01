@@ -178,8 +178,9 @@ pub struct Expression {
 #[derive(Debug, Clone)]
 pub enum TypeKind {
     Implied,
-    Union(Box<TypeKind>, Box<TypeKind>),
+    Union(Box<Type>, Box<Type>),
     Resolved(RuntimeType),
+    Fn(Vec<Type>, Box<Type>),
     Unresolved(String),
 }
 
@@ -283,11 +284,11 @@ macro_rules! skip_if {
 }
 
 fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
+    use RuntimeType::{Void, Int, Float, Bool, String};
+    use TypeKind::*;
     let span = ctx.span();
     let (ctx, kind) = match ctx.token() {
         T::Identifier(name) => {
-            use RuntimeType::*;
-            use TypeKind::*;
             (ctx.skip(1), match name.as_str() {
                 "void" => Resolved(Void),
                 "int" => Resolved(Int),
@@ -298,27 +299,65 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             })
         }
 
-        _ => {
-            panic!();
+        T::Fn => {
+            let mut ctx = ctx.skip(1);
+            let mut params = Vec::new();
+            let ret = loop {
+                match ctx.token() {
+                    T::Arrow => {
+                        ctx = ctx.skip(1);
+                        break if let Ok((_ctx, ret)) = parse_type(ctx) {
+                            ctx = _ctx;
+                            ret
+                        } else {
+                            Type { span: ctx.span(), kind: Resolved(Void) }
+                        };
+                    }
+
+                    _ => {
+                        let (_ctx, param) = parse_type(ctx)?;
+                        ctx = _ctx;
+                        params.push(param);
+
+                        ctx = if matches!(ctx.token(), T::Comma | T::Arrow) {
+                            skip_if!(ctx, T::Comma)
+                        } else {
+                            raise_syntax_error!(ctx, "Expected ',' or '->' after type parameter")
+                        };
+                    }
+
+                    T::EOF => {
+                        raise_syntax_error!(ctx, "Didn't expect EOF in type definition");
+                    }
+                }
+            };
+
+            (ctx, Fn(params, Box::new(ret)))
+        }
+
+        t => {
+            raise_syntax_error!(ctx, "No type starts with '{:?}'", t);
         }
     };
 
-    let (ctx, kind) = if matches!(ctx.token(), T::Pipe) {
-        let (ctx, Type { kind: rest, .. }) = parse_type(ctx.skip(1))?;
-        (ctx, TypeKind::Union(Box::new(kind), Box::new(rest)))
+    let ty = Type { span, kind };
+
+    let (ctx, ty) = if matches!(ctx.token(), T::Pipe) {
+        let (ctx, rest) = parse_type(ctx.skip(1))?;
+        (ctx, Type { span, kind: Union(Box::new(ty), Box::new(rest)) })
     } else {
-        (ctx, kind)
+        (ctx, ty)
     };
 
-    let (ctx, kind) = if matches!(ctx.token(), T::QuestionMark) {
+    let (ctx, ty) = if matches!(ctx.token(), T::QuestionMark) {
         use RuntimeType::Void;
-        use TypeKind::*;
-        (ctx.skip(1), Union(Box::new(kind), Box::new(Resolved(Void))))
+        let void = Type { span: ctx.span(), kind: Resolved(Void) };
+        (ctx.skip(1), Type { span, kind: Union(Box::new(ty), Box::new(void)) })
     } else {
-        (ctx, kind)
+        (ctx, ty)
     };
 
-    Ok((ctx, Type { span, kind }))
+    Ok((ctx, ty))
 }
 
 fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
