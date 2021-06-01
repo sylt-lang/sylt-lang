@@ -1,3 +1,6 @@
+// TODO(ed): Remove me
+#![allow(unused)]
+
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use crate::error::Error;
@@ -279,7 +282,6 @@ macro_rules! skip_if {
 }
 
 fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-    use T as T;
     use ExpressionKind::*;
 
     fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
