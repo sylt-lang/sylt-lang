@@ -178,10 +178,14 @@ pub struct Expression {
 #[derive(Debug, Clone)]
 pub enum TypeKind {
     Implied,
-    Union(Box<Type>, Box<Type>),
     Resolved(RuntimeType),
-    Fn(Vec<Type>, Box<Type>),
     Unresolved(String),
+    Union(Box<Type>, Box<Type>),
+    Fn(Vec<Type>, Box<Type>),
+    Tuple(Vec<Type>),
+    List(Box<Type>),
+    Set(Box<Type>),
+    Dict(Box<Type>, Box<Type>),
 }
 
 #[derive(Debug, Clone)]
@@ -331,8 +335,90 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                     }
                 }
             };
-
             (ctx, Fn(params, Box::new(ret)))
+        }
+
+        T::Fn => {
+            let mut ctx = ctx.skip(1);
+            let mut params = Vec::new();
+            let ret = loop {
+                match ctx.token() {
+                    T::Arrow => {
+                        ctx = ctx.skip(1);
+                        break if let Ok((_ctx, ret)) = parse_type(ctx) {
+                            ctx = _ctx;
+                            ret
+                        } else {
+                            Type { span: ctx.span(), kind: Resolved(Void) }
+                        };
+                    }
+
+                    _ => {
+                        let (_ctx, param) = parse_type(ctx)?;
+                        ctx = _ctx;
+                        params.push(param);
+
+                        ctx = if matches!(ctx.token(), T::Comma | T::Arrow) {
+                            skip_if!(ctx, T::Comma)
+                        } else {
+                            raise_syntax_error!(ctx, "Expected ',' or '->' after type parameter")
+                        };
+                    }
+
+                    T::EOF => {
+                        raise_syntax_error!(ctx, "Didn't expect EOF in type definition");
+                    }
+                }
+            };
+            (ctx, Fn(params, Box::new(ret)))
+        }
+
+        T::LeftParen => {
+            let mut ctx = ctx.skip(1);
+            let mut types = Vec::new();
+            loop {
+                match ctx.token() {
+                    T::RightParen => {
+                        ctx = ctx.skip(1);
+                        break;
+                    }
+
+                    _ => {
+                        let (_ctx, param) = parse_type(ctx)?;
+                        ctx = _ctx;
+                        types.push(param);
+
+                        ctx = if matches!(ctx.token(), T::Comma | T::LeftParen) {
+                            skip_if!(ctx, T::Comma)
+                        } else {
+                            raise_syntax_error!(ctx, "Expected ',' or ')' after tuple field")
+                        };
+                    }
+
+                    T::EOF => {
+                        raise_syntax_error!(ctx, "Didn't expect EOF in type definition");
+                    }
+                }
+            };
+            (ctx, Tuple(types))
+        }
+
+        T::LeftBracket => {
+            let (ctx, ty) = parse_type(ctx.skip(1))?;
+            let ctx = expect!(ctx, T::RightBracket, "Expected ']' after list type");
+            (ctx, List(Box::new(ty)))
+        }
+
+        T::LeftBrace => {
+            let (ctx, ty) = parse_type(ctx.skip(1))?;
+            if matches!(ctx.token(), T::Colon) {
+                let (ctx, value) = parse_type(ctx.skip(1))?;
+                let ctx = expect!(ctx, T::RightBrace, "Expected '}}' after dict type");
+                (ctx, Dict(Box::new(ty), Box::new(value)))
+            } else {
+                let ctx = expect!(ctx, T::RightBrace, "Expected '}}' after set type");
+                (ctx, Set(Box::new(ty)))
+            }
         }
 
         t => {
