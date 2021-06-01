@@ -143,7 +143,6 @@ pub enum ExpressionKind {
     Lteq(Box<Expression>, Box<Expression>),
     AssertEq(Box<Expression>, Box<Expression>),
 
-
     And(Box<Expression>, Box<Expression>),
     Or(Box<Expression>, Box<Expression>),
     Not(Box<Expression>),
@@ -178,6 +177,8 @@ pub struct Expression {
 
 #[derive(Debug, Clone)]
 pub enum TypeKind {
+    Implied,
+    Union(Vec<TypeKind>),
     Resolved(RuntimeType),
     Unresolved(String),
 }
@@ -279,6 +280,29 @@ macro_rules! skip_if {
             }
         }
     };
+}
+
+fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
+    let span = ctx.span();
+    let (ctx, kind) = match ctx.token() {
+        T::Identifier(name) => {
+            use RuntimeType::*;
+            use TypeKind::*;
+            (ctx.skip(1), match name.as_str() {
+                "void" => Resolved(Void),
+                "int" => Resolved(Int),
+                "float" => Resolved(Float),
+                "bool" => Resolved(Bool),
+                "str" => Resolved(String),
+                _ => Unresolved(name.clone()),
+            })
+        }
+
+        _ => {
+            panic!();
+        }
+    };
+    Ok((ctx, Type { span, kind }))
 }
 
 fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
@@ -661,6 +685,8 @@ mod test {
     use super::*;
     use ExpressionKind::*;
     use AssignableKind::*;
+    use TypeKind::*;
+    use RuntimeType as RT;
 
     macro_rules! test_expression {
         ($name:ident: $str:expr => $ans:pat) => {
@@ -711,4 +737,29 @@ mod test {
 
     test_expression!(call_arrow: "1 + 0 -> a! 2, 3" => Add(_, _));
     test_expression!(call_arrow_grouping: "(1 + 0) -> a! 2, 3" => Get(_));
+
+    macro_rules! test_type {
+        ($name:ident: $str:expr => $ans:pat) => {
+            #[test]
+            fn $name () {
+                let tokens = string_to_tokens($str);
+                let path = PathBuf::from(stringify!($name));
+                let result = parse_type(Context::new(&tokens, &path));
+                assert!(result.is_ok(),
+                    "\nSyntax tree test didn't parse for:\n{}\nErrs: {:?}",
+                    $str,
+                    result.unwrap_err().1
+                );
+                let (ctx, result) = result.unwrap();
+                assert!(matches!(result.kind, $ans), "\nExpected: {}, but got: {:?}", stringify!($ans), result);
+                assert_eq!(ctx.curr, ctx.tokens.len(), "Ate past the end of the buffer for:\n{}", $str);
+            }
+        }
+    }
+
+    test_type!(type_void: "void" => Resolved(RT::Void));
+    test_type!(type_int: "int" => Resolved(RT::Int));
+    test_type!(type_float: "float" => Resolved(RT::Float));
+    test_type!(type_str: "str" => Resolved(RT::String));
+    test_type!(type_unknown: "blargh" => Unresolved(_));
 }
