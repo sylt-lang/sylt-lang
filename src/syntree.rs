@@ -178,7 +178,7 @@ pub struct Expression {
 #[derive(Debug, Clone)]
 pub enum TypeKind {
     Implied,
-    Union(Vec<TypeKind>),
+    Union(Box<TypeKind>, Box<TypeKind>),
     Resolved(RuntimeType),
     Unresolved(String),
 }
@@ -302,6 +302,22 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             panic!();
         }
     };
+
+    let (ctx, kind) = if matches!(ctx.token(), T::Pipe) {
+        let (ctx, Type { kind: rest, .. }) = parse_type(ctx.skip(1))?;
+        (ctx, TypeKind::Union(Box::new(kind), Box::new(rest)))
+    } else {
+        (ctx, kind)
+    };
+
+    let (ctx, kind) = if matches!(ctx.token(), T::QuestionMark) {
+        use RuntimeType::Void;
+        use TypeKind::*;
+        (ctx.skip(1), Union(Box::new(kind), Box::new(Resolved(Void))))
+    } else {
+        (ctx, kind)
+    };
+
     Ok((ctx, Type { span, kind }))
 }
 
@@ -762,4 +778,7 @@ mod test {
     test_type!(type_float: "float" => Resolved(RT::Float));
     test_type!(type_str: "str" => Resolved(RT::String));
     test_type!(type_unknown: "blargh" => Unresolved(_));
+    test_type!(type_union: "int | int" => Union(_, _));
+    test_type!(type_question: "int?" => Union(_, _));
+    test_type!(type_union_and_question: "int | void | str?" => Union(_, _));
 }
