@@ -702,7 +702,7 @@ mod test {
                 );
                 let (ctx, result) = result.unwrap();
                 assert!(matches!(result.kind, $ans), "\nExpected: {}, but got: {:?}", stringify!($ans), result);
-                assert_eq!(ctx.curr, ctx.tokens.len(), "Ate past the end of the buffer for:\n{}", $str);
+                assert_eq!(ctx.curr, ctx.tokens.len(), "Parsed too few or too many tokens:\n{}", $str);
             }
         }
     }
@@ -752,7 +752,7 @@ mod test {
                 );
                 let (ctx, result) = result.unwrap();
                 assert!(matches!(result.kind, $ans), "\nExpected: {}, but got: {:?}", stringify!($ans), result);
-                assert_eq!(ctx.curr, ctx.tokens.len(), "Ate past the end of the buffer for:\n{}", $str);
+                assert_eq!(ctx.curr, ctx.tokens.len(), "Parsed too few or too many tokens:\n{}", $str);
             }
         }
     }
