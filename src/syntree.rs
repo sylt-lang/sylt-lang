@@ -49,8 +49,7 @@ pub enum StatementKind {
     },
 
     Blob {
-        name: Identifier,
-        fields: HashMap<Identifier, Type>,
+        fields: HashMap<String, Type>,
     },
 
     Print {
@@ -466,6 +465,35 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx, If { condition, pass: Box::new(pass), fail: Box::new(fail) })
         }
 
+        [(T::Blob, _), ..] => {
+            let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{' to open blob");
+            let mut fields = HashMap::new();
+            loop {
+                match ctx.token().clone() {
+                    T::Newline => {
+                        ctx = ctx.skip(1);
+                    }
+                    T::RightBrace => {
+                        break;
+                    }
+
+                    T::Identifier(field) => {
+                        if fields.contains_key(&field) {
+                            raise_syntax_error!(ctx, "Field '{}' is declared twice", field);
+                        }
+                        let (_ctx, ty) = parse_type(ctx.skip(1))?;
+                        ctx = _ctx;
+                        fields.insert(field, ty);
+                    }
+
+                    t => {
+                        raise_syntax_error!(ctx, "Expected field name or '}}' in blob statement");
+                    }
+                }
+            }
+            (ctx, Blob { fields })
+        }
+
         [(T::Identifier(name), _), (T::ColonColon, _), ..]
         | [(T::Identifier(name), _), (T::ColonEqual, _), ..]
         | [(T::Identifier(name), _), (T::Colon, _), ..] => {
@@ -483,7 +511,12 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                                   Type { span: ctx.span(), kind: TypeKind::Implied }),
                 T::Colon => {
                     let (ctx, ty) = parse_type(ctx.skip(1))?;
-                    (ctx.skip(1), VarKind::Mutable, ty)
+                    let kind = if matches!(ctx.token(), T::Colon) {
+                        VarKind::Const
+                    } else {
+                        VarKind::Mutable
+                    };
+                    (ctx.skip(1), kind, ty)
                 }
 
                 _ => {
