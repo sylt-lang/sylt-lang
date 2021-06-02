@@ -1,10 +1,11 @@
 use std::path::{PathBuf, Path};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use crate::error::Error;
 use crate::tokenizer::Token as T;
 use crate::Type as RuntimeType;
 use crate::compiler::Prec;
 use crate::Next;
+use crate::tokenizer::file_to_tokens;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Span {
@@ -16,7 +17,7 @@ pub struct Span {
 
 #[derive(Debug, Clone)]
 pub struct Prog {
-    files: Vec<(PathBuf, Module)>,
+    modules: Vec<(PathBuf, Module)>,
 }
 
 #[derive(Debug, Clone)]
@@ -1031,9 +1032,10 @@ fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
     statement(ctx)
 }
 
-pub fn construct(path: &Path, tokens: &Tokens) -> Result<Module, Vec<Error>> {
+fn module(path: &Path, tokens: &Tokens) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
     let mut ctx = Context::new(tokens, path);
     let mut errors = Vec::new();
+    let mut use_files = Vec::new();
     let mut statements = Vec::new();
     while !matches!(ctx.token(), T::EOF) {
         if matches!(ctx.token(), T::Newline) {
@@ -1042,7 +1044,11 @@ pub fn construct(path: &Path, tokens: &Tokens) -> Result<Module, Vec<Error>> {
         }
         ctx = match outer_statement(ctx) {
             Ok((ctx, statement)) => {
-                if !matches!(statement.kind, StatementKind::EmptyStatement) {
+                use StatementKind::*;
+                if let Use { file, .. } = &statement.kind {
+                    use_files.push(PathBuf::from(&file.name));
+                }
+                if !matches!(statement.kind, EmptyStatement) {
                     statements.push(statement);
                 }
                 ctx
@@ -1060,9 +1066,42 @@ pub fn construct(path: &Path, tokens: &Tokens) -> Result<Module, Vec<Error>> {
     }
 
     if errors.is_empty() {
-        Ok(Module { span: Span { line: 0 }, statements })
+        (use_files, Ok(Module { span: Span { line: 0 }, statements }))
     } else {
-        eprintln!("Dumping tree:\n{:#?}", statements);
+        (use_files, Err(errors))
+    }
+}
+
+pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
+    let mut visited = HashSet::new();
+    let mut to_visit = Vec::new();
+    to_visit.push(path.to_path_buf());
+
+    let mut modules = Vec::new();
+    let mut errors = Vec::new();
+    while let Some(file) = to_visit.pop() {
+        if visited.contains(&file) {
+            continue;
+        }
+        match file_to_tokens(path) {
+            Ok(tokens) => {
+                let (mut next, result) = module(path, &tokens);
+                match result {
+                    Ok(module) => modules.push((file.clone(), module)),
+                    Err(mut errs) => errors.append(&mut errs),
+                }
+                to_visit.append(&mut next);
+            }
+            Err(_) => {
+                errors.push(Error::FileNotFound(path.to_path_buf()));
+            }
+        }
+        visited.insert(file);
+    }
+
+    if errors.is_empty() {
+        Ok(Prog { modules })
+    } else {
         Err(errors)
     }
 }
