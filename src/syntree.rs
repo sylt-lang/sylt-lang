@@ -29,6 +29,8 @@ pub struct Module {
 pub enum VarKind {
     Const,
     Mutable,
+    ForceConst,
+    ForceMutable,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -530,11 +532,16 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                                   VarKind::Mutable,
                                   Type { span: ctx.span(), kind: TypeKind::Implied }),
                 T::Colon => {
-                    let (ctx, ty) = parse_type(ctx.skip(1))?;
-                    let kind = if matches!(ctx.token(), T::Colon) {
-                        VarKind::Const
-                    } else {
-                        VarKind::Mutable
+                    let ctx = ctx.skip(1);
+                    let banger = ctx.token();
+                    let ctx = skip_if!(ctx, T::Bang);
+                    let (ctx, ty) = parse_type(ctx)?;
+                    let kind = match (ctx.token(), banger) {
+                        (T::Colon, T::Bang) => VarKind::ForceConst,
+                        (T::Equal, T::Bang) => VarKind::ForceMutable,
+                        (T::Colon, _) => VarKind::Const,
+                        (T::Equal, _) => VarKind::Mutable,
+                        (t, _) => { raise_syntax_error!(ctx, "Expected ':' or '=' for definition, but got '{:?}'", t); }
                     };
                     (ctx.skip(1), kind, ty)
                 }
