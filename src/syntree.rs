@@ -141,6 +141,8 @@ pub enum ExpressionKind {
     Lteq(Box<Expression>, Box<Expression>),
     AssertEq(Box<Expression>, Box<Expression>),
 
+    In(Box<Expression>, Box<Expression>),
+
     And(Box<Expression>, Box<Expression>),
     Or(Box<Expression>, Box<Expression>),
     Not(Box<Expression>),
@@ -725,6 +727,8 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 T::And => Prec::BoolAnd,
                 T::Or => Prec::BoolOr,
 
+                T::In => Prec::Index,
+
                 T::AssertEqual => Prec::Assert,
 
                 T::Arrow => Prec::Arrow,
@@ -813,6 +817,8 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 T::Or => Or(lhs, rhs),
 
                 T::AssertEqual => AssertEq(lhs, rhs),
+
+                T::In => In(lhs, rhs),
 
                 T::Arrow => {
                     use AssignableKind::*;
@@ -1099,6 +1105,11 @@ mod test {
         test!(expression, dict: "{1: 1}" => Dict(_));
         test!(expression, zero_set: "{}" => Set(_));
         test!(expression, zero_dict: "{:}" => Dict(_));
+
+        test!(expression, in_list: "a in [1, 2, 3]" => In(_, _));
+        test!(expression, in_set: "2 in {1, 1, 2}" => In(_, _));
+        test!(expression, in_grouping: "1 + 2 in b" => Add(_, _));
+        test!(expression, in_grouping_paren: "(1 + 2) in b" => In(_, _));
 
         test!(expression, call_simple_paren: "a()" => Get(_));
         test!(expression, call_call: "a()()" => Get(_));
