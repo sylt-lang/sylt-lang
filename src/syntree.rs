@@ -1187,6 +1187,8 @@ mod test {
         test!(statement, statement_const_declaration: "a :: 1 + 1" => _);
         test!(statement, statement_mut_type_declaration: "a :int= 1 + 1" => _);
         test!(statement, statement_const_type_declaration: "a :int: 1 + 1" => _);
+        test!(statement, statement_force_mut_type_declaration: "a :!int= 1 + 1" => _);
+        test!(statement, statement_force_const_type_declaration: "a :!int: 1 + 1" => _);
         test!(statement, statement_if: "if 1 { print a }" => _);
         test!(statement, statement_if_else: "if 1 { print a } else { print b }" => _);
         test!(statement, statement_loop: "loop 1 { print a }" => _);
