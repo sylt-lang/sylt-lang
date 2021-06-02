@@ -679,6 +679,13 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                     };
                 }
 
+                // TODO(ed): You're allowed to skip the arrow for void?
+                T::LeftBrace => {
+                    use TypeKind::Resolved;
+                    use RuntimeType::Void;
+                    break Type { span: ctx.span(), kind: Resolved(Void) }
+                }
+
                 T::Identifier(name) => {
                     let ident = Identifier {
                         span: ctx.span(),
@@ -689,10 +696,10 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                     ctx = _ctx;
                     params.push((ident, param));
 
-                    ctx = if matches!(ctx.token(), T::Comma | T::Arrow) {
+                    ctx = if matches!(ctx.token(), T::Comma | T::Arrow | T::LeftBrace) {
                         skip_if!(ctx, T::Comma)
                     } else {
-                        raise_syntax_error!(ctx, "Expected ',' or '->' after type parameter")
+                        raise_syntax_error!(ctx, "Expected ',' '{{' or '->' after type parameter")
                     };
                 }
 
@@ -1214,6 +1221,9 @@ mod test {
         // TODO(ed): Require block or allow all statements?
         test!(expression, simple: "fn -> {}" => _);
         test!(expression, argument: "fn a: int -> int ret a + 1" => _);
+
+        test!(expression, void_simple: "fn {}" => _);
+        test!(expression, void_argument: "fn a: int { ret a + 1 }" => _);
     }
 
     mod statement {
