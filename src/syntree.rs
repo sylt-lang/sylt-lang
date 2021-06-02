@@ -244,9 +244,12 @@ macro_rules! eat {
     }
 }
 
+fn syntax_error_callback() {}
+
 macro_rules! syntax_error {
     ($ctx:expr, $( $msg:expr ),* ) => {
         {
+            syntax_error_callback();
             let msg = format!($( $msg ),*).into();
             Error::SyntaxError {
                 file: $ctx.file.to_path_buf(),
@@ -290,6 +293,20 @@ macro_rules! skip_if {
         }
     };
 }
+
+macro_rules! skip_until {
+    ($ctx:expr, $( $token:pat )|+ ) => {
+        {
+            let mut ctx = $ctx;
+            while !matches!(ctx.token(), T::EOF | $( $token )|* ) {
+                ctx = ctx.skip(1)
+            }
+            ctx
+        }
+    };
+}
+
+
 
 fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     use RuntimeType::{Void, Int, Float, Bool, String};
@@ -420,6 +437,10 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
     let span = ctx.span();
     let (ctx, kind) = match &ctx.tokens[ctx.curr..] {
+        [(T::Newline, _), ..] => {
+            (ctx.skip(1), EmptyStatement)
+        }
+
         [(T::LeftBrace, _), ..] => {
             let mut ctx = ctx.skip(1);
             let mut statements = Vec::new();
@@ -1026,13 +1047,15 @@ pub fn construct(tokens: &Tokens) -> Result<Module, Vec<Error>> {
             continue;
         }
         ctx = match outer_statement(ctx) {
-            Ok((_ctx, statement)) => {
-                statements.push(statement);
-                _ctx
+            Ok((ctx, statement)) => {
+                if !matches!(statement.kind, StatementKind::EmptyStatement) {
+                    statements.push(statement);
+                }
+                ctx
             }
-            Err((_ctx, mut errs)) => {
+            Err((ctx, mut errs)) => {
                 errors.append(&mut errs);
-                _ctx
+                ctx
             }
         }
     }
@@ -1040,6 +1063,7 @@ pub fn construct(tokens: &Tokens) -> Result<Module, Vec<Error>> {
     if errors.is_empty() {
         Ok(Module { span: Span { line: 0 }, statements })
     } else {
+        eprintln!("Dumping tree:\n{:#?}", statements);
         Err(errors)
     }
 }
