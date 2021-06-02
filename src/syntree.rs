@@ -858,14 +858,12 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
         fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             let span = ctx.span();
-            let ctx = expect!(ctx, T::LeftParen, "Expected '('");
+            let mut ctx = expect!(ctx, T::LeftParen, "Expected '('");
 
+            let mut exprs = Vec::new();
 
-            let (mut ctx, expr) = expression(ctx)?;
-            let mut exprs = vec![expr];
-
-            let tuple = matches!(ctx.token(), T::Comma);
-            while tuple {
+            let mut tuple = matches!(ctx.token(), T::Comma | T::RightParen);
+            loop {
                 ctx = skip_if!(ctx, T::Comma);
                 match ctx.token() {
                     T::EOF | T::RightParen => {
@@ -876,6 +874,7 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                         let (_ctx, expr) = expression(ctx)?;
                         exprs.push(expr);
                         ctx = _ctx;
+                        tuple |= matches!(ctx.token(), T::Comma);
                     }
                 }
             }
@@ -1156,7 +1155,10 @@ mod test {
         test!(expression, index_ident: "a[a]" => Get(Assignable { kind: Index(_, _), .. }));
         test!(expression, index_expr: "a[1 + 2 + 3]" => Get(Assignable { kind: Index(_, _), .. }));
         test!(expression, grouping: "(0 * 0) + 1" => Add(_, _));
+        test!(expression, grouping_one: "(0)" => Int(0));
         test!(expression, tuple: "(0, 0)" => Tuple(_));
+        test!(expression, tuple_one: "(0,)" => Tuple(_));
+        test!(expression, tuple_empty: "()" => Tuple(_));
         test!(expression, list: "[0, 0]" => List(_));
         test!(expression, set: "{1, 1}" => Set(_));
         test!(expression, dict: "{1: 1}" => Dict(_));
@@ -1189,6 +1191,13 @@ mod test {
         test!(expression, instance: "A { a: 1 + 1, b: nil }" => Instance { .. });
         test!(expression, instance_more: "A { a: 2\n c: 2 }" => Instance { .. });
         test!(expression, instance_empty: "A {}" => Instance { .. });
+
+        // TODO(ed): Require block or allow all statements?
+        test!(expression, simple: "fn -> {}" => _);
+        test!(expression, argument: "fn a: int -> int ret a + 1" => _);
+
+        test!(expression, void_simple: "fn {}" => _);
+        test!(expression, void_argument: "fn a: int { ret a + 1 }" => _);
     }
 
     mod parse_type {
@@ -1221,13 +1230,6 @@ mod test {
 
         test!(parse_type, type_dict_one: "{int : int}" => Dict(_, _));
         test!(parse_type, type_dict_complex: "{int | float? : int | int | int?}" => Dict(_, _));
-
-        // TODO(ed): Require block or allow all statements?
-        test!(expression, simple: "fn -> {}" => _);
-        test!(expression, argument: "fn a: int -> int ret a + 1" => _);
-
-        test!(expression, void_simple: "fn {}" => _);
-        test!(expression, void_argument: "fn a: int { ret a + 1 }" => _);
     }
 
     mod statement {
