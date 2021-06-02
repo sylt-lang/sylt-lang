@@ -1018,9 +1018,8 @@ fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
     statement(ctx)
 }
 
-pub fn construct(tokens: &Tokens) -> Result<Module, Vec<Error>> {
-    let path = PathBuf::from("hello.sy");
-    let mut ctx = Context::new(tokens, &path);
+pub fn construct(path: &Path, tokens: &Tokens) -> Result<Module, Vec<Error>> {
+    let mut ctx = Context::new(tokens, path);
     let mut errors = Vec::new();
     let mut statements = Vec::new();
     while !matches!(ctx.token(), T::EOF) {
@@ -1035,8 +1034,13 @@ pub fn construct(tokens: &Tokens) -> Result<Module, Vec<Error>> {
                 }
                 ctx
             }
-            Err((ctx, mut errs)) => {
+            Err((mut ctx, mut errs)) => {
                 errors.append(&mut errs);
+
+                // "Error recovery"
+                while !matches!(ctx.token(), T::EOF | T::Newline) {
+                    ctx = ctx.skip(1);
+                }
                 ctx
             }
         }
