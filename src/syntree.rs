@@ -456,7 +456,11 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
         [(T::Ret, _), ..] => {
             let ctx = ctx.skip(1);
-            let (ctx, value) = expression(ctx)?;
+            let (ctx, value) = if matches!(ctx.token(), T::Newline) {
+                (ctx, Expression { span: ctx.span(), kind: ExpressionKind::Nil })
+            } else {
+                expression(ctx)?
+            };
             (ctx, Ret { value })
         }
 
@@ -1242,6 +1246,7 @@ mod test {
         test!(statement, statement_if_else: "if 1 { print a } else { print b }" => _);
         test!(statement, statement_loop: "loop 1 { print a }" => _);
         test!(statement, statement_ret: "ret 1 + 1" => _);
+        test!(statement, statement_ret_newline: "ret \n" => _);
         test!(statement, statement_unreach: "<!>" => _);
         test!(statement, statement_blob_empty: "A :: blob {}" => _);
         test!(statement, statement_blob_comma: "A :: blob { a: int, b: int }" => _);
