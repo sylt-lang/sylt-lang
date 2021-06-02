@@ -50,6 +50,7 @@ pub enum StatementKind {
     },
 
     Blob {
+        name: String,
         fields: HashMap<String, Type>,
     },
 
@@ -471,8 +472,9 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx, If { condition, pass: Box::new(pass), fail: Box::new(fail) })
         }
 
-        [(T::Blob, _), ..] => {
-            let mut ctx = expect!(ctx.skip(1), T::LeftBrace, "Expected '{{' to open blob");
+        [(T::Identifier(name), _), (T::ColonColon, _), (T::Blob, _), ..] => {
+            let name = name.clone();
+            let mut ctx = expect!(ctx.skip(3), T::LeftBrace, "Expected '{{' to open blob");
             let mut fields = HashMap::new();
             loop {
                 match ctx.token().clone() {
@@ -504,7 +506,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 }
             }
             let ctx = expect!(ctx, T::RightBrace, "Expected '}}' to close blob fields");
-            (ctx, Blob { fields })
+            (ctx, Blob { name, fields })
         }
 
         [(T::Identifier(name), _), (T::ColonColon, _), ..]
@@ -1162,10 +1164,10 @@ mod test {
         test!(statement, statement_loop: "loop 1 { print a }" => _);
         test!(statement, statement_ret: "ret 1 + 1" => _);
         test!(statement, statement_unreach: "<!>" => _);
-        test!(statement, statement_blob_empty: "blob {}" => _);
-        test!(statement, statement_blob_comma: "blob { a: int, b: int }" => _);
-        test!(statement, statement_blob_newline: "blob { a: int\n b: int }" => _);
-        test!(statement, statement_blob_comma_newline: "blob { a: int,\n b: int }" => _);
+        test!(statement, statement_blob_empty: "A :: blob {}" => _);
+        test!(statement, statement_blob_comma: "A :: blob { a: int, b: int }" => _);
+        test!(statement, statement_blob_newline: "A :: blob { a: int\n b: int }" => _);
+        test!(statement, statement_blob_comma_newline: "A :: blob { a: int,\n b: int }" => _);
         test!(statement, statement_assign: "a = 1" => _);
         test!(statement, statement_assign_index: "a.b = 1 + 2" => _);
         test!(statement, statement_assign_call: "a().b() += 2" => _);
