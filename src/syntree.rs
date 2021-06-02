@@ -1,6 +1,3 @@
-// TODO(ed): Remove me
-#![allow(unused)]
-
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use crate::error::Error;
@@ -294,20 +291,6 @@ macro_rules! skip_if {
     };
 }
 
-macro_rules! skip_until {
-    ($ctx:expr, $( $token:pat )|+ ) => {
-        {
-            let mut ctx = $ctx;
-            while !matches!(ctx.token(), T::EOF | $( $token )|* ) {
-                ctx = ctx.skip(1)
-            }
-            ctx
-        }
-    };
-}
-
-
-
 fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     use RuntimeType::{Void, Int, Float, Bool, String};
     use TypeKind::*;
@@ -339,6 +322,10 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                         };
                     }
 
+                    T::EOF => {
+                        raise_syntax_error!(ctx, "Didn't expect EOF in type definition");
+                    }
+
                     _ => {
                         let (_ctx, param) = parse_type(ctx)?;
                         ctx = _ctx;
@@ -349,10 +336,6 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                         } else {
                             raise_syntax_error!(ctx, "Expected ',' or '->' after type parameter")
                         };
-                    }
-
-                    T::EOF => {
-                        raise_syntax_error!(ctx, "Didn't expect EOF in type definition");
                     }
                 }
             };
@@ -369,6 +352,10 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                         break;
                     }
 
+                    T::EOF => {
+                        raise_syntax_error!(ctx, "Didn't expect EOF in type definition");
+                    }
+
                     _ => {
                         let (_ctx, param) = parse_type(ctx)?;
                         ctx = _ctx;
@@ -379,10 +366,6 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                         } else {
                             raise_syntax_error!(ctx, "Expected ',' or ')' after tuple field")
                         };
-                    }
-
-                    T::EOF => {
-                        raise_syntax_error!(ctx, "Didn't expect EOF in type definition");
                     }
                 }
             };
@@ -422,7 +405,6 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     };
 
     let (ctx, ty) = if matches!(ctx.token(), T::QuestionMark) {
-        use RuntimeType::Void;
         let void = Type { span: ctx.span(), kind: Resolved(Void) };
         (ctx.skip(1), Type { span, kind: Union(Box::new(ty), Box::new(void)) })
     } else {
@@ -521,7 +503,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         ctx = skip_if!(ctx, T::Comma);
                     }
 
-                    t => {
+                    _ => {
                         raise_syntax_error!(ctx, "Expected field name or '}}' in blob statement");
                     }
                 }
