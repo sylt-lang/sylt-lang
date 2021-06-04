@@ -1,11 +1,11 @@
-use std::path::{PathBuf, Path};
-use std::collections::{HashMap, HashSet};
-use crate::error::Error;
-use crate::tokenizer::Token as T;
-use crate::Type as RuntimeType;
 use crate::compiler::Prec;
-use crate::Next;
+use crate::error::Error;
 use crate::tokenizer::file_to_tokens;
+use crate::tokenizer::Token as T;
+use crate::Next;
+use crate::Type as RuntimeType;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Span {
@@ -129,7 +129,6 @@ pub struct Assignable {
 pub enum ExpressionKind {
     Get(Assignable),
 
-
     Add(Box<Expression>, Box<Expression>),
     Sub(Box<Expression>, Box<Expression>),
     Mul(Box<Expression>, Box<Expression>),
@@ -201,7 +200,7 @@ pub struct Type {
 }
 
 type Tokens = [(T, usize)];
-type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>,  Vec<Error>)>;
+type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>, Vec<Error>)>;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Context<'a> {
@@ -211,13 +210,18 @@ pub struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-
     fn new(tokens: &'a [(T, usize)], file: &'a Path) -> Self {
-        Self { tokens, curr: 0, file, }
+        Self {
+            tokens,
+            curr: 0,
+            file,
+        }
     }
 
     fn span(&self) -> Span {
-        Span { line: self.peek().1 }
+        Span {
+            line: self.peek().1,
+        }
     }
 
     fn line(&self) -> usize {
@@ -237,13 +241,12 @@ impl<'a> Context<'a> {
     fn token(&self) -> &T {
         &self.peek().0
     }
-
 }
 
 macro_rules! eat {
     ($ctx:expr) => {
         ($ctx.token(), $ctx.span(), $ctx.skip(1))
-    }
+    };
 }
 
 fn syntax_error_callback() {}
@@ -297,20 +300,21 @@ macro_rules! skip_if {
 }
 
 fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
-    use RuntimeType::{Void, Int, Float, Bool, String};
+    use RuntimeType::{Bool, Float, Int, String, Void};
     use TypeKind::*;
     let span = ctx.span();
     let (ctx, kind) = match ctx.token() {
-        T::Identifier(name) => {
-            (ctx.skip(1), match name.as_str() {
+        T::Identifier(name) => (
+            ctx.skip(1),
+            match name.as_str() {
                 "void" => Resolved(Void),
                 "int" => Resolved(Int),
                 "float" => Resolved(Float),
                 "bool" => Resolved(Bool),
                 "str" => Resolved(String),
                 _ => Unresolved(name.clone()),
-            })
-        }
+            },
+        ),
 
         T::Fn => {
             let mut ctx = ctx.skip(1);
@@ -323,7 +327,10 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                             ctx = _ctx;
                             ret
                         } else {
-                            Type { span: ctx.span(), kind: Resolved(Void) }
+                            Type {
+                                span: ctx.span(),
+                                kind: Resolved(Void),
+                            }
                         };
                     }
 
@@ -373,7 +380,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                         };
                     }
                 }
-            };
+            }
             (ctx, Tuple(types))
         }
 
@@ -404,14 +411,29 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
 
     let (ctx, ty) = if matches!(ctx.token(), T::Pipe) {
         let (ctx, rest) = parse_type(ctx.skip(1))?;
-        (ctx, Type { span, kind: Union(Box::new(ty), Box::new(rest)) })
+        (
+            ctx,
+            Type {
+                span,
+                kind: Union(Box::new(ty), Box::new(rest)),
+            },
+        )
     } else {
         (ctx, ty)
     };
 
     let (ctx, ty) = if matches!(ctx.token(), T::QuestionMark) {
-        let void = Type { span: ctx.span(), kind: Resolved(Void) };
-        (ctx.skip(1), Type { span, kind: Union(Box::new(ty), Box::new(void)) })
+        let void = Type {
+            span: ctx.span(),
+            kind: Resolved(Void),
+        };
+        (
+            ctx.skip(1),
+            Type {
+                span,
+                kind: Union(Box::new(ty), Box::new(void)),
+            },
+        )
     } else {
         (ctx, ty)
     };
@@ -424,9 +446,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
     let span = ctx.span();
     let (ctx, kind) = match &ctx.tokens[ctx.curr..] {
-        [(T::Newline, _), ..] => {
-            (ctx.skip(1), EmptyStatement)
-        }
+        [(T::Newline, _), ..] => (ctx.skip(1), EmptyStatement),
 
         [(T::LeftBrace, _), ..] => {
             let mut ctx = ctx.skip(1);
@@ -441,13 +461,17 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx, Block { statements })
         }
 
-        [(T::Use, _), (T::Identifier(name), _), ..] => {
-            (ctx.skip(2), Use { file: Identifier { span: ctx.skip(1).span(), name: name.clone() } })
-        }
+        [(T::Use, _), (T::Identifier(name), _), ..] => (
+            ctx.skip(2),
+            Use {
+                file: Identifier {
+                    span: ctx.skip(1).span(),
+                    name: name.clone(),
+                },
+            },
+        ),
 
-        [(T::Unreachable, _), ..] => {
-            (ctx.skip(1), Unreachable)
-        }
+        [(T::Unreachable, _), ..] => (ctx.skip(1), Unreachable),
 
         [(T::Print, _), ..] => {
             let (ctx, value) = expression(ctx.skip(1))?;
@@ -457,7 +481,13 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [(T::Ret, _), ..] => {
             let ctx = ctx.skip(1);
             let (ctx, value) = if matches!(ctx.token(), T::Newline) {
-                (ctx, Expression { span: ctx.span(), kind: ExpressionKind::Nil })
+                (
+                    ctx,
+                    Expression {
+                        span: ctx.span(),
+                        kind: ExpressionKind::Nil,
+                    },
+                )
             } else {
                 expression(ctx)?
             };
@@ -467,7 +497,13 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [(T::Loop, _), ..] => {
             let (ctx, condition) = expression(ctx.skip(1))?;
             let (ctx, body) = statement(ctx)?;
-            (ctx, Loop { condition, body: Box::new(body) })
+            (
+                ctx,
+                Loop {
+                    condition,
+                    body: Box::new(body),
+                },
+            )
         }
 
         [(T::If, _), ..] => {
@@ -478,10 +514,23 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 let (ctx, fail) = statement(ctx.skip(1))?;
                 (ctx, fail)
             } else {
-                (ctx, Statement { span: ctx.span(), kind: EmptyStatement })
+                (
+                    ctx,
+                    Statement {
+                        span: ctx.span(),
+                        kind: EmptyStatement,
+                    },
+                )
             };
 
-            (ctx, If { condition, pass: Box::new(pass), fail: Box::new(fail) })
+            (
+                ctx,
+                If {
+                    condition,
+                    pass: Box::new(pass),
+                    fail: Box::new(fail),
+                },
+            )
         }
 
         [(T::Identifier(name), _), (T::ColonColon, _), (T::Blob, _), ..] => {
@@ -507,7 +556,10 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         fields.insert(field, ty);
 
                         if !matches!(ctx.token(), T::Comma | T::Newline | T::RightBrace) {
-                            raise_syntax_error!(ctx, "Expected a field deliminator: newline or ','");
+                            raise_syntax_error!(
+                                ctx,
+                                "Expected a field deliminator: newline or ','"
+                            );
                         }
                         ctx = skip_if!(ctx, T::Comma);
                     }
@@ -530,12 +582,22 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             };
             let ctx = ctx.skip(1);
             let (ctx, kind, ty) = match ctx.token() {
-                T::ColonColon => (ctx.skip(1),
-                                  VarKind::Const,
-                                  Type { span: ctx.span(), kind: TypeKind::Implied }),
-                T::ColonEqual => (ctx.skip(1),
-                                  VarKind::Mutable,
-                                  Type { span: ctx.span(), kind: TypeKind::Implied }),
+                T::ColonColon => (
+                    ctx.skip(1),
+                    VarKind::Const,
+                    Type {
+                        span: ctx.span(),
+                        kind: TypeKind::Implied,
+                    },
+                ),
+                T::ColonEqual => (
+                    ctx.skip(1),
+                    VarKind::Mutable,
+                    Type {
+                        span: ctx.span(),
+                        kind: TypeKind::Implied,
+                    },
+                ),
                 T::Colon => {
                     let ctx = ctx.skip(1);
                     let banger = ctx.token();
@@ -546,7 +608,13 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         (T::Equal, T::Bang) => VarKind::ForceMutable,
                         (T::Colon, _) => VarKind::Const,
                         (T::Equal, _) => VarKind::Mutable,
-                        (t, _) => { raise_syntax_error!(ctx, "Expected ':' or '=' for definition, but got '{:?}'", t); }
+                        (t, _) => {
+                            raise_syntax_error!(
+                                ctx,
+                                "Expected ':' or '=' for definition, but got '{:?}'",
+                                t
+                            );
+                        }
                     };
                     (ctx.skip(1), kind, ty)
                 }
@@ -556,7 +624,15 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 }
             };
             let (ctx, value) = expression(ctx)?;
-            (ctx, Definition { ident, kind, ty, value })
+            (
+                ctx,
+                Definition {
+                    ident,
+                    kind,
+                    ty,
+                    value,
+                },
+            )
         }
 
         _ => {
@@ -570,10 +646,19 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     T::SlashEqual => Op::Div,
                     T::Equal => Op::Nop,
 
-                    t => { raise_syntax_error!(ctx, "No assignment matches '{:?}'", t); }
+                    t => {
+                        raise_syntax_error!(ctx, "No assignment matches '{:?}'", t);
+                    }
                 };
                 let (ctx, value) = expression(ctx.skip(1))?;
-                Ok((ctx, Assignment { kind, target, value }))
+                Ok((
+                    ctx,
+                    Assignment {
+                        kind,
+                        target,
+                        value,
+                    },
+                ))
             }
 
             // TODO(ed): Potenitally risky - might destroy errors aswell
@@ -594,22 +679,27 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
 fn maybe_call<'t>(ctx: Context<'t>, calle: Assignable) -> ParseResult<'t, Assignable> {
     if !matches!(ctx.token(), T::LeftParen | T::Bang) {
-        return Ok((ctx, calle))
+        return Ok((ctx, calle));
     }
 
     let span = ctx.span();
     let banger = matches!(ctx.token(), T::Bang);
-    let mut ctx = expect!(ctx, T::Bang | T::LeftParen, "Expected '(' or '!' when calling function");
+    let mut ctx = expect!(
+        ctx,
+        T::Bang | T::LeftParen,
+        "Expected '(' or '!' when calling function"
+    );
     let mut args = Vec::new();
 
     loop {
         match (ctx.token(), banger) {
             (T::EOF, _)
-                | (T::RightParen, false)
-                | (T::Dot, true)
-                | (T::Newline, true)
-                | (T::Arrow, true)
-                => { break; }
+            | (T::RightParen, false)
+            | (T::Dot, true)
+            | (T::Newline, true)
+            | (T::Arrow, true) => {
+                break;
+            }
 
             _ => {
                 let (_ctx, expr) = expression(ctx)?;
@@ -628,7 +718,10 @@ fn maybe_call<'t>(ctx: Context<'t>, calle: Assignable) -> ParseResult<'t, Assign
     };
 
     use AssignableKind::Call;
-    let result = Assignable { span, kind: Call(Box::new(calle), args) };
+    let result = Assignable {
+        span,
+        kind: Call(Box::new(calle), args),
+    };
     maybe_call(ctx, result)
 }
 
@@ -636,9 +729,18 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
     use AssignableKind::*;
 
     let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
-        Assignable { span, kind: Read(Identifier { span, name: name.clone() })}
+        Assignable {
+            span,
+            kind: Read(Identifier {
+                span,
+                name: name.clone(),
+            }),
+        }
     } else {
-        raise_syntax_error!(ctx, "Assignable expressions have to start with an identifier");
+        raise_syntax_error!(
+            ctx,
+            "Assignable expressions have to start with an identifier"
+        );
     };
 
     let (ctx, ident) = maybe_call(ctx.skip(1), ident)?;
@@ -652,12 +754,16 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
 
         T::LeftBracket => {
             let (ctx, index) = expression(ctx.skip(1))?;
-            (ctx.skip(1), Assignable { span, kind: Index(Box::new(ident), Box::new(index))})
+            (
+                ctx.skip(1),
+                Assignable {
+                    span,
+                    kind: Index(Box::new(ident), Box::new(index)),
+                },
+            )
         }
 
-        _ => {
-            (ctx, ident)
-        }
+        _ => (ctx, ident),
     };
     Ok(result)
 }
@@ -679,17 +785,23 @@ mod expression {
                         ctx = _ctx;
                         ret
                     } else {
-                        use TypeKind::Resolved;
                         use RuntimeType::Void;
-                        Type { span: ctx.span(), kind: Resolved(Void) }
+                        use TypeKind::Resolved;
+                        Type {
+                            span: ctx.span(),
+                            kind: Resolved(Void),
+                        }
                     };
                 }
 
                 // TODO(ed): You're allowed to skip the arrow for void?
                 T::LeftBrace => {
-                    use TypeKind::Resolved;
                     use RuntimeType::Void;
-                    break Type { span: ctx.span(), kind: Resolved(Void) }
+                    use TypeKind::Resolved;
+                    break Type {
+                        span: ctx.span(),
+                        kind: Resolved(Void),
+                    };
                 }
 
                 T::Identifier(name) => {
@@ -707,15 +819,15 @@ mod expression {
                     } else {
                         raise_syntax_error!(ctx, "Expected ',' '{{' or '->' after type parameter")
                     };
-                        }
+                }
 
                 T::EOF => {
                     raise_syntax_error!(ctx, "Didn't expect EOF in function");
-                        }
+                }
 
                 t => {
                     raise_syntax_error!(ctx, "Didn't expect '{:?}' in function", t);
-                        }
+                }
             }
         };
 
@@ -726,7 +838,13 @@ mod expression {
             body: Box::new(statement),
         };
 
-        Ok((ctx, Expression { span, kind: function }))
+        Ok((
+            ctx,
+            Expression {
+                span,
+                kind: function,
+            },
+        ))
     }
 
     fn parse_precedence<'t>(ctx: Context<'t>, prec: Prec) -> ParseResult<'t, Expression> {
@@ -756,12 +874,9 @@ mod expression {
 
             T::Minus | T::Plus => Prec::Term,
 
-            T::EqualEqual
-                | T::Greater
-                | T::GreaterEqual
-                | T::Less
-                | T::LessEqual
-                | T::NotEqual => Prec::Comp,
+            T::EqualEqual | T::Greater | T::GreaterEqual | T::Less | T::LessEqual | T::NotEqual => {
+                Prec::Comp
+            }
 
             T::And => Prec::BoolAnd,
             T::Or => Prec::BoolOr,
@@ -806,7 +921,13 @@ mod expression {
                 } else {
                     let span = ctx.span();
                     let (ctx, assign) = assignable(ctx)?;
-                    Ok((ctx, Expression { span, kind: Get(assign) }))
+                    Ok((
+                        ctx,
+                        Expression {
+                            span,
+                            kind: Get(assign),
+                        },
+                    ))
                 }
             }
 
@@ -861,13 +982,24 @@ mod expression {
 
             T::Arrow => {
                 use AssignableKind::*;
-                if let Expression { kind: Get(Assignable { kind: Call(calle, mut args), .. }), span } = *rhs {
+                if let Expression {
+                    kind:
+                        Get(Assignable {
+                            kind: Call(calle, mut args),
+                            ..
+                        }),
+                    span,
+                } = *rhs
+                {
                     args.insert(0, *lhs);
-                    Get(Assignable { kind: Call(calle, args), span })
+                    Get(Assignable {
+                        kind: Call(calle, args),
+                        span,
+                    })
                 } else {
                     raise_syntax_error!(ctx, "Expected a call-expression after '->'");
                 }
-            },
+            }
 
             _ => {
                 return Err((ctx, Vec::new()));
@@ -901,7 +1033,10 @@ mod expression {
 
         ctx = expect!(ctx, T::RightParen, "Expected ')'");
         let result = if tuple {
-            Expression { span, kind: Tuple(exprs) }
+            Expression {
+                span,
+                kind: Tuple(exprs),
+            }
         } else {
             exprs.into_iter().next().unwrap()
         };
@@ -950,7 +1085,13 @@ mod expression {
         }
         let ctx = expect!(ctx, T::RightBrace, "Expected '}}' after blob initalizer");
 
-        Ok((ctx, Expression { span, kind: Instance { blob, fields } }))
+        Ok((
+            ctx,
+            Expression {
+                span,
+                kind: Instance { blob, fields },
+            },
+        ))
     }
 
     fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
@@ -973,7 +1114,13 @@ mod expression {
         }
 
         ctx = expect!(ctx, T::RightBracket, "Expected ']'");
-        Ok((ctx, Expression { span, kind: List(exprs) }))
+        Ok((
+            ctx,
+            Expression {
+                span,
+                kind: List(exprs),
+            },
+        ))
     }
 
     fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
@@ -991,7 +1138,9 @@ mod expression {
 
                 T::Colon => {
                     if is_dict.is_some() {
-                        raise_syntax_error!(ctx, "Didn't expect empty dict pair since it has to be a {}",
+                        raise_syntax_error!(
+                            ctx,
+                            "Didn't expect empty dict pair since it has to be a {}",
                             if is_dict.unwrap() { "dict" } else { "set" }
                         );
                     }
@@ -1080,7 +1229,13 @@ fn module(path: &Path, tokens: &Tokens) -> (Vec<PathBuf>, Result<Module, Vec<Err
     }
 
     if errors.is_empty() {
-        (use_files, Ok(Module { span: Span { line: 0 }, statements }))
+        (
+            use_files,
+            Ok(Module {
+                span: Span { line: 0 },
+                statements,
+            }),
+        )
     } else {
         (use_files, Err(errors))
     }
@@ -1122,34 +1277,45 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
 
 #[cfg(test)]
 mod test {
-    use crate::tokenizer::string_to_tokens;
     use super::*;
+    use crate::tokenizer::string_to_tokens;
 
     macro_rules! test {
         ($f:ident, $name:ident: $str:expr => $ans:pat) => {
             #[test]
-            fn $name () {
+            fn $name() {
                 let tokens = string_to_tokens($str);
                 let path = PathBuf::from(stringify!($name));
                 let result = $f(Context::new(&tokens, &path));
-                assert!(result.is_ok(),
+                assert!(
+                    result.is_ok(),
                     "\nSyntax tree test didn't parse for:\n{}\nErrs: {:?}",
                     $str,
                     result.unwrap_err().1
                 );
                 let (ctx, result) = result.unwrap();
-                assert!(matches!(result.kind, $ans), "\nExpected: {}, but got: {:?}", stringify!($ans), result);
-                assert_eq!(ctx.curr, ctx.tokens.len(), "Parsed too few or too many tokens:\n{}", $str);
+                assert!(
+                    matches!(result.kind, $ans),
+                    "\nExpected: {}, but got: {:?}",
+                    stringify!($ans),
+                    result
+                );
+                assert_eq!(
+                    ctx.curr,
+                    ctx.tokens.len(),
+                    "Parsed too few or too many tokens:\n{}",
+                    $str
+                );
             }
-        }
+        };
     }
 
     // TODO(ed): It's really hard to write good tests, Rust refuses to deref the boxes
     // automatically.
     mod expression {
         use super::*;
-        use ExpressionKind::*;
         use AssignableKind::*;
+        use ExpressionKind::*;
 
         test!(expression, value: "0" => Int(0));
         test!(expression, add: "0 + 1.0" => Add(_, _));
@@ -1206,8 +1372,8 @@ mod test {
 
     mod parse_type {
         use super::*;
-        use TypeKind::*;
         use RuntimeType as RT;
+        use TypeKind::*;
 
         test!(parse_type, type_void: "void" => Resolved(RT::Void));
         test!(parse_type, type_int: "int" => Resolved(RT::Int));
