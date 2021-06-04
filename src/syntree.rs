@@ -204,7 +204,7 @@ type Tokens = [(T, usize)];
 type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>,  Vec<Error>)>;
 
 #[derive(Debug, Copy, Clone)]
-struct Context<'a> {
+pub struct Context<'a> {
     pub tokens: &'a Tokens,
     pub curr: usize,
     pub file: &'a Path,
@@ -662,7 +662,9 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
     Ok(result)
 }
 
-fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+use expression::expression;
+mod expression {
+    use super::*;
     use ExpressionKind::*;
 
     fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
@@ -705,15 +707,15 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                     } else {
                         raise_syntax_error!(ctx, "Expected ',' '{{' or '->' after type parameter")
                     };
-                }
+                        }
 
                 T::EOF => {
                     raise_syntax_error!(ctx, "Didn't expect EOF in function");
-                }
+                        }
 
                 t => {
                     raise_syntax_error!(ctx, "Didn't expect '{:?}' in function", t);
-                }
+                        }
             }
         };
 
@@ -728,291 +730,6 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     }
 
     fn parse_precedence<'t>(ctx: Context<'t>, prec: Prec) -> ParseResult<'t, Expression> {
-        fn precedence(token: &T) -> Prec {
-            match token {
-                T::LeftBracket => Prec::Index,
-
-                T::Star | T::Slash => Prec::Factor,
-
-                T::Minus | T::Plus => Prec::Term,
-
-                T::EqualEqual
-                | T::Greater
-                | T::GreaterEqual
-                | T::Less
-                | T::LessEqual
-                | T::NotEqual => Prec::Comp,
-
-                T::And => Prec::BoolAnd,
-                T::Or => Prec::BoolOr,
-
-                T::In => Prec::Index,
-
-                T::AssertEqual => Prec::Assert,
-
-                T::Arrow => Prec::Arrow,
-
-                _ => Prec::No,
-            }
-        }
-
-        fn value<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-            let (token, span, ctx) = eat!(ctx);
-            let kind = match token.clone() {
-                T::Float(f) => Float(f),
-                T::Int(i) => Int(i),
-                T::Bool(b) => Bool(b),
-                T::Nil => Nil,
-                T::String(s) => Str(s),
-                t => {
-                    raise_syntax_error!(ctx, "Cannot parse value, '{:?}' is not a valid value", t);
-                }
-            };
-            Ok((ctx, Expression { span, kind }))
-        }
-
-        fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-            match ctx.token() {
-                T::LeftParen => grouping_or_tuple(ctx),
-                T::LeftBracket => list(ctx),
-                T::LeftBrace => set_or_dict(ctx),
-
-                T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
-                T::Minus | T::Bang => unary(ctx),
-
-                T::Identifier(_) => {
-                    if let Ok(result) = blob(ctx) {
-                        Ok(result)
-                    } else {
-                        let span = ctx.span();
-                        let (ctx, assign) = assignable(ctx)?;
-                        Ok((ctx, Expression { span, kind: Get(assign) }))
-                    }
-                }
-
-                t => {
-                    raise_syntax_error!(ctx, "No valid expression starts with '{:?}'", t);
-                }
-            }
-        }
-
-        fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-            let (op, span, ctx) = eat!(ctx);
-            let (ctx, expr) = parse_precedence(ctx, Prec::Factor)?;
-            let expr = Box::new(expr);
-
-            let kind = match op {
-                T::Minus => Neg(expr),
-                T::Bang => Not(expr),
-
-                _ => {
-                    raise_syntax_error!(ctx, "Invalid unary operator");
-                }
-            };
-            Ok((ctx, Expression { span, kind }))
-        }
-
-        fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
-            let (op, span, ctx) = eat!(ctx);
-
-            let (ctx, rhs) = parse_precedence(ctx, precedence(op).next())?;
-
-            let lhs = Box::new(lhs.clone());
-            let rhs = Box::new(rhs);
-
-            let kind = match op {
-                T::Plus => Add(lhs, rhs),
-                T::Minus => Sub(lhs, rhs),
-                T::Star => Mul(lhs, rhs),
-                T::Slash => Div(lhs, rhs),
-                T::EqualEqual => Eq(lhs, rhs),
-                T::NotEqual => Neq(lhs, rhs),
-                T::Greater => Gt(lhs, rhs),
-                T::GreaterEqual => Gteq(lhs, rhs),
-                T::Less => Lt(lhs, rhs),
-                T::LessEqual => Lteq(lhs, rhs),
-
-                T::And => And(lhs, rhs),
-                T::Or => Or(lhs, rhs),
-
-                T::AssertEqual => AssertEq(lhs, rhs),
-
-                T::In => In(lhs, rhs),
-
-                T::Arrow => {
-                    use AssignableKind::*;
-                    if let Expression { kind: Get(Assignable { kind: Call(calle, mut args), .. }), span } = *rhs {
-                        args.insert(0, *lhs);
-                        Get(Assignable { kind: Call(calle, args), span })
-                    } else {
-                        raise_syntax_error!(ctx, "Expected a call-expression after '->'");
-                    }
-                },
-
-                _ => {
-                    return Err((ctx, Vec::new()));
-                }
-            };
-            Ok((ctx, Expression { span, kind }))
-        }
-
-        fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-            let span = ctx.span();
-            let mut ctx = expect!(ctx, T::LeftParen, "Expected '('");
-
-            let mut exprs = Vec::new();
-
-            let mut tuple = matches!(ctx.token(), T::Comma | T::RightParen);
-            loop {
-                ctx = skip_if!(ctx, T::Comma);
-                match ctx.token() {
-                    T::EOF | T::RightParen => {
-                        break;
-                    }
-
-                    _ => {
-                        let (_ctx, expr) = expression(ctx)?;
-                        exprs.push(expr);
-                        ctx = _ctx;
-                        tuple |= matches!(ctx.token(), T::Comma);
-                    }
-                }
-            }
-
-            ctx = expect!(ctx, T::RightParen, "Expected ')'");
-            let result = if tuple {
-                Expression { span, kind: Tuple(exprs) }
-            } else {
-                exprs.into_iter().next().unwrap()
-            };
-            Ok((ctx, result))
-        }
-
-        fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-            let span = ctx.span();
-            let blob = if let T::Identifier(blob) = ctx.token() {
-                blob.clone()
-            } else {
-                raise_syntax_error!(ctx, "Expected name of blob");
-            };
-            let mut ctx = expect!(ctx.skip(1), T::LeftBrace, "Expected '{{' after blob name");
-
-            let mut fields = Vec::new();
-            loop {
-                match ctx.token() {
-                    T::Newline => {
-                        ctx = ctx.skip(1);
-                    }
-
-                    T::RightBrace | T::EOF => {
-                        break;
-                    }
-
-                    T::Identifier(name) => {
-                        let name = name.clone();
-
-                        ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after field name");
-                        let (_ctx, expr) = expression(ctx)?;
-                        ctx = _ctx;
-
-                        if !matches!(ctx.token(), T::Comma | T::Newline | T::RightBrace) {
-                            raise_syntax_error!(ctx, "Expected a deliminator: newline or ','");
-                        }
-                        ctx = skip_if!(ctx, T::Comma);
-
-                        fields.push((name, expr));
-                    }
-
-                    t => {
-                        raise_syntax_error!(ctx, "Unexpected token ('{:?}') in blob initalizer", t);
-                    }
-                }
-            }
-            let ctx = expect!(ctx, T::RightBrace, "Expected '}}' after blob initalizer");
-
-            Ok((ctx, Expression { span, kind: Instance { blob, fields } }))
-        }
-
-        fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-            let span = ctx.span();
-            let mut ctx = expect!(ctx, T::LeftBracket, "Expected '['");
-
-            let mut exprs = Vec::new();
-            loop {
-                match ctx.token() {
-                    T::EOF | T::RightBracket => {
-                        break;
-                    }
-
-                    _ => {
-                        let (_ctx, expr) = expression(ctx)?;
-                        exprs.push(expr);
-                        ctx = skip_if!(_ctx, T::Comma);
-                    }
-                }
-            }
-
-            ctx = expect!(ctx, T::RightBracket, "Expected ']'");
-            Ok((ctx, Expression { span, kind: List(exprs) }))
-        }
-
-        fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-            let span = ctx.span();
-            let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{'");
-
-            // NOTE(ed): I decided on {:} for empty dicts, and {} for empty sets.
-            let mut exprs = Vec::new();
-            let mut is_dict = None;
-            loop {
-                match ctx.token() {
-                    T::EOF | T::RightBrace => {
-                        break;
-                    }
-
-                    T::Colon => {
-                        if is_dict.is_some() {
-                            raise_syntax_error!(ctx, "Didn't expect empty dict pair since it has to be a {}",
-                                if is_dict.unwrap() { "dict" } else { "set" }
-                            );
-                        }
-                        is_dict = Some(true);
-                        ctx = ctx.skip(1);
-                    }
-
-                    _ => {
-                        let (_ctx, expr) = expression(ctx)?;
-                        ctx = _ctx;
-                        exprs.push(expr);
-
-                        is_dict = if is_dict.is_none() {
-                            Some(matches!(ctx.token(), T::Colon))
-                        } else {
-                            is_dict
-                        };
-
-                        if is_dict.unwrap() {
-                            ctx = expect!(ctx, T::Colon, "Expected ':' for dict pair");
-                            let (_ctx, expr) = expression(ctx)?;
-                            ctx = _ctx;
-                            exprs.push(expr);
-                        }
-
-                        ctx = skip_if!(ctx, T::Comma);
-                    }
-                }
-            }
-
-            ctx = expect!(ctx, T::RightBrace, "Expected '}}'");
-
-            let kind = if is_dict.unwrap_or(false) {
-                Dict(exprs)
-            } else {
-                Set(exprs)
-            };
-
-            Ok((ctx, Expression { span, kind }))
-        }
-
         let pre = prefix(ctx);
         if let Err((ctx, mut errs)) = pre {
             errs.push(syntax_error!(ctx, "Invalid expression"));
@@ -1031,9 +748,296 @@ fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         Ok((ctx, expr))
     }
 
-    match ctx.token() {
-        T::Fn => function(ctx),
-        _ => parse_precedence(ctx, Prec::No),
+    fn precedence(token: &T) -> Prec {
+        match token {
+            T::LeftBracket => Prec::Index,
+
+            T::Star | T::Slash => Prec::Factor,
+
+            T::Minus | T::Plus => Prec::Term,
+
+            T::EqualEqual
+                | T::Greater
+                | T::GreaterEqual
+                | T::Less
+                | T::LessEqual
+                | T::NotEqual => Prec::Comp,
+
+            T::And => Prec::BoolAnd,
+            T::Or => Prec::BoolOr,
+
+            T::In => Prec::Index,
+
+            T::AssertEqual => Prec::Assert,
+
+            T::Arrow => Prec::Arrow,
+
+            _ => Prec::No,
+        }
+    }
+
+    fn value<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+        let (token, span, ctx) = eat!(ctx);
+        let kind = match token.clone() {
+            T::Float(f) => Float(f),
+            T::Int(i) => Int(i),
+            T::Bool(b) => Bool(b),
+            T::Nil => Nil,
+            T::String(s) => Str(s),
+            t => {
+                raise_syntax_error!(ctx, "Cannot parse value, '{:?}' is not a valid value", t);
+            }
+        };
+        Ok((ctx, Expression { span, kind }))
+    }
+
+    fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+        match ctx.token() {
+            T::LeftParen => grouping_or_tuple(ctx),
+            T::LeftBracket => list(ctx),
+            T::LeftBrace => set_or_dict(ctx),
+
+            T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
+            T::Minus | T::Bang => unary(ctx),
+
+            T::Identifier(_) => {
+                if let Ok(result) = blob(ctx) {
+                    Ok(result)
+                } else {
+                    let span = ctx.span();
+                    let (ctx, assign) = assignable(ctx)?;
+                    Ok((ctx, Expression { span, kind: Get(assign) }))
+                }
+            }
+
+            t => {
+                raise_syntax_error!(ctx, "No valid expression starts with '{:?}'", t);
+            }
+        }
+    }
+
+    fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+        let (op, span, ctx) = eat!(ctx);
+        let (ctx, expr) = parse_precedence(ctx, Prec::Factor)?;
+        let expr = Box::new(expr);
+
+        let kind = match op {
+            T::Minus => Neg(expr),
+            T::Bang => Not(expr),
+
+            _ => {
+                raise_syntax_error!(ctx, "Invalid unary operator");
+            }
+        };
+        Ok((ctx, Expression { span, kind }))
+    }
+
+    fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
+        let (op, span, ctx) = eat!(ctx);
+
+        let (ctx, rhs) = parse_precedence(ctx, precedence(op).next())?;
+
+        let lhs = Box::new(lhs.clone());
+        let rhs = Box::new(rhs);
+
+        let kind = match op {
+            T::Plus => Add(lhs, rhs),
+            T::Minus => Sub(lhs, rhs),
+            T::Star => Mul(lhs, rhs),
+            T::Slash => Div(lhs, rhs),
+            T::EqualEqual => Eq(lhs, rhs),
+            T::NotEqual => Neq(lhs, rhs),
+            T::Greater => Gt(lhs, rhs),
+            T::GreaterEqual => Gteq(lhs, rhs),
+            T::Less => Lt(lhs, rhs),
+            T::LessEqual => Lteq(lhs, rhs),
+
+            T::And => And(lhs, rhs),
+            T::Or => Or(lhs, rhs),
+
+            T::AssertEqual => AssertEq(lhs, rhs),
+
+            T::In => In(lhs, rhs),
+
+            T::Arrow => {
+                use AssignableKind::*;
+                if let Expression { kind: Get(Assignable { kind: Call(calle, mut args), .. }), span } = *rhs {
+                    args.insert(0, *lhs);
+                    Get(Assignable { kind: Call(calle, args), span })
+                } else {
+                    raise_syntax_error!(ctx, "Expected a call-expression after '->'");
+                }
+            },
+
+            _ => {
+                return Err((ctx, Vec::new()));
+            }
+        };
+        Ok((ctx, Expression { span, kind }))
+    }
+
+    fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+        let span = ctx.span();
+        let mut ctx = expect!(ctx, T::LeftParen, "Expected '('");
+
+        let mut exprs = Vec::new();
+
+        let mut tuple = matches!(ctx.token(), T::Comma | T::RightParen);
+        loop {
+            ctx = skip_if!(ctx, T::Comma);
+            match ctx.token() {
+                T::EOF | T::RightParen => {
+                    break;
+                }
+
+                _ => {
+                    let (_ctx, expr) = expression(ctx)?;
+                    exprs.push(expr);
+                    ctx = _ctx;
+                    tuple |= matches!(ctx.token(), T::Comma);
+                }
+            }
+        }
+
+        ctx = expect!(ctx, T::RightParen, "Expected ')'");
+        let result = if tuple {
+            Expression { span, kind: Tuple(exprs) }
+        } else {
+            exprs.into_iter().next().unwrap()
+        };
+        Ok((ctx, result))
+    }
+
+    fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+        let span = ctx.span();
+        let blob = if let T::Identifier(blob) = ctx.token() {
+            blob.clone()
+        } else {
+            raise_syntax_error!(ctx, "Expected name of blob");
+        };
+        let mut ctx = expect!(ctx.skip(1), T::LeftBrace, "Expected '{{' after blob name");
+
+        let mut fields = Vec::new();
+        loop {
+            match ctx.token() {
+                T::Newline => {
+                    ctx = ctx.skip(1);
+                }
+
+                T::RightBrace | T::EOF => {
+                    break;
+                }
+
+                T::Identifier(name) => {
+                    let name = name.clone();
+
+                    ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after field name");
+                    let (_ctx, expr) = expression(ctx)?;
+                    ctx = _ctx;
+
+                    if !matches!(ctx.token(), T::Comma | T::Newline | T::RightBrace) {
+                        raise_syntax_error!(ctx, "Expected a deliminator: newline or ','");
+                    }
+                    ctx = skip_if!(ctx, T::Comma);
+
+                    fields.push((name, expr));
+                }
+
+                t => {
+                    raise_syntax_error!(ctx, "Unexpected token ('{:?}') in blob initalizer", t);
+                }
+            }
+        }
+        let ctx = expect!(ctx, T::RightBrace, "Expected '}}' after blob initalizer");
+
+        Ok((ctx, Expression { span, kind: Instance { blob, fields } }))
+    }
+
+    fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+        let span = ctx.span();
+        let mut ctx = expect!(ctx, T::LeftBracket, "Expected '['");
+
+        let mut exprs = Vec::new();
+        loop {
+            match ctx.token() {
+                T::EOF | T::RightBracket => {
+                    break;
+                }
+
+                _ => {
+                    let (_ctx, expr) = expression(ctx)?;
+                    exprs.push(expr);
+                    ctx = skip_if!(_ctx, T::Comma);
+                }
+            }
+        }
+
+        ctx = expect!(ctx, T::RightBracket, "Expected ']'");
+        Ok((ctx, Expression { span, kind: List(exprs) }))
+    }
+
+    fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+        let span = ctx.span();
+        let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{'");
+
+        // NOTE(ed): I decided on {:} for empty dicts, and {} for empty sets.
+        let mut exprs = Vec::new();
+        let mut is_dict = None;
+        loop {
+            match ctx.token() {
+                T::EOF | T::RightBrace => {
+                    break;
+                }
+
+                T::Colon => {
+                    if is_dict.is_some() {
+                        raise_syntax_error!(ctx, "Didn't expect empty dict pair since it has to be a {}",
+                            if is_dict.unwrap() { "dict" } else { "set" }
+                        );
+                    }
+                    is_dict = Some(true);
+                    ctx = ctx.skip(1);
+                }
+
+                _ => {
+                    let (_ctx, expr) = expression(ctx)?;
+                    ctx = _ctx;
+                    exprs.push(expr);
+
+                    is_dict = if is_dict.is_none() {
+                        Some(matches!(ctx.token(), T::Colon))
+                    } else {
+                        is_dict
+                    };
+
+                    if is_dict.unwrap() {
+                        ctx = expect!(ctx, T::Colon, "Expected ':' for dict pair");
+                        let (_ctx, expr) = expression(ctx)?;
+                        ctx = _ctx;
+                        exprs.push(expr);
+                    }
+
+                    ctx = skip_if!(ctx, T::Comma);
+                }
+            }
+        }
+
+        ctx = expect!(ctx, T::RightBrace, "Expected '}}'");
+
+        let kind = if is_dict.unwrap_or(false) {
+            Dict(exprs)
+        } else {
+            Set(exprs)
+        };
+
+        Ok((ctx, Expression { span, kind }))
+    }
+
+    pub fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+        match ctx.token() {
+            T::Fn => function(ctx),
+            _ => parse_precedence(ctx, Prec::No),
+        }
     }
 }
 
