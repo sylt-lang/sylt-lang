@@ -17,12 +17,12 @@ pub struct Span {
 
 #[derive(Debug, Clone)]
 pub struct Prog {
-    modules: Vec<(PathBuf, Module)>,
+    pub modules: Vec<(PathBuf, Module)>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Module {
-    span: Span,
+    pub span: Span,
     statements: Vec<Statement>,
 }
 
@@ -101,14 +101,14 @@ pub enum StatementKind {
 
 #[derive(Debug, Clone)]
 pub struct Statement {
-    span: Span,
-    kind: StatementKind,
+    pub span: Span,
+    pub kind: StatementKind,
 }
 
 #[derive(Debug, Clone)]
 pub struct Identifier {
-    span: Span,
-    name: String,
+    pub span: Span,
+    pub name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -121,8 +121,8 @@ pub enum AssignableKind {
 
 #[derive(Debug, Clone)]
 pub struct Assignable {
-    span: Span,
-    kind: AssignableKind,
+    pub span: Span,
+    pub kind: AssignableKind,
 }
 
 #[derive(Debug, Clone)]

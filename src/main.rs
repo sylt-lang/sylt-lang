@@ -21,7 +21,9 @@ fn main() -> Result<(), String> {
                 Err(format!("{} errors occured.", errs.len()))
             }
             Ok(prog) => {
-                println!("{:#?}", prog.blocks);
+                for block in prog.blocks {
+                    block.borrow().debug_print(Some(&prog.constants));
+                }
                 Ok(())
             }
         }
