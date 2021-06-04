@@ -12,7 +12,7 @@ pub struct Span {
     // TODO(ed): Do this more intelligent, so
     // we can show ranges. Maybe even go back
     // to offsets from start of the file.
-    line: usize,
+    pub line: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -23,7 +23,7 @@ pub struct Prog {
 #[derive(Debug, Clone)]
 pub struct Module {
     pub span: Span,
-    statements: Vec<Statement>,
+    pub statements: Vec<Statement>,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -176,8 +176,8 @@ pub enum ExpressionKind {
 
 #[derive(Debug, Clone)]
 pub struct Expression {
-    span: Span,
-    kind: ExpressionKind,
+    pub span: Span,
+    pub kind: ExpressionKind,
 }
 
 #[derive(Debug, Clone)]

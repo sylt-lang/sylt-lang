@@ -540,3 +540,17 @@ pub fn sylt_link(attrib: proc_macro::TokenStream, tokens: proc_macro::TokenStrea
     };
     proc_macro::TokenStream::from(tokens)
 }
+
+#[proc_macro]
+pub fn sylt_binop_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let op: syn::Ident = parse_macro_input!(tokens);
+
+    let tokens = quote! {
+        syntree:ExpressionKind:: #op (a, b) => {
+            self.expression(&a);
+            self.expression(&b);
+            self.add_op(statement.span, Op:: #op );
+        }
+    };
+    proc_macro::TokenStream::from(tokens)
+}

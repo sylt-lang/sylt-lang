@@ -72,6 +72,7 @@ impl fmt::Display for RuntimePhase {
     }
 }
 
+// TODO(ed): Switch to spans for the whole compiler?
 #[derive(Clone, Debug)]
 pub enum Error {
     RuntimeError {
@@ -88,6 +89,13 @@ pub enum Error {
         token: Token,
         message: Option<String>,
     },
+
+    CompileError {
+        file: PathBuf,
+        line: usize,
+        message: Option<String>,
+    },
+
 
     GitConflictError {
         file: PathBuf,
@@ -111,6 +119,22 @@ impl fmt::Display for Error {
 
                 if let Some(message) = message {
                     write!(f, "{}\n", message)?;
+                }
+                write!(f, "{}\n",
+                    source_line_at(file, Some(*line)).unwrap_or_else(String::new)
+                )
+            }
+            Error::CompileError {
+                file,
+                line,
+                message,
+            } => {
+                write!(f, "{}: ", "compile error".red())?;
+                write!(f, "{}\n", file_line_display(file, Some(*line)))?;
+                write!(f, "{}Failed to compile line {}\n", indent, line)?;
+
+                if let Some(message) = message {
+                    write!(f, "{}{}\n", indent, message)?;
                 }
                 write!(f, "{}\n",
                     source_line_at(file, Some(*line)).unwrap_or_else(String::new)

@@ -21,10 +21,18 @@ fn main() -> Result<(), String> {
                 Err(format!("{} errors occured.", errs.len()))
             }
             Ok(prog) => {
-                for block in prog.blocks {
+                for block in prog.blocks.iter() {
                     block.borrow().debug_print(Some(&prog.constants));
                 }
-                Ok(())
+
+                if let Err(errs) = sylt::run(&prog, &args) {
+                    for err in errs {
+                        println!("{}", err);
+                    }
+                    Err("Runtime failed".into())
+                } else {
+                    Ok(())
+                }
             }
         }
     } else {
