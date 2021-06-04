@@ -213,7 +213,18 @@ impl Compiler {
             }
         }
 
-        compile_error!(self, span, "Not active variable called '{}' could be found", name);
+        compile_error!(self, span, "No active variable called '{}' could be found", name);
+    }
+
+    fn set(&mut self, name: &String, span: Span) {
+        for var in self.globals.iter().rev() {
+            if var.active && &var.name == name {
+                self.add_op(span, Op::AssignGlobal(var.slot));
+                return;
+            }
+        }
+
+        compile_error!(self, span, "No active variable called '{}' could be found", name);
     }
 
     fn define(&mut self, name: &String, kind: &VarKind, ty: &syntree::Type, span: Span) -> VarSlot {
@@ -246,6 +257,31 @@ impl Compiler {
                 let slot = self.define(&ident.name, kind, ty, statement.span);
                 self.expression(value);
                 self.activate(slot);
+            }
+
+            Assignment { kind, target, value } => {
+                use AssignableKind::*;
+
+                match &target.kind {
+                    Read(ident) => {
+                        self.expression(value);
+                        self.set(&ident.name, statement.span);
+                    }
+                    Call(a, expr) => {
+                        compile_error!(self, statement.span, "Cannot assign to result from function call");
+                    }
+                    Access(a, b) => {
+                        unimplemented!("Assignment to accesses is not implemented");
+                    }
+                    Index(a, b) => {
+                        self.assignable(a);
+                        self.expression(b);
+                        self.expression(value);
+                        self.add_op(statement.span, Op::AssignIndex);
+                    }
+                }
+
+                self.expression(value);
             }
 
             StatementExpression { value } => {

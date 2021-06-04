@@ -58,6 +58,8 @@ pub enum StatementKind {
         value: Expression,
     },
 
+    // NOTE(ed): We cannot remove the `kind` field,
+    // since we only want to evaluate the RHS once.
     Assignment {
         kind: Op,
         target: Assignable,
