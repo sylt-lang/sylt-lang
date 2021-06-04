@@ -18,6 +18,8 @@ pub mod vm;
 pub mod typechecker;
 
 mod syntree;
+mod syncomp;
+
 mod compiler;
 mod rc;
 mod sectionizer;
@@ -52,6 +54,10 @@ pub fn construct_tree(args: &Args) -> Result<syntree::Prog, Vec<Error>> {
         }
     };
     syntree::tree(&path)
+}
+
+pub fn tree_compile(args: &Args) -> Result<Prog, Vec<Error>> {
+    syncomp::compile(construct_tree(args)?)
 }
 
 /// Compiles, links and runs the given file. The supplied functions are callable

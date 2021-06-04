@@ -13,15 +13,15 @@ fn main() -> Result<(), String> {
 
     let functions = lib_bindings();
     if args.tree_mode {
-        match sylt::construct_tree(&args) {
+        match sylt::tree_compile(&args) {
             Err(errs) => {
                 for err in errs.iter() {
                     println!("{}", err);
                 }
                 Err(format!("{} errors occured.", errs.len()))
             }
-            Ok(tree) => {
-                println!("{:#?}", tree);
+            Ok(prog) => {
+                println!("{:#?}", prog.blocks);
                 Ok(())
             }
         }
