@@ -1,21 +1,45 @@
 use crate::error::Error;
-use crate::syntree::*;
+use crate::syntree;
+use syntree::*;
 use crate::{Op, Block, Value, Type};
 use std::collections::{hash_map::Entry, HashMap};
 use crate::rc::Rc;
 use std::cell::RefCell;
 use std::path::Path;
 
+type VarSlot = usize;
+
 struct Variable {
     name: String,
-    typ: Type,
+    ty: Type,
     slot: usize,
     line: usize,
+
+    active: bool,
+}
+
+impl Variable {
+    fn new(name: String, ty: Type, slot: usize, span: Span) -> Self {
+        Self {
+            name,
+            ty,
+            slot,
+            line: span.line,
+
+            active: false,
+        }
+    }
+
+    fn filler() -> Self {
+        Variable::new("/filler/".into(), Type::Unknown, 0, Span { line: 0 })
+    }
 }
 
 struct Compiler {
     globals: Vec<Variable>,
     blocks: Vec<Block>,
+
+    // TODO(ed): Stackframes
 
     panic: bool,
     errors: Vec<Error>,
@@ -27,27 +51,14 @@ struct Compiler {
 }
 
 macro_rules! compile_error {
-    ($compiler:expr, $tree:expr, $( $msg:expr ),+ ) => {
+    ($compiler:expr, $span:expr, $( $msg:expr ),+ ) => {
         if !$compiler.panic {
             $compiler.panic = true;
 
             let msg = format!($( $msg ),*).into();
             let err = Error::CompileError {
                 file: $compiler.current_file().into(),
-                line: $tree.span,
-                message: Some(msg),
-            };
-            $compiler.errors.push(err);
-        }
-    };
-    ($compiler:expr, $( $msg:expr ),+ ) => {
-        if !$compiler.panic {
-            $compiler.panic = true;
-
-            let msg = format!($( $msg ),*).into();
-            let err = Error::CompileError {
-                file: $compiler.current_file().into(),
-                line: 0,
+                line: $span.line,
                 message: Some(msg),
             };
             $compiler.errors.push(err);
@@ -94,6 +105,32 @@ impl Compiler {
         self.blocks.last_mut().unwrap().add(op, span.line)
     }
 
+    fn assignable(&mut self, ass: &Assignable) {
+        use AssignableKind::*;
+
+        match &ass.kind {
+            Read(ident) => {
+                self.read(&ident.name, ass.span);
+            }
+            Call(a, expr) => {
+                self.assignable(a);
+                for expr in expr.iter() {
+                    self.expression(expr);
+                }
+                self.add_op(ass.span, Op::Call(expr.len()));
+            }
+            Access(a, b) => {
+                self.assignable(a);
+                self.assignable(b);
+            }
+            Index(a, b) => {
+                self.assignable(a);
+                self.expression(b);
+                self.add_op(ass.span, Op::GetIndex);
+            }
+        }
+    }
+
     fn un_op(&mut self, a: &Expression, ops: &[Op], span: Span) {
         self.expression(&a);
         for op in ops {
@@ -118,6 +155,8 @@ impl Compiler {
         use ExpressionKind::*;
 
         match &expression.kind {
+            Get(a) => self.assignable(a),
+
             Add(a, b) => self.bin_op(a, b, &[Op::Add], expression.span),
             Sub(a, b) => self.bin_op(a, b, &[Op::Sub], expression.span),
             Mul(a, b) => self.bin_op(a, b, &[Op::Mul], expression.span),
@@ -166,6 +205,31 @@ impl Compiler {
 
     }
 
+    fn read(&mut self, name: &String, span: Span) {
+        for var in self.globals.iter().rev() {
+            if var.active && &var.name == name {
+                self.add_op(span, Op::ReadGlobal(var.slot));
+                return;
+            }
+        }
+
+        compile_error!(self, span, "Not active variable called '{}' could be found", name);
+    }
+
+    fn define(&mut self, name: &String, kind: &VarKind, ty: &syntree::Type, span: Span) -> VarSlot {
+        // TODO(ed): Fix the types
+        // TODO(ed): Mutability
+        // TODO(ed): Scoping
+        let slot = self.globals.len();
+        let var = Variable::new(name.clone(), Type::Unknown, slot, span);
+        self.globals.push(var);
+        slot
+    }
+
+    fn activate(&mut self, slot: VarSlot) {
+        self.globals[slot].active = true;
+    }
+
     fn statement(&mut self, statement: &Statement) {
         use StatementKind::*;
 
@@ -175,6 +239,13 @@ impl Compiler {
             Print { value } => {
                 self.expression(value);
                 self.add_op(statement.span, Op::Print);
+            }
+
+            Definition { ident, kind, ty, value } => {
+                // TODO(ed): Don't use type here - type check the tree first.
+                let slot = self.define(&ident.name, kind, ty, statement.span);
+                self.expression(value);
+                self.activate(slot);
             }
 
             StatementExpression { value } => {
@@ -194,6 +265,7 @@ impl Compiler {
     fn compile(mut self, tree: Prog) -> Result<crate::Prog, Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
         self.blocks.push(Block::new("/preamble/", &tree.modules[0].0));
+        self.globals.push(Variable::filler());
 
         let module = &tree.modules[0].1;
         self.module(module);
