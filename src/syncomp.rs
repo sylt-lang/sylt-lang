@@ -142,6 +142,19 @@ impl Compiler {
 
             // ...
 
+            Tuple(x) | List(x) | Set(x) | Dict(x) => {
+                for expr in x.iter() {
+                    self.expression(expr);
+                }
+                self.add_op(expression.span, match &expression.kind {
+                    Tuple(_) => Op::Tuple(x.len()),
+                    List(_) => Op::List(x.len()),
+                    Set(_) => Op::Set(x.len()),
+                    Dict(_) => Op::Dict(x.len()),
+                    _ => unreachable!(),
+                });
+            }
+
             Float(a) => self.push(Value::Float(*a), expression.span),
             Bool(a)  => self.push(Value::Bool(*a), expression.span),
             Int(a)   => self.push(Value::Int(*a), expression.span),
