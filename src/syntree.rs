@@ -875,7 +875,7 @@ mod expression {
 
             T::Minus | T::Plus => Prec::Term,
 
-            T::EqualEqual 
+            T::EqualEqual
             | T::Greater
             | T::GreaterEqual
             | T::Less
@@ -1424,6 +1424,10 @@ mod test {
         test!(statement, statement_blob_comma_newline: "A :: blob { a: int,\n b: int }" => _);
         test!(statement, statement_assign: "a = 1" => _);
         test!(statement, statement_assign_index: "a.b = 1 + 2" => _);
+        test!(statement, statement_add_assign: "a += 2" => _);
+        test!(statement, statement_sub_assign: "a -= 2" => _);
+        test!(statement, statement_mul_assign: "a *= 2" => _);
+        test!(statement, statement_div_assign: "a /= 2" => _);
         test!(statement, statement_assign_call: "a().b() += 2" => _);
         test!(statement, statement_assign_call_index: "a.c().c.b /= 4" => _);
         test!(statement, statement_idek: "a!.c!.c.b()().c = 0" => _);
