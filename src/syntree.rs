@@ -288,7 +288,7 @@ macro_rules! expect {
 }
 
 macro_rules! skip_if {
-    ($ctx:expr, $( $token:pat )|+) => {
+    ($ctx:expr, $( $token:pat )|+ ) => {
         {
             if matches!($ctx.token(), $( $token )|* ) {
                 $ctx.skip(1)
