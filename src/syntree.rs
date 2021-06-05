@@ -1364,6 +1364,20 @@ mod test {
         test!(expression, simple: "fn -> {}" => _);
         test!(expression, argument: "fn a: int -> int ret a + 1" => _);
 
+        test!(expression, booleans: "true && false || !false" => _);
+        test!(expression, bool_and: "true && a" => _);
+        test!(expression, bool_or: "a || false" => _);
+        test!(expression, bool_neg: "!a" => _);
+
+        test!(expression, cmp_eq: "a == b" => _);
+        test!(expression, cmp_leq: "a <= b" => _);
+        test!(expression, cmp_geq: "a >= b" => _);
+        test!(expression, cmp_gt: "a > b" => _);
+        test!(expression, cmp_lt: "a < b" => _);
+        test!(expression, neg: "-a" => _);
+
+        test!(expression, expr: "-a + b < 3 + true && false" => _);
+
         test!(expression, void_simple: "fn {}" => _);
         test!(expression, void_argument: "fn a: int { ret a + 1 }" => _);
     }
