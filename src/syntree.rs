@@ -779,6 +779,23 @@ mod expression {
         let mut params = Vec::new();
         let ret = loop {
             match ctx.token() {
+                T::Identifier(name) => {
+                    let ident = Identifier {
+                        span: ctx.span(),
+                        name: name.clone(),
+                    };
+                    ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after parameter name");
+                    let (_ctx, param) = parse_type(ctx)?;
+                    ctx = _ctx;
+                    params.push((ident, param));
+
+                    ctx = if matches!(ctx.token(), T::Comma | T::Arrow | T::LeftBrace) {
+                        skip_if!(ctx, T::Comma)
+                    } else {
+                        raise_syntax_error!(ctx, "Expected ',' '{{' or '->' after type parameter")
+                    };
+                }
+
                 T::Arrow => {
                     ctx = ctx.skip(1);
                     break if let Ok((_ctx, ret)) = parse_type(ctx) {
@@ -801,23 +818,6 @@ mod expression {
                     break Type {
                         span: ctx.span(),
                         kind: Resolved(Void),
-                    };
-                }
-
-                T::Identifier(name) => {
-                    let ident = Identifier {
-                        span: ctx.span(),
-                        name: name.clone(),
-                    };
-                    ctx = expect!(ctx.skip(1), T::Colon);
-                    let (_ctx, param) = parse_type(ctx)?;
-                    ctx = _ctx;
-                    params.push((ident, param));
-
-                    ctx = if matches!(ctx.token(), T::Comma | T::Arrow | T::LeftBrace) {
-                        skip_if!(ctx, T::Comma)
-                    } else {
-                        raise_syntax_error!(ctx, "Expected ',' '{{' or '->' after type parameter")
                     };
                 }
 
@@ -848,13 +848,13 @@ mod expression {
     }
 
     fn parse_precedence<'t>(ctx: Context<'t>, prec: Prec) -> ParseResult<'t, Expression> {
-        let pre = prefix(ctx);
-        if let Err((ctx, mut errs)) = pre {
-            errs.push(syntax_error!(ctx, "Invalid expression"));
-            return Err((ctx, errs));
-        }
-
-        let (mut ctx, mut expr) = pre.unwrap();
+        let (mut ctx, mut expr) = match prefix(ctx) {
+            Ok(ret) => ret,
+            Err((ctx, mut errs)) => {
+                errs.push(syntax_error!(ctx, "Invalid expression"));
+                return Err((ctx, errs));
+            }
+        };
         while prec <= precedence(ctx.token()) {
             if let Ok((_ctx, _expr)) = infix(ctx, &expr) {
                 ctx = _ctx;
@@ -866,6 +866,7 @@ mod expression {
         Ok((ctx, expr))
     }
 
+    #[rustfmt::skip]
     fn precedence(token: &T) -> Prec {
         match token {
             T::LeftBracket => Prec::Index,
@@ -874,9 +875,12 @@ mod expression {
 
             T::Minus | T::Plus => Prec::Term,
 
-            T::EqualEqual | T::Greater | T::GreaterEqual | T::Less | T::LessEqual | T::NotEqual => {
-                Prec::Comp
-            }
+            T::EqualEqual 
+            | T::Greater
+            | T::GreaterEqual
+            | T::Less
+            | T::LessEqual
+            | T::NotEqual => Prec::Comp,
 
             T::And => Prec::BoolAnd,
             T::Or => Prec::BoolOr,
@@ -1137,11 +1141,11 @@ mod expression {
                 }
 
                 T::Colon => {
-                    if is_dict.is_some() {
+                    if let Some(is_dict) = is_dict {
                         raise_syntax_error!(
                             ctx,
                             "Didn't expect empty dict pair since it has to be a {}",
-                            if is_dict.unwrap() { "dict" } else { "set" }
+                            if is_dict { "dict" } else { "set" }
                         );
                     }
                     is_dict = Some(true);
@@ -1153,13 +1157,7 @@ mod expression {
                     ctx = _ctx;
                     exprs.push(expr);
 
-                    is_dict = if is_dict.is_none() {
-                        Some(matches!(ctx.token(), T::Colon))
-                    } else {
-                        is_dict
-                    };
-
-                    if is_dict.unwrap() {
+                    if *is_dict.get_or_insert_with(|| matches!(ctx.token(), T::Colon)) {
                         ctx = expect!(ctx, T::Colon, "Expected ':' for dict pair");
                         let (_ctx, expr) = expression(ctx)?;
                         ctx = _ctx;
@@ -1354,7 +1352,7 @@ mod test {
         test!(expression, call_args_chaining_bang: "a! 1, 2, 3 .b" => Get(_));
         test!(expression, call_args_chaining_bang_trailing: "a! 1, 2, 3, .b" => Get(_));
 
-        // TODO(ed): a! -> b! -> c! == c(b(a()))
+        // TODO(ed): Verify 'a! -> b! -> c! == c(b(a()))' in some way
         test!(expression, call_arrow: "1 + 0 -> a! 2, 3" => Add(_, _));
         test!(expression, call_arrow_grouping: "(1 + 0) -> a! 2, 3" => Get(_));
 
