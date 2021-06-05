@@ -273,7 +273,7 @@ macro_rules! raise_syntax_error {
 }
 
 macro_rules! expect {
-    ($ctx:expr, $( $token:pat )|+ , $( $msg:expr ),+ ) => {
+    ($ctx:expr, $( $token:pat )|+ , $( $msg:expr ),+) => {
         {
             if !matches!($ctx.token(), $( $token )|* ) {
                 raise_syntax_error!($ctx, $( $msg ),*);
