@@ -1,4 +1,6 @@
+.coverage
 cobertura.xml
 coverage-*
 tags
+target
 target
