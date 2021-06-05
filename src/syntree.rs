@@ -282,7 +282,7 @@ macro_rules! expect {
         }
     };
 
-    ($ctx:expr, $( $token:pat )|+) => {
+    ($ctx:expr, $( $token:pat )|+ ) => {
         expect!($ctx, $( $token )|*, concat!("Expected ", stringify!($( $token )|*)))
     };
 }
