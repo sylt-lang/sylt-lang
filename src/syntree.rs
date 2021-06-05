@@ -229,13 +229,13 @@ impl<'a> Context<'a> {
     }
 
     fn skip(&self, n: usize) -> Self {
-        let mut new = self.clone();
+        let mut new = *self;
         new.curr += n;
         new
     }
 
     fn peek(&self) -> &(T, usize) {
-        &self.tokens.get(self.curr).unwrap_or(&(T::EOF, 0))
+        self.tokens.get(self.curr).unwrap_or(&(T::EOF, 0))
     }
 
     fn token(&self) -> &T {
@@ -600,14 +600,14 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 ),
                 T::Colon => {
                     let ctx = ctx.skip(1);
-                    let banger = ctx.token();
+                    let forced = matches!(ctx.token(), T::Bang);
                     let ctx = skip_if!(ctx, T::Bang);
                     let (ctx, ty) = parse_type(ctx)?;
-                    let kind = match (ctx.token(), banger) {
-                        (T::Colon, T::Bang) => VarKind::ForceConst,
-                        (T::Equal, T::Bang) => VarKind::ForceMutable,
-                        (T::Colon, _) => VarKind::Const,
-                        (T::Equal, _) => VarKind::Mutable,
+                    let kind = match (ctx.token(), forced) {
+                        (T::Colon, true) => VarKind::ForceConst,
+                        (T::Equal, true) => VarKind::ForceMutable,
+                        (T::Colon, false) => VarKind::Const,
+                        (T::Equal, false) => VarKind::Mutable,
                         (t, _) => {
                             raise_syntax_error!(
                                 ctx,
@@ -677,9 +677,9 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     Ok((ctx, Statement { span, kind }))
 }
 
-fn maybe_call<'t>(ctx: Context<'t>, calle: Assignable) -> ParseResult<'t, Assignable> {
+fn maybe_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, Assignable> {
     if !matches!(ctx.token(), T::LeftParen | T::Bang) {
-        return Ok((ctx, calle));
+        return Ok((ctx, callee));
     }
 
     let span = ctx.span();
@@ -720,7 +720,7 @@ fn maybe_call<'t>(ctx: Context<'t>, calle: Assignable) -> ParseResult<'t, Assign
     use AssignableKind::Call;
     let result = Assignable {
         span,
-        kind: Call(Box::new(calle), args),
+        kind: Call(Box::new(callee), args),
     };
     maybe_call(ctx, result)
 }
@@ -985,7 +985,7 @@ mod expression {
                 if let Expression {
                     kind:
                         Get(Assignable {
-                            kind: Call(calle, mut args),
+                            kind: Call(callee, mut args),
                             ..
                         }),
                     span,
@@ -993,7 +993,7 @@ mod expression {
                 {
                     args.insert(0, *lhs);
                     Get(Assignable {
-                        kind: Call(calle, args),
+                        kind: Call(callee, args),
                         span,
                     })
                 } else {
