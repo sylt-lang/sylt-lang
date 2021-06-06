@@ -35,9 +35,21 @@ impl Variable {
     }
 }
 
+type Namespace = HashMap<String, Name>;
+type ConstantID = usize;
+type NamespaceID = usize;
+#[derive(Debug, Copy, Clone)]
+enum Name {
+    Slot(ConstantID),
+    Namespace(NamespaceID),
+}
+
 struct Compiler {
     globals: Vec<Variable>,
     blocks: Vec<Block>,
+
+    path_to_namespace_id: HashMap<String, NamespaceID>,
+    namespaces: Vec<Namespace>,
 
     // TODO(ed): Stackframes
 
@@ -71,6 +83,9 @@ impl Compiler {
         Self {
             globals: Vec::new(),
             blocks: Vec::new(),
+
+            path_to_namespace_id: HashMap::new(),
+            namespaces: Vec::new(),
 
             panic: false,
             errors: Vec::new(),
@@ -323,9 +338,56 @@ impl Compiler {
             Err(self.errors)
         }
     }
+
+    fn extract_globals(&mut self, tree: &Prog) -> Result<(), Vec<Error>> {
+        // TODO(ed): Check for duplicates
+        for (path, module) in tree.modules.iter() {
+            let slot = self.path_to_namespace_id.len();
+            let path = path.file_stem().unwrap().to_str().unwrap().to_owned();
+            if let Entry::Vacant(ent) = self.path_to_namespace_id.entry(path) {
+                ent.insert(slot);
+                self.namespaces.push(Namespace::new());
+            }
+        }
+
+        // TODO(ed): Check for duplicates
+        let mut globals = 0;
+        for (path, module) in tree.modules.iter() {
+            let path = path.file_stem().unwrap().to_str().unwrap();
+            println!("{}", path);
+            let slot = self.path_to_namespace_id[path];
+            for statement in module.statements.iter() {
+                use StatementKind::*;
+                let mut namespace = &mut self.namespaces[slot];
+                match &statement.kind {
+                    Use { file: Identifier { name, .. } } => {
+                        let other = self.path_to_namespace_id[name];
+                        namespace.insert(name.to_owned(), Name::Namespace(other));
+                    }
+
+                    Blob { name, .. } => {
+                    }
+
+                    Definition { ident: Identifier { name, .. }, .. } => {
+                        namespace.insert(name.to_owned(), Name::Slot(globals + 1));
+                        globals += 1;
+                    }
+
+                    _ => {
+                        // TODO(ed): Throw error
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 
 pub fn compile(prog: Prog) -> Result<crate::Prog, Vec<Error>> {
-    Compiler::new().compile(prog)
+    println!("{:#?}", prog);
+    let mut compiler = Compiler::new();
+    compiler.extract_globals(&prog)?;
+    println!("{:#?}", compiler.namespaces);
+    compiler.compile(prog)
 }
