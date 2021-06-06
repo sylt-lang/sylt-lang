@@ -61,7 +61,7 @@ struct Compiler {
     values: HashMap<Value, usize>,
 }
 
-macro_rules! compile_error {
+macro_rules! error {
     ($compiler:expr, $span:expr, $( $msg:expr ),+ ) => {
         if !$compiler.panic {
             $compiler.panic = true;
@@ -222,7 +222,7 @@ impl Compiler {
         match self.namespaces[0].get(name) {
             Some(Name::Slot(slot)) => { self.add_op(span, Op::ReadGlobal(*slot)); return; },
             _ => {
-                compile_error!(self, span, "No active variable called '{}' could be found", name);
+                error!(self, span, "No active variable called '{}' could be found", name);
             },
         }
     }
@@ -231,7 +231,7 @@ impl Compiler {
         match self.namespaces[0].get(name) {
             Some(Name::Slot(slot)) => { self.add_op(span, Op::AssignGlobal(*slot)); return; },
             _ => {
-                compile_error!(self, span, "No active variable called '{}' could be found", name);
+                error!(self, span, "No active variable called '{}' could be found", name);
             },
         }
     }
@@ -278,7 +278,7 @@ impl Compiler {
                         self.set(&ident.name, statement.span);
                     }
                     Call(a, expr) => {
-                        compile_error!(self, statement.span, "Cannot assign to result from function call");
+                        error!(self, statement.span, "Cannot assign to result from function call");
                     }
                     Access(a, b) => {
                         unimplemented!("Assignment to accesses is not implemented");
@@ -351,7 +351,7 @@ impl Compiler {
                 }
 
                 Entry::Occupied(occ) => {
-                    compile_error!(self, Span { line: 0 }, "Reading module '{}' twice. How?", full_path.display);
+                    error!(self, Span { line: 0 }, "Reading module '{}' twice. How?", full_path.display);
                 }
             }
         }
@@ -371,7 +371,7 @@ impl Compiler {
                                 vac.insert(Name::Namespace(other));
                             }
                             Entry::Occupied(occ) => {
-                                compile_error!(
+                                error!(
                                     self,
                                     span,
                                     "A global variable with the name '{}' already exists",
@@ -392,7 +392,7 @@ impl Compiler {
                             }
 
                             Entry::Occupied(occ) => {
-                                compile_error!(
+                                error!(
                                     self,
                                     span,
                                     "A global variable with the name '{}' already exists", name
