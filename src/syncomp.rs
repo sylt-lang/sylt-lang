@@ -45,7 +45,6 @@ enum Name {
 }
 
 struct Compiler {
-    globals: Vec<Variable>,
     blocks: Vec<Block>,
 
     path_to_namespace_id: HashMap<String, NamespaceID>,
@@ -81,7 +80,6 @@ macro_rules! compile_error {
 impl Compiler {
     fn new() -> Self {
         Self {
-            globals: Vec::new(),
             blocks: Vec::new(),
 
             path_to_namespace_id: HashMap::new(),
@@ -221,41 +219,36 @@ impl Compiler {
     }
 
     fn read(&mut self, name: &String, span: Span) {
-        for var in self.globals.iter().rev() {
-            if var.active && &var.name == name {
-                let slot = var.slot;
-                self.add_op(span, Op::ReadGlobal(slot));
-                return;
-            }
+        match self.namespaces[0].get(name) {
+            Some(Name::Slot(slot)) => { self.add_op(span, Op::ReadGlobal(*slot)); return; },
+            _ => {
+                compile_error!(self, span, "No active variable called '{}' could be found", name);
+            },
         }
-
-        compile_error!(self, span, "No active variable called '{}' could be found", name);
     }
 
     fn set(&mut self, name: &String, span: Span) {
-        for var in self.globals.iter().rev() {
-            if var.active && &var.name == name {
-                let slot = var.slot;
-                self.add_op(span, Op::AssignGlobal(slot));
-                return;
-            }
+        match self.namespaces[0].get(name) {
+            Some(Name::Slot(slot)) => { self.add_op(span, Op::AssignGlobal(*slot)); return; },
+            _ => {
+                compile_error!(self, span, "No active variable called '{}' could be found", name);
+            },
         }
-
-        compile_error!(self, span, "No active variable called '{}' could be found", name);
     }
 
     fn define(&mut self, name: &String, kind: &VarKind, ty: &syntree::Type, span: Span) -> VarSlot {
         // TODO(ed): Fix the types
         // TODO(ed): Mutability
         // TODO(ed): Scoping
-        let slot = self.globals.len();
-        let var = Variable::new(name.clone(), Type::Unknown, slot, span);
-        self.globals.push(var);
-        slot
+        // let slot = self.globals.len();
+        // let var = Variable::new(name.clone(), Type::Unknown, slot, span);
+        // self.globals.push(var);
+        // slot
+        0
     }
 
     fn activate(&mut self, slot: VarSlot) {
-        self.globals[slot].active = true;
+        // self.globals[slot].active = true;
     }
 
     fn statement(&mut self, statement: &Statement) {
@@ -305,6 +298,8 @@ impl Compiler {
                 self.expression(value);
             }
 
+            Use { .. } => {}
+
             _ => { unimplemented!(); }
         }
     }
@@ -318,12 +313,17 @@ impl Compiler {
     fn compile(mut self, tree: Prog) -> Result<crate::Prog, Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
         self.blocks.push(Block::new("/preamble/", &tree.modules[0].0));
-        self.globals.push(Variable::filler());
+
+        let globals = self.extract_globals(&tree);
+        let nil = self.constant(Value::Nil);
+        for _ in 0..globals {
+            self.add_op(Span { line: 0 }, nil);
+        }
 
         let module = &tree.modules[0].1;
         self.module(module);
 
-        let nil = self.constant(Value::Int(1));
+        let nil = self.constant(Value::Nil);
         self.add_op(module.span, nil);
         self.add_op(module.span, Op::Return);
 
@@ -339,38 +339,66 @@ impl Compiler {
         }
     }
 
-    fn extract_globals(&mut self, tree: &Prog) -> Result<(), Vec<Error>> {
+    fn extract_globals(&mut self, tree: &Prog) -> usize {
         // TODO(ed): Check for duplicates
-        for (path, module) in tree.modules.iter() {
+        for (full_path, module) in tree.modules.iter() {
             let slot = self.path_to_namespace_id.len();
-            let path = path.file_stem().unwrap().to_str().unwrap().to_owned();
-            if let Entry::Vacant(ent) = self.path_to_namespace_id.entry(path) {
-                ent.insert(slot);
-                self.namespaces.push(Namespace::new());
+            let path = full_path.file_stem().unwrap().to_str().unwrap().to_owned();
+            match self.path_to_namespace_id.entry(path) {
+                Entry::Vacant(vac) => {
+                    vac.insert(slot);
+                    self.namespaces.push(Namespace::new());
+                }
+
+                Entry::Occupied(occ) => {
+                    compile_error!(self, Span { line: 0 }, "Reading module '{}' twice. How?", full_path.display);
+                }
             }
         }
 
-        // TODO(ed): Check for duplicates
         let mut globals = 0;
         for (path, module) in tree.modules.iter() {
             let path = path.file_stem().unwrap().to_str().unwrap();
-            println!("{}", path);
             let slot = self.path_to_namespace_id[path];
             for statement in module.statements.iter() {
                 use StatementKind::*;
-                let mut namespace = &mut self.namespaces[slot];
+                let namespace = &mut self.namespaces[slot];
                 match &statement.kind {
-                    Use { file: Identifier { name, .. } } => {
+                    Use { file: Identifier { name, span } } => {
                         let other = self.path_to_namespace_id[name];
-                        namespace.insert(name.to_owned(), Name::Namespace(other));
+                        match namespace.entry(name.to_owned()) {
+                            Entry::Vacant(vac) => {
+                                vac.insert(Name::Namespace(other));
+                            }
+                            Entry::Occupied(occ) => {
+                                compile_error!(
+                                    self,
+                                    span,
+                                    "A global variable with the name '{}' already exists",
+                                    name
+                                );
+                            }
+                        }
                     }
 
-                    Blob { name, .. } => {
-                    }
+                    // Blob { name, .. } => { }
 
-                    Definition { ident: Identifier { name, .. }, .. } => {
-                        namespace.insert(name.to_owned(), Name::Slot(globals + 1));
-                        globals += 1;
+                    Definition { ident: Identifier { name, span }, .. } => {
+                        match namespace.entry(name.to_owned()) {
+                            Entry::Vacant(vac) => {
+                                // NOTE(ed): +1 is to ignore the entry point
+                                vac.insert(Name::Slot(globals + 1));
+                                globals += 1;
+                            }
+
+                            Entry::Occupied(occ) => {
+                                compile_error!(
+                                    self,
+                                    span,
+                                    "A global variable with the name '{}' already exists", name
+                                );
+                            }
+                        }
                     }
 
                     _ => {
@@ -379,15 +407,12 @@ impl Compiler {
                 }
             }
         }
-        Ok(())
+
+        globals
     }
 }
 
 
 pub fn compile(prog: Prog) -> Result<crate::Prog, Vec<Error>> {
-    println!("{:#?}", prog);
-    let mut compiler = Compiler::new();
-    compiler.extract_globals(&prog)?;
-    println!("{:#?}", compiler.namespaces);
-    compiler.compile(prog)
+    Compiler::new().compile(prog)
 }
