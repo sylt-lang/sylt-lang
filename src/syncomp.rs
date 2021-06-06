@@ -208,7 +208,8 @@ impl Compiler {
     fn read(&mut self, name: &String, span: Span) {
         for var in self.globals.iter().rev() {
             if var.active && &var.name == name {
-                self.add_op(span, Op::ReadGlobal(var.slot));
+                let slot = var.slot;
+                self.add_op(span, Op::ReadGlobal(slot));
                 return;
             }
         }
@@ -219,7 +220,8 @@ impl Compiler {
     fn set(&mut self, name: &String, span: Span) {
         for var in self.globals.iter().rev() {
             if var.active && &var.name == name {
-                self.add_op(span, Op::AssignGlobal(var.slot));
+                let slot = var.slot;
+                self.add_op(span, Op::AssignGlobal(slot));
                 return;
             }
         }
