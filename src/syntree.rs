@@ -1209,7 +1209,7 @@ fn module(path: &Path, tokens: &Tokens) -> (Vec<PathBuf>, Result<Module, Vec<Err
             Ok((ctx, statement)) => {
                 use StatementKind::*;
                 if let Use { file, .. } = &statement.kind {
-                    use_files.push(PathBuf::from(&file.name));
+                    use_files.push(format!("{}.sy", file.name).into());
                 }
                 if !matches!(statement.kind, EmptyStatement) {
                     statements.push(statement);
@@ -1252,7 +1252,7 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
         if visited.contains(&file) {
             continue;
         }
-        match file_to_tokens(path) {
+        match file_to_tokens(&file) {
             Ok(tokens) => {
                 let (mut next, result) = module(path, &tokens);
                 match result {
