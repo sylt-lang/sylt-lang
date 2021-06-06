@@ -186,7 +186,7 @@ pub struct Expression {
 pub enum TypeKind {
     Implied,
     Resolved(RuntimeType),
-    Unresolved(String),
+    Unresolved(Assignable),
     Union(Box<Type>, Box<Type>),
     Fn(Vec<Type>, Box<Type>),
     Tuple(Vec<Type>),
@@ -306,17 +306,17 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     use TypeKind::*;
     let span = ctx.span();
     let (ctx, kind) = match ctx.token() {
-        T::Identifier(name) => (
-            ctx.skip(1),
-            match name.as_str() {
-                "void" => Resolved(Void),
-                "int" => Resolved(Int),
-                "float" => Resolved(Float),
-                "bool" => Resolved(Bool),
-                "str" => Resolved(String),
-                _ => Unresolved(name.clone()),
-            },
-        ),
+        T::Identifier(name) => match name.as_str() {
+            "void" => (ctx.skip(1), Resolved(Void)),
+            "int" => (ctx.skip(1), Resolved(Int)),
+            "float" => (ctx.skip(1), Resolved(Float)),
+            "bool" => (ctx.skip(1), Resolved(Bool)),
+            "str" => (ctx.skip(1), Resolved(String)),
+            _ => {
+                let (ctx, assignable) = assignable(ctx)?;
+                (ctx, Unresolved(assignable))
+            }
+        },
 
         T::Fn => {
             let mut ctx = ctx.skip(1);
@@ -1395,6 +1395,9 @@ mod test {
         test!(parse_type, type_float: "float" => Resolved(RT::Float));
         test!(parse_type, type_str: "str" => Resolved(RT::String));
         test!(parse_type, type_unknown: "blargh" => Unresolved(_));
+        test!(parse_type, type_unknown_access: "a.A | int" => Union(_, _));
+        // TODO(ed): This is controverisal
+        test!(parse_type, type_unknown_access_call: "a.b().A | int" => Union(_, _));
         test!(parse_type, type_union: "int | int" => Union(_, _));
         test!(parse_type, type_question: "int?" => Union(_, _));
         test!(parse_type, type_union_and_question: "int | void | str?" => Union(_, _));
