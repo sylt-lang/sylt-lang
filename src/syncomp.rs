@@ -350,8 +350,8 @@ impl Compiler {
                     self.namespaces.push(Namespace::new());
                 }
 
-                Entry::Occupied(occ) => {
-                    error!(self, Span { line: 0 }, "Reading module '{}' twice. How?", full_path.display);
+                Entry::Occupied(_) => {
+                    error!(self, Span { line: 0 }, "Reading module '{}' twice. How?", full_path.display());
                 }
             }
         }
@@ -370,7 +370,7 @@ impl Compiler {
                             Entry::Vacant(vac) => {
                                 vac.insert(Name::Namespace(other));
                             }
-                            Entry::Occupied(occ) => {
+                            Entry::Occupied(_) => {
                                 error!(
                                     self,
                                     span,
@@ -391,7 +391,7 @@ impl Compiler {
                                 globals += 1;
                             }
 
-                            Entry::Occupied(occ) => {
+                            Entry::Occupied(_) => {
                                 error!(
                                     self,
                                     span,
