@@ -159,7 +159,7 @@ pub enum ExpressionKind {
         body: Box<Statement>,
     },
     Instance {
-        blob: String,
+        blob: Assignable,
         fields: Vec<(String, Expression)>, // Keep calling order
     },
     Tuple(Vec<Expression>),
@@ -1051,12 +1051,8 @@ mod expression {
 
     fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         let span = ctx.span();
-        let blob = if let T::Identifier(blob) = ctx.token() {
-            blob.clone()
-        } else {
-            raise_syntax_error!(ctx, "Expected name of blob");
-        };
-        let mut ctx = expect!(ctx.skip(1), T::LeftBrace, "Expected '{{' after blob name");
+        let (ctx, blob) = assignable(ctx)?;
+        let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{' after blob name");
 
         let mut fields = Vec::new();
         loop {

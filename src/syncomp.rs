@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::syntree;
 use syntree::*;
-use crate::{Op, Block, Value, Type};
+use crate::{Op, Block, Value, Type, Blob};
 use std::collections::{hash_map::Entry, HashMap};
 use crate::rc::Rc;
 use std::cell::RefCell;
@@ -38,9 +38,11 @@ impl Variable {
 type Namespace = HashMap<String, Name>;
 type ConstantID = usize;
 type NamespaceID = usize;
+type BlobID = usize;
 #[derive(Debug, Copy, Clone)]
 enum Name {
     Slot(ConstantID),
+    Blob(BlobID),
     Namespace(NamespaceID),
 }
 
@@ -49,6 +51,7 @@ struct Compiler {
 
     path_to_namespace_id: HashMap<String, NamespaceID>,
     namespaces: Vec<Namespace>,
+    blobs: Vec<usize>,
 
     // TODO(ed): Stackframes
 
@@ -84,6 +87,7 @@ impl Compiler {
 
             path_to_namespace_id: HashMap::new(),
             namespaces: Vec::new(),
+            blobs: Vec::new(),
 
             panic: false,
             errors: Vec::new(),
@@ -118,42 +122,45 @@ impl Compiler {
         self.blocks.last_mut().unwrap().add(op, span.line)
     }
 
-    fn assignable(&mut self, ass: &Assignable) {
+    fn assignable(&mut self, ass: &Assignable, namespace: NamespaceID) -> NamespaceID {
         use AssignableKind::*;
 
         match &ass.kind {
             Read(ident) => {
-                self.read(&ident.name, ass.span);
+                self.read_identifier(&ident.name, ass.span, namespace)
             }
             Call(a, expr) => {
-                self.assignable(a);
+                self.assignable(a, namespace);
                 for expr in expr.iter() {
-                    self.expression(expr);
+                    self.expression(expr, namespace);
                 }
                 self.add_op(ass.span, Op::Call(expr.len()));
+                namespace
             }
             Access(a, b) => {
-                self.assignable(a);
-                self.assignable(b);
+                let namespace = self.assignable(a, namespace);
+                self.assignable(b, namespace);
+                namespace
             }
             Index(a, b) => {
-                self.assignable(a);
-                self.expression(b);
+                self.assignable(a, namespace);
+                self.expression(b, namespace);
                 self.add_op(ass.span, Op::GetIndex);
+                namespace
             }
         }
     }
 
-    fn un_op(&mut self, a: &Expression, ops: &[Op], span: Span) {
-        self.expression(&a);
+    fn un_op(&mut self, a: &Expression, ops: &[Op], span: Span, namespace: NamespaceID) {
+        self.expression(&a, namespace);
         for op in ops {
             self.add_op(span, *op);
         }
     }
 
-    fn bin_op(&mut self, a: &Expression, b: &Expression, ops: &[Op], span: Span) {
-        self.expression(&a);
-        self.expression(&b);
+    fn bin_op(&mut self, a: &Expression, b: &Expression, ops: &[Op], span: Span, namespace: NamespaceID) {
+        self.expression(&a, namespace);
+        self.expression(&b, namespace);
         for op in ops {
             self.add_op(span, *op);
         }
@@ -164,39 +171,49 @@ impl Compiler {
         self.add_op(span, value);
     }
 
-    fn expression(&mut self, expression: &Expression) {
+    fn expression(&mut self, expression: &Expression, namespace: NamespaceID) {
         use ExpressionKind::*;
 
         match &expression.kind {
-            Get(a) => self.assignable(a),
+            Get(a) => { self.assignable(a, namespace); },
 
-            Add(a, b) => self.bin_op(a, b, &[Op::Add], expression.span),
-            Sub(a, b) => self.bin_op(a, b, &[Op::Sub], expression.span),
-            Mul(a, b) => self.bin_op(a, b, &[Op::Mul], expression.span),
-            Div(a, b) => self.bin_op(a, b, &[Op::Div], expression.span),
+            Add(a, b) => self.bin_op(a, b, &[Op::Add], expression.span, namespace),
+            Sub(a, b) => self.bin_op(a, b, &[Op::Sub], expression.span, namespace),
+            Mul(a, b) => self.bin_op(a, b, &[Op::Mul], expression.span, namespace),
+            Div(a, b) => self.bin_op(a, b, &[Op::Div], expression.span, namespace),
 
-            Eq(a, b)   => self.bin_op(a, b, &[Op::Equal], expression.span),
-            Neq(a, b)  => self.bin_op(a, b, &[Op::Equal, Op::Not], expression.span),
-            Gt(a, b)   => self.bin_op(a, b, &[Op::Greater], expression.span),
-            Gteq(a, b) => self.bin_op(a, b, &[Op::Less, Op::Not], expression.span),
-            Lt(a, b)   => self.bin_op(a, b, &[Op::Less], expression.span),
-            Lteq(a, b) => self.bin_op(a, b, &[Op::Greater, Op::Not], expression.span),
+            Eq(a, b)   => self.bin_op(a, b, &[Op::Equal], expression.span, namespace),
+            Neq(a, b)  => self.bin_op(a, b, &[Op::Equal, Op::Not], expression.span, namespace),
+            Gt(a, b)   => self.bin_op(a, b, &[Op::Greater], expression.span, namespace),
+            Gteq(a, b) => self.bin_op(a, b, &[Op::Less, Op::Not], expression.span, namespace),
+            Lt(a, b)   => self.bin_op(a, b, &[Op::Less], expression.span, namespace),
+            Lteq(a, b) => self.bin_op(a, b, &[Op::Greater, Op::Not], expression.span, namespace),
 
-            AssertEq(a, b) => self.bin_op(a, b, &[Op::Equal, Op::Assert], expression.span),
+            AssertEq(a, b) => self.bin_op(a, b, &[Op::Equal, Op::Assert], expression.span, namespace),
 
-            Neg(a) => self.un_op(a, &[Op::Neg], expression.span),
+            Neg(a) => self.un_op(a, &[Op::Neg], expression.span, namespace),
 
-            In(a, b) => self.bin_op(a, b, &[Op::Contains], expression.span),
+            In(a, b) => self.bin_op(a, b, &[Op::Contains], expression.span, namespace),
 
-            And(a, b) => self.bin_op(a, b, &[Op::And], expression.span),
-            Or(a, b)  => self.bin_op(a, b, &[Op::Or], expression.span),
-            Not(a)    => self.un_op(a, &[Op::Neg], expression.span),
+            And(a, b) => self.bin_op(a, b, &[Op::And], expression.span, namespace),
+            Or(a, b)  => self.bin_op(a, b, &[Op::Or], expression.span, namespace),
+            Not(a)    => self.un_op(a, &[Op::Neg], expression.span, namespace),
 
             // ...
 
+            Instance { blob, fields } => {
+                self.assignable(blob, namespace);
+                for (name, field) in fields.iter() {
+                    let name = self.constant(Value::Field(name.clone()));
+                    self.add_op(field.span, name);
+                    self.expression(field, namespace);
+                }
+                self.add_op(expression.span, Op::Call(fields.len() * 2));
+            }
+
             Tuple(x) | List(x) | Set(x) | Dict(x) => {
                 for expr in x.iter() {
-                    self.expression(expr);
+                    self.expression(expr, namespace);
                 }
                 self.add_op(expression.span, match &expression.kind {
                     Tuple(_) => Op::Tuple(x.len()),
@@ -218,22 +235,42 @@ impl Compiler {
 
     }
 
-    fn read(&mut self, name: &String, span: Span) {
+    fn read_identifier(&mut self, name: &String, span: Span, namespace: NamespaceID) -> NamespaceID {
         match self.namespaces[0].get(name) {
-            Some(Name::Slot(slot)) => { self.add_op(span, Op::ReadGlobal(*slot)); return; },
+            Some(Name::Slot(slot)) => {
+                let op = Op::ReadGlobal(*slot);
+                self.add_op(span, op);
+                namespace
+            },
+            Some(Name::Namespace(new_namespace)) => {
+                *new_namespace
+            },
+            Some(Name::Blob(blob)) => {
+                let op = Op::Constant(*blob);
+                self.add_op(span, op);
+                namespace
+            },
+            _ => {
+                error!(self, span, "No active variable called '{}' could be found", name);
+                namespace
+            },
+        }
+    }
+
+    fn set_identifier(&mut self, name: &String, span: Span, _namespace: NamespaceID) {
+        match self.namespaces[0].get(name) {
+            Some(Name::Slot(slot)) => {
+                let op = Op::AssignGlobal(*slot);
+                self.add_op(span, op);
+            },
             _ => {
                 error!(self, span, "No active variable called '{}' could be found", name);
             },
         }
     }
 
-    fn set(&mut self, name: &String, span: Span) {
-        match self.namespaces[0].get(name) {
-            Some(Name::Slot(slot)) => { self.add_op(span, Op::AssignGlobal(*slot)); return; },
-            _ => {
-                error!(self, span, "No active variable called '{}' could be found", name);
-            },
-        }
+    fn resolve_type(&self, assignable: Assignable, namespace: NamespaceID) -> Type {
+        unimplemented!();
     }
 
     fn define(&mut self, name: &String, kind: &VarKind, ty: &syntree::Type, span: Span) -> VarSlot {
@@ -251,21 +288,21 @@ impl Compiler {
         // self.globals[slot].active = true;
     }
 
-    fn statement(&mut self, statement: &Statement) {
+    fn statement(&mut self, statement: &Statement, namespace: NamespaceID) {
         use StatementKind::*;
 
         match &statement.kind {
             EmptyStatement => {},
 
             Print { value } => {
-                self.expression(value);
+                self.expression(value, namespace);
                 self.add_op(statement.span, Op::Print);
             }
 
             Definition { ident, kind, ty, value } => {
                 // TODO(ed): Don't use type here - type check the tree first.
                 let slot = self.define(&ident.name, kind, ty, statement.span);
-                self.expression(value);
+                self.expression(value, namespace);
                 self.activate(slot);
             }
 
@@ -274,39 +311,44 @@ impl Compiler {
 
                 match &target.kind {
                     Read(ident) => {
-                        self.expression(value);
-                        self.set(&ident.name, statement.span);
+                        self.expression(value, namespace);
+                        self.set_identifier(&ident.name, statement.span, namespace);
                     }
-                    Call(a, expr) => {
+                    Call(_a, _expr) => {
                         error!(self, statement.span, "Cannot assign to result from function call");
                     }
-                    Access(a, b) => {
+                    Access(_a, _b) => {
                         unimplemented!("Assignment to accesses is not implemented");
                     }
                     Index(a, b) => {
-                        self.assignable(a);
-                        self.expression(b);
-                        self.expression(value);
+                        self.assignable(a, namespace);
+                        self.expression(b, namespace);
+                        self.expression(value, namespace);
                         self.add_op(statement.span, Op::AssignIndex);
                     }
                 }
 
-                self.expression(value);
+                self.expression(value, namespace);
             }
 
             StatementExpression { value } => {
-                self.expression(value);
+                self.expression(value, namespace);
+                self.add_op(statement.span, Op::Pop);
             }
+
+            Block { .. } => {}
 
             Use { .. } => {}
 
-            _ => { unimplemented!(); }
+            Blob { .. } => {}
+
+            t => { unimplemented!("{:?}", t); }
         }
     }
 
-    fn module(&mut self, module: &Module) {
+    fn module(&mut self, module: &Module, namespace: NamespaceID) {
         for statement in module.statements.iter() {
-            self.statement(statement);
+            self.statement(statement, namespace);
         }
     }
 
@@ -314,14 +356,17 @@ impl Compiler {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
         self.blocks.push(Block::new("/preamble/", &tree.modules[0].0));
 
+        println!("{:#?}", tree);
+
         let globals = self.extract_globals(&tree);
         let nil = self.constant(Value::Nil);
         for _ in 0..globals {
             self.add_op(Span { line: 0 }, nil);
         }
 
+        let namespace = 0;
         let module = &tree.modules[0].1;
-        self.module(module);
+        self.module(module, namespace);
 
         let nil = self.constant(Value::Nil);
         self.add_op(module.span, nil);
@@ -341,7 +386,7 @@ impl Compiler {
 
     fn extract_globals(&mut self, tree: &Prog) -> usize {
         // TODO(ed): Check for duplicates
-        for (full_path, module) in tree.modules.iter() {
+        for (full_path, _) in tree.modules.iter() {
             let slot = self.path_to_namespace_id.len();
             let path = full_path.file_stem().unwrap().to_str().unwrap().to_owned();
             match self.path_to_namespace_id.entry(path) {
@@ -381,7 +426,26 @@ impl Compiler {
                         }
                     }
 
-                    // Blob { name, .. } => { }
+                    // TODO(ed): Maybe break this out into it's own "type resolution thing?"
+                    Blob { name, .. } => {
+                        match namespace.entry(name.to_owned()) {
+                            Entry::Vacant(vac) => {
+                                let id = self.blobs.len();
+                                let blob = crate::Blob::new_tree(id, slot, name);
+                                let slot = self.constants.len();
+                                self.constants.push(Value::Blob(Rc::new(blob)));
+                                vac.insert(Name::Blob(slot));
+                            }
+
+                            Entry::Occupied(_) => {
+                                error!(
+                                    self,
+                                    statement.span,
+                                    "A global variable with the name '{}' already exists", name
+                                );
+                            }
+                        }
+                    }
 
                     Definition { ident: Identifier { name, span }, .. } => {
                         match namespace.entry(name.to_owned()) {
@@ -407,6 +471,9 @@ impl Compiler {
                 }
             }
         }
+
+        // TODO(ed): Resolve the types of all blob fields here!
+        // Thank god we're a scripting language - otherwise this would be impossible.
 
         globals
     }
