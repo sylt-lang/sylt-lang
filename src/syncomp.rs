@@ -203,8 +203,11 @@ impl Compiler {
             Function { params, ret, body } => {
                 // TODO(ed): Push a stackframe here
 
-                let file = PathBuf::from(self.file_for_namespace(namespace));
-                let mut block = Block::new_tree("fn", namespace, &file);
+                let file = self.file_for_namespace(namespace);
+                let file_as_path = PathBuf::from(file);
+                let name = format!("fn {}:{}", file, expression.span.line);
+                let mut block = Block::new_tree(&name, namespace, &&file_as_path);
+
                 for (ident, ty) in params.iter() {
                     let param = self.define(&ident.name, &VarKind::Const, ty, ident.span);
                     self.activate(param);
