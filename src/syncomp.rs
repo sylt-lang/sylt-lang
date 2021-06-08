@@ -1,11 +1,11 @@
 use crate::error::Error;
 use crate::syntree;
 use syntree::*;
-use crate::{Op, Block, Value, Type, Blob};
+use crate::{Op, Block, Value, Type};
 use std::collections::{hash_map::Entry, HashMap};
 use crate::rc::Rc;
 use std::cell::RefCell;
-use std::path::Path;
+use std::path::PathBuf;
 
 type VarSlot = usize;
 
@@ -49,7 +49,8 @@ enum Name {
 struct Compiler {
     blocks: Vec<Block>,
 
-    path_to_namespace_id: HashMap<String, NamespaceID>,
+    namespace_id_to_path: HashMap<NamespaceID, String>,
+
     namespaces: Vec<Namespace>,
     blobs: Vec<usize>,
 
@@ -65,13 +66,13 @@ struct Compiler {
 }
 
 macro_rules! error {
-    ($compiler:expr, $span:expr, $( $msg:expr ),+ ) => {
+    ($compiler:expr, $namespace:expr, $span:expr, $( $msg:expr ),+ ) => {
         if !$compiler.panic {
             $compiler.panic = true;
 
             let msg = format!($( $msg ),*).into();
             let err = Error::CompileError {
-                file: $compiler.current_file().into(),
+                file: $compiler.file_for_namespace($namespace.clone()).into(),
                 line: $span.line,
                 message: Some(msg),
             };
@@ -85,7 +86,7 @@ impl Compiler {
         Self {
             blocks: Vec::new(),
 
-            path_to_namespace_id: HashMap::new(),
+            namespace_id_to_path: HashMap::new(),
             namespaces: Vec::new(),
             blobs: Vec::new(),
 
@@ -99,8 +100,8 @@ impl Compiler {
         }
     }
 
-    fn current_file(&self) -> &Path {
-        &self.blocks.last().expect("No blocks pushed").file
+    fn file_for_namespace(&self, namespace: NamespaceID) -> &str {
+        self.namespace_id_to_path.get(&namespace).unwrap()
     }
 
     fn constant(&mut self, value: Value) -> Op {
@@ -199,7 +200,19 @@ impl Compiler {
             Or(a, b)  => self.bin_op(a, b, &[Op::Or], expression.span, namespace),
             Not(a)    => self.un_op(a, &[Op::Neg], expression.span, namespace),
 
-            // ...
+            Function { params, ret, body } => {
+                // TODO(ed): Push a stackframe here
+
+                let file = PathBuf::from(self.file_for_namespace(namespace));
+                let mut block = Block::new_tree("fn", namespace, &file);
+                for (ident, ty) in params.iter() {
+                    let param = self.define(&ident.name, &VarKind::Const, ty, ident.span);
+                    self.activate(param);
+                }
+
+                // TODO(ed): Pop the stackframe here
+                self.statement(&body, namespace);
+            }
 
             Instance { blob, fields } => {
                 self.assignable(blob, namespace);
@@ -229,10 +242,7 @@ impl Compiler {
             Int(a)   => self.push(Value::Int(*a), expression.span),
             Str(a)   => self.push(Value::String(Rc::new(a.clone())), expression.span),
             Nil      => self.push(Value::Nil, expression.span),
-
-            _ => { unimplemented!(); }
         }
-
     }
 
     fn read_identifier(&mut self, name: &String, span: Span, namespace: NamespaceID) -> NamespaceID {
@@ -251,20 +261,20 @@ impl Compiler {
                 namespace
             },
             _ => {
-                error!(self, span, "No active variable called '{}' could be found", name);
+                error!(self, namespace, span, "No active variable called '{}' could be found", name);
                 namespace
             },
         }
     }
 
-    fn set_identifier(&mut self, name: &String, span: Span, _namespace: NamespaceID) {
+    fn set_identifier(&mut self, name: &String, span: Span, namespace: NamespaceID) {
         match self.namespaces[0].get(name) {
             Some(Name::Slot(slot)) => {
                 let op = Op::AssignGlobal(*slot);
                 self.add_op(span, op);
             },
             _ => {
-                error!(self, span, "No active variable called '{}' could be found", name);
+                error!(self, namespace, span, "No active variable called '{}' could be found", name);
             },
         }
     }
@@ -315,7 +325,7 @@ impl Compiler {
                         self.set_identifier(&ident.name, statement.span, namespace);
                     }
                     Call(_a, _expr) => {
-                        error!(self, statement.span, "Cannot assign to result from function call");
+                        error!(self, namespace, statement.span, "Cannot assign to result from function call");
                     }
                     Access(_a, _b) => {
                         unimplemented!("Assignment to accesses is not implemented");
@@ -386,17 +396,18 @@ impl Compiler {
 
     fn extract_globals(&mut self, tree: &Prog) -> usize {
         // TODO(ed): Check for duplicates
+        let mut path_to_namespace_id = HashMap::new();
         for (full_path, _) in tree.modules.iter() {
-            let slot = self.path_to_namespace_id.len();
+            let slot = path_to_namespace_id.len();
             let path = full_path.file_stem().unwrap().to_str().unwrap().to_owned();
-            match self.path_to_namespace_id.entry(path) {
+            match path_to_namespace_id.entry(path) {
                 Entry::Vacant(vac) => {
                     vac.insert(slot);
                     self.namespaces.push(Namespace::new());
                 }
 
                 Entry::Occupied(_) => {
-                    error!(self, Span { line: 0 }, "Reading module '{}' twice. How?", full_path.display());
+                    error!(self, slot, Span { line: 0 }, "Reading module '{}' twice. How?", full_path.display());
                 }
             }
         }
@@ -404,13 +415,13 @@ impl Compiler {
         let mut globals = 0;
         for (path, module) in tree.modules.iter() {
             let path = path.file_stem().unwrap().to_str().unwrap();
-            let slot = self.path_to_namespace_id[path];
+            let slot = path_to_namespace_id[path];
             for statement in module.statements.iter() {
                 use StatementKind::*;
                 let namespace = &mut self.namespaces[slot];
                 match &statement.kind {
                     Use { file: Identifier { name, span } } => {
-                        let other = self.path_to_namespace_id[name];
+                        let other = path_to_namespace_id[name];
                         match namespace.entry(name.to_owned()) {
                             Entry::Vacant(vac) => {
                                 vac.insert(Name::Namespace(other));
@@ -418,6 +429,7 @@ impl Compiler {
                             Entry::Occupied(_) => {
                                 error!(
                                     self,
+                                    slot,
                                     span,
                                     "A global variable with the name '{}' already exists",
                                     name
@@ -440,6 +452,7 @@ impl Compiler {
                             Entry::Occupied(_) => {
                                 error!(
                                     self,
+                                    slot,
                                     statement.span,
                                     "A global variable with the name '{}' already exists", name
                                 );
@@ -458,6 +471,7 @@ impl Compiler {
                             Entry::Occupied(_) => {
                                 error!(
                                     self,
+                                    slot,
                                     span,
                                     "A global variable with the name '{}' already exists", name
                                 );
@@ -474,6 +488,7 @@ impl Compiler {
 
         // TODO(ed): Resolve the types of all blob fields here!
         // Thank god we're a scripting language - otherwise this would be impossible.
+        self.namespace_id_to_path = path_to_namespace_id.into_iter().map(|(a, b)| (b, a)).collect();
 
         globals
     }

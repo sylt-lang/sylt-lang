@@ -898,6 +898,8 @@ pub struct Block {
     upvalues: Vec<(usize, bool, Type)>,
     linking: BlockLinkState,
 
+    namespace: usize,
+
     pub name: String,
     pub file: PathBuf,
     ops: Vec<Op>,
@@ -912,12 +914,20 @@ impl Block {
             upvalues: Vec::new(),
             linking: BlockLinkState::Nothing,
 
+            namespace: 0,
+
             name: String::from(name),
             file: file.to_owned(),
             ops: Vec::new(),
             last_line_offset: 0,
             line_offsets: HashMap::new(),
         }
+    }
+
+    fn new_tree(name: &str, namespace: usize, file: &Path) -> Self {
+        let mut block = Self::new(name, file);
+        block.namespace = namespace;
+        block
     }
 
     fn mark_constant(&mut self) {
