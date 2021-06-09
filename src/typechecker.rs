@@ -84,7 +84,8 @@ fn typecheck_block(block: Rc<RefCell<Block>>, prog: &Prog, global_types: Vec<Typ
 
     let mut vm = VM::new(&block, global_types);
     let mut errors = Vec::new();
-    for (ip, op) in (*block).borrow().ops.iter().enumerate() {
+    let ops = (*block).borrow().ops.clone();
+    for (ip, op) in ops.iter().enumerate() {
         vm.ip = ip;
 
         #[cfg(debug_assertions)]
@@ -237,7 +238,8 @@ impl VM {
                 let value = &prog.constants[slot];
                 self.push(Type::from(value));
 
-                while let Value::Function(_, block) = value {
+                while let Value::Function(_, _, block) = value {
+                    let block = Rc::clone(&prog.blocks[*block]);
                     match block.borrow().linking {
                         BlockLinkState::Linked => break,
                         BlockLinkState::Unlinked => {
@@ -460,7 +462,8 @@ impl VM {
 
             Op::Link(slot) => {
                 match &prog.constants[slot] {
-                    Value::Function(_, block) => {
+                    Value::Function(_, _, block) => {
+                        let block = &prog.blocks[*block];
                         block.borrow_mut().linking = BlockLinkState::Linked;
 
                         let mut types = Vec::new();

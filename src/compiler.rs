@@ -1224,7 +1224,8 @@ impl Compiler {
 
         // Note(ed): We deliberately add the constant as late as possible.
         // This behaviour is used in `constant_statement`.
-        let function = Value::Function(Rc::new(Vec::new()), Rc::clone(&function_block));
+        let ty = function_block.borrow_mut().ty.clone();
+        let function = Value::Function(Rc::new(Vec::new()), ty, block_id);
         self.blocks[block_id] = function_block;
         let constant = if in_name.is_some() {
             self.named_constant(name, function)
@@ -1389,14 +1390,12 @@ impl Compiler {
         var.global = true;
         var.active = true;
 
-        println!("{} - {}", var.name, slot);
         self.globals.push(var);
         Ok(slot)
     }
 
     fn outer_definition_statement(&mut self, name: &str, _typ: Type, _force: bool, block: &mut Block) {
         let var = self.find_global(name);
-        println!("{:?}", var);
         if var.is_none() {
             syntax_error!(self, "Couldn't find variable '{}' during prepass", name);
             return;
@@ -1432,8 +1431,8 @@ impl Compiler {
         block.ops.pop().unwrap();
         let slot = self.find_constant(name);
         add_op(self, block, Op::Link(slot));
-        if let Value::Function(_, block) = &self.constants[slot] {
-            block.borrow_mut().mark_constant();
+        if let Value::Function(_, _, slot) = &self.constants[slot] {
+            self.blocks[*slot].borrow_mut().mark_constant();
         } else {
             unreachable!();
         }
@@ -2239,6 +2238,10 @@ impl Compiler {
             .enumerate()
             .map(|(i, (s, f))| (s, (i, f)))
             .collect();
+
+        let block = Block::new(name, file);
+        self.blocks.push(Rc::new(RefCell::new(block)));
+
         let mut block = Block::new(name, file);
         for section in 0..self.sections.len() {
             self.init_section(section);
@@ -2294,7 +2297,7 @@ impl Compiler {
             self.panic = false;
         }
 
-        self.blocks.insert(0, Rc::new(RefCell::new(block)));
+        self.blocks[0] = Rc::new(RefCell::new(block));
 
         if self.errors.is_empty() {
             Ok(Prog {

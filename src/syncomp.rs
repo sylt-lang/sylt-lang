@@ -214,12 +214,22 @@ impl Compiler {
 
                 // TODO(ed): Better name
                 let name = format!("fn {}:{}", file, expression.span.line);
-                let mut block = Block::new_tree(&name, ctx.namespace, &file_as_path);
 
+                let ctx = Context {
+                    block_slot: self.blocks.len(),
+                    ..ctx
+                };
+                self.blocks.push(Block::new_tree(&name, ctx.namespace, &file_as_path));
+
+                let mut param_types = Vec::new();
                 for (ident, ty) in params.iter() {
+                    param_types.push(self.resolve_type(&ty, ctx));
                     let param = self.define(&ident.name, &VarKind::Const, ty, ident.span);
                     self.activate(param);
                 }
+                let ret = self.resolve_type(&ret, ctx);
+                self.blocks[ctx.block_slot].ty = Type::Function(param_types, Box::new(ret));
+                // let function = Value::Function(Rc::new(Vec::new()), Rc::new(self.blocks[ctx.block_slot]));
 
                 // TODO(ed): Pop the stackframe here
                 self.statement(&body, ctx);
@@ -290,8 +300,9 @@ impl Compiler {
         }
     }
 
-    fn resolve_type(&self, assignable: Assignable, ctx: Context) -> Type {
-        unimplemented!();
+    fn resolve_type(&self, ty: &syntree::Type, ctx: Context) -> Type {
+        // TODO(ed): Implement this
+        Type::Void
     }
 
     fn define(&mut self, name: &String, kind: &VarKind, ty: &syntree::Type, span: Span) -> VarSlot {

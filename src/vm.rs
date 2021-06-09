@@ -56,6 +56,7 @@ pub struct VM {
 
     stack: Vec<Value>,
     frames: Vec<Frame>,
+    blocks: Vec<Rc<RefCell<Block>>>,
 
     constants: Vec<Value>,
     strings: Vec<String>,
@@ -83,6 +84,7 @@ impl VM {
 
             stack: Vec::new(),
             frames: Vec::new(),
+            blocks: Vec::new(),
 
             constants: Vec::new(),
             strings: Vec::new(),
@@ -127,13 +129,11 @@ impl VM {
     }
 
     fn frame(&self) -> &Frame {
-        let last = self.frames.len() - 1;
-        &self.frames[last]
+        self.frames.last().unwrap()
     }
 
     fn frame_mut(&mut self) -> &mut Frame {
-        let last = self.frames.len() - 1;
-        &mut self.frames[last]
+        self.frames.last_mut().unwrap()
     }
 
     fn constant(&self, slot: usize) -> &Value {
@@ -253,15 +253,16 @@ impl VM {
                 let offset = self.frame().stack_offset;
                 let constant = self.constant(value).clone();
                 let value = match constant {
-                    Value::Function(ups, block) => {
-                        if matches!(block.borrow().linking, BlockLinkState::Linked) {
-                            Value::Function(ups, block)
+                    Value::Function(ups, ty, block) => {
+                        let inner = Rc::clone(&self.blocks[block]);
+                        if matches!(inner.borrow().linking, BlockLinkState::Linked) {
+                            Value::Function(ups, ty, block)
                         } else {
                             let mut ups = Vec::new();
-                            for (slot, is_up, _) in block.borrow().upvalues.iter() {
+                            for (slot, is_up, _) in inner.borrow().upvalues.iter() {
                                 self.frame_mut().contains_upvalues = true;
                                 let up = if *is_up {
-                                    if let Value::Function(local_ups, _) = &self.stack[offset] {
+                                    if let Value::Function(local_ups, _, _) = &self.stack[offset] {
                                         Rc::clone(&local_ups[*slot])
                                     } else {
                                         unreachable!()
@@ -272,7 +273,7 @@ impl VM {
                                 };
                                 ups.push(up);
                             }
-                            Value::Function(Rc::new(ups), block)
+                            Value::Function(Rc::new(ups), ty, block)
                         }
                     }
                     value => value,
@@ -284,11 +285,12 @@ impl VM {
                 let offset = self.frame().stack_offset;
                 let constant = self.constant(slot).clone();
                 let constant = match constant {
-                    Value::Function(_, block) => {
+                    Value::Function(_, ty, block) => {
+                        let inner = Rc::clone(&self.blocks[block]);
                         let mut ups = Vec::new();
-                        for (slot, is_up, _) in block.borrow().upvalues.iter() {
+                        for (slot, is_up, _) in inner.borrow().upvalues.iter() {
                             let up = if *is_up {
-                                if let Value::Function(local_ups, _) = &self.stack[offset] {
+                                if let Value::Function(local_ups, _, _) = &self.stack[offset] {
                                     Rc::clone(&local_ups[*slot])
                                 } else {
                                     unreachable!()
@@ -299,7 +301,7 @@ impl VM {
                             };
                             ups.push(up);
                         }
-                        Value::Function(Rc::new(ups), block)
+                        Value::Function(Rc::new(ups), ty, block)
                     }
                     value => error!(
                         self,
@@ -613,7 +615,7 @@ impl VM {
             Op::ReadUpvalue(slot) => {
                 let offset = self.frame().stack_offset;
                 let value = match &self.stack[offset] {
-                    Value::Function(ups, _) => ups[slot].borrow().get(&self.stack),
+                    Value::Function(ups, _, _) => ups[slot].borrow().get(&self.stack),
                     _ => unreachable!(),
                 };
                 self.push(value);
@@ -623,7 +625,7 @@ impl VM {
                 let offset = self.frame().stack_offset;
                 let value = self.pop();
                 let slot = match &self.stack[offset] {
-                    Value::Function(ups, _) => Rc::clone(&ups[slot]),
+                    Value::Function(ups, _, _) => Rc::clone(&ups[slot]),
                     _ => unreachable!(),
                 };
                 slot.borrow_mut().set(&mut self.stack, value);
@@ -665,9 +667,10 @@ impl VM {
                         values.insert("_name".to_string(), Value::String(Rc::new(blob.name.clone())));
                         self.push(Value::Instance(blob, Rc::new(RefCell::new(values))));
                     }
-                    Value::Function(_, block) => {
-                        let inner = block.borrow();
+                    Value::Function(_, ty, block) => {
+                        let inner = self.blocks[block].borrow();
                         let args = inner.args();
+                        println!("--- {:?}:{} {} - {:?}", args, inner.name, block, ty);
                         if args.len() != num_args {
                             error!(self, RuntimeError::ArgumentCount(args.len(), num_args));
                         }
@@ -678,7 +681,7 @@ impl VM {
                         }
                         self.frames.push(Frame {
                             stack_offset: new_base,
-                            block: Rc::clone(&block),
+                            block: Rc::clone(&self.blocks[block]),
                             ip: 0,
                             contains_upvalues: true,
                         });
@@ -749,12 +752,13 @@ impl VM {
         let block = Rc::clone(&prog.blocks[0]);
         self.constants = prog.constants.clone();
         self.strings = prog.strings.clone();
+        self.blocks = prog.blocks.clone();
 
         self.extern_functions = prog.functions.clone();
         self.stack.clear();
         self.frames.clear();
 
-        self.push(Value::Function(Rc::new(Vec::new()), Rc::clone(&block)));
+        self.push(Value::Function(Rc::new(Vec::new()), Type::Function(Vec::new(), Box::new(Type::Void)), 0));
 
         self.frames.push(Frame {
             stack_offset: 0,
@@ -993,4 +997,3 @@ mod op {
         }
     }
 }
-

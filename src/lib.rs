@@ -289,11 +289,7 @@ impl From<&Value> for Type {
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
-            Value::Function(_, block) => {
-                let block: &RefCell<_> = block.borrow();
-                let block = &block.borrow();
-                block.borrow().ty.clone()
-            }
+            Value::Function(_, ty, _) => ty.clone(),
             Value::Unknown => Type::Unknown,
             Value::ExternFunction(n) => Type::ExternFunction(*n),
             Value::Nil => Type::Void,
@@ -334,10 +330,7 @@ impl From<&Type> for Value {
             Type::Float => Value::Float(1.0),
             Type::Bool => Value::Bool(true),
             Type::String => Value::String(Rc::new("".to_string())),
-            Type::Function(_, _) => Value::Function(
-                Rc::new(Vec::new()),
-                Rc::new(RefCell::new(Block::stubbed_block(ty))),
-            ),
+            Type::Function(a, r) => Value::Function(Rc::new(Vec::new()), Type::Function(a.clone(), r.clone()), 0),
             Type::ExternFunction(x) => Value::ExternFunction(*x),
             Type::Ty => Value::Ty(Type::Void),
         }
@@ -397,7 +390,7 @@ pub enum Value {
     Int(i64),
     Bool(bool),
     String(Rc<String>),
-    Function(Rc<Vec<Rc<RefCell<UpValue>>>>, Rc<RefCell<Block>>),
+    Function(Rc<Vec<Rc<RefCell<UpValue>>>>, Type, usize),
     ExternFunction(usize),
     /// This value should not be present when running, only when type checking.
     /// Most operations are valid but produce funky results.
@@ -451,10 +444,8 @@ impl Debug for Value {
             Value::Set(v) => write!(fmt, "(set {:?})", v),
             Value::Dict(v) => write!(fmt, "(dict {:?})", v),
             Value::Iter(v, _) => write!(fmt, "(iter {:?})", v),
-            Value::Function(_, block) => {
-                let block: &RefCell<_> = block.borrow();
-                let block = &block.borrow();
-                write!(fmt, "(fn {}: {:?})", block.name, block.ty)
+            Value::Function(_, ty, block) => {
+                write!(fmt, "(fn #{} {:?})", block, ty)
             }
             Value::ExternFunction(slot) => write!(fmt, "(extern fn {})", slot),
             Value::Unknown => write!(fmt, "(unknown)"),
