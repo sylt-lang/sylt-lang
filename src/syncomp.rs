@@ -35,10 +35,17 @@ impl Variable {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+struct Context {
+    block_slot: BlockID,
+    namespace: NamespaceID,
+}
+
 type Namespace = HashMap<String, Name>;
 type ConstantID = usize;
 type NamespaceID = usize;
 type BlobID = usize;
+type BlockID = usize;
 #[derive(Debug, Copy, Clone)]
 enum Name {
     Slot(ConstantID),
@@ -72,7 +79,7 @@ macro_rules! error {
 
             let msg = format!($( $msg ),*).into();
             let err = Error::CompileError {
-                file: $compiler.file_for_namespace($namespace.clone()).into(),
+                file: $compiler.file_from_context($namespace).into(),
                 line: $span.line,
                 message: Some(msg),
             };
@@ -100,8 +107,8 @@ impl Compiler {
         }
     }
 
-    fn file_for_namespace(&self, namespace: NamespaceID) -> &str {
-        self.namespace_id_to_path.get(&namespace).unwrap()
+    fn file_from_context(&self, ctx: Context) -> &str {
+        self.namespace_id_to_path.get(&ctx.namespace).unwrap()
     }
 
     fn constant(&mut self, value: Value) -> Op {
@@ -123,45 +130,45 @@ impl Compiler {
         self.blocks.last_mut().unwrap().add(op, span.line)
     }
 
-    fn assignable(&mut self, ass: &Assignable, namespace: NamespaceID) -> NamespaceID {
+    fn assignable(&mut self, ass: &Assignable, ctx: Context) -> Context {
         use AssignableKind::*;
 
         match &ass.kind {
             Read(ident) => {
-                self.read_identifier(&ident.name, ass.span, namespace)
+                self.read_identifier(&ident.name, ass.span, ctx)
             }
             Call(a, expr) => {
-                self.assignable(a, namespace);
+                self.assignable(a, ctx);
                 for expr in expr.iter() {
-                    self.expression(expr, namespace);
+                    self.expression(expr, ctx);
                 }
                 self.add_op(ass.span, Op::Call(expr.len()));
-                namespace
+                ctx
             }
             Access(a, b) => {
-                let namespace = self.assignable(a, namespace);
-                self.assignable(b, namespace);
-                namespace
+                let ctx = self.assignable(a, ctx);
+                self.assignable(b, ctx);
+                ctx
             }
             Index(a, b) => {
-                self.assignable(a, namespace);
-                self.expression(b, namespace);
+                self.assignable(a, ctx);
+                self.expression(b, ctx);
                 self.add_op(ass.span, Op::GetIndex);
-                namespace
+                ctx
             }
         }
     }
 
-    fn un_op(&mut self, a: &Expression, ops: &[Op], span: Span, namespace: NamespaceID) {
-        self.expression(&a, namespace);
+    fn un_op(&mut self, a: &Expression, ops: &[Op], span: Span, ctx: Context) {
+        self.expression(&a, ctx);
         for op in ops {
             self.add_op(span, *op);
         }
     }
 
-    fn bin_op(&mut self, a: &Expression, b: &Expression, ops: &[Op], span: Span, namespace: NamespaceID) {
-        self.expression(&a, namespace);
-        self.expression(&b, namespace);
+    fn bin_op(&mut self, a: &Expression, b: &Expression, ops: &[Op], span: Span, ctx: Context) {
+        self.expression(&a, ctx);
+        self.expression(&b, ctx);
         for op in ops {
             self.add_op(span, *op);
         }
@@ -172,41 +179,43 @@ impl Compiler {
         self.add_op(span, value);
     }
 
-    fn expression(&mut self, expression: &Expression, namespace: NamespaceID) {
+    fn expression(&mut self, expression: &Expression, ctx: Context) {
         use ExpressionKind::*;
 
         match &expression.kind {
-            Get(a) => { self.assignable(a, namespace); },
+            Get(a) => { self.assignable(a, ctx); },
 
-            Add(a, b) => self.bin_op(a, b, &[Op::Add], expression.span, namespace),
-            Sub(a, b) => self.bin_op(a, b, &[Op::Sub], expression.span, namespace),
-            Mul(a, b) => self.bin_op(a, b, &[Op::Mul], expression.span, namespace),
-            Div(a, b) => self.bin_op(a, b, &[Op::Div], expression.span, namespace),
+            Add(a, b) => self.bin_op(a, b, &[Op::Add], expression.span, ctx),
+            Sub(a, b) => self.bin_op(a, b, &[Op::Sub], expression.span, ctx),
+            Mul(a, b) => self.bin_op(a, b, &[Op::Mul], expression.span, ctx),
+            Div(a, b) => self.bin_op(a, b, &[Op::Div], expression.span, ctx),
 
-            Eq(a, b)   => self.bin_op(a, b, &[Op::Equal], expression.span, namespace),
-            Neq(a, b)  => self.bin_op(a, b, &[Op::Equal, Op::Not], expression.span, namespace),
-            Gt(a, b)   => self.bin_op(a, b, &[Op::Greater], expression.span, namespace),
-            Gteq(a, b) => self.bin_op(a, b, &[Op::Less, Op::Not], expression.span, namespace),
-            Lt(a, b)   => self.bin_op(a, b, &[Op::Less], expression.span, namespace),
-            Lteq(a, b) => self.bin_op(a, b, &[Op::Greater, Op::Not], expression.span, namespace),
+            Eq(a, b)   => self.bin_op(a, b, &[Op::Equal], expression.span, ctx),
+            Neq(a, b)  => self.bin_op(a, b, &[Op::Equal, Op::Not], expression.span, ctx),
+            Gt(a, b)   => self.bin_op(a, b, &[Op::Greater], expression.span, ctx),
+            Gteq(a, b) => self.bin_op(a, b, &[Op::Less, Op::Not], expression.span, ctx),
+            Lt(a, b)   => self.bin_op(a, b, &[Op::Less], expression.span, ctx),
+            Lteq(a, b) => self.bin_op(a, b, &[Op::Greater, Op::Not], expression.span, ctx),
 
-            AssertEq(a, b) => self.bin_op(a, b, &[Op::Equal, Op::Assert], expression.span, namespace),
+            AssertEq(a, b) => self.bin_op(a, b, &[Op::Equal, Op::Assert], expression.span, ctx),
 
-            Neg(a) => self.un_op(a, &[Op::Neg], expression.span, namespace),
+            Neg(a) => self.un_op(a, &[Op::Neg], expression.span, ctx),
 
-            In(a, b) => self.bin_op(a, b, &[Op::Contains], expression.span, namespace),
+            In(a, b) => self.bin_op(a, b, &[Op::Contains], expression.span, ctx),
 
-            And(a, b) => self.bin_op(a, b, &[Op::And], expression.span, namespace),
-            Or(a, b)  => self.bin_op(a, b, &[Op::Or], expression.span, namespace),
-            Not(a)    => self.un_op(a, &[Op::Neg], expression.span, namespace),
+            And(a, b) => self.bin_op(a, b, &[Op::And], expression.span, ctx),
+            Or(a, b)  => self.bin_op(a, b, &[Op::Or], expression.span, ctx),
+            Not(a)    => self.un_op(a, &[Op::Neg], expression.span, ctx),
 
             Function { params, ret, body } => {
                 // TODO(ed): Push a stackframe here
 
-                let file = self.file_for_namespace(namespace);
+                let file = self.file_from_context(ctx);
                 let file_as_path = PathBuf::from(file);
+
+                // TODO(ed): Better name
                 let name = format!("fn {}:{}", file, expression.span.line);
-                let mut block = Block::new_tree(&name, namespace, &&file_as_path);
+                let mut block = Block::new_tree(&name, ctx.namespace, &file_as_path);
 
                 for (ident, ty) in params.iter() {
                     let param = self.define(&ident.name, &VarKind::Const, ty, ident.span);
@@ -214,22 +223,22 @@ impl Compiler {
                 }
 
                 // TODO(ed): Pop the stackframe here
-                self.statement(&body, namespace);
+                self.statement(&body, ctx);
             }
 
             Instance { blob, fields } => {
-                self.assignable(blob, namespace);
+                self.assignable(blob, ctx);
                 for (name, field) in fields.iter() {
                     let name = self.constant(Value::Field(name.clone()));
                     self.add_op(field.span, name);
-                    self.expression(field, namespace);
+                    self.expression(field, ctx);
                 }
                 self.add_op(expression.span, Op::Call(fields.len() * 2));
             }
 
             Tuple(x) | List(x) | Set(x) | Dict(x) => {
                 for expr in x.iter() {
-                    self.expression(expr, namespace);
+                    self.expression(expr, ctx);
                 }
                 self.add_op(expression.span, match &expression.kind {
                     Tuple(_) => Op::Tuple(x.len()),
@@ -248,41 +257,41 @@ impl Compiler {
         }
     }
 
-    fn read_identifier(&mut self, name: &String, span: Span, namespace: NamespaceID) -> NamespaceID {
+    fn read_identifier(&mut self, name: &String, span: Span, ctx: Context) -> Context {
         match self.namespaces[0].get(name) {
             Some(Name::Slot(slot)) => {
                 let op = Op::ReadGlobal(*slot);
                 self.add_op(span, op);
-                namespace
+                ctx
             },
             Some(Name::Namespace(new_namespace)) => {
-                *new_namespace
+                Context { namespace: *new_namespace, ..ctx }
             },
             Some(Name::Blob(blob)) => {
                 let op = Op::Constant(*blob);
                 self.add_op(span, op);
-                namespace
+                ctx
             },
             _ => {
-                error!(self, namespace, span, "No active variable called '{}' could be found", name);
-                namespace
+                error!(self, ctx, span, "No active variable called '{}' could be found", name);
+                ctx
             },
         }
     }
 
-    fn set_identifier(&mut self, name: &String, span: Span, namespace: NamespaceID) {
+    fn set_identifier(&mut self, name: &String, span: Span, ctx: Context) {
         match self.namespaces[0].get(name) {
             Some(Name::Slot(slot)) => {
                 let op = Op::AssignGlobal(*slot);
                 self.add_op(span, op);
             },
             _ => {
-                error!(self, namespace, span, "No active variable called '{}' could be found", name);
+                error!(self, ctx, span, "No active variable called '{}' could be found", name);
             },
         }
     }
 
-    fn resolve_type(&self, assignable: Assignable, namespace: NamespaceID) -> Type {
+    fn resolve_type(&self, assignable: Assignable, ctx: Context) -> Type {
         unimplemented!();
     }
 
@@ -301,21 +310,21 @@ impl Compiler {
         // self.globals[slot].active = true;
     }
 
-    fn statement(&mut self, statement: &Statement, namespace: NamespaceID) {
+    fn statement(&mut self, statement: &Statement, ctx: Context) {
         use StatementKind::*;
 
         match &statement.kind {
             EmptyStatement => {},
 
             Print { value } => {
-                self.expression(value, namespace);
+                self.expression(value, ctx);
                 self.add_op(statement.span, Op::Print);
             }
 
             Definition { ident, kind, ty, value } => {
                 // TODO(ed): Don't use type here - type check the tree first.
                 let slot = self.define(&ident.name, kind, ty, statement.span);
-                self.expression(value, namespace);
+                self.expression(value, ctx);
                 self.activate(slot);
             }
 
@@ -324,28 +333,28 @@ impl Compiler {
 
                 match &target.kind {
                     Read(ident) => {
-                        self.expression(value, namespace);
-                        self.set_identifier(&ident.name, statement.span, namespace);
+                        self.expression(value, ctx);
+                        self.set_identifier(&ident.name, statement.span, ctx);
                     }
                     Call(_a, _expr) => {
-                        error!(self, namespace, statement.span, "Cannot assign to result from function call");
+                        error!(self, ctx, statement.span, "Cannot assign to result from function call");
                     }
                     Access(_a, _b) => {
                         unimplemented!("Assignment to accesses is not implemented");
                     }
                     Index(a, b) => {
-                        self.assignable(a, namespace);
-                        self.expression(b, namespace);
-                        self.expression(value, namespace);
+                        self.assignable(a, ctx);
+                        self.expression(b, ctx);
+                        self.expression(value, ctx);
                         self.add_op(statement.span, Op::AssignIndex);
                     }
                 }
 
-                self.expression(value, namespace);
+                self.expression(value, ctx);
             }
 
             StatementExpression { value } => {
-                self.expression(value, namespace);
+                self.expression(value, ctx);
                 self.add_op(statement.span, Op::Pop);
             }
 
@@ -359,9 +368,9 @@ impl Compiler {
         }
     }
 
-    fn module(&mut self, module: &Module, namespace: NamespaceID) {
+    fn module(&mut self, module: &Module, ctx: Context) {
         for statement in module.statements.iter() {
-            self.statement(statement, namespace);
+            self.statement(statement, ctx);
         }
     }
 
@@ -377,9 +386,12 @@ impl Compiler {
             self.add_op(Span { line: 0 }, nil);
         }
 
-        let namespace = 0;
+        let ctx = Context {
+            namespace: 0,
+            block_slot: 0,
+        };
         let module = &tree.modules[0].1;
-        self.module(module, namespace);
+        self.module(module, ctx);
 
         let nil = self.constant(Value::Nil);
         self.add_op(module.span, nil);
@@ -410,7 +422,8 @@ impl Compiler {
                 }
 
                 Entry::Occupied(_) => {
-                    error!(self, slot, Span { line: 0 }, "Reading module '{}' twice. How?", full_path.display());
+                    error!(self, Context { namespace: slot, block_slot: 0 },
+                           Span { line: 0 }, "Reading module '{}' twice. How?", full_path.display());
                 }
             }
         }
@@ -432,7 +445,7 @@ impl Compiler {
                             Entry::Occupied(_) => {
                                 error!(
                                     self,
-                                    slot,
+                                    Context { namespace: slot, block_slot: 0 },
                                     span,
                                     "A global variable with the name '{}' already exists",
                                     name
@@ -455,7 +468,7 @@ impl Compiler {
                             Entry::Occupied(_) => {
                                 error!(
                                     self,
-                                    slot,
+                                    Context { namespace: slot, block_slot: 0 },
                                     statement.span,
                                     "A global variable with the name '{}' already exists", name
                                 );
@@ -474,7 +487,7 @@ impl Compiler {
                             Entry::Occupied(_) => {
                                 error!(
                                     self,
-                                    slot,
+                                    Context { namespace: slot, block_slot: 0 },
                                     span,
                                     "A global variable with the name '{}' already exists", name
                                 );
