@@ -529,8 +529,7 @@ impl Compiler {
         // Thank god we're a scripting language - otherwise this would be impossible.
         self.namespace_id_to_path = path_to_namespace_id.into_iter().map(|(a, b)| (b, a)).collect();
 
-        globals;
-        0
+        globals
     }
 }
 
