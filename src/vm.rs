@@ -670,7 +670,6 @@ impl VM {
                     Value::Function(_, ty, block) => {
                         let inner = self.blocks[block].borrow();
                         let args = inner.args();
-                        println!("--- {:?}:{} {} - {:?}", args, inner.name, block, ty);
                         if args.len() != num_args {
                             error!(self, RuntimeError::ArgumentCount(args.len(), num_args));
                         }

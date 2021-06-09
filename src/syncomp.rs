@@ -207,32 +207,41 @@ impl Compiler {
             Not(a)    => self.un_op(a, &[Op::Neg], expression.span, ctx),
 
             Function { params, ret, body } => {
-                // TODO(ed): Push a stackframe here
-
                 let file = self.file_from_context(ctx);
                 let file_as_path = PathBuf::from(file);
 
                 // TODO(ed): Better name
                 let name = format!("fn {}:{}", file, expression.span.line);
 
-                let ctx = Context {
+                let inner_ctx = Context {
                     block_slot: self.blocks.len(),
                     ..ctx
                 };
-                self.blocks.push(Block::new_tree(&name, ctx.namespace, &file_as_path));
+                self.blocks.push(Block::new_tree(&name, inner_ctx.namespace, &file_as_path));
 
+                // TODO(ed): Push a stackframe here
                 let mut param_types = Vec::new();
                 for (ident, ty) in params.iter() {
-                    param_types.push(self.resolve_type(&ty, ctx));
+                    param_types.push(self.resolve_type(&ty, inner_ctx));
                     let param = self.define(&ident.name, &VarKind::Const, ty, ident.span);
                     self.activate(param);
                 }
-                let ret = self.resolve_type(&ret, ctx);
-                self.blocks[ctx.block_slot].ty = Type::Function(param_types, Box::new(ret));
-                // let function = Value::Function(Rc::new(Vec::new()), Rc::new(self.blocks[ctx.block_slot]));
+                let ret = self.resolve_type(&ret, inner_ctx);
+                let ty = Type::Function(param_types, Box::new(ret));
+                self.blocks[inner_ctx.block_slot].ty = ty.clone();
+
+                self.statement(&body, inner_ctx);
+                // TODO(ed): Do some fancy program analysis
+                let nil = self.constant(Value::Nil);
+                self.add_op(inner_ctx, body.span, nil);
+                self.add_op(inner_ctx, body.span, Op::Return);
 
                 // TODO(ed): Pop the stackframe here
-                self.statement(&body, ctx);
+
+                let function = Value::Function(Rc::new(Vec::new()), ty, inner_ctx.block_slot);
+                let function = self.constant(function);
+                self.add_op(ctx, expression.span, function);
+
             }
 
             Instance { blob, fields } => {
@@ -368,7 +377,11 @@ impl Compiler {
                 self.add_op(ctx, statement.span, Op::Pop);
             }
 
-            Block { .. } => {}
+            Block { statements } => {
+                for statement in statements {
+                    self.statement(statement, ctx);
+                }
+            }
 
             Use { .. } => {}
 
@@ -516,7 +529,8 @@ impl Compiler {
         // Thank god we're a scripting language - otherwise this would be impossible.
         self.namespace_id_to_path = path_to_namespace_id.into_iter().map(|(a, b)| (b, a)).collect();
 
-        globals
+        globals;
+        0
     }
 }
 
