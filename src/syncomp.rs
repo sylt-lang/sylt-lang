@@ -55,7 +55,6 @@ enum Name {
 
 struct Compiler {
     blocks: Vec<Block>,
-
     namespace_id_to_path: HashMap<NamespaceID, String>,
 
     namespaces: Vec<Namespace>,
@@ -126,8 +125,8 @@ impl Compiler {
         Op::Constant(slot)
     }
 
-    fn add_op(&mut self, span: Span, op: Op) -> usize {
-        self.blocks.last_mut().unwrap().add(op, span.line)
+    fn add_op(&mut self, ctx: Context, span: Span, op: Op) -> usize {
+        self.blocks.get_mut(ctx.block_slot).expect("Invalid block id").add(op, span.line)
     }
 
     fn assignable(&mut self, ass: &Assignable, ctx: Context) -> Context {
@@ -142,7 +141,7 @@ impl Compiler {
                 for expr in expr.iter() {
                     self.expression(expr, ctx);
                 }
-                self.add_op(ass.span, Op::Call(expr.len()));
+                self.add_op(ctx, ass.span, Op::Call(expr.len()));
                 ctx
             }
             Access(a, b) => {
@@ -153,7 +152,7 @@ impl Compiler {
             Index(a, b) => {
                 self.assignable(a, ctx);
                 self.expression(b, ctx);
-                self.add_op(ass.span, Op::GetIndex);
+                self.add_op(ctx, ass.span, Op::GetIndex);
                 ctx
             }
         }
@@ -162,7 +161,7 @@ impl Compiler {
     fn un_op(&mut self, a: &Expression, ops: &[Op], span: Span, ctx: Context) {
         self.expression(&a, ctx);
         for op in ops {
-            self.add_op(span, *op);
+            self.add_op(ctx, span, *op);
         }
     }
 
@@ -170,13 +169,13 @@ impl Compiler {
         self.expression(&a, ctx);
         self.expression(&b, ctx);
         for op in ops {
-            self.add_op(span, *op);
+            self.add_op(ctx, span, *op);
         }
     }
 
-    fn push(&mut self, value: Value, span: Span) {
+    fn push(&mut self, value: Value, span: Span, ctx: Context) {
         let value = self.constant(value);
-        self.add_op(span, value);
+        self.add_op(ctx, span, value);
     }
 
     fn expression(&mut self, expression: &Expression, ctx: Context) {
@@ -230,17 +229,17 @@ impl Compiler {
                 self.assignable(blob, ctx);
                 for (name, field) in fields.iter() {
                     let name = self.constant(Value::Field(name.clone()));
-                    self.add_op(field.span, name);
+                    self.add_op(ctx, field.span, name);
                     self.expression(field, ctx);
                 }
-                self.add_op(expression.span, Op::Call(fields.len() * 2));
+                self.add_op(ctx, expression.span, Op::Call(fields.len() * 2));
             }
 
             Tuple(x) | List(x) | Set(x) | Dict(x) => {
                 for expr in x.iter() {
                     self.expression(expr, ctx);
                 }
-                self.add_op(expression.span, match &expression.kind {
+                self.add_op(ctx, expression.span, match &expression.kind {
                     Tuple(_) => Op::Tuple(x.len()),
                     List(_) => Op::List(x.len()),
                     Set(_) => Op::Set(x.len()),
@@ -249,11 +248,11 @@ impl Compiler {
                 });
             }
 
-            Float(a) => self.push(Value::Float(*a), expression.span),
-            Bool(a)  => self.push(Value::Bool(*a), expression.span),
-            Int(a)   => self.push(Value::Int(*a), expression.span),
-            Str(a)   => self.push(Value::String(Rc::new(a.clone())), expression.span),
-            Nil      => self.push(Value::Nil, expression.span),
+            Float(a) => self.push(Value::Float(*a), expression.span, ctx),
+            Bool(a)  => self.push(Value::Bool(*a), expression.span, ctx),
+            Int(a)   => self.push(Value::Int(*a), expression.span, ctx),
+            Str(a)   => self.push(Value::String(Rc::new(a.clone())), expression.span, ctx),
+            Nil      => self.push(Value::Nil, expression.span, ctx),
         }
     }
 
@@ -261,7 +260,7 @@ impl Compiler {
         match self.namespaces[0].get(name) {
             Some(Name::Slot(slot)) => {
                 let op = Op::ReadGlobal(*slot);
-                self.add_op(span, op);
+                self.add_op(ctx, span, op);
                 ctx
             },
             Some(Name::Namespace(new_namespace)) => {
@@ -269,7 +268,7 @@ impl Compiler {
             },
             Some(Name::Blob(blob)) => {
                 let op = Op::Constant(*blob);
-                self.add_op(span, op);
+                self.add_op(ctx, span, op);
                 ctx
             },
             _ => {
@@ -283,7 +282,7 @@ impl Compiler {
         match self.namespaces[0].get(name) {
             Some(Name::Slot(slot)) => {
                 let op = Op::AssignGlobal(*slot);
-                self.add_op(span, op);
+                self.add_op(ctx, span, op);
             },
             _ => {
                 error!(self, ctx, span, "No active variable called '{}' could be found", name);
@@ -318,7 +317,7 @@ impl Compiler {
 
             Print { value } => {
                 self.expression(value, ctx);
-                self.add_op(statement.span, Op::Print);
+                self.add_op(ctx, statement.span, Op::Print);
             }
 
             Definition { ident, kind, ty, value } => {
@@ -346,7 +345,7 @@ impl Compiler {
                         self.assignable(a, ctx);
                         self.expression(b, ctx);
                         self.expression(value, ctx);
-                        self.add_op(statement.span, Op::AssignIndex);
+                        self.add_op(ctx, statement.span, Op::AssignIndex);
                     }
                 }
 
@@ -355,7 +354,7 @@ impl Compiler {
 
             StatementExpression { value } => {
                 self.expression(value, ctx);
-                self.add_op(statement.span, Op::Pop);
+                self.add_op(ctx, statement.span, Op::Pop);
             }
 
             Block { .. } => {}
@@ -377,25 +376,25 @@ impl Compiler {
     fn compile(mut self, tree: Prog) -> Result<crate::Prog, Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
         self.blocks.push(Block::new("/preamble/", &tree.modules[0].0));
+        let ctx = Context {
+            namespace: 0,
+            block_slot: 0,
+        };
 
         println!("{:#?}", tree);
 
         let globals = self.extract_globals(&tree);
         let nil = self.constant(Value::Nil);
         for _ in 0..globals {
-            self.add_op(Span { line: 0 }, nil);
+            self.add_op(ctx, Span { line: 0 }, nil);
         }
 
-        let ctx = Context {
-            namespace: 0,
-            block_slot: 0,
-        };
         let module = &tree.modules[0].1;
         self.module(module, ctx);
 
         let nil = self.constant(Value::Nil);
-        self.add_op(module.span, nil);
-        self.add_op(module.span, Op::Return);
+        self.add_op(ctx, module.span, nil);
+        self.add_op(ctx, module.span, Op::Return);
 
         if self.errors.is_empty() {
             Ok(crate::Prog {
