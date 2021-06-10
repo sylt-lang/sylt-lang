@@ -283,23 +283,34 @@ pub struct Expression {
 
 #[derive(Debug, Clone)]
 pub enum TypeKind {
+    /// An unspecified type that is left to the type checker.
     Implied,
+    /// A specified type by the user.
     Resolved(RuntimeType),
+    /// I.e. blobs.
     UserDefined(String),
+    /// A type that can be either `a` or `b`.
     Union(Box<Type>, Box<Type>),
+    /// `(params, return)`.
     Fn(Vec<Type>, Box<Type>),
+    /// Tuples can mix types since the length is constant.
     Tuple(Vec<Type>),
+    /// Lists only contain a single type.
     List(Box<Type>),
+    /// Sets only contain a single type.
     Set(Box<Type>),
+    /// `(key, value)`.
     Dict(Box<Type>, Box<Type>),
 }
 
+/// The constituting parts of the type system. Contains any [TypeKind].
 #[derive(Debug, Clone)]
 pub struct Type {
     span: Span,
     kind: TypeKind,
 }
 
+/// 
 type Tokens = [(T, usize)];
 type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>, Vec<Error>)>;
 
