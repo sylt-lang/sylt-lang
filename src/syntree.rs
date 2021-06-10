@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Copy, Clone)]
+/// A location in a file containing source code.
 pub struct Span {
     // TODO(ed): Do this more intelligent, so
     // we can show ranges. Maybe even go back
@@ -15,17 +16,23 @@ pub struct Span {
     pub line: usize,
 }
 
+/// Contains modules.
 #[derive(Debug, Clone)]
 pub struct Prog {
     pub modules: Vec<(PathBuf, Module)>,
 }
 
+/// Contains statements.
 #[derive(Debug, Clone)]
 pub struct Module {
     pub span: Span,
     pub statements: Vec<Statement>,
 }
 
+/// Variables can be any combination of `{Force,}{Const,Mutable}`.
+///
+/// Forced variable kinds are a signal to the type checker that the type is
+/// assumed and shouldn't be checked.
 #[derive(Debug, Copy, Clone)]
 pub enum VarKind {
     Const,
@@ -34,6 +41,7 @@ pub enum VarKind {
     ForceMutable,
 }
 
+/// Normal infix operators: `+`, `-`, `*`, `/`
 #[derive(Debug, Copy, Clone)]
 pub enum Op {
     Nop,
@@ -43,29 +51,48 @@ pub enum Op {
     Div,
 }
 
+/// What makes up a program.
+///
+/// There are both shorter statements like `a = b + 1` as well as longer
+/// statements like `if a { ... } else { ...}`. The variants here include
+/// examples of how they look in the code.
+///
+/// Note that this shouldn't be read as a formal language specification.
 #[derive(Debug, Clone)]
 pub enum StatementKind {
+    /// "Imports" another file.
+    ///
+    /// `use <file>`.
     Use {
         file: Identifier,
     },
 
+    /// Defines a new Blob.
+    ///
+    /// `A :: Blob { <field>.. }`.
     Blob {
         name: String,
         fields: HashMap<String, Type>,
     },
 
+    /// Prints to standard out.
+    ///
+    /// `print <expression>`.
     Print {
         value: Expression,
     },
 
-    // NOTE(ed): We cannot remove the `kind` field,
-    // since we only want to evaluate the RHS once.
+    /// Assigns to a variable (`a = <expression>`), optionally with an operator
+    /// applied (`a += <expression>`)
     Assignment {
         kind: Op,
         target: Assignable,
         value: Expression,
     },
 
+    /// Defines a new variable.
+    ///
+    /// `a := <expression>`.
     Definition {
         ident: Identifier,
         kind: VarKind,
@@ -73,29 +100,45 @@ pub enum StatementKind {
         value: Expression,
     },
 
+    /// Makes your code go either here or there.
+    ///
+    /// `if <expression> <statement> [else <statement>]`.
     If {
         condition: Expression,
         pass: Box<Statement>,
         fail: Box<Statement>,
     },
 
+    /// Do something as long as something else evaluates to true.
+    ///
+    /// `loop <expression> <statement>`.
     Loop {
         condition: Expression,
         body: Box<Statement>,
     },
 
+    /// Returns a value from a function.
+    ///
+    /// `ret <expression>`.
     Ret {
         value: Expression,
     },
 
+    /// Groups together statements that are executed after another.
+    ///
+    /// `{ <statement>.. }`.
     Block {
         statements: Vec<Statement>,
     },
 
+    /// A free-standing expression. It's just a `<expression>`.
     StatementExpression {
         value: Expression,
     },
 
+    /// Throws an error if it is ever evaluated.
+    ///
+    /// `<=>`.
     Unreachable,
 
     EmptyStatement,

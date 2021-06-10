@@ -15,10 +15,10 @@ use std::path::{Path, PathBuf};
 
 pub mod error;
 pub mod vm;
+pub mod syntree;
+pub mod syncomp;
 pub mod typechecker;
 
-mod syntree;
-mod syncomp;
 
 mod compiler;
 mod rc;
