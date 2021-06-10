@@ -285,7 +285,7 @@ pub struct Expression {
 pub enum TypeKind {
     Implied,
     Resolved(RuntimeType),
-    Unresolved(String),
+    UserDefined(String),
     Union(Box<Type>, Box<Type>),
     Fn(Vec<Type>, Box<Type>),
     Tuple(Vec<Type>),
@@ -413,7 +413,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                 "float" => Resolved(Float),
                 "bool" => Resolved(Bool),
                 "str" => Resolved(String),
-                _ => Unresolved(name.clone()),
+                _ => UserDefined(name.clone()),
             },
         ),
 
@@ -1493,7 +1493,7 @@ mod test {
         test!(parse_type, type_int: "int" => Resolved(RT::Int));
         test!(parse_type, type_float: "float" => Resolved(RT::Float));
         test!(parse_type, type_str: "str" => Resolved(RT::String));
-        test!(parse_type, type_unknown: "blargh" => Unresolved(_));
+        test!(parse_type, type_unknown: "blargh" => UserDefined(_));
         test!(parse_type, type_union: "int | int" => Union(_, _));
         test!(parse_type, type_question: "int?" => Union(_, _));
         test!(parse_type, type_union_and_question: "int | void | str?" => Union(_, _));
