@@ -374,12 +374,9 @@ macro_rules! eat {
     };
 }
 
-fn syntax_error_callback() {}
-
 macro_rules! syntax_error {
     ($ctx:expr, $( $msg:expr ),* ) => {
         {
-            syntax_error_callback();
             let msg = format!($( $msg ),*).into();
             Error::SyntaxError {
                 file: $ctx.file.to_path_buf(),
