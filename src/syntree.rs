@@ -310,19 +310,24 @@ pub struct Type {
     kind: TypeKind,
 }
 
-/// 
+/// Tokens and their line numbers.
 type Tokens = [(T, usize)];
+
 type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>, Vec<Error>)>;
 
+/// Keeps track of where the parser is currently parsing.
 #[derive(Debug, Copy, Clone)]
 pub struct Context<'a> {
+    /// All tokens to be parsed.
     pub tokens: &'a Tokens,
+    /// The current line number.
     pub curr: usize,
+    /// The file we're currently parsing.
     pub file: &'a Path,
 }
 
 impl<'a> Context<'a> {
-    fn new(tokens: &'a [(T, usize)], file: &'a Path) -> Self {
+    fn new(tokens: &'a Tokens, file: &'a Path) -> Self {
         Self {
             tokens,
             curr: 0,
@@ -330,26 +335,31 @@ impl<'a> Context<'a> {
         }
     }
 
+    /// Get a span representing the current location of the parser.
     fn span(&self) -> Span {
         Span {
             line: self.peek().1,
         }
     }
 
+    /// The line currently beeing parsed.
     fn line(&self) -> usize {
         self.span().line
     }
 
+    /// Move to the next token.
     fn skip(&self, n: usize) -> Self {
         let mut new = *self;
         new.curr += n;
         new
     }
 
+    /// Peek the current token and position.
     fn peek(&self) -> &(T, usize) {
         self.tokens.get(self.curr).unwrap_or(&(T::EOF, 0))
     }
 
+    /// Peek the current token.
     fn token(&self) -> &T {
         &self.peek().0
     }
