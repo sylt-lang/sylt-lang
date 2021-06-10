@@ -667,7 +667,7 @@ impl VM {
                         values.insert("_name".to_string(), Value::String(Rc::new(blob.name.clone())));
                         self.push(Value::Instance(blob, Rc::new(RefCell::new(values))));
                     }
-                    Value::Function(_, ty, block) => {
+                    Value::Function(_, _, block) => {
                         let inner = self.blocks[block].borrow();
                         let args = inner.args();
                         if args.len() != num_args {

@@ -393,7 +393,7 @@ impl Compiler {
 
     fn set_identifier(&mut self, name: &String, span: Span, ctx: Context) {
         for frame in (0..ctx.frame+1).into_iter().rev() {
-            if self.resolve_read_for_frame(name, frame, span, ctx).is_ok() {
+            if self.resolve_set_for_frame(name, frame, span, ctx).is_ok() {
                 return;
             }
         }
@@ -432,6 +432,7 @@ impl Compiler {
             }
 
             Definition { ident, kind, ty, value } => {
+                println!("FRAME: {}", ctx.frame);
                 // TODO(ed): Don't use type here - type check the tree first.
                 if ctx.frame == 0 {
                     self.expression(value, ctx);
@@ -507,7 +508,11 @@ impl Compiler {
 
         // println!("{:#?}", tree);
 
-        let _globals = self.extract_globals(&tree);
+        let globals = self.extract_globals(&tree);
+        let nil = self.constant(Value::Nil);
+        for _ in 0..globals {
+            self.add_op(ctx, Span { line: 0 }, nil);
+        }
 
         let module = &tree.modules[0].1;
         self.module(module, ctx);
