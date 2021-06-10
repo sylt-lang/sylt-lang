@@ -138,7 +138,7 @@ pub enum StatementKind {
 
     /// Throws an error if it is ever evaluated.
     ///
-    /// `<=>`.
+    /// `<!>`.
     Unreachable,
 
     EmptyStatement,
@@ -185,38 +185,69 @@ pub enum AssignableKind {
     Index(Box<Assignable>, Box<Expression>),
 }
 
-/// Something that can be assigned to. Contains any [AssignableKind].
+/// Something that can be assigned to. The assignable value can be read if the
+/// assignable is in an expression. Contains any [AssignableKind].
+///
+/// Note that something like `a = b` will be evaluated to
+/// ```ignored
+/// Statement::Assignment(
+///     Assignable::Read(a),
+///     Expression::Get(Assignable::Read(b))
+/// )
+/// ```
 #[derive(Debug, Clone)]
 pub struct Assignable {
     pub span: Span,
     pub kind: AssignableKind,
 }
 
+/// The different kinds of [Expression]s.
+///
+/// Expressions are recursive and end in some kind of value. Values are
+/// expressions as well.
 #[derive(Debug, Clone)]
 pub enum ExpressionKind {
+    /// Read from an [Assignable]. Variables, function calls, modules, blobs,
+    /// lists and tuples end up here.
     Get(Assignable),
 
+    /// `a + b`
     Add(Box<Expression>, Box<Expression>),
+    /// `a - b`
     Sub(Box<Expression>, Box<Expression>),
+    /// `a * b`
     Mul(Box<Expression>, Box<Expression>),
+    /// `a / b`
     Div(Box<Expression>, Box<Expression>),
+    /// `-a`
     Neg(Box<Expression>),
 
+    /// `a == b`
     Eq(Box<Expression>, Box<Expression>),
+    /// `a != b`
     Neq(Box<Expression>, Box<Expression>),
+    /// `a > b`
     Gt(Box<Expression>, Box<Expression>),
+    /// `a >= b`
     Gteq(Box<Expression>, Box<Expression>),
+    /// `a < b`
     Lt(Box<Expression>, Box<Expression>),
+    /// `a <= b`
     Lteq(Box<Expression>, Box<Expression>),
+    /// `a <=> b`
     AssertEq(Box<Expression>, Box<Expression>),
 
+    /// `a in b`
     In(Box<Expression>, Box<Expression>),
 
+    /// `a && b`
     And(Box<Expression>, Box<Expression>),
+    /// `a || b`
     Or(Box<Expression>, Box<Expression>),
+    /// `!a`
     Not(Box<Expression>),
 
-    // Composite
+    /// Functions and closures.
     Function {
         name: String,
         params: Vec<(Identifier, Type)>,
@@ -224,17 +255,21 @@ pub enum ExpressionKind {
 
         body: Box<Statement>,
     },
+    /// A new instance of a blob.
     Instance {
         blob: Assignable,
         fields: Vec<(String, Expression)>, // Keep calling order
     },
+    /// `(a, b, ..)`
     Tuple(Vec<Expression>),
+    /// `[a, b, ..]`
     List(Vec<Expression>),
+    /// `{a, b, ..}`
     Set(Vec<Expression>),
+    /// `{ a: b, c: d, .. }`
     // Has to have even length, listed { k1, v1, k2, v2 }
     Dict(Vec<Expression>),
 
-    // Simple
     Float(f64),
     Int(i64),
     Str(String),
@@ -242,6 +277,7 @@ pub enum ExpressionKind {
     Nil,
 }
 
+/// Expressions evaluate to values. Contains any [ExpressionKind].
 #[derive(Debug, Clone)]
 pub struct Expression {
     pub span: Span,
