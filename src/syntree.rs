@@ -51,7 +51,7 @@ pub enum Op {
     Div,
 }
 
-/// What makes up a program.
+/// The different kinds of [Statement]s.
 ///
 /// There are both shorter statements like `a = b + 1` as well as longer
 /// statements like `if a { ... } else { ...}`. The variants here include
@@ -144,6 +144,7 @@ pub enum StatementKind {
     EmptyStatement,
 }
 
+/// What makes up a program. Contains any [StatementKind].
 #[derive(Debug, Clone)]
 pub struct Statement {
     pub span: Span,
@@ -156,14 +157,35 @@ pub struct Identifier {
     pub name: String,
 }
 
+/// The different kinds of [Assignable]s.
+///
+/// Assignables are the left hand side of a [StatementKind::Assignment].
+///
+/// The recursive structure means that `a[2].b(1).c(2, 3)` is evaluated to
+/// ```ignored
+/// Access(
+///     Index(
+///         Read(a), 2),
+///         Access(
+///             Call(
+///                 Read(b), [1]
+///             ),
+///             Call(
+///                 Read(c), [2, 3]
+///             )
+///         )
+///     )
+/// ```
 #[derive(Debug, Clone)]
 pub enum AssignableKind {
     Read(Identifier),
+    /// A function call.
     Call(Box<Assignable>, Vec<Expression>),
     Access(Box<Assignable>, Box<Assignable>),
     Index(Box<Assignable>, Box<Expression>),
 }
 
+/// Something that can be assigned to. Contains any [AssignableKind].
 #[derive(Debug, Clone)]
 pub struct Assignable {
     pub span: Span,
