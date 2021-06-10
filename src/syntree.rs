@@ -288,7 +288,7 @@ pub struct Expression {
 pub enum TypeKind {
     Implied,
     Resolved(RuntimeType),
-    Unresolved(Assignable),
+    UserDefined(String),
     Union(Box<Type>, Box<Type>),
     Fn(Vec<Type>, Box<Type>),
     Tuple(Vec<Type>),
@@ -1509,10 +1509,10 @@ mod test {
         test!(parse_type, type_int: "int" => Resolved(RT::Int));
         test!(parse_type, type_float: "float" => Resolved(RT::Float));
         test!(parse_type, type_str: "str" => Resolved(RT::String));
-        test!(parse_type, type_unknown: "blargh" => Unresolved(_));
         test!(parse_type, type_unknown_access: "a.A | int" => Union(_, _));
         // TODO(ed): This is controverisal
         test!(parse_type, type_unknown_access_call: "a.b().A | int" => Union(_, _));
+        test!(parse_type, type_unknown: "blargh" => UserDefined(_));
         test!(parse_type, type_union: "int | int" => Union(_, _));
         test!(parse_type, type_question: "int?" => Union(_, _));
         test!(parse_type, type_union_and_question: "int | void | str?" => Union(_, _));
