@@ -502,6 +502,10 @@ impl Compiler {
                 self.patch(ctx, jump_out, Op::Jmp(end));
             }
 
+            Unreachable { } => {
+                self.add_op(ctx, statement.span, Op::Unreachable);
+            }
+
             Use { .. } => {}
 
             Blob { .. } => {}
