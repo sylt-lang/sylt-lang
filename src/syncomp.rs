@@ -167,6 +167,14 @@ impl Compiler {
         self.blocks.get_mut(ctx.block_slot).expect("Invalid block id").add(op, span.line)
     }
 
+    fn patch(&mut self, ctx: Context, ip: usize, op: Op) {
+        self.blocks.get_mut(ctx.block_slot).expect("Invalid block id").ops[ip] = op;
+    }
+
+    fn next_ip(&mut self, ctx: Context) -> usize {
+        self.blocks.get_mut(ctx.block_slot).expect("Invalid block id").curr()
+    }
+
     fn assignable(&mut self, ass: &Assignable, ctx: Context) -> Context {
         use AssignableKind::*;
 
@@ -478,6 +486,20 @@ impl Compiler {
                 for statement in statements {
                     self.statement(statement, ctx);
                 }
+            }
+
+            If { condition, pass, fail } => {
+                self.expression(condition, ctx);
+
+                let jump_from = self.add_op(ctx, condition.span, Op::Illegal);
+                self.statement(pass, ctx);
+                let jump_out = self.add_op(ctx, condition.span, Op::Illegal);
+                self.statement(fail, ctx);
+
+                self.patch(ctx, jump_from, Op::JmpFalse(jump_out + 1));
+
+                let end = self.next_ip(ctx);
+                self.patch(ctx, jump_out, Op::Jmp(end));
             }
 
             Use { .. } => {}
