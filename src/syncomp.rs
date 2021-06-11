@@ -514,6 +514,9 @@ impl Compiler {
             self.add_op(ctx, Span { line: 0 }, nil);
         }
 
+        for (_, module) in tree.modules.iter().skip(1) {
+            self.module(module, ctx);
+        }
         let module = &tree.modules[0].1;
         self.module(module, ctx);
 
