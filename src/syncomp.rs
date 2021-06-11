@@ -506,6 +506,11 @@ impl Compiler {
                 self.add_op(ctx, statement.span, Op::Unreachable);
             }
 
+            Ret { value } => {
+                self.expression(value, ctx);
+                self.add_op(ctx, statement.span, Op::Return);
+            }
+
             Use { .. } => {}
 
             Blob { .. } => {}
