@@ -344,7 +344,8 @@ impl Compiler {
 
         match self.namespaces[ctx.namespace].get(name) {
             Some(Name::Slot(slot)) => {
-                self.add_op(ctx, span, Op::Constant(*slot));
+                let op = Op::Constant(*slot);
+                self.add_op(ctx, span, op);
                 ctx
             },
             Some(Name::Namespace(new_namespace)) => {
