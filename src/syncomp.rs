@@ -342,7 +342,7 @@ impl Compiler {
             }
         }
 
-        match self.namespaces[0].get(name) {
+        match self.namespaces[ctx.namespace].get(name) {
             Some(Name::Slot(slot)) => {
                 self.add_op(ctx, span, Op::Constant(*slot));
                 ctx
