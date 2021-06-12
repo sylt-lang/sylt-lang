@@ -484,6 +484,16 @@ impl Compiler {
                 }
             }
 
+            Loop { condition, body } => {
+                let start = self.next_ip(ctx);
+                self.expression(condition, ctx);
+                let jump_from = self.add_op(ctx, condition.span, Op::Illegal);
+                self.statement(body, ctx);
+                self.add_op(ctx, body.span, Op::Jmp(start));
+                let out = self.next_ip(ctx);
+                self.patch(ctx, jump_from, Op::JmpFalse(out));
+            }
+
             If { condition, pass, fail } => {
                 self.expression(condition, ctx);
 
