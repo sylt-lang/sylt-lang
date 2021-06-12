@@ -248,10 +248,10 @@ impl Compiler {
             Or(a, b)  => self.bin_op(a, b, &[Op::Or], expression.span, ctx),
             Not(a)    => self.un_op(a, &[Op::Neg], expression.span, ctx),
 
-            Function { params, ret, body } => {
+            Function { name, params, ret, body } => {
                 // TODO(ed): Better name
                 let file = self.file_from_context(ctx);
-                let name = format!("fn {}:{}", file, expression.span.line);
+                let name = format!("fn {} {}:{}", name, file, expression.span.line);
 
                 // === Frame begin ===
                 let inner_ctx = self.push_frame_and_block(ctx, &name, expression.span);

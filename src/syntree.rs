@@ -153,6 +153,7 @@ pub enum ExpressionKind {
 
     // Composite
     Function {
+        name: String,
         params: Vec<(Identifier, Type)>,
         ret: Type,
 
@@ -626,6 +627,22 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 }
             };
             let (ctx, value) = expression(ctx)?;
+
+            use ExpressionKind::Function;
+            let value = if let Function { params, ret, body, .. } = value.kind {
+                Expression {
+                    kind: Function {
+                        name: name.into(),
+                        params,
+                        ret,
+                        body
+                    },
+                    ..value
+                }
+            } else {
+                value
+            };
+
             (
                 ctx,
                 Definition {
@@ -835,6 +852,7 @@ mod expression {
 
         let (ctx, statement) = statement(ctx)?;
         let function = Function {
+            name: "lambda".into(),
             params,
             ret,
             body: Box::new(statement),
