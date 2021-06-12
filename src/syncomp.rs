@@ -383,7 +383,7 @@ impl Compiler {
                 }
             }
         } else {
-            for (slot, var) in self.stack[frame].iter_mut().rev().enumerate() {
+            for (slot, var) in self.stack[frame].iter_mut().enumerate().rev() {
                 if var.active && &var.name == name {
                     assert!(frame == ctx.frame, "Upvalues aren't implemented");
                     let op = Op::AssignLocal(slot);
