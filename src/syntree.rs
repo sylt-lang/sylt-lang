@@ -363,12 +363,11 @@ impl<'a> Context<'a> {
     fn token(&self) -> &T {
         &self.peek().0
     }
-}
 
-macro_rules! eat {
-    ($ctx:expr) => {
-        ($ctx.token(), $ctx.span(), $ctx.skip(1))
-    };
+    /// Eat a token and move to the next.
+    fn eat(&self) -> (&T, Span, Self) {
+        (self.token(), self.span(), self.skip(1))
+    }
 }
 
 macro_rules! syntax_error {
@@ -1014,8 +1013,8 @@ mod expression {
         }
     }
 
-    fn value<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-        let (token, span, ctx) = eat!(ctx);
+    fn value<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Expression), (Context<'t>, Vec<Error>)> {
+        let (token, span, ctx) = ctx.eat();
         let kind = match token.clone() {
             T::Float(f) => Float(f),
             T::Int(i) => Int(i),
@@ -1061,7 +1060,7 @@ mod expression {
     }
 
     fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-        let (op, span, ctx) = eat!(ctx);
+        let (op, span, ctx) = ctx.eat();
         let (ctx, expr) = parse_precedence(ctx, Prec::Factor)?;
         let expr = Box::new(expr);
 
@@ -1077,7 +1076,7 @@ mod expression {
     }
 
     fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
-        let (op, span, ctx) = eat!(ctx);
+        let (op, span, ctx) = ctx.eat();
 
         let (ctx, rhs) = parse_precedence(ctx, precedence(op).next())?;
 
