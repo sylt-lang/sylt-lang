@@ -812,7 +812,7 @@ pub enum Op {
     /// Reads the global, and adds it
     /// to the top of the stack.
     ///
-    /// Constants are stored at the bottom
+    /// Globals are stored at the bottom
     /// of the stack and initalized when
     /// the program starts.
     ///

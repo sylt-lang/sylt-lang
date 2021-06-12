@@ -31,10 +31,6 @@ impl Variable {
             active: false,
         }
     }
-
-    fn filler() -> Self {
-        Variable::new("/filler/".into(), Type::Unknown, 0, Span { line: 0 })
-    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -331,7 +327,7 @@ impl Compiler {
                 }
             }
         } else {
-            for (slot, var) in self.stack[frame].iter_mut().rev().enumerate() {
+            for (slot, var) in self.stack[frame].iter_mut().enumerate().rev() {
                 if var.active && &var.name == name {
                     assert!(frame == ctx.frame, "Upvalues aren't implemented");
                     let op = Op::ReadLocal(slot);

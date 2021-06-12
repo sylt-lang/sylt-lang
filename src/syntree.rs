@@ -197,8 +197,8 @@ pub enum TypeKind {
 
 #[derive(Debug, Clone)]
 pub struct Type {
-    span: Span,
-    kind: TypeKind,
+    pub span: Span,
+    pub kind: TypeKind,
 }
 
 type Tokens = [(T, usize)];
