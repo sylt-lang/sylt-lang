@@ -288,6 +288,7 @@ pub(crate) struct Compiler {
     sections: Vec<Section>,
     contextes: HashMap<PathBuf, CompilerContext>,
     globals: Vec<Variable>,
+    blobs: Vec<Blob>,
 
     panic: bool,
     errors: Vec<Error>,
@@ -321,6 +322,7 @@ impl Compiler {
             sections,
 
             globals: Vec::new(),
+            blobs: Vec::new(),
 
             contextes,
 
@@ -522,7 +524,7 @@ impl Compiler {
             self.panic = false;
             self.error(Error::GitConflictError {
                 file: self.current_file().into(),
-                start: start,
+                start,
                 end: self.line(),
             });
             self.panic = true;
@@ -1795,7 +1797,7 @@ impl Compiler {
                     x => {
                         let blob = self.find_constant(x);
                         if let Value::Blob(blob) = &self.constants[blob] {
-                            Ok(Type::Instance(Rc::clone(blob)))
+                            Ok(Type::Instance(*blob))
                         } else {
                             // TODO(ed): This is kinda bad. If the type cannot
                             // be found it tries to infer it during runtime
@@ -1861,8 +1863,9 @@ impl Compiler {
 
         expect!(self, Token::RightBrace, "Expected '}}' after 'blob' body");
 
-        let blob = Value::Blob(Rc::new(blob));
-        self.named_constant(name, blob);
+        let slot = self.blobs.len();
+        self.blobs.push(blob);
+        self.named_constant(name, Value::Blob(slot));
     }
 
     fn access_dotted(&mut self, block: &mut Block) {
@@ -2302,6 +2305,7 @@ impl Compiler {
         if self.errors.is_empty() {
             Ok(Prog {
                 blocks: self.blocks.clone(),
+                blobs: self.blobs.clone(),
                 functions: functions.iter().map(|(_, f)| *f).collect(),
                 constants: self.constants.clone(),
                 strings: self.strings.clone(),

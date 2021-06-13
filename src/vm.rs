@@ -5,7 +5,7 @@ use std::fmt::Debug;
 
 use crate::error::{Error, RuntimeError, RuntimePhase};
 use crate::rc::Rc;
-use crate::{Block, BlockLinkState, IterFn, Op, Prog, RustFunction, Type, UpValue, Value};
+use crate::{Block, BlockLinkState, IterFn, Op, Blob, Prog, RustFunction, Type, UpValue, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -57,6 +57,7 @@ pub struct VM {
     stack: Vec<Value>,
     frames: Vec<Frame>,
     blocks: Vec<Rc<RefCell<Block>>>,
+    blobs: Vec<Blob>,
 
     constants: Vec<Value>,
     strings: Vec<String>,
@@ -85,6 +86,7 @@ impl VM {
             stack: Vec::new(),
             frames: Vec::new(),
             blocks: Vec::new(),
+            blobs: Vec::new(),
 
             constants: Vec::new(),
             strings: Vec::new(),
@@ -425,6 +427,7 @@ impl VM {
                 let inst = self.pop();
                 match inst {
                     Value::Instance(ty, values) => {
+                        let ty = &self.blobs[ty];
                         let field = self.string(field);
                         match values.borrow().get(field) {
                             Some(value) => {
@@ -453,8 +456,9 @@ impl VM {
                 let (inst, value) = self.poppop();
                 match inst {
                     Value::Instance(ty, values) => {
+                        let ty = &self.blobs[ty];
                         let field_name = self.string(field).clone();
-                        if !(*ty).fields.contains_key(&field_name) {
+                        if !ty.fields.contains_key(&field_name) {
                             error!(self, RuntimeError::UnknownField(ty.name.to_string(), field_name));
                         }
                         (*values).borrow_mut().insert(field_name, value);
@@ -648,7 +652,8 @@ impl VM {
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {
-                    Value::Blob(blob) => {
+                    Value::Blob(blob_slot) => {
+                        let blob = &self.blobs[blob_slot];
                         let mut values = self.stack[new_base+1..]
                             .chunks_exact(2)
                             .map(|b| {
@@ -665,7 +670,7 @@ impl VM {
                         }
                         values.insert("_id".to_string(), Value::Int(blob.id as i64));
                         values.insert("_name".to_string(), Value::String(Rc::new(blob.name.clone())));
-                        self.push(Value::Instance(blob, Rc::new(RefCell::new(values))));
+                        self.push(Value::Instance(blob_slot, Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, _, block) => {
                         let inner = self.blocks[block].borrow();
@@ -752,6 +757,7 @@ impl VM {
         self.constants = prog.constants.clone();
         self.strings = prog.strings.clone();
         self.blocks = prog.blocks.clone();
+        self.blobs = prog.blobs.clone();
 
         self.extern_functions = prog.functions.clone();
         self.stack.clear();

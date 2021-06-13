@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::syntree;
 use syntree::*;
-use crate::{Op, Block, Value, Type};
+use crate::{Op, Block, Value, Type, Blob};
 use std::collections::{hash_map::Entry, HashMap};
 use crate::rc::Rc;
 use std::cell::RefCell;
@@ -69,11 +69,9 @@ struct Compiler {
     namespace_id_to_path: HashMap<NamespaceID, String>,
 
     namespaces: Vec<Namespace>,
-    blobs: Vec<usize>,
+    blobs: Vec<Blob>,
 
     stack: Vec<Vec<Variable>>,
-
-    // TODO(ed): Stackframes
 
     panic: bool,
     errors: Vec<Error>,
@@ -562,6 +560,7 @@ impl Compiler {
             Ok(crate::Prog {
                 blocks: self.blocks.into_iter().map(|x| Rc::new(RefCell::new(x))).collect(),
                 functions: Vec::new(),
+                blobs: self.blobs,
                 constants: self.constants,
                 strings: self.strings,
             })
@@ -623,9 +622,9 @@ impl Compiler {
                             Entry::Vacant(vac) => {
                                 let id = self.blobs.len();
                                 let blob = crate::Blob::new_tree(id, slot, name);
-                                let slot = self.constants.len();
-                                self.constants.push(Value::Blob(Rc::new(blob)));
-                                vac.insert(Name::Blob(slot));
+                                self.blobs.push(blob);
+                                self.constants.push(Value::Blob(id));
+                                vac.insert(Name::Blob(id));
                             }
 
                             Entry::Occupied(_) => {

@@ -286,6 +286,7 @@ impl VM {
                 match inst {
                     Type::Instance(ty) => {
                         let field = &prog.strings[field];
+                        let ty = &prog.blobs[ty];
                         match ty.fields.get(field) {
                             Some(ty) => {
                                 if ty != &expect {
@@ -320,6 +321,7 @@ impl VM {
                             "_id" => { self.push(Type::Int); }
                             "_name" => { self.push(Type::String); }
                             field => {
+                                let ty = &prog.blobs[ty];
                                 match ty.fields.get(field) {
                                     Some(ty) => {
                                         self.push(ty.clone());
@@ -592,7 +594,8 @@ impl VM {
                 let call_callable = |callable: &Type| {
                     let args = self.stack[new_base + 1..].to_vec();
                     match callable {
-                        Type::Blob(blob) => {
+                        Type::Blob(blob_slot) => {
+                            let blob = &prog.blobs[*blob_slot];
                             let values = self.stack[new_base+1..]
                                 .chunks_exact(2)
                                 .map(|b| {
@@ -646,7 +649,7 @@ impl VM {
                                 }
                             }
 
-                            Ok(Type::Instance(Rc::clone(blob)))
+                            Ok(Type::Instance(*blob_slot))
                         }
 
                         Type::Function(fargs, fret) => {

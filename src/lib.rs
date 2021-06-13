@@ -149,8 +149,8 @@ pub enum Type {
     Dict(Box<Type>, Box<Type>),
     Iter(Box<Type>),
     Function(Vec<Type>, Box<Type>),
-    Blob(Rc<Blob>),
-    Instance(Rc<Blob>),
+    Blob(usize),
+    Instance(usize),
     ExternFunction(usize),
 }
 
@@ -203,15 +203,11 @@ impl Hash for Type {
                 8
             }
             Type::Blob(b) => {
-                for t in b.fields.values() {
-                    t.hash(h);
-                }
+                b.hash(h);
                 10
             }
             Type::Instance(b) => {
-                for t in b.fields.values() {
-                    t.hash(h);
-                }
+                b.hash(h);
                 11
             }
             Type::ExternFunction(_) => {
@@ -261,8 +257,8 @@ impl From<&Value> for Type {
     fn from(value: &Value) -> Type {
         match value {
             Value::Field(s) => Type::Field(s.clone()),
-            Value::Instance(b, _) => Type::Instance(Rc::clone(b)),
-            Value::Blob(b) => Type::Blob(Rc::clone(b)),
+            Value::Instance(b, _) => Type::Instance(*b),
+            Value::Blob(b) => Type::Blob(*b),
             Value::Tuple(v) => Type::Tuple(v.iter().map(Type::from).collect()),
             Value::List(v) => {
                 let v: &RefCell<_> = v.borrow();
@@ -309,8 +305,8 @@ impl From<&Type> for Value {
         match ty {
             Type::Field(s) => Value::Field(s.clone()),
             Type::Void => Value::Nil,
-            Type::Blob(b) => Value::Blob(Rc::clone(b)),
-            Type::Instance(b) => Value::Instance(Rc::clone(b), Rc::new(RefCell::new(HashMap::new()))),
+            Type::Blob(b) => Value::Blob(*b),
+            Type::Instance(b) => Value::Instance(*b, Rc::new(RefCell::new(HashMap::new()))),
             Type::Tuple(fields) => Value::Tuple(Rc::new(fields.iter().map(Value::from).collect())),
             Type::Union(v) => Value::Union(v.iter().map(Value::from).collect()),
             Type::List(v) => Value::List(Rc::new(RefCell::new(vec![Value::from(v.as_ref())]))),
@@ -378,8 +374,8 @@ pub type IterFn = dyn FnMut() -> Option<Value>;
 pub enum Value {
     Field(String),
     Ty(Type),
-    Blob(Rc<Blob>),
-    Instance(Rc<Blob>, Rc<RefCell<HashMap<String, Value>>>),
+    Blob(usize),
+    Instance(usize, Rc<RefCell<HashMap<String, Value>>>),
     Tuple(Rc<Vec<Value>>),
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
@@ -434,8 +430,8 @@ impl Debug for Value {
         match self {
             Value::Field(s) => write!(fmt, "( .{} )", s),
             Value::Ty(ty) => write!(fmt, "(type {:?})", ty),
-            Value::Blob(b) => write!(fmt, "(blob {})", b.name),
-            Value::Instance(b, v) => write!(fmt, "(inst {} {:?})", b.name, v),
+            Value::Blob(b) => write!(fmt, "(blob b{})", b),
+            Value::Instance(b, v) => write!(fmt, "(inst b{} {:?})", b, v),
             Value::Float(f) => write!(fmt, "(float {})", f),
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),
@@ -1035,6 +1031,7 @@ impl Block {
 #[derive(Clone)]
 pub struct Prog {
     pub blocks: Vec<Rc<RefCell<Block>>>,
+    pub blobs: Vec<Blob>,
     pub functions: Vec<RustFunction>,
     pub constants: Vec<Value>,
     pub strings: Vec<String>,
