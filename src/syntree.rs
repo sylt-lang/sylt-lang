@@ -941,11 +941,37 @@ fn assignable_index<'t>(ctx: Context<'t>, indexed: Assignable) -> ParseResult<'t
     sub_assignable(ctx, result)
 }
 
+/// Parse an [AssignableKind::Access].
+fn assignable_dot<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t, Assignable> {
+    use AssignableKind::{Read, Access};
+    let (ctx, ident) = if let (T::Identifier(name), span, ctx) = ctx.skip(1).eat() {
+        (
+            ctx,
+            Assignable {
+                span,
+                kind: Read(Identifier {
+                    span,
+                    name: name.clone(),
+                }),
+            }
+        )
+    } else {
+        raise_syntax_error!(
+            ctx,
+            "Assignable expressions have to start with an identifier"
+        );
+    };
+
+    let access = Assignable { span: ctx.span(), kind: Access(Box::new(accessed), Box::new(ident)) };
+    sub_assignable(ctx, access)
+}
+
 /// Parse a (maybe empty) "sub-assignable", i.e. either a call or indexable.
 fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'t, Assignable> {
     match ctx.token() {
         T::Bang | T::LeftParen => assignable_call(ctx, assignable),
         T::LeftBracket => assignable_index(ctx, assignable),
+        T::Dot => assignable_dot(ctx, assignable),
         _ => Ok((ctx, assignable))
     }
 }
@@ -961,8 +987,6 @@ fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'
 /// 3. Parse `a[2].b(1).c(2, 3)` into `Access(Index(Read(a), 2), <parsed b(1).c(2, 3)>)`.
 fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
     use AssignableKind::*;
-    let span = ctx.span();
-
     // Get the first identifier.
     let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
         Assignable {
@@ -979,18 +1003,8 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
         );
     };
 
-    // Parse chained [] and ().
-    let (ctx, ident) = sub_assignable(ctx.skip(1), ident)?;
-
-    Ok(if let T::Dot = ctx.token() {
-        // `a.b` => another assignable
-        let (ctx, rest) = assignable(ctx.skip(1))?;
-        let kind = Access(Box::new(ident), Box::new(rest));
-        (ctx, Assignable { span, kind })
-    } else {
-        // Done
-        (ctx, ident)
-    })
+    // Parse chained [], . and ().
+    sub_assignable(ctx.skip(1), ident)
 }
 
 use expression::expression;
