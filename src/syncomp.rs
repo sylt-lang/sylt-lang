@@ -654,7 +654,7 @@ impl Compiler {
             ..Context::from_namespace(0)
         };
 
-         println!("{:#?}", tree);
+        //println!("{:#?}", tree);
 
         self.extract_globals(&tree);
 
