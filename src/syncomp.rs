@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::syntree;
 use syntree::*;
-use crate::{Op, Block, Value, Type, Blob};
+use crate::{Op, Block, Value, Type, Blob, RustFunction};
 use std::collections::{hash_map::Entry, HashMap};
 use crate::rc::Rc;
 use std::cell::RefCell;
@@ -72,6 +72,7 @@ struct Compiler {
     blobs: Vec<Blob>,
 
     stack: Vec<Vec<Variable>>,
+    functions: HashMap<String, (usize, RustFunction)>,
 
     panic: bool,
     errors: Vec<Error>,
@@ -108,6 +109,7 @@ impl Compiler {
             blobs: Vec::new(),
 
             stack: Vec::new(),
+            functions: HashMap::new(),
 
             panic: false,
             errors: Vec::new(),
@@ -533,8 +535,14 @@ impl Compiler {
         }
     }
 
-    fn compile(mut self, tree: Prog) -> Result<crate::Prog, Vec<Error>> {
+    fn compile(mut self, tree: Prog, functions: &[(String, RustFunction)]) -> Result<crate::Prog, Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
+        self.functions = functions
+            .to_vec()
+            .into_iter()
+            .enumerate()
+            .map(|(i, (s, f))| (s, (i, f)))
+            .collect();
 
         let name = "/preamble/";
         self.blocks.push(Block::new(name, &tree.modules[0].0));
@@ -567,7 +575,7 @@ impl Compiler {
         if self.errors.is_empty() {
             Ok(crate::Prog {
                 blocks: self.blocks.into_iter().map(|x| Rc::new(RefCell::new(x))).collect(),
-                functions: Vec::new(),
+                functions: functions.iter().map(|(_, f)| *f).collect(),
                 blobs: self.blobs,
                 constants: self.constants,
                 strings: self.strings,
@@ -670,6 +678,6 @@ impl Compiler {
 }
 
 
-pub fn compile(prog: Prog) -> Result<crate::Prog, Vec<Error>> {
-    Compiler::new().compile(prog)
+pub fn compile(prog: Prog, functions: &[(String, RustFunction)]) -> Result<crate::Prog, Vec<Error>> {
+    Compiler::new().compile(prog, functions)
 }

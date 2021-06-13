@@ -13,7 +13,7 @@ fn main() -> Result<(), String> {
 
     let functions = lib_bindings();
     if args.tree_mode {
-        match sylt::tree_compile(&args) {
+        match sylt::tree_compile(&args, functions) {
             Err(errs) => {
                 for err in errs.iter() {
                     println!("{}", err);

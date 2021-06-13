@@ -56,15 +56,15 @@ pub fn construct_tree(args: &Args) -> Result<syntree::Prog, Vec<Error>> {
     syntree::tree(&path)
 }
 
-pub fn tree_compile(args: &Args) -> Result<Prog, Vec<Error>> {
-    syncomp::compile(construct_tree(args)?)
+pub fn tree_compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
+    syncomp::compile(construct_tree(args)?, &functions)
 }
 
 /// Compiles, links and runs the given file. The supplied functions are callable
 /// external functions.
 pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
     let prog = if args.tree_mode {
-        tree_compile(args)
+        tree_compile(args, functions)
     } else {
         compile(args, functions)
     }?;
