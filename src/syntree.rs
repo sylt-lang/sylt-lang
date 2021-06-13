@@ -423,6 +423,7 @@ macro_rules! skip_if {
     };
 }
 
+/// Parse a type definition. `fn int, int, bool -> bool
 fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     use RuntimeType::{Bool, Float, Int, String, Void};
     use TypeKind::*;
@@ -440,17 +441,22 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             },
         ),
 
+        // Function type
         T::Fn => {
             let mut ctx = ctx.skip(1);
             let mut params = Vec::new();
+            // There might be multiple parameters.
             let ret = loop {
                 match ctx.token() {
+                    // Arrow implies only one type (the return type) is left.
                     T::Arrow => {
                         ctx = ctx.skip(1);
                         break if let Ok((_ctx, ret)) = parse_type(ctx) {
-                            ctx = _ctx;
+                            ctx = _ctx; // assign to outer
                             ret
                         } else {
+                            // If we couldn't parse the return type, we implicitly
+                            // assume `-> Void`.
                             Type {
                                 span: ctx.span(),
                                 kind: Resolved(Void),
@@ -462,9 +468,10 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                         raise_syntax_error!(ctx, "Didn't expect EOF in type definition");
                     }
 
+                    // Parse a single parameter type.
                     _ => {
                         let (_ctx, param) = parse_type(ctx)?;
-                        ctx = _ctx;
+                        ctx = _ctx; // assign to outer
                         params.push(param);
 
                         ctx = if matches!(ctx.token(), T::Comma | T::Arrow) {
@@ -478,11 +485,14 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             (ctx, Fn(params, Box::new(ret)))
         }
 
+        // Tuple
         T::LeftParen => {
             let mut ctx = ctx.skip(1);
             let mut types = Vec::new();
+            // Tuples may (and probably will) contain multiple types.
             loop {
                 match ctx.token() {
+                    // Done parsing this tuple.
                     T::RightParen => {
                         ctx = ctx.skip(1);
                         break;
@@ -492,9 +502,10 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                         raise_syntax_error!(ctx, "Didn't expect EOF in type definition");
                     }
 
+                    // Parse a single contained type.
                     _ => {
                         let (_ctx, param) = parse_type(ctx)?;
-                        ctx = _ctx;
+                        ctx = _ctx; // assign to outer
                         types.push(param);
 
                         ctx = if matches!(ctx.token(), T::Comma | T::RightParen) {
@@ -508,19 +519,27 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             (ctx, Tuple(types))
         }
 
+        // List.
         T::LeftBracket => {
+            // Only contains a single type.
             let (ctx, ty) = parse_type(ctx.skip(1))?;
             let ctx = expect!(ctx, T::RightBracket, "Expected ']' after list type");
             (ctx, List(Box::new(ty)))
         }
 
+        // Dict or set
         T::LeftBrace => {
+            // { a } -> set
+            // { a: b } -> dict
+            // This means we can pass the first type unambiguously.
             let (ctx, ty) = parse_type(ctx.skip(1))?;
             if matches!(ctx.token(), T::Colon) {
+                // Dict, parse another type.
                 let (ctx, value) = parse_type(ctx.skip(1))?;
                 let ctx = expect!(ctx, T::RightBrace, "Expected '}}' after dict type");
                 (ctx, Dict(Box::new(ty), Box::new(value)))
             } else {
+                // Set, done.
                 let ctx = expect!(ctx, T::RightBrace, "Expected '}}' after set type");
                 (ctx, Set(Box::new(ty)))
             }
@@ -531,9 +550,12 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         }
     };
 
+    // Put it in a syntax tree node.
     let ty = Type { span, kind };
 
+    // Union type, a | b
     let (ctx, ty) = if matches!(ctx.token(), T::Pipe) {
+        // Parse the other type.
         let (ctx, rest) = parse_type(ctx.skip(1))?;
         (
             ctx,
@@ -546,6 +568,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         (ctx, ty)
     };
 
+    // Nullable type. Compiles to `a | Void`.
     let (ctx, ty) = if matches!(ctx.token(), T::QuestionMark) {
         let void = Type {
             span: ctx.span(),
