@@ -1087,5 +1087,29 @@ mod tests {
         };
     }
 
+    #[macro_export]
+    macro_rules! skip_test_file {
+        ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
+            #[test]
+            #[ignore]
+            fn $fn() {
+                #[allow(unused_imports)]
+                use $crate::error::RuntimeError;
+                #[allow(unused_imports)]
+                use $crate::Type;
+
+                let mut args = $crate::Args::default();
+                args.file = Some(std::path::PathBuf::from($path));
+                args.tree_mode = true;
+                args.verbosity = if $print { 1 } else { 0 };
+                let res = $crate::run_file(
+                    &args,
+                    $crate::lib_sylt::_sylt_link(),
+                );
+                $crate::assert_errs!(res, $errs);
+            }
+        };
+    }
+
     sylt_macro::find_tests!();
 }
