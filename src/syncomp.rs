@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 type VarSlot = usize;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Variable {
     name: String,
     ty: Type,
@@ -18,6 +18,7 @@ struct Variable {
     kind: VarKind,
 
     // TODO(ed): Captured
+    captured: bool,
     active: bool,
 }
 
@@ -30,7 +31,43 @@ impl Variable {
             kind,
             line: span.line,
 
+            captured: false,
             active: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Upvalue {
+    parent: usize,
+    upupvalue: bool,
+
+    name: String,
+    ty: Type,
+    slot: usize,
+    line: usize,
+    kind: VarKind,
+}
+
+impl Upvalue {
+    fn capture(var: &Variable, slot: usize) -> Self {
+        Self {
+            parent: var.slot,
+            upupvalue: false,
+
+            name: var.name.clone(),
+            ty: var.ty.clone(),
+            slot,
+            line: var.line,
+            kind: var.kind,
+        }
+    }
+
+    fn loft(up: &Upvalue, slot: usize) -> Self {
+        Self {
+            parent: up.slot,
+            upupvalue: true,
+            ..up.clone()
         }
     }
 }
@@ -66,6 +103,22 @@ enum Name {
     Namespace(NamespaceID),
 }
 
+#[derive(Debug)]
+struct Frame {
+    variables: Vec<Variable>,
+    upvalues: Vec<Upvalue>,
+}
+
+impl Frame {
+    fn new(name: &str, span: Span) -> Self {
+        let variables = vec![Variable::new(name.to_string(), VarKind::Const, Type::Void, 0, span)];
+        Self {
+            variables,
+            upvalues: Vec::new(),
+        }
+    }
+}
+
 struct Compiler {
     blocks: Vec<Block>,
     namespace_id_to_path: HashMap<NamespaceID, String>,
@@ -73,7 +126,7 @@ struct Compiler {
     namespaces: Vec<Namespace>,
     blobs: Vec<Blob>,
 
-    stack: Vec<Vec<Variable>>,
+    stack: Vec<Frame>,
     functions: HashMap<String, (usize, RustFunction)>,
 
     panic: bool,
@@ -129,7 +182,7 @@ impl Compiler {
         let block = Block::new_tree(&name, ctx.namespace, &file_as_path);
         self.blocks.push(block);
 
-        self.stack.push(vec![Variable::new(name.to_string(), VarKind::Const, Type::Void, 0, span)]);
+        self.stack.push(Frame::new(name, span));
         Context {
             block_slot: self.blocks.len() - 1,
             frame: self.stack.len() - 1,
@@ -336,7 +389,7 @@ impl Compiler {
         ctx: Context,
     ) -> Result<(), ()> {
         if frame == 0 {
-            for (slot, var) in self.stack[0].iter().enumerate() {
+            for (slot, var) in self.stack[0].variables.iter().enumerate() {
                 if var.active && &var.name == name {
                     let op = Op::ReadGlobal(slot);
                     self.add_op(ctx, span, op);
@@ -344,7 +397,7 @@ impl Compiler {
                 }
             }
         } else {
-            for (slot, var) in self.stack[frame].iter_mut().enumerate().rev() {
+            for (slot, var) in self.stack[frame].variables.iter_mut().enumerate().rev() {
                 if var.active && &var.name == name {
                     assert!(frame == ctx.frame, "Upvalues aren't implemented");
                     let op = Op::ReadLocal(slot);
@@ -399,7 +452,7 @@ impl Compiler {
     ) -> Result<(), ()> {
         // TODO(ed): Mutability check
         if frame == 0 {
-            for (slot, var) in self.stack[0].iter().enumerate() {
+            for (slot, var) in self.stack[0].variables.iter().enumerate() {
                 if var.active && &var.name == name {
                     // NOTE(ed): In the global namespace - everyhing is legal before start:
                     if var.kind.immutable() && ctx.frame != 0 {
@@ -411,7 +464,7 @@ impl Compiler {
                 }
             }
         } else {
-            for (slot, var) in self.stack[frame].iter_mut().enumerate().rev() {
+            for (slot, var) in self.stack[frame].variables.iter_mut().enumerate().rev() {
                 if var.active && &var.name == name {
                     assert!(frame == ctx.frame, "Upvalues aren't implemented");
                     if var.kind.immutable() {
@@ -445,7 +498,7 @@ impl Compiler {
         // TODO(ed): Fix the types
         // TODO(ed): Mutability
         // TODO(ed): Scoping
-        let stack = self.stack.last_mut().unwrap();
+        let stack = &mut self.stack.last_mut().unwrap().variables;
         let slot = stack.len();
         let var = Variable::new(name.to_string(), kind, Type::Unknown, slot, span);
         stack.push(var);
@@ -453,7 +506,7 @@ impl Compiler {
     }
 
     fn activate(&mut self, slot: VarSlot) {
-        self.stack.last_mut().unwrap()[slot].active = true;
+        self.stack.last_mut().unwrap().variables[slot].active = true;
     }
 
     fn statement(&mut self, statement: &Statement, ctx: Context) {
@@ -580,16 +633,20 @@ impl Compiler {
             }
 
             Block { statements } => {
-                let ss = self.stack[ctx.frame].len();
+                let ss = self.stack[ctx.frame].variables.len();
 
                 for statement in statements {
                     self.statement(statement, ctx);
                 }
 
-                while ss < self.stack[ctx.frame].len() {
+                while ss < self.stack[ctx.frame].variables.len() {
                     // TODO(ed): Upvalues
-                    let _var = self.stack[ctx.frame].pop();
-                    self.add_op(ctx, statement.span, Op::Pop);
+                    let var = self.stack[ctx.frame].variables.pop().unwrap();
+                    if var.captured {
+                        self.add_op(ctx, statement.span, Op::PopUpvalue);
+                    } else {
+                        self.add_op(ctx, statement.span, Op::Pop);
+                    }
                 }
             }
 
@@ -645,7 +702,7 @@ impl Compiler {
 
         let name = "/preamble/";
         self.blocks.push(Block::new(name, &tree.modules[0].0));
-        self.stack.push(vec![Variable::new(name.to_string(), VarKind::Const, Type::Void, 0, Span { line: 0 })]);
+        self.stack.push(Frame::new(name, Span { line: 0 }));
         let ctx = Context {
             block_slot: self.blocks.len() - 1,
             frame: self.stack.len() - 1,
