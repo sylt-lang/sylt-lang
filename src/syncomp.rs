@@ -596,7 +596,7 @@ impl Compiler {
             let ctx = Context::from_namespace(slot);
             for statement in module.statements.iter() {
                 use StatementKind::*;
-                let namespace = &mut self.namespaces[slot];
+                let mut namespace = self.namespaces.remove(slot);
                 match &statement.kind {
                     Use { file: Identifier { name, span } } => {
                         let other = path_to_namespace_id[name];
@@ -619,12 +619,15 @@ impl Compiler {
                     // TODO(ed): Maybe break this out into it's own "type resolution thing?"
                     Blob { name, .. } => {
                         match namespace.entry(name.to_owned()) {
-                            Entry::Vacant(vac) => {
+                            Entry::Vacant(_) => {
                                 let id = self.blobs.len();
-                                let blob = crate::Blob::new_tree(id, slot, name);
-                                self.blobs.push(blob);
-                                self.constants.push(Value::Blob(id));
-                                vac.insert(Name::Blob(id));
+                                self.blobs.push(crate::Blob::new_tree(id, slot, name));
+                                let blob = self.constant(Value::Blob(id));
+                                if let Op::Constant(slot) = blob {
+                                    namespace.insert(name.to_owned(), Name::Blob(slot));
+                                } else {
+                                    unreachable!();
+                                }
                             }
 
                             Entry::Occupied(_) => {
@@ -638,29 +641,18 @@ impl Compiler {
                         }
                     }
 
-                    Definition { ident: Identifier { name, span }, value, kind, ty, .. } => {
-                        match namespace.entry(name.to_owned()) {
-                            Entry::Vacant(vac) => {
-                                let var = self.define(name, kind, ty, statement.span);
-                                self.activate(var);
-                                let nil = self.constant(Value::Nil);
-                                self.add_op(ctx, Span { line: 0 }, nil);
-                            }
-                            _ => {
-                                error!(
-                                    self,
-                                    ctx,
-                                    span,
-                                    "A global variable with the name '{}' already exists", name
-                                );
-                            }
-                        }
+                    Definition { ident: Identifier { name, .. }, kind, ty, .. } => {
+                        let var = self.define(name, kind, ty, statement.span);
+                        self.activate(var);
+                        let nil = self.constant(Value::Nil);
+                        self.add_op(ctx, Span { line: 0 }, nil);
                     }
 
                     _ => {
                         // TODO(ed): Throw error
                     }
                 }
+                self.namespaces.insert(slot, namespace);
             }
         }
 
