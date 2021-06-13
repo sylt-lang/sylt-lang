@@ -203,7 +203,7 @@ impl Compiler {
             Access(a, field) => {
                 let ctx = self.assignable(a, ctx);
                 let slot = self.string(&field.name);
-                self.add_op(ctx, b.span, Op::GetField(slot));
+                self.add_op(ctx, field.span, Op::GetField(slot));
                 ctx
             }
             Index(a, b) => {
@@ -482,12 +482,40 @@ impl Compiler {
                 }
             }
 
-            Assignment { target, value, ..} => {
+            Assignment { target, value, kind } => {
+                use syntree::Op::*;
                 use AssignableKind::*;
+
+                let mutator = |kind|
+                    match kind {
+                        Add
+                        | Sub
+                        | Mul
+                        | Div => true,
+                        Nop => false,
+                    }
+                ;
+
+                let write_mutator_op = |comp: &mut Self, ctx, kind| {
+                    let op = match kind {
+                        Add => { Op::Add }
+                        Sub => { Op::Sub }
+                        Mul => { Op::Mul }
+                        Div => { Op::Div }
+                        Nop => { return; }
+                    };
+                    comp.add_op(ctx, statement.span, op);
+                };
 
                 match &target.kind {
                     Read(ident) => {
+                        if mutator(*kind) {
+                            self.read_identifier(&ident.name, statement.span, ctx);
+                        }
                         self.expression(value, ctx);
+
+                        write_mutator_op(self, ctx, *kind);
+
                         self.set_identifier(&ident.name, statement.span, ctx);
                     }
                     Call(_, _) => {
@@ -495,14 +523,28 @@ impl Compiler {
                     }
                     Access(a, field) => {
                         self.assignable(a, ctx);
-                        self.expression(value, ctx);
                         let slot = self.string(&field.name);
+
+                        if mutator(*kind) {
+                            self.add_op(ctx, statement.span, Op::Copy(1));
+                            self.add_op(ctx, field.span, Op::GetField(slot));
+                        }
+                        self.expression(value, ctx);
+                        write_mutator_op(self, ctx, *kind);
+
                         self.add_op(ctx, field.span, Op::AssignField(slot));
                     }
                     Index(a, b) => {
                         self.assignable(a, ctx);
                         self.expression(b, ctx);
+
+                        if mutator(*kind) {
+                            self.add_op(ctx, statement.span, Op::Copy(2));
+                            self.add_op(ctx, statement.span, Op::GetIndex);
+                        }
                         self.expression(value, ctx);
+                        write_mutator_op(self, ctx, *kind);
+
                         self.add_op(ctx, statement.span, Op::AssignIndex);
                     }
                 }
