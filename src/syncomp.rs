@@ -202,7 +202,12 @@ impl Compiler {
             }
             Access(a, b) => {
                 let ctx = self.assignable(a, ctx);
-                self.assignable(b, ctx);
+                if let Read(field) = &b.kind {
+                    let slot = self.string(&field.name);
+                    self.add_op(ctx, b.span, Op::GetField(slot));
+                } else {
+                    error!(self, ctx, ass.span, "The right field in an access has to be an identifier");
+                }
                 ctx
             }
             Index(a, b) => {
