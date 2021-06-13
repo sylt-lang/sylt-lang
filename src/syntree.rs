@@ -961,12 +961,16 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
         );
     };
 
+    // Parse chained [] and ().
     let (ctx, ident) = sub_assignable(ctx.skip(1), ident)?;
+
     Ok(if let T::Dot = ctx.token() {
+        // `a.b` => another assignable
         let (ctx, rest) = assignable(ctx.skip(1))?;
         let kind = Access(Box::new(ident), Box::new(rest));
         (ctx, Assignable { span, kind })
     } else {
+        // Done
         (ctx, ident)
     })
 }
