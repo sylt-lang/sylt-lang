@@ -4,7 +4,7 @@ A :: blob {
 }
 
 start :: fn {
-    a :: A! { a: 1, b: 2, c: 3 }
+    a :: A { a: 1, b: 2, c: 3 }
     a
 }
 
