@@ -1550,6 +1550,10 @@ mod test {
         test!(expression, call_args_bang: "a! 1, 2, 3" => Get(_));
         test!(expression, call_args_chaining_paren: "a(1, 2, 3).b" => Get(_));
         test!(expression, call_args_chaining_paren_trailing: "a(1, 2, 3,).b" => Get(_));
+        test!(expression, assignable_index: "a[0]" => Get(_));
+        test!(expression, assignable_index_twice: "a[0][1]" => Get(_));
+        test!(expression, assignable_mixed: "a[0]()" => Get(_));
+        test!(expression, assignable_mixed_many: "a()[0]()[1]()()()[2][3]" => Get(_));
 
         // TODO(ed): This is controverisal
         test!(expression, call_args_chaining_bang: "a! 1, 2, 3 .b" => Get(_));
