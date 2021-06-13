@@ -190,7 +190,7 @@ pub enum AssignableKind {
     Read(Identifier),
     /// A function call.
     Call(Box<Assignable>, Vec<Expression>),
-    Access(Box<Assignable>, Box<Assignable>),
+    Access(Box<Assignable>, Identifier),
     Index(Box<Assignable>, Box<Expression>),
 }
 
@@ -950,16 +950,13 @@ fn assignable_index<'t>(ctx: Context<'t>, indexed: Assignable) -> ParseResult<'t
 
 /// Parse an [AssignableKind::Access].
 fn assignable_dot<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t, Assignable> {
-    use AssignableKind::{Read, Access};
+    use AssignableKind::Access;
     let (ctx, ident) = if let (T::Identifier(name), span, ctx) = ctx.skip(1).eat() {
         (
             ctx,
-            Assignable {
+            Identifier {
+                name: name.clone(),
                 span,
-                kind: Read(Identifier {
-                    span,
-                    name: name.clone(),
-                }),
             }
         )
     } else {
@@ -969,7 +966,7 @@ fn assignable_dot<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t,
         );
     };
 
-    let access = Assignable { span: ctx.span(), kind: Access(Box::new(accessed), Box::new(ident)) };
+    let access = Assignable { span: ctx.span(), kind: Access(Box::new(accessed), ident) };
     sub_assignable(ctx, access)
 }
 

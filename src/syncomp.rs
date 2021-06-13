@@ -200,14 +200,10 @@ impl Compiler {
                 self.add_op(ctx, ass.span, Op::Call(expr.len()));
                 ctx
             }
-            Access(a, b) => {
+            Access(a, field) => {
                 let ctx = self.assignable(a, ctx);
-                if let Read(field) = &b.kind {
-                    let slot = self.string(&field.name);
-                    self.add_op(ctx, b.span, Op::GetField(slot));
-                } else {
-                    error!(self, ctx, ass.span, "The right field in an access has to be an identifier");
-                }
+                let slot = self.string(&field.name);
+                self.add_op(ctx, b.span, Op::GetField(slot));
                 ctx
             }
             Index(a, b) => {
@@ -497,15 +493,11 @@ impl Compiler {
                     Call(_, _) => {
                         error!(self, ctx, statement.span, "Cannot assign to result from function call");
                     }
-                    Access(a, b) => {
+                    Access(a, field) => {
                         self.assignable(a, ctx);
-                        if let Read(field) = &b.kind {
-                            self.expression(value, ctx);
-                            let slot = self.string(&field.name);
-                            self.add_op(ctx, b.span, Op::AssignField(slot));
-                        } else {
-                            error!(self, ctx, statement.span, "Can only assign if last access is to a field");
-                        }
+                        self.expression(value, ctx);
+                        let slot = self.string(&field.name);
+                        self.add_op(ctx, field.span, Op::AssignField(slot));
                     }
                     Index(a, b) => {
                         self.assignable(a, ctx);
