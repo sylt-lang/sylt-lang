@@ -350,21 +350,26 @@ impl Compiler {
             Some(Name::Slot(slot)) => {
                 let op = Op::Constant(*slot);
                 self.add_op(ctx, span, op);
-                ctx
             },
             Some(Name::Namespace(new_namespace)) => {
-                Context { namespace: *new_namespace, ..ctx }
+                return Context { namespace: *new_namespace, ..ctx }
             },
             Some(Name::Blob(blob)) => {
                 let op = Op::Constant(*blob);
                 self.add_op(ctx, span, op);
-                ctx
             },
-            None => {
-                error!(self, ctx, span, "No active variable called '{}' could be found", name);
-                ctx
-            },
+            None => {},
         }
+
+        if let Some((slot, _)) = self.functions.get(name) {
+            let slot = *slot;
+            let op = self.constant(Value::ExternFunction(slot));
+            self.add_op(ctx, span, op);
+            return ctx;
+        }
+
+        error!(self, ctx, span, "No active variable called '{}' could be found", name);
+        ctx
     }
 
     fn resolve_set_for_frame(&mut self,
