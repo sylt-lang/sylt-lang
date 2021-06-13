@@ -48,21 +48,26 @@ struct Upvalue {
     kind: VarKind,
 }
 
+enum Lookup {
+    Upvalue(Upvalue),
+    Variable(Variable),
+}
+
 impl Upvalue {
-    fn capture(var: &Variable, slot: usize) -> Self {
+    fn capture(var: &Variable) -> Self {
         Self {
             parent: var.slot,
             upupvalue: false,
 
             name: var.name.clone(),
             ty: var.ty.clone(),
-            slot,
+            slot: 0,
             line: var.line,
             kind: var.kind,
         }
     }
 
-    fn loft(up: &Upvalue, slot: usize) -> Self {
+    fn loft(up: &Upvalue) -> Self {
         Self {
             parent: up.slot,
             upupvalue: true,
@@ -379,36 +384,65 @@ impl Compiler {
         }
     }
 
-    fn resolve_read_for_frame(&mut self,
+    fn resolve_and_capture(&mut self,
         name: &str,
         frame: usize,
         span: Span,
         ctx: Context,
-    ) -> Result<(), ()> {
-        if frame == 0 {
-            for (slot, var) in self.stack[0].variables.iter().enumerate() {
-                if var.active && &var.name == name {
-                    let op = Op::ReadGlobal(slot);
-                    self.add_op(ctx, span, op);
-                    return Ok(());
-                }
-            }
-        } else {
-            for (slot, var) in self.stack[frame].variables.iter_mut().enumerate().rev() {
-                if var.active && &var.name == name {
-                    assert!(frame == ctx.frame, "Upvalues aren't implemented");
-                    let op = Op::ReadLocal(slot);
-                    self.add_op(ctx, span, op);
-                    return Ok(());
-                }
+    ) -> Result<Lookup, ()> {
+        // Frame 0 has globals which cannot be captured.
+        if frame == 0 { return Err(()) }
+
+        // TODO(ed): Maybe remove the clones?
+        for var in self.stack[frame].variables.iter().rev() {
+            if &var.name == name && var.active {
+                return Ok(Lookup::Variable(var.clone()));
             }
         }
-        Err(())
+
+        for up in self.stack[frame].upvalues.iter().rev() {
+            if &up.name == name {
+                return Ok(Lookup::Upvalue(up.clone()));
+            }
+        }
+
+        let up = match self.resolve_and_capture(name, frame - 1, span, ctx) {
+            Ok(Lookup::Upvalue(up)) => {
+                Upvalue::loft(&up)
+            }
+            Ok(Lookup::Variable(var)) => {
+                Upvalue::capture(&var)
+            }
+            _ => {
+                return Err(());
+            }
+        };
+        let slot = self.upvalue(up.clone());
+        let op = Op::ReadUpvalue(slot);
+        self.add_op(ctx, span, op);
+        Ok(Lookup::Upvalue(up))
+
     }
 
     fn read_identifier(&mut self, name: &str, span: Span, ctx: Context) -> Context {
-        for frame in (0..ctx.frame+1).into_iter().rev() {
-            if self.resolve_read_for_frame(name, frame, span, ctx).is_ok() {
+        match self.resolve_and_capture(name, ctx.frame, span, ctx) {
+            Ok(Lookup::Upvalue(up)) => {
+                Op::ReadUpvalue(up.slot);
+                return ctx;
+            }
+
+            Ok(Lookup::Variable(var)) => {
+                Op::ReadUpvalue(var.slot);
+                return ctx;
+            }
+
+            Err(()) => {}
+        }
+
+        for var in self.stack[0].variables.iter() {
+            if var.active && &var.name == name {
+                let op = Op::ReadGlobal(var.slot);
+                self.add_op(ctx, span, op);
                 return ctx;
             }
         }
@@ -441,47 +475,29 @@ impl Compiler {
         ctx
     }
 
-    fn resolve_set_for_frame(&mut self,
-        name: &str,
-        frame: usize,
-        span: Span,
-        ctx: Context,
-    ) -> Result<(), ()> {
-        if frame == 0 {
-            for (slot, var) in self.stack[0].variables.iter().enumerate() {
-                if var.active && &var.name == name {
-                    // NOTE(ed): In the global namespace - everyhing is legal before start:
-                    if var.kind.immutable() && ctx.frame != 0 {
-                        error!(self, ctx, span, "Cannot modify constant '{}'", var.name);
-                    }
-                    let op = Op::AssignGlobal(slot);
-                    self.add_op(ctx, span, op);
-                    return Ok(());
-                }
-            }
-        } else {
-            for (slot, var) in self.stack[frame].variables.iter_mut().enumerate().rev() {
-                if var.active && &var.name == name {
-                    assert!(frame == ctx.frame, "Upvalues aren't implemented");
-                    if var.kind.immutable() {
-                        error!(self, ctx, span, "Cannot modify constant '{}'", var.name);
-                    }
-                    let op = Op::AssignLocal(slot);
-                    self.add_op(ctx, span, op);
-                    return Ok(());
-                }
-            }
-        }
-        Err(())
-    }
-
-
     fn set_identifier(&mut self, name: &str, span: Span, ctx: Context) {
-        for frame in (0..ctx.frame+1).into_iter().rev() {
-            if self.resolve_set_for_frame(name, frame, span, ctx).is_ok() {
+        match self.resolve_and_capture(name, ctx.frame, span, ctx) {
+            Ok(Lookup::Upvalue(up)) => {
+                Op::AssignUpvalue(up.slot);
+                return;
+            }
+
+            Ok(Lookup::Variable(var)) => {
+                Op::AssignLocal(var.slot);
+                return;
+            }
+
+            Err(()) => {}
+        }
+
+        for var in self.stack[0].variables.iter() {
+            if var.active && &var.name == name {
+                let op = Op::AssignGlobal(var.slot);
+                self.add_op(ctx, span, op);
                 return;
             }
         }
+
         error!(self, ctx, span, "No active assignable value called '{}' could be found", name);
     }
 
@@ -496,6 +512,13 @@ impl Compiler {
         let slot = stack.len();
         let var = Variable::new(name.to_string(), kind, Type::Unknown, slot, span);
         stack.push(var);
+        slot
+    }
+
+    fn upvalue(&mut self, up: Upvalue) -> usize {
+        let ups = &mut self.stack.last_mut().unwrap().upvalues;
+        let slot = ups.len();
+        ups.push(up);
         slot
     }
 
