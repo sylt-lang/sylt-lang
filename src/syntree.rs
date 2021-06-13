@@ -1077,7 +1077,9 @@ mod expression {
         ))
     }
 
+    /// Parse an expression until we reach a token with higher precedence.
     fn parse_precedence<'t>(ctx: Context<'t>, prec: Prec) -> ParseResult<'t, Expression> {
+        // Initial value, e.g. a number value, assignable, ..
         let (mut ctx, mut expr) = match prefix(ctx) {
             Ok(ret) => ret,
             Err((ctx, mut errs)) => {
@@ -1087,6 +1089,7 @@ mod expression {
         };
         while prec <= precedence(ctx.token()) {
             if let Ok((_ctx, _expr)) = infix(ctx, &expr) {
+                // assign to outer
                 ctx = _ctx;
                 expr = _expr;
             } else {
@@ -1096,6 +1099,10 @@ mod expression {
         Ok((ctx, expr))
     }
 
+    /// Return a [Token]'s precedence.
+    /// 
+    /// See the documentation on [Prec] for how to interpret and compare the
+    /// variants.
     #[rustfmt::skip]
     fn precedence(token: &T) -> Prec {
         match token {
@@ -1125,6 +1132,7 @@ mod expression {
         }
     }
 
+    /// Parse a single (primitive) value.
     fn value<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Expression), (Context<'t>, Vec<Error>)> {
         let (token, span, ctx) = ctx.eat();
         let kind = match token.clone() {
@@ -1140,6 +1148,7 @@ mod expression {
         Ok((ctx, Expression { span, kind }))
     }
 
+    /// Parse something that begins at the start of a statement.
     fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         match ctx.token() {
             T::LeftParen => grouping_or_tuple(ctx),
@@ -1150,6 +1159,7 @@ mod expression {
             T::Minus | T::Bang => unary(ctx),
 
             T::Identifier(_) => {
+                // Blob declarations are expressions.
                 if let Ok(result) = blob(ctx) {
                     Ok(result)
                 } else {
