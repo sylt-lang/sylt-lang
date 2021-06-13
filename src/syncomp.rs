@@ -479,8 +479,16 @@ impl Compiler {
             }
 
             Block { statements } => {
+                let ss = self.stack[ctx.frame].len();
+
                 for statement in statements {
                     self.statement(statement, ctx);
+                }
+
+                while ss < self.stack[ctx.frame].len() {
+                    // TODO(ed): Upvalues
+                    let _var = self.stack[ctx.frame].pop();
+                    self.add_op(ctx, statement.span, Op::Pop);
                 }
             }
 
