@@ -458,6 +458,7 @@ impl Compiler {
 
     fn statement(&mut self, statement: &Statement, ctx: Context) {
         use StatementKind::*;
+        self.panic = false;
 
         match &statement.kind {
             Use { .. }
