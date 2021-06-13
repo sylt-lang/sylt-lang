@@ -370,7 +370,9 @@ impl<'a> Context<'a> {
     }
 }
 
+/// Construct a syntax error at the current token with a message.
 macro_rules! syntax_error {
+    //TODO None if no message?
     ($ctx:expr, $( $msg:expr ),* ) => {
         {
             let msg = format!($( $msg ),*).into();
@@ -384,12 +386,15 @@ macro_rules! syntax_error {
     };
 }
 
+/// Raise a syntax error at the current token with a message.
 macro_rules! raise_syntax_error {
+    //TODO None if no message?
     ($ctx:expr, $( $msg:expr ),* ) => {
         return Err(($ctx.skip(1), vec![syntax_error!($ctx, $( $msg ),*)]))
     };
 }
 
+/// Eat any one of the specified tokens and raise a syntax error if none is found.
 macro_rules! expect {
     ($ctx:expr, $( $token:pat )|+ , $( $msg:expr ),+ ) => {
         {
@@ -405,6 +410,7 @@ macro_rules! expect {
     };
 }
 
+/// Skip the current token if it is any one of the specified tokens.
 macro_rules! skip_if {
     ($ctx:expr, $( $token:pat )|+ ) => {
         {
