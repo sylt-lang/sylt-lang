@@ -849,12 +849,8 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     Ok((ctx, Statement { span, kind }))
 }
 
-///TODO ?
-fn maybe_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, Assignable> {
-    if !matches!(ctx.token(), T::LeftParen | T::Bang) {
-        return Ok((ctx, callee));
-    }
-
+/// Parse an [AssignableKind::Call]
+fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, Assignable> {
     let span = ctx.span();
     let banger = matches!(ctx.token(), T::Bang); // `f! 1, 2
     let mut ctx = expect!(
@@ -899,12 +895,56 @@ fn maybe_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, Assig
         span,
         kind: Call(Box::new(callee), args),
     };
-    maybe_call(ctx, result)
+    sub_assignable(ctx, result)
 }
 
+/// Parse an [AssignableKind::Index].
+fn assignable_index<'t>(ctx: Context<'t>, indexed: Assignable) -> ParseResult<'t, Assignable> {
+    let mut ctx = expect!(
+        ctx,
+        T::LeftBracket,
+        "Expected '[' when indexing"
+    );
+    let span = ctx.span();
+
+    let (_ctx, expr) = expression(ctx)?;
+    ctx = _ctx; // assign to outer
+    let ctx = expect!(
+        ctx,
+        T::RightBracket,
+        "Expected ']' after index"
+    );
+
+    use AssignableKind::Index;
+    let result = Assignable {
+        span,
+        kind: Index(Box::new(indexed), Box::new(expr)),
+    };
+    sub_assignable(ctx, result)
+}
+
+/// Parse a (maybe empty) "sub-assignable", i.e. either a call or indexable.
+fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'t, Assignable> {
+    match ctx.token() {
+        T::Bang | T::LeftParen => assignable_call(ctx, assignable),
+        T::LeftBracket => assignable_index(ctx, assignable),
+        _ => Ok((ctx, assignable))
+    }
+}
+
+/// Parse an [Assignable].
+/// 
+/// [Assignable]s can be quite complex, e.g. `a[2].b(1).c(2, 3)`. They're parsed
+/// one "step" at a time recursively, so this example will go through three calls
+/// to [assignable].
+/// 
+/// 1. Parse `c(2, 3)` into `Call(Read(c), [2, 3])`.
+/// 2. Parse `b(1).c(2, 3)` into `Access(Call(Read(b), [1]), <parsed c(2, 3)>)`.
+/// 3. Parse `a[2].b(1).c(2, 3)` into `Access(Index(Read(a), 2), <parsed b(1).c(2, 3)>)`.
 fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
     use AssignableKind::*;
 
+    // Get the first identifier.
     let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
         Assignable {
             span,
@@ -920,24 +960,13 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
         );
     };
 
-    let (ctx, ident) = maybe_call(ctx.skip(1), ident)?;
+    let (ctx, ident) = sub_assignable(ctx.skip(1), ident)?;
     let span = ctx.span();
     let result = match ctx.token() {
         T::Dot => {
             let (ctx, rest) = assignable(ctx.skip(1))?;
             let kind = Access(Box::new(ident), Box::new(rest));
             (ctx, Assignable { span, kind })
-        }
-
-        T::LeftBracket => {
-            let (ctx, index) = expression(ctx.skip(1))?;
-            (
-                ctx.skip(1),
-                Assignable {
-                    span,
-                    kind: Index(Box::new(ident), Box::new(index)),
-                },
-            )
         }
 
         _ => (ctx, ident),
