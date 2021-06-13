@@ -522,7 +522,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             (ctx, Tuple(types))
         }
 
-        // List.
+        // List
         T::LeftBracket => {
             // Only contains a single type.
             let (ctx, ty) = parse_type(ctx.skip(1))?;
@@ -553,7 +553,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         }
     };
 
-    // Put it in a syntax tree node.
+    // Wrap it in a syntax tree node.
     let ty = Type { span, kind };
 
     // Union type, a | b
@@ -591,6 +591,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     Ok((ctx, ty))
 }
 
+/// Parse a single statement.
 fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     use StatementKind::*;
 
@@ -598,19 +599,22 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     let (ctx, kind) = match &ctx.tokens[ctx.curr..] {
         [(T::Newline, _), ..] => (ctx.skip(1), EmptyStatement),
 
+        // Block: `{ <statements> }`
         [(T::LeftBrace, _), ..] => {
             let mut ctx = ctx.skip(1);
             let mut statements = Vec::new();
+            // Parse multiple inner statements until } or EOF
             while !matches!(ctx.token(), T::RightBrace | T::EOF) {
                 let (_ctx, stmt) = statement(ctx)?;
-                ctx = _ctx;
+                ctx = _ctx; // assign to outer
                 statements.push(stmt);
             }
 
-            let ctx = expect!(ctx, T::RightBrace);
+            let ctx = expect!(ctx, T::RightBrace, "Expected }} after block statement");
             (ctx, Block { statements })
         }
 
+        // `use a`
         [(T::Use, _), (T::Identifier(name), _), ..] => (
             ctx.skip(2),
             Use {
@@ -628,6 +632,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx, Print { value })
         }
 
+        // `ret <expression>`
         [(T::Ret, _), ..] => {
             let ctx = ctx.skip(1);
             let (ctx, value) = if matches!(ctx.token(), T::Newline) {
@@ -644,6 +649,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx, Ret { value })
         }
 
+        // `loop <expression> <statement>`, i.e. `loop a < 10 { a += 1 }`
         [(T::Loop, _), ..] => {
             let (ctx, condition) = expression(ctx.skip(1))?;
             let (ctx, body) = statement(ctx)?;
@@ -656,14 +662,17 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             )
         }
 
+        // `if <expression> <statement> [else <statement>]`. Note that the else is optional.
         [(T::If, _), ..] => {
             let (ctx, condition) = expression(ctx.skip(1))?;
 
             let (ctx, pass) = statement(ctx)?;
+            // else?
             let (ctx, fail) = if matches!(ctx.token(), T::Else) {
                 let (ctx, fail) = statement(ctx.skip(1))?;
                 (ctx, fail)
             } else {
+                // No else so we insert an empty statement instead.
                 (
                     ctx,
                     Statement {
@@ -683,26 +692,30 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             )
         }
 
+        // Blob declaration: `A :: blob { <fields> }
         [(T::Identifier(name), _), (T::ColonColon, _), (T::Blob, _), ..] => {
             let name = name.clone();
             let mut ctx = expect!(ctx.skip(3), T::LeftBrace, "Expected '{{' to open blob");
             let mut fields = HashMap::new();
+            // Parse fields: `a: int`
             loop {
                 match ctx.token().clone() {
                     T::Newline => {
                         ctx = ctx.skip(1);
                     }
+                    // Done with fields.
                     T::RightBrace => {
                         break;
                     }
 
+                    // Another one.
                     T::Identifier(field) => {
                         if fields.contains_key(&field) {
                             raise_syntax_error!(ctx, "Field '{}' is declared twice", field);
                         }
                         ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after field name");
                         let (_ctx, ty) = parse_type(ctx)?;
-                        ctx = _ctx;
+                        ctx = _ctx; // assign to outer
                         fields.insert(field, ty);
 
                         if !matches!(ctx.token(), T::Comma | T::Newline | T::RightBrace) {
@@ -723,6 +736,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx, Blob { name, fields })
         }
 
+        // Variable definition: `a :: 1`, `a := 2` or `a : int = 3`. Merged since they're kinda similar.
         [(T::Identifier(name), _), (T::ColonColon, _), ..]
         | [(T::Identifier(name), _), (T::ColonEqual, _), ..]
         | [(T::Identifier(name), _), (T::Colon, _), ..] => {
@@ -731,7 +745,9 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 span: ctx.span(),
             };
             let ctx = ctx.skip(1);
+            // Branch depending on the type of definition.
             let (ctx, kind, ty) = match ctx.token() {
+                // Const
                 T::ColonColon => (
                     ctx.skip(1),
                     VarKind::Const,
@@ -740,6 +756,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         kind: TypeKind::Implied,
                     },
                 ),
+                // Mutable
                 T::ColonEqual => (
                     ctx.skip(1),
                     VarKind::Mutable,
@@ -748,9 +765,10 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         kind: TypeKind::Implied,
                     },
                 ),
+                // Typed
                 T::Colon => {
                     let ctx = ctx.skip(1);
-                    let forced = matches!(ctx.token(), T::Bang);
+                    let forced = matches!(ctx.token(), T::Bang); // !int
                     let ctx = skip_if!(ctx, T::Bang);
                     let (ctx, ty) = parse_type(ctx)?;
                     let kind = match (ctx.token(), forced) {
@@ -769,10 +787,12 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     (ctx.skip(1), kind, ty)
                 }
 
+                //TODO unreachable. Be the change you want to see in the world.
                 _ => {
-                    raise_syntax_error!(ctx, "Not an assignment statement");
+                    raise_syntax_error!(ctx, "Not a definition statement");
                 }
             };
+            // The value to define the variable to.
             let (ctx, value) = expression(ctx)?;
 
             use ExpressionKind::Function;
@@ -801,9 +821,11 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             )
         }
 
+        // Expression or assignment. We try assignment first.
         _ => {
-            // Expression or Assignment, we try assignment first
+            /// `a = 5`.
             fn assignment<'t>(ctx: Context<'t>) -> ParseResult<'t, StatementKind> {
+                // The assignable to assign to.
                 let (ctx, target) = assignable(ctx)?;
                 let kind = match ctx.token() {
                     T::PlusEqual => Op::Add,
@@ -813,9 +835,10 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     T::Equal => Op::Nop,
 
                     t => {
-                        raise_syntax_error!(ctx, "No assignment matches '{:?}'", t);
+                        raise_syntax_error!(ctx, "No assignment operation matches '{:?}'", t);
                     }
                 };
+                // The expression to assign the assignable to.
                 let (ctx, value) = expression(ctx.skip(1))?;
                 Ok((
                     ctx,
