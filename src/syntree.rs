@@ -919,12 +919,12 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
 
 /// Parse an [AssignableKind::Index].
 fn assignable_index<'t>(ctx: Context<'t>, indexed: Assignable) -> ParseResult<'t, Assignable> {
+    let span = ctx.span();
     let mut ctx = expect!(
         ctx,
         T::LeftBracket,
         "Expected '[' when indexing"
     );
-    let span = ctx.span();
 
     let (_ctx, expr) = expression(ctx)?;
     ctx = _ctx; // assign to outer
@@ -962,6 +962,7 @@ fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'
 /// 3. Parse `a[2].b(1).c(2, 3)` into `Access(Index(Read(a), 2), <parsed b(1).c(2, 3)>)`.
 fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
     use AssignableKind::*;
+    let span = ctx.span();
 
     // Get the first identifier.
     let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
@@ -980,17 +981,13 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
     };
 
     let (ctx, ident) = sub_assignable(ctx.skip(1), ident)?;
-    let span = ctx.span();
-    let result = match ctx.token() {
-        T::Dot => {
-            let (ctx, rest) = assignable(ctx.skip(1))?;
-            let kind = Access(Box::new(ident), Box::new(rest));
-            (ctx, Assignable { span, kind })
-        }
-
-        _ => (ctx, ident),
-    };
-    Ok(result)
+    Ok(if let T::Dot = ctx.token() {
+        let (ctx, rest) = assignable(ctx.skip(1))?;
+        let kind = Access(Box::new(ident), Box::new(rest));
+        (ctx, Assignable { span, kind })
+    } else {
+        (ctx, ident)
+    })
 }
 
 use expression::expression;
