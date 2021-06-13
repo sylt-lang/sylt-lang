@@ -17,7 +17,6 @@ struct Variable {
     line: usize,
     kind: VarKind,
 
-    // TODO(ed): Captured
     captured: bool,
     active: bool,
 }
@@ -319,7 +318,6 @@ impl Compiler {
             Not(a)    => self.un_op(a, &[Op::Neg], expression.span, ctx),
 
             Function { name, params, ret, body } => {
-                // TODO(ed): Better name
                 let file = self.file_from_context(ctx);
                 let name = format!("fn {} {}:{}", name, file, expression.span.line);
 
@@ -342,7 +340,6 @@ impl Compiler {
                 self.add_op(inner_ctx, body.span, nil);
                 self.add_op(inner_ctx, body.span, Op::Return);
 
-                // TODO(ed): Pop the stackframe here
                 let function = Value::Function(Rc::new(Vec::new()), ty, inner_ctx.block_slot);
                 self.pop_frame(inner_ctx);
                 // === Frame end ===
@@ -450,7 +447,6 @@ impl Compiler {
         span: Span,
         ctx: Context,
     ) -> Result<(), ()> {
-        // TODO(ed): Mutability check
         if frame == 0 {
             for (slot, var) in self.stack[0].variables.iter().enumerate() {
                 if var.active && &var.name == name {
@@ -496,8 +492,6 @@ impl Compiler {
 
     fn define(&mut self, name: &str, kind: VarKind, span: Span) -> VarSlot {
         // TODO(ed): Fix the types
-        // TODO(ed): Mutability
-        // TODO(ed): Scoping
         let stack = &mut self.stack.last_mut().unwrap().variables;
         let slot = stack.len();
         let var = Variable::new(name.to_string(), kind, Type::Unknown, slot, span);
@@ -742,7 +736,6 @@ impl Compiler {
     }
 
     fn extract_globals(&mut self, tree: &Prog) {
-        // TODO(ed): Check for duplicates
         let mut path_to_namespace_id = HashMap::new();
         for (full_path, _) in tree.modules.iter() {
             let slot = path_to_namespace_id.len();
@@ -788,7 +781,6 @@ impl Compiler {
                         }
                     }
 
-                    // TODO(ed): Maybe break this out into it's own "type resolution thing?"
                     Blob { name, .. } => {
                         match namespace.entry(name.to_owned()) {
                             Entry::Vacant(_) => {
@@ -836,9 +828,6 @@ impl Compiler {
                 self.namespaces.insert(slot, namespace);
             }
         }
-
-        // TODO(ed): Resolve the types of all blob fields here!
-        // Thank god we're a scripting language - otherwise this would be impossible.
     }
 }
 
