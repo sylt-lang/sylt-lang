@@ -1,11 +1,13 @@
 use crate::compiler::Prec;
 use crate::error::Error;
 use crate::tokenizer::file_to_tokens;
-use crate::tokenizer::Token as T;
+use crate::tokenizer::Token;
 use crate::Next;
 use crate::Type as RuntimeType;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+
+type T = Token;
 
 #[derive(Debug, Copy, Clone)]
 /// A location in a file containing source code.
@@ -335,7 +337,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Get a span representing the current location of the parser.
+    /// Get a [Span] representing the current location of the parser.
     fn span(&self) -> Span {
         Span {
             line: self.peek().1,
@@ -354,17 +356,17 @@ impl<'a> Context<'a> {
         new
     }
 
-    /// Peek the current token and position.
+    /// Peek the current [Token] and position.
     fn peek(&self) -> &(T, usize) {
         self.tokens.get(self.curr).unwrap_or(&(T::EOF, 0))
     }
 
-    /// Peek the current token.
+    /// Peek the current [Token].
     fn token(&self) -> &T {
         &self.peek().0
     }
 
-    /// Eat a token and move to the next.
+    /// Eat a [Token] and move to the next.
     fn eat(&self) -> (&T, Span, Self) {
         (self.token(), self.span(), self.skip(1))
     }
@@ -423,7 +425,7 @@ macro_rules! skip_if {
     };
 }
 
-/// Parse a type definition. `fn int, int, bool -> bool
+/// Parse a [Type] definition. `fn int, int, bool -> bool.
 fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     use RuntimeType::{Bool, Float, Int, String, Void};
     use TypeKind::*;
@@ -588,7 +590,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     Ok((ctx, ty))
 }
 
-/// Parse a single statement.
+/// Parse a single [Statement].
 fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     use StatementKind::*;
 
@@ -847,13 +849,14 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     Ok((ctx, Statement { span, kind }))
 }
 
+///TODO ?
 fn maybe_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, Assignable> {
     if !matches!(ctx.token(), T::LeftParen | T::Bang) {
         return Ok((ctx, callee));
     }
 
     let span = ctx.span();
-    let banger = matches!(ctx.token(), T::Bang);
+    let banger = matches!(ctx.token(), T::Bang); // `f! 1, 2
     let mut ctx = expect!(
         ctx,
         T::Bang | T::LeftParen,
@@ -861,8 +864,10 @@ fn maybe_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, Assig
     );
     let mut args = Vec::new();
 
+    // Arguments
     loop {
         match (ctx.token(), banger) {
+            // Done with arguments.
             (T::EOF, _)
             | (T::RightParen, false)
             | (T::Dot, true)
@@ -871,9 +876,10 @@ fn maybe_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, Assig
                 break;
             }
 
+            // Parse a single argument.
             _ => {
                 let (_ctx, expr) = expression(ctx)?;
-                ctx = _ctx;
+                ctx = _ctx; // assign to outer
                 args.push(expr);
 
                 ctx = skip_if!(ctx, T::Comma);
@@ -888,6 +894,7 @@ fn maybe_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, Assig
     };
 
     use AssignableKind::Call;
+    //TODO ?
     let result = Assignable {
         span,
         kind: Call(Box::new(callee), args),
