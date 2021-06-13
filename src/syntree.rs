@@ -460,8 +460,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                             ctx = _ctx; // assign to outer
                             ret
                         } else {
-                            // If we couldn't parse the return type, we implicitly
-                            // assume `-> Void`.
+                            // If we couldn't parse the return type, we assume `-> Void`.
                             Type {
                                 span: ctx.span(),
                                 kind: Resolved(Void),
@@ -999,20 +998,25 @@ mod expression {
     use super::*;
     use ExpressionKind::*;
 
+    /// Parse an [ExpressionKind::Function]: `fn a: int, b: bool -> bool <statement>`
     fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         let span = ctx.span();
         let mut ctx = expect!(ctx, T::Fn, "Expected 'fn' for function expression");
         let mut params = Vec::new();
+        // Parameters
         let ret = loop {
             match ctx.token() {
                 T::Identifier(name) => {
+                    // Parameter name
                     let ident = Identifier {
                         span: ctx.span(),
                         name: name.clone(),
                     };
                     ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after parameter name");
+                    // Parameter type
                     let (_ctx, param) = parse_type(ctx)?;
-                    ctx = _ctx;
+                    ctx = _ctx; // assign to outer
+
                     params.push((ident, param));
 
                     ctx = if matches!(ctx.token(), T::Comma | T::Arrow | T::LeftBrace) {
@@ -1022,33 +1026,31 @@ mod expression {
                     };
                 }
 
+                // Parse return type
                 T::Arrow => {
                     ctx = ctx.skip(1);
                     break if let Ok((_ctx, ret)) = parse_type(ctx) {
-                        ctx = _ctx;
+                        ctx = _ctx; // assign to outer
                         ret
                     } else {
                         use RuntimeType::Void;
                         use TypeKind::Resolved;
                         Type {
+                            // If we couldn't parse the return type, we assume `-> Void`.
                             span: ctx.span(),
                             kind: Resolved(Void),
                         }
                     };
                 }
 
-                // TODO(ed): You're allowed to skip the arrow for void?
                 T::LeftBrace => {
                     use RuntimeType::Void;
                     use TypeKind::Resolved;
+                    // No return type so we assume `-> Void`.
                     break Type {
                         span: ctx.span(),
                         kind: Resolved(Void),
                     };
-                }
-
-                T::EOF => {
-                    raise_syntax_error!(ctx, "Didn't expect EOF in function");
                 }
 
                 t => {
@@ -1057,6 +1059,7 @@ mod expression {
             }
         };
 
+        // Parse the function statement. Usually a block.
         let (ctx, statement) = statement(ctx)?;
         let function = Function {
             name: "lambda".into(),
