@@ -50,6 +50,13 @@ pub enum VarKind {
     ForceMutable,
 }
 
+impl VarKind {
+    pub fn immutable(&self) -> bool {
+        matches!(self, VarKind::Const | VarKind::ForceConst)
+    }
+}
+
+
 /// Normal infix operators: `+`, `-`, `*`, `/`
 #[derive(Debug, Copy, Clone)]
 pub enum Op {

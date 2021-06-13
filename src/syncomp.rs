@@ -15,17 +15,19 @@ struct Variable {
     ty: Type,
     slot: usize,
     line: usize,
+    kind: VarKind,
 
     // TODO(ed): Captured
     active: bool,
 }
 
 impl Variable {
-    fn new(name: String, ty: Type, slot: usize, span: Span) -> Self {
+    fn new(name: String, kind: VarKind, ty: Type, slot: usize, span: Span) -> Self {
         Self {
             name,
             ty,
             slot,
+            kind,
             line: span.line,
 
             active: false,
@@ -127,7 +129,7 @@ impl Compiler {
         let block = Block::new_tree(&name, ctx.namespace, &file_as_path);
         self.blocks.push(block);
 
-        self.stack.push(vec![Variable::new(name.to_string(), Type::Void, 0, span)]);
+        self.stack.push(vec![Variable::new(name.to_string(), VarKind::Const, Type::Void, 0, span)]);
         Context {
             block_slot: self.blocks.len() - 1,
             frame: self.stack.len() - 1,
@@ -273,7 +275,7 @@ impl Compiler {
                 let mut param_types = Vec::new();
                 for (ident, ty) in params.iter() {
                     param_types.push(self.resolve_type(&ty, inner_ctx));
-                    let param = self.define(&ident.name, &VarKind::Const, ty, ident.span);
+                    let param = self.define(&ident.name, VarKind::Const, ty, ident.span);
                     self.activate(param);
                 }
                 let ret = self.resolve_type(&ret, inner_ctx);
@@ -399,6 +401,10 @@ impl Compiler {
         if frame == 0 {
             for (slot, var) in self.stack[0].iter().enumerate() {
                 if var.active && &var.name == name {
+                    // NOTE(ed): In the global namespace - everyhing is legal before start:
+                    if var.kind.immutable() && ctx.frame != 0 {
+                        error!(self, ctx, span, "Cannot modify constant '{}'", var.name);
+                    }
                     let op = Op::AssignGlobal(slot);
                     self.add_op(ctx, span, op);
                     return Ok(());
@@ -408,6 +414,9 @@ impl Compiler {
             for (slot, var) in self.stack[frame].iter_mut().enumerate().rev() {
                 if var.active && &var.name == name {
                     assert!(frame == ctx.frame, "Upvalues aren't implemented");
+                    if var.kind.immutable() {
+                        error!(self, ctx, span, "Cannot modify constant '{}'", var.name);
+                    }
                     let op = Op::AssignLocal(slot);
                     self.add_op(ctx, span, op);
                     return Ok(());
@@ -432,13 +441,13 @@ impl Compiler {
         Type::Void
     }
 
-    fn define(&mut self, name: &str, kind: &VarKind, ty: &syntree::Type, span: Span) -> VarSlot {
+    fn define(&mut self, name: &str, kind: VarKind, ty: &syntree::Type, span: Span) -> VarSlot {
         // TODO(ed): Fix the types
         // TODO(ed): Mutability
         // TODO(ed): Scoping
         let stack = self.stack.last_mut().unwrap();
         let slot = stack.len();
-        let var = Variable::new(name.to_string(), Type::Unknown, slot, span);
+        let var = Variable::new(name.to_string(), kind, Type::Unknown, slot, span);
         stack.push(var);
         slot
     }
@@ -476,7 +485,7 @@ impl Compiler {
                     self.expression(value, ctx);
                     self.set_identifier(&ident.name, statement.span, ctx);
                 } else {
-                    let slot = self.define(&ident.name, kind, ty, statement.span);
+                    let slot = self.define(&ident.name, *kind, ty, statement.span);
                     self.expression(value, ctx);
                     self.activate(slot);
                 }
@@ -623,7 +632,7 @@ impl Compiler {
 
         let name = "/preamble/";
         self.blocks.push(Block::new(name, &tree.modules[0].0));
-        self.stack.push(vec![Variable::new(name.to_string(), Type::Void, 0, Span { line: 0 })]);
+        self.stack.push(vec![Variable::new(name.to_string(), VarKind::Const, Type::Void, 0, Span { line: 0 })]);
         let ctx = Context {
             block_slot: self.blocks.len() - 1,
             frame: self.stack.len() - 1,
@@ -735,7 +744,7 @@ impl Compiler {
                     }
 
                     Definition { ident: Identifier { name, .. }, kind, ty, .. } => {
-                        let var = self.define(name, kind, ty, statement.span);
+                        let var = self.define(name, *kind, ty, statement.span);
                         self.activate(var);
                         let nil = self.constant(Value::Nil);
                         self.add_op(ctx, Span { line: 0 }, nil);
