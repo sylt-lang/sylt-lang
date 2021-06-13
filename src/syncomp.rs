@@ -572,8 +572,6 @@ impl Compiler {
                         self.add_op(ctx, statement.span, Op::AssignIndex);
                     }
                 }
-
-                self.expression(value, ctx);
             }
 
             StatementExpression { value } => {
