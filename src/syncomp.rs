@@ -429,7 +429,9 @@ impl Compiler {
         use StatementKind::*;
 
         match &statement.kind {
-            EmptyStatement => {},
+            Use { .. }
+            | Blob { .. }
+            | EmptyStatement => {}
 
             Print { value } => {
                 self.expression(value, ctx);
@@ -516,12 +518,6 @@ impl Compiler {
                 self.expression(value, ctx);
                 self.add_op(ctx, statement.span, Op::Return);
             }
-
-            Use { .. } => {}
-
-            Blob { .. } => {}
-
-            t => { unimplemented!("{:?}", t); }
         }
     }
 
