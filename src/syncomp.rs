@@ -144,6 +144,20 @@ impl Compiler {
         self.namespace_id_to_path.get(&ctx.namespace).unwrap()
     }
 
+    fn string(&mut self, string: &str) -> usize {
+        if let Some(slot) = self.strings
+            .iter()
+            .enumerate()
+            .find_map(|(i, x)| if x == string { Some(i) } else { None }) {
+            slot
+        } else {
+            let slot = self.strings.len();
+            self.strings.push(string.into());
+            slot
+        }
+    }
+
+
     fn constant(&mut self, value: Value) -> Op {
         let slot = match self.values.entry(value.clone()) {
             Entry::Vacant(e) => {
@@ -350,6 +364,7 @@ impl Compiler {
             Some(Name::Slot(slot)) => {
                 let op = Op::Constant(*slot);
                 self.add_op(ctx, span, op);
+                return ctx;
             },
             Some(Name::Namespace(new_namespace)) => {
                 return Context { namespace: *new_namespace, ..ctx }
@@ -357,6 +372,7 @@ impl Compiler {
             Some(Name::Blob(blob)) => {
                 let op = Op::Constant(*blob);
                 self.add_op(ctx, span, op);
+                return ctx;
             },
             None => {},
         }
@@ -435,8 +451,18 @@ impl Compiler {
 
         match &statement.kind {
             Use { .. }
-            | Blob { .. }
             | EmptyStatement => {}
+
+            Blob { name, fields } => {
+                if let Some(Name::Blob(slot)) = self.namespaces[ctx.namespace].get(name) {
+                    self.blobs[*slot].fields = fields
+                        .iter()
+                        .map(|(k, v)| (k.clone(), self.resolve_type(v, ctx)))
+                        .collect();
+                } else {
+                    error!(self, ctx, statement.span, "No blob with the name '{}' in this namespace", name);
+                }
+            }
 
             Print { value } => {
                 self.expression(value, ctx);
@@ -463,11 +489,18 @@ impl Compiler {
                         self.expression(value, ctx);
                         self.set_identifier(&ident.name, statement.span, ctx);
                     }
-                    Call(_a, _expr) => {
+                    Call(_, _) => {
                         error!(self, ctx, statement.span, "Cannot assign to result from function call");
                     }
-                    Access(_a, _b) => {
-                        unimplemented!("Assignment to accesses is not implemented");
+                    Access(a, b) => {
+                        self.assignable(a, ctx);
+                        if let Read(field) = &b.kind {
+                            self.expression(value, ctx);
+                            let slot = self.string(&field.name);
+                            self.add_op(ctx, b.span, Op::AssignField(slot));
+                        } else {
+                            error!(self, ctx, statement.span, "Can only assign if last access is to a field");
+                        }
                     }
                     Index(a, b) => {
                         self.assignable(a, ctx);
@@ -558,7 +591,7 @@ impl Compiler {
             ..Context::from_namespace(0)
         };
 
-        // println!("{:#?}", tree);
+         println!("{:#?}", tree);
 
         self.extract_globals(&tree);
 
