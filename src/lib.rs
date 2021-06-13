@@ -63,8 +63,14 @@ pub fn tree_compile(args: &Args) -> Result<Prog, Vec<Error>> {
 /// Compiles, links and runs the given file. The supplied functions are callable
 /// external functions.
 pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    let prog = compile(args, functions)?;
-    typechecker::typecheck(&prog, &args)?;
+    let prog = if args.tree_mode {
+        tree_compile(args)
+    } else {
+        compile(args, functions)
+    }?;
+    if !args.tree_mode {
+        typechecker::typecheck(&prog, &args)?;
+    }
     run(&prog, &args)
 }
 
@@ -1070,6 +1076,7 @@ mod tests {
 
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
+                args.tree_mode = true;
                 args.verbosity = if $print { 1 } else { 0 };
                 let res = $crate::run_file(
                     &args,
