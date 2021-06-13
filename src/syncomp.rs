@@ -275,7 +275,7 @@ impl Compiler {
                 let mut param_types = Vec::new();
                 for (ident, ty) in params.iter() {
                     param_types.push(self.resolve_type(&ty, inner_ctx));
-                    let param = self.define(&ident.name, VarKind::Const, ty, ident.span);
+                    let param = self.define(&ident.name, VarKind::Const, ident.span);
                     self.activate(param);
                 }
                 let ret = self.resolve_type(&ret, inner_ctx);
@@ -441,7 +441,7 @@ impl Compiler {
         Type::Void
     }
 
-    fn define(&mut self, name: &str, kind: VarKind, ty: &syntree::Type, span: Span) -> VarSlot {
+    fn define(&mut self, name: &str, kind: VarKind, span: Span) -> VarSlot {
         // TODO(ed): Fix the types
         // TODO(ed): Mutability
         // TODO(ed): Scoping
@@ -482,12 +482,26 @@ impl Compiler {
 
             Definition { ident, kind, ty, value } => {
                 // TODO(ed): Don't use type here - type check the tree first.
+                self.expression(value, ctx);
+
                 if ctx.frame == 0 {
-                    self.expression(value, ctx);
+                    // Global
                     self.set_identifier(&ident.name, statement.span, ctx);
                 } else {
-                    let slot = self.define(&ident.name, *kind, ty, statement.span);
-                    self.expression(value, ctx);
+                    // Local variable
+                    let slot = self.define(&ident.name, *kind, statement.span);
+                    let ty = self.resolve_type(ty, ctx);
+                    let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
+                        if kind.force() {
+                            Op::Define(ty)
+                        } else {
+                            Op::Force(ty)
+                        }
+                    } else {
+                        error!(self, ctx, statement.span, "Failed to add type declaration");
+                        Op::Illegal
+                    };
+                    self.add_op(ctx, statement.span, op);
                     self.activate(slot);
                 }
             }
@@ -745,10 +759,19 @@ impl Compiler {
                     }
 
                     Definition { ident: Identifier { name, .. }, kind, ty, .. } => {
-                        let var = self.define(name, *kind, ty, statement.span);
+                        let var = self.define(name, *kind, statement.span);
                         self.activate(var);
                         let nil = self.constant(Value::Nil);
                         self.add_op(ctx, Span { line: 0 }, nil);
+
+                        let ty = self.resolve_type(ty, ctx);
+                        let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
+                            Op::Force(ty)
+                        } else {
+                            error!(self, ctx, statement.span, "Failed to resolve the type");
+                            Op::Illegal
+                        };
+                        self.add_op(ctx, Span { line: 0 }, op);
                     }
 
                     _ => {

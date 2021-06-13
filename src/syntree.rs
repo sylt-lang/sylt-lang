@@ -54,6 +54,10 @@ impl VarKind {
     pub fn immutable(&self) -> bool {
         matches!(self, VarKind::Const | VarKind::ForceConst)
     }
+
+    pub fn force(&self) -> bool {
+        matches!(self, VarKind::ForceConst | VarKind::ForceMutable)
+    }
 }
 
 
