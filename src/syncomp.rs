@@ -318,8 +318,34 @@ impl Compiler {
 
             In(a, b) => self.bin_op(a, b, &[Op::Contains], expression.span, ctx),
 
-            And(a, b) => self.bin_op(a, b, &[Op::And], expression.span, ctx),
-            Or(a, b)  => self.bin_op(a, b, &[Op::Or], expression.span, ctx),
+            And(a, b) => {
+                self.expression(a, ctx);
+
+                self.add_op(ctx, expression.span, Op::Copy(1));
+                let jump = self.add_op(ctx, expression.span, Op::Illegal);
+                self.add_op(ctx, expression.span, Op::Pop);
+
+                self.expression(b, ctx);
+
+                let op = Op::JmpFalse(self.next_ip(ctx));
+                self.patch(ctx, jump, op);
+            }
+            Or(a, b)  => {
+                self.expression(a, ctx);
+
+                self.add_op(ctx, expression.span, Op::Copy(1));
+                let skip = self.add_op(ctx, expression.span, Op::Illegal);
+                let jump = self.add_op(ctx, expression.span, Op::Illegal);
+
+                let op = Op::JmpFalse(self.next_ip(ctx));
+                self.patch(ctx, skip, op);
+                self.add_op(ctx, expression.span, Op::Pop);
+
+                self.expression(b, ctx);
+                let op = Op::Jmp(self.next_ip(ctx));
+                self.patch(ctx, jump, op);
+
+            }
             Not(a)    => self.un_op(a, &[Op::Neg], expression.span, ctx),
 
             Function { name, params, ret, body } => {

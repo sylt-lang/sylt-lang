@@ -1356,6 +1356,10 @@ mod expression {
         }
         let ctx = expect!(ctx, T::RightBrace, "Expected '}}' after blob initalizer");
 
+        if matches!(ctx.token(), T::Else) {
+            raise_syntax_error!(ctx, "Parsed a blob instance not an if-statement");
+        }
+
         Ok((
             ctx,
             Expression {
