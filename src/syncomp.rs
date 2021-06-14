@@ -194,9 +194,9 @@ impl Compiler {
         }
     }
 
-    fn pop_frame(&mut self, ctx: Context) {
+    fn pop_frame(&mut self, ctx: Context) -> Frame {
         assert_eq!(self.stack.len() - 1, ctx.frame, "Can only pop top stackframe");
-        self.stack.pop();
+        self.stack.pop().unwrap()
     }
 
     fn file_from_context(&self, ctx: Context) -> &str {
@@ -345,8 +345,12 @@ impl Compiler {
                 self.add_op(inner_ctx, body.span, nil);
                 self.add_op(inner_ctx, body.span, Op::Return);
 
+                self.blocks[inner_ctx.block_slot].upvalues = self.pop_frame(inner_ctx)
+                    .upvalues
+                    .into_iter()
+                    .map(|u| (u.parent, u.upupvalue, u.ty))
+                    .collect();
                 let function = Value::Function(Rc::new(Vec::new()), ty, inner_ctx.block_slot);
-                self.pop_frame(inner_ctx);
                 // === Frame end ===
 
                 let function = self.constant(function);
@@ -417,9 +421,7 @@ impl Compiler {
                 return Err(());
             }
         };
-        let slot = self.upvalue(up.clone());
-        let op = Op::ReadUpvalue(slot);
-        self.add_op(ctx, span, op);
+        self.upvalue(up.clone());
         Ok(Lookup::Upvalue(up))
 
     }
@@ -427,12 +429,14 @@ impl Compiler {
     fn read_identifier(&mut self, name: &str, span: Span, ctx: Context) -> Context {
         match self.resolve_and_capture(name, ctx.frame, span, ctx) {
             Ok(Lookup::Upvalue(up)) => {
-                Op::ReadUpvalue(up.slot);
+                let op = Op::ReadUpvalue(up.slot);
+                self.add_op(ctx, span, op);
                 return ctx;
             }
 
             Ok(Lookup::Variable(var)) => {
-                Op::ReadUpvalue(var.slot);
+                let op = Op::ReadLocal(var.slot);
+                self.add_op(ctx, span, op);
                 return ctx;
             }
 
@@ -478,12 +482,14 @@ impl Compiler {
     fn set_identifier(&mut self, name: &str, span: Span, ctx: Context) {
         match self.resolve_and_capture(name, ctx.frame, span, ctx) {
             Ok(Lookup::Upvalue(up)) => {
-                Op::AssignUpvalue(up.slot);
+                let op = Op::AssignUpvalue(up.slot);
+                self.add_op(ctx, span, op);
                 return;
             }
 
             Ok(Lookup::Variable(var)) => {
-                Op::AssignLocal(var.slot);
+                let op = Op::AssignLocal(var.slot);
+                self.add_op(ctx, span, op);
                 return;
             }
 
