@@ -447,7 +447,7 @@ impl Compiler {
                 return Err(());
             }
         };
-        self.upvalue(up.clone());
+        self.upvalue(up.clone(), frame);
         Ok(Lookup::Upvalue(up))
 
     }
@@ -546,8 +546,8 @@ impl Compiler {
         slot
     }
 
-    fn upvalue(&mut self, up: Upvalue) -> usize {
-        let ups = &mut self.stack.last_mut().unwrap().upvalues;
+    fn upvalue(&mut self, up: Upvalue, frame: usize) -> usize {
+        let ups = &mut self.stack[frame].upvalues;
         let slot = ups.len();
         ups.push(up);
         slot
