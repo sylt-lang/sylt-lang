@@ -446,7 +446,7 @@ impl VM {
                     inst => {
                         error!(
                             self,
-                            RuntimeError::TypeError(Op::AssignField(field), vec![Type::from(inst)])
+                            RuntimeError::TypeError(Op::GetField(field), vec![Type::from(inst)])
                         );
                     }
                 }

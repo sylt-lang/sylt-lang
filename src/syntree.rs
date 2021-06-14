@@ -1478,7 +1478,8 @@ fn module(path: &Path, tokens: &Tokens) -> (Vec<PathBuf>, Result<Module, Vec<Err
             Ok((ctx, statement)) => {
                 use StatementKind::*;
                 if let Use { file, .. } = &statement.kind {
-                    use_files.push(format!("{}.sy", file.name).into());
+                    let file = PathBuf::from(format!("{}.sy", file.name));
+                    use_files.push(file);
                 }
                 if !matches!(statement.kind, EmptyStatement) {
                     statements.push(statement);
@@ -1513,11 +1514,13 @@ fn module(path: &Path, tokens: &Tokens) -> (Vec<PathBuf>, Result<Module, Vec<Err
 pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
     let mut visited = HashSet::new();
     let mut to_visit = Vec::new();
-    to_visit.push(path.to_path_buf());
+    let root = path.parent().unwrap();
+    to_visit.push(PathBuf::from(path.file_name().unwrap()));
 
     let mut modules = Vec::new();
     let mut errors = Vec::new();
     while let Some(file) = to_visit.pop() {
+        let file = root.join(file);
         if visited.contains(&file) {
             continue;
         }
@@ -1531,7 +1534,7 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
                 to_visit.append(&mut next);
             }
             Err(_) => {
-                errors.push(Error::FileNotFound(path.to_path_buf()));
+                errors.push(Error::FileNotFound(file.to_path_buf()));
             }
         }
         visited.insert(file);
