@@ -513,9 +513,9 @@ pub struct UpValue {
 }
 
 impl UpValue {
-    fn new(value: usize) -> Self {
+    fn new(slot: usize) -> Self {
         Self {
-            slot: value,
+            slot,
             value: Value::Nil,
         }
     }
