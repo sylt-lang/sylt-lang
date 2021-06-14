@@ -1,0 +1,17 @@
+c :: fn -> fn -> int {
+    b := 2
+    a :: fn -> int {
+        b += 1
+        ret b
+    }
+    ret a
+}
+
+start :: fn {
+    a :: c!
+    3 <=> a!
+    4 <=> a!
+    a :: c!
+    3 <=>  a!
+    4 <=>  a!
+}
