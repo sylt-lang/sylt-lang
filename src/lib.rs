@@ -68,9 +68,7 @@ pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(
     } else {
         compile(args, functions)
     }?;
-    if !args.tree_mode {
-        typechecker::typecheck(&prog, &args)?;
-    }
+    typechecker::typecheck(&prog, &args)?;
     run(&prog, &args)
 }
 
@@ -941,7 +939,7 @@ impl Block {
         if let Type::Function(ref args, _) = self.ty {
             args
         } else {
-            unreachable!()
+            unreachable!();
         }
     }
 

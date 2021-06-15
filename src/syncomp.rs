@@ -867,7 +867,9 @@ impl Compiler {
             .collect();
 
         let name = "/preamble/";
-        self.blocks.push(Block::new(name, &tree.modules[0].0));
+        let mut block = Block::new_tree(name, 0, &tree.modules[0].0);
+        block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
+        self.blocks.push(block);
         self.frames.push(Frame::new(name, Span { line: 0 }));
         let mut ctx = Context {
             block_slot: self.blocks.len() - 1,
@@ -892,6 +894,10 @@ impl Compiler {
         self.add_op(ctx, module.span, Op::Return);
 
         self.pop_frame(ctx);
+
+        for blob in self.blobs.iter() {
+            println!("Blob: {:?}", blob);
+        }
 
         if self.errors.is_empty() {
             Ok(crate::Prog {

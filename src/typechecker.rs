@@ -52,9 +52,8 @@ pub struct VM {
 }
 
 // Checks the program for type errors.
-pub(crate) fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
+pub fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
     let (globals, mut errors) = typecheck_block(Rc::clone(&prog.blocks[0]), prog, Vec::new(), &args);
-    println!("{:?}", globals);
     for block in prog.blocks.iter().skip(1) {
         errors.append(
             &mut typecheck_block(Rc::clone(block), prog, globals.clone(), &args).1
