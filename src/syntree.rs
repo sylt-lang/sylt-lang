@@ -94,7 +94,9 @@ pub enum StatementKind {
 
     /// Defines a new variable.
     ///
-    /// `a := <expression>`.
+    /// Example: `a := <expression>`.
+    ///
+    /// Valid definition operators are `::`, `:=` and `: <type> =`.
     Definition {
         ident: Identifier,
         kind: VarKind,
@@ -161,25 +163,27 @@ pub struct Identifier {
 
 /// The different kinds of [Assignable]s.
 ///
+/// # Example
+///
 /// The recursive structure means that `a[2].b(1).c(2, 3)` is evaluated to
 /// ```ignored
 /// Access(
 ///     Index(
-///         Read(a), 2),
-///         Access(
-///             Call(
-///                 Read(b), [1]
-///             ),
-///             Call(
-///                 Read(c), [2, 3]
-///             )
+///         Read(a), 2
+////    ),
+///     Access(
+///         Call(
+///             Read(b), [1]
+///         ),
+///         Call(
+///             Read(c), [2, 3]
 ///         )
 ///     )
+/// )
 /// ```
 #[derive(Debug, Clone)]
 pub enum AssignableKind {
     Read(Identifier),
-    /// A function call.
     Call(Box<Assignable>, Vec<Expression>),
     Access(Box<Assignable>, Box<Assignable>),
     Index(Box<Assignable>, Box<Expression>),
@@ -188,7 +192,8 @@ pub enum AssignableKind {
 /// Something that can be assigned to. The assignable value can be read if the
 /// assignable is in an expression. Contains any [AssignableKind].
 ///
-/// Note that something like `a = b` will be evaluated to
+/// Note that assignables can occur both in the left hand side and the right hand
+/// side of assignment statements, so something like `a = b` will be evaluated as
 /// ```ignored
 /// Statement::Assignment(
 ///     Assignable::Read(a),
@@ -203,12 +208,11 @@ pub struct Assignable {
 
 /// The different kinds of [Expression]s.
 ///
-/// Expressions are recursive and end in some kind of value. Values are
-/// expressions as well.
+/// Expressions are recursive and evaluate to some kind of value.
 #[derive(Debug, Clone)]
 pub enum ExpressionKind {
-    /// Read from an [Assignable]. Variables, function calls, modules, blobs,
-    /// lists and tuples end up here.
+    /// Read from an [Assignable]. Variables, function calls, module accesses,
+    /// blob fields, list indexing, tuple indexing and dict indexing end up here.
     Get(Assignable),
 
     /// `a + b`
@@ -285,9 +289,9 @@ pub struct Expression {
 
 #[derive(Debug, Clone)]
 pub enum TypeKind {
-    /// An unspecified type that is left to the type checker.
+    /// An unspecified type that the type checker infers.
     Implied,
-    /// A specified type by the user.
+    /// A specified "standard" type like float and int.
     Resolved(RuntimeType),
     /// I.e. blobs.
     UserDefined(String),
@@ -305,7 +309,7 @@ pub enum TypeKind {
     Dict(Box<Type>, Box<Type>),
 }
 
-/// The constituting parts of the type system. Contains any [TypeKind].
+/// A parsed type. Contains any [TypeKind].
 #[derive(Debug, Clone)]
 pub struct Type {
     span: Span,
@@ -322,7 +326,7 @@ type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>, Vec<Error>)>;
 pub struct Context<'a> {
     /// All tokens to be parsed.
     pub tokens: &'a Tokens,
-    /// The current line number.
+    /// The index of the curren token in the tokens slice.
     pub curr: usize,
     /// The file we're currently parsing.
     pub file: &'a Path,
@@ -349,19 +353,19 @@ impl<'a> Context<'a> {
         self.span().line
     }
 
-    /// Move to the next token.
+    /// Move to the next nth token.
     fn skip(&self, n: usize) -> Self {
         let mut new = *self;
         new.curr += n;
         new
     }
 
-    /// Peek the current [Token] and position.
+    /// Return the current [Token] and line number.
     fn peek(&self) -> &(T, usize) {
         self.tokens.get(self.curr).unwrap_or(&(T::EOF, 0))
     }
 
-    /// Peek the current [Token].
+    /// Return the current [Token].
     fn token(&self) -> &T {
         &self.peek().0
     }
@@ -372,9 +376,10 @@ impl<'a> Context<'a> {
     }
 }
 
+//TODO(gu) None if no message?
+
 /// Construct a syntax error at the current token with a message.
 macro_rules! syntax_error {
-    //TODO None if no message?
     ($ctx:expr, $( $msg:expr ),* ) => {
         {
             let msg = format!($( $msg ),*).into();
@@ -390,7 +395,6 @@ macro_rules! syntax_error {
 
 /// Raise a syntax error at the current token with a message.
 macro_rules! raise_syntax_error {
-    //TODO None if no message?
     ($ctx:expr, $( $msg:expr ),* ) => {
         return Err(($ctx.skip(1), vec![syntax_error!($ctx, $( $msg ),*)]))
     };
@@ -425,7 +429,7 @@ macro_rules! skip_if {
     };
 }
 
-/// Parse a [Type] definition. `fn int, int, bool -> bool.
+/// Parse a [Type] definition, e.g. `fn int, int, bool -> bool`.
 fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     use RuntimeType::{Bool, Float, Int, String, Void};
     use TypeKind::*;
@@ -532,7 +536,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         T::LeftBrace => {
             // { a } -> set
             // { a: b } -> dict
-            // This means we can pass the first type unambiguously.
+            // This means we can parse the first type unambiguously.
             let (ctx, ty) = parse_type(ctx.skip(1))?;
             if matches!(ctx.token(), T::Colon) {
                 // Dict, parse another type.
@@ -647,7 +651,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx, Ret { value })
         }
 
-        // `loop <expression> <statement>`, i.e. `loop a < 10 { a += 1 }`
+        // `loop <expression> <statement>`, e.g. `loop a < 10 { a += 1 }`
         [(T::Loop, _), ..] => {
             let (ctx, condition) = expression(ctx.skip(1))?;
             let (ctx, body) = statement(ctx)?;
@@ -734,64 +738,91 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx, Blob { name, fields })
         }
 
-        // Variable definition: `a :: 1`, `a := 2` or `a : int = 3`. Merged since they're kinda similar.
-        [(T::Identifier(name), _), (T::ColonColon, _), ..]
-        | [(T::Identifier(name), _), (T::ColonEqual, _), ..]
-        | [(T::Identifier(name), _), (T::Colon, _), ..] => {
+        // Constant declaration, e.g. `a :: 1`.
+        [(T::Identifier(name), _), (T::ColonColon, _), ..] => {
             let ident = Identifier {
                 name: name.clone(),
                 span: ctx.span(),
             };
-            let ctx = ctx.skip(1);
-            // Branch depending on the type of definition.
-            let (ctx, kind, ty) = match ctx.token() {
-                // Const
-                T::ColonColon => (
-                    ctx.skip(1),
-                    VarKind::Const,
-                    Type {
-                        span: ctx.span(),
-                        kind: TypeKind::Implied,
-                    },
-                ),
-                // Mutable
-                T::ColonEqual => (
-                    ctx.skip(1),
-                    VarKind::Mutable,
-                    Type {
-                        span: ctx.span(),
-                        kind: TypeKind::Implied,
-                    },
-                ),
-                // Typed
-                T::Colon => {
-                    let ctx = ctx.skip(1);
-                    let forced = matches!(ctx.token(), T::Bang); // !int
-                    let ctx = skip_if!(ctx, T::Bang);
-                    let (ctx, ty) = parse_type(ctx)?;
-                    let kind = match (ctx.token(), forced) {
-                        (T::Colon, true) => VarKind::ForceConst,
-                        (T::Equal, true) => VarKind::ForceMutable,
-                        (T::Colon, false) => VarKind::Const,
-                        (T::Equal, false) => VarKind::Mutable,
-                        (t, _) => {
-                            raise_syntax_error!(
-                                ctx,
-                                "Expected ':' or '=' for definition, but got '{:?}'",
-                                t
-                            );
-                        }
-                    };
-                    (ctx.skip(1), kind, ty)
-                }
+            // Skip identifier and `::`.
+            let ctx = ctx.skip(2);
 
-                //TODO unreachable. Be the change you want to see in the world.
-                _ => {
-                    raise_syntax_error!(ctx, "Not a definition statement");
-                }
+            // The value to assign.
+            let (ctx, value) = expression(ctx)?;
+
+            (
+                ctx,
+                Definition {
+                    ident,
+                    kind: VarKind::Const,
+                    ty: Type {
+                        span: ctx.span(),
+                        kind: TypeKind::Implied,
+                    },
+                    value,
+                },
+            )
+        }
+
+        // Mutable declaration, e.g. `b := 2`.
+        [(T::Identifier(name), _), (T::ColonEqual, _), ..] => {
+            let ident = Identifier {
+                name: name.clone(),
+                span: ctx.span(),
             };
+            // Skip identifier and `:=`.
+            let ctx = ctx.skip(2);
+
+            // The value to assign.
+            let (ctx, value) = expression(ctx)?;
+
+            (
+                ctx,
+                Definition {
+                    ident,
+                    kind: VarKind::Mutable,
+                    ty: Type {
+                        span: ctx.span(),
+                        kind: TypeKind::Implied,
+                    },
+                    value,
+                },
+            )
+        }
+
+        // Variable declaration with specified type, e.g. `c : int = 3` or `b : int | bool : false`.
+        [(T::Identifier(name), _), (T::Colon, _), ..] => {
+            let ident = Identifier {
+                name: name.clone(),
+                span: ctx.span(),
+            };
+            // Skip identifier.
+            let ctx = ctx.skip(1);
+
+            let (ctx, kind, ty) = {
+                let forced = matches!(ctx.token(), T::Bang); // !int
+                let ctx = skip_if!(ctx, T::Bang);
+                let (ctx, ty) = parse_type(ctx)?;
+                let kind = match (ctx.token(), forced) {
+                    (T::Colon, true) => VarKind::ForceConst,
+                    (T::Equal, true) => VarKind::ForceMutable,
+                    (T::Colon, false) => VarKind::Const,
+                    (T::Equal, false) => VarKind::Mutable,
+                    (t, _) => {
+                        raise_syntax_error!(
+                            ctx,
+                            "Expected ':' or '=' for definition, but got '{:?}'",
+                            t
+                        );
+                    }
+                };
+                // Skip `:` or `=`.
+                (ctx.skip(1), kind, ty)
+            };
+
             // The value to define the variable to.
             let (ctx, value) = expression(ctx)?;
+
             (
                 ctx,
                 Definition {
@@ -889,7 +920,6 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
     };
 
     use AssignableKind::Call;
-    //TODO ?
     let result = Assignable {
         span,
         kind: Call(Box::new(callee), args),
@@ -944,7 +974,7 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
     use AssignableKind::*;
     let span = ctx.span();
 
-    // Get the first identifier.
+    // Get the identifier.
     let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
         Assignable {
             span,
@@ -1040,7 +1070,7 @@ mod expression {
             }
         };
 
-        // Parse the function statement. Usually a block.
+        // Parse the function statement. Usually a block but it's not currently forced.
         let (ctx, statement) = statement(ctx)?;
         let function = Function {
             params,
@@ -1059,7 +1089,7 @@ mod expression {
 
     /// Parse an expression until we reach a token with higher precedence.
     fn parse_precedence<'t>(ctx: Context<'t>, prec: Prec) -> ParseResult<'t, Expression> {
-        // Initial value, e.g. a number value, assignable, ..
+        // Initial value, e.g. a number value, assignable, ...
         let (mut ctx, mut expr) = match prefix(ctx) {
             Ok(ret) => ret,
             Err((ctx, mut errs)) => {
@@ -1128,7 +1158,7 @@ mod expression {
         Ok((ctx, Expression { span, kind }))
     }
 
-    /// Parse something that begins at the start of a statement.
+    /// Parse something that begins at the start of a expression.
     fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         match ctx.token() {
             T::LeftParen => grouping_or_tuple(ctx),
@@ -1139,7 +1169,7 @@ mod expression {
             T::Minus | T::Bang => unary(ctx),
 
             T::Identifier(_) => {
-                // Blob declarations are expressions.
+                // Blob initializations are expressions.
                 if let Ok(result) = blob(ctx) {
                     Ok(result)
                 } else {
