@@ -10,19 +10,13 @@ use std::path::{Path, PathBuf};
 
 type T = Token;
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 /// A location in a file containing source code.
 pub struct Span {
     // TODO(ed): Do this more intelligent, so
     // we can show ranges. Maybe even go back
     // to offsets from start of the file.
     pub line: usize,
-}
-
-impl Debug for Span {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "#{}", self.line)
-    }
 }
 
 /// Contains modules.
