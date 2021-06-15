@@ -446,7 +446,7 @@ impl VM {
                     inst => {
                         error!(
                             self,
-                            RuntimeError::TypeError(Op::AssignField(field), vec![Type::from(inst)])
+                            RuntimeError::TypeError(Op::GetField(field), vec![Type::from(inst)])
                         );
                     }
                 }
@@ -457,11 +457,11 @@ impl VM {
                 match inst {
                     Value::Instance(ty, values) => {
                         let ty = &self.blobs[ty];
-                        let field_name = self.string(field).clone();
-                        if !ty.fields.contains_key(&field_name) {
-                            error!(self, RuntimeError::UnknownField(ty.name.to_string(), field_name));
+                        let field = self.string(field).clone();
+                        if !ty.fields.contains_key(&field) {
+                            error!(self, RuntimeError::UnknownField(ty.name.to_string(), field));
                         }
-                        (*values).borrow_mut().insert(field_name, value);
+                        (*values).borrow_mut().insert(field, value);
                     }
                     inst => {
                         error!(

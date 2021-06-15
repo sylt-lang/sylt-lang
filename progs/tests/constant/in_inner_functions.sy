@@ -1,6 +1,6 @@
 start :: fn {
 
-    q : int = 0
+    q := 0
 
     f :: fn -> fn -> void {
         g :: fn {

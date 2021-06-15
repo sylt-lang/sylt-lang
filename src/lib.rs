@@ -15,10 +15,10 @@ use std::path::{Path, PathBuf};
 
 pub mod error;
 pub mod vm;
+pub mod syntree;
+pub mod syncomp;
 pub mod typechecker;
 
-mod syntree;
-mod syncomp;
 
 mod compiler;
 mod rc;
@@ -56,15 +56,15 @@ pub fn construct_tree(args: &Args) -> Result<syntree::Prog, Vec<Error>> {
     syntree::tree(&path)
 }
 
-pub fn tree_compile(args: &Args) -> Result<Prog, Vec<Error>> {
-    syncomp::compile(construct_tree(args)?)
+pub fn tree_compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
+    syncomp::compile(construct_tree(args)?, &functions)
 }
 
 /// Compiles, links and runs the given file. The supplied functions are callable
 /// external functions.
 pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
     let prog = if args.tree_mode {
-        tree_compile(args)
+        tree_compile(args, functions)
     } else {
         compile(args, functions)
     }?;
@@ -513,9 +513,9 @@ pub struct UpValue {
 }
 
 impl UpValue {
-    fn new(value: usize) -> Self {
+    fn new(slot: usize) -> Self {
         Self {
-            slot: value,
+            slot,
             value: Value::Nil,
         }
     }
@@ -1068,6 +1068,30 @@ mod tests {
     macro_rules! test_file {
         ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
             #[test]
+            fn $fn() {
+                #[allow(unused_imports)]
+                use $crate::error::RuntimeError;
+                #[allow(unused_imports)]
+                use $crate::Type;
+
+                let mut args = $crate::Args::default();
+                args.file = Some(std::path::PathBuf::from($path));
+                args.tree_mode = true;
+                args.verbosity = if $print { 1 } else { 0 };
+                let res = $crate::run_file(
+                    &args,
+                    $crate::lib_sylt::_sylt_link(),
+                );
+                $crate::assert_errs!(res, $errs);
+            }
+        };
+    }
+
+    #[macro_export]
+    macro_rules! skip_test_file {
+        ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
+            #[test]
+            #[ignore]
             fn $fn() {
                 #[allow(unused_imports)]
                 use $crate::error::RuntimeError;

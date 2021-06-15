@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::syntree;
 use syntree::*;
-use crate::{Op, Block, Value, Type, Blob};
+use crate::{Op, Block, Value, Type, Blob, RustFunction};
 use std::collections::{hash_map::Entry, HashMap};
 use crate::rc::Rc;
 use std::cell::RefCell;
@@ -9,26 +9,69 @@ use std::path::PathBuf;
 
 type VarSlot = usize;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Variable {
     name: String,
     ty: Type,
     slot: usize,
     line: usize,
+    kind: VarKind,
 
-    // TODO(ed): Captured
+    captured: bool,
     active: bool,
 }
 
 impl Variable {
-    fn new(name: String, ty: Type, slot: usize, span: Span) -> Self {
+    fn new(name: String, kind: VarKind, ty: Type, slot: usize, span: Span) -> Self {
         Self {
             name,
             ty,
             slot,
+            kind,
             line: span.line,
 
+            captured: false,
             active: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Upvalue {
+    parent: usize,
+    upupvalue: bool,
+
+    name: String,
+    ty: Type,
+    slot: usize,
+    line: usize,
+    kind: VarKind,
+}
+
+enum Lookup {
+    Upvalue(Upvalue),
+    Variable(Variable),
+}
+
+impl Upvalue {
+    fn capture(var: &Variable) -> Self {
+        Self {
+            parent: var.slot,
+            upupvalue: false,
+
+            name: var.name.clone(),
+            ty: var.ty.clone(),
+            slot: 0,
+            line: var.line,
+            kind: var.kind,
+        }
+    }
+
+    fn loft(up: &Upvalue) -> Self {
+        Self {
+            parent: up.slot,
+            upupvalue: true,
+            ..up.clone()
         }
     }
 }
@@ -59,9 +102,25 @@ type BlobID = usize;
 type BlockID = usize;
 #[derive(Debug, Copy, Clone)]
 enum Name {
-    Slot(ConstantID),
+    Global(ConstantID),
     Blob(BlobID),
     Namespace(NamespaceID),
+}
+
+#[derive(Debug)]
+struct Frame {
+    variables: Vec<Variable>,
+    upvalues: Vec<Upvalue>,
+}
+
+impl Frame {
+    fn new(name: &str, span: Span) -> Self {
+        let variables = vec![Variable::new(name.to_string(), VarKind::Const, Type::Void, 0, span)];
+        Self {
+            variables,
+            upvalues: Vec::new(),
+        }
+    }
 }
 
 struct Compiler {
@@ -71,7 +130,8 @@ struct Compiler {
     namespaces: Vec<Namespace>,
     blobs: Vec<Blob>,
 
-    stack: Vec<Vec<Variable>>,
+    frames: Vec<Frame>,
+    functions: HashMap<String, (usize, RustFunction)>,
 
     panic: bool,
     errors: Vec<Error>,
@@ -83,13 +143,13 @@ struct Compiler {
 }
 
 macro_rules! error {
-    ($compiler:expr, $namespace:expr, $span:expr, $( $msg:expr ),+ ) => {
+    ($compiler:expr, $ctx:expr, $span:expr, $( $msg:expr ),+ ) => {
         if !$compiler.panic {
             $compiler.panic = true;
 
             let msg = format!($( $msg ),*).into();
             let err = Error::CompileError {
-                file: $compiler.file_from_context($namespace).into(),
+                file: $compiler.file_from_namespace($ctx.namespace).into(),
                 line: $span.line,
                 message: Some(msg),
             };
@@ -107,7 +167,8 @@ impl Compiler {
             namespaces: Vec::new(),
             blobs: Vec::new(),
 
-            stack: Vec::new(),
+            frames: Vec::new(),
+            functions: HashMap::new(),
 
             panic: false,
             errors: Vec::new(),
@@ -120,27 +181,40 @@ impl Compiler {
     }
 
     fn push_frame_and_block(&mut self, ctx: Context, name: &str, span: Span) -> Context {
-        let file_as_path = PathBuf::from(self.file_from_context(ctx));
+        let file_as_path = PathBuf::from(self.file_from_namespace(ctx.namespace));
 
         let block = Block::new_tree(&name, ctx.namespace, &file_as_path);
         self.blocks.push(block);
 
-        self.stack.push(vec![Variable::new(name.to_string(), Type::Void, 0, span)]);
+        self.frames.push(Frame::new(name, span));
         Context {
             block_slot: self.blocks.len() - 1,
-            frame: self.stack.len() - 1,
+            frame: self.frames.len() - 1,
             ..ctx
         }
     }
 
-    fn pop_frame(&mut self, ctx: Context) {
-        assert_eq!(self.stack.len() - 1, ctx.frame, "Can only pop top stackframe");
-        self.stack.pop();
+    fn pop_frame(&mut self, ctx: Context) -> Frame {
+        assert_eq!(self.frames.len() - 1, ctx.frame, "Can only pop top stackframe");
+        self.frames.pop().unwrap()
     }
 
-    fn file_from_context(&self, ctx: Context) -> &str {
-        self.namespace_id_to_path.get(&ctx.namespace).unwrap()
+    fn file_from_namespace(&self, namespace: usize) -> &str {
+        self.namespace_id_to_path.get(&namespace).unwrap()
     }
+
+    fn string(&mut self, string: &str) -> usize {
+        self.strings
+            .iter()
+            .enumerate()
+            .find_map(|(i, x)| if x == string { Some(i) } else { None })
+            .unwrap_or_else(|| {
+                let slot = self.strings.len();
+                self.strings.push(string.into());
+                slot
+            })
+    }
+
 
     fn constant(&mut self, value: Value) -> Op {
         let slot = match self.values.entry(value.clone()) {
@@ -169,12 +243,12 @@ impl Compiler {
         self.blocks.get_mut(ctx.block_slot).expect("Invalid block id").curr()
     }
 
-    fn assignable(&mut self, ass: &Assignable, ctx: Context) -> Context {
+    fn assignable(&mut self, ass: &Assignable, ctx: Context) -> Option<usize> {
         use AssignableKind::*;
 
         match &ass.kind {
             Read(ident) => {
-                self.read_identifier(&ident.name, ass.span, ctx)
+                return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
             }
             Call(a, expr) => {
                 self.assignable(a, ctx);
@@ -182,20 +256,22 @@ impl Compiler {
                     self.expression(expr, ctx);
                 }
                 self.add_op(ctx, ass.span, Op::Call(expr.len()));
-                ctx
             }
-            Access(a, b) => {
-                let ctx = self.assignable(a, ctx);
-                self.assignable(b, ctx);
-                ctx
+            Access(a, field) => {
+                if let Some(namespace) = self.assignable(a, ctx) {
+                    return self.read_identifier(&field.name, field.span, ctx, namespace);
+                } else {
+                    let slot = self.string(&field.name);
+                    self.add_op(ctx, field.span, Op::GetField(slot));
+                }
             }
             Index(a, b) => {
                 self.assignable(a, ctx);
                 self.expression(b, ctx);
                 self.add_op(ctx, ass.span, Op::GetIndex);
-                ctx
             }
         }
+        None
     }
 
     fn un_op(&mut self, a: &Expression, ops: &[Op], span: Span, ctx: Context) {
@@ -242,13 +318,38 @@ impl Compiler {
 
             In(a, b) => self.bin_op(a, b, &[Op::Contains], expression.span, ctx),
 
-            And(a, b) => self.bin_op(a, b, &[Op::And], expression.span, ctx),
-            Or(a, b)  => self.bin_op(a, b, &[Op::Or], expression.span, ctx),
+            And(a, b) => {
+                self.expression(a, ctx);
+
+                self.add_op(ctx, expression.span, Op::Copy(1));
+                let jump = self.add_op(ctx, expression.span, Op::Illegal);
+                self.add_op(ctx, expression.span, Op::Pop);
+
+                self.expression(b, ctx);
+
+                let op = Op::JmpFalse(self.next_ip(ctx));
+                self.patch(ctx, jump, op);
+            }
+            Or(a, b)  => {
+                self.expression(a, ctx);
+
+                self.add_op(ctx, expression.span, Op::Copy(1));
+                let skip = self.add_op(ctx, expression.span, Op::Illegal);
+                let jump = self.add_op(ctx, expression.span, Op::Illegal);
+
+                let op = Op::JmpFalse(self.next_ip(ctx));
+                self.patch(ctx, skip, op);
+                self.add_op(ctx, expression.span, Op::Pop);
+
+                self.expression(b, ctx);
+                let op = Op::Jmp(self.next_ip(ctx));
+                self.patch(ctx, jump, op);
+
+            }
             Not(a)    => self.un_op(a, &[Op::Neg], expression.span, ctx),
 
             Function { name, params, ret, body } => {
-                // TODO(ed): Better name
-                let file = self.file_from_context(ctx);
+                let file = self.file_from_namespace(ctx.namespace);
                 let name = format!("fn {} {}:{}", name, file, expression.span.line);
 
                 // === Frame begin ===
@@ -256,7 +357,7 @@ impl Compiler {
                 let mut param_types = Vec::new();
                 for (ident, ty) in params.iter() {
                     param_types.push(self.resolve_type(&ty, inner_ctx));
-                    let param = self.define(&ident.name, &VarKind::Const, ty, ident.span);
+                    let param = self.define(&ident.name, VarKind::Const, ident.span);
                     self.activate(param);
                 }
                 let ret = self.resolve_type(&ret, inner_ctx);
@@ -270,9 +371,12 @@ impl Compiler {
                 self.add_op(inner_ctx, body.span, nil);
                 self.add_op(inner_ctx, body.span, Op::Return);
 
-                // TODO(ed): Pop the stackframe here
+                self.blocks[inner_ctx.block_slot].upvalues = self.pop_frame(inner_ctx)
+                    .upvalues
+                    .into_iter()
+                    .map(|u| (u.parent, u.upupvalue, u.ty))
+                    .collect();
                 let function = Value::Function(Rc::new(Vec::new()), ty, inner_ctx.block_slot);
-                self.pop_frame(inner_ctx);
                 // === Frame end ===
 
                 let function = self.constant(function);
@@ -310,126 +414,166 @@ impl Compiler {
         }
     }
 
-    fn resolve_read_for_frame(&mut self,
+    fn resolve_and_capture(&mut self,
         name: &str,
         frame: usize,
         span: Span,
-        ctx: Context,
-    ) -> Result<(), ()> {
-        if frame == 0 {
-            for (slot, var) in self.stack[0].iter().enumerate() {
-                if var.active && &var.name == name {
-                    let op = Op::ReadGlobal(slot);
-                    self.add_op(ctx, span, op);
-                    return Ok(());
-                }
-            }
-        } else {
-            for (slot, var) in self.stack[frame].iter_mut().enumerate().rev() {
-                if var.active && &var.name == name {
-                    assert!(frame == ctx.frame, "Upvalues aren't implemented");
-                    let op = Op::ReadLocal(slot);
-                    self.add_op(ctx, span, op);
-                    return Ok(());
-                }
+    ) -> Result<Lookup, ()> {
+        // Frame 0 has globals which cannot be captured.
+        if frame == 0 { return Err(()) }
+
+        // TODO(ed): Maybe remove the clones?
+        for var in self.frames[frame].variables.iter().rev() {
+            if &var.name == name && var.active {
+                return Ok(Lookup::Variable(var.clone()));
             }
         }
-        Err(())
+
+        for up in self.frames[frame].upvalues.iter().rev() {
+            if &up.name == name {
+                return Ok(Lookup::Upvalue(up.clone()));
+            }
+        }
+
+        let up = match self.resolve_and_capture(name, frame - 1, span) {
+            Ok(Lookup::Upvalue(up)) => {
+                Upvalue::loft(&up)
+            }
+            Ok(Lookup::Variable(var)) => {
+                Upvalue::capture(&var)
+            }
+            _ => {
+                return Err(());
+            }
+        };
+        self.upvalue(up.clone(), frame);
+        Ok(Lookup::Upvalue(up))
+
     }
 
-    fn read_identifier(&mut self, name: &str, span: Span, ctx: Context) -> Context {
-        for frame in (0..ctx.frame+1).into_iter().rev() {
-            if self.resolve_read_for_frame(name, frame, span, ctx).is_ok() {
-                return ctx;
-            }
-        }
-
-        match self.namespaces[ctx.namespace].get(name) {
-            Some(Name::Slot(slot)) => {
-                let op = Op::Constant(*slot);
+    fn read_identifier(&mut self, name: &str, span: Span, ctx: Context, namespace: usize) -> Option<usize> {
+        match self.resolve_and_capture(name, ctx.frame, span) {
+            Ok(Lookup::Upvalue(up)) => {
+                let op = Op::ReadUpvalue(up.slot);
                 self.add_op(ctx, span, op);
-                ctx
-            },
-            Some(Name::Namespace(new_namespace)) => {
-                Context { namespace: *new_namespace, ..ctx }
-            },
-            Some(Name::Blob(blob)) => {
-                let op = Op::Constant(*blob);
+            }
+
+            Ok(Lookup::Variable(var)) => {
+                let op = Op::ReadLocal(var.slot);
                 self.add_op(ctx, span, op);
-                ctx
-            },
-            None => {
-                error!(self, ctx, span, "No active variable called '{}' could be found", name);
-                ctx
-            },
-        }
-    }
-
-    fn resolve_set_for_frame(&mut self,
-        name: &str,
-        frame: usize,
-        span: Span,
-        ctx: Context,
-    ) -> Result<(), ()> {
-        // TODO(ed): Mutability check
-        if frame == 0 {
-            for (slot, var) in self.stack[0].iter().enumerate() {
-                if var.active && &var.name == name {
-                    let op = Op::AssignGlobal(slot);
-                    self.add_op(ctx, span, op);
-                    return Ok(());
-                }
             }
-        } else {
-            for (slot, var) in self.stack[frame].iter_mut().enumerate().rev() {
-                if var.active && &var.name == name {
-                    assert!(frame == ctx.frame, "Upvalues aren't implemented");
-                    let op = Op::AssignLocal(slot);
-                    self.add_op(ctx, span, op);
-                    return Ok(());
+
+            Err(()) => {
+                match self.namespaces[namespace].get(name) {
+                    Some(Name::Global(slot)) => {
+                        let op = Op::ReadGlobal(*slot);
+                        self.add_op(ctx, span, op);
+                    },
+                    Some(Name::Blob(blob)) => {
+                        let op = Op::Constant(*blob);
+                        self.add_op(ctx, span, op);
+                    },
+                    Some(Name::Namespace(new_namespace)) => {
+                        return Some(*new_namespace)
+                    },
+                    None => {
+                        if let Some((slot, _)) = self.functions.get(name) {
+                            let slot = *slot;
+                            let op = self.constant(Value::ExternFunction(slot));
+                            self.add_op(ctx, span, op);
+                        } else {
+                            error!(self, ctx, span,
+                                "Cannot read '{}' in '{}.sy'",
+                                name,
+                                self.file_from_namespace(namespace));
+                        }
+                    },
                 }
             }
         }
-        Err(())
+        None
     }
 
-
-    fn set_identifier(&mut self, name: &str, span: Span, ctx: Context) {
-        for frame in (0..ctx.frame+1).into_iter().rev() {
-            if self.resolve_set_for_frame(name, frame, span, ctx).is_ok() {
+    fn set_identifier(&mut self, name: &str, span: Span, ctx: Context, namespace: usize) {
+        match self.resolve_and_capture(name, ctx.frame, span) {
+            Ok(Lookup::Upvalue(up)) => {
+                let op = Op::AssignUpvalue(up.slot);
+                self.add_op(ctx, span, op);
                 return;
             }
+
+            Ok(Lookup::Variable(var)) => {
+                let op = Op::AssignLocal(var.slot);
+                self.add_op(ctx, span, op);
+                return;
+            }
+
+            Err(()) => {
+                match self.namespaces[namespace].get(name) {
+                    Some(Name::Global(slot)) => {
+                        let var = &self.frames[0].variables[*slot];
+                        if var.kind.immutable() && ctx.frame != 0 {
+                            error!(self, ctx, span, "Cannot mutate constant '{}'", name);
+                        } else {
+                            let op = Op::AssignGlobal(var.slot);
+                            self.add_op(ctx, span, op);
+                        }
+                    },
+
+                    _ => {
+                        error!(self, ctx, span,
+                            "Cannot assign '{}' in '{}.sy'",
+                            name,
+                            self.file_from_namespace(namespace));
+                    }
+                }
+            }
         }
-        error!(self, ctx, span, "No active assignable value called '{}' could be found", name);
     }
 
-    fn resolve_type(&self, ty: &syntree::Type, ctx: Context) -> Type {
+    fn resolve_type(&self, _ty: &syntree::Type, _ctx: Context) -> Type {
         // TODO(ed): Implement this
         Type::Void
     }
 
-    fn define(&mut self, name: &str, kind: &VarKind, ty: &syntree::Type, span: Span) -> VarSlot {
+    fn define(&mut self, name: &str, kind: VarKind, span: Span) -> VarSlot {
         // TODO(ed): Fix the types
-        // TODO(ed): Mutability
-        // TODO(ed): Scoping
-        let stack = self.stack.last_mut().unwrap();
-        let slot = stack.len();
-        let var = Variable::new(name.to_string(), Type::Unknown, slot, span);
-        stack.push(var);
+        let frame = &mut self.frames.last_mut().unwrap().variables;
+        let slot = frame.len();
+        let var = Variable::new(name.to_string(), kind, Type::Unknown, slot, span);
+        frame.push(var);
+        slot
+    }
+
+    fn upvalue(&mut self, up: Upvalue, frame: usize) -> usize {
+        let ups = &mut self.frames[frame].upvalues;
+        let slot = ups.len();
+        ups.push(up);
         slot
     }
 
     fn activate(&mut self, slot: VarSlot) {
-        self.stack.last_mut().unwrap()[slot].active = true;
+        self.frames.last_mut().unwrap().variables[slot].active = true;
     }
 
     fn statement(&mut self, statement: &Statement, ctx: Context) {
         use StatementKind::*;
+        self.panic = false;
 
         match &statement.kind {
             Use { .. }
-            | Blob { .. }
             | EmptyStatement => {}
+
+            Blob { name, fields } => {
+                if let Some(Name::Blob(slot)) = self.namespaces[ctx.namespace].get(name) {
+                    self.blobs[*slot].fields = fields
+                        .iter()
+                        .map(|(k, v)| (k.clone(), self.resolve_type(v, ctx)))
+                        .collect();
+                } else {
+                    error!(self, ctx, statement.span, "No blob with the name '{}' in this namespace", name);
+                }
+            }
 
             Print { value } => {
                 self.expression(value, ctx);
@@ -438,39 +582,88 @@ impl Compiler {
 
             Definition { ident, kind, ty, value } => {
                 // TODO(ed): Don't use type here - type check the tree first.
+                self.expression(value, ctx);
+
                 if ctx.frame == 0 {
-                    self.expression(value, ctx);
-                    self.set_identifier(&ident.name, statement.span, ctx);
+                    // Global
+                    self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
                 } else {
-                    let slot = self.define(&ident.name, kind, ty, statement.span);
-                    self.expression(value, ctx);
+                    // Local variable
+                    let slot = self.define(&ident.name, *kind, statement.span);
+                    let ty = self.resolve_type(ty, ctx);
+                    let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
+                        if kind.force() {
+                            Op::Define(ty)
+                        } else {
+                            Op::Force(ty)
+                        }
+                    } else {
+                        error!(self, ctx, statement.span, "Failed to add type declaration");
+                        Op::Illegal
+                    };
+                    self.add_op(ctx, statement.span, op);
                     self.activate(slot);
                 }
             }
 
-            Assignment { target, value, ..} => {
+            Assignment { target, value, kind } => {
+                use syntree::Op::*;
                 use AssignableKind::*;
+
+                let mutator = |kind| matches!(kind, Add | Sub | Mul | Div);
+
+                let write_mutator_op = |comp: &mut Self, ctx, kind| {
+                    let op = match kind {
+                        Add => { Op::Add }
+                        Sub => { Op::Sub }
+                        Mul => { Op::Mul }
+                        Div => { Op::Div }
+                        Nop => { return; }
+                    };
+                    comp.add_op(ctx, statement.span, op);
+                };
 
                 match &target.kind {
                     Read(ident) => {
+                        if mutator(*kind) {
+                            self.read_identifier(&ident.name, statement.span, ctx, ctx.namespace);
+                        }
                         self.expression(value, ctx);
-                        self.set_identifier(&ident.name, statement.span, ctx);
+
+                        write_mutator_op(self, ctx, *kind);
+
+                        self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
                     }
-                    Call(_a, _expr) => {
+                    Call(_, _) => {
                         error!(self, ctx, statement.span, "Cannot assign to result from function call");
                     }
-                    Access(_a, _b) => {
-                        unimplemented!("Assignment to accesses is not implemented");
+                    Access(a, field) => {
+                        self.assignable(a, ctx);
+                        let slot = self.string(&field.name);
+
+                        if mutator(*kind) {
+                            self.add_op(ctx, statement.span, Op::Copy(1));
+                            self.add_op(ctx, field.span, Op::GetField(slot));
+                        }
+                        self.expression(value, ctx);
+                        write_mutator_op(self, ctx, *kind);
+
+                        self.add_op(ctx, field.span, Op::AssignField(slot));
                     }
                     Index(a, b) => {
                         self.assignable(a, ctx);
                         self.expression(b, ctx);
+
+                        if mutator(*kind) {
+                            self.add_op(ctx, statement.span, Op::Copy(2));
+                            self.add_op(ctx, statement.span, Op::GetIndex);
+                        }
                         self.expression(value, ctx);
+                        write_mutator_op(self, ctx, *kind);
+
                         self.add_op(ctx, statement.span, Op::AssignIndex);
                     }
                 }
-
-                self.expression(value, ctx);
             }
 
             StatementExpression { value } => {
@@ -479,16 +672,20 @@ impl Compiler {
             }
 
             Block { statements } => {
-                let ss = self.stack[ctx.frame].len();
+                let stack_size = self.frames[ctx.frame].variables.len();
 
                 for statement in statements {
                     self.statement(statement, ctx);
                 }
 
-                while ss < self.stack[ctx.frame].len() {
+                while stack_size < self.frames[ctx.frame].variables.len() {
                     // TODO(ed): Upvalues
-                    let _var = self.stack[ctx.frame].pop();
-                    self.add_op(ctx, statement.span, Op::Pop);
+                    let var = self.frames[ctx.frame].variables.pop().unwrap();
+                    if var.captured {
+                        self.add_op(ctx, statement.span, Op::PopUpvalue);
+                    } else {
+                        self.add_op(ctx, statement.span, Op::Pop);
+                    }
                 }
             }
 
@@ -533,29 +730,34 @@ impl Compiler {
         }
     }
 
-    fn compile(mut self, tree: Prog) -> Result<crate::Prog, Vec<Error>> {
+    fn compile(mut self, tree: Prog, functions: &[(String, RustFunction)]) -> Result<crate::Prog, Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
+        self.functions = functions
+            .to_vec()
+            .into_iter()
+            .enumerate()
+            .map(|(i, (s, f))| (s, (i, f)))
+            .collect();
 
         let name = "/preamble/";
         self.blocks.push(Block::new(name, &tree.modules[0].0));
-        self.stack.push(vec![Variable::new(name.to_string(), Type::Void, 0, Span { line: 0 })]);
-        let ctx = Context {
+        self.frames.push(Frame::new(name, Span { line: 0 }));
+        let mut ctx = Context {
             block_slot: self.blocks.len() - 1,
-            frame: self.stack.len() - 1,
+            frame: self.frames.len() - 1,
             ..Context::from_namespace(0)
         };
 
-        // println!("{:#?}", tree);
+        let path_to_namespace_id = self.extract_globals(&tree);
 
-        self.extract_globals(&tree);
-
-        for (_, module) in tree.modules.iter().skip(1) {
+        for (full_path, module) in tree.modules.iter() {
+            let path = full_path.file_stem().unwrap().to_str().unwrap();
+            ctx.namespace = path_to_namespace_id[path];
             self.module(module, ctx);
         }
         let module = &tree.modules[0].1;
-        self.module(module, ctx);
 
-        self.read_identifier("start", Span { line: 0 }, ctx);
+        self.read_identifier("start", Span { line: 0 }, ctx, 0);
         self.add_op(ctx, Span { line: 0 }, Op::Call(0));
 
         let nil = self.constant(Value::Nil);
@@ -567,7 +769,7 @@ impl Compiler {
         if self.errors.is_empty() {
             Ok(crate::Prog {
                 blocks: self.blocks.into_iter().map(|x| Rc::new(RefCell::new(x))).collect(),
-                functions: Vec::new(),
+                functions: functions.iter().map(|(_, f)| *f).collect(),
                 blobs: self.blobs,
                 constants: self.constants,
                 strings: self.strings,
@@ -577,8 +779,7 @@ impl Compiler {
         }
     }
 
-    fn extract_globals(&mut self, tree: &Prog) {
-        // TODO(ed): Check for duplicates
+    fn extract_globals(&mut self, tree: &Prog) -> HashMap<String, usize> {
         let mut path_to_namespace_id = HashMap::new();
         for (full_path, _) in tree.modules.iter() {
             let slot = path_to_namespace_id.len();
@@ -624,7 +825,6 @@ impl Compiler {
                         }
                     }
 
-                    // TODO(ed): Maybe break this out into it's own "type resolution thing?"
                     Blob { name, .. } => {
                         match namespace.entry(name.to_owned()) {
                             Entry::Vacant(_) => {
@@ -650,10 +850,34 @@ impl Compiler {
                     }
 
                     Definition { ident: Identifier { name, .. }, kind, ty, .. } => {
-                        let var = self.define(name, kind, ty, statement.span);
+                        let var = self.define(name, *kind, statement.span);
                         self.activate(var);
+
+                        match namespace.entry(name.to_owned()) {
+                            Entry::Vacant(_) => {
+                                namespace.insert(name.to_owned(), Name::Global(var));
+                            }
+                            Entry::Occupied(_) => {
+                                error!(
+                                    self,
+                                    ctx,
+                                    statement.span,
+                                    "A global variable with the name '{}' already exists", name
+                                );
+                            }
+                        }
+
                         let nil = self.constant(Value::Nil);
                         self.add_op(ctx, Span { line: 0 }, nil);
+
+                        let ty = self.resolve_type(ty, ctx);
+                        let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
+                            Op::Force(ty)
+                        } else {
+                            error!(self, ctx, statement.span, "Failed to resolve the type");
+                            Op::Illegal
+                        };
+                        self.add_op(ctx, Span { line: 0 }, op);
                     }
 
                     _ => {
@@ -663,13 +887,11 @@ impl Compiler {
                 self.namespaces.insert(slot, namespace);
             }
         }
-
-        // TODO(ed): Resolve the types of all blob fields here!
-        // Thank god we're a scripting language - otherwise this would be impossible.
+        path_to_namespace_id
     }
 }
 
 
-pub fn compile(prog: Prog) -> Result<crate::Prog, Vec<Error>> {
-    Compiler::new().compile(prog)
+pub fn compile(prog: Prog, functions: &[(String, RustFunction)]) -> Result<crate::Prog, Vec<Error>> {
+    Compiler::new().compile(prog, functions)
 }

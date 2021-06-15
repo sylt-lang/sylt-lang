@@ -1,0 +1,15 @@
+start :: fn {
+    n := 0
+    a := 3
+    loop a > 0 {
+        b := a
+        loop b > 0 {
+            b -= 1
+            n += 1
+        }
+        a -= 1
+    }
+    // print "N"
+    // print n
+    n <=> 6
+}
