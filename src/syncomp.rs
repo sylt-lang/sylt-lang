@@ -204,16 +204,15 @@ impl Compiler {
     }
 
     fn string(&mut self, string: &str) -> usize {
-        if let Some(slot) = self.strings
+        self.strings
             .iter()
             .enumerate()
-            .find_map(|(i, x)| if x == string { Some(i) } else { None }) {
-            slot
-        } else {
-            let slot = self.strings.len();
-            self.strings.push(string.into());
-            slot
-        }
+            .find_map(|(i, x)| if x == string { Some(i) } else { None })
+            .unwrap_or_else(|| { 
+                let slot = self.strings.len();
+                self.strings.push(string.into());
+                slot
+            })
     }
 
 
