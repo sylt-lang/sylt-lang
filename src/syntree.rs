@@ -313,7 +313,7 @@ pub enum TypeKind {
     /// A specified type by the user.
     Resolved(RuntimeType),
     /// I.e. blobs.
-    UserDefined(String),
+    UserDefined(Assignable),
     /// A type that can be either `a` or `b`.
     Union(Box<Type>, Box<Type>),
     /// `(params, return)`.
@@ -462,7 +462,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             "str" => (ctx.skip(1), Resolved(String)),
             _ => {
                 let (ctx, assignable) = assignable(ctx)?;
-                (ctx, Unresolved(assignable))
+                (ctx, UserDefined(assignable))
             }
         },
 
@@ -994,11 +994,11 @@ fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'
 }
 
 /// Parse an [Assignable].
-/// 
+///
 /// [Assignable]s can be quite complex, e.g. `a[2].b(1).c(2, 3)`. They're parsed
 /// one "step" at a time recursively, so this example will go through three calls
 /// to [assignable].
-/// 
+///
 /// 1. Parse `c(2, 3)` into `Call(Read(c), [2, 3])`.
 /// 2. Parse `b(1).c(2, 3)` into `Access(Call(Read(b), [1]), <parsed c(2, 3)>)`.
 /// 3. Parse `a[2].b(1).c(2, 3)` into `Access(Index(Read(a), 2), <parsed b(1).c(2, 3)>)`.
@@ -1131,7 +1131,7 @@ mod expression {
     }
 
     /// Return a [Token]'s precedence.
-    /// 
+    ///
     /// See the documentation on [Prec] for how to interpret and compare the
     /// variants.
     #[rustfmt::skip]
