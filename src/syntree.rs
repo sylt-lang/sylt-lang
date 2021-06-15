@@ -1394,11 +1394,13 @@ mod expression {
                     break;
                 }
 
+                // Free-standing colon, i.e. "empty dict pair".
                 T::Colon => {
+                    // Only valid if we don't know yet.
                     if let Some(is_dict) = is_dict {
                         raise_syntax_error!(
                             ctx,
-                            "Didn't expect empty dict pair since it has to be a {}",
+                            "Empty dict pair is invalid in a {}",
                             if is_dict { "dict" } else { "set" }
                         );
                     }
@@ -1406,15 +1408,20 @@ mod expression {
                     ctx = ctx.skip(1);
                 }
 
+                // Something that's part of an inner expression.
                 _ => {
+                    // Parse the expression.
                     let (_ctx, expr) = expression(ctx)?;
-                    ctx = _ctx;
+                    ctx = _ctx; // assign to outer
                     exprs.push(expr);
 
+                    // If a) we know we're a dict or b) the next token is a colon, parse the value of the dict.
+                    // Also, if we didn't know previously, store whether we're a dict or not.
                     if *is_dict.get_or_insert_with(|| matches!(ctx.token(), T::Colon)) {
                         ctx = expect!(ctx, T::Colon, "Expected ':' for dict pair");
+                        // Parse value expression.
                         let (_ctx, expr) = expression(ctx)?;
-                        ctx = _ctx;
+                        ctx = _ctx; // assign to outer
                         exprs.push(expr);
                     }
 
@@ -1425,6 +1432,7 @@ mod expression {
 
         ctx = expect!(ctx, T::RightBrace, "Expected '}}'");
 
+        // If we still don't know, assume we're a set.
         let kind = if is_dict.unwrap_or(false) {
             Dict(exprs)
         } else {
@@ -1434,6 +1442,11 @@ mod expression {
         Ok((ctx, Expression { span, kind }))
     }
 
+    /// Parse a single expression.
+    ///
+    /// An expression is either a function expression or a "normal"
+    /// expression that follows precedence rules.
+
     pub fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         match ctx.token() {
             T::Fn => function(ctx),
@@ -1442,27 +1455,42 @@ mod expression {
     }
 }
 
+/// Parse an outer statement.
+///
+/// Currently all statements are valid outer statements.
 fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
     // TODO(ed): Filter for invalid outer statements here.
     statement(ctx)
 }
 
+/// Parses a file's tokens. Returns a list of files it refers to (via `use`s) and
+/// the parsed statements.
+///
+/// # Errors
+///
+/// Returns any errors that occured when parsing the file. Basic error
+/// continuation is performed, so errored statements are skipped until a newline
+/// or EOF.
 fn module(path: &Path, tokens: &Tokens) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
     let mut ctx = Context::new(tokens, path);
     let mut errors = Vec::new();
     let mut use_files = Vec::new();
     let mut statements = Vec::new();
     while !matches!(ctx.token(), T::EOF) {
+        // Ignore newlines.
         if matches!(ctx.token(), T::Newline) {
             ctx = ctx.skip(1);
             continue;
         }
+        // Parse an outer statement.
         ctx = match outer_statement(ctx) {
             Ok((ctx, statement)) => {
                 use StatementKind::*;
+                // Yank `use`s and add it to the used-files list.
                 if let Use { file, .. } = &statement.kind {
                     use_files.push(PathBuf::from(&file.name));
                 }
+                // Only push non-empty statements.
                 if !matches!(statement.kind, EmptyStatement) {
                     statements.push(statement);
                 }
@@ -1493,19 +1521,33 @@ fn module(path: &Path, tokens: &Tokens) -> (Vec<PathBuf>, Result<Module, Vec<Err
     }
 }
 
+/// Parses the contents of a file as well as all files this file refers to and so
+/// on.
+///
+/// Returns the resulting [Program](Prog) (list of [Module]s).
+///
+/// # Errors
+///
+/// Returns any errors that occured when parsing the file(s). Basic error
+/// continuation is performed as documented in [module].
 pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
+    // Files we've already parsed. This ensures circular includes don't parse infinitely.
     let mut visited = HashSet::new();
+    // Files we want to parse but haven't yet.
     let mut to_visit = Vec::new();
     to_visit.push(path.to_path_buf());
 
+    // The resulting modules of files we've parsed.
     let mut modules = Vec::new();
     let mut errors = Vec::new();
     while let Some(file) = to_visit.pop() {
         if visited.contains(&file) {
             continue;
         }
+        // Lex into tokens.
         match file_to_tokens(path) {
             Ok(tokens) => {
+                // Parse the module.
                 let (mut next, result) = module(path, &tokens);
                 match result {
                     Ok(module) => modules.push((file.clone(), module)),
