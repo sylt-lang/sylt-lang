@@ -32,7 +32,7 @@ pub struct Module {
 }
 
 /// Variables can be any combination of `{Force,}{Const,Mutable}`.
-/// 
+///
 /// Forced variable kinds are a signal to the type checker that the type is
 /// assumed and shouldn't be checked.
 #[derive(Debug, Copy, Clone)]
@@ -54,11 +54,11 @@ pub enum Op {
 }
 
 /// The different kinds of [Statement]s.
-/// 
+///
 /// There are both shorter statements like `a = b + 1` as well as longer
 /// statements like `if a { ... } else { ...}`. The variants here include
 /// examples of how they look in the code.
-/// 
+///
 /// Note that this shouldn't be read as a formal language specification.
 #[derive(Debug, Clone)]
 pub enum StatementKind {
@@ -160,7 +160,7 @@ pub struct Identifier {
 }
 
 /// The different kinds of [Assignable]s.
-/// 
+///
 /// The recursive structure means that `a[2].b(1).c(2, 3)` is evaluated to
 /// ```ignored
 /// Access(
@@ -202,7 +202,7 @@ pub struct Assignable {
 }
 
 /// The different kinds of [Expression]s.
-/// 
+///
 /// Expressions are recursive and end in some kind of value. Values are
 /// expressions as well.
 #[derive(Debug, Clone)]
@@ -932,11 +932,11 @@ fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'
 }
 
 /// Parse an [Assignable].
-/// 
+///
 /// [Assignable]s can be quite complex, e.g. `a[2].b(1).c(2, 3)`. They're parsed
 /// one "step" at a time recursively, so this example will go through three calls
 /// to [assignable].
-/// 
+///
 /// 1. Parse `c(2, 3)` into `Call(Read(c), [2, 3])`.
 /// 2. Parse `b(1).c(2, 3)` into `Access(Call(Read(b), [1]), <parsed c(2, 3)>)`.
 /// 3. Parse `a[2].b(1).c(2, 3)` into `Access(Index(Read(a), 2), <parsed b(1).c(2, 3)>)`.
@@ -1080,7 +1080,7 @@ mod expression {
     }
 
     /// Return a [Token]'s precedence.
-    /// 
+    ///
     /// See the documentation on [Prec] for how to interpret and compare the
     /// variants.
     #[rustfmt::skip]
@@ -1161,6 +1161,7 @@ mod expression {
         }
     }
 
+    /// Parse a unary operator followed by an expression, e.g. `-5`.
     fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         let (op, span, ctx) = ctx.eat();
         let (ctx, expr) = parse_precedence(ctx, Prec::Factor)?;
@@ -1177,15 +1178,21 @@ mod expression {
         Ok((ctx, Expression { span, kind }))
     }
 
+    /// Parse an expression starting from an infix operator. Called by `parse_precedence`.
     fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
+        // The infix operator in question.
         let (op, span, ctx) = ctx.eat();
 
+        // The followed expression, parsed until we reach a token with higher precedence.
         let (ctx, rhs) = parse_precedence(ctx, precedence(op).next())?;
 
+        // Left and right of the operator.
         let lhs = Box::new(lhs.clone());
         let rhs = Box::new(rhs);
 
+        // Which expression kind to omit depends on the token.
         let kind = match op {
+            // Simple arithmetic.
             T::Plus => Add(lhs, rhs),
             T::Minus => Sub(lhs, rhs),
             T::Star => Mul(lhs, rhs),
@@ -1197,6 +1204,7 @@ mod expression {
             T::Less => Lt(lhs, rhs),
             T::LessEqual => Lteq(lhs, rhs),
 
+            // Boolean operators.
             T::And => And(lhs, rhs),
             T::Or => Or(lhs, rhs),
 
@@ -1204,31 +1212,29 @@ mod expression {
 
             T::In => In(lhs, rhs),
 
+            // The cool arrow syntax. For example: `a->b(2)` compiles to `b(a, 2)`.
             T::Arrow => {
-                use AssignableKind::*;
-                if let Expression {
-                    kind:
-                        Get(Assignable {
-                            kind: Call(callee, mut args),
-                            ..
-                        }),
-                    span,
-                } = *rhs
-                {
+                use AssignableKind::Call;
+                // Rhs has to be an ExpressionKind::Get(AssignableKind::Call).
+                if let Get(Assignable { kind: Call(callee, mut args), ..  }) = rhs.kind {
+                    // Insert lhs as the first argument.
                     args.insert(0, *lhs);
+                    // Return the new expression.
                     Get(Assignable {
                         kind: Call(callee, args),
-                        span,
+                        span: rhs.span,
                     })
                 } else {
                     raise_syntax_error!(ctx, "Expected a call-expression after '->'");
                 }
             }
 
+            // Unknown infix operator.
             _ => {
                 return Err((ctx, Vec::new()));
             }
         };
+
         Ok((ctx, Expression { span, kind }))
     }
 
@@ -1262,7 +1268,7 @@ mod expression {
                 kind: Tuple(exprs),
             }
         } else {
-            exprs.into_iter().next().unwrap()
+            exprs.remove(0)
         };
         Ok((ctx, result))
     }
