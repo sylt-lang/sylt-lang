@@ -610,15 +610,7 @@ impl Compiler {
                 use syntree::Op::*;
                 use AssignableKind::*;
 
-                let mutator = |kind|
-                    match kind {
-                        Add
-                        | Sub
-                        | Mul
-                        | Div => true,
-                        Nop => false,
-                    }
-                ;
+                let mutator = |kind| matches!(kind, Add | Sub | Mul | Div);
 
                 let write_mutator_op = |comp: &mut Self, ctx, kind| {
                     let op = match kind {
