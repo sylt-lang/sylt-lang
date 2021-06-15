@@ -531,9 +531,134 @@ impl Compiler {
         }
     }
 
-    fn resolve_type(&self, _ty: &syntree::Type, _ctx: Context) -> Type {
-        // TODO(ed): Implement this
+    fn resolve_type_namespace(
+        &mut self,
+        assignable: &Assignable,
+        namespace: usize,
+        ctx: Context,
+    ) -> Option<usize> {
+        // TODO(ed): This is ugly
+        use AssignableKind::*;
+        match &assignable.kind {
+            Access(inner, ident) => {
+                if let Some(namespace) = self.resolve_type_namespace(&inner, namespace, ctx) {
+                    match self.namespaces[namespace].get(&ident.name) {
+                        Some(Name::Namespace(namespace)) => {
+                            return Some(*namespace);
+                        }
+                        _ => {
+                            error!(
+                                self,
+                                ctx,
+                                assignable.span,
+                                "While parsing type '{}' is not a namespace",
+                                ident.name
+                            );
+                        }
+                    }
+                }
+                None
+            },
+            Read(_) => {
+                // Should be unreachable
+                error!(self, ctx, assignable.span, "This is not a namespace");
+                None
+            }
+            Call(_, _) => {
+                error!(self, ctx, assignable.span, "Cannot have calls in types");
+                None
+            }
+            Index(_, _) => {
+                error!(self, ctx, assignable.span, "Cannot have indexing in types");
+                None
+            }
+        }
+    }
+
+    fn resolve_type_ident(
+        &mut self,
+        assignable: &Assignable,
+        namespace: usize,
+        ctx: Context,
+    ) -> Type {
+        use AssignableKind::*;
+        match &assignable.kind {
+            Read(ident) => {
+                match self.namespaces[namespace].get(&ident.name) {
+                    Some(Name::Blob(blob)) => {
+                        return Type::Blob(*blob);
+                    }
+                    _ => {}
+                }
+                error!(
+                    self,
+                    ctx,
+                    assignable.span,
+                    "While parsing type '{}' is not a blob",
+                    ident.name
+                );
+            },
+            Access(inner, ident) => {
+                if let Some(namespace) = self.resolve_type_namespace(&inner, namespace, ctx) {
+                    match self.namespaces[namespace].get(&ident.name) {
+                        Some(Name::Blob(blob)) => {
+                            return Type::Blob(*blob);
+                        }
+                        _ => {}
+                    }
+                    error!(
+                        self,
+                        ctx,
+                        assignable.span,
+                        "While parsing type '{}' is not a blob",
+                        ident.name
+                    );
+                }
+            }
+            Call(_, _) => {
+                error!(self, ctx, assignable.span, "Cannot have calls in types");
+            }
+            Index(_, _) => {
+                error!(self, ctx, assignable.span, "Cannot have indexing in types");
+            }
+        }
         Type::Void
+    }
+
+    fn resolve_type(&mut self, ty: &syntree::Type, ctx: Context) -> Type {
+        use TypeKind::*;
+        match &ty.kind {
+            Implied => Type::Unknown,
+            Resolved(ty) => ty.clone(),
+            UserDefined(assignable) => {
+                self.resolve_type_ident(&assignable, ctx.namespace, ctx)
+            },
+            Union(a, b) => {
+                match (self.resolve_type(a, ctx), self.resolve_type(b, ctx)) {
+                    (Type::Union(_), _) => panic!("Didn't expect union on RHS - check parser"),
+                    (a, Type::Union(mut us)) => {
+                        us.insert(a);
+                        Type::Union(us)
+                    }
+                    (a, b) => Type::Union(vec![a, b].into_iter().collect()),
+                }
+            }
+            Fn(params, ret) => {
+                let params = params.iter().map(|t| self.resolve_type(t, ctx)).collect();
+                let ret = Box::new(self.resolve_type(ret, ctx));
+                Type::Function(params, ret)
+            }
+            Tuple(fields) =>
+                Type::Tuple(fields.iter().map(|t| self.resolve_type(t, ctx)).collect()),
+            List(kind) =>
+                Type::List(Box::new(self.resolve_type(kind, ctx))),
+            Set(kind) =>
+                Type::Set(Box::new(self.resolve_type(kind, ctx))),
+            Dict(key, value) => Type::Dict(
+                Box::new(self.resolve_type(key, ctx)),
+                Box::new(self.resolve_type(value, ctx))
+            ),
+        }
     }
 
     fn define(&mut self, name: &str, kind: VarKind, span: Span) -> VarSlot {
@@ -566,9 +691,11 @@ impl Compiler {
 
             Blob { name, fields } => {
                 if let Some(Name::Blob(slot)) = self.namespaces[ctx.namespace].get(name) {
-                    self.blobs[*slot].fields = fields
-                        .iter()
-                        .map(|(k, v)| (k.clone(), self.resolve_type(v, ctx)))
+                    let slot = *slot;
+                    self.blobs[slot].fields = fields
+                        .clone()
+                        .into_iter()
+                        .map(|(k, v)| (k, self.resolve_type(&v, ctx)))
                         .collect();
                 } else {
                     error!(self, ctx, statement.span, "No blob with the name '{}' in this namespace", name);
