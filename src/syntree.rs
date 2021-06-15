@@ -796,8 +796,8 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 name: name.clone(),
                 span: ctx.span(),
             };
-            // Skip identifier.
-            let ctx = ctx.skip(1);
+            // Skip identifier and ':'.
+            let ctx = ctx.skip(2);
 
             let (ctx, kind, ty) = {
                 let forced = matches!(ctx.token(), T::Bang); // !int
