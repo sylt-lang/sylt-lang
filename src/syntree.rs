@@ -1238,31 +1238,43 @@ mod expression {
         Ok((ctx, Expression { span, kind }))
     }
 
+    /// Parse either a grouping parenthesis or a tuple.
+    ///
+    /// Essentially, one-element tuples are groupings unless they end with a
+    /// comma. So `(1)` is parsed as the value `1` while `(1,)` is parsed as the
+    /// one-sized tuple containing `1`.
+    ///
+    /// `()` as well as `(,)` are parsed as zero-sized tuples.
     fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         let span = ctx.span();
         let mut ctx = expect!(ctx, T::LeftParen, "Expected '('");
 
+        // The expressions contained in the parenthesis.
         let mut exprs = Vec::new();
 
-        let mut tuple = matches!(ctx.token(), T::Comma | T::RightParen);
+        let mut is_tuple = matches!(ctx.token(), T::Comma | T::RightParen);
         loop {
+            // Any initial comma is skipped since we checked it before entering the loop.
             ctx = skip_if!(ctx, T::Comma);
             match ctx.token() {
+                // Done.
                 T::EOF | T::RightParen => {
                     break;
                 }
 
+                // Another inner expression.
                 _ => {
                     let (_ctx, expr) = expression(ctx)?;
                     exprs.push(expr);
-                    ctx = _ctx;
-                    tuple |= matches!(ctx.token(), T::Comma);
+                    ctx = _ctx; // assign to outer
+                    // Not a tuple, until it is.
+                    is_tuple |= matches!(ctx.token(), T::Comma);
                 }
             }
         }
 
         ctx = expect!(ctx, T::RightParen, "Expected ')'");
-        let result = if tuple {
+        let result = if is_tuple {
             Expression {
                 span,
                 kind: Tuple(exprs),
