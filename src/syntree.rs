@@ -1285,8 +1285,10 @@ mod expression {
         Ok((ctx, result))
     }
 
+    // Parse a blob instantiation, e.g. `A { b: 55 }`.
     fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         let span = ctx.span();
+        // The blob type.
         let blob = if let T::Identifier(blob) = ctx.token() {
             blob.clone()
         } else {
@@ -1294,6 +1296,7 @@ mod expression {
         };
         let mut ctx = expect!(ctx.skip(1), T::LeftBrace, "Expected '{{' after blob name");
 
+        // The blob's fields.
         let mut fields = Vec::new();
         loop {
             match ctx.token() {
@@ -1301,19 +1304,23 @@ mod expression {
                     ctx = ctx.skip(1);
                 }
 
+                // Done with fields.
                 T::RightBrace | T::EOF => {
                     break;
                 }
 
+                // Another field, e.g. `b: 55`.
                 T::Identifier(name) => {
+                    // Get the field name.
                     let name = name.clone();
 
                     ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after field name");
+                    // Get the value; `55` in the example above.
                     let (_ctx, expr) = expression(ctx)?;
-                    ctx = _ctx;
+                    ctx = _ctx; // assign to outer
 
                     if !matches!(ctx.token(), T::Comma | T::Newline | T::RightBrace) {
-                        raise_syntax_error!(ctx, "Expected a deliminator: newline or ','");
+                        raise_syntax_error!(ctx, "Expected a delimiter: newline or ','");
                     }
                     ctx = skip_if!(ctx, T::Comma);
 
@@ -1336,17 +1343,21 @@ mod expression {
         ))
     }
 
+    // Parse a list expression, e.g. `[1, 2, a(3)]`
     fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         let span = ctx.span();
         let mut ctx = expect!(ctx, T::LeftBracket, "Expected '['");
 
+        // Inner experssions.
         let mut exprs = Vec::new();
         loop {
             match ctx.token() {
+                // Done with inner expressions.
                 T::EOF | T::RightBracket => {
                     break;
                 }
 
+                // Another one.
                 _ => {
                     let (_ctx, expr) = expression(ctx)?;
                     exprs.push(expr);
@@ -1365,15 +1376,20 @@ mod expression {
         ))
     }
 
+    /// Parse either a set or dict expression.
+    ///
+    /// `{:}` is parsed as the empty dict and {} is parsed as the empty set.
     fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         let span = ctx.span();
         let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{'");
 
-        // NOTE(ed): I decided on {:} for empty dicts, and {} for empty sets.
+        // The inner values of the set or dict.
         let mut exprs = Vec::new();
+        // None => we don't know. Some(b) => we know b.
         let mut is_dict = None;
         loop {
             match ctx.token() {
+                // Done.
                 T::EOF | T::RightBrace => {
                     break;
                 }
