@@ -130,7 +130,7 @@ struct Compiler {
     namespaces: Vec<Namespace>,
     blobs: Vec<Blob>,
 
-    stack: Vec<Frame>,
+    frames: Vec<Frame>,
     functions: HashMap<String, (usize, RustFunction)>,
 
     panic: bool,
@@ -167,7 +167,7 @@ impl Compiler {
             namespaces: Vec::new(),
             blobs: Vec::new(),
 
-            stack: Vec::new(),
+            frames: Vec::new(),
             functions: HashMap::new(),
 
             panic: false,
@@ -186,17 +186,17 @@ impl Compiler {
         let block = Block::new_tree(&name, ctx.namespace, &file_as_path);
         self.blocks.push(block);
 
-        self.stack.push(Frame::new(name, span));
+        self.frames.push(Frame::new(name, span));
         Context {
             block_slot: self.blocks.len() - 1,
-            frame: self.stack.len() - 1,
+            frame: self.frames.len() - 1,
             ..ctx
         }
     }
 
     fn pop_frame(&mut self, ctx: Context) -> Frame {
-        assert_eq!(self.stack.len() - 1, ctx.frame, "Can only pop top stackframe");
-        self.stack.pop().unwrap()
+        assert_eq!(self.frames.len() - 1, ctx.frame, "Can only pop top stackframe");
+        self.frames.pop().unwrap()
     }
 
     fn file_from_namespace(&self, namespace: usize) -> &str {
@@ -208,7 +208,7 @@ impl Compiler {
             .iter()
             .enumerate()
             .find_map(|(i, x)| if x == string { Some(i) } else { None })
-            .unwrap_or_else(|| { 
+            .unwrap_or_else(|| {
                 let slot = self.strings.len();
                 self.strings.push(string.into());
                 slot
@@ -423,13 +423,13 @@ impl Compiler {
         if frame == 0 { return Err(()) }
 
         // TODO(ed): Maybe remove the clones?
-        for var in self.stack[frame].variables.iter().rev() {
+        for var in self.frames[frame].variables.iter().rev() {
             if &var.name == name && var.active {
                 return Ok(Lookup::Variable(var.clone()));
             }
         }
 
-        for up in self.stack[frame].upvalues.iter().rev() {
+        for up in self.frames[frame].upvalues.iter().rev() {
             if &up.name == name {
                 return Ok(Lookup::Upvalue(up.clone()));
             }
@@ -511,7 +511,7 @@ impl Compiler {
             Err(()) => {
                 match self.namespaces[namespace].get(name) {
                     Some(Name::Global(slot)) => {
-                        let var = &self.stack[0].variables[*slot];
+                        let var = &self.frames[0].variables[*slot];
                         if var.kind.immutable() && ctx.frame != 0 {
                             error!(self, ctx, span, "Cannot mutate constant '{}'", name);
                         } else {
@@ -538,22 +538,22 @@ impl Compiler {
 
     fn define(&mut self, name: &str, kind: VarKind, span: Span) -> VarSlot {
         // TODO(ed): Fix the types
-        let stack = &mut self.stack.last_mut().unwrap().variables;
-        let slot = stack.len();
+        let frame = &mut self.frames.last_mut().unwrap().variables;
+        let slot = frame.len();
         let var = Variable::new(name.to_string(), kind, Type::Unknown, slot, span);
-        stack.push(var);
+        frame.push(var);
         slot
     }
 
     fn upvalue(&mut self, up: Upvalue, frame: usize) -> usize {
-        let ups = &mut self.stack[frame].upvalues;
+        let ups = &mut self.frames[frame].upvalues;
         let slot = ups.len();
         ups.push(up);
         slot
     }
 
     fn activate(&mut self, slot: VarSlot) {
-        self.stack.last_mut().unwrap().variables[slot].active = true;
+        self.frames.last_mut().unwrap().variables[slot].active = true;
     }
 
     fn statement(&mut self, statement: &Statement, ctx: Context) {
@@ -672,15 +672,15 @@ impl Compiler {
             }
 
             Block { statements } => {
-                let ss = self.stack[ctx.frame].variables.len();
+                let stack_size = self.frames[ctx.frame].variables.len();
 
                 for statement in statements {
                     self.statement(statement, ctx);
                 }
 
-                while ss < self.stack[ctx.frame].variables.len() {
+                while stack_size < self.frames[ctx.frame].variables.len() {
                     // TODO(ed): Upvalues
-                    let var = self.stack[ctx.frame].variables.pop().unwrap();
+                    let var = self.frames[ctx.frame].variables.pop().unwrap();
                     if var.captured {
                         self.add_op(ctx, statement.span, Op::PopUpvalue);
                     } else {
@@ -741,10 +741,10 @@ impl Compiler {
 
         let name = "/preamble/";
         self.blocks.push(Block::new(name, &tree.modules[0].0));
-        self.stack.push(Frame::new(name, Span { line: 0 }));
+        self.frames.push(Frame::new(name, Span { line: 0 }));
         let mut ctx = Context {
             block_slot: self.blocks.len() - 1,
-            frame: self.stack.len() - 1,
+            frame: self.frames.len() - 1,
             ..Context::from_namespace(0)
         };
 
