@@ -19,10 +19,7 @@ pub mod syntree;
 pub mod syncomp;
 pub mod typechecker;
 
-
-mod compiler;
 mod rc;
-mod sectionizer;
 mod tokenizer;
 
 // Lingon linking layer
@@ -46,28 +43,22 @@ pub trait Next {
     fn next(&self) -> Self;
 }
 
-pub fn construct_tree(args: &Args) -> Result<syntree::Prog, Vec<Error>> {
+pub fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
     let path = match &args.file {
         Some(file) => file,
         None => {
             return Err(vec![Error::NoFileGiven]);
         }
     };
-    syntree::tree(&path)
-}
-
-pub fn tree_compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
-    syncomp::compile(construct_tree(args)?, &functions)
+    let tree = syntree::tree(&path)?;
+    let prog = syncomp::compile(tree, &functions)?;
+    Ok(prog)
 }
 
 /// Compiles, links and runs the given file. The supplied functions are callable
 /// external functions.
 pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    let prog = if args.tree_mode {
-        tree_compile(args, functions)
-    } else {
-        compile(args, functions)
-    }?;
+    let prog = compile(args, functions)?;
     typechecker::typecheck(&prog, &args)?;
     run(&prog, &args)
 }
@@ -84,19 +75,6 @@ pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
     }
 }
 
-pub fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
-    let path = match &args.file {
-        Some(file) => file,
-        None => {
-            return Err(vec![Error::NoFileGiven]);
-        }
-    };
-    let sections = sectionizer::sectionize(&path)?;
-    let prog = compiler::Compiler::new(sections).compile("/preamble", &path, &functions)?;
-    typechecker::typecheck(&prog, &args)?;
-    Ok(prog)
-}
-
 #[derive(Default, Debug, Options)]
 pub struct Args {
     #[options(free)]
@@ -107,9 +85,6 @@ pub struct Args {
 
     #[options(short = "c", long = "compile", help = "Compile a sylt binary")]
     pub compile_target: Option<PathBuf>,
-
-    #[options(short = "t", long = "tree", help = "Use the syntax tree backend (WIP)")]
-    pub tree_mode: bool,
 
     #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
     pub verbosity: u32,
@@ -1075,7 +1050,6 @@ mod tests {
 
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
-                args.tree_mode = true;
                 args.verbosity = if $print { 1 } else { 0 };
                 let res = $crate::run_file(
                     &args,
@@ -1099,7 +1073,6 @@ mod tests {
 
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
-                args.tree_mode = true;
                 args.verbosity = if $print { 1 } else { 0 };
                 let res = $crate::run_file(
                     &args,

@@ -12,41 +12,13 @@ fn main() -> Result<(), String> {
     }
 
     let functions = lib_bindings();
-    if args.tree_mode {
-        match sylt::tree_compile(&args, functions) {
-            Err(errs) => {
-                for err in errs.iter() {
-                    println!("{}", err);
-                }
-                Err(format!("{} errors occured.", errs.len()))
-            }
-            Ok(prog) => {
-                if let Err(errs) = sylt::typechecker::typecheck(&prog, &args) {
-                    for err in errs {
-                        println!("{}", err);
-                    }
-                    return Err("Typecheck failed".into())
-                }
+    let res = sylt::run_file(&args, functions);
 
-                if let Err(errs) = sylt::run(&prog, &args) {
-                    for err in errs {
-                        println!("{}", err);
-                    }
-                    Err("Runtime failed".into())
-                } else {
-                    Ok(())
-                }
-            }
+    if let Err(errs) = res {
+        for err in errs.iter() {
+            println!("{}", err);
         }
-    } else {
-        let res = sylt::run_file(&args, functions);
-
-        if let Err(errs) = res {
-            for err in errs.iter() {
-                println!("{}", err);
-            }
-            return Err(format!("{} errors occured.", errs.len()));
-        }
-        Ok(())
+        return Err(format!("{} errors occured.", errs.len()));
     }
+    Ok(())
 }

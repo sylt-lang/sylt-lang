@@ -1,4 +1,3 @@
-use crate::compiler::Prec;
 use crate::error::Error;
 use crate::tokenizer::file_to_tokens;
 use crate::tokenizer::Token;
@@ -30,6 +29,27 @@ pub struct Prog {
 pub struct Module {
     pub span: Span,
     pub statements: Vec<Statement>,
+}
+
+/// The precedence of an operator.
+///
+/// A higher precedence means that something should be more tightly bound. For
+/// example, multiplication has higher precedence than addition and as such is
+/// evaluated first.
+///
+/// Prec-variants can be compared to each other. A proc-macro ensures that the
+/// order here is what is compared.
+#[derive(sylt_macro::Next, PartialEq, PartialOrd, Clone, Copy, Debug)]
+pub enum Prec {
+    No,
+    Assert,
+    BoolOr,
+    BoolAnd,
+    Comp,
+    Term,
+    Factor,
+    Index,
+    Arrow,
 }
 
 /// Variables can be any combination of `{Force,}{Const,Mutable}`.
