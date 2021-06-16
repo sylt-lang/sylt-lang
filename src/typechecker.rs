@@ -120,8 +120,6 @@ fn typecheck_block(block_slot: usize, prog: &Prog, global_types: Vec<Type>, args
         );
     }
 
-    println!("{:?}", vm.stack);
-
     (vm.stack, errors)
 }
 

@@ -897,10 +897,6 @@ impl Compiler {
 
         self.pop_frame(ctx);
 
-        for blob in self.blobs.iter() {
-            println!("Blob: {:?}", blob);
-        }
-
         if self.errors.is_empty() {
             Ok(crate::Prog {
                 blocks: self.blocks.into_iter().map(|x| Rc::new(RefCell::new(x))).collect(),
