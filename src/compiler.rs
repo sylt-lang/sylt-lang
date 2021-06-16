@@ -111,6 +111,15 @@ macro_rules! push_scope {
     };
 }
 
+/// The precedence of an operator.
+///
+/// A higher precedence means that something should be more tightly bound. For
+/// example, multiplication has higher precedence than addition and as such is
+/// evaluated first.
+///
+/// Prec-variants can be compared to each other. A proc-macro ensures that the
+/// comparison follows the ordering here such that
+/// `prec_i < prec_j` for all `j > i`.
 #[derive(sylt_macro::Next, PartialEq, PartialOrd, Clone, Copy, Debug)]
 pub enum Prec {
     No,
