@@ -376,12 +376,15 @@ impl VM {
             Op::AssignUpvalue(slot) => {
                 let current = self.upvalues.get(slot).unwrap().clone();
                 let up = self.pop();
-                if current != up {
+                if !current.fits(&up) {
                     error!(
                         self,
                         RuntimeError::TypeMismatch(up, current),
                         "Captured varibles type doesn't match upvalue"
                     );
+                }
+                if matches!(current, Type::Unknown) {
+                    self.upvalues[slot] = up;
                 }
             }
 
