@@ -366,10 +366,12 @@ impl Compiler {
 
                 self.statement(&body, inner_ctx);
 
-                // TODO(ed): Do some fancy program analysis
-                let nil = self.constant(Value::Nil);
-                self.add_op(inner_ctx, body.span, nil);
-                self.add_op(inner_ctx, body.span, Op::Return);
+
+                if !all_paths_return(&body) {
+                    let nil = self.constant(Value::Nil);
+                    self.add_op(inner_ctx, body.span, nil);
+                    self.add_op(inner_ctx, body.span, Op::Return);
+                }
 
                 self.blocks[inner_ctx.block_slot].upvalues = self.pop_frame(inner_ctx)
                     .upvalues
@@ -958,6 +960,8 @@ impl Compiler {
                         }
                     }
 
+                    // TODO(ed): These need to be done before all other statements, so
+                    // types can be resolved.
                     Blob { name, .. } => {
                         match namespace.entry(name.to_owned()) {
                             Entry::Vacant(_) => {
@@ -1000,8 +1004,10 @@ impl Compiler {
                             }
                         }
 
-                        let nil = self.constant(Value::Nil);
-                        self.add_op(ctx, Span { line: 0 }, nil);
+                        // Just fill in an empty slot since we have no idea.
+                        // Unknown is overwritten by the Op::Force in the type checker.
+                        let unknown = self.constant(Value::Unknown);
+                        self.add_op(ctx, Span { line: 0 }, unknown);
 
                         let ty = self.resolve_type(ty, ctx);
                         let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
@@ -1027,4 +1033,26 @@ impl Compiler {
 
 pub fn compile(prog: Prog, functions: &[(String, RustFunction)]) -> Result<crate::Prog, Vec<Error>> {
     Compiler::new().compile(prog, functions)
+}
+
+fn all_paths_return(statement: &Statement) -> bool {
+    match &statement.kind {
+        StatementKind::Use { .. }
+        | StatementKind::Blob { .. }
+        | StatementKind::Print { .. }
+        | StatementKind::Assignment { .. }
+        | StatementKind::Definition { .. }
+        | StatementKind::StatementExpression { .. }
+        | StatementKind::Unreachable
+        | StatementKind::EmptyStatement
+            => false,
+
+        StatementKind::If { pass, fail, .. }
+            => all_paths_return(pass) && all_paths_return(fail),
+
+        StatementKind::Loop { body, .. } => all_paths_return(body),
+        StatementKind::Block { statements } => statements.iter().any(all_paths_return),
+
+        StatementKind::Ret { .. } => true,
+    }
 }

@@ -1250,20 +1250,12 @@ mod expression {
             T::In => In(lhs, rhs),
 
             T::Arrow => {
-                use AssignableKind::*;
-                if let Expression {
-                    kind:
-                        Get(Assignable {
-                            kind: Call(callee, mut args),
-                            ..
-                        }),
-                    span,
-                } = *rhs
-                {
+                use AssignableKind::Call;
+                if let Get(Assignable { kind: Call(callee, mut args), ..  }) = rhs.kind {
                     args.insert(0, *lhs);
                     Get(Assignable {
                         kind: Call(callee, args),
-                        span,
+                        span: rhs.span,
                     })
                 } else {
                     raise_syntax_error!(ctx, "Expected a call-expression after '->'");

@@ -344,6 +344,7 @@ impl From<Type> for Value {
 }
 
 impl Type {
+    // TODO(ed): Swap order of arguments
     /// Checks if the other type is valid in a place where the self type is. It's an asymmetrical
     /// comparison for types useful when checking assignment.
     pub fn fits(&self, other: &Self) -> bool {

@@ -25,6 +25,7 @@ fn main() -> Result<(), String> {
                     for err in errs {
                         println!("{}", err);
                     }
+                    return Err("Typecheck failed".into())
                 }
 
                 if let Err(errs) = sylt::run(&prog, &args) {
