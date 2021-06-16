@@ -221,7 +221,7 @@ impl VM {
             Op::AssignLocal(slot) => {
                 let current = self.stack[slot].clone();
                 let given = self.pop();
-                if !given.fits(&current) {
+                if !current.fits(&given) {
                     error!(
                         self,
                         RuntimeError::TypeMismatch(current, given),
@@ -245,7 +245,7 @@ impl VM {
             Op::AssignGlobal(slot) => {
                 let current = self.global_types[slot].clone();
                 let given = self.pop();
-                if !given.fits(&current) {
+                if !current.fits(&given) {
                     error!(
                         self,
                         RuntimeError::TypeMismatch(current, given),

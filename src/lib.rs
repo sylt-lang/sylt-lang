@@ -349,7 +349,7 @@ impl Type {
     /// comparison for types useful when checking assignment.
     pub fn fits(&self, other: &Self) -> bool {
         match (self, other) {
-            (_, Type::Unknown) => true,
+            (Type::Unknown, _) | (_, Type::Unknown) => true,
             (Type::List(a), Type::List(b)) => a.fits(b),
             (Type::Set(a), Type::Set(b)) => a.fits(b),
             (Type::Dict(ak, av), Type::Dict(bk, bv)) => ak.fits(bk) && av.fits(bv),

@@ -588,7 +588,7 @@ impl Compiler {
             Read(ident) => {
                 match self.namespaces[namespace].get(&ident.name) {
                     Some(Name::Blob(blob)) => {
-                        return Type::Blob(*blob);
+                        return Type::Instance(*blob);
                     }
                     _ => {}
                 }
@@ -604,7 +604,7 @@ impl Compiler {
                 if let Some(namespace) = self.resolve_type_namespace(&inner, namespace, ctx) {
                     match self.namespaces[namespace].get(&ident.name) {
                         Some(Name::Blob(blob)) => {
-                            return Type::Blob(*blob);
+                            return Type::Instance(*blob);
                         }
                         _ => {}
                     }
@@ -722,9 +722,9 @@ impl Compiler {
                     let ty = self.resolve_type(ty, ctx);
                     let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
                         if kind.force() {
-                            Op::Define(ty)
-                        } else {
                             Op::Force(ty)
+                        } else {
+                            Op::Define(ty)
                         }
                     } else {
                         error!(self, ctx, statement.span, "Failed to add type declaration");
