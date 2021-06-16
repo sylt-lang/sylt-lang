@@ -183,7 +183,7 @@ impl Compiler {
     fn push_frame_and_block(&mut self, ctx: Context, name: &str, span: Span) -> Context {
         let file_as_path = PathBuf::from(self.file_from_namespace(ctx.namespace));
 
-        let block = Block::new_tree(&name, ctx.namespace, &file_as_path);
+        let block = Block::new(&name, ctx.namespace, &file_as_path);
         self.blocks.push(block);
 
         self.frames.push(Frame::new(name, span));
@@ -869,7 +869,7 @@ impl Compiler {
             .collect();
 
         let name = "/preamble/";
-        let mut block = Block::new_tree(name, 0, &tree.modules[0].0);
+        let mut block = Block::new(name, 0, &tree.modules[0].0);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
         self.blocks.push(block);
         self.frames.push(Frame::new(name, Span { line: 0 }));
@@ -962,7 +962,7 @@ impl Compiler {
                         match namespace.entry(name.to_owned()) {
                             Entry::Vacant(_) => {
                                 let id = self.blobs.len();
-                                self.blobs.push(crate::Blob::new_tree(id, slot, name));
+                                self.blobs.push(crate::Blob::new(id, slot, name));
                                 let blob = self.constant(Value::Blob(id));
                                 if let Op::Constant(slot) = blob {
                                     namespace.insert(name.to_owned(), Name::Blob(slot));

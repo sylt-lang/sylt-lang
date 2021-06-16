@@ -7,7 +7,6 @@ use error::{Error, RuntimeError};
 use owo_colors::OwoColorize;
 use std::borrow::Borrow;
 use std::cell::RefCell;
-use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
@@ -538,33 +537,12 @@ impl PartialEq for Blob {
 }
 
 impl Blob {
-    // NOTE(ed): Should be replaced with `new_tree`
-    fn new(id: usize, name: &str) -> Self {
-        Self {
-            id,
-            name: String::from(name),
-            namespace: 0,
-            fields: HashMap::new(),
-        }
-    }
-
-    fn new_tree(id: usize, namespace: usize, name: &str) -> Self {
+    fn new(id: usize, namespace: usize, name: &str) -> Self {
         Self {
             id,
             namespace,
             name: String::from(name),
             fields: HashMap::new(),
-        }
-    }
-
-    fn add_field(&mut self, name: &str, ty: Type) -> Result<(), ()> {
-        let entry = self.fields.entry(String::from(name));
-        match entry {
-            Entry::Occupied(_) => Err(()),
-            Entry::Vacant(v) => {
-                v.insert(ty);
-                Ok(())
-            }
         }
     }
 }
@@ -855,7 +833,6 @@ pub enum Op {
 #[derive(Debug)]
 enum BlockLinkState {
     Linked,
-    Unlinked,
     Nothing,
 }
 
@@ -875,13 +852,13 @@ pub struct Block {
 }
 
 impl Block {
-    fn new(name: &str, file: &Path) -> Self {
+    fn new(name: &str, namespace: usize, file: &Path) -> Self {
         Self {
             ty: Type::Void,
             upvalues: Vec::new(),
             linking: BlockLinkState::Nothing,
 
-            namespace: 0,
+            namespace,
 
             name: String::from(name),
             file: file.to_owned(),
@@ -889,26 +866,6 @@ impl Block {
             last_line_offset: 0,
             line_offsets: HashMap::new(),
         }
-    }
-
-    fn new_tree(name: &str, namespace: usize, file: &Path) -> Self {
-        let mut block = Self::new(name, file);
-        block.namespace = namespace;
-        block
-    }
-
-    fn mark_constant(&mut self) {
-        if self.upvalues.is_empty() {
-            return;
-        }
-        self.linking = BlockLinkState::Unlinked;
-    }
-
-    // Used to create empty functions.
-    fn stubbed_block(ty: &Type) -> Self {
-        let mut block = Block::new("/empty/", Path::new(""));
-        block.ty = ty.clone();
-        block
     }
 
     pub fn args(&self) -> &Vec<Type> {
@@ -992,19 +949,8 @@ impl Block {
         len
     }
 
-    fn add_from(&mut self, ops: &[Op], token_position: usize) -> usize {
-        let len = self.curr();
-        self.add_line(token_position);
-        self.ops.extend_from_slice(ops);
-        len
-    }
-
     fn curr(&self) -> usize {
         self.ops.len()
-    }
-
-    fn patch(&mut self, op: Op, pos: usize) {
-        self.ops[pos] = op;
     }
 }
 

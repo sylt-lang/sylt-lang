@@ -260,12 +260,6 @@ impl VM {
                     let block = Rc::clone(&prog.blocks[*block]);
                     match block.borrow().linking {
                         BlockLinkState::Linked => break,
-                        BlockLinkState::Unlinked => {
-                            error!(self,
-                                RuntimeError::InvalidProgram,
-                                "Calling function '{}' before all captured variables are declared",
-                                block.borrow().name);
-                        }
                         BlockLinkState::Nothing => {},
                     }
 
