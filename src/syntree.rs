@@ -43,7 +43,7 @@ pub enum VarKind {
     ForceMutable,
 }
 
-/// Normal infix operators: `+`, `-`, `*`, `/`
+/// The different kinds of assignment operators: `+=`, `-=`, `*=`, `/=` and `=`.
 #[derive(Debug, Copy, Clone)]
 pub enum Op {
     Nop,
@@ -526,7 +526,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
 
         // List
         T::LeftBracket => {
-            // Only contains a single type.
+            // Lists only contain a single type.
             let (ctx, ty) = parse_type(ctx.skip(1))?;
             let ctx = expect!(ctx, T::RightBracket, "Expected ']' after list type");
             (ctx, List(Box::new(ty)))
@@ -558,7 +558,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     // Wrap it in a syntax tree node.
     let ty = Type { span, kind };
 
-    // Union type, a | b
+    // Union type, `a | b`
     let (ctx, ty) = if matches!(ctx.token(), T::Pipe) {
         // Parse the other type.
         let (ctx, rest) = parse_type(ctx.skip(1))?;
@@ -1070,7 +1070,7 @@ mod expression {
             }
         };
 
-        // Parse the function statement. Usually a block but it's not currently forced.
+        // Parse the function statement. Usually a block statement but it's not currently forced.
         let (ctx, statement) = statement(ctx)?;
         let function = Function {
             params,
@@ -1210,10 +1210,9 @@ mod expression {
 
     /// Parse an expression starting from an infix operator. Called by `parse_precedence`.
     fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
-        // The infix operator in question.
+        // Parse an operator and a following expression
+        // until we reach a token with higher precedence.
         let (op, span, ctx) = ctx.eat();
-
-        // The followed expression, parsed until we reach a token with higher precedence.
         let (ctx, rhs) = parse_precedence(ctx, precedence(op).next())?;
 
         // Left and right of the operator.
@@ -1315,7 +1314,7 @@ mod expression {
         Ok((ctx, result))
     }
 
-    // Parse a blob instantiation, e.g. `A { b: 55 }`.
+    /// Parse a blob instantiation, e.g. `A { b: 55 }`.
     fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         let span = ctx.span();
         // The blob type.
@@ -1567,7 +1566,6 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
     let mut to_visit = Vec::new();
     to_visit.push(path.to_path_buf());
 
-    // The resulting modules of files we've parsed.
     let mut modules = Vec::new();
     let mut errors = Vec::new();
     while let Some(file) = to_visit.pop() {
