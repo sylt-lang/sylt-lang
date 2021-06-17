@@ -543,23 +543,22 @@ impl Compiler {
         use AssignableKind::*;
         match &assignable.kind {
             Access(inner, ident) => {
-                if let Some(namespace) = self.resolve_type_namespace(&inner, namespace, ctx) {
-                    match self.namespaces[namespace].get(&ident.name) {
-                        Some(Name::Namespace(namespace)) => {
-                            return Some(*namespace);
-                        }
-                        _ => {
-                            error!(
-                                self,
-                                ctx,
-                                assignable.span,
-                                "While parsing type '{}' is not a namespace",
-                                ident.name
-                            );
-                        }
-                    }
-                }
-                None
+                self.resolve_type_namespace(&inner, namespace, ctx)
+                    .and_then(|namespace| self.namespaces[namespace].get(&ident.name))
+                    .and_then(|o| match o {
+                        Name::Namespace(namespace) => Some(*namespace),
+                        _ => None,
+                    })
+                    .or_else(|| {
+                        error!(
+                            self,
+                            ctx,
+                            assignable.span,
+                            "While parsing type '{}' is not a namespace",
+                            ident.name
+                        );
+                        None
+                    })
             },
             Read(_) => {
                 // Should be unreachable
@@ -586,45 +585,49 @@ impl Compiler {
         use AssignableKind::*;
         match &assignable.kind {
             Read(ident) => {
-                match self.namespaces[namespace].get(&ident.name) {
-                    Some(Name::Blob(blob)) => {
-                        return Type::Instance(*blob);
-                    }
-                    _ => {}
-                }
-                error!(
-                    self,
-                    ctx,
-                    assignable.span,
-                    "While parsing type '{}' is not a blob",
-                    ident.name
-                );
+                self.namespaces[namespace].get(&ident.name)
+                    .and_then(|name| match name {
+                        Name::Blob(blob) => Some(Type::Instance(*blob)),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| {
+                        error!(
+                            self,
+                            ctx,
+                            assignable.span,
+                            "While parsing type '{}' is not a blob",
+                            ident.name
+                        );
+                        Type::Void
+                    })
             },
             Access(inner, ident) => {
-                if let Some(namespace) = self.resolve_type_namespace(&inner, namespace, ctx) {
-                    match self.namespaces[namespace].get(&ident.name) {
-                        Some(Name::Blob(blob)) => {
-                            return Type::Instance(*blob);
-                        }
-                        _ => {}
-                    }
-                    error!(
-                        self,
-                        ctx,
-                        assignable.span,
-                        "While parsing type '{}' is not a blob",
-                        ident.name
-                    );
-                }
+                self.resolve_type_namespace(&inner, namespace, ctx)
+                    .and_then(|namespace| self.namespaces[namespace].get(&ident.name))
+                    .and_then(|name| match name {
+                        Name::Blob(blob) => Some(Type::Instance(*blob)),
+                        _ => None
+                    })
+                    .unwrap_or_else(|| {
+                        error!(
+                            self,
+                            ctx,
+                            assignable.span,
+                            "While parsing type '{}' is not a blob",
+                            ident.name
+                        );
+                        Type::Void
+                    })
             }
             Call(_, _) => {
                 error!(self, ctx, assignable.span, "Cannot have calls in types");
+                Type::Void
             }
             Index(_, _) => {
                 error!(self, ctx, assignable.span, "Cannot have indexing in types");
+                Type::Void
             }
         }
-        Type::Void
     }
 
     fn resolve_type(&mut self, ty: &syntree::Type, ctx: Context) -> Type {
