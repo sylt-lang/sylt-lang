@@ -68,9 +68,7 @@ pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(
     } else {
         compile(args, functions)
     }?;
-    if !args.tree_mode {
-        typechecker::typecheck(&prog, &args)?;
-    }
+    typechecker::typecheck(&prog, &args)?;
     run(&prog, &args)
 }
 
@@ -346,11 +344,12 @@ impl From<Type> for Value {
 }
 
 impl Type {
+    // TODO(ed): Swap order of arguments
     /// Checks if the other type is valid in a place where the self type is. It's an asymmetrical
     /// comparison for types useful when checking assignment.
     pub fn fits(&self, other: &Self) -> bool {
         match (self, other) {
-            (_, Type::Unknown) => true,
+            (Type::Unknown, _) | (_, Type::Unknown) => true,
             (Type::List(a), Type::List(b)) => a.fits(b),
             (Type::Set(a), Type::Set(b)) => a.fits(b),
             (Type::Dict(ak, av), Type::Dict(bk, bv)) => ak.fits(bk) && av.fits(bv),
@@ -941,7 +940,7 @@ impl Block {
         if let Type::Function(ref args, _) = self.ty {
             args
         } else {
-            unreachable!()
+            unreachable!();
         }
     }
 

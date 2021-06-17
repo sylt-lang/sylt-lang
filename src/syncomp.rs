@@ -366,10 +366,12 @@ impl Compiler {
 
                 self.statement(&body, inner_ctx);
 
-                // TODO(ed): Do some fancy program analysis
-                let nil = self.constant(Value::Nil);
-                self.add_op(inner_ctx, body.span, nil);
-                self.add_op(inner_ctx, body.span, Op::Return);
+
+                if !all_paths_return(&body) {
+                    let nil = self.constant(Value::Nil);
+                    self.add_op(inner_ctx, body.span, nil);
+                    self.add_op(inner_ctx, body.span, Op::Return);
+                }
 
                 self.blocks[inner_ctx.block_slot].upvalues = self.pop_frame(inner_ctx)
                     .upvalues
@@ -531,9 +533,137 @@ impl Compiler {
         }
     }
 
-    fn resolve_type(&self, _ty: &syntree::Type, _ctx: Context) -> Type {
-        // TODO(ed): Implement this
-        Type::Void
+    fn resolve_type_namespace(
+        &mut self,
+        assignable: &Assignable,
+        namespace: usize,
+        ctx: Context,
+    ) -> Option<usize> {
+        // TODO(ed): This is ugly
+        use AssignableKind::*;
+        match &assignable.kind {
+            Access(inner, ident) => {
+                self.resolve_type_namespace(&inner, namespace, ctx)
+                    .and_then(|namespace| self.namespaces[namespace].get(&ident.name))
+                    .and_then(|o| match o {
+                        Name::Namespace(namespace) => Some(*namespace),
+                        _ => None,
+                    })
+                    .or_else(|| {
+                        error!(
+                            self,
+                            ctx,
+                            assignable.span,
+                            "While parsing type '{}' is not a namespace",
+                            ident.name
+                        );
+                        None
+                    })
+            },
+            Read(_) => {
+                // Should be unreachable
+                error!(self, ctx, assignable.span, "This is not a namespace");
+                None
+            }
+            Call(_, _) => {
+                error!(self, ctx, assignable.span, "Cannot have calls in types");
+                None
+            }
+            Index(_, _) => {
+                error!(self, ctx, assignable.span, "Cannot have indexing in types");
+                None
+            }
+        }
+    }
+
+    fn resolve_type_ident(
+        &mut self,
+        assignable: &Assignable,
+        namespace: usize,
+        ctx: Context,
+    ) -> Type {
+        use AssignableKind::*;
+        match &assignable.kind {
+            Read(ident) => {
+                self.namespaces[namespace].get(&ident.name)
+                    .and_then(|name| match name {
+                        Name::Blob(blob) => Some(Type::Instance(*blob)),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| {
+                        error!(
+                            self,
+                            ctx,
+                            assignable.span,
+                            "While parsing type '{}' is not a blob",
+                            ident.name
+                        );
+                        Type::Void
+                    })
+            },
+            Access(inner, ident) => {
+                self.resolve_type_namespace(&inner, namespace, ctx)
+                    .and_then(|namespace| self.namespaces[namespace].get(&ident.name))
+                    .and_then(|name| match name {
+                        Name::Blob(blob) => Some(Type::Instance(*blob)),
+                        _ => None
+                    })
+                    .unwrap_or_else(|| {
+                        error!(
+                            self,
+                            ctx,
+                            assignable.span,
+                            "While parsing type '{}' is not a blob",
+                            ident.name
+                        );
+                        Type::Void
+                    })
+            }
+            Call(_, _) => {
+                error!(self, ctx, assignable.span, "Cannot have calls in types");
+                Type::Void
+            }
+            Index(_, _) => {
+                error!(self, ctx, assignable.span, "Cannot have indexing in types");
+                Type::Void
+            }
+        }
+    }
+
+    fn resolve_type(&mut self, ty: &syntree::Type, ctx: Context) -> Type {
+        use TypeKind::*;
+        match &ty.kind {
+            Implied => Type::Unknown,
+            Resolved(ty) => ty.clone(),
+            UserDefined(assignable) => {
+                self.resolve_type_ident(&assignable, ctx.namespace, ctx)
+            },
+            Union(a, b) => {
+                match (self.resolve_type(a, ctx), self.resolve_type(b, ctx)) {
+                    (Type::Union(_), _) => panic!("Didn't expect union on RHS - check parser"),
+                    (a, Type::Union(mut us)) => {
+                        us.insert(a);
+                        Type::Union(us)
+                    }
+                    (a, b) => Type::Union(vec![a, b].into_iter().collect()),
+                }
+            }
+            Fn(params, ret) => {
+                let params = params.iter().map(|t| self.resolve_type(t, ctx)).collect();
+                let ret = Box::new(self.resolve_type(ret, ctx));
+                Type::Function(params, ret)
+            }
+            Tuple(fields) =>
+                Type::Tuple(fields.iter().map(|t| self.resolve_type(t, ctx)).collect()),
+            List(kind) =>
+                Type::List(Box::new(self.resolve_type(kind, ctx))),
+            Set(kind) =>
+                Type::Set(Box::new(self.resolve_type(kind, ctx))),
+            Dict(key, value) => Type::Dict(
+                Box::new(self.resolve_type(key, ctx)),
+                Box::new(self.resolve_type(value, ctx))
+            ),
+        }
     }
 
     fn define(&mut self, name: &str, kind: VarKind, span: Span) -> VarSlot {
@@ -566,9 +696,11 @@ impl Compiler {
 
             Blob { name, fields } => {
                 if let Some(Name::Blob(slot)) = self.namespaces[ctx.namespace].get(name) {
-                    self.blobs[*slot].fields = fields
-                        .iter()
-                        .map(|(k, v)| (k.clone(), self.resolve_type(v, ctx)))
+                    let slot = *slot;
+                    self.blobs[slot].fields = fields
+                        .clone()
+                        .into_iter()
+                        .map(|(k, v)| (k, self.resolve_type(&v, ctx)))
                         .collect();
                 } else {
                     error!(self, ctx, statement.span, "No blob with the name '{}' in this namespace", name);
@@ -593,9 +725,9 @@ impl Compiler {
                     let ty = self.resolve_type(ty, ctx);
                     let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
                         if kind.force() {
-                            Op::Define(ty)
-                        } else {
                             Op::Force(ty)
+                        } else {
+                            Op::Define(ty)
                         }
                     } else {
                         error!(self, ctx, statement.span, "Failed to add type declaration");
@@ -740,7 +872,9 @@ impl Compiler {
             .collect();
 
         let name = "/preamble/";
-        self.blocks.push(Block::new(name, &tree.modules[0].0));
+        let mut block = Block::new_tree(name, 0, &tree.modules[0].0);
+        block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
+        self.blocks.push(block);
         self.frames.push(Frame::new(name, Span { line: 0 }));
         let mut ctx = Context {
             block_slot: self.blocks.len() - 1,
@@ -825,6 +959,8 @@ impl Compiler {
                         }
                     }
 
+                    // TODO(ed): These need to be done before all other statements, so
+                    // types can be resolved.
                     Blob { name, .. } => {
                         match namespace.entry(name.to_owned()) {
                             Entry::Vacant(_) => {
@@ -867,8 +1003,10 @@ impl Compiler {
                             }
                         }
 
-                        let nil = self.constant(Value::Nil);
-                        self.add_op(ctx, Span { line: 0 }, nil);
+                        // Just fill in an empty slot since we have no idea.
+                        // Unknown is overwritten by the Op::Force in the type checker.
+                        let unknown = self.constant(Value::Unknown);
+                        self.add_op(ctx, Span { line: 0 }, unknown);
 
                         let ty = self.resolve_type(ty, ctx);
                         let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
@@ -894,4 +1032,26 @@ impl Compiler {
 
 pub fn compile(prog: Prog, functions: &[(String, RustFunction)]) -> Result<crate::Prog, Vec<Error>> {
     Compiler::new().compile(prog, functions)
+}
+
+fn all_paths_return(statement: &Statement) -> bool {
+    match &statement.kind {
+        StatementKind::Use { .. }
+        | StatementKind::Blob { .. }
+        | StatementKind::Print { .. }
+        | StatementKind::Assignment { .. }
+        | StatementKind::Definition { .. }
+        | StatementKind::StatementExpression { .. }
+        | StatementKind::Unreachable
+        | StatementKind::EmptyStatement
+            => false,
+
+        StatementKind::If { pass, fail, .. }
+            => all_paths_return(pass) && all_paths_return(fail),
+
+        StatementKind::Loop { body, .. } => all_paths_return(body),
+        StatementKind::Block { statements } => statements.iter().any(all_paths_return),
+
+        StatementKind::Ret { .. } => true,
+    }
 }

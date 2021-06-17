@@ -21,8 +21,11 @@ fn main() -> Result<(), String> {
                 Err(format!("{} errors occured.", errs.len()))
             }
             Ok(prog) => {
-                for block in prog.blocks.iter() {
-                    block.borrow().debug_print(Some(&prog.constants));
+                if let Err(errs) = sylt::typechecker::typecheck(&prog, &args) {
+                    for err in errs {
+                        println!("{}", err);
+                    }
+                    return Err("Typecheck failed".into())
                 }
 
                 if let Err(errs) = sylt::run(&prog, &args) {
