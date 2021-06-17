@@ -52,12 +52,11 @@ pub struct VM {
 }
 
 // Checks the program for type errors.
-pub(crate) fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
-    let (globals, mut errors) = typecheck_block(Rc::clone(&prog.blocks[0]), prog, Vec::new(), &args);
-    println!("{:?}", globals);
-    for block in prog.blocks.iter().skip(1) {
+pub fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
+    let (globals, mut errors) = typecheck_block(0, prog, Vec::new(), &args);
+    for block_slot in 0..prog.blocks.len() {
         errors.append(
-            &mut typecheck_block(Rc::clone(block), prog, globals.clone(), &args).1
+            &mut typecheck_block(block_slot, prog, globals.clone(), &args).1
         );
     }
 
@@ -69,8 +68,9 @@ pub(crate) fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
 }
 
 
-fn typecheck_block(block: Rc<RefCell<Block>>, prog: &Prog, global_types: Vec<Type>, args: &Args)
+fn typecheck_block(block_slot: usize, prog: &Prog, global_types: Vec<Type>, args: &Args)
     -> (Vec<Type>, Vec<Error>) {
+    let block = &prog.blocks[block_slot];
     let print_bytecode = args.verbosity > 0;
     let print_exec = args.verbosity > 0;
     if print_bytecode {
@@ -84,7 +84,8 @@ fn typecheck_block(block: Rc<RefCell<Block>>, prog: &Prog, global_types: Vec<Typ
 
     let mut vm = VM::new(&block, global_types);
     let mut errors = Vec::new();
-    for (ip, op) in (*block).borrow().ops.iter().enumerate() {
+    let ops = (*block).borrow().ops.clone();
+    for (ip, op) in ops.iter().enumerate() {
         vm.ip = ip;
 
         #[cfg(debug_assertions)]
@@ -92,7 +93,21 @@ fn typecheck_block(block: Rc<RefCell<Block>>, prog: &Prog, global_types: Vec<Typ
             vm.print_stack()
         }
 
-        if let Err(e) = vm.check_op(*op, prog) {
+        // Global operations in the outer scope are the same
+        // as local operations. Since we assign to the stack.
+        //
+        // This makes the implementation a lot easier.
+        let op = match (block_slot == 0, op) {
+            (true, Op::ReadGlobal(slot)) => {
+                Op::ReadLocal(*slot)
+            }
+            (true, Op::AssignGlobal(slot)) => {
+                Op::AssignLocal(*slot)
+            }
+            _ => { *op }
+        };
+
+        if let Err(e) = vm.check_op(op, prog) {
             errors.push(e);
         }
     }
@@ -202,14 +217,18 @@ impl VM {
             }
 
             Op::AssignLocal(slot) => {
-                let var = self.stack[slot].clone();
-                let other = self.pop();
-                if var != other {
+                let current = self.stack[slot].clone();
+                let given = self.pop();
+                if !current.fits(&given) {
                     error!(
                         self,
-                        RuntimeError::TypeMismatch(var, other),
+                        RuntimeError::TypeMismatch(current, given),
                         "Cannot assign to different type"
                     );
+                }
+
+                if matches!(current, Type::Unknown) {
+                    self.stack[slot] = given;
                 }
             }
 
@@ -222,12 +241,12 @@ impl VM {
             }
 
             Op::AssignGlobal(slot) => {
-                let var = self.global_types[slot].clone();
-                let other = self.pop();
-                if var != other {
+                let current = self.global_types[slot].clone();
+                let given = self.pop();
+                if !current.fits(&given) {
                     error!(
                         self,
-                        RuntimeError::TypeMismatch(var, other),
+                        RuntimeError::TypeMismatch(current, given),
                         "Cannot assign to different type"
                     );
                 }
@@ -237,7 +256,8 @@ impl VM {
                 let value = &prog.constants[slot];
                 self.push(Type::from(value));
 
-                while let Value::Function(_, block) = value {
+                while let Value::Function(_, _, block) = value {
+                    let block = Rc::clone(&prog.blocks[*block]);
                     match block.borrow().linking {
                         BlockLinkState::Linked => break,
                         BlockLinkState::Unlinked => {
@@ -284,6 +304,7 @@ impl VM {
                 match inst {
                     Type::Instance(ty) => {
                         let field = &prog.strings[field];
+                        let ty = &prog.blobs[ty];
                         match ty.fields.get(field) {
                             Some(ty) => {
                                 if ty != &expect {
@@ -318,6 +339,7 @@ impl VM {
                             "_id" => { self.push(Type::Int); }
                             "_name" => { self.push(Type::String); }
                             field => {
+                                let ty = &prog.blobs[ty];
                                 match ty.fields.get(field) {
                                     Some(ty) => {
                                         self.push(ty.clone());
@@ -352,14 +374,17 @@ impl VM {
             }
 
             Op::AssignUpvalue(slot) => {
-                let var = self.upvalues.get(slot).unwrap().clone();
+                let current = self.upvalues.get(slot).unwrap().clone();
                 let up = self.pop();
-                if var != up {
+                if !current.fits(&up) {
                     error!(
                         self,
-                        RuntimeError::TypeMismatch(up, var),
+                        RuntimeError::TypeMismatch(up, current),
                         "Captured varibles type doesn't match upvalue"
                     );
+                }
+                if matches!(current, Type::Unknown) {
+                    self.upvalues[slot] = up;
                 }
             }
 
@@ -450,17 +475,24 @@ impl VM {
             }
 
             Op::Force(ty) => {
-                self.pop();
-                if let Value::Ty(ty) = &prog.constants[ty] {
-                    self.push(ty.clone());
-                } else {
-                    error!(self, RuntimeError::InvalidProgram, "Can only force types");
+                let old = self.pop();
+                match &prog.constants[ty] {
+                    Value::Ty(Type::Unknown) => {
+                        self.push(old);
+                    }
+                    Value::Ty(ty) => {
+                        self.push(ty.clone());
+                    }
+                    _ => {
+                        error!(self, RuntimeError::InvalidProgram, "Can only force types");
+                    }
                 }
             }
 
             Op::Link(slot) => {
                 match &prog.constants[slot] {
-                    Value::Function(_, block) => {
+                    Value::Function(_, _, block) => {
+                        let block = &prog.blocks[*block];
                         block.borrow_mut().linking = BlockLinkState::Linked;
 
                         let mut types = Vec::new();
@@ -589,7 +621,8 @@ impl VM {
                 let call_callable = |callable: &Type| {
                     let args = self.stack[new_base + 1..].to_vec();
                     match callable {
-                        Type::Blob(blob) => {
+                        Type::Blob(blob_slot) => {
+                            let blob = &prog.blobs[*blob_slot];
                             let values = self.stack[new_base+1..]
                                 .chunks_exact(2)
                                 .map(|b| {
@@ -643,7 +676,7 @@ impl VM {
                                 }
                             }
 
-                            Ok(Type::Instance(Rc::clone(blob)))
+                            Ok(Type::Instance(*blob_slot))
                         }
 
                         Type::Function(fargs, fret) => {
@@ -659,6 +692,8 @@ impl VM {
                             let args: Vec<_> = self.stack[new_base + 1..].to_vec().into_iter().map(Value::from).collect();
                             extern_func(&args, true).map(|r| r.into())
                         }
+
+                        Type::Unknown => Ok(Type::Unknown),
 
                         _ => Err(RuntimeError::InvalidProgram),
                     }
@@ -690,7 +725,7 @@ impl VM {
                 };
                 self.stack.truncate(new_base + 1);
                 if let Some(err) = err {
-                    error!(self, err);
+                    error!(self, err, "Failed to call");
                 }
             }
 

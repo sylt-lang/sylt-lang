@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 
 pub mod error;
 pub mod vm;
+pub mod syncomp;
 pub mod syntree;
 pub mod typechecker;
 
@@ -54,10 +55,18 @@ pub fn construct_tree(args: &Args) -> Result<syntree::Prog, Vec<Error>> {
     syntree::tree(&path)
 }
 
+pub fn tree_compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
+    syncomp::compile(construct_tree(args)?, &functions)
+}
+
 /// Compiles, links and runs the given file. The supplied functions are callable
 /// external functions.
 pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    let prog = compile(args, functions)?;
+    let prog = if args.tree_mode {
+        tree_compile(args, functions)
+    } else {
+        compile(args, functions)
+    }?;
     typechecker::typecheck(&prog, &args)?;
     run(&prog, &args)
 }
@@ -143,8 +152,8 @@ pub enum Type {
     Dict(Box<Type>, Box<Type>),
     Iter(Box<Type>),
     Function(Vec<Type>, Box<Type>),
-    Blob(Rc<Blob>),
-    Instance(Rc<Blob>),
+    Blob(usize),
+    Instance(usize),
     ExternFunction(usize),
 }
 
@@ -197,15 +206,11 @@ impl Hash for Type {
                 8
             }
             Type::Blob(b) => {
-                for t in b.fields.values() {
-                    t.hash(h);
-                }
+                b.hash(h);
                 10
             }
             Type::Instance(b) => {
-                for t in b.fields.values() {
-                    t.hash(h);
-                }
+                b.hash(h);
                 11
             }
             Type::ExternFunction(_) => {
@@ -255,8 +260,8 @@ impl From<&Value> for Type {
     fn from(value: &Value) -> Type {
         match value {
             Value::Field(s) => Type::Field(s.clone()),
-            Value::Instance(b, _) => Type::Instance(Rc::clone(b)),
-            Value::Blob(b) => Type::Blob(Rc::clone(b)),
+            Value::Instance(b, _) => Type::Instance(*b),
+            Value::Blob(b) => Type::Blob(*b),
             Value::Tuple(v) => Type::Tuple(v.iter().map(Type::from).collect()),
             Value::List(v) => {
                 let v: &RefCell<_> = v.borrow();
@@ -283,11 +288,7 @@ impl From<&Value> for Type {
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
-            Value::Function(_, block) => {
-                let block: &RefCell<_> = block.borrow();
-                let block = &block.borrow();
-                block.borrow().ty.clone()
-            }
+            Value::Function(_, ty, _) => ty.clone(),
             Value::Unknown => Type::Unknown,
             Value::ExternFunction(n) => Type::ExternFunction(*n),
             Value::Nil => Type::Void,
@@ -307,8 +308,8 @@ impl From<&Type> for Value {
         match ty {
             Type::Field(s) => Value::Field(s.clone()),
             Type::Void => Value::Nil,
-            Type::Blob(b) => Value::Blob(Rc::clone(b)),
-            Type::Instance(b) => Value::Instance(Rc::clone(b), Rc::new(RefCell::new(HashMap::new()))),
+            Type::Blob(b) => Value::Blob(*b),
+            Type::Instance(b) => Value::Instance(*b, Rc::new(RefCell::new(HashMap::new()))),
             Type::Tuple(fields) => Value::Tuple(Rc::new(fields.iter().map(Value::from).collect())),
             Type::Union(v) => Value::Union(v.iter().map(Value::from).collect()),
             Type::List(v) => Value::List(Rc::new(RefCell::new(vec![Value::from(v.as_ref())]))),
@@ -328,10 +329,7 @@ impl From<&Type> for Value {
             Type::Float => Value::Float(1.0),
             Type::Bool => Value::Bool(true),
             Type::String => Value::String(Rc::new("".to_string())),
-            Type::Function(_, _) => Value::Function(
-                Rc::new(Vec::new()),
-                Rc::new(RefCell::new(Block::stubbed_block(ty))),
-            ),
+            Type::Function(a, r) => Value::Function(Rc::new(Vec::new()), Type::Function(a.clone(), r.clone()), 0),
             Type::ExternFunction(x) => Value::ExternFunction(*x),
             Type::Ty => Value::Ty(Type::Void),
         }
@@ -345,11 +343,12 @@ impl From<Type> for Value {
 }
 
 impl Type {
+    // TODO(ed): Swap order of arguments
     /// Checks if the other type is valid in a place where the self type is. It's an asymmetrical
     /// comparison for types useful when checking assignment.
     pub fn fits(&self, other: &Self) -> bool {
         match (self, other) {
-            (_, Type::Unknown) => true,
+            (Type::Unknown, _) | (_, Type::Unknown) => true,
             (Type::List(a), Type::List(b)) => a.fits(b),
             (Type::Set(a), Type::Set(b)) => a.fits(b),
             (Type::Dict(ak, av), Type::Dict(bk, bv)) => ak.fits(bk) && av.fits(bv),
@@ -379,8 +378,8 @@ pub type IterFn = dyn FnMut() -> Option<Value>;
 pub enum Value {
     Field(String),
     Ty(Type),
-    Blob(Rc<Blob>),
-    Instance(Rc<Blob>, Rc<RefCell<HashMap<String, Value>>>),
+    Blob(usize),
+    Instance(usize, Rc<RefCell<HashMap<String, Value>>>),
     Tuple(Rc<Vec<Value>>),
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
@@ -391,7 +390,7 @@ pub enum Value {
     Int(i64),
     Bool(bool),
     String(Rc<String>),
-    Function(Rc<Vec<Rc<RefCell<UpValue>>>>, Rc<RefCell<Block>>),
+    Function(Rc<Vec<Rc<RefCell<UpValue>>>>, Type, usize),
     ExternFunction(usize),
     /// This value should not be present when running, only when type checking.
     /// Most operations are valid but produce funky results.
@@ -435,8 +434,8 @@ impl Debug for Value {
         match self {
             Value::Field(s) => write!(fmt, "( .{} )", s),
             Value::Ty(ty) => write!(fmt, "(type {:?})", ty),
-            Value::Blob(b) => write!(fmt, "(blob {})", b.name),
-            Value::Instance(b, v) => write!(fmt, "(inst {} {:?})", b.name, v),
+            Value::Blob(b) => write!(fmt, "(blob b{})", b),
+            Value::Instance(b, v) => write!(fmt, "(inst b{} {:?})", b, v),
             Value::Float(f) => write!(fmt, "(float {})", f),
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),
@@ -445,10 +444,8 @@ impl Debug for Value {
             Value::Set(v) => write!(fmt, "(set {:?})", v),
             Value::Dict(v) => write!(fmt, "(dict {:?})", v),
             Value::Iter(v, _) => write!(fmt, "(iter {:?})", v),
-            Value::Function(_, block) => {
-                let block: &RefCell<_> = block.borrow();
-                let block = &block.borrow();
-                write!(fmt, "(fn {}: {:?})", block.name, block.ty)
+            Value::Function(_, ty, block) => {
+                write!(fmt, "(fn #{} {:?})", block, ty)
             }
             Value::ExternFunction(slot) => write!(fmt, "(extern fn {})", slot),
             Value::Unknown => write!(fmt, "(unknown)"),
@@ -514,9 +511,9 @@ pub struct UpValue {
 }
 
 impl UpValue {
-    fn new(value: usize) -> Self {
+    fn new(slot: usize) -> Self {
         Self {
-            slot: value,
+            slot,
             value: Value::Nil,
         }
     }
@@ -547,11 +544,14 @@ impl UpValue {
     }
 }
 
+// TODO(ed): We need to rewrite this with indexes to this struct instead
+// of an RC - otherwise we cannot support all recursive types.
 #[derive(Debug, Clone)]
 pub struct Blob {
     pub id: usize,
+    pub namespace: usize,
     pub name: String,
-    /// Maps field names to their slot and type.
+    /// Maps field names to their type
     pub fields: HashMap<String, Type>,
 }
 
@@ -562,9 +562,20 @@ impl PartialEq for Blob {
 }
 
 impl Blob {
+    // NOTE(ed): Should be replaced with `new_tree`
     fn new(id: usize, name: &str) -> Self {
         Self {
             id,
+            name: String::from(name),
+            namespace: 0,
+            fields: HashMap::new(),
+        }
+    }
+
+    fn new_tree(id: usize, namespace: usize, name: &str) -> Self {
+        Self {
+            id,
+            namespace,
             name: String::from(name),
             fields: HashMap::new(),
         }
@@ -801,7 +812,7 @@ pub enum Op {
     /// Reads the global, and adds it
     /// to the top of the stack.
     ///
-    /// Constants are stored at the bottom
+    /// Globals are stored at the bottom
     /// of the stack and initalized when
     /// the program starts.
     ///
@@ -878,6 +889,8 @@ pub struct Block {
     upvalues: Vec<(usize, bool, Type)>,
     linking: BlockLinkState,
 
+    namespace: usize,
+
     pub name: String,
     pub file: PathBuf,
     ops: Vec<Op>,
@@ -892,12 +905,20 @@ impl Block {
             upvalues: Vec::new(),
             linking: BlockLinkState::Nothing,
 
+            namespace: 0,
+
             name: String::from(name),
             file: file.to_owned(),
             ops: Vec::new(),
             last_line_offset: 0,
             line_offsets: HashMap::new(),
         }
+    }
+
+    fn new_tree(name: &str, namespace: usize, file: &Path) -> Self {
+        let mut block = Self::new(name, file);
+        block.namespace = namespace;
+        block
     }
 
     fn mark_constant(&mut self) {
@@ -907,18 +928,11 @@ impl Block {
         self.linking = BlockLinkState::Unlinked;
     }
 
-    // Used to create empty functions.
-    fn stubbed_block(ty: &Type) -> Self {
-        let mut block = Block::new("/empty/", Path::new(""));
-        block.ty = ty.clone();
-        block
-    }
-
     pub fn args(&self) -> &Vec<Type> {
         if let Type::Function(ref args, _) = self.ty {
             args
         } else {
-            unreachable!()
+            unreachable!();
         }
     }
 
@@ -1014,6 +1028,7 @@ impl Block {
 #[derive(Clone)]
 pub struct Prog {
     pub blocks: Vec<Rc<RefCell<Block>>>,
+    pub blobs: Vec<Blob>,
     pub functions: Vec<RustFunction>,
     pub constants: Vec<Value>,
     pub strings: Vec<String>,
@@ -1052,6 +1067,31 @@ mod tests {
 
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
+                args.tree_mode = true;
+                args.verbosity = if $print { 1 } else { 0 };
+                let res = $crate::run_file(
+                    &args,
+                    $crate::lib_sylt::_sylt_link(),
+                );
+                $crate::assert_errs!(res, $errs);
+            }
+        };
+    }
+
+    #[macro_export]
+    macro_rules! skip_test_file {
+        ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
+            #[test]
+            #[ignore]
+            fn $fn() {
+                #[allow(unused_imports)]
+                use $crate::error::RuntimeError;
+                #[allow(unused_imports)]
+                use $crate::Type;
+
+                let mut args = $crate::Args::default();
+                args.file = Some(std::path::PathBuf::from($path));
+                args.tree_mode = true;
                 args.verbosity = if $print { 1 } else { 0 };
                 let res = $crate::run_file(
                     &args,

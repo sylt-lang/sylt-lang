@@ -5,6 +5,7 @@ use crate::tokenizer::Token;
 use crate::Next;
 use crate::Type as RuntimeType;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 
 type T = Token;
@@ -15,20 +16,20 @@ pub struct Span {
     // TODO(ed): Do this more intelligent, so
     // we can show ranges. Maybe even go back
     // to offsets from start of the file.
-    line: usize,
+    pub line: usize,
 }
 
 /// Contains modules.
 #[derive(Debug, Clone)]
 pub struct Prog {
-    modules: Vec<(PathBuf, Module)>,
+    pub modules: Vec<(PathBuf, Module)>,
 }
 
 /// Contains statements.
 #[derive(Debug, Clone)]
 pub struct Module {
-    span: Span,
-    statements: Vec<Statement>,
+    pub span: Span,
+    pub statements: Vec<Statement>,
 }
 
 /// Variables can be any combination of `{Force,}{Const,Mutable}`.
@@ -41,6 +42,16 @@ pub enum VarKind {
     Mutable,
     ForceConst,
     ForceMutable,
+}
+
+impl VarKind {
+    pub fn immutable(&self) -> bool {
+        matches!(self, VarKind::Const | VarKind::ForceConst)
+    }
+
+    pub fn force(&self) -> bool {
+        matches!(self, VarKind::ForceConst | VarKind::ForceMutable)
+    }
 }
 
 /// The different kinds of assignment operators: `+=`, `-=`, `*=`, `/=` and `=`.
@@ -128,6 +139,8 @@ pub enum StatementKind {
         value: Expression,
     },
 
+    // TODO(ed): break and continue
+
     /// Groups together statements that are executed after another.
     ///
     /// `{ <statement>.. }`.
@@ -151,17 +164,19 @@ pub enum StatementKind {
 /// What makes up a program. Contains any [StatementKind].
 #[derive(Debug, Clone)]
 pub struct Statement {
-    span: Span,
-    kind: StatementKind,
+    pub span: Span,
+    pub kind: StatementKind,
 }
 
 #[derive(Debug, Clone)]
 pub struct Identifier {
-    span: Span,
-    name: String,
+    pub span: Span,
+    pub name: String,
 }
 
 /// The different kinds of [Assignable]s.
+///
+/// Assignables are the left hand side of a [StatementKind::Assignment].
 ///
 /// # Example
 ///
@@ -170,7 +185,7 @@ pub struct Identifier {
 /// Access(
 ///     Index(
 ///         Read(a), 2
-////    ),
+///     ),
 ///     Access(
 ///         Call(
 ///             Read(b), [1]
@@ -184,8 +199,9 @@ pub struct Identifier {
 #[derive(Debug, Clone)]
 pub enum AssignableKind {
     Read(Identifier),
+    /// A function call.
     Call(Box<Assignable>, Vec<Expression>),
-    Access(Box<Assignable>, Box<Assignable>),
+    Access(Box<Assignable>, Identifier),
     Index(Box<Assignable>, Box<Expression>),
 }
 
@@ -202,8 +218,8 @@ pub enum AssignableKind {
 /// ```
 #[derive(Debug, Clone)]
 pub struct Assignable {
-    span: Span,
-    kind: AssignableKind,
+    pub span: Span,
+    pub kind: AssignableKind,
 }
 
 /// The different kinds of [Expression]s.
@@ -253,6 +269,7 @@ pub enum ExpressionKind {
 
     /// Functions and closures.
     Function {
+        name: String,
         params: Vec<(Identifier, Type)>,
         ret: Type,
 
@@ -260,7 +277,7 @@ pub enum ExpressionKind {
     },
     /// A new instance of a blob.
     Instance {
-        blob: String,
+        blob: Assignable,
         fields: Vec<(String, Expression)>, // Keep calling order
     },
     /// `(a, b, ..)`
@@ -283,18 +300,18 @@ pub enum ExpressionKind {
 /// Expressions evaluate to values. Contains any [ExpressionKind].
 #[derive(Debug, Clone)]
 pub struct Expression {
-    span: Span,
-    kind: ExpressionKind,
+    pub span: Span,
+    pub kind: ExpressionKind,
 }
 
 #[derive(Debug, Clone)]
 pub enum TypeKind {
-    /// An unspecified type that the type checker infers.
+    /// An unspecified type that is left to the type checker.
     Implied,
-    /// A specified "standard" type like float and int.
+    /// A specified type by the user.
     Resolved(RuntimeType),
     /// I.e. blobs.
-    UserDefined(String),
+    UserDefined(Assignable),
     /// A type that can be either `a` or `b`.
     Union(Box<Type>, Box<Type>),
     /// `(params, return)`.
@@ -312,8 +329,8 @@ pub enum TypeKind {
 /// A parsed type. Contains any [TypeKind].
 #[derive(Debug, Clone)]
 pub struct Type {
-    span: Span,
-    kind: TypeKind,
+    pub span: Span,
+    pub kind: TypeKind,
 }
 
 /// Tokens and their line numbers.
@@ -380,6 +397,7 @@ impl<'a> Context<'a> {
 
 /// Construct a syntax error at the current token with a message.
 macro_rules! syntax_error {
+    //TODO None if no message?
     ($ctx:expr, $( $msg:expr ),* ) => {
         {
             let msg = format!($( $msg ),*).into();
@@ -395,6 +413,7 @@ macro_rules! syntax_error {
 
 /// Raise a syntax error at the current token with a message.
 macro_rules! raise_syntax_error {
+    //TODO None if no message?
     ($ctx:expr, $( $msg:expr ),* ) => {
         return Err(($ctx.skip(1), vec![syntax_error!($ctx, $( $msg ),*)]))
     };
@@ -435,17 +454,17 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     use TypeKind::*;
     let span = ctx.span();
     let (ctx, kind) = match ctx.token() {
-        T::Identifier(name) => (
-            ctx.skip(1),
-            match name.as_str() {
-                "void" => Resolved(Void),
-                "int" => Resolved(Int),
-                "float" => Resolved(Float),
-                "bool" => Resolved(Bool),
-                "str" => Resolved(String),
-                _ => UserDefined(name.clone()),
-            },
-        ),
+        T::Identifier(name) => match name.as_str() {
+            "void" => (ctx.skip(1), Resolved(Void)),
+            "int" => (ctx.skip(1), Resolved(Int)),
+            "float" => (ctx.skip(1), Resolved(Float)),
+            "bool" => (ctx.skip(1), Resolved(Bool)),
+            "str" => (ctx.skip(1), Resolved(String)),
+            _ => {
+                let (ctx, assignable) = assignable(ctx)?;
+                (ctx, UserDefined(assignable))
+            }
+        },
 
         // Function type
         T::Fn => {
@@ -920,6 +939,7 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
     };
 
     use AssignableKind::Call;
+    //TODO ?
     let result = Assignable {
         span,
         kind: Call(Box::new(callee), args),
@@ -952,11 +972,34 @@ fn assignable_index<'t>(ctx: Context<'t>, indexed: Assignable) -> ParseResult<'t
     sub_assignable(ctx, result)
 }
 
+/// Parse an [AssignableKind::Access].
+fn assignable_dot<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t, Assignable> {
+    use AssignableKind::Access;
+    let (ctx, ident) = if let (T::Identifier(name), span, ctx) = ctx.skip(1).eat() {
+        (
+            ctx,
+            Identifier {
+                name: name.clone(),
+                span,
+            }
+        )
+    } else {
+        raise_syntax_error!(
+            ctx,
+            "Assignable expressions have to start with an identifier"
+        );
+    };
+
+    let access = Assignable { span: ctx.span(), kind: Access(Box::new(accessed), ident) };
+    sub_assignable(ctx, access)
+}
+
 /// Parse a (maybe empty) "sub-assignable", i.e. either a call or indexable.
 fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'t, Assignable> {
     match ctx.token() {
         T::Bang | T::LeftParen => assignable_call(ctx, assignable),
         T::LeftBracket => assignable_index(ctx, assignable),
+        T::Dot => assignable_dot(ctx, assignable),
         _ => Ok((ctx, assignable))
     }
 }
@@ -972,12 +1015,12 @@ fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'
 /// 3. Parse `a[2].b(1).c(2, 3)` into `Access(Index(Read(a), 2), <parsed b(1).c(2, 3)>)`.
 fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
     use AssignableKind::*;
-    let span = ctx.span();
+    let outer_span = ctx.span();
 
     // Get the identifier.
     let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
         Assignable {
-            span,
+            span: outer_span,
             kind: Read(Identifier {
                 span,
                 name: name.clone(),
@@ -990,18 +1033,8 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
         );
     };
 
-    // Parse chained [] and ().
-    let (ctx, ident) = sub_assignable(ctx.skip(1), ident)?;
-
-    Ok(if let T::Dot = ctx.token() {
-        // `a.b` => another assignable
-        let (ctx, rest) = assignable(ctx.skip(1))?;
-        let kind = Access(Box::new(ident), Box::new(rest));
-        (ctx, Assignable { span, kind })
-    } else {
-        // Done
-        (ctx, ident)
-    })
+    // Parse chained [], . and ().
+    sub_assignable(ctx.skip(1), ident)
 }
 
 use expression::expression;
@@ -1073,6 +1106,7 @@ mod expression {
         // Parse the function statement. Usually a block statement but it's not currently forced.
         let (ctx, statement) = statement(ctx)?;
         let function = Function {
+            name: "lambda".into(),
             params,
             ret,
             body: Box::new(statement),
@@ -1317,13 +1351,8 @@ mod expression {
     /// Parse a blob instantiation, e.g. `A { b: 55 }`.
     fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         let span = ctx.span();
-        // The blob type.
-        let blob = if let T::Identifier(blob) = ctx.token() {
-            blob.clone()
-        } else {
-            raise_syntax_error!(ctx, "Expected name of blob");
-        };
-        let mut ctx = expect!(ctx.skip(1), T::LeftBrace, "Expected '{{' after blob name");
+        let (ctx, blob) = assignable(ctx)?;
+        let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{' after blob name");
 
         // The blob's fields.
         let mut fields = Vec::new();
@@ -1362,6 +1391,10 @@ mod expression {
             }
         }
         let ctx = expect!(ctx, T::RightBrace, "Expected '}}' after blob initalizer");
+
+        if matches!(ctx.token(), T::Else) {
+            raise_syntax_error!(ctx, "Parsed a blob instance not an if-statement");
+        }
 
         Ok((
             ctx,
@@ -1517,7 +1550,8 @@ fn module(path: &Path, tokens: &Tokens) -> (Vec<PathBuf>, Result<Module, Vec<Err
                 use StatementKind::*;
                 // Yank `use`s and add it to the used-files list.
                 if let Use { file, .. } = &statement.kind {
-                    use_files.push(PathBuf::from(&file.name));
+                    let file = PathBuf::from(format!("{}.sy", file.name));
+                    use_files.push(file);
                 }
                 // Only push non-empty statements.
                 if !matches!(statement.kind, EmptyStatement) {
@@ -1564,16 +1598,18 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
     let mut visited = HashSet::new();
     // Files we want to parse but haven't yet.
     let mut to_visit = Vec::new();
-    to_visit.push(path.to_path_buf());
+    let root = path.parent().unwrap();
+    to_visit.push(PathBuf::from(path.file_name().unwrap()));
 
     let mut modules = Vec::new();
     let mut errors = Vec::new();
     while let Some(file) = to_visit.pop() {
+        let file = root.join(file);
         if visited.contains(&file) {
             continue;
         }
         // Lex into tokens.
-        match file_to_tokens(path) {
+        match file_to_tokens(&file) {
             Ok(tokens) => {
                 // Parse the module.
                 let (mut next, result) = module(path, &tokens);
@@ -1584,7 +1620,7 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
                 to_visit.append(&mut next);
             }
             Err(_) => {
-                errors.push(Error::FileNotFound(path.to_path_buf()));
+                errors.push(Error::FileNotFound(file.to_path_buf()));
             }
         }
         visited.insert(file);
@@ -1720,6 +1756,9 @@ mod test {
         test!(parse_type, type_int: "int" => Resolved(RT::Int));
         test!(parse_type, type_float: "float" => Resolved(RT::Float));
         test!(parse_type, type_str: "str" => Resolved(RT::String));
+        test!(parse_type, type_unknown_access: "a.A | int" => Union(_, _));
+        // TODO(ed): This is controverisal
+        test!(parse_type, type_unknown_access_call: "a.b().A | int" => Union(_, _));
         test!(parse_type, type_unknown: "blargh" => UserDefined(_));
         test!(parse_type, type_union: "int | int" => Union(_, _));
         test!(parse_type, type_question: "int?" => Union(_, _));
