@@ -38,7 +38,8 @@ pub struct Module {
 /// evaluated first.
 ///
 /// Prec-variants can be compared to each other. A proc-macro ensures that the
-/// order here is what is compared.
+/// comparison follows the ordering here such that
+/// `prec_i < prec_j` for all `j > i`.
 #[derive(sylt_macro::Next, PartialEq, PartialOrd, Clone, Copy, Debug)]
 pub enum Prec {
     No,
@@ -74,8 +75,7 @@ impl VarKind {
     }
 }
 
-
-/// Normal infix operators: `+`, `-`, `*`, `/`
+/// The different kinds of assignment operators: `+=`, `-=`, `*=`, `/=` and `=`.
 #[derive(Debug, Copy, Clone)]
 pub enum Op {
     Nop,
@@ -126,7 +126,9 @@ pub enum StatementKind {
 
     /// Defines a new variable.
     ///
-    /// `a := <expression>`.
+    /// Example: `a := <expression>`.
+    ///
+    /// Valid definition operators are `::`, `:=` and `: <type> =`.
     Definition {
         ident: Identifier,
         kind: VarKind,
@@ -197,20 +199,23 @@ pub struct Identifier {
 ///
 /// Assignables are the left hand side of a [StatementKind::Assignment].
 ///
+/// # Example
+///
 /// The recursive structure means that `a[2].b(1).c(2, 3)` is evaluated to
 /// ```ignored
 /// Access(
 ///     Index(
-///         Read(a), 2),
-///         Access(
-///             Call(
-///                 Read(b), [1]
-///             ),
-///             Call(
-///                 Read(c), [2, 3]
-///             )
+///         Read(a), 2
+///     ),
+///     Access(
+///         Call(
+///             Read(b), [1]
+///         ),
+///         Call(
+///             Read(c), [2, 3]
 ///         )
 ///     )
+/// )
 /// ```
 #[derive(Debug, Clone)]
 pub enum AssignableKind {
@@ -224,7 +229,8 @@ pub enum AssignableKind {
 /// Something that can be assigned to. The assignable value can be read if the
 /// assignable is in an expression. Contains any [AssignableKind].
 ///
-/// Note that something like `a = b` will be evaluated to
+/// Note that assignables can occur both in the left hand side and the right hand
+/// side of assignment statements, so something like `a = b` will be evaluated as
 /// ```ignored
 /// Statement::Assignment(
 ///     Assignable::Read(a),
@@ -239,12 +245,11 @@ pub struct Assignable {
 
 /// The different kinds of [Expression]s.
 ///
-/// Expressions are recursive and end in some kind of value. Values are
-/// expressions as well.
+/// Expressions are recursive and evaluate to some kind of value.
 #[derive(Debug, Clone)]
 pub enum ExpressionKind {
-    /// Read from an [Assignable]. Variables, function calls, modules, blobs,
-    /// lists and tuples end up here.
+    /// Read from an [Assignable]. Variables, function calls, module accesses,
+    /// blob fields, list indexing, tuple indexing and dict indexing end up here.
     Get(Assignable),
 
     /// `a + b`
@@ -342,7 +347,7 @@ pub enum TypeKind {
     Dict(Box<Type>, Box<Type>),
 }
 
-/// The constituting parts of the type system. Contains any [TypeKind].
+/// A parsed type. Contains any [TypeKind].
 #[derive(Debug, Clone)]
 pub struct Type {
     pub span: Span,
@@ -359,7 +364,7 @@ type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>, Vec<Error>)>;
 pub struct Context<'a> {
     /// All tokens to be parsed.
     pub tokens: &'a Tokens,
-    /// The current line number.
+    /// The index of the curren token in the tokens slice.
     pub curr: usize,
     /// The file we're currently parsing.
     pub file: &'a Path,
@@ -386,19 +391,19 @@ impl<'a> Context<'a> {
         self.span().line
     }
 
-    /// Move to the next token.
+    /// Move to the next nth token.
     fn skip(&self, n: usize) -> Self {
         let mut new = *self;
         new.curr += n;
         new
     }
 
-    /// Peek the current [Token] and position.
+    /// Return the current [Token] and line number.
     fn peek(&self) -> &(T, usize) {
         self.tokens.get(self.curr).unwrap_or(&(T::EOF, 0))
     }
 
-    /// Peek the current [Token].
+    /// Return the current [Token].
     fn token(&self) -> &T {
         &self.peek().0
     }
@@ -408,6 +413,8 @@ impl<'a> Context<'a> {
         (self.token(), self.span(), self.skip(1))
     }
 }
+
+//TODO(gu) None if no message?
 
 /// Construct a syntax error at the current token with a message.
 macro_rules! syntax_error {
@@ -462,7 +469,7 @@ macro_rules! skip_if {
     };
 }
 
-/// Parse a [Type] definition. `fn int, int, bool -> bool.
+/// Parse a [Type] definition, e.g. `fn int, int, bool -> bool`.
 fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     use RuntimeType::{Bool, Float, Int, String, Void};
     use TypeKind::*;
@@ -559,7 +566,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
 
         // List
         T::LeftBracket => {
-            // Only contains a single type.
+            // Lists only contain a single type.
             let (ctx, ty) = parse_type(ctx.skip(1))?;
             let ctx = expect!(ctx, T::RightBracket, "Expected ']' after list type");
             (ctx, List(Box::new(ty)))
@@ -569,7 +576,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         T::LeftBrace => {
             // { a } -> set
             // { a: b } -> dict
-            // This means we can pass the first type unambiguously.
+            // This means we can parse the first type unambiguously.
             let (ctx, ty) = parse_type(ctx.skip(1))?;
             if matches!(ctx.token(), T::Colon) {
                 // Dict, parse another type.
@@ -591,7 +598,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     // Wrap it in a syntax tree node.
     let ty = Type { span, kind };
 
-    // Union type, a | b
+    // Union type, `a | b`
     let (ctx, ty) = if matches!(ctx.token(), T::Pipe) {
         // Parse the other type.
         let (ctx, rest) = parse_type(ctx.skip(1))?;
@@ -684,7 +691,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx, Ret { value })
         }
 
-        // `loop <expression> <statement>`, i.e. `loop a < 10 { a += 1 }`
+        // `loop <expression> <statement>`, e.g. `loop a < 10 { a += 1 }`
         [(T::Loop, _), ..] => {
             let (ctx, condition) = expression(ctx.skip(1))?;
             let (ctx, body) = statement(ctx)?;
@@ -771,79 +778,90 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx, Blob { name, fields })
         }
 
-        // Variable definition: `a :: 1`, `a := 2` or `a : int = 3`. Merged since they're kinda similar.
-        [(T::Identifier(name), _), (T::ColonColon, _), ..]
-        | [(T::Identifier(name), _), (T::ColonEqual, _), ..]
-        | [(T::Identifier(name), _), (T::Colon, _), ..] => {
+        // Constant declaration, e.g. `a :: 1`.
+        [(T::Identifier(name), _), (T::ColonColon, _), ..] => {
             let ident = Identifier {
                 name: name.clone(),
                 span: ctx.span(),
             };
-            let ctx = ctx.skip(1);
-            // Branch depending on the type of definition.
-            let (ctx, kind, ty) = match ctx.token() {
-                // Const
-                T::ColonColon => (
-                    ctx.skip(1),
-                    VarKind::Const,
-                    Type {
-                        span: ctx.span(),
-                        kind: TypeKind::Implied,
-                    },
-                ),
-                // Mutable
-                T::ColonEqual => (
-                    ctx.skip(1),
-                    VarKind::Mutable,
-                    Type {
-                        span: ctx.span(),
-                        kind: TypeKind::Implied,
-                    },
-                ),
-                // Typed
-                T::Colon => {
-                    let ctx = ctx.skip(1);
-                    let forced = matches!(ctx.token(), T::Bang); // !int
-                    let ctx = skip_if!(ctx, T::Bang);
-                    let (ctx, ty) = parse_type(ctx)?;
-                    let kind = match (ctx.token(), forced) {
-                        (T::Colon, true) => VarKind::ForceConst,
-                        (T::Equal, true) => VarKind::ForceMutable,
-                        (T::Colon, false) => VarKind::Const,
-                        (T::Equal, false) => VarKind::Mutable,
-                        (t, _) => {
-                            raise_syntax_error!(
-                                ctx,
-                                "Expected ':' or '=' for definition, but got '{:?}'",
-                                t
-                            );
-                        }
-                    };
-                    (ctx.skip(1), kind, ty)
-                }
+            // Skip identifier and `::`.
+            let ctx = ctx.skip(2);
 
-                //TODO unreachable. Be the change you want to see in the world.
-                _ => {
-                    raise_syntax_error!(ctx, "Not a definition statement");
-                }
-            };
-            // The value to define the variable to.
+            // The value to assign.
             let (ctx, value) = expression(ctx)?;
 
-            use ExpressionKind::Function;
-            let value = if let Function { params, ret, body, .. } = value.kind {
-                Expression {
-                    kind: Function {
-                        name: name.into(),
-                        params,
-                        ret,
-                        body
+            (
+                ctx,
+                Definition {
+                    ident,
+                    kind: VarKind::Const,
+                    ty: Type {
+                        span: ctx.span(),
+                        kind: TypeKind::Implied,
                     },
-                    ..value
-                }
-            } else {
-                value
+                    value,
+                },
+            )
+        }
+
+        // Mutable declaration, e.g. `b := 2`.
+        [(T::Identifier(name), _), (T::ColonEqual, _), ..] => {
+            let ident = Identifier {
+                name: name.clone(),
+                span: ctx.span(),
             };
+            // Skip identifier and `:=`.
+            let ctx = ctx.skip(2);
+
+            // The value to assign.
+            let (ctx, value) = expression(ctx)?;
+
+            (
+                ctx,
+                Definition {
+                    ident,
+                    kind: VarKind::Mutable,
+                    ty: Type {
+                        span: ctx.span(),
+                        kind: TypeKind::Implied,
+                    },
+                    value,
+                },
+            )
+        }
+
+        // Variable declaration with specified type, e.g. `c : int = 3` or `b : int | bool : false`.
+        [(T::Identifier(name), _), (T::Colon, _), ..] => {
+            let ident = Identifier {
+                name: name.clone(),
+                span: ctx.span(),
+            };
+            // Skip identifier and ':'.
+            let ctx = ctx.skip(2);
+
+            let (ctx, kind, ty) = {
+                let forced = matches!(ctx.token(), T::Bang); // !int
+                let ctx = skip_if!(ctx, T::Bang);
+                let (ctx, ty) = parse_type(ctx)?;
+                let kind = match (ctx.token(), forced) {
+                    (T::Colon, true) => VarKind::ForceConst,
+                    (T::Equal, true) => VarKind::ForceMutable,
+                    (T::Colon, false) => VarKind::Const,
+                    (T::Equal, false) => VarKind::Mutable,
+                    (t, _) => {
+                        raise_syntax_error!(
+                            ctx,
+                            "Expected ':' or '=' for definition, but got '{:?}'",
+                            t
+                        );
+                    }
+                };
+                // Skip `:` or `=`.
+                (ctx.skip(1), kind, ty)
+            };
+
+            // The value to define the variable to.
+            let (ctx, value) = expression(ctx)?;
 
             (
                 ctx,
@@ -1018,10 +1036,12 @@ fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'
 /// 3. Parse `a[2].b(1).c(2, 3)` into `Access(Index(Read(a), 2), <parsed b(1).c(2, 3)>)`.
 fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
     use AssignableKind::*;
-    // Get the first identifier.
+    let outer_span = ctx.span();
+
+    // Get the identifier.
     let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
         Assignable {
-            span,
+            span: outer_span,
             kind: Read(Identifier {
                 span,
                 name: name.clone(),
@@ -1104,7 +1124,7 @@ mod expression {
             }
         };
 
-        // Parse the function statement. Usually a block.
+        // Parse the function statement. Usually a block statement but it's not currently forced.
         let (ctx, statement) = statement(ctx)?;
         let function = Function {
             name: "lambda".into(),
@@ -1124,7 +1144,7 @@ mod expression {
 
     /// Parse an expression until we reach a token with higher precedence.
     fn parse_precedence<'t>(ctx: Context<'t>, prec: Prec) -> ParseResult<'t, Expression> {
-        // Initial value, e.g. a number value, assignable, ..
+        // Initial value, e.g. a number value, assignable, ...
         let (mut ctx, mut expr) = match prefix(ctx) {
             Ok(ret) => ret,
             Err((ctx, mut errs)) => {
@@ -1193,7 +1213,7 @@ mod expression {
         Ok((ctx, Expression { span, kind }))
     }
 
-    /// Parse something that begins at the start of a statement.
+    /// Parse something that begins at the start of a expression.
     fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         match ctx.token() {
             T::LeftParen => grouping_or_tuple(ctx),
@@ -1204,7 +1224,7 @@ mod expression {
             T::Minus | T::Bang => unary(ctx),
 
             T::Identifier(_) => {
-                // Blob declarations are expressions.
+                // Blob initializations are expressions.
                 if let Ok(result) = blob(ctx) {
                     Ok(result)
                 } else {
@@ -1226,6 +1246,7 @@ mod expression {
         }
     }
 
+    /// Parse a unary operator followed by an expression, e.g. `-5`.
     fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         let (op, span, ctx) = ctx.eat();
         let (ctx, expr) = parse_precedence(ctx, Prec::Factor)?;
@@ -1242,15 +1263,20 @@ mod expression {
         Ok((ctx, Expression { span, kind }))
     }
 
+    /// Parse an expression starting from an infix operator. Called by `parse_precedence`.
     fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
+        // Parse an operator and a following expression
+        // until we reach a token with higher precedence.
         let (op, span, ctx) = ctx.eat();
-
         let (ctx, rhs) = parse_precedence(ctx, precedence(op).next())?;
 
+        // Left and right of the operator.
         let lhs = Box::new(lhs.clone());
         let rhs = Box::new(rhs);
 
+        // Which expression kind to omit depends on the token.
         let kind = match op {
+            // Simple arithmetic.
             T::Plus => Add(lhs, rhs),
             T::Minus => Sub(lhs, rhs),
             T::Star => Mul(lhs, rhs),
@@ -1262,6 +1288,7 @@ mod expression {
             T::Less => Lt(lhs, rhs),
             T::LessEqual => Lteq(lhs, rhs),
 
+            // Boolean operators.
             T::And => And(lhs, rhs),
             T::Or => Or(lhs, rhs),
 
@@ -1269,10 +1296,14 @@ mod expression {
 
             T::In => In(lhs, rhs),
 
+            // The cool arrow syntax. For example: `a->b(2)` compiles to `b(a, 2)`.
             T::Arrow => {
                 use AssignableKind::Call;
+                // Rhs has to be an ExpressionKind::Get(AssignableKind::Call).
                 if let Get(Assignable { kind: Call(callee, mut args), ..  }) = rhs.kind {
+                    // Insert lhs as the first argument.
                     args.insert(0, *lhs);
+                    // Return the new expression.
                     Get(Assignable {
                         kind: Call(callee, args),
                         span: rhs.span,
@@ -1282,53 +1313,69 @@ mod expression {
                 }
             }
 
+            // Unknown infix operator.
             _ => {
                 return Err((ctx, Vec::new()));
             }
         };
+
         Ok((ctx, Expression { span, kind }))
     }
 
+    /// Parse either a grouping parenthesis or a tuple.
+    ///
+    /// Essentially, one-element tuples are groupings unless they end with a
+    /// comma. So `(1)` is parsed as the value `1` while `(1,)` is parsed as the
+    /// one-sized tuple containing `1`.
+    ///
+    /// `()` as well as `(,)` are parsed as zero-sized tuples.
     fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         let span = ctx.span();
         let mut ctx = expect!(ctx, T::LeftParen, "Expected '('");
 
+        // The expressions contained in the parenthesis.
         let mut exprs = Vec::new();
 
-        let mut tuple = matches!(ctx.token(), T::Comma | T::RightParen);
+        let mut is_tuple = matches!(ctx.token(), T::Comma | T::RightParen);
         loop {
+            // Any initial comma is skipped since we checked it before entering the loop.
             ctx = skip_if!(ctx, T::Comma);
             match ctx.token() {
+                // Done.
                 T::EOF | T::RightParen => {
                     break;
                 }
 
+                // Another inner expression.
                 _ => {
                     let (_ctx, expr) = expression(ctx)?;
                     exprs.push(expr);
-                    ctx = _ctx;
-                    tuple |= matches!(ctx.token(), T::Comma);
+                    ctx = _ctx; // assign to outer
+                    // Not a tuple, until it is.
+                    is_tuple |= matches!(ctx.token(), T::Comma);
                 }
             }
         }
 
         ctx = expect!(ctx, T::RightParen, "Expected ')'");
-        let result = if tuple {
+        let result = if is_tuple {
             Expression {
                 span,
                 kind: Tuple(exprs),
             }
         } else {
-            exprs.into_iter().next().unwrap()
+            exprs.remove(0)
         };
         Ok((ctx, result))
     }
 
+    /// Parse a blob instantiation, e.g. `A { b: 55 }`.
     fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         let span = ctx.span();
         let (ctx, blob) = assignable(ctx)?;
         let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{' after blob name");
 
+        // The blob's fields.
         let mut fields = Vec::new();
         loop {
             match ctx.token() {
@@ -1336,19 +1383,23 @@ mod expression {
                     ctx = ctx.skip(1);
                 }
 
+                // Done with fields.
                 T::RightBrace | T::EOF => {
                     break;
                 }
 
+                // Another field, e.g. `b: 55`.
                 T::Identifier(name) => {
+                    // Get the field name.
                     let name = name.clone();
 
                     ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after field name");
+                    // Get the value; `55` in the example above.
                     let (_ctx, expr) = expression(ctx)?;
-                    ctx = _ctx;
+                    ctx = _ctx; // assign to outer
 
                     if !matches!(ctx.token(), T::Comma | T::Newline | T::RightBrace) {
-                        raise_syntax_error!(ctx, "Expected a deliminator: newline or ','");
+                        raise_syntax_error!(ctx, "Expected a delimiter: newline or ','");
                     }
                     ctx = skip_if!(ctx, T::Comma);
 
@@ -1375,17 +1426,21 @@ mod expression {
         ))
     }
 
+    // Parse a list expression, e.g. `[1, 2, a(3)]`
     fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         let span = ctx.span();
         let mut ctx = expect!(ctx, T::LeftBracket, "Expected '['");
 
+        // Inner experssions.
         let mut exprs = Vec::new();
         loop {
             match ctx.token() {
+                // Done with inner expressions.
                 T::EOF | T::RightBracket => {
                     break;
                 }
 
+                // Another one.
                 _ => {
                     let (_ctx, expr) = expression(ctx)?;
                     exprs.push(expr);
@@ -1404,24 +1459,31 @@ mod expression {
         ))
     }
 
+    /// Parse either a set or dict expression.
+    ///
+    /// `{:}` is parsed as the empty dict and {} is parsed as the empty set.
     fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         let span = ctx.span();
         let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{'");
 
-        // NOTE(ed): I decided on {:} for empty dicts, and {} for empty sets.
+        // The inner values of the set or dict.
         let mut exprs = Vec::new();
+        // None => we don't know. Some(b) => we know b.
         let mut is_dict = None;
         loop {
             match ctx.token() {
+                // Done.
                 T::EOF | T::RightBrace => {
                     break;
                 }
 
+                // Free-standing colon, i.e. "empty dict pair".
                 T::Colon => {
+                    // Only valid if we don't know yet.
                     if let Some(is_dict) = is_dict {
                         raise_syntax_error!(
                             ctx,
-                            "Didn't expect empty dict pair since it has to be a {}",
+                            "Empty dict pair is invalid in a {}",
                             if is_dict { "dict" } else { "set" }
                         );
                     }
@@ -1429,15 +1491,20 @@ mod expression {
                     ctx = ctx.skip(1);
                 }
 
+                // Something that's part of an inner expression.
                 _ => {
+                    // Parse the expression.
                     let (_ctx, expr) = expression(ctx)?;
-                    ctx = _ctx;
+                    ctx = _ctx; // assign to outer
                     exprs.push(expr);
 
+                    // If a) we know we're a dict or b) the next token is a colon, parse the value of the dict.
+                    // Also, if we didn't know previously, store whether we're a dict or not.
                     if *is_dict.get_or_insert_with(|| matches!(ctx.token(), T::Colon)) {
                         ctx = expect!(ctx, T::Colon, "Expected ':' for dict pair");
+                        // Parse value expression.
                         let (_ctx, expr) = expression(ctx)?;
-                        ctx = _ctx;
+                        ctx = _ctx; // assign to outer
                         exprs.push(expr);
                     }
 
@@ -1448,6 +1515,7 @@ mod expression {
 
         ctx = expect!(ctx, T::RightBrace, "Expected '}}'");
 
+        // If we still don't know, assume we're a set.
         let kind = if is_dict.unwrap_or(false) {
             Dict(exprs)
         } else {
@@ -1457,6 +1525,11 @@ mod expression {
         Ok((ctx, Expression { span, kind }))
     }
 
+    /// Parse a single expression.
+    ///
+    /// An expression is either a function expression or a "normal"
+    /// expression that follows precedence rules.
+
     pub fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         match ctx.token() {
             T::Fn => function(ctx),
@@ -1465,28 +1538,43 @@ mod expression {
     }
 }
 
+/// Parse an outer statement.
+///
+/// Currently all statements are valid outer statements.
 fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
     // TODO(ed): Filter for invalid outer statements here.
     statement(ctx)
 }
 
+/// Parses a file's tokens. Returns a list of files it refers to (via `use`s) and
+/// the parsed statements.
+///
+/// # Errors
+///
+/// Returns any errors that occured when parsing the file. Basic error
+/// continuation is performed, so errored statements are skipped until a newline
+/// or EOF.
 fn module(path: &Path, tokens: &Tokens) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
     let mut ctx = Context::new(tokens, path);
     let mut errors = Vec::new();
     let mut use_files = Vec::new();
     let mut statements = Vec::new();
     while !matches!(ctx.token(), T::EOF) {
+        // Ignore newlines.
         if matches!(ctx.token(), T::Newline) {
             ctx = ctx.skip(1);
             continue;
         }
+        // Parse an outer statement.
         ctx = match outer_statement(ctx) {
             Ok((ctx, statement)) => {
                 use StatementKind::*;
+                // Yank `use`s and add it to the used-files list.
                 if let Use { file, .. } = &statement.kind {
                     let file = PathBuf::from(format!("{}.sy", file.name));
                     use_files.push(file);
                 }
+                // Only push non-empty statements.
                 if !matches!(statement.kind, EmptyStatement) {
                     statements.push(statement);
                 }
@@ -1517,8 +1605,19 @@ fn module(path: &Path, tokens: &Tokens) -> (Vec<PathBuf>, Result<Module, Vec<Err
     }
 }
 
+/// Parses the contents of a file as well as all files this file refers to and so
+/// on.
+///
+/// Returns the resulting [Program](Prog) (list of [Module]s).
+///
+/// # Errors
+///
+/// Returns any errors that occured when parsing the file(s). Basic error
+/// continuation is performed as documented in [module].
 pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
+    // Files we've already parsed. This ensures circular includes don't parse infinitely.
     let mut visited = HashSet::new();
+    // Files we want to parse but haven't yet.
     let mut to_visit = Vec::new();
     let root = path.parent().unwrap();
     to_visit.push(PathBuf::from(path.file_name().unwrap()));
@@ -1530,8 +1629,10 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
         if visited.contains(&file) {
             continue;
         }
+        // Lex into tokens.
         match file_to_tokens(&file) {
             Ok(tokens) => {
+                // Parse the module.
                 let (mut next, result) = module(path, &tokens);
                 match result {
                     Ok(module) => modules.push((file.clone(), module)),

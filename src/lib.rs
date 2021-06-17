@@ -14,8 +14,8 @@ use std::path::{Path, PathBuf};
 
 pub mod error;
 pub mod vm;
-pub mod syntree;
 pub mod syncomp;
+pub mod syntree;
 pub mod typechecker;
 
 mod rc;
