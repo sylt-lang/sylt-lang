@@ -346,7 +346,7 @@ impl Compiler {
                 self.patch(ctx, jump, op);
 
             }
-            Not(a)    => self.un_op(a, &[Op::Neg], expression.span, ctx),
+            Not(a)    => self.un_op(a, &[Op::Not], expression.span, ctx),
 
             Function { name, params, ret, body } => {
                 let file = self.file_from_namespace(ctx.namespace);
@@ -365,7 +365,6 @@ impl Compiler {
                 self.blocks[inner_ctx.block_slot].ty = ty.clone();
 
                 self.statement(&body, inner_ctx);
-
 
                 if !all_paths_return(&body) {
                     let nil = self.constant(Value::Nil);
