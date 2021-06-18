@@ -1157,13 +1157,7 @@ mod expression {
     /// Parse an expression until we reach a token with higher precedence.
     fn parse_precedence<'t>(ctx: Context<'t>, prec: Prec) -> ParseResult<'t, Expression> {
         // Initial value, e.g. a number value, assignable, ...
-        let (mut ctx, mut expr) = match prefix(ctx) {
-            Ok(ret) => ret,
-            Err((ctx, mut errs)) => {
-                errs.push(syntax_error!(ctx, "Invalid expression"));
-                return Err((ctx, errs));
-            }
-        };
+        let (mut ctx, mut expr) = prefix(ctx)?;
         while prec <= precedence(ctx.token()) {
             if let Ok((_ctx, _expr)) = infix(ctx, &expr) {
                 // assign to outer
@@ -1813,6 +1807,8 @@ mod test {
         test!(expression, bool_and: "true && a" => _);
         test!(expression, bool_or: "a || false" => _);
         test!(expression, bool_neg: "!a" => _);
+        test!(expression, bool_neg_multiple: "!a && b" => _);
+        test!(expression, bool_neg_multiple_rev: "a && !b" => _);
 
         test!(expression, cmp_eq: "a == b" => _);
         test!(expression, cmp_neq: "a != b" => _);
