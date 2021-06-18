@@ -855,9 +855,37 @@ impl Compiler {
         }
     }
 
-    fn module(&mut self, module: &Module, ctx: Context) {
+    fn module_functions(&mut self, module: &Module, ctx: Context) {
         for statement in module.statements.iter() {
-            self.statement(statement, ctx);
+            match statement.kind {
+                StatementKind::Definition {
+                    value: Expression {
+                        kind: ExpressionKind::Function { .. },
+                        ..
+                    },
+                    ..
+                } => {
+                    self.statement(statement, ctx);
+                }
+                _ => (),
+            }
+        }
+    }
+
+    fn module_not_functions(&mut self, module: &Module, ctx: Context) {
+        for statement in module.statements.iter() {
+            match statement.kind {
+                StatementKind::Definition {
+                    value: Expression {
+                        kind: ExpressionKind::Function { .. },
+                        ..
+                    },
+                    ..
+                } => (),
+                _ => {
+                    self.statement(statement, ctx);
+                }
+            }
         }
     }
 
@@ -886,7 +914,13 @@ impl Compiler {
         for (full_path, module) in tree.modules.iter() {
             let path = full_path.file_stem().unwrap().to_str().unwrap();
             ctx.namespace = path_to_namespace_id[path];
-            self.module(module, ctx);
+            self.module_functions(module, ctx);
+        }
+
+        for (full_path, module) in tree.modules.iter() {
+            let path = full_path.file_stem().unwrap().to_str().unwrap();
+            ctx.namespace = path_to_namespace_id[path];
+            self.module_not_functions(module, ctx);
         }
         let module = &tree.modules[0].1;
 
