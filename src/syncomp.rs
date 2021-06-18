@@ -936,30 +936,11 @@ impl Compiler {
             let path = path.file_stem().unwrap().to_str().unwrap();
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
+
             for statement in module.statements.iter() {
                 use StatementKind::*;
                 let mut namespace = self.namespaces.remove(slot);
                 match &statement.kind {
-                    Use { file: Identifier { name, span } } => {
-                        let other = path_to_namespace_id[name];
-                        match namespace.entry(name.to_owned()) {
-                            Entry::Vacant(vac) => {
-                                vac.insert(Name::Namespace(other));
-                            }
-                            Entry::Occupied(_) => {
-                                error!(
-                                    self,
-                                    ctx,
-                                    span,
-                                    "A global variable with the name '{}' already exists",
-                                    name
-                                );
-                            }
-                        }
-                    }
-
-                    // TODO(ed): These need to be done before all other statements, so
-                    // types can be resolved.
                     Blob { name, .. } => {
                         match namespace.entry(name.to_owned()) {
                             Entry::Vacant(_) => {
@@ -979,6 +960,40 @@ impl Compiler {
                                     ctx,
                                     statement.span,
                                     "A global variable with the name '{}' already exists", name
+                                );
+                            }
+                        }
+                    }
+
+                    // Handled below.
+                    _ => (),
+                }
+                self.namespaces.insert(slot, namespace);
+            }
+        }
+
+        for (path, module) in tree.modules.iter() {
+            let path = path.file_stem().unwrap().to_str().unwrap();
+            let slot = path_to_namespace_id[path];
+            let ctx = Context::from_namespace(slot);
+
+            for statement in module.statements.iter() {
+                use StatementKind::*;
+                let mut namespace = self.namespaces.remove(slot);
+                match &statement.kind {
+                    Use { file: Identifier { name, span } } => {
+                        let other = path_to_namespace_id[name];
+                        match namespace.entry(name.to_owned()) {
+                            Entry::Vacant(vac) => {
+                                vac.insert(Name::Namespace(other));
+                            }
+                            Entry::Occupied(_) => {
+                                error!(
+                                    self,
+                                    ctx,
+                                    span,
+                                    "A global variable with the name '{}' already exists",
+                                    name
                                 );
                             }
                         }
@@ -1016,6 +1031,9 @@ impl Compiler {
                         };
                         self.add_op(ctx, Span { line: 0 }, op);
                     }
+
+                    // Already handled in the loop before.
+                    Blob { .. } => (),
 
                     _ => {
                         // TODO(ed): Throw error
