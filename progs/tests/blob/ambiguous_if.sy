@@ -1,0 +1,11 @@
+A :: blob {
+    a: int
+    b: [int]
+}
+
+start :: fn {
+    a := A {
+        b: [1, 2]
+        a: 0
+    }
+}
