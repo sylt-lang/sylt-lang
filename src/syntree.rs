@@ -418,7 +418,6 @@ impl<'a> Context<'a> {
 
 /// Construct a syntax error at the current token with a message.
 macro_rules! syntax_error {
-    //TODO None if no message?
     ($ctx:expr, $( $msg:expr ),* ) => {
         {
             let msg = format!($( $msg ),*).into();
@@ -434,7 +433,6 @@ macro_rules! syntax_error {
 
 /// Raise a syntax error at the current token with a message.
 macro_rules! raise_syntax_error {
-    //TODO None if no message?
     ($ctx:expr, $( $msg:expr ),* ) => {
         return Err(($ctx.skip(1), vec![syntax_error!($ctx, $( $msg ),*)]))
     };
@@ -1213,7 +1211,7 @@ mod expression {
         Ok((ctx, Expression { span, kind }))
     }
 
-    /// Parse something that begins at the start of a expression.
+    /// Parse something that begins at the start of an expression.
     fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         match ctx.token() {
             T::LeftParen => grouping_or_tuple(ctx),
