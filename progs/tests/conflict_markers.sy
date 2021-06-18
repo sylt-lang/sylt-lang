@@ -8,5 +8,4 @@ start :: fn {
 
 }
 
-// error: @_
-// error: Error::GitConflictError { start: 3, end: 7, .. }
+// error: Error::GitConflictError { start: 3, .. }

@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 
+use crate::rc::Rc;
 use crate::{tokenizer::Token, Op, Type, Value};
 
 fn source_line_at(file: &Path, line: Option<usize>) -> Option<String> {
@@ -100,11 +101,11 @@ pub enum Error {
     GitConflictError {
         file: PathBuf,
         start: usize,
-        end: usize,
     },
 
     FileNotFound(PathBuf),
     NoFileGiven,
+    IOError(Rc<std::io::Error>),
 }
 
 impl fmt::Display for Error {
@@ -160,26 +161,28 @@ impl fmt::Display for Error {
             Error::GitConflictError {
                 file,
                 start,
-                end,
             } => {
                 write!(f, "{}: ", "git conflict error".red())?;
                 write!(f, "{}\n", file_line_display(file, Some(*start)))?;
 
-                write!(f,
-                    "{}Git conflict markers found between lines {} and {}\n",
-                    indent, start, end)?;
+                write!(
+                    f,
+                    "{}Git conflict marker found at line {}\n",
+                    indent,
+                    start
+                )?;
 
-                write!(f, "{}   ---{}",
-                    source_line_at(file, Some(*start + 1))
-                    .unwrap_or_else(String::new),
-                    source_line_at(file, Some(*end + 1))
-                    .unwrap_or_else(String::new))
+                write!(f, "{}",
+                    source_line_at(file, Some(*start + 1)).unwrap_or_else(String::new))
             }
             Error::FileNotFound(path) => {
                 write!(f, "File '{}' not found", path.display())
             }
             Error::NoFileGiven => {
                 write!(f, "No file to run")
+            }
+            Error::IOError(e) => {
+                write!(f, "Unknown IO error: {}", e)
             }
         }
     }

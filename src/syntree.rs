@@ -1,4 +1,5 @@
 use crate::error::Error;
+use crate::rc::Rc;
 use crate::tokenizer::file_to_tokens;
 use crate::tokenizer::Token;
 use crate::Next;
@@ -1603,6 +1604,42 @@ fn module(path: &Path, tokens: &Tokens) -> (Vec<PathBuf>, Result<Module, Vec<Err
     }
 }
 
+/// Look for git conflict markers (`<<<<<<<`) in a file.
+///
+/// Since conflict markers might be present anywhere, we don't even try to save
+/// the parsing if we find any.
+///
+/// # Errors
+///
+/// Returns a [Vec] of all errors found.
+///
+/// - [Error::FileNotFound] if the file couldn't be found.
+/// - [Error::GitConflictError] if conflict markers were found.
+/// - Any [Error::IOError] that occured when reading the file.
+pub fn find_conflict_markers(file: &Path) -> Vec<Error> {
+    let s = match std::fs::read_to_string(file) {
+        Ok(s) => s,
+        Err(e) => return vec![
+            if matches!(e.kind(), std::io::ErrorKind::NotFound) {
+                Error::FileNotFound(file.to_path_buf())
+            } else {
+                Error::IOError(Rc::new(e))
+            }
+        ],
+    };
+    let mut errs = Vec::new();
+    // Search line by line and push any errors we find.
+    for (i, line) in s.lines().enumerate() {
+        if line.starts_with("<<<<<<<") {
+            errs.push(Error::GitConflictError {
+                file: file.to_path_buf(),
+                start: i + 1,
+            });
+        }
+    }
+    errs
+}
+
 /// Parses the contents of a file as well as all files this file refers to and so
 /// on.
 ///
@@ -1627,6 +1664,13 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
         if visited.contains(&file) {
             continue;
         }
+        // Look for conflict markers
+        let mut conflict_errors = find_conflict_markers(&file);
+        if !conflict_errors.is_empty() {
+            errors.append(&mut conflict_errors);
+            visited.insert(file);
+            continue;
+        }
         // Lex into tokens.
         match file_to_tokens(&file) {
             Ok(tokens) => {
@@ -1639,7 +1683,7 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
                 to_visit.append(&mut next);
             }
             Err(_) => {
-                errors.push(Error::FileNotFound(file.to_path_buf()));
+                errors.push(Error::FileNotFound(file.clone()));
             }
         }
         visited.insert(file);
