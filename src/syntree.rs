@@ -399,6 +399,15 @@ impl<'a> Context<'a> {
         new
     }
 
+    /// Eat until the next non-newline token.
+    fn skip_newlines(&self) -> Self {
+        let mut ret = *self;
+        while matches!(ret.token(), T::Newline) {
+            ret = ret.skip(1);
+        }
+        ret
+    }
+
     /// Return the current [Token] and line number.
     fn peek(&self) -> &(T, usize) {
         self.tokens.get(self.curr).unwrap_or(&(T::EOF, 0))
@@ -1430,6 +1439,9 @@ mod expression {
         let span = ctx.span();
         let mut ctx = expect!(ctx, T::LeftBracket, "Expected '['");
 
+        // `l := [\n1` is valid
+        ctx = ctx.skip_newlines();
+
         // Inner experssions.
         let mut exprs = Vec::new();
         loop {
@@ -1444,6 +1456,7 @@ mod expression {
                     let (_ctx, expr) = expression(ctx)?;
                     exprs.push(expr);
                     ctx = skip_if!(_ctx, T::Comma);
+                    ctx = ctx.skip_newlines(); // newlines after expression is valid inside lists
                 }
             }
         }
