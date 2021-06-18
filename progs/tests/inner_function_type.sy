@@ -5,5 +5,3 @@ f :: fn -> fn -> {
 
 start :: fn {
 }
-
-// error: @1
