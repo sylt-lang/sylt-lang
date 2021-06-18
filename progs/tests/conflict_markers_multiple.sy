@@ -1,0 +1,17 @@
+start :: fn {
+
+<<<<<<< HEAD
+    print extern_test(4.0)
+=======
+    print extern_test(5.0)
+>>>>>>> 2
+
+<<<<<<< HEAD
+    print extern_test(4.0)
+=======
+    print extern_test(5.0)
+>>>>>>> 2
+}
+
+// error: Error::GitConflictError { start: 3, .. }
+// error: Error::GitConflictError { start: 9, .. }
