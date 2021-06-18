@@ -419,7 +419,6 @@ impl<'a> Context<'a> {
     fn skip_while(&self, token: T) -> Self {
         let mut ret = *self;
         while ret.token() == &token {
-            println!("wowe");
             ret = ret.skip(1);
         }
         ret
@@ -645,6 +644,22 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     Ok((ctx, ty))
 }
 
+fn block_statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
+    let span = ctx.span();
+    let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{' at start of block");
+
+    let mut statements = Vec::new();
+    // Parse multiple inner statements until } or EOF
+    while !matches!(ctx.token(), T::RightBrace | T::EOF) {
+        let (_ctx, stmt) = statement(ctx)?;
+        ctx = _ctx; // assign to outer
+        statements.push(stmt);
+    }
+
+    let ctx = expect!(ctx, T::RightBrace, "Expected }} after block statement");
+    Ok((ctx, Statement { span, kind: StatementKind::Block { statements } }))
+}
+
 /// Parse a single [Statement].
 fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     use StatementKind::*;
@@ -655,17 +670,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
         // Block: `{ <statements> }`
         [(T::LeftBrace, _), ..] => {
-            let mut ctx = ctx.skip(1);
-            let mut statements = Vec::new();
-            // Parse multiple inner statements until } or EOF
-            while !matches!(ctx.token(), T::RightBrace | T::EOF) {
-                let (_ctx, stmt) = statement(ctx)?;
-                ctx = _ctx; // assign to outer
-                statements.push(stmt);
-            }
-
-            let ctx = expect!(ctx, T::RightBrace, "Expected }} after block statement");
-            (ctx, Block { statements })
+            return block_statement(ctx);
         }
 
         // `use a`
@@ -1136,8 +1141,8 @@ mod expression {
             }
         };
 
-        // Parse the function statement. Usually a block statement but it's not currently forced.
-        let (ctx, statement) = statement(ctx)?;
+        // Parse the function statement.
+        let (ctx, statement) = block_statement(ctx)?;
         let function = Function {
             name: "lambda".into(),
             params,
@@ -1801,7 +1806,7 @@ mod test {
 
         // TODO(ed): Require block or allow all statements?
         test!(expression, simple: "fn -> {}" => _);
-        test!(expression, argument: "fn a: int -> int ret a + 1" => _);
+        test!(expression, argument: "fn a: int -> int { ret a + 1 }" => _);
 
         test!(expression, booleans: "true && false || !false" => _);
         test!(expression, bool_and: "true && a" => _);
