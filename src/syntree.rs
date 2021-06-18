@@ -1692,7 +1692,7 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
         match file_to_tokens(&file) {
             Ok(tokens) => {
                 // Parse the module.
-                let (mut next, result) = module(path, &tokens);
+                let (mut next, result) = module(&file, &tokens);
                 match result {
                     Ok(module) => modules.push((file.clone(), module)),
                     Err(mut errs) => errors.append(&mut errs),
