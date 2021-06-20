@@ -15,7 +15,7 @@ sylt-common = { path = "../sylt-common" }
 sylt-compiler = { path = "../sylt-compiler" }
 sylt-machine = { path = "../sylt-machine" }
 sylt-parser = { path = "../sylt-parser" }
-sylt-std = { path = "../sylt-std" }
+sylt-std = { path = "../sylt-std", default-features = false }
 sylt-tokenizer = { path = "../sylt-tokenizer" }
 sylt-typechecker = { path = "../sylt-typechecker" }
 
@@ -24,6 +24,10 @@ sylt_macro = { path = "../sylt_macro" }
 gumdrop = "0.8"
 
 criterion = { version = "0.3", optional = true }
+
+[features]
+lingon = [ "sylt-std/lingon" ]
+default = [ "lingon" ]
 
 #[[bench]]
 #name = "sylt_benchmark"
