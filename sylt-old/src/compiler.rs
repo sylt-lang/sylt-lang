@@ -1,11 +1,10 @@
-use crate::parser::{self, *};
-use crate::{Op, Block, Value, Type, Blob, RustFunction};
-
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::PathBuf;
 use sylt_common::error::Error;
 use sylt_common::rc::Rc;
+use sylt_common::{Op, Block, Value, Type, Blob, RustFunction};
+use sylt_parser::{AST, Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeKind, VarKind};
 
 type VarSlot = usize;
 
@@ -628,7 +627,7 @@ impl Compiler {
         }
     }
 
-    fn resolve_type(&mut self, ty: &parser::Type, ctx: Context) -> Type {
+    fn resolve_type(&mut self, ty: &ParserType, ctx: Context) -> Type {
         use TypeKind::*;
         match &ty.kind {
             Implied => Type::Unknown,
@@ -737,7 +736,7 @@ impl Compiler {
             }
 
             Assignment { target, value, kind } => {
-                use parser::Op::*;
+                use ParserOp::*;
                 use AssignableKind::*;
 
                 let mutator = |kind| matches!(kind, Add | Sub | Mul | Div);

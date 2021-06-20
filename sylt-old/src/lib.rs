@@ -1,4 +1,3 @@
-
 /// Re-export of derived functions for [Args].
 pub use gumdrop::Options;
 
@@ -7,14 +6,13 @@ use sylt_common::blob::Blob;
 use sylt_common::error::{Error, RuntimeError};
 use sylt_common::prog::Prog;
 use sylt_common::rc::Rc;
-use sylt_common::{Block, Op, RustFunction, Type, Value};
+use sylt_common::{RustFunction, Type, Value};
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 
 pub mod compiler;
-pub mod parser;
 pub mod typechecker;
 pub mod vm;
 
@@ -35,10 +33,6 @@ pub fn lib_bindings() -> Vec<(String, RustFunction)> {
     lib
 }
 
-pub trait Next {
-    fn next(&self) -> Self;
-}
-
 pub fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
     let path = match &args.file {
         Some(file) => file,
@@ -46,7 +40,7 @@ pub fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Pr
             return Err(vec![Error::NoFileGiven]);
         }
     };
-    let tree = parser::tree(&path)?;
+    let tree = sylt_parser::tree(&path)?;
     let prog = compiler::compile(tree, &functions)?;
     Ok(prog)
 }

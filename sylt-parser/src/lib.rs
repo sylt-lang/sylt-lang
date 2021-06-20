@@ -1,5 +1,4 @@
-use crate::Next;
-use crate::Type as RuntimeType;
+use sylt_common::Type as RuntimeType;
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
@@ -9,6 +8,10 @@ use sylt_common::rc::Rc;
 use sylt_tokenizer::{Token, file_to_tokens};
 
 type T = Token;
+
+pub trait Next {
+    fn next(&self) -> Self;
+}
 
 #[derive(Debug, Copy, Clone)]
 /// A location in a file containing source code.
