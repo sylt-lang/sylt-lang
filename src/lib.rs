@@ -12,11 +12,11 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
+pub mod compiler;
 pub mod error;
-pub mod vm;
-pub mod syncomp;
-pub mod syntree;
+pub mod parser;
 pub mod typechecker;
+pub mod vm;
 
 mod rc;
 mod tokenizer;
@@ -49,8 +49,8 @@ pub fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Pr
             return Err(vec![Error::NoFileGiven]);
         }
     };
-    let tree = syntree::tree(&path)?;
-    let prog = syncomp::compile(tree, &functions)?;
+    let tree = parser::tree(&path)?;
+    let prog = compiler::compile(tree, &functions)?;
     Ok(prog)
 }
 

@@ -1,10 +1,10 @@
 use crate::error::Error;
-use crate::syntree;
-use syntree::*;
-use crate::{Op, Block, Value, Type, Blob, RustFunction};
-use std::collections::{hash_map::Entry, HashMap};
+use crate::parser::{self, *};
 use crate::rc::Rc;
+use crate::{Op, Block, Value, Type, Blob, RustFunction};
+
 use std::cell::RefCell;
+use std::collections::{hash_map::Entry, HashMap};
 use std::path::PathBuf;
 
 type VarSlot = usize;
@@ -628,7 +628,7 @@ impl Compiler {
         }
     }
 
-    fn resolve_type(&mut self, ty: &syntree::Type, ctx: Context) -> Type {
+    fn resolve_type(&mut self, ty: &parser::Type, ctx: Context) -> Type {
         use TypeKind::*;
         match &ty.kind {
             Implied => Type::Unknown,
@@ -737,7 +737,7 @@ impl Compiler {
             }
 
             Assignment { target, value, kind } => {
-                use syntree::Op::*;
+                use parser::Op::*;
                 use AssignableKind::*;
 
                 let mutator = |kind| matches!(kind, Add | Sub | Mul | Div);
