@@ -930,8 +930,6 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
     };
 
-    // TODO(ed): Not sure this is right.
-    // let ctx = expect!(ctx, T::Newline, "Expected newline after statement");
     let ctx = ctx.skip_if(T::Newline);
     Ok((ctx, Statement { span, kind }))
 }
@@ -977,7 +975,6 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
     };
 
     use AssignableKind::Call;
-    //TODO ?
     let result = Assignable {
         span,
         kind: Call(Box::new(callee), args),
@@ -1558,7 +1555,6 @@ mod expression {
 ///
 /// Currently all statements are valid outer statements.
 fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
-    // TODO(ed): Filter for invalid outer statements here.
     let (ctx, stmt) = statement(ctx)?;
     use StatementKind::*;
     match stmt.kind {
@@ -1758,8 +1754,10 @@ mod test {
         };
     }
 
-    // TODO(ed): It's really hard to write good tests, Rust refuses to deref the boxes
+    // NOTE(ed): It's really hard to write good tests, Rust refuses to deref the boxes
     // automatically.
+    //
+    // Faulty syntax should be tested in the small language tests.
     mod expression {
         use super::*;
         use AssignableKind::*;
@@ -1814,7 +1812,6 @@ mod test {
         test!(expression, instance_more: "A { a: 2\n c: 2 }" => Instance { .. });
         test!(expression, instance_empty: "A {}" => Instance { .. });
 
-        // TODO(ed): Require block or allow all statements?
         test!(expression, simple: "fn -> {}" => _);
         test!(expression, argument: "fn a: int -> int { ret a + 1 }" => _);
 
@@ -1849,7 +1846,6 @@ mod test {
         test!(parse_type, type_float: "float" => Resolved(RT::Float));
         test!(parse_type, type_str: "str" => Resolved(RT::String));
         test!(parse_type, type_unknown_access: "a.A | int" => Union(_, _));
-        // TODO(ed): This is controverisal
         test!(parse_type, type_unknown_access_call: "a.b().A | int" => Union(_, _));
         test!(parse_type, type_unknown: "blargh" => UserDefined(_));
         test!(parse_type, type_union: "int | int" => Union(_, _));

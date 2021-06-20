@@ -24,8 +24,6 @@ pub enum Token {
     If,
     #[token("else")]
     Else,
-    #[token("for")]
-    For,
     #[token("break")]
     Break,
     #[token("continue")]
@@ -37,7 +35,6 @@ pub enum Token {
     #[token("blob")]
     Blob,
 
-    // TODO(ed): Remove
     #[token("print")]
     Print,
 

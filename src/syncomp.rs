@@ -424,7 +424,6 @@ impl Compiler {
         // Frame 0 has globals which cannot be captured.
         if frame == 0 { return Err(()) }
 
-        // TODO(ed): Maybe remove the clones?
         for var in self.frames[frame].variables.iter().rev() {
             if &var.name == name && var.active {
                 return Ok(Lookup::Variable(var.clone()));
@@ -539,7 +538,6 @@ impl Compiler {
         namespace: usize,
         ctx: Context,
     ) -> Option<usize> {
-        // TODO(ed): This is ugly
         use AssignableKind::*;
         match &assignable.kind {
             Access(inner, ident) => {
@@ -667,7 +665,6 @@ impl Compiler {
     }
 
     fn define(&mut self, name: &str, kind: VarKind, span: Span) -> VarSlot {
-        // TODO(ed): Fix the types
         let frame = &mut self.frames.last_mut().unwrap().variables;
         let slot = frame.len();
         let var = Variable::new(name.to_string(), kind, Type::Unknown, slot, span);
@@ -812,7 +809,6 @@ impl Compiler {
                 }
 
                 while stack_size < self.frames[ctx.frame].variables.len() {
-                    // TODO(ed): Upvalues
                     let var = self.frames[ctx.frame].variables.pop().unwrap();
                     if var.captured {
                         self.add_op(ctx, statement.span, Op::PopUpvalue);
@@ -1072,7 +1068,7 @@ impl Compiler {
                     Blob { .. } => (),
 
                     _ => {
-                        // TODO(ed): Throw error
+                        error!(self, ctx, statement.span, "Invalid outer statement");
                     }
                 }
                 self.namespaces.insert(slot, namespace);
