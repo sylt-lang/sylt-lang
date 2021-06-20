@@ -1,2309 +1,1106 @@
-use std::cell::RefCell;
-use std::collections::{hash_map::Entry, HashMap, HashSet};
-use std::path::{Path, PathBuf};
-
 use crate::error::Error;
+use crate::syntree;
+use syntree::*;
+use crate::{Op, Block, Value, Type, Blob, RustFunction};
+use std::collections::{hash_map::Entry, HashMap};
 use crate::rc::Rc;
-use crate::sectionizer::Section;
-use crate::tokenizer::Token;
-use crate::{path_to_module, Blob, Block, Next, Op, Prog, RustFunction, Type, Value};
+use std::cell::RefCell;
+use std::path::PathBuf;
 
-macro_rules! syntax_error {
-    ($thing:expr, $( $msg:expr ),* ) => {
-        {
-            let msg = format!($( $msg ),*).into();
-            let err = Error::SyntaxError {
-                file: $thing.current_file().into(),
-                line: $thing.line(),
-                token: $thing.peek(),
-                message: Some(msg),
-            };
-            $thing.error(err);
-        }
-    };
-}
+type VarSlot = usize;
 
-macro_rules! expect {
-    ($thing:expr, $exp_head:pat $( | $exp_rest:pat ),* , $( $msg:expr ),*) => {
-        match $thing.peek() {
-            $exp_head $( | $exp_rest )* => { $thing.eat(); true },
-            _ => { syntax_error!($thing, $( $msg ),*); false } ,
-        }
-    };
-}
-
-macro_rules! rest_of_line_contains {
-    ($compiler:expr, $head:pat $( | $tail:pat )* ) => {
-        {
-            let mut i = 0;
-            while match $compiler.peek_at(i) {
-                Token::Newline | Token::EOF => false,
-                $head $( | $tail )* => false,
-                _ => true,
-            } {
-                i += 1;
-            }
-            matches!($compiler.peek_at(i), $head $( | $tail )*)
-        }
-    }
-}
-
-macro_rules! push_frame {
-    ($compiler:expr, $block:expr, $code:tt) => {
-        {
-            $compiler.frames_mut().push(Frame::new());
-
-            // Return value stored as a variable
-            let mut var = Variable::new("/frame", true, Type::Unknown);
-            var.read = true;
-            $compiler.define(var).unwrap();
-
-            $code
-
-            let frame = $compiler.frames_mut().pop().unwrap();
-            // 0-th slot is the function itself.
-            for var in frame.stack.iter().skip(1) {
-                if !(var.read || var.upvalue) {
-                    $compiler.error(Error::SyntaxError {
-                        file: $compiler.current_file().into(),
-                        line: var.line,
-                        token: Token::Identifier(var.name.clone()),
-                        message: Some(format!("Unused value '{}'", var.name)),
-                    });
-                }
-                $compiler.panic = false;
-            }
-            // The 0th slot is the return value, which is passed out
-            // from functions, and should not be popped.
-            0
-        }
-    };
-}
-
-macro_rules! push_scope {
-    ($compiler:expr, $block:expr, $code:tt) => {
-        let ss = $compiler.stack().len();
-        $compiler.frame_mut().scope += 1;
-
-        $code;
-
-        $compiler.frame_mut().scope -= 1;
-
-        let mut errors = Vec::new();
-        for var in $compiler.frame().stack.iter().skip(ss).rev() {
-            if !(var.read || var.upvalue) {
-                errors.push(Error::SyntaxError {
-                    file: $compiler.current_file().into(),
-                    line: var.line,
-                    token: Token::Identifier(var.name.clone()),
-                    message: Some(format!("Unused value '{}'", var.name)),
-                });
-            }
-            if var.captured {
-                add_op($compiler, $block, Op::PopUpvalue);
-            } else {
-                add_op($compiler, $block, Op::Pop);
-            }
-        }
-
-        errors.into_iter().for_each(|e| $compiler.error(e));
-        $compiler.stack_mut().truncate(ss);
-    };
-}
-
-#[derive(sylt_macro::Next, PartialEq, PartialOrd, Clone, Copy, Debug)]
-pub enum Prec {
-    No,
-    Assert,
-    BoolOr,
-    BoolAnd,
-    Comp,
-    Term,
-    Factor,
-    Index,
-}
-
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 struct Variable {
     name: String,
-    typ: Type,
-    scope: usize,
+    ty: Type,
     slot: usize,
     line: usize,
+    kind: VarKind,
 
-    outer_slot: usize,
-    outer_upvalue: bool,
-
-    global: bool,
-
-    active: bool,
-    upvalue: bool,
     captured: bool,
-    mutable: bool,
-    read: bool,
+    active: bool,
 }
 
 impl Variable {
-    fn new(name: &str, mutable: bool, typ: Type) -> Self {
+    fn new(name: String, kind: VarKind, ty: Type, slot: usize, span: Span) -> Self {
         Self {
-            name: String::from(name),
-            typ,
-            scope: 0,
-            slot: 0,
-            line: 0,
+            name,
+            ty,
+            slot,
+            kind,
+            line: span.line,
 
-            outer_slot: 0,
-            outer_upvalue: false,
-
-            global: false,
-
-            active: false,
-            upvalue: false,
             captured: false,
-            mutable,
-            read: false,
-        }
-    }
-}
-
-#[derive(Debug)]
-enum LoopOp {
-    Continue,
-    Break,
-}
-
-#[derive(Debug)]
-struct Frame {
-    loops: Vec<Vec<(usize, usize, LoopOp)>>,
-    stack: Vec<Variable>,
-    upvalues: Vec<Variable>,
-    scope: usize,
-}
-
-impl Frame {
-    fn new() -> Self {
-        Self {
-            loops: Vec::new(),
-            stack: Vec::new(),
-            upvalues: Vec::new(),
-            scope: 0,
-        }
-    }
-
-    fn push_loop(&mut self) {
-        self.loops.push(Vec::new());
-    }
-
-    fn pop_loop(&mut self, block: &mut Block, stacktarget: usize, start: usize, end: usize) {
-        // Compiler error if this fails
-        for (addr, stacksize, op) in self.loops.pop().unwrap().iter() {
-            let to_pop = stacksize - stacktarget;
-            let op = match op {
-                LoopOp::Continue => Op::JmpNPop(start, to_pop),
-                LoopOp::Break => Op::JmpNPop(end, to_pop),
-            };
-            block.patch(op, *addr);
-        }
-    }
-
-    fn add_continue(&mut self, addr: usize, stacksize: usize) -> Result<(), ()> {
-        if let Some(top) = self.loops.last_mut() {
-            top.push((addr, stacksize, LoopOp::Continue));
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-
-    fn add_break(&mut self, addr: usize, stacksize: usize) -> Result<(), ()> {
-        if let Some(top) = self.loops.last_mut() {
-            top.push((addr, stacksize, LoopOp::Break));
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-
-    fn find_local(&self, name: &str) -> Option<Variable> {
-        for var in self.stack.iter().rev() {
-            if var.name == name && var.active {
-                return Some(var.clone());
-            }
-        }
-        None
-    }
-
-    fn find_upvalue(&self, name: &str) -> Option<Variable> {
-        for var in self.upvalues.iter().rev() {
-            if var.name == name && var.active {
-                return Some(var.clone());
-            }
-        }
-        None
-    }
-
-    fn add_upvalue(&mut self, variable: Variable) -> Variable {
-        let new_variable = Variable {
-            outer_upvalue: variable.upvalue,
-            outer_slot: variable.slot,
-            slot: self.upvalues.len(),
-            active: true,
-            upvalue: true,
-            ..variable
-        };
-        self.upvalues.push(new_variable.clone());
-        new_variable
-    }
-}
-
-type Namespace = HashMap<String, Name>;
-
-#[derive(Debug)]
-struct CompilerContext {
-    frames: Vec<Frame>,
-    namespace: Namespace,
-}
-
-impl CompilerContext {
-    fn new() -> Self {
-        Self {
-            frames: vec![Frame::new()],
-            namespace: Namespace::new(),
+            active: false,
         }
     }
 }
 
 #[derive(Debug, Clone)]
-enum Name {
-    Slot(usize, usize),
-    Unknown(usize, usize),
-    Namespace(PathBuf),
+struct Upvalue {
+    parent: usize,
+    upupvalue: bool,
+
+    name: String,
+    ty: Type,
+    slot: usize,
+    line: usize,
+    kind: VarKind,
 }
 
-pub(crate) struct Compiler {
-    current_token: usize,
-    current_section: usize,
+enum Lookup {
+    Upvalue(Upvalue),
+    Variable(Variable),
+}
 
-    sections: Vec<Section>,
-    contextes: HashMap<PathBuf, CompilerContext>,
-    globals: Vec<Variable>,
+impl Upvalue {
+    fn capture(var: &Variable) -> Self {
+        Self {
+            parent: var.slot,
+            upupvalue: false,
+
+            name: var.name.clone(),
+            ty: var.ty.clone(),
+            slot: 0,
+            line: var.line,
+            kind: var.kind,
+        }
+    }
+
+    fn loft(up: &Upvalue) -> Self {
+        Self {
+            parent: up.slot,
+            upupvalue: true,
+            slot: 0,
+            ..up.clone()
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+struct Context {
+    block_slot: BlockID,
+    namespace: NamespaceID,
+    scope: usize,
+    frame: usize,
+}
+
+impl Context {
+    fn from_namespace(namespace: NamespaceID) -> Self {
+        Self {
+            namespace,
+            block_slot: 0,
+            scope: 0,
+            frame: 0,
+        }
+    }
+}
+
+type Namespace = HashMap<String, Name>;
+type ConstantID = usize;
+type NamespaceID = usize;
+type BlobID = usize;
+type BlockID = usize;
+#[derive(Debug, Copy, Clone)]
+enum Name {
+    Global(ConstantID),
+    Blob(BlobID),
+    Namespace(NamespaceID),
+}
+
+#[derive(Debug)]
+struct Frame {
+    variables: Vec<Variable>,
+    upvalues: Vec<Upvalue>,
+}
+
+impl Frame {
+    fn new(name: &str, span: Span) -> Self {
+        let variables = vec![Variable::new(name.to_string(), VarKind::Const, Type::Void, 0, span)];
+        Self {
+            variables,
+            upvalues: Vec::new(),
+        }
+    }
+}
+
+struct Compiler {
+    blocks: Vec<Block>,
+    namespace_id_to_path: HashMap<NamespaceID, String>,
+
+    namespaces: Vec<Namespace>,
+    blobs: Vec<Blob>,
+
+    frames: Vec<Frame>,
+    functions: HashMap<String, (usize, RustFunction)>,
 
     panic: bool,
     errors: Vec<Error>,
 
-    blocks: Vec<Rc<RefCell<Block>>>,
-    blob_id: usize,
-
-    functions: HashMap<String, (usize, RustFunction)>,
-
     strings: Vec<String>,
-
     constants: Vec<Value>,
+
     values: HashMap<Value, usize>,
 }
 
-/// Helper function for adding operations to the given block.
-fn add_op(compiler: &Compiler, block: &mut Block, op: Op) -> usize {
-    block.add(op, compiler.line())
+macro_rules! error {
+    ($compiler:expr, $ctx:expr, $span:expr, $( $msg:expr ),+ ) => {
+        if !$compiler.panic {
+            $compiler.panic = true;
+
+            let msg = format!($( $msg ),*).into();
+            let err = Error::CompileError {
+                file: $compiler.file_from_namespace($ctx.namespace).into(),
+                line: $span.line,
+                message: Some(msg),
+            };
+            $compiler.errors.push(err);
+        }
+    };
 }
 
 impl Compiler {
-    pub(crate) fn new(sections: Vec<Section>) -> Self {
-        let contextes = sections
-            .iter()
-            .map(|section| (section.path.to_path_buf(), CompilerContext::new()))
-            .collect();
-
+    fn new() -> Self {
         Self {
-            current_token: 0,
-            current_section: 0,
-            sections,
-
-            globals: Vec::new(),
-
-            contextes,
-
-            panic: false,
-            errors: vec![],
-
             blocks: Vec::new(),
-            blob_id: 0,
 
+            namespace_id_to_path: HashMap::new(),
+            namespaces: Vec::new(),
+            blobs: Vec::new(),
+
+            frames: Vec::new(),
             functions: HashMap::new(),
 
-            strings: Vec::new(),
+            panic: false,
+            errors: Vec::new(),
 
-            constants: vec![],
+            strings: Vec::new(),
+            constants: Vec::new(),
+
             values: HashMap::new(),
         }
     }
 
-    fn new_blob_id(&mut self) -> usize {
-        let id = self.blob_id;
-        self.blob_id += 1;
-        id
-    }
+    fn push_frame_and_block(&mut self, ctx: Context, name: &str, span: Span) -> Context {
+        let file_as_path = PathBuf::from(self.file_from_namespace(ctx.namespace));
 
-    fn add_namespace(&mut self, name: String, path: PathBuf) {
-        match self.names_mut().entry(name.clone()) {
-            Entry::Vacant(v) => {
-                v.insert(Name::Namespace(path));
-            }
-            Entry::Occupied(_) => {
-                syntax_error!(self, "Namespace {} already present", name);
-            }
+        let block = Block::new(&name, ctx.namespace, &file_as_path);
+        self.blocks.push(block);
+
+        self.frames.push(Frame::new(name, span));
+        Context {
+            block_slot: self.blocks.len() - 1,
+            frame: self.frames.len() - 1,
+            ..ctx
         }
     }
 
-    fn add_constant(&mut self, value: Value) -> usize {
-        if matches!(
-            value,
-            Value::Float(_)
-                | Value::Int(_)
-                | Value::Bool(_)
-                | Value::String(_)
-                | Value::Tuple(_)
-                | Value::Nil
-        ) {
-            let entry = self.values.entry(value.clone());
-            if let Entry::Occupied(entry) = entry {
-                *entry.get()
-            } else {
+    fn pop_frame(&mut self, ctx: Context) -> Frame {
+        assert_eq!(self.frames.len() - 1, ctx.frame, "Can only pop top stackframe");
+        self.frames.pop().unwrap()
+    }
+
+    fn file_from_namespace(&self, namespace: usize) -> &str {
+        self.namespace_id_to_path.get(&namespace).unwrap()
+    }
+
+    fn string(&mut self, string: &str) -> usize {
+        self.strings
+            .iter()
+            .enumerate()
+            .find_map(|(i, x)| if x == string { Some(i) } else { None })
+            .unwrap_or_else(|| {
+                let slot = self.strings.len();
+                self.strings.push(string.into());
+                slot
+            })
+    }
+
+
+    fn constant(&mut self, value: Value) -> Op {
+        let slot = match self.values.entry(value.clone()) {
+            Entry::Vacant(e) => {
                 let slot = self.constants.len();
+                e.insert(slot);
                 self.constants.push(value);
-                entry.or_insert(slot);
                 slot
             }
-        } else {
-            self.constants.push(value);
-            self.constants.len() - 1
-        }
-    }
-
-    fn intern_string(&mut self, string: String) -> usize {
-        self.strings.push(string);
-        self.strings.len() - 1
-    }
-
-    fn section(&self) -> &Section {
-        &self.sections[self.current_section]
-    }
-
-    fn current_file(&self) -> &Path {
-        &self.section().path
-    }
-
-    fn current_context(&self) -> &CompilerContext {
-        self.contextes.get(self.current_file()).unwrap()
-    }
-
-    fn current_context_mut(&mut self) -> &mut CompilerContext {
-        let file = self.current_file().to_path_buf();
-        self.contextes.get_mut(&file).unwrap()
-    }
-
-    fn frame(&self) -> &Frame {
-        self.current_context().frames.last().unwrap()
-    }
-
-    fn frame_mut(&mut self) -> &mut Frame {
-        self.current_context_mut().frames.last_mut().unwrap()
-    }
-
-    fn frames(&self) -> &[Frame] {
-        &self.current_context().frames
-    }
-
-    fn frames_mut(&mut self) -> &mut Vec<Frame> {
-        &mut self.current_context_mut().frames
-    }
-
-    fn names(&self) -> &Namespace {
-        &self.current_context().namespace
-    }
-
-    fn names_mut(&mut self) -> &mut Namespace {
-        &mut self.current_context_mut().namespace
-    }
-
-    fn find_global(&self, name: &str) -> Option<Variable> {
-        for var in self.globals.iter().rev() {
-            if var.name == name && var.active {
-                return Some(var.clone());
-            }
-        }
-        None
-    }
-
-    /// Marks a variable as read. Also marks upvalues.
-    fn mark_read(&mut self, frame_id: usize, var: &Variable) {
-        // Early out
-        if var.read || var.global {
-            return;
-        }
-
-        match self.frames()[frame_id].upvalues.get(var.slot) {
-            Some(up) if up.name == var.name => {
-                let mut inner_var = self.frames()[frame_id].upvalues[var.slot].clone();
-                inner_var.slot = inner_var.outer_slot;
-                self.mark_read(frame_id - 1, &inner_var);
-                self.frames_mut()[frame_id].upvalues[var.slot].read = true;
-            }
-            _ => {
-                self.frames_mut()[frame_id].stack[var.slot].read = true;
-            }
-        }
-    }
-
-    fn stack(&self) -> &[Variable] {
-        &self.frame().stack.as_ref()
-    }
-
-    fn stack_mut(&mut self) -> &mut Vec<Variable> {
-        &mut self.frame_mut().stack
-    }
-
-    /// Used to recover from a panic so the rest of the code can be parsed.
-    fn clear_panic(&mut self) {
-        if self.panic {
-            self.panic = false;
-
-            while !matches!(self.peek(), Token::EOF | Token::Newline)  {
-                self.eat();
-            }
-            self.eat();
-        }
-    }
-
-    fn error(&mut self, error: Error) {
-        if self.panic {
-            return;
-        }
-        self.panic = true;
-        self.errors.push(error);
-    }
-
-    fn init_section(&mut self, section: usize) {
-        self.current_token = 0;
-        self.current_section = section;
-    }
-
-    fn peek(&self) -> Token {
-        self.peek_at(0)
-    }
-
-    fn peek_at(&self, at: usize) -> Token {
-        if self.section().tokens.len() <= self.current_token + at {
-            crate::tokenizer::Token::EOF
-        } else {
-            self.section().tokens[self.current_token + at].0.clone()
-        }
-    }
-
-    // TODO(ed): Const generics
-    fn peek_four(&self) -> (Token, Token, Token, Token) {
-        (
-            self.peek_at(0),
-            self.peek_at(1),
-            self.peek_at(2),
-            self.peek_at(3),
-        )
-    }
-
-    fn eat(&mut self) -> Token {
-        let t = self.peek();
-        self.current_token += 1;
-        if let Token::GitConflictBegin = t {
-            self.current_token -= 1;
-            let start = self.line();
-            self.current_token += 1;
-            while !matches!(self.eat(), Token::GitConflictEnd) {}
-            self.panic = false;
-            self.error(Error::GitConflictError {
-                file: self.current_file().into(),
-                start: start,
-                end: self.line(),
-            });
-            self.panic = true;
-        }
-        t
-    }
-
-    /// The line of the current token.
-    fn line(&self) -> usize {
-        if self.section().tokens.is_empty() {
-            0
-        } else {
-            self.section().tokens
-                [std::cmp::min(self.current_token, self.section().tokens.len() - 1)]
-            .1
-        }
-    }
-
-    fn precedence(&self, token: Token) -> Prec {
-        match token {
-            Token::LeftBracket => Prec::Index,
-
-            Token::Star | Token::Slash => Prec::Factor,
-
-            Token::Minus | Token::Plus => Prec::Term,
-
-            Token::EqualEqual
-            | Token::Greater
-            | Token::GreaterEqual
-            | Token::Less
-            | Token::LessEqual
-            | Token::NotEqual => Prec::Comp,
-
-            Token::And => Prec::BoolAnd,
-            Token::Or => Prec::BoolOr,
-
-            Token::AssertEqual => Prec::Assert,
-
-            _ => Prec::No,
-        }
-    }
-
-    fn prefix(&mut self, token: Token, block: &mut Block) -> bool {
-        match token {
-            Token::Identifier(_) => self.variable_expression(block),
-            Token::LeftParen => self.grouping_or_tuple(block),
-            Token::Minus => self.unary(block),
-            Token::LeftBracket => self.list(block),
-            Token::LeftBrace => self.set_or_dict(block),
-
-            Token::Float(_) | Token::Int(_) | Token::Bool(_) | Token::String(_) | Token::Nil => {
-                self.value(block)
-            }
-
-            Token::Bang => self.unary(block),
-
-            _ => {
-                return false;
-            }
-        }
-        true
-    }
-
-    fn infix(&mut self, token: Token, block: &mut Block) -> bool {
-        match token {
-            Token::Minus
-            | Token::Plus
-            | Token::Slash
-            | Token::Star
-            | Token::AssertEqual
-            | Token::EqualEqual
-            | Token::Greater
-            | Token::GreaterEqual
-            | Token::Less
-            | Token::LessEqual
-            | Token::NotEqual => self.binary(block),
-
-            Token::In => self.contains(block),
-
-            Token::And | Token::Or => self.binary_bool(block),
-
-            _ => {
-                return false;
-            }
-        }
-        true
-    }
-
-    fn value(&mut self, block: &mut Block) {
-        let value = match self.eat() {
-            Token::Float(f) => Value::Float(f),
-            Token::Int(i) => Value::Int(i),
-            Token::Bool(b) => Value::Bool(b),
-            Token::Nil => Value::Nil,
-            Token::String(s) => Value::String(Rc::from(s)),
-            _ => {
-                syntax_error!(self, "Cannot parse value");
-                Value::Bool(false)
+            Entry::Occupied(e) => {
+                *e.get()
             }
         };
-        let constant = self.add_constant(value);
-        add_op(self, block, Op::Constant(constant));
+        Op::Constant(slot)
     }
 
-    fn list(&mut self, block: &mut Block) {
-        expect!(self, Token::LeftBracket, "Expected '[' at start of list");
-        let mut num_args = 0;
-        loop {
-            match self.peek() {
-                Token::RightBracket | Token::EOF => {
-                    break;
-                }
-                Token::Newline => {
-                    self.eat();
-                }
-                Token::Comma => {
-                    syntax_error!(self, "Lists must begin with an element or ']'");
-                    return;
-                }
-                _ => {
-                    self.expression(block);
-                    num_args += 1;
-                    match self.peek() {
-                        Token::Comma => {
-                            self.eat();
-                        }
-                        Token::RightBracket => {}
-                        _ => {
-                            syntax_error!(self, "Expected ',' or ']' after list element");
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-        expect!(self, Token::RightBracket, "Expected ']' after list");
-        add_op(self, block, Op::List(num_args));
+    fn add_op(&mut self, ctx: Context, span: Span, op: Op) -> usize {
+        self.blocks.get_mut(ctx.block_slot).expect("Invalid block id").add(op, span.line)
     }
 
-    fn set_or_dict(&mut self, block: &mut Block) {
-        expect!(
-            self,
-            Token::LeftBrace,
-            "Expected '{{' for set or dict"
-        );
+    fn patch(&mut self, ctx: Context, ip: usize, op: Op) {
+        self.blocks.get_mut(ctx.block_slot).expect("Invalid block id").ops[ip] = op;
+    }
 
-        let mut is_dict: Option<bool> = None;
-        let mut num_args = 0;
-        loop {
-            match self.peek() {
-                Token::RightBrace => {
-                    if is_dict.is_none() {
-                        is_dict = Some(false);
-                    }
-                    break;
+    fn next_ip(&mut self, ctx: Context) -> usize {
+        self.blocks.get_mut(ctx.block_slot).expect("Invalid block id").curr()
+    }
+
+    fn assignable(&mut self, ass: &Assignable, ctx: Context) -> Option<usize> {
+        use AssignableKind::*;
+
+        match &ass.kind {
+            Read(ident) => {
+                return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
+            }
+            Call(a, expr) => {
+                self.assignable(a, ctx);
+                for expr in expr.iter() {
+                    self.expression(expr, ctx);
                 }
-
-                Token::Colon => {
-                    if is_dict.is_none() {
-                        is_dict = Some(true);
-                    } else {
-                        syntax_error!(self, "Unexpected ':' in set");
-                    }
-                    self.eat();
-                    break;
-                }
-
-                Token::EOF => {
-                    break;
-                }
-                Token::Newline => {
-                    self.eat();
-                }
-                _ => {
-                    self.expression(block);
-                    num_args += 1;
-                    // TODO(ed): Someone who's more awake might
-                    // be able to fix this.
-                    match is_dict {
-                        Some(false) => match self.peek() {
-                            Token::Comma => {
-                                self.eat();
-                            }
-                            Token::RightBrace => {}
-                            _ => {
-                                syntax_error!(self, "Expected ',' or '}}' after set element");
-                            }
-                        },
-                        Some(true) => {
-                            expect!(self, Token::Colon, "Expected ':' after dict element");
-                            self.expression(block);
-                            match self.peek() {
-                                Token::Comma => {
-                                    self.eat();
-                                }
-                                Token::RightBrace => {}
-                                _ => {
-                                    syntax_error!(self, "Expected ',' or '}}' after set element");
-                                }
-                            }
-                        }
-                        None => match self.peek() {
-                            Token::Comma => {
-                                is_dict = Some(false);
-                                self.eat();
-                            }
-                            Token::RightBrace => {
-                                is_dict = Some(false);
-                            }
-                            Token::Colon => {
-                                is_dict = Some(true);
-                                expect!(self, Token::Colon, "Expected ':' after dict element");
-                                self.expression(block);
-                                match self.peek() {
-                                    Token::Comma => {
-                                        self.eat();
-                                    }
-                                    Token::RightBrace => {}
-                                    _ => {
-                                        syntax_error!(self, "Expected ',' or '}}' after set element");
-                                    }
-                                }
-                            }
-                            _ => {
-                                syntax_error!(self, "Expected ',' ':' or '}}' after element");
-                                return;
-                            }
-                        },
-                    }
-                }
+                self.add_op(ctx, ass.span, Op::Call(expr.len()));
             }
-        }
-
-        expect!(
-            self,
-            Token::RightBrace,
-            "Expected '}}' after set or dict"
-        );
-        match is_dict {
-            Some(true) => {
-                add_op(self, block, Op::Dict(num_args * 2));
-            }
-            Some(false) => {
-                add_op(self, block, Op::Set(num_args));
-            }
-            None => syntax_error!(self, "Don't know if set or dict"),
-        }
-    }
-
-    fn grouping_or_tuple(&mut self, block: &mut Block) {
-        expect!(
-            self,
-            Token::LeftParen,
-            "Expected '(' for grouping or tuple."
-        );
-
-        let mut num_args = 0;
-        let trailing_comma = loop {
-            match self.peek() {
-                Token::RightParen | Token::EOF => {
-                    break false;
-                }
-                Token::Newline => {
-                    self.eat();
-                }
-                _ => {
-                    self.expression(block);
-                    num_args += 1;
-                    match self.peek() {
-                        Token::Comma => {
-                            self.eat();
-                            if matches!(self.peek(), Token::RightParen) {
-                                break true;
-                            }
-                        }
-                        Token::RightParen => {}
-                        _ => {
-                            syntax_error!(self, "Expected ',' or ')' after tuple element");
-                            return;
-                        }
-                    }
-                }
-            }
-        };
-        if trailing_comma || num_args != 1 {
-            add_op(self, block, Op::Tuple(num_args));
-        }
-        expect!(self, Token::RightParen, "Expected ')' after tuple");
-    }
-
-    fn unary(&mut self, block: &mut Block) {
-        let op = match self.eat() {
-            Token::Minus => Op::Neg,
-            Token::Bang => Op::Not,
-            _ => {
-                syntax_error!(self, "Invalid unary operator");
-                Op::Neg
-            }
-        };
-        self.parse_precedence(block, Prec::Factor);
-        add_op(self, block, op);
-    }
-
-    fn contains(&mut self, block: &mut Block) {
-        expect!(self, Token::In, "Expected 'in' at start of contains");
-        self.parse_precedence(block, Prec::Index);
-        add_op(self, block, Op::Contains);
-    }
-
-    fn binary_bool(&mut self, block: &mut Block) {
-        let op = self.eat();
-
-        // TODO(ed): If JmpFalseNoPeek would be made, we could
-        // save some instructions and clones.
-        match op {
-            Token::And => {
-                add_op(self, block, Op::Copy(1));
-                let jump = add_op(self, block, Op::Illegal);
-                add_op(self, block, Op::Pop);
-
-                self.parse_precedence(block, self.precedence(op).next());
-
-                block.patch(Op::JmpFalse(block.curr()), jump);
-            }
-
-            Token::Or => {
-                add_op(self, block, Op::Copy(1));
-                let skip = add_op(self, block, Op::Illegal);
-                let jump = add_op(self, block, Op::Illegal);
-
-                block.patch(Op::JmpFalse(block.curr()), skip);
-                add_op(self, block, Op::Pop);
-
-                self.parse_precedence(block, self.precedence(op).next());
-
-                block.patch(Op::Jmp(block.curr()), jump);
-            }
-
-            _ => {
-                syntax_error!(self, "Illegal operator");
-            }
-        }
-    }
-
-    fn binary(&mut self, block: &mut Block) {
-        let op = self.eat();
-
-        self.parse_precedence(block, self.precedence(op.clone()).next());
-
-        let op: &[Op] = match op {
-            Token::Plus => &[Op::Add],
-            Token::Minus => &[Op::Sub],
-            Token::Star => &[Op::Mul],
-            Token::Slash => &[Op::Div],
-            Token::AssertEqual => &[Op::Equal, Op::Assert],
-            Token::EqualEqual => &[Op::Equal],
-            Token::Less => &[Op::Less],
-            Token::Greater => &[Op::Greater],
-            Token::NotEqual => &[Op::Equal, Op::Not],
-            Token::LessEqual => &[Op::Greater, Op::Not],
-            Token::GreaterEqual => &[Op::Less, Op::Not],
-            _ => {
-                syntax_error!(self, "Illegal operator");
-                &[]
-            }
-        };
-        block.add_from(op, self.line());
-    }
-
-    /// Entry point for all expression parsing.
-    fn expression(&mut self, block: &mut Block) {
-        match self.peek_four() {
-            (Token::Fn, ..) => {
-                self.function(block, None);
-            }
-            _ => self.parse_precedence(block, Prec::No),
-        }
-    }
-
-    fn parse_precedence(&mut self, block: &mut Block, precedence: Prec) {
-        if !self.prefix(self.peek(), block) {
-            syntax_error!(self, "Invalid expression");
-        }
-
-        while precedence <= self.precedence(self.peek()) {
-            if !self.infix(self.peek(), block) {
-                break;
-            }
-        }
-    }
-
-    fn find_namespace(&self, name: &str) -> Option<&Namespace> {
-        match self.names().get(name) {
-            Some(Name::Namespace(path)) => Some(&self.contextes.get(path).unwrap().namespace),
-            _ => None,
-        }
-    }
-
-    fn find_and_capture_variable<'i, I>(name: &str, mut iterator: I) -> Option<Variable>
-    where
-        I: Iterator<Item = &'i mut Frame>,
-    {
-        if let Some(frame) = iterator.next() {
-            if let Some(res) = frame.find_local(name) {
-                frame.stack[res.slot].captured = true;
-                return Some(res);
-            }
-            if let Some(res) = frame.find_upvalue(name) {
-                return Some(res);
-            }
-
-            if let Some(res) = Self::find_and_capture_variable(name, iterator) {
-                return Some(frame.add_upvalue(res));
-            }
-        }
-        None
-    }
-
-    fn find_extern_function(&self, name: &str) -> Option<usize> {
-        self.functions.get(name).map(|(i, _)| *i)
-    }
-
-    fn find_variable(&mut self, name: &str) -> Option<Variable> {
-        if let Some(res) = self.frame().find_local(name) {
-            return Some(res);
-        }
-
-        if let Some(res) = self.frame().find_upvalue(name) {
-            return Some(res);
-        }
-
-        if let Some(res) = self.find_global(name) {
-            return Some(res);
-        }
-
-        Self::find_and_capture_variable(name, self.frames_mut().iter_mut().rev())
-    }
-
-    fn find_constant(&mut self, name: &str) -> usize {
-        match self.names_mut().entry(name.to_string()) {
-            Entry::Occupied(entry) => match entry.get() {
-                Name::Slot(i, _) => {
-                    return *i;
-                }
-                Name::Unknown(i, _) => {
-                    return *i;
-                }
-                _ => {
-                    syntax_error!(
-                        self,
-                        "Tried to find constant '{}' but it was a namespace", name
-                    );
-                    return 0;
-                }
-            },
-            Entry::Vacant(_) => {}
-        };
-
-        let slot = self.add_constant(Value::Unknown);
-        let line = self.line();
-        self.names_mut()
-            .insert(name.to_string(), Name::Unknown(slot, line));
-        slot
-    }
-
-    fn named_constant(&mut self, name: String, value: Value) -> usize {
-        let line = self.line();
-        match self.names_mut().entry(name.clone()) {
-            Entry::Occupied(mut entry) => {
-                let slot = if let Name::Unknown(slot, _) = entry.get() {
-                    *slot
+            Access(a, field) => {
+                if let Some(namespace) = self.assignable(a, ctx) {
+                    return self.read_identifier(&field.name, field.span, ctx, namespace);
                 } else {
-                    syntax_error!(self, "Constant named \"{}\" already has a value", name);
-                    return 0;
-                };
-                entry.insert(Name::Slot(slot, line));
-                self.constants[slot] = value;
-                return slot;
+                    let slot = self.string(&field.name);
+                    self.add_op(ctx, field.span, Op::GetField(slot));
+                }
             }
-            Entry::Vacant(_) => {}
+            Index(a, b) => {
+                self.assignable(a, ctx);
+                self.expression(b, ctx);
+                self.add_op(ctx, ass.span, Op::GetIndex);
+            }
         }
-        let slot = self.add_constant(value);
-        self.names_mut().insert(name, Name::Slot(slot, line));
-        slot
+        None
     }
 
-    fn forward_constant(&mut self, name: String) -> usize {
-        let line = self.line();
-        let slot = self.add_constant(Value::Unknown);
-        match self.names_mut().entry(name.clone()) {
-            Entry::Occupied(_) => {
-                syntax_error!(self, "Constant named \"{}\" already has a value", name);
-                0
-            }
-            Entry::Vacant(entry) => {
-                entry.insert(Name::Unknown(slot, line));
-                slot
-            }
+    fn un_op(&mut self, a: &Expression, ops: &[Op], span: Span, ctx: Context) {
+        self.expression(&a, ctx);
+        for op in ops {
+            self.add_op(ctx, span, *op);
         }
     }
 
-    fn call_maybe(&mut self, block: &mut Block) -> bool {
-        match self.peek_four() {
-            (Token::Bang, Token::LeftBrace, ..) => {
-                self.blob_initializer(block)
-            }
-            (Token::Bang, ..) | (Token::LeftParen, ..) => self.call(block),
-            _ => { return false; }
+    fn bin_op(&mut self, a: &Expression, b: &Expression, ops: &[Op], span: Span, ctx: Context) {
+        self.expression(&a, ctx);
+        self.expression(&b, ctx);
+        for op in ops {
+            self.add_op(ctx, span, *op);
         }
-        return true;
     }
 
-    fn blob_initializer(&mut self, block: &mut Block) {
-        expect!(self, Token::Bang, "Expected '!' at start of blob initializer");
-        expect!(self, Token::LeftBrace, "Expected '{{' at start of blob initializer");
-        let mut num_fields = 0;
-        loop {
-            match self.peek() {
-                Token::Newline | Token::Comma => {
-                    self.eat();
-                }
-                Token::Identifier(field) => {
-                    self.eat();
-                    num_fields += 1;
-                    let field = self.add_constant(Value::Field(field));
-                    add_op(self, block, Op::Constant(field));
-                    expect!(self, Token::Colon, "Expected ':' after field name");
-                    self.expression(block);
-                    if !matches!(self.peek(), Token::Newline | Token::Comma | Token::RightBrace) {
-                        syntax_error!(self, "Trash at end of line");
-                    }
-                }
-                Token::RightBrace => {
-                    break;
-                }
-                _ => {
-                    syntax_error!(self, "Expected field name in initializer");
-                    break;
-                }
-            }
-        }
-        add_op(self, block, Op::Call(num_fields * 2));
-        expect!(self, Token::RightBrace, "Expected '}}' after blob initializer");
+    fn push(&mut self, value: Value, span: Span, ctx: Context) {
+        let value = self.constant(value);
+        self.add_op(ctx, span, value);
     }
 
-    fn call(&mut self, block: &mut Block) {
-        let mut arity = 0;
-        match self.peek() {
-            Token::LeftParen => {
-                self.eat();
-                loop {
-                    match self.peek() {
-                        Token::EOF => {
-                            syntax_error!(self, "Unexpected EOF in function call");
-                            break;
-                        }
-                        Token::RightParen => {
-                            self.eat();
-                            break;
-                        }
-                        _ => {
-                            self.expression(block);
-                            arity += 1;
-                            if !matches!(self.peek(), Token::RightParen) {
-                                expect!(self, Token::Comma, "Expected ',' after argument");
-                            }
-                        }
-                    }
-                    if self.panic {
-                        break;
-                    }
+    fn expression(&mut self, expression: &Expression, ctx: Context) {
+        use ExpressionKind::*;
+
+        match &expression.kind {
+            Get(a) => { self.assignable(a, ctx); },
+
+            Add(a, b) => self.bin_op(a, b, &[Op::Add], expression.span, ctx),
+            Sub(a, b) => self.bin_op(a, b, &[Op::Sub], expression.span, ctx),
+            Mul(a, b) => self.bin_op(a, b, &[Op::Mul], expression.span, ctx),
+            Div(a, b) => self.bin_op(a, b, &[Op::Div], expression.span, ctx),
+
+            Eq(a, b)   => self.bin_op(a, b, &[Op::Equal], expression.span, ctx),
+            Neq(a, b)  => self.bin_op(a, b, &[Op::Equal, Op::Not], expression.span, ctx),
+            Gt(a, b)   => self.bin_op(a, b, &[Op::Greater], expression.span, ctx),
+            Gteq(a, b) => self.bin_op(a, b, &[Op::Less, Op::Not], expression.span, ctx),
+            Lt(a, b)   => self.bin_op(a, b, &[Op::Less], expression.span, ctx),
+            Lteq(a, b) => self.bin_op(a, b, &[Op::Greater, Op::Not], expression.span, ctx),
+
+            AssertEq(a, b) => self.bin_op(a, b, &[Op::Equal, Op::Assert], expression.span, ctx),
+
+            Neg(a) => self.un_op(a, &[Op::Neg], expression.span, ctx),
+
+            In(a, b) => self.bin_op(a, b, &[Op::Contains], expression.span, ctx),
+
+            And(a, b) => {
+                self.expression(a, ctx);
+
+                self.add_op(ctx, expression.span, Op::Copy(1));
+                let jump = self.add_op(ctx, expression.span, Op::Illegal);
+                self.add_op(ctx, expression.span, Op::Pop);
+
+                self.expression(b, ctx);
+
+                let op = Op::JmpFalse(self.next_ip(ctx));
+                self.patch(ctx, jump, op);
+            }
+            Or(a, b)  => {
+                self.expression(a, ctx);
+
+                self.add_op(ctx, expression.span, Op::Copy(1));
+                let skip = self.add_op(ctx, expression.span, Op::Illegal);
+                let jump = self.add_op(ctx, expression.span, Op::Illegal);
+
+                let op = Op::JmpFalse(self.next_ip(ctx));
+                self.patch(ctx, skip, op);
+                self.add_op(ctx, expression.span, Op::Pop);
+
+                self.expression(b, ctx);
+                let op = Op::Jmp(self.next_ip(ctx));
+                self.patch(ctx, jump, op);
+
+            }
+            Not(a)    => self.un_op(a, &[Op::Not], expression.span, ctx),
+
+            Function { name, params, ret, body } => {
+                let file = self.file_from_namespace(ctx.namespace);
+                let name = format!("fn {} {}:{}", name, file, expression.span.line);
+
+                // === Frame begin ===
+                let inner_ctx = self.push_frame_and_block(ctx, &name, expression.span);
+                let mut param_types = Vec::new();
+                for (ident, ty) in params.iter() {
+                    param_types.push(self.resolve_type(&ty, inner_ctx));
+                    let param = self.define(&ident.name, VarKind::Const, ident.span);
+                    self.activate(param);
                 }
-            }
+                let ret = self.resolve_type(&ret, inner_ctx);
+                let ty = Type::Function(param_types, Box::new(ret));
+                self.blocks[inner_ctx.block_slot].ty = ty.clone();
 
-            Token::Bang => {
-                self.eat();
-                loop {
-                    match self.peek() {
-                        Token::EOF => {
-                            syntax_error!(self, "Unexpected EOF in function call");
-                            break;
-                        }
-                        Token::Newline => {
-                            break;
-                        }
-                        _ => {
-                            self.expression(block);
-                            arity += 1;
-                            if matches!(self.peek(), Token::Comma) {
-                                self.eat();
-                            }
-                        }
-                    }
-                    if self.panic {
-                        break;
-                    }
+                self.statement(&body, inner_ctx);
+
+                if !all_paths_return(&body) {
+                    let nil = self.constant(Value::Nil);
+                    self.add_op(inner_ctx, body.span, nil);
+                    self.add_op(inner_ctx, body.span, Op::Return);
                 }
-            }
 
-            _ => {
-                syntax_error!(self, "Invalid function call. Expected '!' or '('");
-            }
-        }
-
-        add_op(self, block, Op::Call(arity));
-    }
-
-    // TODO(ed): de-complexify
-    fn function(&mut self, block: &mut Block, in_name: Option<&str>) {
-        expect!(self, Token::Fn, "Expected 'fn' at start of function");
-
-        let name = if let Some(name) = in_name {
-            String::from(name)
-        } else {
-            format!("λ {}@{:03}", self.current_file().display(), self.line())
-        };
-
-        let mut args = Vec::new();
-        let mut return_type = Type::Void;
-        let mut function_block = Block::new(&name, self.current_file());
-
-        let block_id = self.blocks.len();
-        let temp_block = Block::new(&name, self.current_file());
-        self.blocks.push(Rc::new(RefCell::new(temp_block)));
-
-        let _ret = push_frame!(self, function_block, {
-            loop {
-                match self.peek() {
-                    Token::Identifier(name) => {
-                        self.eat();
-                        expect!(self, Token::Colon, "Expected ':' after parameter name");
-                        if let Ok(typ) = self.parse_type() {
-                            args.push(typ.clone());
-                            let mut var = Variable::new(&name, true, typ);
-                            var.read = true;
-                            if let Ok(slot) = self.define(var) {
-                                self.stack_mut()[slot].active = true;
-                            }
-                        } else {
-                            syntax_error!(self, "Failed to parse parameter type");
-                        }
-                        if !matches!(self.peek(), Token::Arrow | Token::LeftBrace) {
-                            expect!(self, Token::Comma, "Expected ',' after parameter");
-                        }
-                    }
-                    Token::LeftBrace => {
-                        break;
-                    }
-                    Token::Arrow => {
-                        self.eat();
-                        if let Ok(typ) = self.parse_type() {
-                            return_type = typ;
-                        } else {
-                            syntax_error!(self, "Failed to parse return type");
-                        }
-                        break;
-                    }
-                    _ => {
-                        syntax_error!(
-                            self,
-                            "Expected '->' or more paramters in function definition"
-                        );
-                        break;
-                    }
-                }
-            }
-
-            self.scope(&mut function_block);
-
-            for var in self.frame().upvalues.iter() {
-                function_block
+                self.blocks[inner_ctx.block_slot].upvalues = self.pop_frame(inner_ctx)
                     .upvalues
-                    .push((var.outer_slot, var.outer_upvalue, var.typ.clone()));
+                    .into_iter()
+                    .map(|u| (u.parent, u.upupvalue, u.ty))
+                    .collect();
+                let function = Value::Function(Rc::new(Vec::new()), ty, inner_ctx.block_slot);
+                // === Frame end ===
+
+                let function = self.constant(function);
+                self.add_op(ctx, expression.span, function);
             }
-        });
 
-        let nil = self.add_constant(Value::Nil);
-        for op in function_block.ops.iter().rev() {
-            match op {
-                Op::Pop | Op::PopUpvalue => {}
-                Op::Return => {
-                    break;
+            Instance { blob, fields } => {
+                self.assignable(blob, ctx);
+                for (name, field) in fields.iter() {
+                    let name = self.constant(Value::Field(name.clone()));
+                    self.add_op(ctx, field.span, name);
+                    self.expression(field, ctx);
                 }
-                _ => {
-                    add_op(self, &mut function_block, Op::Constant(nil));
-                    add_op(self, &mut function_block, Op::Return);
-                    break;
-                }
+                self.add_op(ctx, expression.span, Op::Call(fields.len() * 2));
             }
+
+            Tuple(x) | List(x) | Set(x) | Dict(x) => {
+                for expr in x.iter() {
+                    self.expression(expr, ctx);
+                }
+                self.add_op(ctx, expression.span, match &expression.kind {
+                    Tuple(_) => Op::Tuple(x.len()),
+                    List(_) => Op::List(x.len()),
+                    Set(_) => Op::Set(x.len()),
+                    Dict(_) => Op::Dict(x.len()),
+                    _ => unreachable!(),
+                });
+            }
+
+            Float(a) => self.push(Value::Float(*a), expression.span, ctx),
+            Bool(a)  => self.push(Value::Bool(*a), expression.span, ctx),
+            Int(a)   => self.push(Value::Int(*a), expression.span, ctx),
+            Str(a)   => self.push(Value::String(Rc::new(a.clone())), expression.span, ctx),
+            Nil      => self.push(Value::Nil, expression.span, ctx),
         }
-
-        if function_block.ops.is_empty() {
-            add_op(self, &mut function_block, Op::Constant(nil));
-            add_op(self, &mut function_block, Op::Return);
-        }
-
-        function_block.ty = Type::Function(args, Box::new(return_type));
-        let function_block = Rc::new(RefCell::new(function_block));
-
-        // Note(ed): We deliberately add the constant as late as possible.
-        // This behaviour is used in `constant_statement`.
-        let function = Value::Function(Rc::new(Vec::new()), Rc::clone(&function_block));
-        self.blocks[block_id] = function_block;
-        let constant = if in_name.is_some() {
-            self.named_constant(name, function)
-        } else {
-            self.add_constant(function)
-        };
-        add_op(self, block, Op::Constant(constant));
     }
 
-    fn variable_expression(&mut self, block: &mut Block) {
-        let name = match self.peek() {
-            Token::Identifier(name) => name,
-            _ => unreachable!(),
-        };
+    fn resolve_and_capture(&mut self,
+        name: &str,
+        frame: usize,
+        span: Span,
+    ) -> Result<Lookup, ()> {
+        // Frame 0 has globals which cannot be captured.
+        if frame == 0 { return Err(()) }
 
-        // TODO(ed): This is a clone I would love to get rid of...
-        if let Some(mut namespace) = self.find_namespace(&name).cloned() {
-            self.eat();
-            loop {
-                if self.eat() != Token::Dot {
-                    syntax_error!(self, "Expect '.' after namespace");
-                    return;
-                }
-                if let Token::Identifier(field) = self.eat() {
-                    match namespace.get(&field) {
-                        Some(Name::Slot(slot, _)) | Some(Name::Unknown(slot, _)) => {
-                            add_op(self, block, Op::Constant(*slot));
-                            self.call_maybe(block);
-                            return;
-                        }
-                        Some(Name::Namespace(inner_name)) => {
-                            namespace = self.contextes.get(inner_name).unwrap().namespace.clone();
-                        }
-                        _ => {
-                            syntax_error!(self, "Invalid namespace field");
-                        }
-                    }
-                } else {
-                    syntax_error!(self, "Expected fieldname after '.'");
-                }
+        for var in self.frames[frame].variables.iter().rev() {
+            if &var.name == name && var.active {
+                return Ok(Lookup::Variable(var.clone()));
             }
         }
 
-        self.eat();
-
-        // Global functions take precedence
-        if let Some(slot) = self.find_extern_function(&name) {
-            let string = self.add_constant(Value::ExternFunction(slot));
-            add_op(self, block, Op::Constant(string));
-            self.call(block);
-            return;
-        }
-
-        // Variables
-        if let Some(var) = self.find_variable(&name) {
-            self.mark_read(self.frames().len() - 1, &var);
-            if var.global {
-                add_op(self, block, Op::ReadGlobal(var.slot));
-            } else if var.upvalue {
-                add_op(self, block, Op::ReadUpvalue(var.slot));
-            } else {
-                add_op(self, block, Op::ReadLocal(var.slot));
-            }
-            loop {
-                match self.peek() {
-                    Token::Dot => {
-                        self.eat();
-                        if let Token::Identifier(field) = self.eat() {
-                            let string = self.intern_string(field);
-                            add_op(self, block, Op::GetField(string));
-                        } else {
-                            syntax_error!(self, "Expected fieldname after '.'");
-                            return;
-                        }
-                    }
-                    Token::LeftBracket => {
-                        // TODO(ed): The code here is very duplicated from blob_field,
-                        // which is a wierd name, we can refactor this out and get something
-                        // more readable.
-                        self.eat();
-                        self.expression(block);
-                        expect!(self, Token::RightBracket, "Expected ']' after indexing");
-
-                        let nil = self.add_constant(Value::Nil);
-                        let op = match self.peek() {
-                            Token::Equal => {
-                                self.eat();
-                                self.expression(block);
-                                add_op(self, block, Op::AssignIndex);
-                                add_op(self, block, Op::Constant(nil));
-                                return;
-                            }
-
-                            Token::PlusEqual => Op::Add,
-                            Token::MinusEqual => Op::Sub,
-                            Token::StarEqual => Op::Mul,
-                            Token::SlashEqual => Op::Div,
-
-                            _ => {
-                                add_op(self, block, Op::GetIndex);
-                                continue;
-                            }
-                        };
-
-                        add_op(self, block, Op::Copy(2));
-                        add_op(self, block, Op::GetIndex);
-                        self.eat();
-                        self.expression(block);
-                        add_op(self, block, op);
-                        add_op(self, block, Op::AssignIndex);
-                        add_op(self, block, Op::Constant(nil));
-                        return;
-                    }
-                    _ => {
-                        if !self.call_maybe(block) {
-                            return;
-                        }
-                    }
-                }
+        for up in self.frames[frame].upvalues.iter().rev() {
+            if &up.name == name {
+                return Ok(Lookup::Upvalue(up.clone()));
             }
         }
 
-        // Blobs - Always returns a blob since it's filled in if it isn't used.
-        let con = self.find_constant(&name);
-        add_op(self, block, Op::Constant(con));
-        self.call_maybe(block);
-    }
-
-    fn define(&mut self, mut var: Variable) -> Result<usize, ()> {
-        let line = self.line();
-        let frame = self.frame_mut();
-
-        if let Some(res) = frame
-            .find_local(&var.name)
-            .or_else(|| frame.find_upvalue(&var.name))
-        {
-            if res.scope == frame.scope {
-                syntax_error!(self, "Multiple definitions of '{}' in this block", res.name);
+        let up = match self.resolve_and_capture(name, frame - 1, span) {
+            Ok(Lookup::Upvalue(up)) => {
+                Upvalue::loft(&up)
+            }
+            Ok(Lookup::Variable(var)) => {
+                Upvalue::capture(&var)
+            }
+            _ => {
                 return Err(());
             }
-        }
+        };
+        let up = self.upvalue(up, frame);
+        Ok(Lookup::Upvalue(up))
 
-        let slot = frame.stack.len();
-        var.slot = slot;
-        var.line = line;
-        var.scope = frame.scope;
-        frame.stack.push(var);
-        Ok(slot)
     }
 
-    fn define_global(&mut self, mut var: Variable) -> Result<usize, ()> {
-        let line = self.line();
+    fn read_identifier(&mut self, name: &str, span: Span, ctx: Context, namespace: usize) -> Option<usize> {
+        match self.resolve_and_capture(name, ctx.frame, span) {
+            Ok(Lookup::Upvalue(up)) => {
+                let op = Op::ReadUpvalue(up.slot);
+                self.add_op(ctx, span, op);
+            }
 
-        if let Some(res) = self.find_global(&var.name) {
-            syntax_error!(self, "Multiple global definitions of '{}'", res.name);
-            return Err(());
+            Ok(Lookup::Variable(var)) => {
+                let op = Op::ReadLocal(var.slot);
+                self.add_op(ctx, span, op);
+            }
+
+            Err(()) => {
+                match self.namespaces[namespace].get(name) {
+                    Some(Name::Global(slot)) => {
+                        let op = Op::ReadGlobal(*slot);
+                        self.add_op(ctx, span, op);
+                    },
+                    Some(Name::Blob(blob)) => {
+                        let op = Op::Constant(*blob);
+                        self.add_op(ctx, span, op);
+                    },
+                    Some(Name::Namespace(new_namespace)) => {
+                        return Some(*new_namespace)
+                    },
+                    None => {
+                        if let Some((slot, _)) = self.functions.get(name) {
+                            let slot = *slot;
+                            let op = self.constant(Value::ExternFunction(slot));
+                            self.add_op(ctx, span, op);
+                        } else {
+                            error!(self, ctx, span,
+                                "Cannot read '{}' in '{}.sy'",
+                                name,
+                                self.file_from_namespace(namespace));
+                        }
+                    },
+                }
+            }
         }
-
-        let slot = self.globals.len();
-        var.slot = slot;
-        var.line = line;
-        var.global = true;
-        var.active = true;
-
-        println!("{} - {}", var.name, slot);
-        self.globals.push(var);
-        Ok(slot)
+        None
     }
 
-    fn outer_definition_statement(&mut self, name: &str, _typ: Type, _force: bool, block: &mut Block) {
-        let var = self.find_global(name);
-        println!("{:?}", var);
-        if var.is_none() {
-            syntax_error!(self, "Couldn't find variable '{}' during prepass", name);
-            return;
-        }
-        let var = var.unwrap();
-        assert!(var.mutable);
-
-        self.expression(block);
-    }
-
-    fn definition_statement(&mut self, name: &str, typ: Type, force: bool, block: &mut Block) {
-        // Local
-        let var = Variable::new(name, true, typ.clone());
-        let slot = self.define(var);
-        self.expression(block);
-        let constant = self.add_constant(Value::Ty(typ));
-        if force {
-            add_op(self, block, Op::Force(constant));
-        } else {
-            add_op(self, block, Op::Define(constant));
-        }
-
-        if let Ok(slot) = slot {
-            self.stack_mut()[slot].active = true;
-        }
-    }
-
-    fn outer_function(&mut self, name: &str, _typ: Type, block: &mut Block) {
-        assert!(self.frames().len() <= 1, "Not in global namespace");
-        self.function(block, Some(name));
-        // Remove the function, since it's a constant and we already
-        // added it.
-        block.ops.pop().unwrap();
-        let slot = self.find_constant(name);
-        add_op(self, block, Op::Link(slot));
-        if let Value::Function(_, block) = &self.constants[slot] {
-            block.borrow_mut().mark_constant();
-        } else {
-            unreachable!();
-        }
-        return;
-    }
-
-    fn outer_constant_statement(&mut self, name: &str, _typ: Type, block: &mut Block) {
-        let var = self.find_global(name);
-        if var.is_none() {
-            syntax_error!(self, "Couldn't find constant '{}' during prepass", name);
-            return;
-        }
-        let var = var.unwrap();
-        assert!(!var.mutable);
-
-        self.expression(block);
-    }
-
-    fn constant_statement(&mut self, name: &str, typ: Type, block: &mut Block) {
-        // Local
-        let var = Variable::new(name, false, typ);
-        let slot = self.define(var);
-        self.expression(block);
-
-        if let Ok(slot) = slot {
-            self.stack_mut()[slot].active = true;
-        }
-    }
-
-    fn assign(&mut self, block: &mut Block) {
-        let name = match self.eat() {
-            Token::Identifier(name) => name,
-            _ => {
-                syntax_error!(self, "Expected identifier in assignment");
+    fn set_identifier(&mut self, name: &str, span: Span, ctx: Context, namespace: usize) {
+        match self.resolve_and_capture(name, ctx.frame, span) {
+            Ok(Lookup::Upvalue(up)) => {
+                let op = Op::AssignUpvalue(up.slot);
+                self.add_op(ctx, span, op);
                 return;
             }
-        };
 
-        let op = match self.eat() {
-            Token::Equal => None,
-
-            Token::PlusEqual => Some(Op::Add),
-            Token::MinusEqual => Some(Op::Sub),
-            Token::StarEqual => Some(Op::Mul),
-            Token::SlashEqual => Some(Op::Div),
-
-            _ => {
-                syntax_error!(self, "Expected '=' in assignment");
+            Ok(Lookup::Variable(var)) => {
+                let op = Op::AssignLocal(var.slot);
+                self.add_op(ctx, span, op);
                 return;
             }
-        };
 
-        if let Some(var) = self.find_variable(&name) {
-            if !var.mutable {
-                syntax_error!(self, "Cannot assign to constant '{}'", var.name);
-            }
-            if let Some(op) = op {
-                // TODO(ed): Maybe a function that generates a read - this code is quite
-                // duplicated.
-                if var.global {
-                    add_op(self, block, Op::ReadGlobal(var.slot));
-                } else if var.upvalue {
-                    add_op(self, block, Op::ReadUpvalue(var.slot));
-                } else {
-                    add_op(self, block, Op::ReadLocal(var.slot));
-                }
-                self.expression(block);
-                add_op(self, block, op);
-            } else {
-                self.expression(block);
-            }
+            Err(()) => {
+                match self.namespaces[namespace].get(name) {
+                    Some(Name::Global(slot)) => {
+                        let var = &self.frames[0].variables[*slot];
+                        if var.kind.immutable() && ctx.frame != 0 {
+                            error!(self, ctx, span, "Cannot mutate constant '{}'", name);
+                        } else {
+                            let op = Op::AssignGlobal(var.slot);
+                            self.add_op(ctx, span, op);
+                        }
+                    },
 
-            if var.global {
-                add_op(self, block, Op::AssignGlobal(var.slot));
-            } else if var.upvalue {
-                add_op(self, block, Op::AssignUpvalue(var.slot));
-            } else {
-                add_op(self, block, Op::AssignLocal(var.slot));
-            }
-        } else {
-            syntax_error!(self, "Using undefined variable {}", name);
-        }
-    }
-
-    fn scope(&mut self, block: &mut Block) {
-        if !expect!(self, Token::LeftBrace, "Expected '{{' at start of block") {
-            return;
-        }
-
-        push_scope!(self, block, {
-            while !matches!(self.peek(), Token::RightBrace | Token::EOF) {
-                self.statement(block);
-                match self.peek() {
-                    Token::Newline => {
-                        self.eat();
-                    }
-                    Token::RightBrace => {
-                        break;
-                    }
                     _ => {
-                        syntax_error!(self, "Expect newline after statement");
+                        error!(self, ctx, span,
+                            "Cannot assign '{}' in '{}.sy'",
+                            name,
+                            self.file_from_namespace(namespace));
                     }
                 }
             }
-        });
-
-        expect!(self, Token::RightBrace, "Expected '}}' at end of block");
-    }
-
-    fn if_statment(&mut self, block: &mut Block) {
-        expect!(self, Token::If, "Expected 'if' at start of if-statement");
-        self.expression(block);
-        let jump = add_op(self, block, Op::Illegal);
-        self.scope(block);
-
-        if Token::Else == self.peek() {
-            self.eat();
-
-            let else_jmp = add_op(self, block, Op::Illegal);
-            block.patch(Op::JmpFalse(block.curr()), jump);
-
-            match self.peek() {
-                Token::If => self.if_statment(block),
-                Token::LeftBrace => self.scope(block),
-                _ => syntax_error!(self, "Epected 'if' or '{{' after else"),
-            }
-            block.patch(Op::Jmp(block.curr()), else_jmp);
-        } else {
-            block.patch(Op::JmpFalse(block.curr()), jump);
         }
     }
 
-    fn for_loop_condition(&mut self, block: &mut Block) {
-        expect!(
-            self,
-            Token::Comma,
-            "Expect ',' between initalizer and loop expression"
-        );
-
-        let cond = block.curr();
-        self.expression(block);
-        let cond_out = add_op(self, block, Op::Illegal);
-        let cond_cont = add_op(self, block, Op::Illegal);
-        expect!(
-            self,
-            Token::Comma,
-            "Expect ',' between initalizer and loop expression"
-        );
-
-        let inc = block.curr();
-        push_scope!(self, block, {
-            self.statement(block);
-        });
-        add_op(self, block, Op::Jmp(cond));
-
-        // patch_jmp!(Op::Jmp, cond_cont => block.curr());
-        block.patch(Op::Jmp(block.curr()), cond_cont);
-        self.scope(block);
-        add_op(self, block, Op::Jmp(inc));
-
-        block.patch(Op::JmpFalse(block.curr()), cond_out);
-
-        let stacksize = self.frame().stack.len();
-        self.frame_mut()
-            .pop_loop(block, stacksize, inc, block.curr());
-    }
-
-    //TODO de-complexify
-    fn for_loop(&mut self, block: &mut Block) {
-        expect!(self, Token::For, "Expected 'for' at start of for-loop");
-
-        push_scope!(self, block, {
-            self.frame_mut().push_loop();
-            // Definition
-            match self.peek_four() {
-                // TODO(ed): Typed definitions aswell!
-                (Token::Identifier(name), Token::ColonEqual, ..) => {
-                    self.eat();
-                    self.eat();
-                    self.definition_statement(&name, Type::Unknown, false, block);
-                    self.for_loop_condition(block);
-                }
-
-                (Token::Comma, ..) => {
-                    self.for_loop_condition(block);
-                }
-
-                (Token::Identifier(name), Token::In, ..) => {
-                    // TODO(ed): Destructure tuples? Break this out into function?
-
-                    // The type will always be infered from the iterator.
-                    let var = Variable::new("/iter", false, Type::Unknown);
-                    let slot = self.define(var).unwrap();
-                    self.stack_mut()[slot].read = true;
-
-                    self.eat();
-                    self.eat();
-
-                    self.expression(block);
-                    add_op(self, block, Op::Iter);
-                    let start = add_op(self, block, Op::Illegal);
-
-                    push_scope!(self, block, {
-                        let var = Variable::new(&name, false, Type::Unknown);
-                        let slot = self.define(var);
-
-                        if let Ok(slot) = slot {
-                            self.stack_mut()[slot].active = true;
-                        } else {
-                            syntax_error!(self, "Failed to define '{}'", name);
-                        }
-                        self.scope(block);
-                    });
-
-                    add_op(self, block, Op::Jmp(start));
-                    let end = block.curr();
-                    block.patch(Op::JmpNext(end), start);
-
-                    let stacksize = self.frame().stack.len();
-                    self.frame_mut().pop_loop(block, stacksize, start, end);
-                }
-
-                _ => {
-                    syntax_error!(self, "Expected definition at start of for-loop");
-                }
-            }
-
-        });
-    }
-
-    fn parse_type(&mut self) -> Result<Type, ()> {
-        if self.peek() == Token::LeftBrace {
-            // Hashset
-            // TODO(ed): This is kinda hacky, but the error
-            // messages get really borked if we don't move back.
-            let start = self.current_token;
-            self.eat();
-            if let Ok(ty) = self.parse_type() {
-                if self.peek() == Token::RightBrace {
-                    self.eat();
-                    return Ok(Type::Set(Box::new(ty)));
-                }
-                expect!(self, Token::Colon, "Expected ':' for dict type");
-                if let Ok(val) = self.parse_type() {
-                    expect!(self, Token::RightBrace, "Expected '}}' after dict type");
-                    return Ok(Type::Dict(Box::new(ty), Box::new(val)));
-                }
-            }
-            self.current_token = start;
-            return Err(());
-        }
-
-        let mut tys = HashSet::new();
-        tys.insert(self.parse_simple_type()?);
-        loop {
-            match self.peek() {
-                Token::QuestionMark => {
-                    self.eat();
-                    tys.insert(Type::Void);
-                    return Ok(Type::Union(tys));
-                }
-
-                Token::Pipe => {
-                    self.eat();
-                    tys.insert(self.parse_simple_type()?);
-                }
-
-                _ => {
-                    break;
-                }
-            }
-        }
-        if tys.len() == 1 {
-            Ok(tys.iter().next().unwrap().clone())
-        } else {
-            Ok(Type::Union(tys))
-        }
-    }
-
-    fn parse_simple_type(&mut self) -> Result<Type, ()> {
-        match self.peek() {
-            Token::Fn => {
-                self.eat();
-                let mut params = Vec::new();
-                let return_type = loop {
-                    match self.peek() {
-                        Token::Identifier(_) | Token::Fn => {
-                            if let Ok(ty) = self.parse_type() {
-                                params.push(ty);
-                                if self.peek() == Token::Comma {
-                                    self.eat();
-                                }
-                            } else {
-                                syntax_error!(
-                                    self,
-                                    "Function type signature contains non-type {:?}",
-                                    self.peek()
-                                );
-                                return Err(());
-                            }
-                        }
-                        Token::Arrow => {
-                            self.eat();
-                            let return_type = self.parse_type();
-                            if return_type.is_err() {
-                                syntax_error!(self, "Failed to parse return type, try 'void'");
-                                return Err(());
-                            }
-                            break return_type.unwrap();
-                        }
-                        Token::Comma | Token::Equal => {
-                            break Type::Void;
-                        }
-                        token => {
-                            syntax_error!(
-                                self,
-                                "Function type signature contains non-type {:?}", token
-                            );
-                            return Err(());
-                        }
-                    }
-                };
-                let f = Type::Function(params, Box::new(return_type));
-                Ok(f)
-            }
-
-            Token::LeftParen => {
-                self.eat();
-                let mut element = Vec::new();
-                loop {
-                    element.push(self.parse_type()?);
-                    if self.peek() == Token::RightParen {
-                        self.eat();
-                        return Ok(Type::Tuple(element));
-                    }
-                    if !expect!(self, Token::Comma, "Expect comma efter element in tuple") {
-                        return Err(());
-                    }
-                }
-            }
-
-            Token::LeftBracket => {
-                self.eat();
-                let ty = self.parse_type();
-                expect!(self, Token::RightBracket, "Expected ']' after list type");
-                match ty {
-                    Ok(ty) => Ok(Type::List(Box::new(ty))),
-                    Err(_) => Err(()),
-                }
-            }
-
-            Token::Identifier(x) => {
-                self.eat();
-                match x.as_str() {
-                    "void" => Ok(Type::Void),
-                    "int" => Ok(Type::Int),
-                    "float" => Ok(Type::Float),
-                    "bool" => Ok(Type::Bool),
-                    "str" => Ok(Type::String),
-                    x => {
-                        let blob = self.find_constant(x);
-                        if let Value::Blob(blob) = &self.constants[blob] {
-                            Ok(Type::Instance(Rc::clone(blob)))
-                        } else {
-                            // TODO(ed): This is kinda bad. If the type cannot
-                            // be found it tries to infer it during runtime
-                            // and doesn't verify it.
-                            Ok(Type::Unknown)
-                        }
-                    }
-                }
-            }
-            _ => Err(()),
-        }
-    }
-
-    fn blob_statement(&mut self, _block: &mut Block) {
-        let name = if let Token::Identifier(name) = self.eat() {
-            name
-        } else {
-            syntax_error!(self, "Expected identifier after 'blob'");
-            return;
-        };
-        expect!(
-            self,
-            Token::ColonColon,
-            "Expected '::' when declaring a blob"
-        );
-        expect!(self, Token::Blob, "Expected 'blob' when declaring a blob");
-
-        expect!(self, Token::LeftBrace, "Expected 'blob' body. AKA '{{'");
-
-        let mut blob = Blob::new(self.new_blob_id(), &name);
-        loop {
-            if matches!(self.peek(), Token::EOF | Token::RightBrace) {
-                break;
-            }
-            if matches!(self.peek(), Token::Newline) {
-                self.eat();
-                continue;
-            }
-
-            let name = if let Token::Identifier(name) = self.eat() {
-                name
-            } else {
-                syntax_error!(self, "Expected identifier for field");
-                continue;
-            };
-
-            expect!(self, Token::Colon, "Expected ':' after field name");
-
-            let ty = if let Ok(ty) = self.parse_type() {
-                ty
-            } else {
-                syntax_error!(self, "Failed to parse blob-field type");
-                continue;
-            };
-
-            if blob.add_field(&name, ty).is_err() {
-                syntax_error!(
-                    self,
-                    "A field named '{}' is defined twice for '{}'", name, blob.name
-                );
-            }
-        }
-
-        expect!(self, Token::RightBrace, "Expected '}}' after 'blob' body");
-
-        let blob = Value::Blob(Rc::new(blob));
-        self.named_constant(name, blob);
-    }
-
-    fn access_dotted(&mut self, block: &mut Block) {
-        let name = match self.peek() {
-            Token::Identifier(name) => name,
-            _ => unreachable!(),
-        };
-        if self.find_namespace(&name).is_some() {
-            self.expression(block);
-            add_op(self, block, Op::Pop);
-        } else if rest_of_line_contains!(
-            self,
-            Token::Equal
-                | Token::PlusEqual
-                | Token::MinusEqual
-                | Token::StarEqual
-                | Token::SlashEqual
-        ) {
-            self.blob_field(block);
-        } else {
-            self.expression(block);
-            add_op(self, block, Op::Pop);
-        }
-    }
-
-    //TODO rename
-    fn blob_field(&mut self, block: &mut Block) {
-        let name = match self.eat() {
-            Token::Identifier(name) => name,
-            _ => unreachable!(),
-        };
-
-        if let Some(var) = self.find_variable(&name) {
-            self.mark_read(self.frames().len() - 1, &var);
-            if var.global {
-                add_op(self, block, Op::ReadGlobal(var.slot));
-            } else if var.upvalue {
-                add_op(self, block, Op::ReadUpvalue(var.slot));
-            } else {
-                add_op(self, block, Op::ReadLocal(var.slot));
-            }
-            loop {
-                match self.peek() {
-                    Token::Dot => {
-                        self.eat();
-                        let field = if let Token::Identifier(field) = self.eat() {
-                            field
-                        } else {
-                            syntax_error!(self, "Expected fieldname after '.'");
-                            return;
-                        };
-
-                        let field = self.intern_string(field);
-                        let op = match self.peek() {
-                            Token::Equal => {
-                                self.eat();
-                                self.expression(block);
-                                add_op(self, block, Op::AssignField(field));
-                                return;
-                            }
-
-                            Token::PlusEqual => Op::Add,
-                            Token::MinusEqual => Op::Sub,
-                            Token::StarEqual => Op::Mul,
-                            Token::SlashEqual => Op::Div,
-
-                            _ => {
-                                add_op(self, block, Op::GetField(field));
-                                continue;
-                            }
-                        };
-                        add_op(self, block, Op::Copy(1));
-                        add_op(self, block, Op::GetField(field));
-                        self.eat();
-                        self.expression(block);
-                        add_op(self, block, op);
-                        add_op(self, block, Op::AssignField(field));
-                        return;
-                    }
-                    Token::LeftBracket => {
-                        self.eat();
-                        self.expression(block);
-                        expect!(self, Token::RightBracket, "Expected ']' after indexing");
-
-                        let op = match self.peek() {
-                            Token::Equal => {
-                                self.eat();
-                                self.expression(block);
-                                add_op(self, block, Op::AssignIndex);
-                                return;
-                            }
-
-                            Token::PlusEqual => Op::Add,
-                            Token::MinusEqual => Op::Sub,
-                            Token::StarEqual => Op::Mul,
-                            Token::SlashEqual => Op::Div,
-
-                            _ => {
-                                add_op(self, block, Op::GetIndex);
-                                continue;
-                            }
-                        };
-
-                        add_op(self, block, Op::Copy(2));
-                        add_op(self, block, Op::GetIndex);
-                        self.eat();
-                        self.expression(block);
-                        add_op(self, block, op);
-                        add_op(self, block, Op::AssignIndex);
-                        return;
-                    }
-                    Token::Newline => {
-                        return;
-                    }
-                    _ => {
-                        if !self.call_maybe(block) {
-                            syntax_error!(self, "Unexpected token when parsing blob-field");
-                            return;
-                        }
-                    }
-                }
-            }
-        } else {
-            syntax_error!(self, "Cannot find variable '{}'", name);
-        }
-    }
-
-    fn outer_statement(&mut self, block: &mut Block) {
-        self.clear_panic();
-        match self.peek_four() {
-            (Token::Identifier(name), Token::ColonEqual, ..) => {
-                self.eat();
-                self.eat();
-                self.outer_definition_statement(&name, Type::Unknown, false, block);
-            }
-
-            (Token::Identifier(_), Token::ColonColon, Token::Blob, ..) => {
-                self.blob_statement(block);
-            }
-
-            (Token::Identifier(name), Token::ColonColon, Token::Fn, ..) => {
-                self.eat();
-                self.eat();
-                self.outer_function(&name, Type::Unknown, block);
-            }
-
-            (Token::Identifier(name), Token::ColonColon, ..) => {
-                self.eat();
-                self.eat();
-                self.outer_constant_statement(&name, Type::Unknown, block);
-            }
-
-            (Token::Identifier(name), Token::Colon, ..) => {
-                self.eat();
-                self.eat();
-                let force = if self.peek() == Token::Bang {
-                    self.eat();
-                    true
-                } else {
-                    false
-                };
-                if let Ok(typ) = self.parse_type() {
-                    expect!(self, Token::Equal, "Expected assignment");
-                    self.outer_definition_statement(&name, typ, force, block);
-                } else {
-                    syntax_error!(self, "Expected type found '{:?}'", self.peek());
-                }
-            }
-
-            (Token::Newline, ..) => {}
-
-            (a, b, c, d) => {
-                syntax_error!(
-                    self,
-                    "Unknown outer token sequence: {:?} {:?} {:?} {:?}", a, b, c, d
-                )
-            }
-        }
-    }
-
-    fn statement(&mut self, block: &mut Block) {
-        self.clear_panic();
-
-        match self.peek_four() {
-            (Token::Print, ..) => {
-                self.eat();
-                self.expression(block);
-                add_op(self, block, Op::Print);
-            }
-
-            (Token::Identifier(_), Token::Equal, ..)
-            | (Token::Identifier(_), Token::PlusEqual, ..)
-            | (Token::Identifier(_), Token::MinusEqual, ..)
-            | (Token::Identifier(_), Token::SlashEqual, ..)
-            | (Token::Identifier(_), Token::StarEqual, ..) => {
-                self.assign(block);
-            }
-
-            (Token::Identifier(_), Token::Dot, ..) => {
-                self.access_dotted(block);
-            }
-
-            (Token::Yield, ..) => {
-                self.eat();
-                add_op(self, block, Op::Yield);
-            }
-
-            (Token::Identifier(name), Token::ColonEqual, ..) => {
-                self.eat();
-                self.eat();
-                self.definition_statement(&name, Type::Unknown, false, block);
-            }
-
-            (Token::Identifier(name), Token::ColonColon, ..) => {
-                self.eat();
-                self.eat();
-                self.constant_statement(&name, Type::Unknown, block);
-            }
-
-            (Token::Identifier(name), Token::Colon, ..) => {
-                self.eat();
-                self.eat();
-                let force = if self.peek() == Token::Bang {
-                    self.eat();
-                    true
-                } else {
-                    false
-                };
-                if let Ok(typ) = self.parse_type() {
-                    expect!(self, Token::Equal, "Expected assignment");
-                    self.definition_statement(&name, typ, force, block);
-                } else {
-                    syntax_error!(self, "Expected type found '{:?}'", self.peek());
-                }
-            }
-
-            (Token::If, ..) => {
-                self.if_statment(block);
-            }
-
-            (Token::For, ..) => {
-                self.for_loop(block);
-            }
-
-            (Token::Break, ..) => {
-                self.eat();
-                let addr = add_op(self, block, Op::Illegal);
-                let stack_size = self.frame().stack.len();
-                if self.frame_mut().add_break(addr, stack_size).is_err() {
-                    syntax_error!(self, "Cannot place 'break' outside of loop");
-                }
-            }
-
-            (Token::Continue, ..) => {
-                self.eat();
-                let addr = add_op(self, block, Op::Illegal);
-                let stack_size = self.frame().stack.len();
-                if self.frame_mut().add_continue(addr, stack_size).is_err() {
-                    syntax_error!(self, "Cannot place 'continue' outside of loop");
-                }
-            }
-
-            (Token::Ret, ..) => {
-                self.eat();
-                if self.peek() == Token::Newline {
-                    self.eat();
-                    let nil = self.add_constant(Value::Nil);
-                    add_op(self, block, Op::Constant(nil));
-                } else {
-                    self.expression(block);
-                }
-                add_op(self, block, Op::Return);
-            }
-
-            (Token::Unreachable, ..) => {
-                self.eat();
-                add_op(self, block, Op::Unreachable);
-            }
-
-            (Token::LeftBrace, ..) => {
-                self.scope(block);
-            }
-
-            (Token::Newline, ..) => {}
-
-            _ => {
-                self.expression(block);
-                add_op(self, block, Op::Pop);
-            }
-        }
-    }
-
-    pub(crate) fn compile(
+    fn resolve_type_namespace(
         &mut self,
-        name: &str,
-        file: &Path,
-        functions: &[(String, RustFunction)],
-    ) -> Result<Prog, Vec<Error>> {
+        assignable: &Assignable,
+        namespace: usize,
+        ctx: Context,
+    ) -> Option<usize> {
+        use AssignableKind::*;
+        match &assignable.kind {
+            Access(inner, ident) => {
+                self.resolve_type_namespace(&inner, namespace, ctx)
+                    .and_then(|namespace| self.namespaces[namespace].get(&ident.name))
+                    .and_then(|o| match o {
+                        Name::Namespace(namespace) => Some(*namespace),
+                        _ => None,
+                    })
+                    .or_else(|| {
+                        error!(
+                            self,
+                            ctx,
+                            assignable.span,
+                            "While parsing type '{}' is not a namespace",
+                            ident.name
+                        );
+                        None
+                    })
+            },
+            Read(_) => {
+                // Should be unreachable
+                error!(self, ctx, assignable.span, "This is not a namespace");
+                None
+            }
+            Call(_, _) => {
+                error!(self, ctx, assignable.span, "Cannot have calls in types");
+                None
+            }
+            Index(_, _) => {
+                error!(self, ctx, assignable.span, "Cannot have indexing in types");
+                None
+            }
+        }
+    }
 
-        let mut main = Variable::new("/preamble", false, Type::Void);
-        main.read = true;
-        self.define_global(main).unwrap();
+    fn resolve_type_ident(
+        &mut self,
+        assignable: &Assignable,
+        namespace: usize,
+        ctx: Context,
+    ) -> Type {
+        use AssignableKind::*;
+        match &assignable.kind {
+            Read(ident) => {
+                self.namespaces[namespace].get(&ident.name)
+                    .and_then(|name| match name {
+                        Name::Blob(blob) => Some(Type::Instance(*blob)),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| {
+                        error!(
+                            self,
+                            ctx,
+                            assignable.span,
+                            "While parsing type '{}' is not a blob",
+                            ident.name
+                        );
+                        Type::Void
+                    })
+            },
+            Access(inner, ident) => {
+                self.resolve_type_namespace(&inner, namespace, ctx)
+                    .and_then(|namespace| self.namespaces[namespace].get(&ident.name))
+                    .and_then(|name| match name {
+                        Name::Blob(blob) => Some(Type::Instance(*blob)),
+                        _ => None
+                    })
+                    .unwrap_or_else(|| {
+                        error!(
+                            self,
+                            ctx,
+                            assignable.span,
+                            "While parsing type '{}' is not a blob",
+                            ident.name
+                        );
+                        Type::Void
+                    })
+            }
+            Call(_, _) => {
+                error!(self, ctx, assignable.span, "Cannot have calls in types");
+                Type::Void
+            }
+            Index(_, _) => {
+                error!(self, ctx, assignable.span, "Cannot have indexing in types");
+                Type::Void
+            }
+        }
+    }
 
-        // TODO(ed): Break this out into a function
-        for section in 0..self.sections.len() {
-            self.init_section(section);
-            let section = &mut self.sections[section];
-            match (
-                section.tokens.get(0),
-                section.tokens.get(1),
-                section.tokens.get(2),
-            ) {
-                (Some((Token::Use, _)), Some((Token::Identifier(name), _)), ..) => {
-                    let path = path_to_module(file, &name);
-                    let name = name.to_string();
-                    self.add_namespace(name, path);
+    fn resolve_type(&mut self, ty: &syntree::Type, ctx: Context) -> Type {
+        use TypeKind::*;
+        match &ty.kind {
+            Implied => Type::Unknown,
+            Resolved(ty) => ty.clone(),
+            UserDefined(assignable) => {
+                self.resolve_type_ident(&assignable, ctx.namespace, ctx)
+            },
+            Union(a, b) => {
+                match (self.resolve_type(a, ctx), self.resolve_type(b, ctx)) {
+                    (Type::Union(_), _) => panic!("Didn't expect union on RHS - check parser"),
+                    (a, Type::Union(mut us)) => {
+                        us.insert(a);
+                        Type::Union(us)
+                    }
+                    (a, b) => Type::Union(vec![a, b].into_iter().collect()),
                 }
+            }
+            Fn(params, ret) => {
+                let params = params.iter().map(|t| self.resolve_type(t, ctx)).collect();
+                let ret = Box::new(self.resolve_type(ret, ctx));
+                Type::Function(params, ret)
+            }
+            Tuple(fields) =>
+                Type::Tuple(fields.iter().map(|t| self.resolve_type(t, ctx)).collect()),
+            List(kind) =>
+                Type::List(Box::new(self.resolve_type(kind, ctx))),
+            Set(kind) =>
+                Type::Set(Box::new(self.resolve_type(kind, ctx))),
+            Dict(key, value) => Type::Dict(
+                Box::new(self.resolve_type(key, ctx)),
+                Box::new(self.resolve_type(value, ctx))
+            ),
+        }
+    }
 
-                (
-                    Some((Token::Identifier(name), _)),
-                    Some((Token::ColonColon, _)),
-                    Some((Token::Fn, _)),
-                ) => {
-                    let name = name.to_string();
-                    self.forward_constant(name);
+    fn define(&mut self, name: &str, kind: VarKind, span: Span) -> VarSlot {
+        let frame = &mut self.frames.last_mut().unwrap().variables;
+        let slot = frame.len();
+        let var = Variable::new(name.to_string(), kind, Type::Unknown, slot, span);
+        frame.push(var);
+        slot
+    }
+
+    fn upvalue(&mut self, mut up: Upvalue, frame: usize) -> Upvalue {
+        let ups = &mut self.frames[frame].upvalues;
+        let slot = ups.len();
+        up.slot = slot;
+        ups.push(up.clone());
+        up
+    }
+
+    fn activate(&mut self, slot: VarSlot) {
+        self.frames.last_mut().unwrap().variables[slot].active = true;
+    }
+
+    fn statement(&mut self, statement: &Statement, ctx: Context) {
+        use StatementKind::*;
+        self.panic = false;
+
+        match &statement.kind {
+            Use { .. }
+            | EmptyStatement => {}
+
+            Blob { name, fields } => {
+                if let Some(Name::Blob(slot)) = self.namespaces[ctx.namespace].get(name) {
+                    let slot = *slot;
+                    self.blobs[slot].fields = fields
+                        .clone()
+                        .into_iter()
+                        .map(|(k, v)| (k, self.resolve_type(&v, ctx)))
+                        .collect();
+                } else {
+                    error!(self, ctx, statement.span, "No blob with the name '{}' in this namespace", name);
                 }
+            }
 
-                (
-                    Some((Token::Identifier(name), _)),
-                    Some((Token::ColonColon, _)),
-                    Some((Token::Blob, _)),
-                ) => {
-                    let name = name.to_string();
-                    self.forward_constant(name);
-                }
+            Print { value } => {
+                self.expression(value, ctx);
+                self.add_op(ctx, statement.span, Op::Print);
+            }
 
-                (Some((Token::Identifier(name), _)), Some((Token::Colon, _)), ..) => {
-                    let name = name.to_string();
-                    self.eat();
-                    self.eat();
-                    if let Ok(ty) = self.parse_type() {
-                        println!("DEFINING GLOBAL: {}", name);
-                        let is_mut = self.peek() == Token::Equal;
-                        let var = Variable::new(&name, is_mut, ty);
-                        self.define_global(var).unwrap();
+            Definition { ident, kind, ty, value } => {
+                // TODO(ed): Don't use type here - type check the tree first.
+                self.expression(value, ctx);
+
+                if ctx.frame == 0 {
+                    // Global
+                    self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
+                } else {
+                    // Local variable
+                    let slot = self.define(&ident.name, *kind, statement.span);
+                    let ty = self.resolve_type(ty, ctx);
+                    let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
+                        if kind.force() {
+                            Op::Force(ty)
+                        } else {
+                            Op::Define(ty)
+                        }
                     } else {
-                        syntax_error!(self, "Failed to parse type global '{}'", name);
+                        error!(self, ctx, statement.span, "Failed to add type declaration");
+                        Op::Illegal
+                    };
+                    self.add_op(ctx, statement.span, op);
+                    self.activate(slot);
+                }
+            }
+
+            Assignment { target, value, kind } => {
+                use syntree::Op::*;
+                use AssignableKind::*;
+
+                let mutator = |kind| matches!(kind, Add | Sub | Mul | Div);
+
+                let write_mutator_op = |comp: &mut Self, ctx, kind| {
+                    let op = match kind {
+                        Add => { Op::Add }
+                        Sub => { Op::Sub }
+                        Mul => { Op::Mul }
+                        Div => { Op::Div }
+                        Nop => { return; }
+                    };
+                    comp.add_op(ctx, statement.span, op);
+                };
+
+                match &target.kind {
+                    Read(ident) => {
+                        if mutator(*kind) {
+                            self.read_identifier(&ident.name, statement.span, ctx, ctx.namespace);
+                        }
+                        self.expression(value, ctx);
+
+                        write_mutator_op(self, ctx, *kind);
+
+                        self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
+                    }
+                    Call(_, _) => {
+                        error!(self, ctx, statement.span, "Cannot assign to result from function call");
+                    }
+                    Access(a, field) => {
+                        self.assignable(a, ctx);
+                        let slot = self.string(&field.name);
+
+                        if mutator(*kind) {
+                            self.add_op(ctx, statement.span, Op::Copy(1));
+                            self.add_op(ctx, field.span, Op::GetField(slot));
+                        }
+                        self.expression(value, ctx);
+                        write_mutator_op(self, ctx, *kind);
+
+                        self.add_op(ctx, field.span, Op::AssignField(slot));
+                    }
+                    Index(a, b) => {
+                        self.assignable(a, ctx);
+                        self.expression(b, ctx);
+
+                        if mutator(*kind) {
+                            self.add_op(ctx, statement.span, Op::Copy(2));
+                            self.add_op(ctx, statement.span, Op::GetIndex);
+                        }
+                        self.expression(value, ctx);
+                        write_mutator_op(self, ctx, *kind);
+
+                        self.add_op(ctx, statement.span, Op::AssignIndex);
                     }
                 }
+            }
 
-                (Some((Token::Identifier(name), _)), Some((Token::ColonColon, _)), ..) => {
-                    let var = Variable::new(name, false, Type::Unknown);
-                    self.define_global(var).unwrap();
+            StatementExpression { value } => {
+                self.expression(value, ctx);
+                self.add_op(ctx, statement.span, Op::Pop);
+            }
+
+            Block { statements } => {
+                let stack_size = self.frames[ctx.frame].variables.len();
+
+                for statement in statements {
+                    self.statement(statement, ctx);
                 }
 
-                (Some((Token::Identifier(name), _)), Some((Token::ColonEqual, _)), ..) => {
-                    let var = Variable::new(name, true, Type::Unknown);
-                    self.define_global(var).unwrap();
+                while stack_size < self.frames[ctx.frame].variables.len() {
+                    let var = self.frames[ctx.frame].variables.pop().unwrap();
+                    if var.captured {
+                        self.add_op(ctx, statement.span, Op::PopUpvalue);
+                    } else {
+                        self.add_op(ctx, statement.span, Op::Pop);
+                    }
                 }
+            }
 
-                (None, ..) => {}
+            Loop { condition, body } => {
+                let start = self.next_ip(ctx);
+                self.expression(condition, ctx);
+                let jump_from = self.add_op(ctx, condition.span, Op::Illegal);
+                self.statement(body, ctx);
+                self.add_op(ctx, body.span, Op::Jmp(start));
+                let out = self.next_ip(ctx);
+                self.patch(ctx, jump_from, Op::JmpFalse(out));
+            }
 
-                (a, b, c) => {
-                    section.faulty = true;
-                    syntax_error!(self, "Unknown outer token sequence: {:?} {:?} {:?}. Expected 'use', function, blob or variable", a, b, c);
+            If { condition, pass, fail } => {
+                self.expression(condition, ctx);
+
+                let jump_from = self.add_op(ctx, condition.span, Op::Illegal);
+                self.statement(pass, ctx);
+                let jump_out = self.add_op(ctx, condition.span, Op::Illegal);
+                self.statement(fail, ctx);
+
+                self.patch(ctx, jump_from, Op::JmpFalse(jump_out + 1));
+
+                let end = self.next_ip(ctx);
+                self.patch(ctx, jump_out, Op::Jmp(end));
+            }
+
+            Unreachable { } => {
+                self.add_op(ctx, statement.span, Op::Unreachable);
+            }
+
+            Ret { value } => {
+                self.expression(value, ctx);
+                self.add_op(ctx, statement.span, Op::Return);
+            }
+        }
+    }
+
+    fn module_functions(&mut self, module: &Module, ctx: Context) {
+        for statement in module.statements.iter() {
+            match statement.kind {
+                StatementKind::Definition {
+                    value: Expression {
+                        kind: ExpressionKind::Function { .. },
+                        ..
+                    },
+                    ..
+                } => {
+                    self.statement(statement, ctx);
+                }
+                _ => (),
+            }
+        }
+    }
+
+    fn module_not_functions(&mut self, module: &Module, ctx: Context) {
+        for statement in module.statements.iter() {
+            match statement.kind {
+                StatementKind::Definition {
+                    value: Expression {
+                        kind: ExpressionKind::Function { .. },
+                        ..
+                    },
+                    ..
+                } => (),
+                _ => {
+                    self.statement(statement, ctx);
                 }
             }
         }
+    }
 
+    fn compile(mut self, tree: Prog, functions: &[(String, RustFunction)]) -> Result<crate::Prog, Vec<Error>> {
+        assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
         self.functions = functions
             .to_vec()
             .into_iter()
             .enumerate()
             .map(|(i, (s, f))| (s, (i, f)))
             .collect();
-        let mut block = Block::new(name, file);
-        for section in 0..self.sections.len() {
-            self.init_section(section);
-            if self.sections[section].faulty {
-                continue;
-            }
-            while !matches!(self.peek(), Token::EOF | Token::Use) {
-                self.outer_statement(&mut block);
-                expect!(
-                    self,
-                    Token::Newline | Token::EOF,
-                    "Expect newline or EOF after expression"
-                );
-            }
-        }
+
+        let name = "/preamble/";
+        let mut block = Block::new(name, 0, &tree.modules[0].0);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
+        self.blocks.push(block);
+        self.frames.push(Frame::new(name, Span { line: 0 }));
+        let mut ctx = Context {
+            block_slot: self.blocks.len() - 1,
+            frame: self.frames.len() - 1,
+            ..Context::from_namespace(0)
+        };
 
-        if !self.names().is_empty() {
-            let errors: Vec<_> = self
-                .names()
-                .iter()
-                .filter_map(|(name, kind)| {
-                    if let Name::Unknown(_, line) = kind {
-                        Some(Error::SyntaxError {
-                            file: self.current_file().into(),
-                            line: *line,
-                            token: Token::Identifier(name.clone()),
-                            message: Some(format!("Usage of undefined value: '{}'", name)),
-                        })
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            errors.into_iter().for_each(|e| self.error(e));
+        let path_to_namespace_id = self.extract_globals(&tree);
+
+        for (full_path, module) in tree.modules.iter() {
+            let path = full_path.file_stem().unwrap().to_str().unwrap();
+            ctx.namespace = path_to_namespace_id[path];
+            self.module_functions(module, ctx);
         }
 
-        self.init_section(0);
-        let constant = self.find_constant("start");
-        add_op(self, &mut block, Op::Constant(constant));
-        add_op(self, &mut block, Op::Call(0));
-        add_op(self, &mut block, Op::Return);
-
-        for var in self.frames_mut().pop().unwrap().stack.iter().skip(1) {
-            if !(var.read || var.upvalue) {
-                self.error(Error::SyntaxError {
-                    file: self.current_file().into(),
-                    line: var.line,
-                    token: Token::Identifier(var.name.clone()),
-                    message: Some(format!("Unused value '{}'", var.name)),
-                });
-            }
-            self.panic = false;
+        for (full_path, module) in tree.modules.iter() {
+            let path = full_path.file_stem().unwrap().to_str().unwrap();
+            ctx.namespace = path_to_namespace_id[path];
+            self.module_not_functions(module, ctx);
         }
+        let module = &tree.modules[0].1;
 
-        self.blocks.insert(0, Rc::new(RefCell::new(block)));
+        self.read_identifier("start", Span { line: 0 }, ctx, 0);
+        self.add_op(ctx, Span { line: 0 }, Op::Call(0));
+
+        let nil = self.constant(Value::Nil);
+        self.add_op(ctx, module.span, nil);
+        self.add_op(ctx, module.span, Op::Return);
+
+        self.pop_frame(ctx);
 
         if self.errors.is_empty() {
-            Ok(Prog {
-                blocks: self.blocks.clone(),
+            Ok(crate::Prog {
+                blocks: self.blocks.into_iter().map(|x| Rc::new(RefCell::new(x))).collect(),
                 functions: functions.iter().map(|(_, f)| *f).collect(),
-                constants: self.constants.clone(),
-                strings: self.strings.clone(),
+                blobs: self.blobs,
+                constants: self.constants,
+                strings: self.strings,
             })
         } else {
-            Err(self.errors.clone())
+            Err(self.errors)
         }
+    }
+
+    fn extract_globals(&mut self, tree: &Prog) -> HashMap<String, usize> {
+        let mut path_to_namespace_id = HashMap::new();
+        for (full_path, _) in tree.modules.iter() {
+            let slot = path_to_namespace_id.len();
+            let path = full_path.file_stem().unwrap().to_str().unwrap().to_owned();
+            match path_to_namespace_id.entry(path) {
+                Entry::Vacant(vac) => {
+                    vac.insert(slot);
+                    self.namespaces.push(Namespace::new());
+                }
+
+                Entry::Occupied(_) => {
+                    error!(self, Context::from_namespace(slot),
+                           Span { line: 0 }, "Reading module '{}' twice! How?", full_path.display());
+                }
+            }
+        }
+
+        self.namespace_id_to_path = path_to_namespace_id.iter().map(|(a, b)| (b.clone(), a.clone())).collect();
+
+        for (path, module) in tree.modules.iter() {
+            let path = path.file_stem().unwrap().to_str().unwrap();
+            let slot = path_to_namespace_id[path];
+            let ctx = Context::from_namespace(slot);
+
+            for statement in module.statements.iter() {
+                use StatementKind::*;
+                let mut namespace = self.namespaces.remove(slot);
+                match &statement.kind {
+                    Blob { name, .. } => {
+                        match namespace.entry(name.to_owned()) {
+                            Entry::Vacant(_) => {
+                                let id = self.blobs.len();
+                                self.blobs.push(crate::Blob::new(id, slot, name));
+                                let blob = self.constant(Value::Blob(id));
+                                if let Op::Constant(slot) = blob {
+                                    namespace.insert(name.to_owned(), Name::Blob(slot));
+                                } else {
+                                    unreachable!();
+                                }
+                            }
+
+                            Entry::Occupied(_) => {
+                                error!(
+                                    self,
+                                    ctx,
+                                    statement.span,
+                                    "A global variable with the name '{}' already exists", name
+                                );
+                            }
+                        }
+                    }
+
+                    // Handled below.
+                    _ => (),
+                }
+                self.namespaces.insert(slot, namespace);
+            }
+        }
+
+        for (path, module) in tree.modules.iter() {
+            let path = path.file_stem().unwrap().to_str().unwrap();
+            let slot = path_to_namespace_id[path];
+            let ctx = Context::from_namespace(slot);
+
+            for statement in module.statements.iter() {
+                use StatementKind::*;
+                let mut namespace = self.namespaces.remove(slot);
+                match &statement.kind {
+                    Use { file: Identifier { name, span } } => {
+                        let other = path_to_namespace_id[name];
+                        match namespace.entry(name.to_owned()) {
+                            Entry::Vacant(vac) => {
+                                vac.insert(Name::Namespace(other));
+                            }
+                            Entry::Occupied(_) => {
+                                error!(
+                                    self,
+                                    ctx,
+                                    span,
+                                    "A global variable with the name '{}' already exists",
+                                    name
+                                );
+                            }
+                        }
+                    }
+
+                    Definition { ident: Identifier { name, .. }, kind, ty, .. } => {
+                        let var = self.define(name, *kind, statement.span);
+                        self.activate(var);
+
+                        match namespace.entry(name.to_owned()) {
+                            Entry::Vacant(_) => {
+                                namespace.insert(name.to_owned(), Name::Global(var));
+                            }
+                            Entry::Occupied(_) => {
+                                error!(
+                                    self,
+                                    ctx,
+                                    statement.span,
+                                    "A global variable with the name '{}' already exists", name
+                                );
+                            }
+                        }
+
+                        // Just fill in an empty slot since we have no idea.
+                        // Unknown is overwritten by the Op::Force in the type checker.
+                        let unknown = self.constant(Value::Unknown);
+                        self.add_op(ctx, Span { line: 0 }, unknown);
+
+                        let ty = self.resolve_type(ty, ctx);
+                        let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
+                            Op::Force(ty)
+                        } else {
+                            error!(self, ctx, statement.span, "Failed to resolve the type");
+                            Op::Illegal
+                        };
+                        self.add_op(ctx, Span { line: 0 }, op);
+                    }
+
+                    // Already handled in the loop before.
+                    Blob { .. } => (),
+
+                    _ => {
+                        error!(self, ctx, statement.span, "Invalid outer statement");
+                    }
+                }
+                self.namespaces.insert(slot, namespace);
+            }
+        }
+        path_to_namespace_id
+    }
+}
+
+
+pub fn compile(prog: Prog, functions: &[(String, RustFunction)]) -> Result<crate::Prog, Vec<Error>> {
+    Compiler::new().compile(prog, functions)
+}
+
+fn all_paths_return(statement: &Statement) -> bool {
+    match &statement.kind {
+        StatementKind::Use { .. }
+        | StatementKind::Blob { .. }
+        | StatementKind::Print { .. }
+        | StatementKind::Assignment { .. }
+        | StatementKind::Definition { .. }
+        | StatementKind::StatementExpression { .. }
+        | StatementKind::Unreachable
+        | StatementKind::EmptyStatement
+            => false,
+
+        StatementKind::If { pass, fail, .. }
+            => all_paths_return(pass) && all_paths_return(fail),
+
+        StatementKind::Loop { body, .. } => all_paths_return(body),
+        StatementKind::Block { statements } => statements.iter().any(all_paths_return),
+
+        StatementKind::Ret { .. } => true,
     }
 }

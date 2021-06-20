@@ -6,7 +6,7 @@ start :: fn {
     a :: [1]
     a[0] = "fail"
 
-    q :: Q! { a: [4] }
+    q :: Q { a: [4] }
     q.a[0] = "fail"
 }
 

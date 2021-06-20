@@ -1,0 +1,6 @@
+start :: fn {
+    a := A {}
+}
+
+A :: blob {}
+

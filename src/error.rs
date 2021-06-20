@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 
+use crate::rc::Rc;
 use crate::{tokenizer::Token, Op, Type, Value};
 
 fn source_line_at(file: &Path, line: Option<usize>) -> Option<String> {
@@ -72,6 +73,7 @@ impl fmt::Display for RuntimePhase {
     }
 }
 
+// TODO(ed): Switch to spans for the whole compiler?
 #[derive(Clone, Debug)]
 pub enum Error {
     RuntimeError {
@@ -89,14 +91,21 @@ pub enum Error {
         message: Option<String>,
     },
 
+    CompileError {
+        file: PathBuf,
+        line: usize,
+        message: Option<String>,
+    },
+
+
     GitConflictError {
         file: PathBuf,
         start: usize,
-        end: usize,
     },
 
     FileNotFound(PathBuf),
     NoFileGiven,
+    IOError(Rc<std::io::Error>),
 }
 
 impl fmt::Display for Error {
@@ -111,6 +120,22 @@ impl fmt::Display for Error {
 
                 if let Some(message) = message {
                     write!(f, "{}\n", message)?;
+                }
+                write!(f, "{}\n",
+                    source_line_at(file, Some(*line)).unwrap_or_else(String::new)
+                )
+            }
+            Error::CompileError {
+                file,
+                line,
+                message,
+            } => {
+                write!(f, "{}: ", "compile error".red())?;
+                write!(f, "{}\n", file_line_display(file, Some(*line)))?;
+                write!(f, "{}Failed to compile line {}\n", indent, line)?;
+
+                if let Some(message) = message {
+                    write!(f, "{}{}\n", indent, message)?;
                 }
                 write!(f, "{}\n",
                     source_line_at(file, Some(*line)).unwrap_or_else(String::new)
@@ -136,26 +161,28 @@ impl fmt::Display for Error {
             Error::GitConflictError {
                 file,
                 start,
-                end,
             } => {
                 write!(f, "{}: ", "git conflict error".red())?;
                 write!(f, "{}\n", file_line_display(file, Some(*start)))?;
 
-                write!(f,
-                    "{}Git conflict markers found between lines {} and {}\n",
-                    indent, start, end)?;
+                write!(
+                    f,
+                    "{}Git conflict marker found at line {}\n",
+                    indent,
+                    start
+                )?;
 
-                write!(f, "{}   ---{}",
-                    source_line_at(file, Some(*start + 1))
-                    .unwrap_or_else(String::new),
-                    source_line_at(file, Some(*end + 1))
-                    .unwrap_or_else(String::new))
+                write!(f, "{}",
+                    source_line_at(file, Some(*start + 1)).unwrap_or_else(String::new))
             }
             Error::FileNotFound(path) => {
                 write!(f, "File '{}' not found", path.display())
             }
             Error::NoFileGiven => {
                 write!(f, "No file to run")
+            }
+            Error::IOError(e) => {
+                write!(f, "Unknown IO error: {}", e)
             }
         }
     }

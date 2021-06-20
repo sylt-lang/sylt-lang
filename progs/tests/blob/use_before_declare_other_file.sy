@@ -1,0 +1,5 @@
+use use_before_declare
+
+start :: fn {
+    a := use_before_declare.A {}
+}

@@ -1,0 +1,13 @@
+// Works
+c :: fn -> fn -> int {
+    b := 2
+    a :: fn -> int {
+        ret b
+    }
+    ret a
+}
+
+start :: fn {
+    a :: c!
+    2 <=> a!
+}

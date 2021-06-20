@@ -11,10 +11,10 @@ A :: blob {
 B :: blob { }
 
 start :: fn {
-    c := C! {}
-    a := A! { c: c }
-    b := B! {}
-    b2 := B! {}
+    c := C {}
+    a := A { c: c }
+    b := B {}
+    b2 := B {}
 
     a
     b
