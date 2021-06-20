@@ -823,6 +823,7 @@ dependencies = [
  "sylt-compiler",
  "sylt-parser",
  "sylt-tokenizer",
+ "sylt-typechecker",
  "sylt_macro",
 ]
 
@@ -856,6 +857,14 @@ name = "sylt-tokenizer"
 version = "0.1.0"
 dependencies = [
  "logos",
+]
+
+[[package]]
+name = "sylt-typechecker"
+version = "0.1.0"
+dependencies = [
+ "owo-colors",
+ "sylt-common",
 ]
 
 [[package]]

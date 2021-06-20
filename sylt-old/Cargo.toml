@@ -15,6 +15,7 @@ sylt-common = { path = "../sylt-common" }
 sylt-compiler = { path = "../sylt-compiler" }
 sylt-parser = { path = "../sylt-parser" }
 sylt-tokenizer = { path = "../sylt-tokenizer" }
+sylt-typechecker = { path = "../sylt-typechecker" }
 
 owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
 sylt_macro = { path = "../sylt_macro" }

@@ -1,11 +1,9 @@
-use crate::{Prog, Args};
-
 use owo_colors::OwoColorize;
 use std::collections::{HashSet, HashMap};
 use std::cell::RefCell;
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::rc::Rc;
-use sylt_common::{Block, BlockLinkState, Op, Type, Value};
+use sylt_common::{Block, BlockLinkState, Op, Prog, Type, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -53,11 +51,11 @@ pub struct VM {
 }
 
 // Checks the program for type errors.
-pub fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
-    let (globals, mut errors) = typecheck_block(0, prog, Vec::new(), &args);
+pub fn typecheck(prog: &Prog, verbosity: u32) -> Result<(), Vec<Error>> {
+    let (globals, mut errors) = typecheck_block(0, prog, Vec::new(), verbosity);
     for block_slot in 1..prog.blocks.len() {
         errors.append(
-            &mut typecheck_block(block_slot, prog, globals.clone(), &args).1
+            &mut typecheck_block(block_slot, prog, globals.clone(), verbosity).1
         );
     }
 
@@ -69,11 +67,11 @@ pub fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
 }
 
 
-fn typecheck_block(block_slot: usize, prog: &Prog, global_types: Vec<Type>, args: &Args)
+fn typecheck_block(block_slot: usize, prog: &Prog, global_types: Vec<Type>, verbosity: u32)
     -> (Vec<Type>, Vec<Error>) {
     let block = &prog.blocks[block_slot];
-    let print_bytecode = args.verbosity > 0;
-    let print_exec = args.verbosity > 0;
+    let print_bytecode = verbosity > 0;
+    let print_exec = verbosity > 0;
     if print_bytecode {
         println!(
             "\n    [[{} - {}]]\n",

@@ -11,7 +11,6 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 
-pub mod typechecker;
 pub mod vm;
 
 // Lingon linking layer
@@ -47,7 +46,7 @@ pub fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Pr
 /// external functions.
 pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
     let prog = compile(args, functions)?;
-    typechecker::typecheck(&prog, &args)?;
+    sylt_typechecker::typecheck(&prog, args.verbosity)?;
     run(&prog, &args)
 }
 
