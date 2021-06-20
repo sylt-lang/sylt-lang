@@ -1,11 +1,11 @@
 /// Re-export of derived functions for [Args].
 pub use gumdrop::Options;
 
+use std::fmt::Debug;
+use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
 use sylt_common::prog::Prog;
 use sylt_common::RustFunction;
-use std::fmt::Debug;
-use std::path::{Path, PathBuf};
 
 /// Generates the linking for the standard library, and lingon if it's active.
 pub fn lib_bindings() -> Vec<(String, RustFunction)> {
@@ -91,7 +91,7 @@ mod tests {
             let errs = $result.err().unwrap_or(Vec::new());
 
             #[allow(unused_imports)]
-            use ::sylt_common::error::Error;
+            use sylt_common::error::Error;
             if !matches!(errs.as_slice(), $expect) {
                 eprintln!("===== Got =====");
                 for err in errs {
@@ -110,17 +110,14 @@ mod tests {
             #[test]
             fn $fn() {
                 #[allow(unused_imports)]
-                use ::sylt_common::error::RuntimeError;
+                use sylt_common::error::RuntimeError;
                 #[allow(unused_imports)]
-                use ::sylt_common::Type;
+                use sylt_common::Type;
 
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from(format!("../{}", $path)));
                 args.verbosity = if $print { 1 } else { 0 };
-                let res = $crate::run_file(
-                    &args,
-                    ::sylt_std::sylt::_sylt_link(),
-                );
+                let res = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
                 $crate::assert_errs!(res, $errs);
             }
         };

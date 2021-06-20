@@ -87,10 +87,9 @@ impl Block {
                 i.red(),
                 s,
                 match (s, constants) {
-                    (Op::Constant(c), Some(constants))
-                    | (Op::Link(c), Some(constants))
-                      => format!("    => {:?}", &constants[*c]),
-                    _ => "".to_string()
+                    (Op::Constant(c), Some(constants)) | (Op::Link(c), Some(constants)) =>
+                        format!("    => {:?}", &constants[*c]),
+                    _ => "".to_string(),
                 }
             );
         }

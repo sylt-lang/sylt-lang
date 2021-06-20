@@ -1,5 +1,5 @@
-pub mod block;
 pub mod blob;
+pub mod block;
 pub mod error;
 pub mod op;
 pub mod prog;
@@ -8,8 +8,8 @@ pub mod ty;
 pub mod upvalue;
 pub mod value;
 
-pub use block::{Block, BlockLinkState};
 pub use blob::Blob;
+pub use block::{Block, BlockLinkState};
 pub use op::Op;
 pub use prog::Prog;
 pub use ty::Type;

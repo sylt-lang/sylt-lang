@@ -1,11 +1,20 @@
 use crate as sylt_std;
 
-use lingon::{Game, random::{Uniform, Distribute, NoDice}};
-use lingon::renderer::{Rect, Sprite, Transform, Tint};
+use lingon::renderer::{Rect, Sprite, Tint, Transform};
+use lingon::{
+    random::{Distribute, NoDice, Uniform},
+    Game,
+};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 use sylt_common::error::RuntimeError;
 use sylt_common::rc::Rc;
-use std::{path::PathBuf, sync::{Arc, Mutex}};
-use sylt_common::{Value::{self, *}, Type};
+use sylt_common::{
+    Type,
+    Value::{self, *},
+};
 
 // Errors are important, they should be easy to write!
 macro_rules! error {
@@ -26,20 +35,21 @@ fn unpack_int_int_tuple(value: &Value) -> (i64, i64) {
 fn parse_dist(name: &str) -> Option<Box<dyn lingon::random::Distribute>> {
     use lingon::random::*;
 
-    Some(match name{
+    Some(match name {
         "Square" => Box::new(Square),
         "ThreeDice" => Box::new(ThreeDice),
         "TwoDice" => Box::new(TwoDice),
         "Uniform" => Box::new(Uniform),
         "NoDice" => Box::new(NoDice),
-        _ => { return None; }
+        _ => {
+            return None;
+        }
     })
 }
 
 struct GG {
     pub game: Game<std::string::String>,
 }
-
 
 // If you see this, you should stop your inital instinct to puke.
 //
@@ -62,7 +72,9 @@ std::thread_local! {
 
 fn new_game() -> Arc<Mutex<GG>> {
     // TODO(ed): Maybe make these settable from the game itself.
-    Arc::new(Mutex::new(GG { game: Game::new("Lingon - Sylt", 500, 500) }))
+    Arc::new(Mutex::new(GG {
+        game: Game::new("Lingon - Sylt", 500, 500),
+    }))
 }
 
 macro_rules! game {
@@ -121,7 +133,17 @@ sylt_macro::extern_function!(
     },
 );
 
-fn l_gfx_rect_internal(x: &f64, y: &f64, w: &f64, h: &f64, rot: &f64, r: &f64, g: &f64, b: &f64, a: &f64) {
+fn l_gfx_rect_internal(
+    x: &f64,
+    y: &f64,
+    w: &f64,
+    h: &f64,
+    rot: &f64,
+    r: &f64,
+    g: &f64,
+    b: &f64,
+    a: &f64,
+) {
     let mut rect = Rect::new();
     rect.at(*x as f32, *y as f32);
     rect.scale(*w as f32, *h as f32);
@@ -210,7 +232,20 @@ sylt_macro::extern_function!(
     },
 );
 
-fn l_gfx_sprite_internal(sprite: &i64, x: &f64, y: &f64, w: &f64, h: &f64, gx: &i64, gy: &i64, rot: &f64, r: &f64, g: &f64, b: &f64, a: &f64) -> Value {
+fn l_gfx_sprite_internal(
+    sprite: &i64,
+    x: &f64,
+    y: &f64,
+    w: &f64,
+    h: &f64,
+    gx: &i64,
+    gy: &i64,
+    rot: &f64,
+    r: &f64,
+    g: &f64,
+    b: &f64,
+    a: &f64,
+) -> Value {
     let sprite = game!().renderer.sprite_sheets[*sprite as usize].grid(*gx as usize, *gy as usize);
     let mut sprite = Sprite::new(sprite);
     sprite.at(*x as f32, *y as f32).scale(*w as f32, *h as f32);
@@ -643,7 +678,6 @@ sylt_macro::extern_function!(
     },
 );
 
-
 sylt_macro::extern_function!(
     "sylt_std::lingon"
     l_random
@@ -670,7 +704,6 @@ sylt_macro::extern_function!(
         Ok(Float(*lo + Uniform.sample() as f64 * (hi - lo)))
     },
 );
-
 
 sylt_macro::extern_function!(
     "sylt_std::lingon"
@@ -891,7 +924,9 @@ pub fn l_load_image(values: &[Value], typecheck: bool) -> Result<Value, RuntimeE
             let image = &game.assets[image];
 
             let dim = unpack_int_int_tuple(tilesize);
-            let slot = game.renderer.add_sprite_sheet(image.clone(), (dim.0 as usize, dim.1 as usize));
+            let slot = game
+                .renderer
+                .add_sprite_sheet(image.clone(), (dim.0 as usize, dim.1 as usize));
 
             Ok(Tuple(Rc::new(vec![sylt_str("image"), Int(slot as i64)])))
         }
@@ -918,9 +953,7 @@ pub fn l_load_audio(values: &[Value], typecheck: bool) -> Result<Value, RuntimeE
             let audio = game.assets.load_audio(path);
             Ok(Tuple(Rc::new(vec![sylt_str("audio"), Int(*audio as i64)])))
         }
-        ([String(_)], true) => {
-            Ok(Tuple(Rc::new(vec![sylt_str("audio"), Int(0)])))
-        }
+        ([String(_)], true) => Ok(Tuple(Rc::new(vec![sylt_str("audio"), Int(0)]))),
         (values, _) => Err(RuntimeError::ExternTypeMismatch(
             "l_load_image".to_string(),
             values.iter().map(Type::from).collect(),

@@ -81,9 +81,7 @@ impl Hash for Type {
                 b.hash(h);
                 11
             }
-            Type::ExternFunction(_) => {
-                16
-            }
+            Type::ExternFunction(_) => 16,
         }
         .hash(h);
     }
