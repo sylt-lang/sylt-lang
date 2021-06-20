@@ -1,29 +1,20 @@
 /// Re-export of derived functions for [Args].
 pub use gumdrop::Options;
 
-use owo_colors::OwoColorize;
-use sylt_common::error::{Error, RuntimeError};
+use sylt_common::error::Error;
 use sylt_common::prog::Prog;
-use sylt_common::rc::Rc;
-use sylt_common::{RustFunction, Type, Value};
-use std::borrow::Borrow;
-use std::cell::RefCell;
+use sylt_common::RustFunction;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
-
-// Lingon linking layer
-#[cfg(feature = "lingon")]
-pub mod lingon_sylt;
-pub mod lib_sylt;
 
 /// Generates the linking for the standard library, and lingon if it's active.
 pub fn lib_bindings() -> Vec<(String, RustFunction)> {
     let mut lib = Vec::new();
 
-    lib.append(&mut lib_sylt::_sylt_link());
+    lib.append(&mut sylt_std::sylt::_sylt_link());
 
     #[cfg(feature = "lingon")]
-    lib.append(&mut lingon_sylt::_sylt_link());
+    lib.append(&mut sylt_std::lingon::_sylt_link());
 
     lib
 }
@@ -121,14 +112,14 @@ mod tests {
                 #[allow(unused_imports)]
                 use ::sylt_common::error::RuntimeError;
                 #[allow(unused_imports)]
-                use $crate::Type;
+                use ::sylt_common::Type;
 
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from(format!("../{}", $path)));
                 args.verbosity = if $print { 1 } else { 0 };
                 let res = $crate::run_file(
                     &args,
-                    $crate::lib_sylt::_sylt_link(),
+                    ::sylt_std::sylt::_sylt_link(),
                 );
                 $crate::assert_errs!(res, $errs);
             }

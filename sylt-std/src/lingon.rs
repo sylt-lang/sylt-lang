@@ -1,4 +1,4 @@
-use crate as sylt;
+use crate as sylt_std;
 
 use lingon::{Game, random::{Uniform, Distribute, NoDice}};
 use lingon::renderer::{Rect, Sprite, Transform, Tint};
@@ -72,7 +72,7 @@ macro_rules! game {
 }
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_update
     "Updates the engine. Needs to be called once per frame"
     [] -> Type::Void => {
@@ -82,7 +82,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_render
     "Draws all render calls to the screen. Needs to be called once per frame"
     [] -> Type::Void => {
@@ -92,7 +92,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_window_size
     "Returns the size of the game window"
     [] -> Type::Tuple(vec![Type::Int, Type::Int]) => {
@@ -102,7 +102,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_set_window_size
     "Sets the dimension of the game window"
     [Two(Int(x), Int(y))] -> Type::Void => {
@@ -112,7 +112,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_set_window_icon
     "Sets the window icon of the game window"
     [One(String(path))] -> Type::Void => {
@@ -132,7 +132,7 @@ fn l_gfx_rect_internal(x: &f64, y: &f64, w: &f64, h: &f64, rot: &f64, r: &f64, g
 }
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_gfx_rect
     "Draws a rectangle on the screen, in many different ways"
     [One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h))]
@@ -221,7 +221,7 @@ fn l_gfx_sprite_internal(sprite: &i64, x: &f64, y: &f64, w: &f64, h: &f64, gx: &
 }
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_gfx_sprite
     "Draws a sprite on the screen, in many different ways.
      Note that the first argument is a sprite id from <a href='#l_load_image'>l_load_image</a>"
@@ -312,7 +312,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_gfx_camera_at
     "Gives out the position of the camera"
     [] -> Type::Tuple(vec![Type::Float, Type::Float]) => {
@@ -324,7 +324,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_gfx_camera_place
     "Positions the camera at a specific point in space"
     [Two(Float(x), Float(y))] -> Type::Void => {
@@ -338,7 +338,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_gfx_camera_angle
     "Sets the angle of the camera - in absolute terms"
     [One(Float(angle))] -> Type::Void => {
@@ -348,7 +348,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_gfx_camera_rotate
     "Rotates the camera - relative to the current rotation"
     [One(Float(by))] -> Type::Void => {
@@ -358,7 +358,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_gfx_camera_set_zoom
     "Specifies the zoom level"
     [One(Float(to))] -> Type::Void => {
@@ -376,7 +376,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_gfx_camera_zoom_by
     "Zoomes relative to the current zoom level"
     [One(Float(to))] -> Type::Void => {
@@ -394,7 +394,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_gfx_particle_new
     "Creates a new particle system. Note specially the return type. Don't edit the return value."
     [] -> Type::Tuple(vec![Type::String, Type::Int]) => {
@@ -409,7 +409,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_gfx_particle_spawn
     "Spawn a new particle for the given particle system"
     [Two(String(name), Int(system))] -> Type::Void => {
@@ -433,7 +433,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_gfx_particle_update
     "Updates the particle system, stepping it forward in time"
     [Two(String(name), Int(system)), One(Float(delta))] -> Type::Void => {
@@ -448,7 +448,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_gfx_particle_render
     "Renders the particle system, has to be called each frame"
     [Two(String(name), Int(system))] -> Type::Void => {
@@ -463,7 +463,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_gfx_particle_add_sprite
     "Adds a sprite to the particle system as an alternative when spawning. If nothing is added it's colored rectangles all the way"
     [Two(String(s_name), Int(system)), Two(String(sp_name), Int(sprite)), Two(Int(gx), Int(gy))] -> Type::Void => {
@@ -485,7 +485,7 @@ sylt_macro::extern_function!(
 macro_rules! particle_prop {
     { $name:ident, $prop:ident } => {
         sylt_macro::extern_function!(
-            "sylt::lingon_sylt"
+            "sylt_std::lingon"
             $name
             "Sets the given particle prop"
             [Two(String(name), Int(system)), Two(Float(lo), Float(hi))] -> Type::Void => {
@@ -548,7 +548,7 @@ particle_prop! { l_gfx_particle_end_blue, end_blue }
 particle_prop! { l_gfx_particle_end_alpha, end_alpha }
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_gfx_particle_start_color
     "Sets the spawn color of the particles"
     [Two(String(name), Int(system)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
@@ -586,7 +586,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_gfx_particle_end_color
     "Sets the spawn color of the particles"
     [Two(String(name), Int(system)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
@@ -624,7 +624,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_delta
     "The time since last the frame in seconds"
     [] -> Type::Float => {
@@ -634,7 +634,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_time
     "An absolute time messurement, but the start time is ill defined"
     [] -> Type::Float => {
@@ -645,7 +645,7 @@ sylt_macro::extern_function!(
 
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_random
     "Returns a uniformly sampled random float between 0 and 1"
     [] -> Type::Float => {
@@ -654,7 +654,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_random_range
     "Returns a randomized integer in the given range"
     [One(Int(lo)), One(Int(hi))] -> Type::Int => {
@@ -673,7 +673,7 @@ sylt_macro::extern_function!(
 
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_bind_key
     "Binds a keyboard key to an input name"
     [One(String(key)), One(String(name))] -> Type::Void => {
@@ -691,7 +691,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_bind_quit
     "Binds the windows quit action (pressing the X in the corner) - plus points if you make it jump"
     [One(String(name))] -> Type::Void => {
@@ -702,7 +702,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_bind_button
     "Binds a controller button to an input name"
     [One(Int(controller)), One(String(button)), One(String(name))] -> Type::Void => {
@@ -719,7 +719,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_bind_axis
     "Binds a controller axis to an input name"
     [One(Int(controller)), One(String(axis)), One(String(name))] -> Type::Void => {
@@ -736,7 +736,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_bind_mouse
     "Binds a mouse button, allows the following keys: ['left', 'middle', 'right', 'x1', 'x2']"
     [One(String(button)), One(String(name))] -> Type::Void => {
@@ -756,7 +756,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_input_down
     "Returns true if the input name is down this frame, e.g. pressed"
     [One(String(name))] -> Type::Bool => {
@@ -765,7 +765,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_input_up
     "Returns true if the input name is up this frame, e.g. not pressed"
     [One(String(name))] -> Type::Bool => {
@@ -774,7 +774,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_input_pressed
     "Returns true if the input name started being down this frame, e.g. a tap"
     [One(String(name))] -> Type::Bool => {
@@ -783,7 +783,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_input_released
     "Returns true if the input name started being up this frame, e.g. a release"
     [One(String(name))] -> Type::Bool => {
@@ -792,7 +792,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_input_value
     "Returns the float representation of the input name, usefull for reading controller inputs"
     [One(String(name))] -> Type::Float => {
@@ -801,7 +801,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_audio_play
     "Plays an audio source. Expects the first value to be a
      return value from <a href='#l_load_audio'>l_load_audio</a>"
@@ -846,7 +846,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_audio_master_gain
     "Controls the master gain of the audio mixer"
     [One(Float(gain))] -> Type::Void => {
@@ -856,7 +856,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_mouse
     "Gets the current mouse position"
     [] -> Type::Tuple(vec!(Type::Int, Type::Int)) => {
@@ -866,7 +866,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lingon_sylt"
+    "sylt_std::lingon"
     l_mouse_rel
     "Gets the relative mouse position since the last frame"
     [] -> Type::Tuple(vec!(Type::Int, Type::Int)) => {
@@ -881,7 +881,7 @@ pub fn sylt_str(s: &str) -> Value {
 
 #[sylt_macro::sylt_doc(l_load_image, "Loads an image and turns it into a sprite sheet",
   [One(String(path))] Type::Tuple)]
-#[sylt_macro::sylt_link(l_load_image, "sylt::lingon_sylt")]
+#[sylt_macro::sylt_link(l_load_image, "sylt_std::lingon")]
 pub fn l_load_image(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
         ([String(path), tilesize], false) => {
@@ -909,7 +909,7 @@ pub fn l_load_image(values: &[Value], typecheck: bool) -> Result<Value, RuntimeE
 #[sylt_macro::sylt_doc(l_load_audio,
   "Loads a sound and lets you play it using <a href='l_audio_play'>l_audio_play</a>",
   [One(String(path))] Type::Tuple)]
-#[sylt_macro::sylt_link(l_load_audio, "sylt::lingon_sylt")]
+#[sylt_macro::sylt_link(l_load_audio, "sylt_std::lingon")]
 pub fn l_load_audio(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
         ([String(path)], false) => {
@@ -928,4 +928,4 @@ pub fn l_load_audio(values: &[Value], typecheck: bool) -> Result<Value, RuntimeE
     }
 }
 
-sylt_macro::sylt_link_gen!("sylt::lingon_sylt");
+sylt_macro::sylt_link_gen!("sylt_std::lingon");

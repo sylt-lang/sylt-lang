@@ -5,10 +5,11 @@ members = [
 
     "sylt-common",
     "sylt-compiler",
+    "sylt-machine",
     "sylt-parser",
+    "sylt-std",
     "sylt-tokenizer",
-    "sylt-typechecker",
-    "sylt-machine"
+    "sylt-typechecker"
 ]
 
 [profile.release]
