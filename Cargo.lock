@@ -819,9 +819,14 @@ dependencies = [
  "lazy_static",
  "lingon",
  "owo-colors",
+ "sylt-common",
  "sylt-tokenizer",
  "sylt_macro",
 ]
+
+[[package]]
+name = "sylt-common"
+version = "0.1.0"
 
 [[package]]
 name = "sylt-tokenizer"

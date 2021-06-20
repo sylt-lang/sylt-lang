@@ -3,8 +3,8 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
+use sylt_common::rc::Rc;
 
-use crate::rc::Rc;
 use crate::{tokenizer::Token, Op, Type, Value};
 
 fn source_line_at(file: &Path, line: Option<usize>) -> Option<String> {

@@ -1,10 +1,10 @@
-use crate::rc::Rc;
 
 /// Re-export of derived functions for [Args].
 pub use gumdrop::Options;
 
 use error::{Error, RuntimeError};
 use owo_colors::OwoColorize;
+use sylt_common::rc::Rc;
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -18,8 +18,6 @@ pub mod error;
 pub mod parser;
 pub mod typechecker;
 pub mod vm;
-
-mod rc;
 
 // Lingon linking layer
 #[cfg(feature = "lingon")]

@@ -1,12 +1,13 @@
 use crate::error::Error;
-use crate::rc::Rc;
 use crate::tokenizer::file_to_tokens;
 use crate::tokenizer::Token;
 use crate::Next;
 use crate::Type as RuntimeType;
+
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
+use sylt_common::rc::Rc;
 
 type T = Token;
 

@@ -2,9 +2,9 @@ use owo_colors::OwoColorize;
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt::Debug;
+use sylt_common::rc::Rc;
 
 use crate::error::{Error, RuntimeError, RuntimePhase};
-use crate::rc::Rc;
 use crate::{Block, BlockLinkState, IterFn, Op, Blob, Prog, RustFunction, Type, UpValue, Value};
 
 macro_rules! error {

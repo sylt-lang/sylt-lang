@@ -2,6 +2,8 @@
 
 members = [
     "sylt-old",
+
+    "sylt-common",
     "sylt-tokenizer"
 ]
 
