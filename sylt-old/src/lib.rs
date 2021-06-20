@@ -5,6 +5,7 @@ pub use gumdrop::Options;
 use owo_colors::OwoColorize;
 use sylt_common::blob::Blob;
 use sylt_common::error::{Error, RuntimeError};
+use sylt_common::prog::Prog;
 use sylt_common::rc::Rc;
 use sylt_common::{Block, Op, RustFunction, Type, Value};
 use std::borrow::Borrow;
@@ -100,16 +101,6 @@ pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
     res.pop();
     res.push(format!("{}.sy", module));
     res
-}
-
-
-#[derive(Clone)]
-pub struct Prog {
-    pub blocks: Vec<Rc<RefCell<Block>>>,
-    pub blobs: Vec<Blob>,
-    pub functions: Vec<RustFunction>,
-    pub constants: Vec<Value>,
-    pub strings: Vec<String>,
 }
 
 #[cfg(test)]

@@ -2,6 +2,7 @@ pub mod block;
 pub mod blob;
 pub mod error;
 pub mod op;
+pub mod prog;
 pub mod rc;
 pub mod ty;
 pub mod upvalue;
