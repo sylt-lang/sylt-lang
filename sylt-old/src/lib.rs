@@ -2,7 +2,6 @@
 pub use gumdrop::Options;
 
 use owo_colors::OwoColorize;
-use sylt_common::blob::Blob;
 use sylt_common::error::{Error, RuntimeError};
 use sylt_common::prog::Prog;
 use sylt_common::rc::Rc;
@@ -12,7 +11,6 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 
-pub mod compiler;
 pub mod typechecker;
 pub mod vm;
 
@@ -41,7 +39,7 @@ pub fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Pr
         }
     };
     let tree = sylt_parser::tree(&path)?;
-    let prog = compiler::compile(tree, &functions)?;
+    let prog = sylt_compiler::compile(tree, &functions)?;
     Ok(prog)
 }
 

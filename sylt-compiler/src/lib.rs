@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::PathBuf;
 use sylt_common::error::Error;
+use sylt_common::prog::Prog;
 use sylt_common::rc::Rc;
 use sylt_common::{Op, Block, Value, Type, Blob, RustFunction};
 use sylt_parser::{AST, Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeKind, VarKind};
@@ -886,7 +887,7 @@ impl Compiler {
         }
     }
 
-    fn compile(mut self, tree: AST, functions: &[(String, RustFunction)]) -> Result<crate::Prog, Vec<Error>> {
+    fn compile(mut self, tree: AST, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
         self.functions = functions
             .to_vec()
@@ -931,7 +932,7 @@ impl Compiler {
         self.pop_frame(ctx);
 
         if self.errors.is_empty() {
-            Ok(crate::Prog {
+            Ok(Prog {
                 blocks: self.blocks.into_iter().map(|x| Rc::new(RefCell::new(x))).collect(),
                 functions: functions.iter().map(|(_, f)| *f).collect(),
                 blobs: self.blobs,
@@ -1078,7 +1079,7 @@ impl Compiler {
 }
 
 
-pub fn compile(prog: AST, functions: &[(String, RustFunction)]) -> Result<crate::Prog, Vec<Error>> {
+pub fn compile(prog: AST, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
     Compiler::new().compile(prog, functions)
 }
 

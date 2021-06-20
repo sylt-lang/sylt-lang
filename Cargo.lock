@@ -820,6 +820,7 @@ dependencies = [
  "lingon",
  "owo-colors",
  "sylt-common",
+ "sylt-compiler",
  "sylt-parser",
  "sylt-tokenizer",
  "sylt_macro",
@@ -831,6 +832,14 @@ version = "0.1.0"
 dependencies = [
  "owo-colors",
  "sylt-tokenizer",
+]
+
+[[package]]
+name = "sylt-compiler"
+version = "0.1.0"
+dependencies = [
+ "sylt-common",
+ "sylt-parser",
 ]
 
 [[package]]
