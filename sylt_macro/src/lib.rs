@@ -474,7 +474,10 @@ impl DocFile {
         use std::fs::File;
         use std::io::prelude::*;
         match File::create(&Path::new("docs/docs.json")) {
-            Err(msg) => eprintln!("Failed to write docs: {}", msg),
+            Err(msg) => {
+                eprintln!("Failed to write docs: {}", msg);
+                eprintln!("{}", String::from_utf8(std::process::Command::new("pwd").output().unwrap().stdout).unwrap());
+            }
             Ok(mut file) => {
                 write!(file, "[\n{}\n]", self.docs.join(",\n")).unwrap();
             }
