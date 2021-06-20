@@ -1,8 +1,7 @@
 [workspace]
 
 members = [
-    "sylt-old",
-
+    "sylt",
     "sylt-common",
     "sylt-compiler",
     "sylt-machine",
