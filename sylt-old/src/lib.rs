@@ -8,11 +8,9 @@ use sylt_common::rc::Rc;
 use sylt_common::{Op, RustFunction, Type, Value};
 use std::borrow::Borrow;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-use sylt_tokenizer as tokenizer;
 
 pub mod compiler;
 pub mod parser;

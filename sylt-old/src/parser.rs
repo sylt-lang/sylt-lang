@@ -1722,7 +1722,7 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::tokenizer::string_to_tokens;
+    use sylt_tokenizer::string_to_tokens;
 
     macro_rules! test {
         ($f:ident, $name:ident: $str:expr => $ans:pat) => {
