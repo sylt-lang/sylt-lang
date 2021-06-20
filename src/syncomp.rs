@@ -71,6 +71,7 @@ impl Upvalue {
         Self {
             parent: up.slot,
             upupvalue: true,
+            slot: 0,
             ..up.clone()
         }
     }
@@ -447,7 +448,7 @@ impl Compiler {
                 return Err(());
             }
         };
-        self.upvalue(up.clone(), frame);
+        let up = self.upvalue(up, frame);
         Ok(Lookup::Upvalue(up))
 
     }
@@ -674,11 +675,12 @@ impl Compiler {
         slot
     }
 
-    fn upvalue(&mut self, up: Upvalue, frame: usize) -> usize {
+    fn upvalue(&mut self, mut up: Upvalue, frame: usize) -> Upvalue {
         let ups = &mut self.frames[frame].upvalues;
         let slot = ups.len();
-        ups.push(up);
-        slot
+        up.slot = slot;
+        ups.push(up.clone());
+        up
     }
 
     fn activate(&mut self, slot: VarSlot) {
