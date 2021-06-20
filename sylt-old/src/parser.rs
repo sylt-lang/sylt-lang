@@ -21,7 +21,7 @@ pub struct Span {
 
 /// Contains modules.
 #[derive(Debug, Clone)]
-pub struct Prog {
+pub struct AST {
     pub modules: Vec<(PathBuf, Module)>,
 }
 
@@ -1672,7 +1672,7 @@ pub fn find_conflict_markers(file: &Path) -> Vec<Error> {
 ///
 /// Returns any errors that occured when parsing the file(s). Basic error
 /// continuation is performed as documented in [module].
-pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
+pub fn tree(path: &Path) -> Result<AST, Vec<Error>> {
     // Files we've already parsed. This ensures circular includes don't parse infinitely.
     let mut visited = HashSet::new();
     // Files we want to parse but haven't yet.
@@ -1713,7 +1713,7 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
     }
 
     if errors.is_empty() {
-        Ok(Prog { modules })
+        Ok(AST { modules })
     } else {
         Err(errors)
     }

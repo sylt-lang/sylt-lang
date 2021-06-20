@@ -887,7 +887,7 @@ impl Compiler {
         }
     }
 
-    fn compile(mut self, tree: Prog, functions: &[(String, RustFunction)]) -> Result<crate::Prog, Vec<Error>> {
+    fn compile(mut self, tree: AST, functions: &[(String, RustFunction)]) -> Result<crate::Prog, Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
         self.functions = functions
             .to_vec()
@@ -944,7 +944,7 @@ impl Compiler {
         }
     }
 
-    fn extract_globals(&mut self, tree: &Prog) -> HashMap<String, usize> {
+    fn extract_globals(&mut self, tree: &AST) -> HashMap<String, usize> {
         let mut path_to_namespace_id = HashMap::new();
         for (full_path, _) in tree.modules.iter() {
             let slot = path_to_namespace_id.len();
@@ -1079,7 +1079,7 @@ impl Compiler {
 }
 
 
-pub fn compile(prog: Prog, functions: &[(String, RustFunction)]) -> Result<crate::Prog, Vec<Error>> {
+pub fn compile(prog: AST, functions: &[(String, RustFunction)]) -> Result<crate::Prog, Vec<Error>> {
     Compiler::new().compile(prog, functions)
 }
 
