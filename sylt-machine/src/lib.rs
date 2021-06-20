@@ -4,9 +4,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt::Debug;
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::rc::Rc;
-use sylt_common::{Block, BlockLinkState, Blob, IterFn, Op, RustFunction, Type, UpValue, Value};
-
-use crate::Prog;
+use sylt_common::{Block, BlockLinkState, Blob, IterFn, Op, Prog, RustFunction, Type, UpValue, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -80,7 +78,7 @@ pub enum OpResult {
 }
 
 impl VM {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             upvalues: HashMap::new(),
 

@@ -7,7 +7,8 @@ members = [
     "sylt-compiler",
     "sylt-parser",
     "sylt-tokenizer",
-    "sylt-typechecker"
+    "sylt-typechecker",
+    "sylt-machine"
 ]
 
 [profile.release]

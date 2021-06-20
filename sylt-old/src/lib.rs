@@ -11,8 +11,6 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 
-pub mod vm;
-
 // Lingon linking layer
 #[cfg(feature = "lingon")]
 pub mod lingon_sylt;
@@ -51,7 +49,7 @@ pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(
 }
 
 pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
-    let mut vm = vm::VM::new();
+    let mut vm = sylt_machine::VM::new();
     vm.print_bytecode = args.verbosity >= 1;
     vm.print_exec = args.verbosity >= 2;
     vm.init(&prog);

@@ -13,6 +13,7 @@ name = "sylt"
 [dependencies]
 sylt-common = { path = "../sylt-common" }
 sylt-compiler = { path = "../sylt-compiler" }
+sylt-machine = { path = "../sylt-machine" }
 sylt-parser = { path = "../sylt-parser" }
 sylt-tokenizer = { path = "../sylt-tokenizer" }
 sylt-typechecker = { path = "../sylt-typechecker" }

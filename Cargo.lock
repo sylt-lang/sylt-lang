@@ -821,6 +821,7 @@ dependencies = [
  "owo-colors",
  "sylt-common",
  "sylt-compiler",
+ "sylt-machine",
  "sylt-parser",
  "sylt-tokenizer",
  "sylt-typechecker",
@@ -841,6 +842,14 @@ version = "0.1.0"
 dependencies = [
  "sylt-common",
  "sylt-parser",
+]
+
+[[package]]
+name = "sylt-machine"
+version = "0.1.0"
+dependencies = [
+ "owo-colors",
+ "sylt-common",
 ]
 
 [[package]]
