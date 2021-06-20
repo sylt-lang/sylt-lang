@@ -4,9 +4,9 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt::Debug;
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::rc::Rc;
-use sylt_common::{IterFn, Op, Type, UpValue, Value};
+use sylt_common::{Block, BlockLinkState, Blob, IterFn, Op, RustFunction, Type, UpValue, Value};
 
-use crate::{Block, BlockLinkState, Blob, Prog, RustFunction};
+use crate::Prog;
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {

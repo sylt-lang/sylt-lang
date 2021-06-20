@@ -3,12 +3,12 @@
 pub use gumdrop::Options;
 
 use owo_colors::OwoColorize;
+use sylt_common::blob::Blob;
 use sylt_common::error::{Error, RuntimeError};
 use sylt_common::rc::Rc;
-use sylt_common::{Op, RustFunction, Type, Value};
+use sylt_common::{Block, Op, RustFunction, Type, Value};
 use std::borrow::Borrow;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 
@@ -102,157 +102,6 @@ pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
     res
 }
 
-// TODO(ed): We need to rewrite this with indexes to this struct instead
-// of an RC - otherwise we cannot support all recursive types.
-#[derive(Debug, Clone)]
-pub struct Blob {
-    pub id: usize,
-    pub namespace: usize,
-    pub name: String,
-    /// Maps field names to their type
-    pub fields: HashMap<String, Type>,
-}
-
-impl PartialEq for Blob {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl Blob {
-    fn new(id: usize, namespace: usize, name: &str) -> Self {
-        Self {
-            id,
-            namespace,
-            name: String::from(name),
-            fields: HashMap::new(),
-        }
-    }
-}
-
-#[derive(Debug)]
-enum BlockLinkState {
-    Linked,
-    Nothing,
-}
-
-#[derive(Debug)]
-pub struct Block {
-    pub ty: Type,
-    upvalues: Vec<(usize, bool, Type)>,
-    linking: BlockLinkState,
-
-    namespace: usize,
-
-    pub name: String,
-    pub file: PathBuf,
-    ops: Vec<Op>,
-    last_line_offset: usize,
-    line_offsets: HashMap<usize, usize>,
-}
-
-impl Block {
-    fn new(name: &str, namespace: usize, file: &Path) -> Self {
-        Self {
-            ty: Type::Void,
-            upvalues: Vec::new(),
-            linking: BlockLinkState::Nothing,
-
-            namespace,
-
-            name: String::from(name),
-            file: file.to_owned(),
-            ops: Vec::new(),
-            last_line_offset: 0,
-            line_offsets: HashMap::new(),
-        }
-    }
-
-    pub fn args(&self) -> &Vec<Type> {
-        if let Type::Function(ref args, _) = self.ty {
-            args
-        } else {
-            unreachable!();
-        }
-    }
-
-    pub fn ret(&self) -> &Type {
-        if let Type::Function(_, ref ret) = self.ty {
-            ret
-        } else {
-            unreachable!()
-        }
-    }
-
-    fn add_line(&mut self, token_position: usize) {
-        if token_position != self.last_line_offset {
-            self.line_offsets.insert(self.curr(), token_position);
-            self.last_line_offset = token_position;
-        }
-    }
-
-    fn line(&self, ip: usize) -> usize {
-        for i in (0..=ip).rev() {
-            if let Some(line) = self.line_offsets.get(&i) {
-                return *line;
-            }
-        }
-        0
-    }
-
-    pub fn debug_print(&self, constants: Option<&[Value]>) {
-        println!("     === {} ===", self.name.blue());
-        for (i, s) in self.ops.iter().enumerate() {
-            println!(
-                "{}{:05} {:?}{}",
-                if self.line_offsets.contains_key(&i) {
-                    format!("{:5} ", self.line_offsets[&i].blue())
-                } else {
-                    format!("    {} ", "|".blue())
-                },
-                i.red(),
-                s,
-                match (s, constants) {
-                    (Op::Constant(c), Some(constants))
-                    | (Op::Link(c), Some(constants))
-                      => format!("    => {:?}", &constants[*c]),
-                    _ => "".to_string()
-                }
-            );
-        }
-        println!();
-    }
-
-    fn add(&mut self, op: Op, token_position: usize) -> usize {
-        let mut len = self.curr();
-        if matches!(op, Op::Pop) && len > 1 {
-            len -= 1;
-            match self.ops.last().unwrap() {
-                Op::Copy(n) => {
-                    if *n == 1 {
-                        self.ops.pop();
-                        return len - 1;
-                    } else {
-                        self.ops[len] = Op::Copy(*n - 1);
-                        return len;
-                    }
-                }
-                Op::Constant(_) | Op::ReadLocal(_) | Op::ReadUpvalue(_) => {
-                    self.ops.pop();
-                    return len - 1;
-                }
-                _ => {}
-            }
-        }
-        self.add_line(token_position);
-        self.ops.push(op);
-        len
-    }
-
-    fn curr(&self) -> usize {
-        self.ops.len()
-    }
-}
 
 #[derive(Clone)]
 pub struct Prog {

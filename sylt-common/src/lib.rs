@@ -1,3 +1,5 @@
+pub mod block;
+pub mod blob;
 pub mod error;
 pub mod op;
 pub mod rc;
@@ -5,6 +7,8 @@ pub mod ty;
 pub mod upvalue;
 pub mod value;
 
+pub use block::{Block, BlockLinkState};
+pub use blob::Blob;
 pub use op::Op;
 pub use ty::Type;
 pub use upvalue::UpValue;
