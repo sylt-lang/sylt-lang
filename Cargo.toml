@@ -11,7 +11,8 @@ name = "sylt"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-logos = "0.12"
+sylt-tokenizer = { path = "sylt-tokenizer" }
+
 owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
 sylt_macro = { path = "sylt_macro" }
 gumdrop = "0.8"

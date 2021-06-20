@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use sylt_tokenizer as tokenizer;
 
 pub mod compiler;
 pub mod error;
@@ -19,7 +20,6 @@ pub mod typechecker;
 pub mod vm;
 
 mod rc;
-mod tokenizer;
 
 // Lingon linking layer
 #[cfg(feature = "lingon")]
