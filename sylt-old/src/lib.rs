@@ -995,7 +995,7 @@ mod tests {
                 use $crate::Type;
 
                 let mut args = $crate::Args::default();
-                args.file = Some(std::path::PathBuf::from($path));
+                args.file = Some(std::path::PathBuf::from(format!("../{}", $path)));
                 args.verbosity = if $print { 1 } else { 0 };
                 let res = $crate::run_file(
                     &args,
