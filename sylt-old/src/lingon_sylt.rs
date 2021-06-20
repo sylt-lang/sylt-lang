@@ -1,9 +1,11 @@
+use crate as sylt;
+
 use lingon::{Game, random::{Uniform, Distribute, NoDice}};
 use lingon::renderer::{Rect, Sprite, Transform, Tint};
-use std::sync::{Arc, Mutex};
-use crate::{*, error::RuntimeError};
-use crate::Value::*;
-use crate as sylt;
+use sylt_common::error::RuntimeError;
+use sylt_common::rc::Rc;
+use std::{path::PathBuf, sync::{Arc, Mutex}};
+use sylt_common::{Value::{self, *}, Type};
 
 // Errors are important, they should be easy to write!
 macro_rules! error {

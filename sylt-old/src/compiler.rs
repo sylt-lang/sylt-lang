@@ -1,10 +1,10 @@
-use crate::error::Error;
 use crate::parser::{self, *};
 use crate::{Op, Block, Value, Type, Blob, RustFunction};
 
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::PathBuf;
+use sylt_common::error::Error;
 use sylt_common::rc::Rc;
 
 type VarSlot = usize;

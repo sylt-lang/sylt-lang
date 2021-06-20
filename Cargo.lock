@@ -827,6 +827,10 @@ dependencies = [
 [[package]]
 name = "sylt-common"
 version = "0.1.0"
+dependencies = [
+ "owo-colors",
+ "sylt-tokenizer",
+]
 
 [[package]]
 name = "sylt-tokenizer"

@@ -2,10 +2,11 @@ use owo_colors::OwoColorize;
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt::Debug;
+use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::rc::Rc;
+use sylt_common::{IterFn, Op, Type, UpValue, Value};
 
-use crate::error::{Error, RuntimeError, RuntimePhase};
-use crate::{Block, BlockLinkState, IterFn, Op, Blob, Prog, RustFunction, Type, UpValue, Value};
+use crate::{Block, BlockLinkState, Blob, Prog, RustFunction};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {

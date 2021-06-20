@@ -1,9 +1,9 @@
-use crate::error::{Error, RuntimeError, RuntimePhase};
 use crate::{Type, Value, Prog, Args, Block, Op, BlockLinkState};
 
 use owo_colors::OwoColorize;
 use std::collections::{HashSet, HashMap};
 use std::cell::RefCell;
+use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::rc::Rc;
 
 macro_rules! error {
