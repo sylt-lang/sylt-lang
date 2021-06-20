@@ -54,7 +54,7 @@ pub struct VM {
 // Checks the program for type errors.
 pub fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
     let (globals, mut errors) = typecheck_block(0, prog, Vec::new(), &args);
-    for block_slot in 0..prog.blocks.len() {
+    for block_slot in 1..prog.blocks.len() {
         errors.append(
             &mut typecheck_block(block_slot, prog, globals.clone(), &args).1
         );
@@ -160,8 +160,9 @@ impl VM {
         );
     }
 
-    fn push(&mut self, ty: Type) {
+    fn push(&mut self, ty: Type) -> &Type {
         self.stack.push(ty);
+        self.stack.last().unwrap()
     }
 
     fn pop(&mut self) -> Type {
@@ -172,10 +173,8 @@ impl VM {
     }
 
     fn poppop(&mut self) -> (Type, Type) {
-        let (a, b) = (
-            self.stack.remove(self.stack.len() - 1),
-            self.stack.remove(self.stack.len() - 1),
-        );
+        let a = self.pop();
+        let b = self.pop();
         (b, a) // this matches the order they were on the stack
     }
 
@@ -213,7 +212,14 @@ impl VM {
 
             Op::ReadLocal(n) => {
                 let ty = self.stack[n].clone();
-                self.push(ty);
+                let ty = self.push(ty);
+                if matches!(ty, &Type::Unknown) {
+                    error!(
+                        self,
+                        RuntimeError::InvalidProgram,
+                        "Read from an uninitalized value"
+                    );
+                }
             }
 
             Op::AssignLocal(slot) => {
@@ -233,10 +239,17 @@ impl VM {
             }
 
             Op::ReadGlobal(slot) => {
-                if let Some(ty) = self.global_types.get(slot).cloned() {
-                    self.push(ty);
-                } else {
-                    self.push(Type::Unknown);
+                match self.global_types.get(slot).cloned() {
+                    Some(Type::Unknown) => {
+                        self.push(Type::Unknown);
+                        error!(
+                            self,
+                            RuntimeError::InvalidProgram,
+                            "Read from an uninitalized global"
+                        );
+                    }
+                    Some(ty) => { self.push(ty); },
+                    _ => { self.push(Type::Unknown); },
                 }
             }
 
