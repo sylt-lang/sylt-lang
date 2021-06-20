@@ -1559,7 +1559,17 @@ mod expression {
 /// Currently all statements are valid outer statements.
 fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
     // TODO(ed): Filter for invalid outer statements here.
-    statement(ctx)
+    let (ctx, stmt) = statement(ctx)?;
+    use StatementKind::*;
+    match stmt.kind {
+        Blob { ..}
+        | Definition { .. }
+        | Use { .. }
+        | EmptyStatement
+        => Ok((ctx, stmt)),
+
+        _ => raise_syntax_error!(ctx, "Not a valid outer statement"),
+    }
 }
 
 /// Parses a file's tokens. Returns a list of files it refers to (via `use`s) and
@@ -1895,5 +1905,10 @@ mod test {
         test!(statement, statement_assign_call: "a().b() += 2" => _);
         test!(statement, statement_assign_call_index: "a.c().c.b /= 4" => _);
         test!(statement, statement_idek: "a!.c!.c.b()().c = 0" => _);
+
+        test!(outer_statement, outer_statement_blob: "B :: blob {}\n" => _);
+        test!(outer_statement, outer_statement_declaration: "B :: fn -> {}\n" => _);
+        test!(outer_statement, outer_statement_use: "use ABC\n" => _);
+        test!(outer_statement, outer_statement_empty: "\n" => _);
     }
 }
