@@ -1,5 +1,5 @@
-use crate::compiler::Prec;
 use crate::error::Error;
+use crate::rc::Rc;
 use crate::tokenizer::file_to_tokens;
 use crate::tokenizer::Token;
 use crate::Next;
@@ -30,6 +30,28 @@ pub struct Prog {
 pub struct Module {
     pub span: Span,
     pub statements: Vec<Statement>,
+}
+
+/// The precedence of an operator.
+///
+/// A higher precedence means that something should be more tightly bound. For
+/// example, multiplication has higher precedence than addition and as such is
+/// evaluated first.
+///
+/// Prec-variants can be compared to each other. A proc-macro ensures that the
+/// comparison follows the ordering here such that
+/// `prec_i < prec_j` for all `j > i`.
+#[derive(sylt_macro::Next, PartialEq, PartialOrd, Clone, Copy, Debug)]
+pub enum Prec {
+    No,
+    Assert,
+    BoolOr,
+    BoolAnd,
+    Comp,
+    Term,
+    Factor,
+    Index,
+    Arrow,
 }
 
 /// Variables can be any combination of `{Force,}{Const,Mutable}`.
@@ -377,6 +399,31 @@ impl<'a> Context<'a> {
         new
     }
 
+    fn skip_if(&self, token: T) -> Self {
+        if self.token() == &token {
+            self.skip(1)
+        } else {
+            *self
+        }
+    }
+
+    fn _skip_if_any<const N: usize>(&self, tokens: [T; N]) -> Self {
+        if tokens.iter().any(|t| self.token() == t) {
+            self.skip(1)
+        } else {
+            *self
+        }
+    }
+
+    /// Eat until the next non-newline token.
+    fn skip_while(&self, token: T) -> Self {
+        let mut ret = *self;
+        while ret.token() == &token {
+            ret = ret.skip(1);
+        }
+        ret
+    }
+
     /// Return the current [Token] and line number.
     fn peek(&self) -> &(T, usize) {
         self.tokens.get(self.curr).unwrap_or(&(T::EOF, 0))
@@ -397,7 +444,6 @@ impl<'a> Context<'a> {
 
 /// Construct a syntax error at the current token with a message.
 macro_rules! syntax_error {
-    //TODO None if no message?
     ($ctx:expr, $( $msg:expr ),* ) => {
         {
             let msg = format!($( $msg ),*).into();
@@ -413,7 +459,6 @@ macro_rules! syntax_error {
 
 /// Raise a syntax error at the current token with a message.
 macro_rules! raise_syntax_error {
-    //TODO None if no message?
     ($ctx:expr, $( $msg:expr ),* ) => {
         return Err(($ctx.skip(1), vec![syntax_error!($ctx, $( $msg ),*)]))
     };
@@ -432,19 +477,6 @@ macro_rules! expect {
 
     ($ctx:expr, $( $token:pat )|+ ) => {
         expect!($ctx, $( $token )|*, concat!("Expected ", stringify!($( $token )|*)))
-    };
-}
-
-/// Skip the current token if it is any one of the specified tokens.
-macro_rules! skip_if {
-    ($ctx:expr, $( $token:pat )|+ ) => {
-        {
-            if matches!($ctx.token(), $( $token )|* ) {
-                $ctx.skip(1)
-            } else {
-                $ctx
-            }
-        }
     };
 }
 
@@ -499,7 +531,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                         params.push(param);
 
                         ctx = if matches!(ctx.token(), T::Comma | T::Arrow) {
-                            skip_if!(ctx, T::Comma)
+                            ctx.skip_if(T::Comma)
                         } else {
                             raise_syntax_error!(ctx, "Expected ',' or '->' after type parameter")
                         };
@@ -533,7 +565,7 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                         types.push(param);
 
                         ctx = if matches!(ctx.token(), T::Comma | T::RightParen) {
-                            skip_if!(ctx, T::Comma)
+                            ctx.skip_if(T::Comma)
                         } else {
                             raise_syntax_error!(ctx, "Expected ',' or ')' after tuple field")
                         };
@@ -612,6 +644,22 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     Ok((ctx, ty))
 }
 
+fn block_statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
+    let span = ctx.span();
+    let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{' at start of block");
+
+    let mut statements = Vec::new();
+    // Parse multiple inner statements until } or EOF
+    while !matches!(ctx.token(), T::RightBrace | T::EOF) {
+        let (_ctx, stmt) = statement(ctx)?;
+        ctx = _ctx; // assign to outer
+        statements.push(stmt);
+    }
+
+    let ctx = expect!(ctx, T::RightBrace, "Expected }} after block statement");
+    Ok((ctx, Statement { span, kind: StatementKind::Block { statements } }))
+}
+
 /// Parse a single [Statement].
 fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     use StatementKind::*;
@@ -622,17 +670,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
         // Block: `{ <statements> }`
         [(T::LeftBrace, _), ..] => {
-            let mut ctx = ctx.skip(1);
-            let mut statements = Vec::new();
-            // Parse multiple inner statements until } or EOF
-            while !matches!(ctx.token(), T::RightBrace | T::EOF) {
-                let (_ctx, stmt) = statement(ctx)?;
-                ctx = _ctx; // assign to outer
-                statements.push(stmt);
-            }
-
-            let ctx = expect!(ctx, T::RightBrace, "Expected }} after block statement");
-            (ctx, Block { statements })
+            return block_statement(ctx);
         }
 
         // `use a`
@@ -745,7 +783,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                                 "Expected a field deliminator: newline or ','"
                             );
                         }
-                        ctx = skip_if!(ctx, T::Comma);
+                        ctx = ctx.skip_if(T::Comma);
                     }
 
                     _ => {
@@ -820,7 +858,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
             let (ctx, kind, ty) = {
                 let forced = matches!(ctx.token(), T::Bang); // !int
-                let ctx = skip_if!(ctx, T::Bang);
+                let ctx = ctx.skip_if(T::Bang);
                 let (ctx, ty) = parse_type(ctx)?;
                 let kind = match (ctx.token(), forced) {
                     (T::Colon, true) => VarKind::ForceConst,
@@ -892,9 +930,7 @@ fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
     };
 
-    // TODO(ed): Not sure this is right.
-    // let ctx = expect!(ctx, T::Newline, "Expected newline after statement");
-    let ctx = skip_if!(ctx, T::Newline);
+    let ctx = ctx.skip_if(T::Newline);
     Ok((ctx, Statement { span, kind }))
 }
 
@@ -927,7 +963,7 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
                 ctx = _ctx; // assign to outer
                 args.push(expr);
 
-                ctx = skip_if!(ctx, T::Comma);
+                ctx = ctx.skip_if(T::Comma);
             }
         }
     }
@@ -939,7 +975,6 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
     };
 
     use AssignableKind::Call;
-    //TODO ?
     let result = Assignable {
         span,
         kind: Call(Box::new(callee), args),
@@ -1064,7 +1099,7 @@ mod expression {
                     params.push((ident, param));
 
                     ctx = if matches!(ctx.token(), T::Comma | T::Arrow | T::LeftBrace) {
-                        skip_if!(ctx, T::Comma)
+                        ctx.skip_if(T::Comma)
                     } else {
                         raise_syntax_error!(ctx, "Expected ',' '{{' or '->' after type parameter")
                     };
@@ -1103,8 +1138,8 @@ mod expression {
             }
         };
 
-        // Parse the function statement. Usually a block statement but it's not currently forced.
-        let (ctx, statement) = statement(ctx)?;
+        // Parse the function statement.
+        let (ctx, statement) = block_statement(ctx)?;
         let function = Function {
             name: "lambda".into(),
             params,
@@ -1124,13 +1159,7 @@ mod expression {
     /// Parse an expression until we reach a token with higher precedence.
     fn parse_precedence<'t>(ctx: Context<'t>, prec: Prec) -> ParseResult<'t, Expression> {
         // Initial value, e.g. a number value, assignable, ...
-        let (mut ctx, mut expr) = match prefix(ctx) {
-            Ok(ret) => ret,
-            Err((ctx, mut errs)) => {
-                errs.push(syntax_error!(ctx, "Invalid expression"));
-                return Err((ctx, errs));
-            }
-        };
+        let (mut ctx, mut expr) = prefix(ctx)?;
         while prec <= precedence(ctx.token()) {
             if let Ok((_ctx, _expr)) = infix(ctx, &expr) {
                 // assign to outer
@@ -1192,7 +1221,7 @@ mod expression {
         Ok((ctx, Expression { span, kind }))
     }
 
-    /// Parse something that begins at the start of a expression.
+    /// Parse something that begins at the start of an expression.
     fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         match ctx.token() {
             T::LeftParen => grouping_or_tuple(ctx),
@@ -1318,7 +1347,7 @@ mod expression {
         let mut is_tuple = matches!(ctx.token(), T::Comma | T::RightParen);
         loop {
             // Any initial comma is skipped since we checked it before entering the loop.
-            ctx = skip_if!(ctx, T::Comma);
+            ctx = ctx.skip_if(T::Comma);
             match ctx.token() {
                 // Done.
                 T::EOF | T::RightParen => {
@@ -1380,7 +1409,7 @@ mod expression {
                     if !matches!(ctx.token(), T::Comma | T::Newline | T::RightBrace) {
                         raise_syntax_error!(ctx, "Expected a delimiter: newline or ','");
                     }
-                    ctx = skip_if!(ctx, T::Comma);
+                    ctx = ctx.skip_if(T::Comma);
 
                     fields.push((name, expr));
                 }
@@ -1410,6 +1439,9 @@ mod expression {
         let span = ctx.span();
         let mut ctx = expect!(ctx, T::LeftBracket, "Expected '['");
 
+        // `l := [\n1` is valid
+        ctx = ctx.skip_while(T::Newline);
+
         // Inner experssions.
         let mut exprs = Vec::new();
         loop {
@@ -1423,7 +1455,9 @@ mod expression {
                 _ => {
                     let (_ctx, expr) = expression(ctx)?;
                     exprs.push(expr);
-                    ctx = skip_if!(_ctx, T::Comma);
+                    ctx = _ctx; // assign to outer
+                    ctx = ctx.skip_if(T::Comma);
+                    ctx = ctx.skip_while(T::Newline); // newlines after expression is valid inside lists
                 }
             }
         }
@@ -1487,7 +1521,7 @@ mod expression {
                         exprs.push(expr);
                     }
 
-                    ctx = skip_if!(ctx, T::Comma);
+                    ctx = ctx.skip_if(T::Comma);
                 }
             }
         }
@@ -1521,8 +1555,17 @@ mod expression {
 ///
 /// Currently all statements are valid outer statements.
 fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
-    // TODO(ed): Filter for invalid outer statements here.
-    statement(ctx)
+    let (ctx, stmt) = statement(ctx)?;
+    use StatementKind::*;
+    match stmt.kind {
+        Blob { ..}
+        | Definition { .. }
+        | Use { .. }
+        | EmptyStatement
+        => Ok((ctx, stmt)),
+
+        _ => raise_syntax_error!(ctx, "Not a valid outer statement"),
+    }
 }
 
 /// Parses a file's tokens. Returns a list of files it refers to (via `use`s) and
@@ -1584,6 +1627,42 @@ fn module(path: &Path, tokens: &Tokens) -> (Vec<PathBuf>, Result<Module, Vec<Err
     }
 }
 
+/// Look for git conflict markers (`<<<<<<<`) in a file.
+///
+/// Since conflict markers might be present anywhere, we don't even try to save
+/// the parsing if we find any.
+///
+/// # Errors
+///
+/// Returns a [Vec] of all errors found.
+///
+/// - [Error::FileNotFound] if the file couldn't be found.
+/// - [Error::GitConflictError] if conflict markers were found.
+/// - Any [Error::IOError] that occured when reading the file.
+pub fn find_conflict_markers(file: &Path) -> Vec<Error> {
+    let s = match std::fs::read_to_string(file) {
+        Ok(s) => s,
+        Err(e) => return vec![
+            if matches!(e.kind(), std::io::ErrorKind::NotFound) {
+                Error::FileNotFound(file.to_path_buf())
+            } else {
+                Error::IOError(Rc::new(e))
+            }
+        ],
+    };
+    let mut errs = Vec::new();
+    // Search line by line and push any errors we find.
+    for (i, line) in s.lines().enumerate() {
+        if line.starts_with("<<<<<<<") {
+            errs.push(Error::GitConflictError {
+                file: file.to_path_buf(),
+                start: i + 1,
+            });
+        }
+    }
+    errs
+}
+
 /// Parses the contents of a file as well as all files this file refers to and so
 /// on.
 ///
@@ -1608,11 +1687,18 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
         if visited.contains(&file) {
             continue;
         }
+        // Look for conflict markers
+        let mut conflict_errors = find_conflict_markers(&file);
+        if !conflict_errors.is_empty() {
+            errors.append(&mut conflict_errors);
+            visited.insert(file);
+            continue;
+        }
         // Lex into tokens.
         match file_to_tokens(&file) {
             Ok(tokens) => {
                 // Parse the module.
-                let (mut next, result) = module(path, &tokens);
+                let (mut next, result) = module(&file, &tokens);
                 match result {
                     Ok(module) => modules.push((file.clone(), module)),
                     Err(mut errs) => errors.append(&mut errs),
@@ -1620,7 +1706,7 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
                 to_visit.append(&mut next);
             }
             Err(_) => {
-                errors.push(Error::FileNotFound(file.to_path_buf()));
+                errors.push(Error::FileNotFound(file.clone()));
             }
         }
         visited.insert(file);
@@ -1668,8 +1754,10 @@ mod test {
         };
     }
 
-    // TODO(ed): It's really hard to write good tests, Rust refuses to deref the boxes
+    // NOTE(ed): It's really hard to write good tests, Rust refuses to deref the boxes
     // automatically.
+    //
+    // Faulty syntax should be tested in the small language tests.
     mod expression {
         use super::*;
         use AssignableKind::*;
@@ -1724,14 +1812,15 @@ mod test {
         test!(expression, instance_more: "A { a: 2\n c: 2 }" => Instance { .. });
         test!(expression, instance_empty: "A {}" => Instance { .. });
 
-        // TODO(ed): Require block or allow all statements?
         test!(expression, simple: "fn -> {}" => _);
-        test!(expression, argument: "fn a: int -> int ret a + 1" => _);
+        test!(expression, argument: "fn a: int -> int { ret a + 1 }" => _);
 
         test!(expression, booleans: "true && false || !false" => _);
         test!(expression, bool_and: "true && a" => _);
         test!(expression, bool_or: "a || false" => _);
         test!(expression, bool_neg: "!a" => _);
+        test!(expression, bool_neg_multiple: "!a && b" => _);
+        test!(expression, bool_neg_multiple_rev: "a && !b" => _);
 
         test!(expression, cmp_eq: "a == b" => _);
         test!(expression, cmp_neq: "a != b" => _);
@@ -1757,7 +1846,6 @@ mod test {
         test!(parse_type, type_float: "float" => Resolved(RT::Float));
         test!(parse_type, type_str: "str" => Resolved(RT::String));
         test!(parse_type, type_unknown_access: "a.A | int" => Union(_, _));
-        // TODO(ed): This is controverisal
         test!(parse_type, type_unknown_access_call: "a.b().A | int" => Union(_, _));
         test!(parse_type, type_unknown: "blargh" => UserDefined(_));
         test!(parse_type, type_union: "int | int" => Union(_, _));
@@ -1813,5 +1901,10 @@ mod test {
         test!(statement, statement_assign_call: "a().b() += 2" => _);
         test!(statement, statement_assign_call_index: "a.c().c.b /= 4" => _);
         test!(statement, statement_idek: "a!.c!.c.b()().c = 0" => _);
+
+        test!(outer_statement, outer_statement_blob: "B :: blob {}\n" => _);
+        test!(outer_statement, outer_statement_declaration: "B :: fn -> {}\n" => _);
+        test!(outer_statement, outer_statement_use: "use ABC\n" => _);
+        test!(outer_statement, outer_statement_empty: "\n" => _);
     }
 }

@@ -71,6 +71,7 @@ impl Upvalue {
         Self {
             parent: up.slot,
             upupvalue: true,
+            slot: 0,
             ..up.clone()
         }
     }
@@ -183,7 +184,7 @@ impl Compiler {
     fn push_frame_and_block(&mut self, ctx: Context, name: &str, span: Span) -> Context {
         let file_as_path = PathBuf::from(self.file_from_namespace(ctx.namespace));
 
-        let block = Block::new_tree(&name, ctx.namespace, &file_as_path);
+        let block = Block::new(&name, ctx.namespace, &file_as_path);
         self.blocks.push(block);
 
         self.frames.push(Frame::new(name, span));
@@ -346,7 +347,7 @@ impl Compiler {
                 self.patch(ctx, jump, op);
 
             }
-            Not(a)    => self.un_op(a, &[Op::Neg], expression.span, ctx),
+            Not(a)    => self.un_op(a, &[Op::Not], expression.span, ctx),
 
             Function { name, params, ret, body } => {
                 let file = self.file_from_namespace(ctx.namespace);
@@ -365,7 +366,6 @@ impl Compiler {
                 self.blocks[inner_ctx.block_slot].ty = ty.clone();
 
                 self.statement(&body, inner_ctx);
-
 
                 if !all_paths_return(&body) {
                     let nil = self.constant(Value::Nil);
@@ -424,7 +424,6 @@ impl Compiler {
         // Frame 0 has globals which cannot be captured.
         if frame == 0 { return Err(()) }
 
-        // TODO(ed): Maybe remove the clones?
         for var in self.frames[frame].variables.iter().rev() {
             if &var.name == name && var.active {
                 return Ok(Lookup::Variable(var.clone()));
@@ -448,7 +447,7 @@ impl Compiler {
                 return Err(());
             }
         };
-        self.upvalue(up.clone(), frame);
+        let up = self.upvalue(up, frame);
         Ok(Lookup::Upvalue(up))
 
     }
@@ -539,7 +538,6 @@ impl Compiler {
         namespace: usize,
         ctx: Context,
     ) -> Option<usize> {
-        // TODO(ed): This is ugly
         use AssignableKind::*;
         match &assignable.kind {
             Access(inner, ident) => {
@@ -667,7 +665,6 @@ impl Compiler {
     }
 
     fn define(&mut self, name: &str, kind: VarKind, span: Span) -> VarSlot {
-        // TODO(ed): Fix the types
         let frame = &mut self.frames.last_mut().unwrap().variables;
         let slot = frame.len();
         let var = Variable::new(name.to_string(), kind, Type::Unknown, slot, span);
@@ -675,11 +672,12 @@ impl Compiler {
         slot
     }
 
-    fn upvalue(&mut self, up: Upvalue, frame: usize) -> usize {
+    fn upvalue(&mut self, mut up: Upvalue, frame: usize) -> Upvalue {
         let ups = &mut self.frames[frame].upvalues;
         let slot = ups.len();
-        ups.push(up);
-        slot
+        up.slot = slot;
+        ups.push(up.clone());
+        up
     }
 
     fn activate(&mut self, slot: VarSlot) {
@@ -811,7 +809,6 @@ impl Compiler {
                 }
 
                 while stack_size < self.frames[ctx.frame].variables.len() {
-                    // TODO(ed): Upvalues
                     let var = self.frames[ctx.frame].variables.pop().unwrap();
                     if var.captured {
                         self.add_op(ctx, statement.span, Op::PopUpvalue);
@@ -856,9 +853,37 @@ impl Compiler {
         }
     }
 
-    fn module(&mut self, module: &Module, ctx: Context) {
+    fn module_functions(&mut self, module: &Module, ctx: Context) {
         for statement in module.statements.iter() {
-            self.statement(statement, ctx);
+            match statement.kind {
+                StatementKind::Definition {
+                    value: Expression {
+                        kind: ExpressionKind::Function { .. },
+                        ..
+                    },
+                    ..
+                } => {
+                    self.statement(statement, ctx);
+                }
+                _ => (),
+            }
+        }
+    }
+
+    fn module_not_functions(&mut self, module: &Module, ctx: Context) {
+        for statement in module.statements.iter() {
+            match statement.kind {
+                StatementKind::Definition {
+                    value: Expression {
+                        kind: ExpressionKind::Function { .. },
+                        ..
+                    },
+                    ..
+                } => (),
+                _ => {
+                    self.statement(statement, ctx);
+                }
+            }
         }
     }
 
@@ -872,7 +897,7 @@ impl Compiler {
             .collect();
 
         let name = "/preamble/";
-        let mut block = Block::new_tree(name, 0, &tree.modules[0].0);
+        let mut block = Block::new(name, 0, &tree.modules[0].0);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
         self.blocks.push(block);
         self.frames.push(Frame::new(name, Span { line: 0 }));
@@ -887,7 +912,13 @@ impl Compiler {
         for (full_path, module) in tree.modules.iter() {
             let path = full_path.file_stem().unwrap().to_str().unwrap();
             ctx.namespace = path_to_namespace_id[path];
-            self.module(module, ctx);
+            self.module_functions(module, ctx);
+        }
+
+        for (full_path, module) in tree.modules.iter() {
+            let path = full_path.file_stem().unwrap().to_str().unwrap();
+            ctx.namespace = path_to_namespace_id[path];
+            self.module_not_functions(module, ctx);
         }
         let module = &tree.modules[0].1;
 
@@ -937,6 +968,47 @@ impl Compiler {
             let path = path.file_stem().unwrap().to_str().unwrap();
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
+
+            for statement in module.statements.iter() {
+                use StatementKind::*;
+                let mut namespace = self.namespaces.remove(slot);
+                match &statement.kind {
+                    Blob { name, .. } => {
+                        match namespace.entry(name.to_owned()) {
+                            Entry::Vacant(_) => {
+                                let id = self.blobs.len();
+                                self.blobs.push(crate::Blob::new(id, slot, name));
+                                let blob = self.constant(Value::Blob(id));
+                                if let Op::Constant(slot) = blob {
+                                    namespace.insert(name.to_owned(), Name::Blob(slot));
+                                } else {
+                                    unreachable!();
+                                }
+                            }
+
+                            Entry::Occupied(_) => {
+                                error!(
+                                    self,
+                                    ctx,
+                                    statement.span,
+                                    "A global variable with the name '{}' already exists", name
+                                );
+                            }
+                        }
+                    }
+
+                    // Handled below.
+                    _ => (),
+                }
+                self.namespaces.insert(slot, namespace);
+            }
+        }
+
+        for (path, module) in tree.modules.iter() {
+            let path = path.file_stem().unwrap().to_str().unwrap();
+            let slot = path_to_namespace_id[path];
+            let ctx = Context::from_namespace(slot);
+
             for statement in module.statements.iter() {
                 use StatementKind::*;
                 let mut namespace = self.namespaces.remove(slot);
@@ -954,32 +1026,6 @@ impl Compiler {
                                     span,
                                     "A global variable with the name '{}' already exists",
                                     name
-                                );
-                            }
-                        }
-                    }
-
-                    // TODO(ed): These need to be done before all other statements, so
-                    // types can be resolved.
-                    Blob { name, .. } => {
-                        match namespace.entry(name.to_owned()) {
-                            Entry::Vacant(_) => {
-                                let id = self.blobs.len();
-                                self.blobs.push(crate::Blob::new_tree(id, slot, name));
-                                let blob = self.constant(Value::Blob(id));
-                                if let Op::Constant(slot) = blob {
-                                    namespace.insert(name.to_owned(), Name::Blob(slot));
-                                } else {
-                                    unreachable!();
-                                }
-                            }
-
-                            Entry::Occupied(_) => {
-                                error!(
-                                    self,
-                                    ctx,
-                                    statement.span,
-                                    "A global variable with the name '{}' already exists", name
                                 );
                             }
                         }
@@ -1018,8 +1064,11 @@ impl Compiler {
                         self.add_op(ctx, Span { line: 0 }, op);
                     }
 
+                    // Already handled in the loop before.
+                    Blob { .. } => (),
+
                     _ => {
-                        // TODO(ed): Throw error
+                        error!(self, ctx, statement.span, "Invalid outer statement");
                     }
                 }
                 self.namespaces.insert(slot, namespace);

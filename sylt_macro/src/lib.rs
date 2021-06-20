@@ -269,17 +269,9 @@ fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
             let print = settings.print;
             let wanted_errs: proc_macro2::TokenStream = settings.errors.parse().unwrap();
 
-            // TODO(ed): Skip the tests with errors - they won't work until the compiler is fully
-            // ported.
             // TODO(ed): Make a flag for skipping the test
-            let tokens = if settings.errors.len() == 4 {
-                quote! {
-                    test_file!(#test_name, #path_string, #print, #wanted_errs);
-                }
-            } else {
-                quote! {
-                    skip_test_file!(#test_name, #path_string, #print, #wanted_errs);
-                }
+            let tokens = quote! {
+                test_file!(#test_name, #path_string, #print, #wanted_errs);
             };
 
             tests.extend(tokens);

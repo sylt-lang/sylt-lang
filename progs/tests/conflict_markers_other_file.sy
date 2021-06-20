@@ -1,0 +1,5 @@
+use conflict_markers
+
+start :: fn {}
+
+// error: Error::GitConflictError { start: 3, .. }

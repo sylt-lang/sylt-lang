@@ -1,0 +1,6 @@
+start :: fn {
+    a := true
+    if !a {
+        <!>
+    }
+}

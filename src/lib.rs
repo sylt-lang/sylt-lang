@@ -7,7 +7,6 @@ use error::{Error, RuntimeError};
 use owo_colors::OwoColorize;
 use std::borrow::Borrow;
 use std::cell::RefCell;
-use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
@@ -19,9 +18,7 @@ pub mod syncomp;
 pub mod syntree;
 pub mod typechecker;
 
-mod compiler;
 mod rc;
-mod sectionizer;
 mod tokenizer;
 
 // Lingon linking layer
@@ -45,28 +42,22 @@ pub trait Next {
     fn next(&self) -> Self;
 }
 
-pub fn construct_tree(args: &Args) -> Result<syntree::Prog, Vec<Error>> {
+pub fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
     let path = match &args.file {
         Some(file) => file,
         None => {
             return Err(vec![Error::NoFileGiven]);
         }
     };
-    syntree::tree(&path)
-}
-
-pub fn tree_compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
-    syncomp::compile(construct_tree(args)?, &functions)
+    let tree = syntree::tree(&path)?;
+    let prog = syncomp::compile(tree, &functions)?;
+    Ok(prog)
 }
 
 /// Compiles, links and runs the given file. The supplied functions are callable
 /// external functions.
 pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
-    let prog = if args.tree_mode {
-        tree_compile(args, functions)
-    } else {
-        compile(args, functions)
-    }?;
+    let prog = compile(args, functions)?;
     typechecker::typecheck(&prog, &args)?;
     run(&prog, &args)
 }
@@ -83,19 +74,6 @@ pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
     }
 }
 
-pub fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
-    let path = match &args.file {
-        Some(file) => file,
-        None => {
-            return Err(vec![Error::NoFileGiven]);
-        }
-    };
-    let sections = sectionizer::sectionize(&path)?;
-    let prog = compiler::Compiler::new(sections).compile("/preamble", &path, &functions)?;
-    typechecker::typecheck(&prog, &args)?;
-    Ok(prog)
-}
-
 #[derive(Default, Debug, Options)]
 pub struct Args {
     #[options(free)]
@@ -106,9 +84,6 @@ pub struct Args {
 
     #[options(short = "c", long = "compile", help = "Compile a sylt binary")]
     pub compile_target: Option<PathBuf>,
-
-    #[options(short = "t", long = "tree", help = "Use the syntax tree backend (WIP)")]
-    pub tree_mode: bool,
 
     #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
     pub verbosity: u32,
@@ -562,33 +537,12 @@ impl PartialEq for Blob {
 }
 
 impl Blob {
-    // NOTE(ed): Should be replaced with `new_tree`
-    fn new(id: usize, name: &str) -> Self {
-        Self {
-            id,
-            name: String::from(name),
-            namespace: 0,
-            fields: HashMap::new(),
-        }
-    }
-
-    fn new_tree(id: usize, namespace: usize, name: &str) -> Self {
+    fn new(id: usize, namespace: usize, name: &str) -> Self {
         Self {
             id,
             namespace,
             name: String::from(name),
             fields: HashMap::new(),
-        }
-    }
-
-    fn add_field(&mut self, name: &str, ty: Type) -> Result<(), ()> {
-        let entry = self.fields.entry(String::from(name));
-        match entry {
-            Entry::Occupied(_) => Err(()),
-            Entry::Vacant(v) => {
-                v.insert(ty);
-                Ok(())
-            }
         }
     }
 }
@@ -879,7 +833,6 @@ pub enum Op {
 #[derive(Debug)]
 enum BlockLinkState {
     Linked,
-    Unlinked,
     Nothing,
 }
 
@@ -899,13 +852,13 @@ pub struct Block {
 }
 
 impl Block {
-    fn new(name: &str, file: &Path) -> Self {
+    fn new(name: &str, namespace: usize, file: &Path) -> Self {
         Self {
             ty: Type::Void,
             upvalues: Vec::new(),
             linking: BlockLinkState::Nothing,
 
-            namespace: 0,
+            namespace,
 
             name: String::from(name),
             file: file.to_owned(),
@@ -913,19 +866,6 @@ impl Block {
             last_line_offset: 0,
             line_offsets: HashMap::new(),
         }
-    }
-
-    fn new_tree(name: &str, namespace: usize, file: &Path) -> Self {
-        let mut block = Self::new(name, file);
-        block.namespace = namespace;
-        block
-    }
-
-    fn mark_constant(&mut self) {
-        if self.upvalues.is_empty() {
-            return;
-        }
-        self.linking = BlockLinkState::Unlinked;
     }
 
     pub fn args(&self) -> &Vec<Type> {
@@ -1009,19 +949,8 @@ impl Block {
         len
     }
 
-    fn add_from(&mut self, ops: &[Op], token_position: usize) -> usize {
-        let len = self.curr();
-        self.add_line(token_position);
-        self.ops.extend_from_slice(ops);
-        len
-    }
-
     fn curr(&self) -> usize {
         self.ops.len()
-    }
-
-    fn patch(&mut self, op: Op, pos: usize) {
-        self.ops[pos] = op;
     }
 }
 
@@ -1067,31 +996,6 @@ mod tests {
 
                 let mut args = $crate::Args::default();
                 args.file = Some(std::path::PathBuf::from($path));
-                args.tree_mode = true;
-                args.verbosity = if $print { 1 } else { 0 };
-                let res = $crate::run_file(
-                    &args,
-                    $crate::lib_sylt::_sylt_link(),
-                );
-                $crate::assert_errs!(res, $errs);
-            }
-        };
-    }
-
-    #[macro_export]
-    macro_rules! skip_test_file {
-        ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
-            #[test]
-            #[ignore]
-            fn $fn() {
-                #[allow(unused_imports)]
-                use $crate::error::RuntimeError;
-                #[allow(unused_imports)]
-                use $crate::Type;
-
-                let mut args = $crate::Args::default();
-                args.file = Some(std::path::PathBuf::from($path));
-                args.tree_mode = true;
                 args.verbosity = if $print { 1 } else { 0 };
                 let res = $crate::run_file(
                     &args,
