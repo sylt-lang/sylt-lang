@@ -442,7 +442,7 @@ mod test {
     test!(statement, statement_div_assign: "a /= 2" => _);
     test!(statement, statement_assign_call: "a().b() += 2" => _);
     test!(statement, statement_assign_call_index: "a.c().c.b /= 4" => _);
-    test!(statement, statement_idek: "a!.c!.c.b()().c = 0" => _);
+    test!(statement, statement_idek: "a'.c'.c.b()().c = 0" => _);
 
     test!(outer_statement, outer_statement_blob: "B :: blob {}\n" => _);
     test!(outer_statement, outer_statement_declaration: "B :: fn -> {}\n" => _);

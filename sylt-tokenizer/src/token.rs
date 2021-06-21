@@ -119,6 +119,8 @@ pub enum Token {
     QuestionMark,
     #[token("|")]
     Pipe,
+    #[token("'")]
+    Prime,
 
     #[token(",")]
     Comma,

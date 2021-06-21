@@ -2,7 +2,7 @@ A :: blob { a: int }
 a := A { a: 1 }
 start :: fn {
     a.b = a.b + 1
-    a.a = f! a.b
+    a.a = f' a.b
 }
 
 f :: fn a:int -> int {

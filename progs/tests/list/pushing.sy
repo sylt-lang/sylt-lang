@@ -12,10 +12,10 @@ start :: fn {
     q :: fn {
         push(b, "a")
     }
-    q!
-    q!
-    q!
+    q'
+    q'
+    q'
     len(b) <=> 3
-    q!
+    q'
     len(b) <=> 4
 }

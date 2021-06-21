@@ -1,6 +1,6 @@
 a :: fn f: fn -> {}
 
 start :: fn {
-    a! fn {}
+    a' fn {}
     1
 }

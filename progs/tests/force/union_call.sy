@@ -6,7 +6,7 @@ f :: fn a: int -> int | bool | str {
 }
 
 start :: fn {
-    a: !int | bool = f! 0
+    a: !int | bool = f' 0
     if a != 1 {
         <!>
     }
