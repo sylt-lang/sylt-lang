@@ -55,6 +55,11 @@ pub enum Op {
     ///
     /// {T, I} - Index - {T[I]}
     GetIndex,
+    /// Indexes something indexable with a constant integer,
+    /// and adds that element to the stack.
+    ///
+    /// {T} - Index(I) - {T[I]}
+    GetConstIndex(i64),
     /// Assigns the indexes of something indexable.
     /// T[I] = V
     ///

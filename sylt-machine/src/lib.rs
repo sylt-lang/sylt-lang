@@ -360,6 +360,52 @@ impl VM {
                 }
             }
 
+            Op::GetConstIndex(slot) => {
+                let val = self.pop();
+                match val {
+                    Value::Tuple(v) => {
+                        let slot = slot as usize;
+                        if v.len() <= slot {
+                            self.stack.push(Value::Nil);
+                            let len = v.len();
+                            error!(
+                                self,
+                                RuntimeError::IndexOutOfBounds(Value::Tuple(v), len, slot)
+                            );
+                        }
+                        self.stack.push(v[slot].clone());
+                    }
+                    Value::List(rc_v) => {
+                        let slot = slot as usize;
+                        let v = rc_v.borrow();
+                        if v.len() <= slot {
+                            self.stack.push(Value::Nil);
+                            let len = v.len();
+                            drop(v);
+                            error!(
+                                self,
+                                RuntimeError::IndexOutOfBounds(Value::List(rc_v), len, slot)
+                            );
+                        }
+                        self.stack.push(v[slot].clone());
+                    }
+                    Value::Dict(dict) => {
+                        self.push(
+                            dict.as_ref()
+                                .borrow()
+                                .get(&Value::Int(slot))
+                                .cloned()
+                                .unwrap_or(Value::Nil),
+                        );
+                    }
+                    val => {
+                        self.stack.push(Value::Nil);
+                        error!(self, RuntimeError::IndexError(val, Type::Int));
+                    }
+                }
+            }
+
+
             Op::AssignIndex => {
                 let value = self.pop();
                 let slot = self.pop();

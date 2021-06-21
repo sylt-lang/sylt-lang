@@ -557,6 +557,23 @@ impl VM {
                 }
             }
 
+            Op::GetConstIndex(slot) => {
+                match self.pop() {
+                    Type::List(a) => {
+                        self.push((*a).clone());
+                    }
+                    Type::Tuple(a) => {
+                        self.push(a.get(slot as usize).cloned().unwrap_or(Type::Void));
+                    }
+                    Type::Dict(k, v) if k.fits(&Type::Int) => {
+                        self.push((*v).clone());
+                    }
+                    _ => {
+                        self.push(Type::Void);
+                    }
+                }
+            }
+
             Op::AssignIndex => {
                 let value = self.pop();
                 let slot = self.pop();
