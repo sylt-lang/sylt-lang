@@ -1,14 +1,14 @@
-use sylt_common::Type as RuntimeType;
-
 use self::expression::expression;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
+use sylt_common::Type as RuntimeType;
 use sylt_common::error::Error;
 use sylt_common::rc::Rc;
 use sylt_tokenizer::{Token, file_to_tokens};
 
 pub mod expression;
+pub use self::expression::{Expression, ExpressionKind};
 
 type T = Token;
 
@@ -248,88 +248,6 @@ pub enum AssignableKind {
 pub struct Assignable {
     pub span: Span,
     pub kind: AssignableKind,
-}
-
-/// The different kinds of [Expression]s.
-///
-/// Expressions are recursive and evaluate to some kind of value.
-#[derive(Debug, Clone)]
-pub enum ExpressionKind {
-    /// Read from an [Assignable]. Variables, function calls, module accesses,
-    /// blob fields, list indexing, tuple indexing and dict indexing end up here.
-    Get(Assignable),
-
-    /// `a + b`
-    Add(Box<Expression>, Box<Expression>),
-    /// `a - b`
-    Sub(Box<Expression>, Box<Expression>),
-    /// `a * b`
-    Mul(Box<Expression>, Box<Expression>),
-    /// `a / b`
-    Div(Box<Expression>, Box<Expression>),
-    /// `-a`
-    Neg(Box<Expression>),
-
-    /// `a == b`
-    Eq(Box<Expression>, Box<Expression>),
-    /// `a != b`
-    Neq(Box<Expression>, Box<Expression>),
-    /// `a > b`
-    Gt(Box<Expression>, Box<Expression>),
-    /// `a >= b`
-    Gteq(Box<Expression>, Box<Expression>),
-    /// `a < b`
-    Lt(Box<Expression>, Box<Expression>),
-    /// `a <= b`
-    Lteq(Box<Expression>, Box<Expression>),
-    /// `a <=> b`
-    AssertEq(Box<Expression>, Box<Expression>),
-
-    /// `a in b`
-    In(Box<Expression>, Box<Expression>),
-
-    /// `a && b`
-    And(Box<Expression>, Box<Expression>),
-    /// `a || b`
-    Or(Box<Expression>, Box<Expression>),
-    /// `!a`
-    Not(Box<Expression>),
-
-    /// Functions and closures.
-    Function {
-        name: String,
-        params: Vec<(Identifier, Type)>,
-        ret: Type,
-
-        body: Box<Statement>,
-    },
-    /// A new instance of a blob.
-    Instance {
-        blob: Assignable,
-        fields: Vec<(String, Expression)>, // Keep calling order
-    },
-    /// `(a, b, ..)`
-    Tuple(Vec<Expression>),
-    /// `[a, b, ..]`
-    List(Vec<Expression>),
-    /// `{a, b, ..}`
-    Set(Vec<Expression>),
-    /// `{ a: b, c: d, .. }`
-    // Has to have even length, listed { k1, v1, k2, v2 }
-    Dict(Vec<Expression>),
-
-    Float(f64),
-    Int(i64),
-    Str(String),
-    Bool(bool),
-    Nil,
-}
-
-/// Expressions evaluate to values. Contains any [ExpressionKind].
-#[derive(Debug, Clone)]
-pub struct Expression {
-    pub span: Span,
-    pub kind: ExpressionKind,
 }
 
 #[derive(Debug, Clone)]

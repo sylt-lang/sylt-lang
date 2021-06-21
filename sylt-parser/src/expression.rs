@@ -2,6 +2,88 @@ use sylt_common::error::Error;
 
 use super::*;
 
+/// The different kinds of [Expression]s.
+///
+/// Expressions are recursive and evaluate to some kind of value.
+#[derive(Debug, Clone)]
+pub enum ExpressionKind {
+    /// Read from an [Assignable]. Variables, function calls, module accesses,
+    /// blob fields, list indexing, tuple indexing and dict indexing end up here.
+    Get(Assignable),
+
+    /// `a + b`
+    Add(Box<Expression>, Box<Expression>),
+    /// `a - b`
+    Sub(Box<Expression>, Box<Expression>),
+    /// `a * b`
+    Mul(Box<Expression>, Box<Expression>),
+    /// `a / b`
+    Div(Box<Expression>, Box<Expression>),
+    /// `-a`
+    Neg(Box<Expression>),
+
+    /// `a == b`
+    Eq(Box<Expression>, Box<Expression>),
+    /// `a != b`
+    Neq(Box<Expression>, Box<Expression>),
+    /// `a > b`
+    Gt(Box<Expression>, Box<Expression>),
+    /// `a >= b`
+    Gteq(Box<Expression>, Box<Expression>),
+    /// `a < b`
+    Lt(Box<Expression>, Box<Expression>),
+    /// `a <= b`
+    Lteq(Box<Expression>, Box<Expression>),
+    /// `a <=> b`
+    AssertEq(Box<Expression>, Box<Expression>),
+
+    /// `a in b`
+    In(Box<Expression>, Box<Expression>),
+
+    /// `a && b`
+    And(Box<Expression>, Box<Expression>),
+    /// `a || b`
+    Or(Box<Expression>, Box<Expression>),
+    /// `!a`
+    Not(Box<Expression>),
+
+    /// Functions and closures.
+    Function {
+        name: String,
+        params: Vec<(Identifier, Type)>,
+        ret: Type,
+
+        body: Box<Statement>,
+    },
+    /// A new instance of a blob.
+    Instance {
+        blob: Assignable,
+        fields: Vec<(String, Expression)>, // Keep calling order
+    },
+    /// `(a, b, ..)`
+    Tuple(Vec<Expression>),
+    /// `[a, b, ..]`
+    List(Vec<Expression>),
+    /// `{a, b, ..}`
+    Set(Vec<Expression>),
+    /// `{ a: b, c: d, .. }`
+    // Has to have even length, listed { k1, v1, k2, v2 }
+    Dict(Vec<Expression>),
+
+    Float(f64),
+    Int(i64),
+    Str(String),
+    Bool(bool),
+    Nil,
+}
+
+/// Expressions evaluate to values. Contains any [ExpressionKind].
+#[derive(Debug, Clone)]
+pub struct Expression {
+    pub span: Span,
+    pub kind: ExpressionKind,
+}
+
 /// Parse an [ExpressionKind::Function]: `fn a: int, b: bool -> bool <statement>`
 fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use RuntimeType::Void;
@@ -497,9 +579,9 @@ pub fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 mod test {
     use crate::Assignable;
     use crate::AssignableKind::*;
-    use crate::ExpressionKind::*;
-    use crate::test;
     use crate::expression;
+    use crate::test;
+    use super::ExpressionKind::*;
 
     test!(expression, value: "0" => Int(0));
     test!(expression, add: "0 + 1.0" => Add(_, _));
