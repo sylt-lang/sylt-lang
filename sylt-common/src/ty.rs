@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
-use crate::value::Value;
+use crate::{Value, Blob};
 
 #[derive(Debug, Clone)]
 pub enum Type {
@@ -170,15 +170,26 @@ impl Type {
     // TODO(ed): Swap order of arguments
     /// Checks if the other type is valid in a place where the self type is. It's an asymmetrical
     /// comparison for types useful when checking assignment.
-    pub fn fits(&self, other: &Self) -> bool {
+    pub fn fits(&self, other: &Self, blobs: &[Blob]) -> bool {
         match (self, other) {
             (Type::Unknown, _) | (_, Type::Unknown) => true,
-            (Type::List(a), Type::List(b)) => a.fits(b),
-            (Type::Set(a), Type::Set(b)) => a.fits(b),
-            (Type::Dict(ak, av), Type::Dict(bk, bv)) => ak.fits(bk) && av.fits(bv),
+            (Type::List(a), Type::List(b)) => a.fits(b, blobs),
+            (Type::Set(a), Type::Set(b)) => a.fits(b, blobs),
+            (Type::Dict(ak, av), Type::Dict(bk, bv)) => ak.fits(bk, blobs) && av.fits(bv, blobs),
             (Type::Union(a), Type::Union(b)) => b.iter().all(|x| a.contains(x)),
+            (Type::Instance(a), Type::Instance(b)) => {
+                let a_fields = &blobs[*a].fields;
+                let b_fields = &blobs[*b].fields;
+                a_fields.iter().all(|(f, t)| {
+                    if let Some(y) = b_fields.get(f) {
+                        t.fits(y, blobs)
+                    } else {
+                        false
+                    }
+                })
+            }
             (_, Type::Union(_)) => false,
-            (a, b) => a == b,
+            (a, b) => a == b, // Handles (Union(?) < T)
         }
     }
 

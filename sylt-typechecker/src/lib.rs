@@ -3,7 +3,7 @@ use std::collections::{HashSet, HashMap};
 use std::cell::RefCell;
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::rc::Rc;
-use sylt_common::{Block, BlockLinkState, Op, Prog, Type, Value};
+use sylt_common::{Block, BlockLinkState, Op, Prog, Type, Value, RuntimeContext};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -224,7 +224,7 @@ impl VM {
             Op::AssignLocal(slot) => {
                 let current = self.stack[slot].clone();
                 let given = self.pop();
-                if !current.fits(&given) {
+                if !current.fits(&given, &prog.blobs) {
                     error!(
                         self,
                         RuntimeError::TypeMismatch(current, given),
@@ -255,7 +255,7 @@ impl VM {
             Op::AssignGlobal(slot) => {
                 let current = self.global_types[slot].clone();
                 let given = self.pop();
-                if !current.fits(&given) {
+                if !current.fits(&given, &prog.blobs) {
                     error!(
                         self,
                         RuntimeError::TypeMismatch(current, given),
@@ -382,7 +382,7 @@ impl VM {
             Op::AssignUpvalue(slot) => {
                 let current = self.upvalues.get(slot).unwrap().clone();
                 let up = self.pop();
-                if !current.fits(&up) {
+                if !current.fits(&up, &prog.blobs) {
                     error!(
                         self,
                         RuntimeError::TypeMismatch(up, current),
@@ -419,7 +419,7 @@ impl VM {
                 let top_type = self.stack.last().unwrap().clone();
                 match (ty, top_type) {
                     (Type::Unknown, top_type) if top_type != Type::Unknown => {}
-                    (a, b) if a.fits(&b) => {
+                    (a, b) if a.fits(&b, &prog.blobs) => {
                         let last = self.stack.len() - 1;
                         self.stack[last] = a;
                     }
@@ -542,13 +542,13 @@ impl VM {
 
             Op::GetIndex => {
                 match self.poppop() {
-                    (Type::List(a), b) if b.fits(&Type::Int) => {
+                    (Type::List(a), b) if b.fits(&Type::Int, &prog.blobs) => {
                         self.push((*a).clone());
                     }
-                    (Type::Tuple(a), b) if b.fits(&Type::Int) => {
+                    (Type::Tuple(a), b) if b.fits(&Type::Int, &prog.blobs) => {
                         self.push(Type::Union(a.iter().cloned().collect()));
                     }
-                    (Type::Dict(k, v), i) if k.fits(&i) => {
+                    (Type::Dict(k, v), i) if k.fits(&i, &prog.blobs) => {
                         self.push((*v).clone());
                     }
                     _ => {
@@ -564,7 +564,7 @@ impl VM {
                 match (indexable, slot, value) {
                     (Type::List(v), Type::Int, n) => match (v.as_ref(), &n) {
                         (Type::Unknown, top_type) if top_type != &Type::Unknown => {}
-                        (a, b) if a.fits(b) => {}
+                        (a, b) if a.fits(b, &prog.blobs) => {}
                         (a, b) => {
                             error!(
                                 self,
@@ -574,7 +574,7 @@ impl VM {
                         }
                     },
                     (Type::Dict(k, v), i, n) => {
-                        if !k.fits(&i) {
+                        if !k.fits(&i, &prog.blobs) {
                             error!(
                                 self,
                                 RuntimeError::TypeMismatch(k.as_ref().clone(), i),
@@ -582,7 +582,7 @@ impl VM {
                             );
                         }
 
-                        if !v.fits(&n) {
+                        if !v.fits(&n, &prog.blobs) {
                             error!(
                                 self,
                                 RuntimeError::TypeMismatch(v.as_ref().clone(), n),
@@ -605,7 +605,7 @@ impl VM {
                 match (Type::from(container), Type::from(element)) {
                     (Type::List(v), e) | (Type::Set(v), e) | (Type::Dict(v, _), e) => {
                         self.push(Type::Bool);
-                        if !v.fits(&e) {
+                        if !v.fits(&e, &prog.blobs) {
                             error!(
                                 self,
                                 RuntimeError::TypeMismatch(v.as_ref().clone(), e),
@@ -641,7 +641,7 @@ impl VM {
 
                             for (field, ty) in values.iter() {
                                 match blob.fields.get(field) {
-                                    Some(given_ty) if given_ty.fits(ty) => {}
+                                    Some(given_ty) if given_ty.fits(ty, &prog.blobs) => {}
                                     Some(given_ty) => {
                                         return Err(RuntimeError::FieldTypeMismatch(
                                                 blob.name.clone(),
@@ -661,7 +661,7 @@ impl VM {
 
                             for (field, ty) in blob.fields.iter() {
                                 match (values.get(field), ty) {
-                                    (Some(t), ty) if ty.fits(t) => {}
+                                    (Some(t), ty) if ty.fits(t, &prog.blobs) => {}
                                     (Some(t), ty) => {
                                         return Err(RuntimeError::FieldTypeMismatch(
                                                 blob.name.clone(),
@@ -670,7 +670,7 @@ impl VM {
                                                 t.clone(),
                                         ))
                                     }
-                                    (None, ty) if ty.fits(&Type::Void) => {}
+                                    (None, ty) if ty.fits(&Type::Void, &prog.blobs) => {}
                                     (None, ty) => {
                                         return Err(RuntimeError::FieldTypeMismatch(
                                                 blob.name.clone(),
@@ -686,17 +686,21 @@ impl VM {
                         }
 
                         Type::Function(fargs, fret) => {
-                            if fargs != &args {
-                                Err(RuntimeError::ArgumentType(fargs.clone(), args))
-                            } else {
+                            if fargs.iter().zip(args.iter()).all(|(a, b)| a.fits(b, &prog.blobs)) {
                                 Ok((**fret).clone())
+                            } else {
+                                Err(RuntimeError::ArgumentType(fargs.clone(), args))
                             }
                         }
 
                         Type::ExternFunction(slot) => {
                             let extern_func = prog.functions[*slot];
                             let args: Vec<_> = self.stack[new_base + 1..].to_vec().into_iter().map(Value::from).collect();
-                            extern_func(&args, true).map(|r| r.into())
+                            let ctx = RuntimeContext {
+                                typecheck: true,
+                                blobs: &prog.blobs,
+                            };
+                            extern_func(&args, ctx).map(|r| r.into())
                         }
 
                         Type::Unknown => Ok(Type::Unknown),
