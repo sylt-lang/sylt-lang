@@ -224,11 +224,12 @@ impl VM {
             Op::AssignLocal(slot) => {
                 let current = self.stack[slot].clone();
                 let given = self.pop();
-                if !current.fits(&given, &prog.blobs) {
+                if let Err(msg) = current.fits(&given, &prog.blobs) {
                     error!(
                         self,
                         RuntimeError::TypeMismatch(current, given),
-                        "Cannot assign to different type"
+                        "Failed to assign. {}",
+                        msg
                     );
                 }
 
@@ -255,11 +256,12 @@ impl VM {
             Op::AssignGlobal(slot) => {
                 let current = self.global_types[slot].clone();
                 let given = self.pop();
-                if !current.fits(&given, &prog.blobs) {
+                if let Err(msg) = current.fits(&given, &prog.blobs) {
                     error!(
                         self,
                         RuntimeError::TypeMismatch(current, given),
-                        "Cannot assign to different type"
+                        "Failed to assign. {}",
+                        msg
                     );
                 }
             }
@@ -382,11 +384,12 @@ impl VM {
             Op::AssignUpvalue(slot) => {
                 let current = self.upvalues.get(slot).unwrap().clone();
                 let up = self.pop();
-                if !current.fits(&up, &prog.blobs) {
+                if let Err(msg) = current.fits(&up, &prog.blobs) {
                     error!(
                         self,
                         RuntimeError::TypeMismatch(up, current),
-                        "Captured varibles type doesn't match upvalue"
+                        "Captured varibles type doesn't match upvalue type. {}",
+                        msg
                     );
                 }
                 if matches!(current, Type::Unknown) {
@@ -419,16 +422,18 @@ impl VM {
                 let top_type = self.stack.last().unwrap().clone();
                 match (ty, top_type) {
                     (Type::Unknown, top_type) if top_type != Type::Unknown => {}
-                    (a, b) if a.fits(&b, &prog.blobs) => {
-                        let last = self.stack.len() - 1;
-                        self.stack[last] = a;
-                    }
                     (a, b) => {
-                        error!(
-                            self,
-                            RuntimeError::TypeMismatch(a.clone(), b),
-                            "Cannot assign mismatching types"
-                        );
+                        if let Err(msg) = a.fits(&b, &prog.blobs) {
+                            error!(
+                                self,
+                                RuntimeError::TypeMismatch(a.clone(), b),
+                                "Cannot define mismatching types. {}",
+                                msg
+                            );
+                        } else {
+                            let last = self.stack.len() - 1;
+                            self.stack[last] = a;
+                        }
                     }
                 }
             }
@@ -542,17 +547,24 @@ impl VM {
 
             Op::GetIndex => {
                 match self.poppop() {
-                    (Type::List(a), b) if b.fits(&Type::Int, &prog.blobs) => {
+                    (Type::List(a), b) if b.fits(&Type::Int, &prog.blobs).is_ok() => {
                         self.push((*a).clone());
                     }
-                    (Type::Tuple(a), b) if b.fits(&Type::Int, &prog.blobs) => {
+                    (Type::Tuple(a), b) if b.fits(&Type::Int, &prog.blobs).is_ok() => {
                         self.push(Type::Union(a.iter().cloned().collect()));
                     }
-                    (Type::Dict(k, v), i) if k.fits(&i, &prog.blobs) => {
+                    (Type::Dict(k, v), i) if k.fits(&i, &prog.blobs).is_ok() => {
                         self.push((*v).clone());
                     }
-                    _ => {
+                    (a, b) => {
                         self.push(Type::Void);
+                        error!(
+                            self,
+                            RuntimeError::TypeError(op, vec![]),
+                            "Failed to index '{:?}' with '{:?}'",
+                            a,
+                            b
+                        );
                     }
                 }
             }
@@ -564,29 +576,33 @@ impl VM {
                 match (indexable, slot, value) {
                     (Type::List(v), Type::Int, n) => match (v.as_ref(), &n) {
                         (Type::Unknown, top_type) if top_type != &Type::Unknown => {}
-                        (a, b) if a.fits(b, &prog.blobs) => {}
                         (a, b) => {
-                            error!(
-                                self,
-                                RuntimeError::TypeMismatch(a.clone(), b.clone()),
-                                "Cannot assign mismatching types"
-                            );
+                            if let Err(msg) = a.fits(b, &prog.blobs) {
+                                error!(
+                                    self,
+                                    RuntimeError::TypeMismatch(a.clone(), b.clone()),
+                                    "Cannot assign mismatching types. {}",
+                                    msg
+                                );
+                            }
                         }
                     },
                     (Type::Dict(k, v), i, n) => {
-                        if !k.fits(&i, &prog.blobs) {
+                        if let Err(msg) = k.fits(&i, &prog.blobs) {
                             error!(
                                 self,
-                                RuntimeError::TypeMismatch(k.as_ref().clone(), i),
-                                "Cannot index mismatching types"
+                                RuntimeError::TypeMismatch(*k.clone(), i.clone()),
+                                "Cannot index with missmatching types. {}",
+                                msg
                             );
                         }
 
-                        if !v.fits(&n, &prog.blobs) {
+                        if let Err(msg) = v.fits(&n, &prog.blobs) {
                             error!(
                                 self,
-                                RuntimeError::TypeMismatch(v.as_ref().clone(), n),
-                                "Cannot assign mismatching types"
+                                RuntimeError::TypeMismatch(*v.clone(), n.clone()),
+                                "Cannot assign with missmatching types. {}",
+                                msg
                             );
                         }
                     }
@@ -605,11 +621,12 @@ impl VM {
                 match (Type::from(container), Type::from(element)) {
                     (Type::List(v), e) | (Type::Set(v), e) | (Type::Dict(v, _), e) => {
                         self.push(Type::Bool);
-                        if !v.fits(&e, &prog.blobs) {
+                        if let Err(msg) = v.fits(&e, &prog.blobs) {
                             error!(
                                 self,
                                 RuntimeError::TypeMismatch(v.as_ref().clone(), e),
-                                "Container does not contain the type"
+                                "Container does not contain the type. {}",
+                                msg
                             );
                         }
                     }
@@ -641,14 +658,16 @@ impl VM {
 
                             for (field, ty) in values.iter() {
                                 match blob.fields.get(field) {
-                                    Some(given_ty) if given_ty.fits(ty, &prog.blobs) => {}
                                     Some(given_ty) => {
-                                        return Err(RuntimeError::FieldTypeMismatch(
-                                                blob.name.clone(),
-                                                field.clone(),
-                                                ty.clone(),
-                                                given_ty.clone(),
-                                        ));
+                                        if let Err(msg) = given_ty.fits(ty, &prog.blobs) {
+                                            return Err(RuntimeError::FieldTypeMismatch(
+                                                    blob.name.clone(),
+                                                    field.clone(),
+                                                    ty.clone(),
+                                                    given_ty.clone(),
+                                                    msg,
+                                            ));
+                                        }
                                     }
                                     None => {
                                         return Err(RuntimeError::UnknownField(
@@ -661,23 +680,27 @@ impl VM {
 
                             for (field, ty) in blob.fields.iter() {
                                 match (values.get(field), ty) {
-                                    (Some(t), ty) if ty.fits(t, &prog.blobs) => {}
                                     (Some(t), ty) => {
-                                        return Err(RuntimeError::FieldTypeMismatch(
-                                                blob.name.clone(),
-                                                field.clone(),
-                                                ty.clone(),
-                                                t.clone(),
-                                        ))
+                                        if let Err(msg) = ty.fits(t, &prog.blobs) {
+                                            return Err(RuntimeError::FieldTypeMismatch(
+                                                    blob.name.clone(),
+                                                    field.clone(),
+                                                    ty.clone(),
+                                                    t.clone(),
+                                                    msg,
+                                            ));
+                                        }
                                     }
-                                    (None, ty) if ty.fits(&Type::Void, &prog.blobs) => {}
                                     (None, ty) => {
-                                        return Err(RuntimeError::FieldTypeMismatch(
-                                                blob.name.clone(),
-                                                field.clone(),
-                                                ty.clone(),
-                                                Type::Void,
-                                        ));
+                                        if let Err(msg) = ty.fits(&Type::Void, &prog.blobs) {
+                                            return Err(RuntimeError::FieldTypeMismatch(
+                                                    blob.name.clone(),
+                                                    field.clone(),
+                                                    ty.clone(),
+                                                    Type::Void,
+                                                    msg,
+                                            ));
+                                        }
                                     }
                                 }
                             }
@@ -686,11 +709,12 @@ impl VM {
                         }
 
                         Type::Function(fargs, fret) => {
-                            if fargs.iter().zip(args.iter()).all(|(a, b)| a.fits(b, &prog.blobs)) {
-                                Ok((**fret).clone())
-                            } else {
-                                Err(RuntimeError::ArgumentType(fargs.clone(), args))
+                            for (a, b) in fargs.iter().zip(args.iter()) {
+                                if let Err(msg) = a.fits(b, &prog.blobs) {
+                                    return Err(RuntimeError::ArgumentType(fargs.clone(), args, msg));
+                                }
                             }
+                            Ok((**fret).clone())
                         }
 
                         Type::ExternFunction(slot) => {

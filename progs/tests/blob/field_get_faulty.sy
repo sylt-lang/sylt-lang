@@ -12,5 +12,3 @@ f :: fn a:int -> int {
 // error: #UnknownField(_, _)
 // error: #UnknownField(_, _)
 // error: #UnknownField(_, _)
-// error: #ArgumentType(_, _)
-// error: #TypeMismatch(_, _)

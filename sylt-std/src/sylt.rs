@@ -220,9 +220,9 @@ sylt_macro::extern_function!(
 
 
 pub fn union_type<'t>(a: Type, b: Type, blobs: &[Blob]) -> Type{
-    if a.fits(&b, blobs) {
+    if a.fits(&b, blobs).is_ok() {
         a
-    } else if b.fits(&a, blobs) {
+    } else if b.fits(&a, blobs).is_ok() {
         b
     } else {
         match (a, b) {

@@ -170,26 +170,91 @@ impl Type {
     // TODO(ed): Swap order of arguments
     /// Checks if the other type is valid in a place where the self type is. It's an asymmetrical
     /// comparison for types useful when checking assignment.
-    pub fn fits(&self, other: &Self, blobs: &[Blob]) -> bool {
+    pub fn fits(&self, other: &Self, blobs: &[Blob]) -> Result<(), String> {
         match (self, other) {
-            (Type::Unknown, _) | (_, Type::Unknown) => true,
+            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
             (Type::List(a), Type::List(b)) => a.fits(b, blobs),
             (Type::Set(a), Type::Set(b)) => a.fits(b, blobs),
-            (Type::Dict(ak, av), Type::Dict(bk, bv)) => ak.fits(bk, blobs) && av.fits(bv, blobs),
-            (Type::Union(a), Type::Union(b)) => b.iter().all(|x| a.contains(x)),
+            (Type::Dict(ak, av), Type::Dict(bk, bv)) => {
+                ak.fits(bk, blobs)?; av.fits(bv, blobs)
+            }
+            (Type::Union(_), Type::Union(b)) => {
+                for x in b.iter() {
+                    // NOTE(ed): Does this cause infinet recursion?
+                    if let Err(_) = self.fits(x, blobs) {
+                        return Err(
+                            format!(
+                                "'{:?}' doesn't fit a '{:?}'",
+                                self,
+                                other
+                        ))
+                    }
+                }
+                Ok(())
+            }
             (Type::Instance(a), Type::Instance(b)) => {
                 let a_fields = &blobs[*a].fields;
                 let b_fields = &blobs[*b].fields;
-                a_fields.iter().all(|(f, t)| {
+                for (f, t) in a_fields.iter() {
                     if let Some(y) = b_fields.get(f) {
-                        t.fits(y, blobs)
+                        // NOTE(ed): It might be tempting to put a `fits`
+                        // call here. Don't! It will cause infinet recursion
+                        // if a type that has itself as a field in any way.
+                        if t != y {
+                            return Err(
+                                format!(
+                                    "'{}' is not a '{}', field '{:?}' has type '{:?}' but expected '{:?}'",
+                                    blobs[*a].name,
+                                    blobs[*b].name,
+                                    f,
+                                    y,
+                                    t
+                            ))
+                        }
                     } else {
-                        false
+                        return Err(
+                            format!(
+                                "'{:?}' is not a '{:?}', '{:?}' has no field '{:?}'",
+                                blobs[*a].name,
+                                blobs[*b].name,
+                                blobs[*b].name,
+                                f
+                        ))
                     }
-                })
+                };
+                Ok(())
             }
-            (_, Type::Union(_)) => false,
-            (a, b) => a == b, // Handles (Union(?) < T)
+            (a, Type::Union(b)) => {
+                for x in b.iter() {
+                    if x != a {
+                        return Err(format!(
+                                "'{:?}' cannot fit a '{:?}'",
+                                a,
+                                other
+                        ));
+                    }
+                }
+                Ok(())
+            }
+            (Type::Union(a), b) => {
+                for x in a.iter() {
+                    if x == b {
+                        return Ok(());
+                    }
+                }
+                Err(format!(
+                        "'{:?}' cannot fit a '{:?}'",
+                        self,
+                        other
+                ))
+            }
+            (a, b) => {
+                if a == b {
+                    Ok(())
+                } else {
+                    Err(format!("'{:?}' is not a '{:?}'", a, b))
+                }
+            }
         }
     }
 

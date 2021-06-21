@@ -38,11 +38,12 @@ fn file_line_display(file: &Path, line: Option<usize>) -> String {
 
 #[derive(Debug, Clone)]
 pub enum RuntimeError {
-    FieldTypeMismatch(String, String, Type, Type),
+    FieldTypeMismatch(String, String, Type, Type, String),
     TypeError(Op, Vec<Type>),
+    TypeCompare(String),
     TypeMismatch(Type, Type),
     CannotInfer(Type, Type),
-    ArgumentType(Vec<Type>, Vec<Type>),
+    ArgumentType(Vec<Type>, Vec<Type>, String),
     IndexError(Value, Type),
 
     /// (External function, parameters)
@@ -98,7 +99,6 @@ pub enum Error {
         line: usize,
         message: Option<String>,
     },
-
 
     GitConflictError {
         file: PathBuf,
@@ -193,8 +193,8 @@ impl fmt::Display for Error {
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RuntimeError::FieldTypeMismatch(obj, field, a, b) => {
-                write!(f, "Field {}.{} expected {:?} but got {:?}", obj, field, a, b)
+            RuntimeError::FieldTypeMismatch(obj, field, a, b, msg) => {
+                write!(f, "Field {}.{} expected {:?} but got {:?}. {}", obj, field, a, b, msg)
             }
             RuntimeError::TypeError(op, types) => {
                 let types = types
@@ -202,13 +202,16 @@ impl fmt::Display for RuntimeError {
                     .fold(String::new(), |a, v| format!("{}{:?}, ", a, v));
                 write!(f, "Cannot apply {:?} to types {}", op, types)
             }
+            RuntimeError::TypeCompare(msg) => {
+                write!(f, "{}", msg)
+            }
             RuntimeError::TypeMismatch(a, b) => {
                 write!(f, "Expected '{:?}' and got '{:?}'", a, b)
             }
             RuntimeError::CannotInfer(a, b) => {
                 write!(f, "Failed to infer type '{:?}' from '{:?}'", a, b)
             }
-            RuntimeError::ArgumentType(a, b) => {
+            RuntimeError::ArgumentType(a, b, msg) => {
                 let expected = a
                     .iter()
                     .fold(String::new(), |a, v| format!("{}{:?}, ", a, v));
@@ -217,8 +220,8 @@ impl fmt::Display for RuntimeError {
                     .fold(String::new(), |a, v| format!("{}{:?}, ", a, v));
                 write!(
                     f,
-                    "Argument types do not match, expected [{:?}] but got [{:?}]",
-                    expected, given
+                    "Argument types do not match, expected [{:?}] but got [{:?}]. {}",
+                    expected, given, msg
                 )
             }
             RuntimeError::IndexError(value, slot) => {
