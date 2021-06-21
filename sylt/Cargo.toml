@@ -1,0 +1,34 @@
+[package]
+name = "sylt"
+version = "0.1.0"
+authors = ["Edvard Thörnros <edvard.thornros@gmail.com>", "Gustav Sörnäs <gustav@sornas.net>"]
+edition = "2018"
+default-run = "sylt"
+
+[lib]
+name = "sylt"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+sylt-common = { path = "../sylt-common" }
+sylt-compiler = { path = "../sylt-compiler" }
+sylt-machine = { path = "../sylt-machine" }
+sylt-parser = { path = "../sylt-parser" }
+sylt-std = { path = "../sylt-std", default-features = false }
+sylt-tokenizer = { path = "../sylt-tokenizer" }
+sylt-typechecker = { path = "../sylt-typechecker" }
+
+owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
+sylt_macro = { path = "../sylt_macro" }
+gumdrop = "0.8"
+
+criterion = { version = "0.3", optional = true }
+
+[features]
+lingon = [ "sylt-std/lingon" ]
+default = [ "lingon" ]
+
+#[[bench]]
+#name = "sylt_benchmark"
+#harness = false

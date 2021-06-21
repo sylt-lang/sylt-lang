@@ -1,14 +1,17 @@
-use crate::error::Error;
-use crate::rc::Rc;
-use crate::tokenizer::file_to_tokens;
-use crate::tokenizer::Token;
-use crate::Next;
-use crate::Type as RuntimeType;
+use sylt_common::Type as RuntimeType;
+
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
+use sylt_common::error::Error;
+use sylt_common::rc::Rc;
+use sylt_tokenizer::{Token, file_to_tokens};
 
 type T = Token;
+
+pub trait Next {
+    fn next(&self) -> Self;
+}
 
 #[derive(Debug, Copy, Clone)]
 /// A location in a file containing source code.
@@ -21,7 +24,7 @@ pub struct Span {
 
 /// Contains modules.
 #[derive(Debug, Clone)]
-pub struct Prog {
+pub struct AST {
     pub modules: Vec<(PathBuf, Module)>,
 }
 
@@ -1672,7 +1675,7 @@ pub fn find_conflict_markers(file: &Path) -> Vec<Error> {
 ///
 /// Returns any errors that occured when parsing the file(s). Basic error
 /// continuation is performed as documented in [module].
-pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
+pub fn tree(path: &Path) -> Result<AST, Vec<Error>> {
     // Files we've already parsed. This ensures circular includes don't parse infinitely.
     let mut visited = HashSet::new();
     // Files we want to parse but haven't yet.
@@ -1713,7 +1716,7 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
     }
 
     if errors.is_empty() {
-        Ok(Prog { modules })
+        Ok(AST { modules })
     } else {
         Err(errors)
     }
@@ -1722,7 +1725,7 @@ pub fn tree(path: &Path) -> Result<Prog, Vec<Error>> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::tokenizer::string_to_tokens;
+    use sylt_tokenizer::string_to_tokens;
 
     macro_rules! test {
         ($f:ident, $name:ident: $str:expr => $ans:pat) => {

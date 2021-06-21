@@ -1,4 +1,4 @@
-use lazy_static::{lazy_static};
+use lazy_static::lazy_static;
 use quote::{format_ident, quote};
 use std::collections::HashMap;
 use std::path::Path;
@@ -84,7 +84,7 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
         let pat = block.pattern.clone();
         let ty = block.return_ty.clone();
         quote! {
-            #pat => { Ok(self::sylt::Value::from(#ty)) }
+            #pat => { Ok(sylt_common::Value::from(#ty)) }
         }
     }).collect();
 
@@ -100,29 +100,31 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
         #[sylt_macro::sylt_doc(#function, #doc , #( #matches ),*)]
         #[sylt_macro::sylt_link(#link_name, #module)]
         pub fn #function (
-            __values: &[self::sylt::Value],
+            __values: &[sylt_common::Value],
             __typecheck: bool
-        ) -> ::std::result::Result<self::sylt::Value, self::sylt::error::RuntimeError>
+        ) -> ::std::result::Result<sylt_common::Value, sylt_common::error::RuntimeError>
         {
-            use self::sylt::Value::*;
-            use self::sylt::MatchableValue::*;
+            use sylt_common::MatchableValue::*;
+            use sylt_common::RustFunction;
+            use sylt_common::Value::*;
+            use sylt_common::value::make_matchable;
             if __typecheck {
                 let matching: Vec<_> = __values.iter().map(make_matchable).collect();
                 #[allow(unused_variables)]
                 match matching.as_slice() {
                     #(#typecheck_blocks),*
-                    _ => Err(self::sylt::error::RuntimeError::ExternTypeMismatch(
+                    _ => Err(sylt_common::error::RuntimeError::ExternTypeMismatch(
                         stringify!(#function).to_string(),
-                        __values.iter().map(|v| self::sylt::Type::from(v)).collect()
+                        __values.iter().map(|v| sylt_common::Type::from(v)).collect()
                     ))
                 }
             } else {
                 let matching: Vec<_> = __values.iter().map(make_matchable).collect();
                 match matching.as_slice() {
                     #(#eval_blocks),*
-                    _ => Err(self::sylt::error::RuntimeError::ExternTypeMismatch(
+                    _ => Err(sylt_common::error::RuntimeError::ExternTypeMismatch(
                         stringify!(#function).to_string(),
-                        __values.iter().map(|v| self::sylt::Type::from(v)).collect()
+                        __values.iter().map(|v| sylt_common::Type::from(v)).collect()
                     ))
                 }
             }
@@ -423,7 +425,7 @@ pub fn sylt_link_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
     }).collect();
 
     let tokens = quote! {
-        pub fn _sylt_link() -> Vec<(std::string::String, RustFunction)> {
+        pub fn _sylt_link() -> Vec<(std::string::String, ::sylt_common::RustFunction)> {
             vec! [ #(#funs)* ]
         }
     };
@@ -474,7 +476,7 @@ impl DocFile {
         use std::fs::File;
         use std::io::prelude::*;
         match File::create(&Path::new("docs/docs.json")) {
-            Err(msg) => eprintln!("Failed to write docs: {}", msg),
+            Err(_msg) => (), //TODO(gu) report errors
             Ok(mut file) => {
                 write!(file, "[\n{}\n]", self.docs.join(",\n")).unwrap();
             }

@@ -1,8 +1,13 @@
-use crate::*;
-use crate as sylt;
+use crate as sylt_std;
+
+use owo_colors::OwoColorize;
+use sylt_common::error::RuntimeError;
+use sylt_common::rc::Rc;
+use std::cell::RefCell;
+use sylt_common::{Type, Value};
 
 #[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", [One(Value(val))] Type::Void)]
-#[sylt_macro::sylt_link(dbg, "sylt::lib_sylt")]
+#[sylt_macro::sylt_link(dbg, "sylt_std::sylt")]
 pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
     println!(
         "{}: {:?}, {:?}",
@@ -14,12 +19,11 @@ pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
 }
 
 #[sylt_macro::sylt_doc(push, "Appends an element to the end of a list", [One(List(ls)), One(Value(val))] Type::Void)]
-#[sylt_macro::sylt_link(push, "sylt::lib_sylt")]
+#[sylt_macro::sylt_link(push, "sylt_std::sylt")]
 pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
         ([Value::List(ls), v], true) => {
-            let ls: &RefCell<_> = ls.borrow();
-            let ls = &ls.borrow();
+            let ls = ls.borrow();
             assert!(ls.len() == 1);
             let ls = Type::from(&ls[0]);
             let v: Type = Type::from(&*v);
@@ -31,7 +35,6 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
         }
         ([Value::List(ls), v], false) => {
             // NOTE(ed): Deliberately no type checking.
-            let ls: &RefCell<_> = ls.borrow();
             ls.borrow_mut().push(v.clone());
             Ok(Value::Nil)
         }
@@ -43,11 +46,10 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
 }
 
 #[sylt_macro::sylt_doc(clear, "Removes all elements from the list", [One(List(ls))] Type::Void)]
-#[sylt_macro::sylt_link(clear, "sylt::lib_sylt")]
+#[sylt_macro::sylt_link(clear, "sylt_std::sylt")]
 pub fn clear(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
         ([Value::List(ls)], _) => {
-            let ls: &RefCell<_> = ls.borrow();
             ls.borrow_mut().clear();
             Ok(Value::Nil)
         }
@@ -60,11 +62,10 @@ pub fn clear(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
 
 
 #[sylt_macro::sylt_doc(prepend, "Adds an element to the start of a list", [One(List(ls)), One(Value(val))] Type::Void)]
-#[sylt_macro::sylt_link(prepend, "sylt::lib_sylt")]
+#[sylt_macro::sylt_link(prepend, "sylt_std::sylt")]
 pub fn prepend(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
         ([Value::List(ls), v], true) => {
-            let ls: &RefCell<_> = ls.borrow();
             let ls = &ls.borrow();
             assert!(ls.len() == 1);
             let ls = Type::from(&ls[0]);
@@ -77,7 +78,6 @@ pub fn prepend(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError>
         }
         ([Value::List(ls), v], false) => {
             // NOTE(ed): Deliberately no type checking.
-            let ls: &RefCell<_> = ls.borrow();
             ls.borrow_mut().insert(0, v.clone());
             Ok(Value::Nil)
         }
@@ -89,14 +89,14 @@ pub fn prepend(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError>
 }
 
 #[sylt_macro::sylt_doc(len, "Gives the length of tuples and lists", [One(Tuple(ls))] Type::Int, [One(List(ls))] Type::Int)]
-#[sylt_macro::sylt_link(len, "sylt::lib_sylt")]
+#[sylt_macro::sylt_link(len, "sylt_std::sylt")]
 pub fn len(values: &[Value], _: bool) -> Result<Value, RuntimeError> {
     match values {
         [Value::Tuple(ls)] => {
             Ok(Value::Int(ls.len() as i64))
         }
         [Value::List(ls)] => {
-            Ok(Value::Int(RefCell::borrow(ls).len() as i64))
+            Ok(Value::Int(ls.borrow().len() as i64))
         }
         [_] => {
             Ok(Value::Int(0))
@@ -109,7 +109,7 @@ pub fn len(values: &[Value], _: bool) -> Result<Value, RuntimeError> {
 }
 
 sylt_macro::extern_function!(
-    "sylt::lib_sylt"
+    "sylt_std::sylt"
     atan2
     ""
     [One(Float(x)), One(Float(y))] -> Type::Float => {
@@ -119,7 +119,7 @@ sylt_macro::extern_function!(
 
 
 sylt_macro::extern_function!(
-    "sylt::lib_sylt"
+    "sylt_std::sylt"
     sin
     "The sine function you know and love from trigonometry class"
     [One(Float(t))] -> Type::Float => {
@@ -128,7 +128,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lib_sylt"
+    "sylt_std::sylt"
     cos
     "The cosine function you know and love from trigonometry class"
     [One(Float(t))] -> Type::Float => {
@@ -137,7 +137,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lib_sylt"
+    "sylt_std::sylt"
     as_float
     "Converts the int to a float"
     [One(Int(t))] -> Type::Float => {
@@ -149,7 +149,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lib_sylt"
+    "sylt_std::sylt"
     as_int
     "Converts the int to a float"
     [One(Float(t))] -> Type::Int => {
@@ -158,7 +158,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lib_sylt"
+    "sylt_std::sylt"
     sqrt
     "Returns the square root"
     [One(Float(x))] -> Type::Float => {
@@ -167,7 +167,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lib_sylt"
+    "sylt_std::sylt"
     abs
     "Returns the square root"
     [One(Float(x))] -> Type::Float => {
@@ -176,7 +176,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lib_sylt"
+    "sylt_std::sylt"
     clamp
     "Clamps the value 'a' between 'lo' and 'hi'"
     [One(Float(a)), One(Float(lo)), One(Float(hi))] -> Type::Float => {
@@ -188,7 +188,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lib_sylt"
+    "sylt_std::sylt"
     min
     "Returns the smallest"
     [One(Float(a)), One(Float(b))] -> Type::Float => {
@@ -197,7 +197,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lib_sylt"
+    "sylt_std::sylt"
     max
     "Returns the largest"
     [One(Float(a)), One(Float(b))] -> Type::Float => {
@@ -206,7 +206,7 @@ sylt_macro::extern_function!(
 );
 
 sylt_macro::extern_function!(
-    "sylt::lib_sylt"
+    "sylt_std::sylt"
     rem
     "Returns the remainder after division"
     [One(Float(x)), One(Float(y))] -> Type::Float => {
@@ -242,11 +242,10 @@ pub fn union_type(a: Type, b: Type) -> Type{
 }
 
 #[sylt_macro::sylt_doc(pop, "Removes the last element in the list, and returns it", [One(List(l))] Type::Value)]
-#[sylt_macro::sylt_link(pop, "sylt::lib_sylt")]
+#[sylt_macro::sylt_link(pop, "sylt_std::sylt")]
 pub fn pop(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
         ([Value::List(ls)], true) => {
-            let ls: &RefCell<_> = ls.borrow();
             let ls = &ls.borrow();
             // TODO(ed): Write correct typing
             let ls = Type::from(&ls[0]);
@@ -255,7 +254,6 @@ pub fn pop(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
         }
         ([Value::List(ls)], false) => {
             // NOTE(ed): Deliberately no type checking.
-            let ls: &RefCell<_> = ls.borrow();
             let last = ls.borrow_mut().pop().unwrap_or(Value::Nil);
             Ok(last)
         }
@@ -267,7 +265,7 @@ pub fn pop(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
 }
 
 #[sylt_macro::sylt_doc(inf, "Returns an infinite iterator, spitting out the value you give it", [One(Value(val))] Type::Iter)]
-#[sylt_macro::sylt_link(inf, "sylt::lib_sylt")]
+#[sylt_macro::sylt_link(inf, "sylt_std::sylt")]
 pub fn inf(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
     match values {
         [x] => {
@@ -282,5 +280,4 @@ pub fn inf(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
     }
 }
 
-
-sylt_macro::sylt_link_gen!("sylt::lib_sylt");
+sylt_macro::sylt_link_gen!("sylt_std::sylt");

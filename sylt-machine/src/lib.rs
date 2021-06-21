@@ -2,10 +2,9 @@ use owo_colors::OwoColorize;
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt::Debug;
-
-use crate::error::{Error, RuntimeError, RuntimePhase};
-use crate::rc::Rc;
-use crate::{Block, BlockLinkState, IterFn, Op, Blob, Prog, RustFunction, Type, UpValue, Value};
+use sylt_common::error::{Error, RuntimeError, RuntimePhase};
+use sylt_common::rc::Rc;
+use sylt_common::{Block, BlockLinkState, Blob, IterFn, Op, Prog, RustFunction, Type, UpValue, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -79,7 +78,7 @@ pub enum OpResult {
 }
 
 impl VM {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             upvalues: HashMap::new(),
 

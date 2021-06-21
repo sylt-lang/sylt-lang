@@ -1,32 +1,15 @@
-[package]
-name = "sylt"
-version = "0.1.0"
-authors = ["Edvard Thörnros <edvard.thornros@gmail.com>", "Gustav Sörnäs <gustav@sornas.net>"]
-edition = "2018"
-default-run = "sylt"
+[workspace]
 
-[lib]
-name = "sylt"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-logos = "0.12"
-owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
-sylt_macro = { path = "sylt_macro" }
-gumdrop = "0.8"
-
-criterion = { version = "0.3", optional = true }
-lingon = { git = "https://github.com/sornas/lingon.git", branch = "main", optional = true }
-lazy_static = "1"
+members = [
+    "sylt",
+    "sylt-common",
+    "sylt-compiler",
+    "sylt-machine",
+    "sylt-parser",
+    "sylt-std",
+    "sylt-tokenizer",
+    "sylt-typechecker"
+]
 
 [profile.release]
 lto = "thin"
-
-[features]
-default = ["lingon"]
-bundled = ["lingon/bundled"]
-
-[[bench]]
-name = "sylt_benchmark"
-harness = false
