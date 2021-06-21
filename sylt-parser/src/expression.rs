@@ -1,9 +1,12 @@
 use sylt_common::error::Error;
 
-use crate::{Assignable, Context, Expression, Identifier, Next, ParseResult, Prec, T, Type, assignable, block_statement, expect, parse_type, raise_syntax_error, syntax_error};
+use super::*;
 
 /// Parse an [ExpressionKind::Function]: `fn a: int, b: bool -> bool <statement>`
 fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+    use RuntimeType::Void;
+    use TypeKind::Resolved;
+
     let span = ctx.span();
     let mut ctx = expect!(ctx, T::Fn, "Expected 'fn' for function expression");
     let mut params = Vec::new();
@@ -37,8 +40,6 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                     ctx = _ctx; // assign to outer
                     ret
                 } else {
-                    use crate::RuntimeType::Void;
-                    use crate::TypeKind::Resolved;
                     Type {
                         // If we couldn't parse the return type, we assume `-> Void`.
                         span: ctx.span(),
@@ -48,8 +49,6 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             }
 
             T::LeftBrace => {
-                use crate::RuntimeType::Void;
-                use crate::TypeKind::Resolved;
                 // No return type so we assume `-> Void`.
                 break Type {
                     span: ctx.span(),
@@ -63,7 +62,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         }
     };
 
-    use crate::ExpressionKind::Function;
+    use ExpressionKind::Function;
     // Parse the function statement.
     let (ctx, statement) = block_statement(ctx)?;
     let function = Function {
@@ -104,6 +103,8 @@ fn parse_precedence<'t>(ctx: Context<'t>, prec: Prec) -> ParseResult<'t, Express
 /// variants.
 #[rustfmt::skip]
 fn precedence(token: &T) -> Prec {
+    use Prec;
+
     match token {
         T::LeftBracket => Prec::Index,
 
@@ -133,7 +134,7 @@ fn precedence(token: &T) -> Prec {
 
 /// Parse a single (primitive) value.
 fn value<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Expression), (Context<'t>, Vec<Error>)> {
-    use crate::ExpressionKind::*;
+    use ExpressionKind::*;
     let (token, span, ctx) = ctx.eat();
     let kind = match token.clone() {
         T::Float(f) => Float(f),
@@ -150,7 +151,7 @@ fn value<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Expression), (Context<'t>
 
 /// Parse something that begins at the start of an expression.
 fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-    use crate::ExpressionKind::Get;
+    use ExpressionKind::Get;
 
     match ctx.token() {
         T::LeftParen => grouping_or_tuple(ctx),
@@ -185,7 +186,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
 /// Parse a unary operator followed by an expression, e.g. `-5`.
 fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-    use crate::ExpressionKind::{Neg, Not};
+    use ExpressionKind::{Neg, Not};
 
     let (op, span, ctx) = ctx.eat();
     let (ctx, expr) = parse_precedence(ctx, Prec::Factor)?;
@@ -204,7 +205,7 @@ fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
 /// Parse an expression starting from an infix operator. Called by `parse_precedence`.
 fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
-    use crate::ExpressionKind::*;
+    use ExpressionKind::*;
 
     // Parse an operator and a following expression
     // until we reach a token with higher precedence.
@@ -239,7 +240,7 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
 
         // The cool arrow syntax. For example: `a->b(2)` compiles to `b(a, 2)`.
         T::Arrow => {
-            use crate::AssignableKind::Call;
+            use AssignableKind::Call;
             // Rhs has to be an ExpressionKind::Get(AssignableKind::Call).
             if let Get(Assignable { kind: Call(callee, mut args), ..  }) = rhs.kind {
                 // Insert lhs as the first argument.
@@ -300,7 +301,7 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
     ctx = expect!(ctx, T::RightParen, "Expected ')'");
 
-    use crate::ExpressionKind::Tuple;
+    use ExpressionKind::Tuple;
     let result = if is_tuple {
         Expression {
             span,
@@ -360,7 +361,7 @@ fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         raise_syntax_error!(ctx, "Parsed a blob instance not an if-statement");
     }
 
-    use crate::ExpressionKind::Instance;
+    use ExpressionKind::Instance;
     Ok((
         ctx,
         Expression {
@@ -399,7 +400,7 @@ fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     }
 
     ctx = expect!(ctx, T::RightBracket, "Expected ']'");
-    use crate::ExpressionKind::List;
+    use ExpressionKind::List;
     Ok((
         ctx,
         Expression {
@@ -465,7 +466,7 @@ fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
     ctx = expect!(ctx, T::RightBrace, "Expected '}}'");
 
-    use crate::ExpressionKind::{Dict, Set};
+    use ExpressionKind::{Dict, Set};
     // If we still don't know, assume we're a set.
     let kind = if is_dict.unwrap_or(false) {
         Dict(exprs)
@@ -498,7 +499,7 @@ mod test {
     use crate::AssignableKind::*;
     use crate::ExpressionKind::*;
     use crate::test;
-    use super::expression;
+    use crate::expression;
 
     test!(expression, value: "0" => Int(0));
     test!(expression, add: "0 + 1.0" => Add(_, _));
