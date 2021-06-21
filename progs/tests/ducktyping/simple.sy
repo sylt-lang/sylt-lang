@@ -1,0 +1,11 @@
+A :: blob { a: int }
+B :: blob { a: int, b: int }
+
+f :: fn a: A -> int { ret a.a }
+
+start :: fn {
+	b :: B { a: 0, b: 1 }
+	f(b) <=> 0
+}
+
+
