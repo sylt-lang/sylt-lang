@@ -487,3 +487,88 @@ pub fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         _ => parse_precedence(ctx, Prec::No),
     }
 }
+
+// NOTE(ed): It's really hard to write good tests, Rust refuses to deref the boxes
+// automatically.
+//
+// Faulty syntax should be tested in the small language tests.
+#[cfg(test)]
+mod test {
+    use crate::Assignable;
+    use crate::AssignableKind::*;
+    use crate::ExpressionKind::*;
+    use crate::test;
+    use super::expression;
+
+    test!(expression, value: "0" => Int(0));
+    test!(expression, add: "0 + 1.0" => Add(_, _));
+    test!(expression, mul: "\"abc\" * \"abc\"" => Mul(_, _));
+    test!(expression, ident: "a" => Get(Assignable { kind: Read(_), .. }));
+    test!(expression, access: "a.b" => Get(Assignable { kind: Access(_, _), .. }));
+    test!(expression, index_ident: "a[a]" => Get(Assignable { kind: Index(_, _), .. }));
+    test!(expression, index_expr: "a[1 + 2 + 3]" => Get(Assignable { kind: Index(_, _), .. }));
+    test!(expression, grouping: "(0 * 0) + 1" => Add(_, _));
+    test!(expression, grouping_one: "(0)" => Int(0));
+    test!(expression, tuple: "(0, 0)" => Tuple(_));
+    test!(expression, tuple_one: "(0,)" => Tuple(_));
+    test!(expression, tuple_empty: "()" => Tuple(_));
+    test!(expression, list: "[0, 0]" => List(_));
+    test!(expression, set: "{1, 1}" => Set(_));
+    test!(expression, dict: "{1: 1}" => Dict(_));
+    test!(expression, zero_set: "{}" => Set(_));
+    test!(expression, zero_dict: "{:}" => Dict(_));
+
+    test!(expression, in_list: "a in [1, 2, 3]" => In(_, _));
+    test!(expression, in_set: "2 in {1, 1, 2}" => In(_, _));
+    test!(expression, in_grouping: "1 + 2 in b" => Add(_, _));
+    test!(expression, in_grouping_paren: "(1 + 2) in b" => In(_, _));
+
+    test!(expression, call_simple_paren: "a()" => Get(_));
+    test!(expression, call_call: "a()()" => Get(_));
+    test!(expression, call_simple_bang: "a!" => Get(_));
+    test!(expression, call_chaining_paren: "a().b" => Get(_));
+    test!(expression, call_chaining_bang: "a!.b" => Get(_));
+    test!(expression, call_args_paren: "a(1, 2, 3)" => Get(_));
+    test!(expression, call_args_bang: "a! 1, 2, 3" => Get(_));
+    test!(expression, call_args_chaining_paren: "a(1, 2, 3).b" => Get(_));
+    test!(expression, call_args_chaining_paren_trailing: "a(1, 2, 3,).b" => Get(_));
+    test!(expression, assignable_index: "a[0]" => Get(_));
+    test!(expression, assignable_index_twice: "a[0][1]" => Get(_));
+    test!(expression, assignable_mixed: "a[0]()" => Get(_));
+    test!(expression, assignable_mixed_many: "a()[0]()[1]()()()[2][3]" => Get(_));
+
+    // TODO(ed): This is controverisal
+    test!(expression, call_args_chaining_bang: "a! 1, 2, 3 .b" => Get(_));
+    test!(expression, call_args_chaining_bang_trailing: "a! 1, 2, 3, .b" => Get(_));
+
+    // TODO(ed): Verify 'a! -> b! -> c! == c(b(a()))' in some way
+    test!(expression, call_arrow: "1 + 0 -> a! 2, 3" => Add(_, _));
+    test!(expression, call_arrow_grouping: "(1 + 0) -> a! 2, 3" => Get(_));
+
+    test!(expression, instance: "A { a: 1 + 1, b: nil }" => Instance { .. });
+    test!(expression, instance_more: "A { a: 2\n c: 2 }" => Instance { .. });
+    test!(expression, instance_empty: "A {}" => Instance { .. });
+
+    test!(expression, simple: "fn -> {}" => _);
+    test!(expression, argument: "fn a: int -> int { ret a + 1 }" => _);
+
+    test!(expression, booleans: "true && false || !false" => _);
+    test!(expression, bool_and: "true && a" => _);
+    test!(expression, bool_or: "a || false" => _);
+    test!(expression, bool_neg: "!a" => _);
+    test!(expression, bool_neg_multiple: "!a && b" => _);
+    test!(expression, bool_neg_multiple_rev: "a && !b" => _);
+
+    test!(expression, cmp_eq: "a == b" => _);
+    test!(expression, cmp_neq: "a != b" => _);
+    test!(expression, cmp_leq: "a <= b" => _);
+    test!(expression, cmp_geq: "a >= b" => _);
+    test!(expression, cmp_gt: "a > b" => _);
+    test!(expression, cmp_lt: "a < b" => _);
+    test!(expression, neg: "-a" => _);
+
+    test!(expression, expr: "-a + b < 3 * true && false / 2" => _);
+
+    test!(expression, void_simple: "fn {}" => _);
+    test!(expression, void_argument: "fn a: int { ret a + 1 }" => _);
+}
