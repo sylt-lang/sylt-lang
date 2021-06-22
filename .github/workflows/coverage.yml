@@ -11,13 +11,16 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: gruffo/tarpaulin:latest
+    container: xd009642/tarpaulin:develop
 
     steps:
       - uses: actions/checkout@v2
 
+      - name: Install SDL2 and Python
+        run: apt install -y python3 libsdl2-dev
+
       - name: Generate code coverage
-        run: /cargo-tarpaulin tarpaulin --verbose --no-default-features --workspace --timeout 120 --out Xml
+        run: ./cargo-tarpaulin tarpaulin --verbose --no-default-features --workspace --timeout 120 --out Xml
 
       - name: Upload to codecov.io
         env:
