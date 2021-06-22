@@ -179,18 +179,17 @@ impl Type {
                 ak.fits(bk, blobs)?; av.fits(bv, blobs)
             }
             (Type::Union(_), Type::Union(b)) => {
-                for x in b.iter() {
-                    // NOTE(ed): Does this cause infinet recursion?
-                    if let Err(_) = self.fits(x, blobs) {
-                        return Err(
-                            format!(
-                                "'{:?}' doesn't fit a '{:?}'",
-                                self,
-                                other
-                        ))
-                    }
+                // NOTE(ed): Does this cause infinite recursion?
+                if b.iter().any(|x| self.fits(x, blobs).is_err()) {
+                    Err(
+                        format!(
+                            "'{:?}' doesn't fit a '{:?}'",
+                            self,
+                            other
+                    ))
+                } else {
+                    Ok(())
                 }
-                Ok(())
             }
             (Type::Instance(a), Type::Instance(b)) => {
                 let a_fields = &blobs[*a].fields;
@@ -198,7 +197,7 @@ impl Type {
                 for (f, t) in a_fields.iter() {
                     if let Some(y) = b_fields.get(f) {
                         // NOTE(ed): It might be tempting to put a `fits`
-                        // call here. Don't! It will cause infinet recursion
+                        // call here. Don't! It will cause infinite recursion
                         // if a type that has itself as a field in any way.
                         if t != y {
                             return Err(
@@ -225,28 +224,26 @@ impl Type {
                 Ok(())
             }
             (a, Type::Union(b)) => {
-                for x in b.iter() {
-                    if x != a {
-                        return Err(format!(
-                                "'{:?}' cannot fit a '{:?}'",
-                                a,
-                                other
-                        ));
-                    }
+                if !b.iter().all(|x| x == a) {
+                    Err(format!(
+                            "'{:?}' cannot fit a '{:?}'",
+                            a,
+                            other
+                    ))
+                } else {
+                    Ok(())
                 }
-                Ok(())
             }
             (Type::Union(a), b) => {
-                for x in a.iter() {
-                    if x == b {
-                        return Ok(());
-                    }
+                if a.iter().any(|x| x == b) {
+                    Ok(())
+                } else {
+                    Err(format!(
+                            "'{:?}' cannot fit a '{:?}'",
+                            self,
+                            other
+                    ))
                 }
-                Err(format!(
-                        "'{:?}' cannot fit a '{:?}'",
-                        self,
-                        other
-                ))
             }
             (a, b) => {
                 if a == b {
