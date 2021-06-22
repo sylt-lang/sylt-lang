@@ -5,7 +5,7 @@ use lingon::renderer::{Rect, Sprite, Transform, Tint};
 use sylt_common::error::RuntimeError;
 use sylt_common::rc::Rc;
 use std::{path::PathBuf, sync::{Arc, Mutex}};
-use sylt_common::{Value::{self, *}, Type};
+use sylt_common::{Value::{self, *}, Type, RuntimeContext};
 
 // Errors are important, they should be easy to write!
 macro_rules! error {
@@ -882,8 +882,8 @@ pub fn sylt_str(s: &str) -> Value {
 #[sylt_macro::sylt_doc(l_load_image, "Loads an image and turns it into a sprite sheet",
   [One(String(path))] Type::Tuple)]
 #[sylt_macro::sylt_link(l_load_image, "sylt_std::lingon")]
-pub fn l_load_image(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
-    match (values, typecheck) {
+pub fn l_load_image<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    match (values, ctx.typecheck) {
         ([String(path), tilesize], false) => {
             let game = game!();
             let path = PathBuf::from(path.as_ref());
@@ -910,8 +910,8 @@ pub fn l_load_image(values: &[Value], typecheck: bool) -> Result<Value, RuntimeE
   "Loads a sound and lets you play it using <a href='l_audio_play'>l_audio_play</a>",
   [One(String(path))] Type::Tuple)]
 #[sylt_macro::sylt_link(l_load_audio, "sylt_std::lingon")]
-pub fn l_load_audio(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
-    match (values, typecheck) {
+pub fn l_load_audio<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    match (values, ctx.typecheck) {
         ([String(path)], false) => {
             let game = game!();
             let path = PathBuf::from(path.as_ref());

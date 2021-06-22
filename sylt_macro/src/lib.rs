@@ -101,14 +101,14 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
         #[sylt_macro::sylt_link(#link_name, #module)]
         pub fn #function (
             __values: &[sylt_common::Value],
-            __typecheck: bool
+            __ctx: sylt_common::RuntimeContext
         ) -> ::std::result::Result<sylt_common::Value, sylt_common::error::RuntimeError>
         {
             use sylt_common::MatchableValue::*;
             use sylt_common::RustFunction;
             use sylt_common::Value::*;
             use sylt_common::value::make_matchable;
-            if __typecheck {
+            if __ctx.typecheck {
                 let matching: Vec<_> = __values.iter().map(make_matchable).collect();
                 #[allow(unused_variables)]
                 match matching.as_slice() {
