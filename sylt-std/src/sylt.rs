@@ -4,11 +4,11 @@ use owo_colors::OwoColorize;
 use sylt_common::error::RuntimeError;
 use sylt_common::rc::Rc;
 use std::cell::RefCell;
-use sylt_common::{Type, Value};
+use sylt_common::{Type, Value, Blob, RuntimeContext};
 
 #[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", [One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(dbg, "sylt_std::sylt")]
-pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
+pub fn dbg<'t>(values: &[Value], _ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     println!(
         "{}: {:?}, {:?}",
         "DBG".purple(),
@@ -20,8 +20,8 @@ pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
 
 #[sylt_macro::sylt_doc(push, "Appends an element to the end of a list", [One(List(ls)), One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(push, "sylt_std::sylt")]
-pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
-    match (values, typecheck) {
+pub fn push<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    match (values, ctx.typecheck) {
         ([Value::List(ls), v], true) => {
             let ls = ls.borrow();
             assert!(ls.len() == 1);
@@ -47,8 +47,8 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
 
 #[sylt_macro::sylt_doc(clear, "Removes all elements from the list", [One(List(ls))] Type::Void)]
 #[sylt_macro::sylt_link(clear, "sylt_std::sylt")]
-pub fn clear(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
-    match (values, typecheck) {
+pub fn clear<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    match (values, ctx.typecheck) {
         ([Value::List(ls)], _) => {
             ls.borrow_mut().clear();
             Ok(Value::Nil)
@@ -63,8 +63,8 @@ pub fn clear(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
 
 #[sylt_macro::sylt_doc(prepend, "Adds an element to the start of a list", [One(List(ls)), One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(prepend, "sylt_std::sylt")]
-pub fn prepend(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
-    match (values, typecheck) {
+pub fn prepend<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    match (values, ctx.typecheck) {
         ([Value::List(ls), v], true) => {
             let ls = &ls.borrow();
             assert!(ls.len() == 1);
@@ -90,7 +90,7 @@ pub fn prepend(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError>
 
 #[sylt_macro::sylt_doc(len, "Gives the length of tuples and lists", [One(Tuple(ls))] Type::Int, [One(List(ls))] Type::Int)]
 #[sylt_macro::sylt_link(len, "sylt_std::sylt")]
-pub fn len(values: &[Value], _: bool) -> Result<Value, RuntimeError> {
+pub fn len<'t>(values: &[Value], _: RuntimeContext) -> Result<Value, RuntimeError> {
     match values {
         [Value::Tuple(ls)] => {
             Ok(Value::Int(ls.len() as i64))
@@ -219,10 +219,10 @@ sylt_macro::extern_function!(
 
 
 
-pub fn union_type(a: Type, b: Type) -> Type{
-    if a.fits(&b) {
+pub fn union_type<'t>(a: Type, b: Type, blobs: &[Blob]) -> Type{
+    if a.fits(&b, blobs).is_ok() {
         a
-    } else if b.fits(&a) {
+    } else if b.fits(&a, blobs).is_ok() {
         b
     } else {
         match (a, b) {
@@ -243,13 +243,13 @@ pub fn union_type(a: Type, b: Type) -> Type{
 
 #[sylt_macro::sylt_doc(pop, "Removes the last element in the list, and returns it", [One(List(l))] Type::Value)]
 #[sylt_macro::sylt_link(pop, "sylt_std::sylt")]
-pub fn pop(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
-    match (values, typecheck) {
+pub fn pop<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    match (values, ctx.typecheck) {
         ([Value::List(ls)], true) => {
             let ls = &ls.borrow();
             // TODO(ed): Write correct typing
             let ls = Type::from(&ls[0]);
-            let ret = union_type(ls, Type::Void);
+            let ret = union_type(ls, Type::Void, ctx.blobs);
             Ok(Value::from(ret))
         }
         ([Value::List(ls)], false) => {
@@ -266,7 +266,7 @@ pub fn pop(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
 
 #[sylt_macro::sylt_doc(inf, "Returns an infinite iterator, spitting out the value you give it", [One(Value(val))] Type::Iter)]
 #[sylt_macro::sylt_link(inf, "sylt_std::sylt")]
-pub fn inf(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
+pub fn inf<'t>(values: &[Value], _ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     match values {
         [x] => {
             let t: Type = Type::from(&*x);

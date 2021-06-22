@@ -18,4 +18,9 @@ pub use value::{IterFn, MatchableValue, Value};
 
 /// A linkable external function. Created either manually or using
 /// [sylt_macro::extern_function].
-pub type RustFunction = fn(&[Value], bool) -> Result<Value, error::RuntimeError>;
+pub type RustFunction = fn(&[Value], RuntimeContext) -> Result<Value, error::RuntimeError>;
+
+pub struct RuntimeContext<'t> {
+    pub typecheck: bool,
+    pub blobs: &'t [Blob],
+}

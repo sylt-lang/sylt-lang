@@ -473,17 +473,17 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
 /// Parse an [AssignableKind::Call]
 fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, Assignable> {
     let span = ctx.span();
-    let banger = matches!(ctx.token(), T::Bang); // `f! 1, 2
+    let primer = matches!(ctx.token(), T::Prime); // `f' 1, 2`
     let mut ctx = expect!(
         ctx,
-        T::Bang | T::LeftParen,
+        T::Prime | T::LeftParen,
         "Expected '(' or '!' when calling function"
     );
     let mut args = Vec::new();
 
     // Arguments
     loop {
-        match (ctx.token(), banger) {
+        match (ctx.token(), primer) {
             // Done with arguments.
             (T::EOF, _)
             | (T::RightParen, false)
@@ -504,7 +504,7 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
         }
     }
 
-    let ctx = if !banger {
+    let ctx = if !primer {
         expect!(ctx, T::RightParen, "Expected ')' after calling function")
     } else {
         ctx
@@ -568,7 +568,7 @@ fn assignable_dot<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t,
 /// Parse a (maybe empty) "sub-assignable", i.e. either a call or indexable.
 fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'t, Assignable> {
     match ctx.token() {
-        T::Bang | T::LeftParen => assignable_call(ctx, assignable),
+        T::Prime | T::LeftParen => assignable_call(ctx, assignable),
         T::LeftBracket => assignable_index(ctx, assignable),
         T::Dot => assignable_dot(ctx, assignable),
         _ => Ok((ctx, assignable))

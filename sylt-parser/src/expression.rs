@@ -610,11 +610,11 @@ mod test {
 
     test!(expression, call_simple_paren: "a()" => Get(_));
     test!(expression, call_call: "a()()" => Get(_));
-    test!(expression, call_simple_bang: "a!" => Get(_));
+    test!(expression, call_simple_bang: "a'" => Get(_));
     test!(expression, call_chaining_paren: "a().b" => Get(_));
-    test!(expression, call_chaining_bang: "a!.b" => Get(_));
+    test!(expression, call_chaining_bang: "a'.b" => Get(_));
     test!(expression, call_args_paren: "a(1, 2, 3)" => Get(_));
-    test!(expression, call_args_bang: "a! 1, 2, 3" => Get(_));
+    test!(expression, call_args_bang: "a' 1, 2, 3" => Get(_));
     test!(expression, call_args_chaining_paren: "a(1, 2, 3).b" => Get(_));
     test!(expression, call_args_chaining_paren_trailing: "a(1, 2, 3,).b" => Get(_));
     test!(expression, assignable_index: "a[0]" => Get(_));
@@ -623,12 +623,12 @@ mod test {
     test!(expression, assignable_mixed_many: "a()[0]()[1]()()()[2][3]" => Get(_));
 
     // TODO(ed): This is controverisal
-    test!(expression, call_args_chaining_bang: "a! 1, 2, 3 .b" => Get(_));
-    test!(expression, call_args_chaining_bang_trailing: "a! 1, 2, 3, .b" => Get(_));
+    test!(expression, call_args_chaining_bang: "a' 1, 2, 3 .b" => Get(_));
+    test!(expression, call_args_chaining_bang_trailing: "a' 1, 2, 3, .b" => Get(_));
 
     // TODO(ed): Verify 'a! -> b! -> c! == c(b(a()))' in some way
-    test!(expression, call_arrow: "1 + 0 -> a! 2, 3" => Add(_, _));
-    test!(expression, call_arrow_grouping: "(1 + 0) -> a! 2, 3" => Get(_));
+    test!(expression, call_arrow: "1 + 0 -> a' 2, 3" => Add(_, _));
+    test!(expression, call_arrow_grouping: "(1 + 0) -> a' 2, 3" => Get(_));
 
     test!(expression, instance: "A { a: 1 + 1, b: nil }" => Instance { .. });
     test!(expression, instance_more: "A { a: 2\n c: 2 }" => Instance { .. });

@@ -14,20 +14,20 @@ test002 :: fn b:bool -> int? {
 
 // TODO(ed): Introduce type type!
 test003 :: fn {
-    a := test002! false
+    a := test002' false
     a += 1
     a <=> 1
 }
 
 
 start :: fn {
-    test001!
-    nil <=> test002! true
-    0 <=> test002! false
+    test001'
+    nil <=> test002' true
+    0 <=> test002' false
     q : bool? = true
     q <=> true
     q = nil
     q <=> nil
-    test003!
+    test003'
 }
 
