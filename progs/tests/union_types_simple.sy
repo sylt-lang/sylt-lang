@@ -24,13 +24,13 @@ h :: fn a:bool -> int | fn -> int {
 }
 
 start :: fn {
-    1 <=> f! true
-    nil <=> f! false
-    (true, true) <=> g! false
-    1 <=> g! true
+    1 <=> f' true
+    nil <=> f' false
+    (true, true) <=> g' false
+    1 <=> g' true
     f(true) <=> g(true)
 
-    1 <=> h! false
-    q :: h! true
+    1 <=> h' false
+    q :: h' true
     1 <=> q()
 }

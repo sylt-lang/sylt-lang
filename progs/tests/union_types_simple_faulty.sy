@@ -15,10 +15,10 @@ g :: fn a:bool -> int | (bool, bool) {
 }
 
 start :: fn {
-    0 <=> f! true
-    0.0 <=> f! false
-    ("hello!", "there") <=> g! false
-    1 <=> g! true
+    0 <=> f' true
+    0.0 <=> f' false
+    ("hello!", "there") <=> g' false
+    1 <=> g' true
     f(true) <=> g(true)
 }
 
