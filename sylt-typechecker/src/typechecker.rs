@@ -577,11 +577,18 @@ impl VM {
                     Type::Tuple(a) => {
                         self.push(a.get(slot as usize).cloned().unwrap_or(Type::Void));
                     }
-                    Type::Dict(k, v) if k.fits(&Type::Int) => {
+                    Type::Dict(k, v) if k.fits(&Type::Int, &prog.blobs).is_ok() => {
                         self.push((*v).clone());
                     }
-                    _ => {
+                    a => {
                         self.push(Type::Void);
+                        error!(
+                            self,
+                            RuntimeError::TypeError(op, vec![]),
+                            "Failed to index '{:?}' with '{:?}'",
+                            a,
+                            Type::Int
+                        );
                     }
                 }
             }
