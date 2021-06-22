@@ -268,8 +268,12 @@ impl Compiler {
             }
             Index(a, b) => {
                 self.assignable(a, ctx);
-                self.expression(b, ctx);
-                self.add_op(ctx, ass.span, Op::GetIndex);
+                if let ExpressionKind::Int(n) = b.kind {
+                    self.add_op(ctx, ass.span, Op::GetConstIndex(n));
+                } else {
+                    self.expression(b, ctx);
+                    self.add_op(ctx, ass.span, Op::GetIndex);
+                }
             }
         }
         None
