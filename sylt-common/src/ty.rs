@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
-use crate::value::Value;
+use crate::{Value, Blob};
 
 #[derive(Debug, Clone)]
 pub enum Type {
@@ -170,15 +170,88 @@ impl Type {
     // TODO(ed): Swap order of arguments
     /// Checks if the other type is valid in a place where the self type is. It's an asymmetrical
     /// comparison for types useful when checking assignment.
-    pub fn fits(&self, other: &Self) -> bool {
+    pub fn fits(&self, other: &Self, blobs: &[Blob]) -> Result<(), String> {
         match (self, other) {
-            (Type::Unknown, _) | (_, Type::Unknown) => true,
-            (Type::List(a), Type::List(b)) => a.fits(b),
-            (Type::Set(a), Type::Set(b)) => a.fits(b),
-            (Type::Dict(ak, av), Type::Dict(bk, bv)) => ak.fits(bk) && av.fits(bv),
-            (Type::Union(a), Type::Union(b)) => b.iter().all(|x| a.contains(x)),
-            (_, Type::Union(_)) => false,
-            (a, b) => a == b,
+            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
+            (Type::List(a), Type::List(b)) => a.fits(b, blobs),
+            (Type::Set(a), Type::Set(b)) => a.fits(b, blobs),
+            (Type::Dict(ak, av), Type::Dict(bk, bv)) => {
+                ak.fits(bk, blobs)?; av.fits(bv, blobs)
+            }
+            (Type::Union(_), Type::Union(b)) => {
+                // NOTE(ed): Does this cause infinite recursion?
+                if b.iter().any(|x| self.fits(x, blobs).is_err()) {
+                    Err(
+                        format!(
+                            "'{:?}' doesn't fit a '{:?}'",
+                            self,
+                            other
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+            (Type::Instance(a), Type::Instance(b)) => {
+                let a_fields = &blobs[*a].fields;
+                let b_fields = &blobs[*b].fields;
+                for (f, t) in a_fields.iter() {
+                    if let Some(y) = b_fields.get(f) {
+                        // NOTE(ed): It might be tempting to put a `fits`
+                        // call here. Don't! It will cause infinite recursion
+                        // if a type that has itself as a field in any way.
+                        if t != y {
+                            return Err(
+                                format!(
+                                    "'{}' is not a '{}', field '{:?}' has type '{:?}' but expected '{:?}'",
+                                    blobs[*a].name,
+                                    blobs[*b].name,
+                                    f,
+                                    y,
+                                    t
+                            ))
+                        }
+                    } else {
+                        return Err(
+                            format!(
+                                "'{:?}' is not a '{:?}', '{:?}' has no field '{:?}'",
+                                blobs[*a].name,
+                                blobs[*b].name,
+                                blobs[*b].name,
+                                f
+                        ))
+                    }
+                };
+                Ok(())
+            }
+            (a, Type::Union(b)) => {
+                if !b.iter().all(|x| x == a) {
+                    Err(format!(
+                            "'{:?}' cannot fit a '{:?}'",
+                            a,
+                            other
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+            (Type::Union(a), b) => {
+                if a.iter().any(|x| x == b) {
+                    Ok(())
+                } else {
+                    Err(format!(
+                            "'{:?}' cannot fit a '{:?}'",
+                            self,
+                            other
+                    ))
+                }
+            }
+            (a, b) => {
+                if a == b {
+                    Ok(())
+                } else {
+                    Err(format!("'{:?}' is not a '{:?}'", a, b))
+                }
+            }
         }
     }
 
