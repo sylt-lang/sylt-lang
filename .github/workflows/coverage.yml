@@ -11,13 +11,13 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: xd009642/tarpaulin:0.17.0
+    container: gruffo/tarpaulin:latest
 
     steps:
       - uses: actions/checkout@v2
 
       - name: Generate code coverage
-        run: cargo-tarpaulin tarpaulin --verbose --no-default-features --workspace --timeout 120 --out Xml
+        run: ./cargo-tarpaulin --verbose --no-default-features --workspace --timeout 120 --out Xml
 
       - name: Upload to codecov.io
         env:
