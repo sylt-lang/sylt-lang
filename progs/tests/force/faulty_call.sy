@@ -3,7 +3,7 @@ f :: fn -> int | bool {
 }
 
 start :: fn {
-    a: int = f!
+    a: int = f'
     a <=> 1
 }
 

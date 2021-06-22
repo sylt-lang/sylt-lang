@@ -5,10 +5,10 @@ a :: fn b: [int] -> int {
 
 start :: fn {
     b :: [1, 2, 3, 4]
-    3 <=> a! b
+    3 <=> a' b
 
-    push! b, 5
-    3 <=> a! b
+    push' b, 5
+    3 <=> a' b
 }
 
 

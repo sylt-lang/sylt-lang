@@ -8,6 +8,6 @@ c :: fn -> fn -> int {
 }
 
 start :: fn {
-    a :: c!
-    2 <=> a!
+    a :: c'
+    2 <=> a'
 }

@@ -1,6 +1,6 @@
 A :: blob { }
 start :: fn {
 
-    a : A = A!
+    a : A = A'
     a
 }
