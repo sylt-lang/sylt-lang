@@ -11,7 +11,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: xd009642/tarpaulin:0.17.0
+    container: xd009642/tarpaulin:latest
 
     steps:
       - uses: actions/checkout@v2
