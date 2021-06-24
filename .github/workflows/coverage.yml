@@ -19,7 +19,9 @@ jobs:
           wget https://github.com/xd009642/tarpaulin/releases/download/0.16.0/cargo-tarpaulin-0.16.0-travis.tar.gz
           tar xvzf cargo-tarpaulin-0.16.0-travis.tar.gz
       - name: Generate code coverage
-        run: ./cargo-tarpaulin tarpaulin --verbose --no-default-features --workspace --timeout 120 --out Xml
+        run: |
+          cd sylt
+          ../cargo-tarpaulin tarpaulin --verbose --no-default-features --workspace --timeout 120 --out Xml
       - name: Upload to codecov.io
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
