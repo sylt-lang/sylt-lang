@@ -16,8 +16,8 @@ jobs:
       - uses: actions/checkout@v2
       - name: Download and extract tarpaulin
         run: |
-          wget https://github.com/xd009642/tarpaulin/releases/download/0.16.0/cargo-tarpaulin-0.16.0-travis.tar.gz
-          tar xvzf cargo-tarpaulin-0.16.0-travis.tar.gz
+          wget https://github.com/xd009642/tarpaulin/releases/download/0.18.0-alpha3/cargo-tarpaulin-0.18.0-alpha3-travis.tar.gz
+          tar xvzf cargo-tarpaulin-0.18.0-alpha3-travis.tar.gz
       - name: Generate code coverage
         run: ./cargo-tarpaulin tarpaulin --verbose --no-default-features --workspace --timeout 120 --out Xml
       - name: Upload to codecov.io
