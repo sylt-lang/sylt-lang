@@ -255,7 +255,7 @@ impl Type {
                 if a == b {
                     Ok(())
                 } else {
-                    Err(format!("'{:?}' is not a '{:?}'", a, b))
+                    Err(format!("'{:?}' is not a '{:?}'", b, a))
                 }
             }
         }
