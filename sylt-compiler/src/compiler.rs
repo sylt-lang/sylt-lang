@@ -893,12 +893,16 @@ impl Compiler {
 
     fn compile(mut self, tree: AST, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
+        let num_functions = functions.len();
         self.functions = functions
             .to_vec()
             .into_iter()
             .enumerate()
             .map(|(i, (s, f))| (s, (i, f)))
             .collect();
+        assert_eq!(num_functions, self.functions.len(), "There are {} names and {} extern functions - some extern functions share name",
+                self.functions.len(),
+                num_functions);
 
         let name = "/preamble/";
         let mut block = Block::new(name, 0, &tree.modules[0].0);
