@@ -150,20 +150,23 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     // Parse the function statement.
     let (ctx, mut statement) = block_statement(ctx)?;
 
-    if let StatementKind::Block { statements } = &mut statement.kind {
-        if statements.len() > 0 {
-            // If the last statement is an expression statement,
-            // replace it with a return statement.
-            if let Statement {
-                span,
-                kind: StatementKind::StatementExpression {
-                    value
-                }
-            } = statements.remove(statements.len() - 1) {
-                statements.push(Statement {
+    // If the return type isn't void, check for and apply implicit returns.
+    if !matches!(ret.kind, TypeKind::Resolved(RuntimeType::Void)) {
+        if let StatementKind::Block { statements } = &mut statement.kind {
+            if statements.len() > 0 {
+                // If the last statement is an expression statement,
+                // replace it with a return statement.
+                if let Statement {
                     span,
-                    kind: StatementKind::Ret { value },
-                });
+                    kind: StatementKind::StatementExpression {
+                        value
+                    }
+                } = statements.remove(statements.len() - 1) {
+                    statements.push(Statement {
+                        span,
+                        kind: StatementKind::Ret { value },
+                    });
+                }
             }
         }
     }
