@@ -124,13 +124,17 @@ pub fn block_statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     use StatementKind::*;
 
+    // Newlines have meaning in statements - thus they shouldn't be skipped.
+    let (ctx, skip_newlines) = ctx.push_skip_newlines(false);
+
     let span = ctx.span();
     let (ctx, kind) = match &ctx.tokens[ctx.curr..] {
         [(T::Newline, _), ..] => (ctx.skip(1), EmptyStatement),
 
         // Block: `{ <statements> }`
         [(T::LeftBrace, _), ..] => {
-            return block_statement(ctx);
+            let (ctx, stmt) = block_statement(ctx)?;
+            (ctx, stmt.kind)
         }
 
         // `use a`
@@ -237,10 +241,10 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         ctx = _ctx; // assign to outer
                         fields.insert(field, ty);
 
-                        if !matches!(ctx.token(), T::Comma | T::Newline | T::RightBrace) {
+                        if !matches!(ctx.token(), T::Comma | T::RightBrace) {
                             raise_syntax_error!(
                                 ctx,
-                                "Expected a field deliminator: newline or ','"
+                                "Expected a field deliminator ','"
                             );
                         }
                         ctx = ctx.skip_if(T::Comma);
@@ -391,6 +395,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     };
 
     let ctx = ctx.skip_if(T::Newline);
+    let ctx = ctx.pop_skip_newlines(skip_newlines);
     Ok((ctx, Statement { span, kind }))
 }
 
@@ -417,6 +422,7 @@ mod test {
 
     // NOTE(ed): Expressions are valid statements! :D
     test!(statement, statement_expression: "1 + 1" => _);
+    test!(statement, statement_skip_newline: "(1 \n\n+\n 1\n\n)" => _);
     test!(statement, statement_print: "print 1" => _);
     test!(statement, statement_mut_declaration: "a := 1 + 1" => _);
     test!(statement, statement_const_declaration: "a :: 1 + 1" => _);
