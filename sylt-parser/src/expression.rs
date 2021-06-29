@@ -148,7 +148,26 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
     use ExpressionKind::Function;
     // Parse the function statement.
-    let (ctx, statement) = block_statement(ctx)?;
+    let (ctx, mut statement) = block_statement(ctx)?;
+
+    if let StatementKind::Block { statements } = &mut statement.kind {
+        if statements.len() > 0 {
+            // If the last statement is an expression statement,
+            // replace it with a return statement.
+            if let Statement {
+                span,
+                kind: StatementKind::StatementExpression {
+                    value
+                }
+            } = statements.remove(statements.len() - 1) {
+                statements.push(Statement {
+                    span,
+                    kind: StatementKind::Ret { value },
+                });
+            }
+        }
+    }
+
     let function = Function {
         name: "lambda".into(),
         params,
