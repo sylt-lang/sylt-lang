@@ -23,6 +23,8 @@ pub enum Type {
     Blob(usize),
     Instance(usize),
     ExternFunction(usize),
+
+    Invalid,
 }
 
 impl Hash for Type {
@@ -83,6 +85,10 @@ impl Hash for Type {
             }
             Type::ExternFunction(_) => {
                 16
+            }
+
+            Type::Invalid => {
+                19
             }
         }
         .hash(h);
@@ -256,7 +262,7 @@ impl Type {
     }
 
     pub fn is_nil(&self) -> bool {
-        matches!(self, Type::Void)
+        matches!(self, Type::Void | Type::Invalid)
     }
 
     pub fn maybe_union<'a>(v: impl Iterator<Item = &'a Type>) -> Type {

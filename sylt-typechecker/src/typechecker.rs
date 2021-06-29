@@ -211,13 +211,15 @@ impl VM {
 
             Op::ReadLocal(n) => {
                 let ty = self.stack[n].clone();
-                let ty = self.push(ty);
-                if matches!(ty, &Type::Unknown) {
+                if matches!(ty, Type::Unknown) {
+                    self.push(Type::Invalid);
                     error!(
                         self,
                         RuntimeError::InvalidProgram,
                         "Read from an uninitalized value"
                     );
+                } else {
+                    self.push(ty);
                 }
             }
 
@@ -240,8 +242,8 @@ impl VM {
 
             Op::ReadGlobal(slot) => {
                 match self.global_types.get(slot).cloned() {
-                    Some(Type::Unknown) => {
-                        self.push(Type::Unknown);
+                    Some(Type::Unknown) | Some(Type::Invalid) => {
+                        self.push(Type::Invalid);
                         error!(
                             self,
                             RuntimeError::InvalidProgram,
@@ -353,7 +355,7 @@ impl VM {
                                         self.push(ty.clone());
                                     }
                                     _ => {
-                                        self.push(Type::Unknown);
+                                        self.push(Type::Invalid);
                                         error!(
                                             self,
                                             RuntimeError::UnknownField(ty.name.clone(), field.to_string())
@@ -557,7 +559,7 @@ impl VM {
                         self.push((*v).clone());
                     }
                     (a, b) => {
-                        self.push(Type::Void);
+                        self.push(Type::Invalid);
                         error!(
                             self,
                             RuntimeError::TypeError(op, vec![]),
@@ -581,7 +583,7 @@ impl VM {
                         self.push((*v).clone());
                     }
                     a => {
-                        self.push(Type::Void);
+                        self.push(Type::Invalid);
                         error!(
                             self,
                             RuntimeError::TypeError(op, vec![]),
@@ -655,7 +657,7 @@ impl VM {
                         }
                     }
                     (indexable, e) => {
-                        self.push(Type::Void);
+                        self.push(Type::Invalid);
                         error!(self, RuntimeError::IndexError(indexable.into(), e.into()));
                     }
                 }
@@ -873,7 +875,7 @@ impl VM {
                 if !matches!(ty, Type::Bool) {
                     error!(
                         self,
-                        RuntimeError::TypeMismatch(ty, Type::Bool),
+                        RuntimeError::TypeMismatch(Type::Bool, ty),
                         "Can only assert on bools"
                     );
                 }
@@ -915,7 +917,7 @@ mod op {
                     Some(x)
                 }
             })
-            .unwrap_or(Type::Void)
+            .unwrap_or(Type::Invalid)
     }
 
     fn union_bin_op(a: &HashSet<Type>, b: &Type, f: fn(&Type, &Type) -> Type) -> Type {
@@ -928,7 +930,7 @@ mod op {
                     Some(x)
                 }
             })
-            .unwrap_or(Type::Void)
+            .unwrap_or(Type::Invalid)
     }
 
     pub fn neg(value: &Type) -> Type {
@@ -938,7 +940,7 @@ mod op {
             Type::Tuple(a) => tuple_un_op(a, neg),
             Type::Union(v) => union_un_op(&v, neg),
             Type::Unknown => Type::Unknown,
-            _ => Type::Void,
+            _ => Type::Invalid,
         }
     }
 
@@ -948,7 +950,7 @@ mod op {
             Type::Tuple(a) => tuple_un_op(a, not),
             Type::Union(v) => union_un_op(&v, not),
             Type::Unknown => Type::Bool,
-            _ => Type::Void,
+            _ => Type::Invalid,
         }
     }
 
@@ -961,7 +963,7 @@ mod op {
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => add(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
             (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, add),
-            _ => Type::Void,
+            _ => Type::Invalid,
         }
     }
 
@@ -977,7 +979,7 @@ mod op {
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => mul(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
             (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, mul),
-            _ => Type::Void,
+            _ => Type::Invalid,
         }
     }
 
@@ -989,7 +991,7 @@ mod op {
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => div(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
             (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, div),
-            _ => Type::Void,
+            _ => Type::Invalid,
         }
     }
 
@@ -1012,7 +1014,7 @@ mod op {
             (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, eq),
             (Type::Void, Type::Void) => Type::Bool,
             (Type::List(a), Type::List(b)) => eq(a, b),
-            _ => Type::Void,
+            _ => Type::Invalid,
         }
     }
 
@@ -1033,7 +1035,7 @@ mod op {
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => less(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
             (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, less),
-            _ => Type::Void,
+            _ => Type::Invalid,
         }
     }
 
@@ -1048,7 +1050,7 @@ mod op {
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => and(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
             (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, and),
-            _ => Type::Void,
+            _ => Type::Invalid,
         }
     }
 
@@ -1059,7 +1061,7 @@ mod op {
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => or(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
             (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, or),
-            _ => Type::Void,
+            _ => Type::Invalid,
         }
     }
 }
