@@ -43,6 +43,8 @@ macro_rules! two_op {
 
 
 pub struct VM {
+    ignore_error: bool,
+
     upvalues: Vec<Type>,
     stack: Vec<Type>,
     global_types: Vec<Type>,
@@ -86,6 +88,7 @@ fn typecheck_block(block_slot: usize, prog: &Prog, global_types: Vec<Type>, verb
     let ops = (*block).borrow().ops.clone();
     for (ip, op) in ops.iter().enumerate() {
         vm.ip = ip;
+        vm.ignore_error = false;
 
         #[cfg(debug_assertions)]
         if print_exec {
@@ -107,7 +110,9 @@ fn typecheck_block(block_slot: usize, prog: &Prog, global_types: Vec<Type>, verb
         };
 
         if let Err(e) = vm.check_op(op, prog) {
-            errors.push(e);
+            if !vm.ignore_error {
+                errors.push(e);
+            }
         }
     }
 
@@ -126,6 +131,8 @@ fn typecheck_block(block_slot: usize, prog: &Prog, global_types: Vec<Type>, verb
 impl VM {
     pub(crate) fn new(block: &Rc<RefCell<Block>>, global_types: Vec<Type>) -> Self {
         let mut vm = Self {
+            ignore_error: false,
+
             upvalues: block.borrow().upvalues.iter().map(|(_, _, ty)| ty).cloned().collect(),
             stack: Vec::new(),
             global_types,
@@ -166,6 +173,10 @@ impl VM {
 
     fn pop(&mut self) -> Type {
         match self.stack.pop() {
+            Some(Type::Invalid) => {
+                self.ignore_error = true;
+                Type::Invalid
+            }
             Some(x) => x,
             None => self.crash_and_burn(),
         }
@@ -421,7 +432,8 @@ impl VM {
                 } else {
                     unreachable!("Cannot define variable to non-type");
                 };
-                let top_type = self.stack.last().unwrap().clone();
+                let top_type = self.pop();
+                self.push(top_type.clone());
                 match (ty, top_type) {
                     (Type::Unknown, top_type) if top_type != Type::Unknown => {}
                     (a, b) => {
@@ -475,9 +487,10 @@ impl VM {
             }
 
             Op::JmpNext(_) => {
-                if let Some(Type::Iter(ty)) = self.stack.last() {
-                    let ty = (**ty).clone();
-                    self.push(ty);
+                let top = self.pop();
+                self.push(top.clone());
+                if let Type::Iter(ty) = top {
+                    self.push(*ty);
                 } else {
                     error!(
                         self,
@@ -783,6 +796,10 @@ impl VM {
                         Ok(v) => Type::from(v),
                     },
                 };
+
+                self.ignore_error |= self.stack[new_base + 1..]
+                    .iter()
+                    .any(|x| matches!(x, Type::Invalid));
                 self.stack.truncate(new_base + 1);
                 if let Some(err) = err {
                     error!(self, err, "Failed to call");
@@ -871,7 +888,8 @@ impl VM {
             }
 
             Op::Assert => {
-                let ty = self.stack.last().unwrap().clone();
+                let ty = self.pop();
+                self.push(ty.clone());
                 if !matches!(ty, Type::Bool) {
                     error!(
                         self,
