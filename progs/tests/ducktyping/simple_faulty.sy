@@ -10,4 +10,3 @@ start :: fn {
 
 // error: #ArgumentType(_, _, _)
 // error: #TypeError(_, _)
-// error: #TypeMismatch(_, _)
