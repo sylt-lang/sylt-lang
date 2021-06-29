@@ -1007,6 +1007,8 @@ mod op {
     pub fn less(a: &Value, b: &Value) -> Value {
         match (a, b) {
             (Value::Float(a), Value::Float(b)) => Value::Bool(a < b),
+            (Value::Float(a), Value::Int(b)) => Value::Bool(*a < (*b as f64)),
+            (Value::Int(a), Value::Float(b)) => Value::Bool((*a as f64) < *b),
             (Value::Int(a), Value::Int(b)) => Value::Bool(a < b),
             (Value::String(a), Value::String(b)) => Value::Bool(a < b),
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(a < b),

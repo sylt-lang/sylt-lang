@@ -1018,8 +1018,10 @@ mod op {
 
     pub fn less(a: &Type, b: &Type) -> Type {
         match (a, b) {
-            (Type::Float, Type::Float) => Type::Bool,
-            (Type::Int, Type::Int) => Type::Bool,
+            (Type::Float, Type::Float)
+            | (Type::Int, Type::Int)
+            | (Type::Float, Type::Int)
+            | (Type::Int, Type::Float) => Type::Bool,
             (Type::String, Type::String) => Type::Bool,
             (Type::Bool, Type::Bool) => Type::Bool,
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() =>
