@@ -223,7 +223,9 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         // Blob declaration: `A :: blob { <fields> }
         [(T::Identifier(name), _), (T::ColonColon, _), (T::Blob, _), ..] => {
             let name = name.clone();
-            let mut ctx = expect!(ctx.skip(3), T::LeftBrace, "Expected '{{' to open blob");
+            let ctx = expect!(ctx.skip(3), T::LeftBrace, "Expected '{{' to open blob");
+            let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
+
             let mut fields = HashMap::new();
             // Parse fields: `a: int`
             loop {
@@ -260,6 +262,8 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     }
                 }
             }
+
+            let ctx = ctx.pop_skip_newlines(skip_newlines);
             let ctx = expect!(ctx, T::RightBrace, "Expected '}}' to close blob fields");
             (ctx, Blob { name, fields })
         }
