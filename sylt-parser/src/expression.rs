@@ -425,7 +425,7 @@ fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 ctx = _ctx; // assign to outer
 
                 if !matches!(ctx.token(), T::Comma | T::RightBrace) {
-                    raise_syntax_error!(ctx, "Expected a delimiter: ','");
+                    raise_syntax_error!(ctx, "Expected a field delimiter ',' - but got {:?}", ctx.token());
                 }
                 ctx = ctx.skip_if(T::Comma);
 
@@ -631,7 +631,7 @@ mod test {
     test!(expression, call_arrow_grouping: "(1 + 0) -> a' 2, 3" => Get(_));
 
     test!(expression, instance: "A { a: 1 + 1, b: nil }" => Instance { .. });
-    test!(expression, instance_more: "A { a: 2\n c: 2 }" => Instance { .. });
+    test!(expression, instance_more: "A { a: 2, \n c: 2 }" => Instance { .. });
     test!(expression, instance_empty: "A {}" => Instance { .. });
 
     test!(expression, simple: "fn -> {}" => _);

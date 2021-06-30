@@ -431,7 +431,6 @@ mod test {
 
     // NOTE(ed): Expressions are valid statements! :D
     test!(statement, statement_expression: "1 + 1" => _);
-    test!(statement, statement_skip_newline: "(1 \n\n+\n 1\n\n)" => _);
     test!(statement, statement_print: "print 1" => _);
     test!(statement, statement_mut_declaration: "a := 1 + 1" => _);
     test!(statement, statement_const_declaration: "a :: 1 + 1" => _);
@@ -447,7 +446,6 @@ mod test {
     test!(statement, statement_unreach: "<!>" => _);
     test!(statement, statement_blob_empty: "A :: blob {}" => _);
     test!(statement, statement_blob_comma: "A :: blob { a: int, b: int }" => _);
-    test!(statement, statement_blob_newline: "A :: blob { a: int\n b: int }" => _);
     test!(statement, statement_blob_comma_newline: "A :: blob { a: int,\n b: int }" => _);
     test!(statement, statement_assign: "a = 1" => _);
     test!(statement, statement_assign_index: "a.b = 1 + 2" => _);
@@ -459,8 +457,17 @@ mod test {
     test!(statement, statement_assign_call_index: "a.c().c.b /= 4" => _);
     test!(statement, statement_idek: "a'.c'.c.b()().c = 0" => _);
 
+    test!(statement, statement_skip_newline: "(1 \n\n+\n 1\n\n)" => _);
+    test!(statement, statement_skip_newline_list: "[\n\n 1 \n\n,\n 1\n\n,]" => _);
+    test!(statement, statement_skip_newline_set: "{\n\n 1 \n\n,\n 1\n\n,}" => _);
+    test!(statement, statement_skip_newline_dict: "{\n\n 1: \n3\n,\n 1\n\n:1,}" => _);
+
     test!(outer_statement, outer_statement_blob: "B :: blob {}\n" => _);
+    test!(outer_statement, outer_statement_blob_no_last_comma: "B :: blob { \na: A\n }\n" => _);
+    test!(outer_statement, outer_statement_blob_yes_last_comma: "B :: blob { \na: A,\n }\n" => _);
     test!(outer_statement, outer_statement_declaration: "B :: fn -> {}\n" => _);
     test!(outer_statement, outer_statement_use: "use ABC\n" => _);
     test!(outer_statement, outer_statement_empty: "\n" => _);
+
+    fail!(statement, statement_blob_newline: "A :: blob { a: int\n b: int }" => _);
 }
