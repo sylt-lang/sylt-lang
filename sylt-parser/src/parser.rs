@@ -231,7 +231,8 @@ impl<'a> Context<'a> {
     fn push_skip_newlines(&self, skip_newlines: bool) -> (Self, bool) {
         let mut new = *self;
         new.skip_newlines = skip_newlines;
-        (new, self.skip_newlines)
+        // If currently on a newline token - we want to skip it.
+        (new.skip(0), self.skip_newlines)
     }
 
     /// Reset to old newline skipping state.
