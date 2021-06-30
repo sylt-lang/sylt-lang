@@ -133,8 +133,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
         // Block: `{ <statements> }`
         [(T::LeftBrace, _), ..] => {
-            let (ctx, stmt) = block_statement(ctx)?;
-            (ctx, stmt.kind)
+            match (block_statement(ctx), expression(ctx)) {
+                (Ok((ctx, stmt)), _) => (ctx, stmt.kind),
+                (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
+                (Err((ctx, _)), Err(_)) => {
+                    raise_syntax_error!(ctx, "Neither a block nor a valid expression");
+                }
+            }
         }
 
         // `use a`

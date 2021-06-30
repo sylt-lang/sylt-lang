@@ -246,19 +246,17 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         T::Minus | T::Bang => unary(ctx),
 
         T::Identifier(_) => {
-            // Blob initializations are expressions.
-            if let Ok(result) = blob(ctx) {
-                Ok(result)
-            } else {
-                let span = ctx.span();
-                let (ctx, assign) = assignable(ctx)?;
-                Ok((
+
+            let span = ctx.span();
+            match (blob(ctx), assignable(ctx)) {
+                (Ok(result), _) => Ok(result),
+                (_, Ok((ctx, assign))) => Ok((
                     ctx,
-                    Expression {
-                        span,
-                        kind: Get(assign),
-                    },
-                ))
+                    Expression { span, kind: Get(assign), },
+                )),
+                (Err((ctx, _)), Err(_)) => {
+                    raise_syntax_error!(ctx, "Neither a blob instantiation or an identifier");
+                }
             }
         }
 
