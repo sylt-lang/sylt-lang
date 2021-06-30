@@ -7,10 +7,18 @@ pub struct Args {
     #[options(free, required, help = "The file to run")]
     pub run_file: PathBuf,
 
-    #[options(short = "r", long = "runs", help = "If set, how many times the program should be run at most")]
+    #[options(
+        short = "r",
+        long = "runs",
+        help = "If set, how many times the program should be run at most"
+    )]
     pub max_runs: Option<usize>,
 
-    #[options(short = "t", long = "time", help = "If set, stop running when this amount of seconds have passed")]
+    #[options(
+        short = "t",
+        long = "time",
+        help = "If set, stop running when this amount of seconds have passed"
+    )]
     pub max_time: Option<u64>,
 
     #[options(help = "Print this help")]
