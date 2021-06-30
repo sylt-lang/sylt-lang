@@ -77,6 +77,7 @@ impl Block {
     pub fn debug_print(&self, constants: Option<&[Value]>) {
         println!("     === {} ===", self.name.blue());
         for (i, s) in self.ops.iter().enumerate() {
+            #[rustfmt::skip]
             println!(
                 "{}{:05} {:?}{}",
                 if self.line_offsets.contains_key(&i) {
@@ -87,8 +88,9 @@ impl Block {
                 i.red(),
                 s,
                 match (s, constants) {
-                    (Op::Constant(c), Some(constants)) | (Op::Link(c), Some(constants)) =>
-                        format!("    => {:?}", &constants[*c]),
+                    (Op::Constant(c), Some(constants))
+                    | (Op::Link(c), Some(constants))
+                      => format!("    => {:?}", &constants[*c]),
                     _ => "".to_string(),
                 }
             );

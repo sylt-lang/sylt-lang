@@ -133,17 +133,8 @@ sylt_macro::extern_function!(
     },
 );
 
-fn l_gfx_rect_internal(
-    x: &f64,
-    y: &f64,
-    w: &f64,
-    h: &f64,
-    rot: &f64,
-    r: &f64,
-    g: &f64,
-    b: &f64,
-    a: &f64,
-) {
+#[rustfmt::skip]
+fn l_gfx_rect_internal(x: &f64, y: &f64, w: &f64, h: &f64, rot: &f64, r: &f64, g: &f64, b: &f64, a: &f64) {
     let mut rect = Rect::new();
     rect.at(*x as f32, *y as f32);
     rect.scale(*w as f32, *h as f32);
@@ -232,20 +223,8 @@ sylt_macro::extern_function!(
     },
 );
 
-fn l_gfx_sprite_internal(
-    sprite: &i64,
-    x: &f64,
-    y: &f64,
-    w: &f64,
-    h: &f64,
-    gx: &i64,
-    gy: &i64,
-    rot: &f64,
-    r: &f64,
-    g: &f64,
-    b: &f64,
-    a: &f64,
-) -> Value {
+#[rustfmt::skip]
+fn l_gfx_sprite_internal(sprite: &i64, x: &f64, y: &f64, w: &f64, h: &f64, gx: &i64, gy: &i64, rot: &f64, r: &f64, g: &f64, b: &f64, a: &f64) -> Value {
     let sprite = game!().renderer.sprite_sheets[*sprite as usize].grid(*gx as usize, *gy as usize);
     let mut sprite = Sprite::new(sprite);
     sprite.at(*x as f32, *y as f32).scale(*w as f32, *h as f32);

@@ -381,7 +381,8 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 let (_ctx, expr) = expression(ctx)?;
                 exprs.push(expr);
                 ctx = _ctx; // assign to outer
-                            // Not a tuple, until it is.
+
+                // Not a tuple, until it is.
                 is_tuple |= matches!(ctx.token(), T::Comma);
             }
         }

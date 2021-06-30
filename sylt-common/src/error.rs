@@ -114,13 +114,8 @@ impl fmt::Display for Error {
         let indent = "      ";
 
         match self {
-            Error::RuntimeError {
-                kind,
-                phase,
-                file,
-                line,
-                message,
-            } => {
+            #[rustfmt::skip]
+            Error::RuntimeError { kind, phase, file, line, message } => {
                 write!(f, "{} {}: ", phase.red(), "error".red())?;
                 write!(f, "{}\n", file_line_display(file, Some(*line)))?;
                 write!(f, "{}{}\n", indent, kind)?;

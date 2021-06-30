@@ -165,14 +165,9 @@ pub fn make_matchable<'t>(value: &'t Value) -> MatchableValue<'t> {
     use Value::*;
 
     match value {
+        #[rustfmt::skip]
         Tuple(inner) => {
-            match (
-                inner.get(0),
-                inner.get(1),
-                inner.get(2),
-                inner.get(3),
-                inner.get(4),
-            ) {
+            match (inner.get(0), inner.get(1), inner.get(2), inner.get(3), inner.get(4)) {
                 (Some(a), Some(b), Some(c), Some(d), Some(e), ..) => Five(a, b, c, d, e),
                 (Some(a), Some(b), Some(c), Some(d), ..) => Four(a, b, c, d),
                 (Some(a), Some(b), Some(c), ..) => Three(a, b, c),
@@ -180,7 +175,7 @@ pub fn make_matchable<'t>(value: &'t Value) -> MatchableValue<'t> {
                 (Some(a), ..) => One(a),
                 _ => Empty,
             }
-        }
+        },
         x => One(x),
     }
 }

@@ -75,7 +75,9 @@ pub enum StatementKind {
         value: Expression,
     },
 
+    #[rustfmt::skip]
     // TODO(ed): break and continue
+
     /// Groups together statements that are executed after another.
     ///
     /// `{ <statement>.. }`.
@@ -406,7 +408,12 @@ pub fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
     let (ctx, stmt) = statement(ctx)?;
     use StatementKind::*;
     match stmt.kind {
-        Blob { .. } | Definition { .. } | Use { .. } | EmptyStatement => Ok((ctx, stmt)),
+        #[rustfmt::skip]
+        Blob { .. }
+        | Definition { .. }
+        | Use { .. }
+        | EmptyStatement
+        => Ok((ctx, stmt)),
 
         _ => raise_syntax_error!(ctx, "Not a valid outer statement"),
     }

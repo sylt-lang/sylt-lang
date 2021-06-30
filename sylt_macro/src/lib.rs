@@ -81,14 +81,11 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
         quote! { "Undocumented" }
     };
 
+    #[rustfmt::skip]
     let matches: Vec<_> = parsed
         .blocks
         .iter()
-        .map(
-            |ExternBlock {
-                 pattern, return_ty, ..
-             }| quote! { #pattern #return_ty },
-        )
+        .map(|ExternBlock { pattern, return_ty, .. }| quote! { #pattern #return_ty })
         .collect();
 
     let link_name = parsed.name.unwrap_or_else(|| function.clone());
