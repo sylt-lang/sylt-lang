@@ -3,10 +3,10 @@ use self::statement::outer_statement;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
-use sylt_common::Type as RuntimeType;
 use sylt_common::error::Error;
 use sylt_common::rc::Rc;
-use sylt_tokenizer::{Token, file_to_tokens};
+use sylt_common::Type as RuntimeType;
+use sylt_tokenizer::{file_to_tokens, Token};
 
 pub mod expression;
 pub mod statement;
@@ -521,19 +521,11 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
 /// Parse an [AssignableKind::Index].
 fn assignable_index<'t>(ctx: Context<'t>, indexed: Assignable) -> ParseResult<'t, Assignable> {
     let span = ctx.span();
-    let mut ctx = expect!(
-        ctx,
-        T::LeftBracket,
-        "Expected '[' when indexing"
-    );
+    let mut ctx = expect!(ctx, T::LeftBracket, "Expected '[' when indexing");
 
     let (_ctx, expr) = expression(ctx)?;
     ctx = _ctx; // assign to outer
-    let ctx = expect!(
-        ctx,
-        T::RightBracket,
-        "Expected ']' after index"
-    );
+    let ctx = expect!(ctx, T::RightBracket, "Expected ']' after index");
 
     use AssignableKind::Index;
     let result = Assignable {
@@ -552,7 +544,7 @@ fn assignable_dot<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t,
             Identifier {
                 name: name.clone(),
                 span,
-            }
+            },
         )
     } else {
         raise_syntax_error!(
@@ -561,7 +553,10 @@ fn assignable_dot<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t,
         );
     };
 
-    let access = Assignable { span: ctx.span(), kind: Access(Box::new(accessed), ident) };
+    let access = Assignable {
+        span: ctx.span(),
+        kind: Access(Box::new(accessed), ident),
+    };
     sub_assignable(ctx, access)
 }
 
@@ -571,7 +566,7 @@ fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'
         T::Prime | T::LeftParen => assignable_call(ctx, assignable),
         T::LeftBracket => assignable_index(ctx, assignable),
         T::Dot => assignable_dot(ctx, assignable),
-        _ => Ok((ctx, assignable))
+        _ => Ok((ctx, assignable)),
     }
 }
 
@@ -682,13 +677,13 @@ fn module(path: &Path, tokens: &Tokens) -> (Vec<PathBuf>, Result<Module, Vec<Err
 pub fn find_conflict_markers(file: &Path) -> Vec<Error> {
     let s = match std::fs::read_to_string(file) {
         Ok(s) => s,
-        Err(e) => return vec![
-            if matches!(e.kind(), std::io::ErrorKind::NotFound) {
+        Err(e) => {
+            return vec![if matches!(e.kind(), std::io::ErrorKind::NotFound) {
                 Error::FileNotFound(file.to_path_buf())
             } else {
                 Error::IOError(Rc::new(e))
-            }
-        ],
+            }]
+        }
     };
     let mut errs = Vec::new();
     // Search line by line and push any errors we find.

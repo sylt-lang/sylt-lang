@@ -8,25 +8,24 @@ use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 use sylt_tokenizer::Token;
 
-
 fn source_line_at(file: &Path, line: Option<usize>) -> Option<String> {
     match (File::open(file), line) {
-        (Ok(file), Some(line)) => {
-            Some(io::BufReader::new(file)
+        (Ok(file), Some(line)) => Some(
+            io::BufReader::new(file)
                 .lines()
                 .enumerate()
                 .filter(|(n, _)| line <= *n + 3 && *n + 3 <= line + 2)
                 .fold(String::from("\n"), |a, (n, l)| {
                     format!("{} {:3} | {}\n", a, (n + 1).blue(), l.unwrap())
-                })
-            )
-        }
+                }),
+        ),
         _ => None,
     }
 }
 
 fn file_line_display(file: &Path, line: Option<usize>) -> String {
-    format!("{}:{}",
+    format!(
+        "{}:{}",
         file.display().blue(),
         if let Some(line) = line {
             line.blue().to_string()
@@ -115,7 +114,13 @@ impl fmt::Display for Error {
         let indent = "      ";
 
         match self {
-            Error::RuntimeError { kind, phase, file, line, message } => {
+            Error::RuntimeError {
+                kind,
+                phase,
+                file,
+                line,
+                message,
+            } => {
                 write!(f, "{} {}: ", phase.red(), "error".red())?;
                 write!(f, "{}\n", file_line_display(file, Some(*line)))?;
                 write!(f, "{}{}\n", indent, kind)?;
@@ -123,7 +128,9 @@ impl fmt::Display for Error {
                 if let Some(message) = message {
                     write!(f, "{}\n", message)?;
                 }
-                write!(f, "{}\n",
+                write!(
+                    f,
+                    "{}\n",
                     source_line_at(file, Some(*line)).unwrap_or_else(String::new)
                 )
             }
@@ -139,7 +146,9 @@ impl fmt::Display for Error {
                 if let Some(message) = message {
                     write!(f, "{}{}\n", indent, message)?;
                 }
-                write!(f, "{}\n",
+                write!(
+                    f,
+                    "{}\n",
                     source_line_at(file, Some(*line)).unwrap_or_else(String::new)
                 )
             }
@@ -151,31 +160,32 @@ impl fmt::Display for Error {
             } => {
                 write!(f, "{}: ", "syntax error".red())?;
                 write!(f, "{}\n", file_line_display(file, Some(*line)))?;
-                write!(f, "{}Syntax Error on line {} at token {:?}\n", indent, line, token)?;
+                write!(
+                    f,
+                    "{}Syntax Error on line {} at token {:?}\n",
+                    indent, line, token
+                )?;
 
                 if let Some(message) = message {
                     write!(f, "{}{}\n", indent, message)?;
                 }
-                write!(f, "{}\n",
+                write!(
+                    f,
+                    "{}\n",
                     source_line_at(file, Some(*line)).unwrap_or_else(String::new)
                 )
             }
-            Error::GitConflictError {
-                file,
-                start,
-            } => {
+            Error::GitConflictError { file, start } => {
                 write!(f, "{}: ", "git conflict error".red())?;
                 write!(f, "{}\n", file_line_display(file, Some(*start)))?;
 
+                write!(f, "{}Git conflict marker found at line {}\n", indent, start)?;
+
                 write!(
                     f,
-                    "{}Git conflict marker found at line {}\n",
-                    indent,
-                    start
-                )?;
-
-                write!(f, "{}",
-                    source_line_at(file, Some(*start + 1)).unwrap_or_else(String::new))
+                    "{}",
+                    source_line_at(file, Some(*start + 1)).unwrap_or_else(String::new)
+                )
             }
             Error::FileNotFound(path) => {
                 write!(f, "File '{}' not found", path.display())
@@ -194,7 +204,11 @@ impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RuntimeError::FieldTypeMismatch(obj, field, a, b, msg) => {
-                write!(f, "Field {}.{} expected {:?} but got {:?}. {}", obj, field, a, b, msg)
+                write!(
+                    f,
+                    "Field {}.{} expected {:?} but got {:?}. {}",
+                    obj, field, a, b, msg
+                )
             }
             RuntimeError::TypeError(op, types) => {
                 let types = types

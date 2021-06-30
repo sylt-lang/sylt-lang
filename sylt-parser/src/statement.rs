@@ -76,7 +76,6 @@ pub enum StatementKind {
     },
 
     // TODO(ed): break and continue
-
     /// Groups together statements that are executed after another.
     ///
     /// `{ <statement>.. }`.
@@ -117,7 +116,13 @@ pub fn block_statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     }
 
     let ctx = expect!(ctx, T::RightBrace, "Expected }} after block statement");
-    Ok((ctx, Statement { span, kind: StatementKind::Block { statements } }))
+    Ok((
+        ctx,
+        Statement {
+            span,
+            kind: StatementKind::Block { statements },
+        },
+    ))
 }
 
 /// Parse a single [Statement].
@@ -401,11 +406,7 @@ pub fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
     let (ctx, stmt) = statement(ctx)?;
     use StatementKind::*;
     match stmt.kind {
-        Blob { ..}
-        | Definition { .. }
-        | Use { .. }
-        | EmptyStatement
-        => Ok((ctx, stmt)),
+        Blob { .. } | Definition { .. } | Use { .. } | EmptyStatement => Ok((ctx, stmt)),
 
         _ => raise_syntax_error!(ctx, "Not a valid outer statement"),
     }
