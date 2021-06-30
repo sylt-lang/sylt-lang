@@ -3,7 +3,11 @@ use std::hash::{Hash, Hasher};
 
 use crate::{Value, Blob};
 
-#[derive(Debug, Clone)]
+pub trait Numbered {
+    fn to_number(&self) -> usize;
+}
+
+#[derive(Debug, Clone, sylt_macro::Numbered)]
 pub enum Type {
     Ty,
     Field(String),
@@ -29,67 +33,43 @@ pub enum Type {
 
 impl Hash for Type {
     fn hash<H: Hasher>(&self, h: &mut H) {
-        // TODO(ed): We can use the fancy macro here instead.
+        self.to_number().hash(h);
         match self {
-            Type::Ty => 18,
-            Type::Field(_) => unimplemented!(),
-            Type::Void => 0,
-            Type::Unknown => 1,
-            Type::Int => 2,
-            Type::Float => 3,
-            Type::Bool => 4,
-            Type::String => 5,
+            Type::Field(_) | Type::Invalid => unimplemented!(),
+
+            Type::List(t) | Type::Set(t) | Type::Iter(t)
+                => t.as_ref().hash(h),
+
             Type::Tuple(ts) => {
                 for t in ts.iter() {
                     t.hash(h);
                 }
-                6
-            }
-            Type::List(t) => {
-                t.as_ref().hash(h);
-                12
-            }
-            Type::Set(t) => {
-                t.as_ref().hash(h);
-                13
             }
             Type::Dict(k, v) => {
                 k.as_ref().hash(h);
                 v.as_ref().hash(h);
-                14
-            }
-            Type::Iter(t) => {
-                t.as_ref().hash(h);
-                15
             }
             Type::Union(ts) => {
                 for t in ts {
                     t.hash(h);
                 }
-                7
             }
             Type::Function(args, ret) => {
                 ret.hash(h);
                 for t in args.iter() {
                     t.hash(h);
                 }
-                8
             }
-            Type::Blob(b) => {
-                b.hash(h);
-                10
-            }
-            Type::Instance(b) => {
-                b.hash(h);
-                11
-            }
-            Type::ExternFunction(_) => {
-                16
-            }
+            Type::Blob(b) | Type::Instance(b) => b.hash(h),
 
-            Type::Invalid => {
-                19
-            }
+            Type::Ty
+            | Type::Void
+            | Type::Unknown
+            | Type::Int
+            | Type::Float
+            | Type::Bool
+            | Type::ExternFunction(..)
+            | Type::String => {}
         }
         .hash(h);
     }

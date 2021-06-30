@@ -371,6 +371,46 @@ pub fn derive_next(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     proc_macro::TokenStream::from(item)
 }
 
+#[proc_macro_derive(Numbered)]
+pub fn derive_numbered(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    assert!(!item.is_empty());
+    let parsed: syn::ItemEnum = parse_macro_input!(item);
+
+    let ident = parsed.ident.clone();
+
+    let match_arms: Vec<_> = parsed.variants.iter().enumerate().map(|(i, v)| {
+        let name = v.ident.clone();
+        match v.fields {
+            syn::Fields::Named(_) => {
+                quote! {
+                    #ident::#name { .. } => #i,
+                }
+            }
+            syn::Fields::Unnamed(_) => {
+                quote! {
+                    #ident::#name ( .. ) => #i,
+                }
+            }
+            syn::Fields::Unit => {
+                quote! {
+                    #ident::#name => #i,
+                }
+            }
+        }
+    }).collect();
+
+    let item = quote! {
+        impl Numbered for #ident {
+            fn to_number(&self) -> usize {
+                match self {
+                    #(#match_arms)*
+                }
+            }
+        }
+    };
+    proc_macro::TokenStream::from(item)
+}
+
 enum LinkState {
     Open,
     Written,

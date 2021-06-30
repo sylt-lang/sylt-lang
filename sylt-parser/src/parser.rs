@@ -19,6 +19,10 @@ pub trait Next {
     fn next(&self) -> Self;
 }
 
+pub trait Numbered {
+    fn to_number(&self) -> usize;
+}
+
 #[derive(Debug, Copy, Clone)]
 /// A location in a file containing source code.
 pub struct Span {
