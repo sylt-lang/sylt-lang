@@ -805,6 +805,30 @@ mod test {
         };
     }
 
+    #[macro_export]
+    macro_rules! fail {
+        ($f:ident, $name:ident: $str:expr => $ans:pat) => {
+            #[test]
+            fn $name() {
+                let tokens = ::sylt_tokenizer::string_to_tokens($str);
+                let path = ::std::path::PathBuf::from(stringify!($name));
+                let result = $f($crate::Context::new(&tokens, &path));
+                assert!(
+                    result.is_err(),
+                    "\nSyntax tree test parsed - when it should have failed - for:\n{}\n",
+                    $str,
+                );
+                let (_, result) = result.unwrap_err();
+                assert!(
+                    matches!(result, $ans),
+                    "\nExpected: {}, but got: {:?}",
+                    stringify!($ans),
+                    result
+                );
+            }
+        };
+    }
+
     mod parse_type {
         use super::*;
         use RuntimeType as RT;
