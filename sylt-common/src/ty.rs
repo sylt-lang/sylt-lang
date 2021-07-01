@@ -172,7 +172,7 @@ impl Type {
                     Ok(())
                 }
             }
-            (Type::Instance(a), Type::Instance(b)) => {
+            (Type::Instance(a), Type::Instance(b)) | (Type::Blob(a), Type::Blob(b)) => {
                 let a_fields = &blobs[*a].fields;
                 let b_fields = &blobs[*b].fields;
                 for (f, t) in a_fields.iter() {
