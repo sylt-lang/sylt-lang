@@ -172,7 +172,15 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
         // `loop <expression> <statement>`, e.g. `loop a < 10 { a += 1 }`
         [(T::Loop, _), ..] => {
-            let (ctx, condition) = expression(ctx.skip(1))?;
+            let ctx = ctx.skip(1);
+            let (ctx, condition) = if matches!(ctx.token(), T::LeftBrace) {
+                (
+                    ctx,
+                    Expression { span: ctx.span(), kind: ExpressionKind::Bool(true), },
+                )
+            } else {
+                expression(ctx)?
+            };
             let (ctx, body) = statement(ctx)?;
             (
                 ctx,
@@ -430,6 +438,7 @@ mod test {
     test!(statement, statement_if: "if 1 { print a }" => _);
     test!(statement, statement_if_else: "if 1 { print a } else { print b }" => _);
     test!(statement, statement_loop: "loop 1 { print a }" => _);
+    test!(statement, statement_loop_no_condition: "loop { print a }" => _);
     test!(statement, statement_ret: "ret 1 + 1" => _);
     test!(statement, statement_ret_newline: "ret \n" => _);
     test!(statement, statement_unreach: "<!>" => _);
