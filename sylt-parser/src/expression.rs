@@ -13,6 +13,9 @@ pub enum ExpressionKind {
     /// blob fields, list indexing, tuple indexing and dict indexing end up here.
     Get(Assignable),
 
+    /// A type as a value
+    TypeConstant(Type),
+
     /// `a + b`
     Add(Box<Expression>, Box<Expression>),
     /// `a - b`
@@ -239,12 +242,24 @@ fn value<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Expression), (Context<'t>
 
 /// Parse something that begins at the start of an expression.
 fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-    use ExpressionKind::Get;
+    use ExpressionKind::{Get, TypeConstant};
 
     match ctx.token() {
         T::LeftParen => grouping_or_tuple(ctx),
         T::LeftBracket => list(ctx),
         T::LeftBrace => set_or_dict(ctx),
+
+        T::Hash => {
+            let span = ctx.span();
+            let (ctx, ty) = parse_type(ctx.skip(1))?;
+            Ok((
+                ctx,
+                Expression {
+                    span,
+                    kind: TypeConstant(ty),
+                },
+            ))
+        }
 
         T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
         T::Minus | T::Bang => unary(ctx),
@@ -664,6 +679,13 @@ mod test {
     test!(expression, neg: "-a" => _);
 
     test!(expression, expr: "-a + b < 3 * true && false / 2" => _);
+
+    test!(expression, type_expr_int: "#int" => _);
+    test!(expression, type_expr_void: "#void" => _);
+    test!(expression, type_expr_float: "#float" => _);
+    test!(expression, type_expr_str: "#str" => _);
+    test!(expression, type_expr_custom: "#A" => _);
+    test!(expression, type_expr_custom_chaining: "#A.b.C" => _);
 
     test!(expression, void_simple: "fn {}" => _);
     test!(expression, void_argument: "fn a: int { ret a + 1 }" => _);

@@ -66,6 +66,8 @@ pub enum Token {
     #[token("/=")]
     SlashEqual,
 
+    #[token("#")]
+    Hash,
     #[token(":")]
     Colon,
     #[token("::")]
