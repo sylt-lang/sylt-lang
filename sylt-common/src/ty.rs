@@ -71,7 +71,6 @@ impl Hash for Type {
             | Type::ExternFunction(..)
             | Type::String => {}
         }
-        .hash(h);
     }
 }
 
