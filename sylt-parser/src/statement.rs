@@ -118,13 +118,8 @@ pub fn block_statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     }
 
     let ctx = expect!(ctx, T::RightBrace, "Expected }} after block statement");
-    Ok((
-        ctx,
-        Statement {
-            span,
-            kind: StatementKind::Block { statements },
-        },
-    ))
+    #[rustfmt::skip]
+    return Ok(( ctx, Statement { span, kind: StatementKind::Block { statements } }));
 }
 
 /// Parse a single [Statement].

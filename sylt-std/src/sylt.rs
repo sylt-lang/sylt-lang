@@ -257,10 +257,8 @@ pub fn inf<'t>(values: &[Value], _ctx: RuntimeContext<'t>) -> Result<Value, Runt
         [x] => {
             let t: Type = Type::from(&*x);
             let x = x.clone();
-            Ok(Value::Iter(
-                t,
-                Rc::new(RefCell::new(Box::new(move || Some(x.clone())))),
-            ))
+            #[rustfmt::skip]
+            return Ok(Value::Iter(t, Rc::new(RefCell::new(Box::new(move || Some(x.clone()))))));
         }
         values => Err(RuntimeError::ExternTypeMismatch(
             "inf".to_string(),
