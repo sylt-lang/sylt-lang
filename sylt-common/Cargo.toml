@@ -7,5 +7,6 @@ edition = "2018"
 
 [dependencies]
 sylt-tokenizer = { path = "../sylt-tokenizer" }
+sylt_macro = { path = "../sylt_macro" }
 
 owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }

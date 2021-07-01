@@ -7,4 +7,3 @@ start :: fn {
 
 // error: #TypeMismatch(Type::Int, Type::String)
 // error: #TypeError(_, _)
-// error: #TypeMismatch(_, _)

@@ -55,7 +55,7 @@ impl From<&Type> for Value {
             Type::Iter(v) => {
                 Value::Iter(v.as_ref().clone(), Rc::new(RefCell::new(Box::new(|| None))))
             }
-            Type::Unknown => Value::Unknown,
+            Type::Unknown | Type::Invalid => Value::Unknown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),
             Type::Bool => Value::Bool(true),
