@@ -4,7 +4,10 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt::Debug;
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::rc::Rc;
-use sylt_common::{Block, BlockLinkState, Blob, IterFn, Op, Prog, RuntimeContext, RustFunction, Type, UpValue, Value};
+use sylt_common::{
+    Blob, Block, BlockLinkState, IterFn, Op, Prog, RuntimeContext, RustFunction, Type, UpValue,
+    Value,
+};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -36,7 +39,10 @@ macro_rules! two_op {
         let c = $fun(&a, &b);
         if c.is_nil() {
             $self.push(c);
-            error!($self, RuntimeError::TypeError($op, vec![a.into(), b.into()]));
+            error!(
+                $self,
+                RuntimeError::TypeError($op, vec![a.into(), b.into()])
+            );
         }
         $self.push(c);
     };
@@ -169,7 +175,10 @@ impl VM {
         self.print_stack();
         println!("\n");
         self.print_stacktrace();
-        self.frame().block.borrow().debug_print(Some(&self.constants));
+        self.frame()
+            .block
+            .borrow()
+            .debug_print(Some(&self.constants));
         println!(
             "    ip: {}, line: {}\n",
             self.frame().ip.blue(),
@@ -405,7 +414,6 @@ impl VM {
                 }
             }
 
-
             Op::AssignIndex => {
                 let value = self.pop();
                 let slot = self.pop();
@@ -591,7 +599,9 @@ impl VM {
                     }
                     Value::Dict(rc) => {
                         let mut v = rc.as_ref().borrow().clone().into_iter();
-                        Some(Box::new(move || v.next().map(|(k, v)| Value::Tuple(Rc::new(vec![k, v])))))
+                        Some(Box::new(move || {
+                            v.next().map(|(k, v)| Value::Tuple(Rc::new(vec![k, v])))
+                        }))
                     }
                     v => {
                         self.push(Value::Nil);
@@ -699,7 +709,7 @@ impl VM {
                 match self.stack[new_base].clone() {
                     Value::Blob(blob_slot) => {
                         let blob = &self.blobs[blob_slot];
-                        let mut values = self.stack[new_base+1..]
+                        let mut values = self.stack[new_base + 1..]
                             .chunks_exact(2)
                             .map(|b| {
                                 if let Value::Field(name) = &b[0] {
@@ -714,7 +724,10 @@ impl VM {
                             values.entry(name.clone()).or_insert(Value::Nil);
                         }
                         values.insert("_id".to_string(), Value::Int(blob.id as i64));
-                        values.insert("_name".to_string(), Value::String(Rc::new(blob.name.clone())));
+                        values.insert(
+                            "_name".to_string(),
+                            Value::String(Rc::new(blob.name.clone())),
+                        );
                         self.push(Value::Instance(blob_slot, Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, _, block) => {
@@ -812,7 +825,11 @@ impl VM {
         self.stack.clear();
         self.frames.clear();
 
-        self.push(Value::Function(Rc::new(Vec::new()), Type::Function(Vec::new(), Box::new(Type::Void)), 0));
+        self.push(Value::Function(
+            Rc::new(Vec::new()),
+            Type::Function(Vec::new(), Box::new(Type::Void)),
+            0,
+        ));
 
         self.frames.push(Frame {
             stack_offset: 0,
@@ -826,7 +843,10 @@ impl VM {
     pub fn run(&mut self) -> Result<OpResult, Error> {
         if self.print_bytecode {
             println!("\n    [[{}]]\n", "RUNNING".red());
-            self.frame().block.borrow().debug_print(Some(&self.constants));
+            self.frame()
+                .block
+                .borrow()
+                .debug_print(Some(&self.constants));
         }
 
         loop {
@@ -1007,6 +1027,8 @@ mod op {
     pub fn less(a: &Value, b: &Value) -> Value {
         match (a, b) {
             (Value::Float(a), Value::Float(b)) => Value::Bool(a < b),
+            (Value::Float(a), Value::Int(b)) => Value::Bool(*a < (*b as f64)),
+            (Value::Int(a), Value::Float(b)) => Value::Bool((*a as f64) < *b),
             (Value::Int(a), Value::Int(b)) => Value::Bool(a < b),
             (Value::String(a), Value::String(b)) => Value::Bool(a < b),
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(a < b),

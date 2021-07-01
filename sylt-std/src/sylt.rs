@@ -1,10 +1,10 @@
 use crate as sylt_std;
 
 use owo_colors::OwoColorize;
+use std::cell::RefCell;
 use sylt_common::error::RuntimeError;
 use sylt_common::rc::Rc;
-use std::cell::RefCell;
-use sylt_common::{Type, Value, Blob, RuntimeContext};
+use sylt_common::{Blob, RuntimeContext, Type, Value};
 
 #[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", [One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(dbg, "sylt_std::sylt")]
@@ -60,7 +60,6 @@ pub fn clear<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, Run
     }
 }
 
-
 #[sylt_macro::sylt_doc(prepend, "Adds an element to the start of a list", [One(List(ls)), One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(prepend, "sylt_std::sylt")]
 pub fn prepend<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
@@ -92,15 +91,9 @@ pub fn prepend<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, R
 #[sylt_macro::sylt_link(len, "sylt_std::sylt")]
 pub fn len<'t>(values: &[Value], _: RuntimeContext) -> Result<Value, RuntimeError> {
     match values {
-        [Value::Tuple(ls)] => {
-            Ok(Value::Int(ls.len() as i64))
-        }
-        [Value::List(ls)] => {
-            Ok(Value::Int(ls.borrow().len() as i64))
-        }
-        [_] => {
-            Ok(Value::Int(0))
-        }
+        [Value::Tuple(ls)] => Ok(Value::Int(ls.len() as i64)),
+        [Value::List(ls)] => Ok(Value::Int(ls.borrow().len() as i64)),
+        [_] => Ok(Value::Int(0)),
         values => Err(RuntimeError::ExternTypeMismatch(
             "len".to_string(),
             values.iter().map(Type::from).collect(),
@@ -116,7 +109,6 @@ sylt_macro::extern_function!(
         Ok(Float(y.atan2(*x)))
     },
 );
-
 
 sylt_macro::extern_function!(
     "sylt_std::sylt"
@@ -217,26 +209,20 @@ sylt_macro::extern_function!(
     },
 );
 
-
-
-pub fn union_type<'t>(a: Type, b: Type, blobs: &[Blob]) -> Type{
+pub fn union_type<'t>(a: Type, b: Type, blobs: &[Blob]) -> Type {
     if a.fits(&b, blobs).is_ok() {
         a
     } else if b.fits(&a, blobs).is_ok() {
         b
     } else {
         match (a, b) {
-            (Type::Union(a), Type::Union(b)) => {
-                Type::Union(a.union(&b).cloned().collect())
-            }
+            (Type::Union(a), Type::Union(b)) => Type::Union(a.union(&b).cloned().collect()),
             (b, Type::Union(a)) | (Type::Union(a), b) => {
                 let mut a = a.clone();
                 a.insert(b.clone());
                 Type::Union(a)
             }
-            (a, b) => {
-                Type::Union([a, b].iter().cloned().collect())
-            }
+            (a, b) => Type::Union([a, b].iter().cloned().collect()),
         }
     }
 }
@@ -271,7 +257,8 @@ pub fn inf<'t>(values: &[Value], _ctx: RuntimeContext<'t>) -> Result<Value, Runt
         [x] => {
             let t: Type = Type::from(&*x);
             let x = x.clone();
-            Ok(Value::Iter(t, Rc::new(RefCell::new(Box::new(move || Some(x.clone()))))))
+            #[rustfmt::skip]
+            return Ok(Value::Iter(t, Rc::new(RefCell::new(Box::new(move || Some(x.clone()))))));
         }
         values => Err(RuntimeError::ExternTypeMismatch(
             "inf".to_string(),
