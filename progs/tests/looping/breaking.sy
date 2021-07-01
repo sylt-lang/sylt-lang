@@ -1,0 +1,14 @@
+start :: fn {
+    loop {
+        break
+        <!>
+    }
+
+    a := 0
+    loop a < 3 {
+        if a > 2 {
+            break
+        }
+        a += 1
+    }
+}

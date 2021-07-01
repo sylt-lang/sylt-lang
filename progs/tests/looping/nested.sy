@@ -9,7 +9,5 @@ start :: fn {
         }
         a -= 1
     }
-    // print "N"
-    // print n
     n <=> 6
 }

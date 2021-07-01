@@ -68,6 +68,16 @@ pub enum StatementKind {
         body: Box<Statement>,
     },
 
+    /// Jump out of a loop.
+    ///
+    /// `break`.
+    Break,
+
+    /// Go back to the start of the loop.
+    ///
+    /// `continue`.
+    Continue,
+
     /// Returns a value from a function.
     ///
     /// `ret <expression>`.
@@ -146,6 +156,8 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             },
         ),
 
+        [(T::Break, _), ..] => (ctx.skip(1), Break),
+        [(T::Continue, _), ..] => (ctx.skip(1), Continue),
         [(T::Unreachable, _), ..] => (ctx.skip(1), Unreachable),
 
         [(T::Print, _), ..] => {
@@ -429,6 +441,8 @@ mod test {
     // NOTE(ed): Expressions are valid statements! :D
     test!(statement, statement_expression: "1 + 1" => _);
     test!(statement, statement_print: "print 1" => _);
+    test!(statement, statement_break: "break" => _);
+    test!(statement, statement_continue: "continue" => _);
     test!(statement, statement_mut_declaration: "a := 1 + 1" => _);
     test!(statement, statement_const_declaration: "a :: 1 + 1" => _);
     test!(statement, statement_mut_type_declaration: "a :int= 1 + 1" => _);
