@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
-use crate::{Value, Blob};
+use crate::{Blob, Value};
 
 pub trait Numbered {
     fn to_number(&self) -> usize;
@@ -161,17 +161,13 @@ impl Type {
             (Type::List(a), Type::List(b)) => a.fits(b, blobs),
             (Type::Set(a), Type::Set(b)) => a.fits(b, blobs),
             (Type::Dict(ak, av), Type::Dict(bk, bv)) => {
-                ak.fits(bk, blobs)?; av.fits(bv, blobs)
+                ak.fits(bk, blobs)?;
+                av.fits(bv, blobs)
             }
             (Type::Union(_), Type::Union(b)) => {
                 // NOTE(ed): Does this cause infinite recursion?
                 if b.iter().any(|x| self.fits(x, blobs).is_err()) {
-                    Err(
-                        format!(
-                            "'{:?}' doesn't fit a '{:?}'",
-                            self,
-                            other
-                    ))
+                    Err(format!("'{:?}' doesn't fit a '{:?}'", self, other))
                 } else {
                     Ok(())
                 }
@@ -193,28 +189,20 @@ impl Type {
                                     f,
                                     y,
                                     t
-                            ))
+                            ));
                         }
                     } else {
-                        return Err(
-                            format!(
-                                "'{:?}' is not a '{:?}', '{:?}' has no field '{:?}'",
-                                blobs[*a].name,
-                                blobs[*b].name,
-                                blobs[*b].name,
-                                f
-                        ))
+                        return Err(format!(
+                            "'{:?}' is not a '{:?}', '{:?}' has no field '{:?}'",
+                            blobs[*a].name, blobs[*b].name, blobs[*b].name, f
+                        ));
                     }
-                };
+                }
                 Ok(())
             }
             (a, Type::Union(b)) => {
                 if !b.iter().all(|x| x == a) {
-                    Err(format!(
-                            "'{:?}' cannot fit a '{:?}'",
-                            a,
-                            other
-                    ))
+                    Err(format!("'{:?}' cannot fit a '{:?}'", a, other))
                 } else {
                     Ok(())
                 }
@@ -223,11 +211,7 @@ impl Type {
                 if a.iter().any(|x| x == b) {
                     Ok(())
                 } else {
-                    Err(format!(
-                            "'{:?}' cannot fit a '{:?}'",
-                            self,
-                            other
-                    ))
+                    Err(format!("'{:?}' cannot fit a '{:?}'", self, other))
                 }
             }
             (a, b) => {

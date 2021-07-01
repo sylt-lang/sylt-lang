@@ -4,7 +4,10 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
-use syn::{Expr, Pat, Token, parse::{Parse, ParseStream, Result}, parse_macro_input};
+use syn::{
+    parse::{Parse, ParseStream, Result},
+    parse_macro_input, Expr, Pat, Token,
+};
 
 struct ExternBlock {
     pattern: Pat,
@@ -21,7 +24,7 @@ struct ExternFunction {
     _as: Option<Token![as]>,
     name: Option<syn::Ident>,
     doc: Option<syn::LitStr>,
-    blocks: Vec<ExternBlock>
+    blocks: Vec<ExternBlock>,
 }
 
 impl Parse for ExternBlock {
@@ -70,31 +73,46 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
         let doc = parsed.doc.unwrap();
         quote! { #doc }
     } else {
-        eprintln!("Missing doc-string: {} :: {}", module.value(), function.to_string());
+        eprintln!(
+            "Missing doc-string: {} :: {}",
+            module.value(),
+            function.to_string()
+        );
         quote! { "Undocumented" }
     };
 
-    let matches: Vec<_> = parsed.blocks.iter()
-        .map(|ExternBlock { pattern, return_ty, ..}| quote! { #pattern #return_ty })
+    #[rustfmt::skip]
+    let matches: Vec<_> = parsed
+        .blocks
+        .iter()
+        .map(|ExternBlock { pattern, return_ty, .. }| quote! { #pattern #return_ty })
         .collect();
 
     let link_name = parsed.name.unwrap_or_else(|| function.clone());
 
-    let typecheck_blocks: Vec<_> = parsed.blocks.iter().map(|block| {
-        let pat = block.pattern.clone();
-        let ty = block.return_ty.clone();
-        quote! {
-            #pat => { Ok(sylt_common::Value::from(#ty)) }
-        }
-    }).collect();
+    let typecheck_blocks: Vec<_> = parsed
+        .blocks
+        .iter()
+        .map(|block| {
+            let pat = block.pattern.clone();
+            let ty = block.return_ty.clone();
+            quote! {
+                #pat => { Ok(sylt_common::Value::from(#ty)) }
+            }
+        })
+        .collect();
 
-    let eval_blocks: Vec<_> = parsed.blocks.iter().map(|block| {
-        let pat = block.pattern.clone();
-        let expr = block.block.clone();
-        quote! {
-            #pat => #expr
-        }
-    }).collect();
+    let eval_blocks: Vec<_> = parsed
+        .blocks
+        .iter()
+        .map(|block| {
+            let pat = block.pattern.clone();
+            let expr = block.block.clone();
+            quote! {
+                #pat => #expr
+            }
+        })
+        .collect();
 
     let tokens = quote! {
         #[sylt_macro::sylt_doc(#function, #doc , #( #matches ),*)]
@@ -167,9 +185,7 @@ struct Links {
 
 impl Parse for Links {
     fn parse(input: ParseStream) -> Result<Self> {
-        let mut res = Self {
-            links: Vec::new(),
-        };
+        let mut res = Self { links: Vec::new() };
         while !input.is_empty() {
             res.links.push(input.parse()?);
             let _comma: Option<Token![,]> = input.parse().ok();
@@ -181,17 +197,21 @@ impl Parse for Links {
 #[proc_macro]
 pub fn link(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let links: Links = parse_macro_input!(tokens);
-    let links: Vec<_> = links.links.iter().map(|link| {
-        let name = if let Some(rename) = &link.rename {
-            &rename.name
-        } else {
-            &link.path.segments.last().unwrap().ident
-        };
-        let path = &link.path;
-        quote! {
-            (stringify!(#name).to_string(), #path)
-        }
-    }).collect();
+    let links: Vec<_> = links
+        .links
+        .iter()
+        .map(|link| {
+            let name = if let Some(rename) = &link.rename {
+                &rename.name
+            } else {
+                &link.path.segments.last().unwrap().ident
+            };
+            let path = &link.path;
+            quote! {
+                (stringify!(#name).to_string(), #path)
+            }
+        })
+        .collect();
 
     let tokens = quote! {
         vec![ #(#links),* ]
@@ -219,12 +239,12 @@ fn parse_test_settings(contents: String) -> TestSettings {
     let mut errors = Vec::new();
     for line in contents.split("\n") {
         if line.starts_with("// error: ") {
-            let mut line = line
-                .strip_prefix("// error: ")
-                .unwrap()
-                .to_string();
+            let mut line = line.strip_prefix("// error: ").unwrap().to_string();
             if line.starts_with("#") {
-                line = format!("Error::RuntimeError {{ kind: RuntimeError::{}, .. }}", &line[1..]);
+                line = format!(
+                    "Error::RuntimeError {{ kind: RuntimeError::{}, .. }}",
+                    &line[1..]
+                );
             }
             if line.starts_with("@") {
                 line = format!("Error::SyntaxError {{ line: {}, .. }}", &line[1..]);
@@ -262,7 +282,10 @@ fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
         if path.is_dir() {
             tests.extend(find_test_paths(&path));
         } else {
-            assert!(!path.to_str().unwrap().contains(","), "You should be ashamed.");
+            assert!(
+                !path.to_str().unwrap().contains(","),
+                "You should be ashamed."
+            );
 
             let path_string = path.to_str().unwrap();
             let test_name = format_ident!("{}", file_name.replace(".sy", ""));
@@ -280,7 +303,12 @@ fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
         }
     }
 
-    let directory = directory.file_name().unwrap().to_str().unwrap().replace("/", "");
+    let directory = directory
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .replace("/", "");
     let directory = format_ident!("{}", directory);
     quote! {
         mod #directory {
@@ -303,16 +331,26 @@ pub fn derive_enumerate(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
     let parsed: syn::ItemEnum = parse_macro_input!(item);
 
     let ident = parsed.ident;
-    let match_from_usize: Vec<_> = parsed.variants.iter().enumerate().map(|(i, v)| {
-        quote! {
-            #i => Ok(#ident::#v),
-        }
-    }).collect();
-    let match_from_ident: Vec<_> = parsed.variants.iter().enumerate().map(|(i, v)| {
-        quote! {
-            #ident::#v => #i,
-        }
-    }).collect();
+    let match_from_usize: Vec<_> = parsed
+        .variants
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            quote! {
+                #i => Ok(#ident::#v),
+            }
+        })
+        .collect();
+    let match_from_ident: Vec<_> = parsed
+        .variants
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            quote! {
+                #ident::#v => #i,
+            }
+        })
+        .collect();
 
     let max = parsed.variants.len();
 
@@ -348,13 +386,15 @@ pub fn derive_next(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let mut iter = parsed.variants.iter();
     let mut prev = iter.next().expect("Empty enum can't be Next");
-    let mut match_arms: Vec<_> = iter.map(|v| {
-        let tokens = quote! {
-            #ident::#prev => #ident::#v,
-        };
-        prev = v;
-        tokens
-    }).collect();
+    let mut match_arms: Vec<_> = iter
+        .map(|v| {
+            let tokens = quote! {
+                #ident::#prev => #ident::#v,
+            };
+            prev = v;
+            tokens
+        })
+        .collect();
     match_arms.push(quote! {
         #ident::#prev => #ident::#prev,
     });
@@ -431,7 +471,8 @@ impl ModuleLink {
 }
 
 lazy_static! {
-    static ref LINKS: Arc<Mutex<HashMap<String, ModuleLink>>> = Arc::new(Mutex::new(HashMap::new()));
+    static ref LINKS: Arc<Mutex<HashMap<String, ModuleLink>>> =
+        Arc::new(Mutex::new(HashMap::new()));
 }
 
 #[proc_macro]
@@ -455,14 +496,16 @@ pub fn sylt_link_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
         return proc_macro::TokenStream::from(tokens);
     }
     link.state = LinkState::Written;
-    let funs: Vec<_> = link.mapping
+    let funs: Vec<_> = link
+        .mapping
         .iter()
         .map(|(ident, name)| {
             let ident = proc_macro2::TokenStream::from_str(&ident).unwrap();
             quote! {
                 (#name.to_string(), #ident),
             }
-    }).collect();
+        })
+        .collect();
 
     let tokens = quote! {
         pub fn _sylt_link() -> Vec<(std::string::String, ::sylt_common::RustFunction)> {
@@ -525,13 +568,22 @@ impl DocFile {
 }
 
 #[proc_macro_attribute]
-pub fn sylt_doc(attrib: proc_macro::TokenStream, tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn sylt_doc(
+    attrib: proc_macro::TokenStream,
+    tokens: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
     let doc: SyltDoc = parse_macro_input!(attrib);
 
-    let doc = format!("{{ \"name\": \"{}\", \"comment\": \"{}\", \"signature\": [{}]}}",
+    let doc = format!(
+        "{{ \"name\": \"{}\", \"comment\": \"{}\", \"signature\": [{}]}}",
         doc.name.to_string(),
         doc.comment.value().replace("\n", "\\n"),
-        doc.args.iter().map(|(p, r)| format!("\"{}\"", quote! { #p -> #r }.to_string())).collect::<Vec<_>>().join(",").replace("\n", ""),
+        doc.args
+            .iter()
+            .map(|(p, r)| format!("\"{}\"", quote! { #p -> #r }.to_string()))
+            .collect::<Vec<_>>()
+            .join(",")
+            .replace("\n", ""),
     );
     let mut doc_file = DOC.lock().unwrap();
     doc_file.docs.push(doc);
@@ -558,13 +610,18 @@ impl Parse for SyltLink {
 }
 
 #[proc_macro_attribute]
-pub fn sylt_link(attrib: proc_macro::TokenStream, tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn sylt_link(
+    attrib: proc_macro::TokenStream,
+    tokens: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
     let parsed: syn::ItemFn = parse_macro_input!(tokens);
     let fun = parsed.sig.ident.clone();
     let link: SyltLink = parse_macro_input!(attrib);
 
     let mut links = LINKS.lock().unwrap();
-    let links = links.entry(link.module.value()).or_insert(ModuleLink::new());
+    let links = links
+        .entry(link.module.value())
+        .or_insert(ModuleLink::new());
     if matches!(links.state, LinkState::Written) {
         let tokens = quote! {
             std::compile_error!("Tried to write linked sylt functions twice.");
@@ -572,12 +629,10 @@ pub fn sylt_link(attrib: proc_macro::TokenStream, tokens: proc_macro::TokenStrea
         return proc_macro::TokenStream::from(tokens);
     }
 
-    links.mapping.push(
-        (
-            format!("{}::{}", link.module.value(), fun),
-            link.name.to_string().clone()
-        )
-    );
+    links.mapping.push((
+        format!("{}::{}", link.module.value(), fun),
+        link.name.to_string().clone(),
+    ));
 
     let tokens = quote! {
         #parsed

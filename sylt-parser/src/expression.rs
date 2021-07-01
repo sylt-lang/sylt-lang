@@ -326,7 +326,11 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
         T::Arrow => {
             use AssignableKind::Call;
             // Rhs has to be an ExpressionKind::Get(AssignableKind::Call).
-            if let Get(Assignable { kind: Call(callee, mut args), ..  }) = rhs.kind {
+            if let Get(Assignable {
+                kind: Call(callee, mut args),
+                ..
+            }) = rhs.kind
+            {
                 // Insert lhs as the first argument.
                 args.insert(0, *lhs);
                 // Return the new expression.
@@ -377,6 +381,7 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 let (_ctx, expr) = expression(ctx)?;
                 exprs.push(expr);
                 ctx = _ctx; // assign to outer
+
                 // Not a tuple, until it is.
                 is_tuple |= matches!(ctx.token(), T::Comma);
             }
@@ -579,11 +584,11 @@ pub fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 // Faulty syntax should be tested in the small language tests.
 #[cfg(test)]
 mod test {
-    use crate::Assignable;
-    use crate::AssignableKind::*;
+    use super::ExpressionKind::*;
     use crate::expression;
     use crate::test;
-    use super::ExpressionKind::*;
+    use crate::Assignable;
+    use crate::AssignableKind::*;
 
     test!(expression, value: "0" => Int(0));
     test!(expression, add: "0 + 1.0" => Add(_, _));
