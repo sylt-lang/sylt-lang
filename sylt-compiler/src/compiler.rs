@@ -338,6 +338,8 @@ impl Compiler {
             Lt(a, b) => self.bin_op(a, b, &[Op::Less], expression.span, ctx),
             Lteq(a, b) => self.bin_op(a, b, &[Op::Greater, Op::Not], expression.span, ctx),
 
+            Is(a, b) => self.bin_op(a, b, &[Op::Is], expression.span, ctx),
+
             AssertEq(a, b) => self.bin_op(a, b, &[Op::Equal, Op::Assert], expression.span, ctx),
 
             Neg(a) => self.un_op(a, &[Op::Neg], expression.span, ctx),

@@ -25,6 +25,9 @@ pub enum ExpressionKind {
     Neg(Box<Expression>),
 
     /// `a == b`
+    Is(Box<Expression>, Box<Expression>),
+
+    /// `a == b`
     Eq(Box<Expression>, Box<Expression>),
     /// `a != b`
     Neq(Box<Expression>, Box<Expression>),
@@ -206,6 +209,7 @@ fn precedence(token: &T) -> Prec {
         T::And => Prec::BoolAnd,
         T::Or => Prec::BoolOr,
 
+        T::Is => Prec::Index,
         T::In => Prec::Index,
 
         T::AssertEqual => Prec::Assert,
@@ -313,6 +317,7 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
         T::GreaterEqual => Gteq(lhs, rhs),
         T::Less => Lt(lhs, rhs),
         T::LessEqual => Lteq(lhs, rhs),
+        T::Is => Is(lhs, rhs),
 
         // Boolean operators.
         T::And => And(lhs, rhs),
@@ -649,6 +654,7 @@ mod test {
     test!(expression, bool_neg_multiple: "!a && b" => _);
     test!(expression, bool_neg_multiple_rev: "a && !b" => _);
 
+    test!(expression, cmp_is: "a is B" => _);
     test!(expression, cmp_eq: "a == b" => _);
     test!(expression, cmp_neq: "a != b" => _);
     test!(expression, cmp_leq: "a <= b" => _);

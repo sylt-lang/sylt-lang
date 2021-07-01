@@ -870,6 +870,11 @@ impl VM {
                 two_op!(self, Op::Greater, op::greater);
             }
 
+            Op::Is => {
+                self.poppop();
+                self.push(Type::Bool);
+            }
+
             Op::And => {
                 two_op!(self, Op::And, op::and);
             }
