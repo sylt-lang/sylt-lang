@@ -52,13 +52,17 @@ impl From<&Type> for Value {
                 s.insert(Value::from(k.as_ref()), Value::from(v.as_ref()));
                 Value::Dict(Rc::new(RefCell::new(s)))
             }
-            Type::Iter(v) => Value::Iter(v.as_ref().clone(), Rc::new(RefCell::new(Box::new(|| None)))),
+            Type::Iter(v) => {
+                Value::Iter(v.as_ref().clone(), Rc::new(RefCell::new(Box::new(|| None))))
+            }
             Type::Unknown => Value::Unknown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),
             Type::Bool => Value::Bool(true),
             Type::String => Value::String(Rc::new("".to_string())),
-            Type::Function(a, r) => Value::Function(Rc::new(Vec::new()), Type::Function(a.clone(), r.clone()), 0),
+            Type::Function(a, r) => {
+                Value::Function(Rc::new(Vec::new()), Type::Function(a.clone(), r.clone()), 0)
+            }
             Type::ExternFunction(x) => Value::ExternFunction(*x),
             Type::Ty => Value::Ty(Type::Void),
         }
@@ -157,10 +161,11 @@ pub enum MatchableValue<'t> {
 }
 
 pub fn make_matchable<'t>(value: &'t Value) -> MatchableValue<'t> {
-    use Value::*;
     use MatchableValue::*;
+    use Value::*;
 
     match value {
+        #[rustfmt::skip]
         Tuple(inner) => {
             match (inner.get(0), inner.get(1), inner.get(2), inner.get(3), inner.get(4)) {
                 (Some(a), Some(b), Some(c), Some(d), Some(e), ..) => Five(a, b, c, d, e),
