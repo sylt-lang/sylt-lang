@@ -326,6 +326,12 @@ impl Compiler {
                 self.assignable(a, ctx);
             }
 
+            TypeConstant(ty) => {
+                let resolved_ty = self.resolve_type(ty, ctx);
+                let ty_constant = self.constant(Value::Ty(resolved_ty));
+                self.add_op(ctx, expression.span, ty_constant);
+            }
+
             Add(a, b) => self.bin_op(a, b, &[Op::Add], expression.span, ctx),
             Sub(a, b) => self.bin_op(a, b, &[Op::Sub], expression.span, ctx),
             Mul(a, b) => self.bin_op(a, b, &[Op::Mul], expression.span, ctx),

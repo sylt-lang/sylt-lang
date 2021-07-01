@@ -527,7 +527,15 @@ impl VM {
 
             Op::Is => {
                 let (a, b) = self.poppop();
-                let result = Type::from(a).fits(&Type::from(b), &self.blobs).is_ok();
+                let a = match a {
+                    Value::Ty(ty) => ty,
+                    val => Type::from(val),
+                };
+                let b = match b {
+                    Value::Ty(ty) => ty,
+                    val => Type::from(val),
+                };
+                let result = a.fits(&b, &self.blobs).is_ok();
                 self.push(Value::Bool(result));
             }
 
