@@ -733,12 +733,8 @@ impl Compiler {
                 self.add_op(ctx, statement.span, Op::Print);
             }
 
-            Definition {
-                ident,
-                kind,
-                ty,
-                value,
-            } => {
+            #[rustfmt::skip]
+            Definition { ident, kind, ty, value } => {
                 // TODO(ed): Don't use type here - type check the tree first.
                 self.expression(value, ctx);
 
@@ -764,11 +760,8 @@ impl Compiler {
                 }
             }
 
-            Assignment {
-                target,
-                value,
-                kind,
-            } => {
+            #[rustfmt::skip]
+            Assignment { target, value, kind } => {
                 use AssignableKind::*;
                 use ParserOp::*;
 
@@ -865,11 +858,8 @@ impl Compiler {
                 self.patch(ctx, jump_from, Op::JmpFalse(out));
             }
 
-            If {
-                condition,
-                pass,
-                fail,
-            } => {
+            #[rustfmt::skip]
+            If { condition, pass, fail } => {
                 self.expression(condition, ctx);
 
                 let jump_from = self.add_op(ctx, condition.span, Op::Illegal);
@@ -1099,12 +1089,8 @@ impl Compiler {
                         }
                     }
 
-                    Definition {
-                        ident: Identifier { name, .. },
-                        kind,
-                        ty,
-                        ..
-                    } => {
+                    #[rustfmt::skip]
+                    Definition { ident: Identifier { name, .. }, kind, ty, .. } => {
                         let var = self.define(name, *kind, statement.span);
                         self.activate(var);
 
