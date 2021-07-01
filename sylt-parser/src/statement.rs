@@ -134,15 +134,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [(T::Newline, _), ..] => (ctx.skip(1), EmptyStatement),
 
         // Block: `{ <statements> }`
-        [(T::LeftBrace, _), ..] => {
-            match (block_statement(ctx), expression(ctx)) {
-                (Ok((ctx, stmt)), _) => (ctx, stmt.kind),
-                (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
-                (Err((ctx, _)), Err(_)) => {
-                    raise_syntax_error!(ctx, "Neither a block nor a valid expression");
-                }
+        [(T::LeftBrace, _), ..] => match (block_statement(ctx), expression(ctx)) {
+            (Ok((ctx, stmt)), _) => (ctx, stmt.kind),
+            (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
+            (Err((ctx, _)), Err(_)) => {
+                raise_syntax_error!(ctx, "Neither a block nor a valid expression");
             }
-        }
+        },
 
         // `use a`
         [(T::Use, _), (T::Identifier(name), _), ..] => (
@@ -251,10 +249,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         fields.insert(field, ty);
 
                         if !matches!(ctx.token(), T::Comma | T::RightBrace) {
-                            raise_syntax_error!(
-                                ctx,
-                                "Expected a field deliminator ','"
-                            );
+                            raise_syntax_error!(ctx, "Expected a field deliminator ','");
                         }
                         ctx = ctx.skip_if(T::Comma);
                     }

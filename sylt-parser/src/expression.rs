@@ -246,13 +246,15 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         T::Minus | T::Bang => unary(ctx),
 
         T::Identifier(_) => {
-
             let span = ctx.span();
             match (blob(ctx), assignable(ctx)) {
                 (Ok(result), _) => Ok(result),
                 (_, Ok((ctx, assign))) => Ok((
                     ctx,
-                    Expression { span, kind: Get(assign), },
+                    Expression {
+                        span,
+                        kind: Get(assign),
+                    },
                 )),
                 (Err((ctx, _)), Err(_)) => {
                     raise_syntax_error!(ctx, "Neither a blob instantiation or an identifier");
@@ -362,7 +364,6 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let ctx = expect!(ctx, T::LeftParen, "Expected '('");
     let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
 
-
     // The expressions contained in the parenthesis.
     let mut exprs = Vec::new();
 
@@ -430,7 +431,11 @@ fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 ctx = _ctx; // assign to outer
 
                 if !matches!(ctx.token(), T::Comma | T::RightBrace) {
-                    raise_syntax_error!(ctx, "Expected a field delimiter ',' - but got {:?}", ctx.token());
+                    raise_syntax_error!(
+                        ctx,
+                        "Expected a field delimiter ',' - but got {:?}",
+                        ctx.token()
+                    );
                 }
                 ctx = ctx.skip_if(T::Comma);
 
