@@ -736,6 +736,7 @@ version = "0.1.0"
 dependencies = [
  "owo-colors",
  "sylt-tokenizer",
+ "sylt_macro",
 ]
 
 [[package]]
