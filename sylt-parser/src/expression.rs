@@ -27,7 +27,7 @@ pub enum ExpressionKind {
     /// `-a`
     Neg(Box<Expression>),
 
-    /// `a == b`
+    /// `a is b`
     Is(Box<Expression>, Box<Expression>),
 
     /// `a == b`
