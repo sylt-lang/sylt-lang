@@ -7,7 +7,7 @@ use lingon::{
 };
 use std::{
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::Mutex,
 };
 use sylt_common::error::RuntimeError;
 use sylt_common::rc::Rc;
@@ -47,40 +47,9 @@ fn parse_dist(name: &str) -> Option<Box<dyn lingon::random::Distribute>> {
     })
 }
 
-struct GG {
-    pub game: Game<std::string::String>,
-}
-
-// If you see this, you should stop your inital instinct to puke.
-//
-// Luminance - the graphics API underneth - is helpfull and well written,
-// it doesn't allow this, since GL-contexts cannot be passed between threads.
-// It makes sense.
-//
-// So this is me promising that I won't pass it between threads.
-// -- Ed
-unsafe impl Send for GG {}
-unsafe impl Sync for GG {}
-
-lazy_static::lazy_static! {
-    static ref GAME: Arc<Mutex<GG>> = new_game();
-}
-
 std::thread_local! {
     static PARTICLES: Mutex<Vec<lingon::renderer::ParticleSystem>> = Mutex::new(Vec::new());
-}
-
-fn new_game() -> Arc<Mutex<GG>> {
-    // TODO(ed): Maybe make these settable from the game itself.
-    Arc::new(Mutex::new(GG {
-        game: Game::new("Lingon - Sylt", 500, 500),
-    }))
-}
-
-macro_rules! game {
-    () => {
-        &mut GAME.lock().unwrap().game
-    };
+    static GAME: Mutex<Game<std::string::String>> = Mutex::new(Game::new("Lingon - Sylt", 500, 500));
 }
 
 sylt_macro::extern_function!(
@@ -88,7 +57,7 @@ sylt_macro::extern_function!(
     l_update
     "Updates the engine. Needs to be called once per frame"
     [] -> Type::Void => {
-        game!().update();
+        GAME.with(|game| game.lock().unwrap().update());
         Ok(Nil)
     },
 );
@@ -98,7 +67,7 @@ sylt_macro::extern_function!(
     l_render
     "Draws all render calls to the screen. Needs to be called once per frame"
     [] -> Type::Void => {
-        game!().draw().unwrap();
+        GAME.with(|game| { game.lock().unwrap().draw().unwrap(); });
         Ok(Nil)
     },
 );
@@ -108,7 +77,7 @@ sylt_macro::extern_function!(
     l_window_size
     "Returns the size of the game window"
     [] -> Type::Tuple(vec![Type::Int, Type::Int]) => {
-        let (x, y) = game!().window_size();
+        let (x, y) = GAME.with(|game| game.lock().unwrap().window_size());
         Ok(Value::Tuple(Rc::new(vec![Value::Int(x as i64), Value::Int(y as i64)])))
     },
 );
@@ -118,7 +87,7 @@ sylt_macro::extern_function!(
     l_set_window_size
     "Sets the dimension of the game window"
     [Two(Int(x), Int(y))] -> Type::Void => {
-        game!().set_window_size(*x as u32, *y as u32).unwrap();
+        GAME.with(|game| game.lock().unwrap().set_window_size(*x as u32, *y as u32).unwrap());
         Ok(Value::Nil)
     },
 );
@@ -128,7 +97,7 @@ sylt_macro::extern_function!(
     l_set_window_icon
     "Sets the window icon of the game window"
     [One(String(path))] -> Type::Void => {
-        game!().set_window_icon(path.as_ref());
+        GAME.with(|game| game.lock().unwrap().set_window_icon(path.as_ref()));
         Ok(Nil)
     },
 );
@@ -141,7 +110,7 @@ fn l_gfx_rect_internal(x: &f64, y: &f64, w: &f64, h: &f64, rot: &f64, r: &f64, g
     rect.angle(*rot as f32);
     rect.rgba(*r as f32, *g as f32, *b as f32, *a as f32);
 
-    game!().renderer.push(rect);
+    GAME.with(|game| game.lock().unwrap().renderer.push(rect));
 }
 
 sylt_macro::extern_function!(
@@ -225,12 +194,12 @@ sylt_macro::extern_function!(
 
 #[rustfmt::skip]
 fn l_gfx_sprite_internal(sprite: &i64, x: &f64, y: &f64, w: &f64, h: &f64, gx: &i64, gy: &i64, rot: &f64, r: &f64, g: &f64, b: &f64, a: &f64) -> Value {
-    let sprite = game!().renderer.sprite_sheets[*sprite as usize].grid(*gx as usize, *gy as usize);
+    let sprite = GAME.with(|game| game.lock().unwrap().renderer.sprite_sheets[*sprite as usize].grid(*gx as usize, *gy as usize));
     let mut sprite = Sprite::new(sprite);
     sprite.at(*x as f32, *y as f32).scale(*w as f32, *h as f32);
     sprite.angle(*rot as f32);
     sprite.rgba(*r as f32, *g as f32, *b as f32, *a as f32);
-    game!().renderer.push(sprite);
+    GAME.with(|game| game.lock().unwrap().renderer.push(sprite));
     Nil
 }
 
@@ -330,10 +299,12 @@ sylt_macro::extern_function!(
     l_gfx_camera_at
     "Gives out the position of the camera"
     [] -> Type::Tuple(vec![Type::Float, Type::Float]) => {
-        let game = &mut game!().renderer.camera;
-        let x = *game.x_mut();
-        let y = *game.y_mut();
-        Ok(Tuple(Rc::new(vec![Float(x as f64), Float(y as f64)])))
+        GAME.with(|game| {
+            let camera = &mut game.lock().unwrap().renderer.camera;
+            let x = *camera.x_mut();
+            let y = *camera.y_mut();
+            Ok(Tuple(Rc::new(vec![Float(x as f64), Float(y as f64)])))
+        })
     },
 );
 
@@ -342,11 +313,11 @@ sylt_macro::extern_function!(
     l_gfx_camera_place
     "Positions the camera at a specific point in space"
     [Two(Float(x), Float(y))] -> Type::Void => {
-        game!().renderer.camera.at(*x as f32, *y as f32);
+        GAME.with(|game| { game.lock().unwrap().renderer.camera.at(*x as f32, *y as f32); });
         Ok(Nil)
     },
     [One(Float(x)), One(Float(y))] -> Type::Void => {
-        game!().renderer.camera.at(*x as f32, *y as f32);
+        GAME.with(|game| { game.lock().unwrap().renderer.camera.at(*x as f32, *y as f32); });
         Ok(Nil)
     },
 );
@@ -356,7 +327,7 @@ sylt_macro::extern_function!(
     l_gfx_camera_angle
     "Sets the angle of the camera - in absolute terms"
     [One(Float(angle))] -> Type::Void => {
-        game!().renderer.camera.angle(*angle as f32);
+        GAME.with(|game| { game.lock().unwrap().renderer.camera.angle(*angle as f32); });
         Ok(Nil)
     },
 );
@@ -366,7 +337,7 @@ sylt_macro::extern_function!(
     l_gfx_camera_rotate
     "Rotates the camera - relative to the current rotation"
     [One(Float(by))] -> Type::Void => {
-        game!().renderer.camera.rotate(*by as f32);
+        GAME.with(|game| { game.lock().unwrap().renderer.camera.rotate(*by as f32); });
         Ok(Nil)
     },
 );
@@ -376,15 +347,15 @@ sylt_macro::extern_function!(
     l_gfx_camera_set_zoom
     "Specifies the zoom level"
     [One(Float(to))] -> Type::Void => {
-        game!().renderer.camera.scale(*to as f32, *to as f32);
+        GAME.with(|game| { game.lock().unwrap().renderer.camera.scale(*to as f32, *to as f32); });
         Ok(Nil)
     },
     [One(Float(sx)), One(Float(sy))] -> Type::Void => {
-        game!().renderer.camera.scale(*sx as f32, *sy as f32);
+        GAME.with(|game| { game.lock().unwrap().renderer.camera.scale(*sx as f32, *sy as f32); });
         Ok(Nil)
     },
     [Two(Float(sx), Float(sy))] -> Type::Void => {
-        game!().renderer.camera.scale(*sx as f32, *sy as f32);
+        GAME.with(|game| { game.lock().unwrap().renderer.camera.scale(*sx as f32, *sy as f32); });
         Ok(Nil)
     },
 );
@@ -394,15 +365,15 @@ sylt_macro::extern_function!(
     l_gfx_camera_zoom_by
     "Zoomes relative to the current zoom level"
     [One(Float(to))] -> Type::Void => {
-        game!().renderer.camera.scale_by(*to as f32, *to as f32);
+        GAME.with(|game| { game.lock().unwrap().renderer.camera.scale_by(*to as f32, *to as f32); });
         Ok(Nil)
     },
     [One(Float(sx)), One(Float(sy))] -> Type::Void => {
-        game!().renderer.camera.scale_by(*sx as f32, *sy as f32);
+        GAME.with(|game| { game.lock().unwrap().renderer.camera.scale_by(*sx as f32, *sy as f32); });
         Ok(Nil)
     },
     [Two(Float(sx), Float(sy))] -> Type::Void => {
-        game!().renderer.camera.scale_by(*sx as f32, *sy as f32);
+        GAME.with(|game| { game.lock().unwrap().renderer.camera.scale_by(*sx as f32, *sy as f32); });
         Ok(Nil)
     },
 );
@@ -470,7 +441,7 @@ sylt_macro::extern_function!(
             return error!("l_gfx_particle_spawn", "Expected a particle system ID");
         }
         PARTICLES.with(|ps| {
-            game!().renderer.push_particle_system(&ps.lock().unwrap()[*system as usize]);
+            GAME.with(|game| game.lock().unwrap().renderer.push_particle_system(&ps.lock().unwrap()[*system as usize]));
         });
         Ok(Nil)
     },
@@ -488,7 +459,7 @@ sylt_macro::extern_function!(
             return error!("l_gfx_sprite", "Expected a sprite ID");
         }
 
-        let sprite = game!().renderer.sprite_sheets[*sprite as usize].grid(*gx as usize, *gy as usize);
+        let sprite = GAME.with(|game| game.lock().unwrap().renderer.sprite_sheets[*sprite as usize].grid(*gx as usize, *gy as usize));
         PARTICLES.with(|ps| {
             ps.lock().unwrap()[*system as usize].sprites.push(sprite);
         });
@@ -642,7 +613,7 @@ sylt_macro::extern_function!(
     l_delta
     "The time since last the frame in seconds"
     [] -> Type::Float => {
-        let delta = game!().delta() as f64;
+        let delta = GAME.with(|game| game.lock().unwrap().delta() as f64);
         Ok(Float(delta))
     },
 );
@@ -652,7 +623,7 @@ sylt_macro::extern_function!(
     l_time
     "An absolute time messurement, but the start time is ill defined"
     [] -> Type::Float => {
-        let time = game!().total_time() as f64;
+        let time = GAME.with(|game| game.lock().unwrap().total_time() as f64);
         Ok(Float(time))
     },
 );
@@ -696,7 +667,7 @@ sylt_macro::extern_function!(
         };
 
         use lingon::input::{Device::Key, Keycode};
-        game!().input.bind(Key(key), std::string::String::clone(name));
+        GAME.with(|game| game.lock().unwrap().input.bind(Key(key), std::string::String::clone(name)));
 
         Ok(Nil)
     },
@@ -708,7 +679,7 @@ sylt_macro::extern_function!(
     "Binds the windows quit action (pressing the X in the corner) - plus points if you make it jump"
     [One(String(name))] -> Type::Void => {
         use lingon::input::Device::Quit;
-        game!().input.bind(Quit, std::string::String::clone(name));
+        GAME.with(|game| game.lock().unwrap().input.bind(Quit, std::string::String::clone(name)));
         Ok(Nil)
     },
 );
@@ -725,7 +696,7 @@ sylt_macro::extern_function!(
             return error!("l_bind_button", "'{}' is an invalid button", button);
         };
 
-        game!().input.bind(Device::Button(*controller as u32, button), std::string::String::clone(name));
+        GAME.with(|game| game.lock().unwrap().input.bind(Device::Button(*controller as u32, button), std::string::String::clone(name)));
         Ok(Nil)
     },
 );
@@ -742,7 +713,7 @@ sylt_macro::extern_function!(
             return error!("l_bind_axis", "'{}' is an invalid axis", axis);
         };
 
-        game!().input.bind(Device::Axis(*controller as u32, axis), std::string::String::clone(name));
+        GAME.with(|game| game.lock().unwrap().input.bind(Device::Axis(*controller as u32, axis), std::string::String::clone(name)));
         Ok(Nil)
     },
 );
@@ -762,7 +733,7 @@ sylt_macro::extern_function!(
             _ => { return error!("l_bind_mouse", "'{}' is an invalid mouse button", button); }
         };
 
-        game!().input.bind(Mouse(button), std::string::String::clone(name));
+        GAME.with(|game| game.lock().unwrap().input.bind(Mouse(button), std::string::String::clone(name)));
         Ok(Nil)
     },
 );
@@ -772,7 +743,7 @@ sylt_macro::extern_function!(
     l_input_down
     "Returns true if the input name is down this frame, e.g. pressed"
     [One(String(name))] -> Type::Bool => {
-        Ok(Bool(game!().input.down(std::string::String::clone(name))))
+        Ok(Bool(GAME.with(|game| game.lock().unwrap().input.down(std::string::String::clone(name)))))
     },
 );
 
@@ -781,7 +752,7 @@ sylt_macro::extern_function!(
     l_input_up
     "Returns true if the input name is up this frame, e.g. not pressed"
     [One(String(name))] -> Type::Bool => {
-        Ok(Bool(game!().input.up(std::string::String::clone(name))))
+        Ok(Bool(GAME.with(|game| game.lock().unwrap().input.up(std::string::String::clone(name)))))
     },
 );
 
@@ -790,7 +761,7 @@ sylt_macro::extern_function!(
     l_input_pressed
     "Returns true if the input name started being down this frame, e.g. a tap"
     [One(String(name))] -> Type::Bool => {
-        Ok(Bool(game!().input.pressed(std::string::String::clone(name))))
+        Ok(Bool(GAME.with(|game| game.lock().unwrap().input.pressed(std::string::String::clone(name)))))
     },
 );
 
@@ -799,7 +770,7 @@ sylt_macro::extern_function!(
     l_input_released
     "Returns true if the input name started being up this frame, e.g. a release"
     [One(String(name))] -> Type::Bool => {
-        Ok(Bool(game!().input.released(std::string::String::clone(name))))
+        Ok(Bool(GAME.with(|game| game.lock().unwrap().input.released(std::string::String::clone(name)))))
     },
 );
 
@@ -808,7 +779,7 @@ sylt_macro::extern_function!(
     l_input_value
     "Returns the float representation of the input name, usefull for reading controller inputs"
     [One(String(name))] -> Type::Float => {
-        Ok(Float(game!().input.value(std::string::String::clone(name)) as f64))
+        Ok(Float(GAME.with(|game| game.lock().unwrap().input.value(std::string::String::clone(name)) as f64)))
     },
 );
 
@@ -826,13 +797,15 @@ sylt_macro::extern_function!(
             return error!("l_audio_play", "");
         }
 
-        let game = game!();
-        let sound = &game.assets[unsafe { lingon::asset::AudioAssetID::from_usize(*sound as usize) }];
-        let source = lingon::audio::AudioSource::new(sound)
-            .looping(*looping)
-            .gain(*gain as f32)
-            .pitch(*pitch as f32);
-        game.audio.lock().play(source);
+        GAME.with(|game| {
+            let mut game = game.lock().unwrap();
+            let sound = &game.assets[unsafe { lingon::asset::AudioAssetID::from_usize(*sound as usize) }];
+            let source = lingon::audio::AudioSource::new(sound)
+                .looping(*looping)
+                .gain(*gain as f32)
+                .pitch(*pitch as f32);
+            game.audio.lock().play(source);
+        });
 
         Ok(Nil)
     },
@@ -845,14 +818,15 @@ sylt_macro::extern_function!(
             return error!("l_audio_play", "");
         }
 
-        let game = game!();
-        let sound = &game.assets[unsafe { lingon::asset::AudioAssetID::from_usize(*sound as usize) }];
-        let source = lingon::audio::AudioSource::new(sound)
-            .looping(*looping)
-            .gain(*gain as f32).gain_variance(*gain_variance as f32)
-            .pitch(*pitch as f32).pitch_variance(*pitch_variance as f32);
-        game.audio.lock().play(source);
-
+        GAME.with(|game| {
+            let mut game = game.lock().unwrap();
+            let sound = &game.assets[unsafe { lingon::asset::AudioAssetID::from_usize(*sound as usize) }];
+            let source = lingon::audio::AudioSource::new(sound)
+                .looping(*looping)
+                .gain(*gain as f32).gain_variance(*gain_variance as f32)
+                .pitch(*pitch as f32).pitch_variance(*pitch_variance as f32);
+            game.audio.lock().play(source);
+        });
         Ok(Nil)
     },
 );
@@ -862,7 +836,7 @@ sylt_macro::extern_function!(
     l_audio_master_gain
     "Controls the master gain of the audio mixer"
     [One(Float(gain))] -> Type::Void => {
-        *game!().audio.lock().gain_mut() = *gain as f32;
+        GAME.with(|game| { *game.lock().unwrap().audio.lock().gain_mut() = *gain as f32; });
         Ok(Nil)
     },
 );
@@ -872,7 +846,7 @@ sylt_macro::extern_function!(
     l_mouse
     "Gets the current mouse position"
     [] -> Type::Tuple(vec!(Type::Int, Type::Int)) => {
-        let mouse = game!().input.mouse();
+        let mouse = GAME.with(|game| game.lock().unwrap().input.mouse());
         Ok(Tuple(Rc::new(vec!(Int(mouse.0 as i64), Int(mouse.1 as i64)))))
     },
 );
@@ -882,7 +856,7 @@ sylt_macro::extern_function!(
     l_mouse_rel
     "Gets the relative mouse position since the last frame"
     [] -> Type::Tuple(vec!(Type::Int, Type::Int)) => {
-        let mouse = game!().input.mouse_rel();
+        let mouse = GAME.with(|game| game.lock().unwrap().input.mouse_rel());
         Ok(Tuple(Rc::new(vec!(Int(mouse.0 as i64), Int(mouse.1 as i64)))))
     },
 );
@@ -897,17 +871,18 @@ pub fn sylt_str(s: &str) -> Value {
 pub fn l_load_image<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     match (values, ctx.typecheck) {
         ([String(path), tilesize], false) => {
-            let game = game!();
-            let path = PathBuf::from(path.as_ref());
-            let image = game.assets.load_image(path);
-            let image = &game.assets[image];
+            GAME.with(|game| {
+                let mut game = game.lock().unwrap();
+                let path = PathBuf::from(path.as_ref());
+                let image = game.assets.load_image(path);
+                let image = game.assets[image].clone();
 
-            let dim = unpack_int_int_tuple(tilesize);
-            let slot = game
-                .renderer
-                .add_sprite_sheet(image.clone(), (dim.0 as usize, dim.1 as usize));
-
-            Ok(Tuple(Rc::new(vec![sylt_str("image"), Int(slot as i64)])))
+                let dim = unpack_int_int_tuple(tilesize);
+                let slot = game
+                    .renderer
+                    .add_sprite_sheet(image, (dim.0 as usize, dim.1 as usize));
+                Ok(Tuple(Rc::new(vec![sylt_str("image"), Int(slot as i64)])))
+            })
         }
         ([String(_), tilesize], true) => {
             unpack_int_int_tuple(tilesize);
@@ -927,9 +902,8 @@ pub fn l_load_image<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Val
 pub fn l_load_audio<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     match (values, ctx.typecheck) {
         ([String(path)], false) => {
-            let game = game!();
             let path = PathBuf::from(path.as_ref());
-            let audio = game.assets.load_audio(path);
+            let audio = GAME.with(|game| game.lock().unwrap().assets.load_audio(path));
             Ok(Tuple(Rc::new(vec![sylt_str("audio"), Int(*audio as i64)])))
         }
         ([String(_)], true) => Ok(Tuple(Rc::new(vec![sylt_str("audio"), Int(0)]))),
