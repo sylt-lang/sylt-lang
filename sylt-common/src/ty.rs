@@ -22,7 +22,6 @@ pub enum Type {
     List(Box<Type>),
     Set(Box<Type>),
     Dict(Box<Type>, Box<Type>),
-    Iter(Box<Type>),
     Function(Vec<Type>, Box<Type>),
     Blob(usize),
     Instance(usize),
@@ -37,7 +36,7 @@ impl Hash for Type {
         match self {
             Type::Field(_) | Type::Invalid => unimplemented!(),
 
-            Type::List(t) | Type::Set(t) | Type::Iter(t)
+            Type::List(t) | Type::Set(t)
                 => t.as_ref().hash(h),
 
             Type::Tuple(ts) => {
@@ -89,7 +88,6 @@ impl PartialEq for Type {
             (Type::List(a), Type::List(b)) => a == b,
             (Type::Set(a), Type::Set(b)) => a == b,
             (Type::Dict(ak, av), Type::Dict(bk, bv)) => ak == bk && av == bv,
-            (Type::Iter(a), Type::Iter(b)) => a == b,
             (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
                 a_args == b_args && a_ret == b_ret
             }
@@ -130,7 +128,6 @@ impl From<&Value> for Type {
                 let v = maybe_union_type(v.values());
                 Type::Dict(Box::new(k), Box::new(v))
             }
-            Value::Iter(t, _) => Type::Iter(Box::new(t.clone())),
             Value::Union(v) => Type::Union(v.iter().map(Type::from).collect()),
             Value::Int(_) => Type::Int,
             Value::Float(_) => Type::Float,

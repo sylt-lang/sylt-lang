@@ -449,48 +449,6 @@ impl VM {
                 }
             }
 
-            Op::Iter => {
-                let ty: Type = match Type::from(self.pop()) {
-                    i if matches!(i, Type::Iter(_)) => {
-                        self.push(i);
-                        return Ok(());
-                    }
-                    Type::List(e) => e.as_ref().clone(),
-                    Type::Tuple(v) => {
-                        let set: HashSet<_> = v.into_iter().collect();
-                        match set.len() {
-                            0 => Type::Unknown,
-                            1 => set.into_iter().next().unwrap(),
-                            _ => Type::Union(set),
-                        }
-                    }
-                    Type::Set(v) => v.as_ref().clone(),
-                    Type::Dict(k, v) => Type::Tuple(vec![k.as_ref().clone(), v.as_ref().clone()]),
-                    i => {
-                        error!(
-                            self,
-                            RuntimeError::TypeError(Op::Iter, vec![i]),
-                            "Cannot convert to iterator"
-                        );
-                    }
-                };
-                self.push(Type::Iter(Box::new(ty)));
-            }
-
-            Op::JmpNext(_) => {
-                let top = self.pop();
-                self.push(top.clone());
-                if let Type::Iter(ty) = top {
-                    self.push(*ty);
-                } else {
-                    error!(
-                        self,
-                        RuntimeError::InvalidProgram,
-                        "Can only 'next' iterators"
-                    );
-                }
-            }
-
             Op::Force(ty) => {
                 let old = self.pop();
                 match &prog.constants[ty] {

@@ -1,7 +1,6 @@
 use crate as sylt_std;
 
 use owo_colors::OwoColorize;
-use std::cell::RefCell;
 use sylt_common::error::RuntimeError;
 use sylt_common::rc::Rc;
 use sylt_common::{Blob, RuntimeContext, Type, Value};
@@ -245,23 +244,6 @@ pub fn pop<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, Runti
         }
         (values, _) => Err(RuntimeError::ExternTypeMismatch(
             "pop".to_string(),
-            values.iter().map(Type::from).collect(),
-        )),
-    }
-}
-
-#[sylt_macro::sylt_doc(inf, "Returns an infinite iterator, spitting out the value you give it", [One(Value(val))] Type::Iter)]
-#[sylt_macro::sylt_link(inf, "sylt_std::sylt")]
-pub fn inf<'t>(values: &[Value], _ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    match values {
-        [x] => {
-            let t: Type = Type::from(&*x);
-            let x = x.clone();
-            #[rustfmt::skip]
-            return Ok(Value::Iter(t, Rc::new(RefCell::new(Box::new(move || Some(x.clone()))))));
-        }
-        values => Err(RuntimeError::ExternTypeMismatch(
-            "inf".to_string(),
             values.iter().map(Type::from).collect(),
         )),
     }
