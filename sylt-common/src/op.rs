@@ -85,19 +85,6 @@ pub enum Op {
     /// {O} - Set(F) - {}
     AssignField(usize),
 
-    /// Turns the top element on the stack into an iterator.
-    ///
-    /// Iter(Iter(A)) = Iter(A)
-    ///
-    /// {A} - Iter - {Iter(A)}
-    Iter,
-    /// Steps the iterator on top of the stack one step and pushes
-    /// the new value. If the iterator is consumed, jumps to the address
-    /// and pushes [Value::Nil]. Errors if the top element isn't an iterator.
-    ///
-    /// {I} - JmpNext(line) - {I, A}
-    JmpNext(usize),
-
     /// Adds the two top elements on the stack,
     /// using the function [op::add]. The result
     /// is the pushed.

@@ -5,8 +5,6 @@ use std::hash::{Hash, Hasher};
 
 use crate::{rc::Rc, ty::Type, upvalue::UpValue};
 
-pub type IterFn = dyn FnMut() -> Option<Value>;
-
 #[derive(Clone)]
 pub enum Value {
     Field(String),
@@ -17,7 +15,6 @@ pub enum Value {
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
     Dict(Rc<RefCell<HashMap<Value, Value>>>),
-    Iter(Type, Rc<RefCell<Box<IterFn>>>),
     Union(HashSet<Value>),
     Float(f64),
     Int(i64),
@@ -51,9 +48,6 @@ impl From<&Type> for Value {
                 let mut s = HashMap::new();
                 s.insert(Value::from(k.as_ref()), Value::from(v.as_ref()));
                 Value::Dict(Rc::new(RefCell::new(s)))
-            }
-            Type::Iter(v) => {
-                Value::Iter(v.as_ref().clone(), Rc::new(RefCell::new(Box::new(|| None))))
             }
             Type::Unknown | Type::Invalid => Value::Unknown,
             Type::Int => Value::Int(1),
@@ -90,7 +84,6 @@ impl Debug for Value {
             Value::List(v) => write!(fmt, "(array {:?})", v),
             Value::Set(v) => write!(fmt, "(set {:?})", v),
             Value::Dict(v) => write!(fmt, "(dict {:?})", v),
-            Value::Iter(v, _) => write!(fmt, "(iter {:?})", v),
             Value::Function(_, ty, block) => {
                 write!(fmt, "(fn #{} {:?})", block, ty)
             }

@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::rc::Rc;
 use sylt_common::{
-    Blob, Block, BlockLinkState, IterFn, Op, Prog, RuntimeContext, RustFunction, Type, UpValue,
+    Blob, Block, BlockLinkState, Op, Prog, RuntimeContext, RustFunction, Type, UpValue,
     Value,
 };
 
@@ -583,73 +583,6 @@ impl VM {
 
             Op::Not => {
                 one_op!(self, Op::Not, op::not);
-            }
-
-            Op::Iter => {
-                let iter: Option<Box<IterFn>> = match self.pop() {
-                    x if matches!(x, Value::Iter(_, _)) => {
-                        self.push(x);
-                        None
-                    }
-                    Value::List(rc) => {
-                        let mut i = 0;
-                        Some(Box::new(move || {
-                            let res = rc.borrow().get(i).cloned();
-                            i += 1;
-                            res
-                        }))
-                    }
-                    Value::Tuple(rc) => {
-                        let mut i = 0;
-                        Some(Box::new(move || {
-                            let res = rc.as_ref().get(i).cloned();
-                            i += 1;
-                            res
-                        }))
-                    }
-                    Value::Set(rc) => {
-                        let mut v = rc.as_ref().borrow().clone().into_iter();
-                        Some(Box::new(move || v.next()))
-                    }
-                    Value::Dict(rc) => {
-                        let mut v = rc.as_ref().borrow().clone().into_iter();
-                        Some(Box::new(move || {
-                            v.next().map(|(k, v)| Value::Tuple(Rc::new(vec![k, v])))
-                        }))
-                    }
-                    v => {
-                        self.push(Value::Nil);
-                        error!(
-                            self,
-                            RuntimeError::TypeError(Op::Iter, vec![Type::from(v)]),
-                            "Cannot turn into iterator"
-                        );
-                    }
-                };
-                if let Some(iter) = iter {
-                    // The type is never used during runtime, so Void is used.
-                    self.push(Value::Iter(Type::Void, Rc::new(RefCell::new(iter))));
-                }
-            }
-
-            Op::JmpNext(line) => {
-                if let Some(Value::Iter(_, f)) = self.stack.last() {
-                    let v = (f.borrow_mut())();
-                    drop(f);
-                    if let Some(v) = v {
-                        self.push(v);
-                    } else {
-                        self.frame_mut().ip = line;
-                        return Ok(OpResult::Continue);
-                    }
-                } else {
-                    self.push(Value::Nil);
-                    error!(
-                        self,
-                        RuntimeError::InvalidProgram,
-                        "Cannot iterate over non-iterator"
-                    );
-                }
             }
 
             Op::Jmp(line) => {
