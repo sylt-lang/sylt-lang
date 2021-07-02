@@ -326,6 +326,12 @@ impl Compiler {
                 self.assignable(a, ctx);
             }
 
+            TypeConstant(ty) => {
+                let resolved_ty = self.resolve_type(ty, ctx);
+                let ty_constant = self.constant(Value::Ty(resolved_ty));
+                self.add_op(ctx, expression.span, ty_constant);
+            }
+
             Add(a, b) => self.bin_op(a, b, &[Op::Add], expression.span, ctx),
             Sub(a, b) => self.bin_op(a, b, &[Op::Sub], expression.span, ctx),
             Mul(a, b) => self.bin_op(a, b, &[Op::Mul], expression.span, ctx),
@@ -337,6 +343,8 @@ impl Compiler {
             Gteq(a, b) => self.bin_op(a, b, &[Op::Less, Op::Not], expression.span, ctx),
             Lt(a, b) => self.bin_op(a, b, &[Op::Less], expression.span, ctx),
             Lteq(a, b) => self.bin_op(a, b, &[Op::Greater, Op::Not], expression.span, ctx),
+
+            Is(a, b) => self.bin_op(a, b, &[Op::Is], expression.span, ctx),
 
             AssertEq(a, b) => self.bin_op(a, b, &[Op::Equal, Op::Assert], expression.span, ctx),
 

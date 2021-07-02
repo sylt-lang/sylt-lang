@@ -21,6 +21,8 @@ pub enum Token {
 
     #[token("if")]
     If,
+    #[token("is")]
+    Is,
     #[token("else")]
     Else,
     #[token("break")]
@@ -64,6 +66,8 @@ pub enum Token {
     #[token("/=")]
     SlashEqual,
 
+    #[token("#")]
+    Hash,
     #[token(":")]
     Colon,
     #[token("::")]

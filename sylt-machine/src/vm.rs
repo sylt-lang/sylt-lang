@@ -525,6 +525,20 @@ impl VM {
                 }
             }
 
+            Op::Is => {
+                let (a, b) = self.poppop();
+                let a = match a {
+                    Value::Ty(ty) => ty,
+                    val => Type::from(val),
+                };
+                let b = match b {
+                    Value::Ty(ty) => ty,
+                    val => Type::from(val),
+                };
+                let result = a.fits(&b, &self.blobs).is_ok();
+                self.push(Value::Bool(result));
+            }
+
             // TODO(ed): These look the same as in typechecker.rs, since the macros and functions hide the
             // rest, maybe merge them?
             Op::Neg => {
