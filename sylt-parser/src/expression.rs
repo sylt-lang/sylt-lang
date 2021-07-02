@@ -146,9 +146,36 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         }
     };
 
-    use ExpressionKind::Function;
     // Parse the function statement.
-    let (ctx, statement) = block_statement(ctx)?;
+    let (ctx, mut statement) = block_statement(ctx)?;
+
+    // If the return type isn't void, check for and apply implicit returns.
+
+    let statements = if let StatementKind::Block { statements } = &mut statement.kind {
+        statements
+    } else {
+        unreachable!("Function blocks should only be blocks");
+    };
+
+    if !matches!(ret.kind, Resolved(Void)) {
+        // If the last statement is an expression statement,
+        // replace it with a return statement.
+        let last_statement = statements.pop();
+        if let Some(Statement {
+            span,
+            kind: StatementKind::StatementExpression { value },
+        }) = last_statement
+        {
+            statements.push(Statement {
+                span,
+                kind: StatementKind::Ret { value },
+            });
+        } else if let Some(statement) = last_statement {
+            statements.push(statement);
+        }
+    }
+
+    use ExpressionKind::Function;
     let function = Function {
         name: "lambda".into(),
         params,

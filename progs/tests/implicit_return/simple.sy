@@ -1,0 +1,17 @@
+f :: fn -> int {
+    1
+}
+
+g :: fn -> int {
+    1 + 1
+}
+
+h :: fn a:int, b:int -> int {
+    a + b
+}
+
+start :: fn {
+    f() <=> 1
+    g() <=> 2
+    h(1, 2) <=> 3
+}
