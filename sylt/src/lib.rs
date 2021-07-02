@@ -35,7 +35,9 @@ pub fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Pr
 /// external functions.
 pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
     let prog = compile(args, functions)?;
-    sylt_typechecker::typecheck(&prog, args.verbosity)?;
+    if !args.skip_typecheck {
+        sylt_typechecker::typecheck(&prog, args.verbosity)?;
+    }
     run(&prog, &args)
 }
 
@@ -58,6 +60,9 @@ pub struct Args {
 
     #[options(short = "r", long = "run", help = "Runs a precompiled sylt binary")]
     pub is_binary: bool,
+
+    #[options(long = "skip-typecheck", no_short, help = "Does no type checking what so ever")]
+    pub skip_typecheck: bool,
 
     #[options(short = "c", long = "compile", help = "Compile a sylt binary")]
     pub compile_target: Option<PathBuf>,
