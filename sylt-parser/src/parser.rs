@@ -18,8 +18,8 @@ pub use sylt_tokenizer::Span;
 static INVALID_TOKEN: Token = Token::EOF;
 static INVALID_SPAN: Span = Span {
     line: 0,
-    col_start_byte: 0,
-    col_end_byte: 0,
+    col_start: 0,
+    col_end: 0,
 };
 
 type T = Token;

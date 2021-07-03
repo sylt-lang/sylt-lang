@@ -11,16 +11,18 @@ pub struct Span {
     // we can show ranges. Maybe even go back
     // to offsets from start of the file.
     pub line: usize,
-    pub col_start_byte: usize,
-    pub col_end_byte: usize,
+    /// The first column that this Span contains.
+    pub col_start: usize,
+    /// The first column that this Span doesn't contain.
+    pub col_end: usize,
 }
 
 impl Span {
     pub fn zero() -> Self {
         Self {
             line: 0,
-            col_start_byte: 0,
-            col_end_byte: 0,
+            col_start: 0,
+            col_end: 0,
         }
     }
 }
@@ -32,26 +34,47 @@ pub struct PlacedToken {
 }
 
 pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
-    // Map with side-effects intended
+    // A list containing which char index a specific byte index is at.
+    //
+    // Since &str contains UTF-8, a byte offset (which is what the lexer gives
+    // us) won't necessarily match up with the char index. For example, given
+    // the string "123", '3' has both byte index 3 and char index 3. However, in
+    // the string "ä23", '3' has char index 3 as before, but byte index 4 since
+    // 'ä' contains two bytes.
+    //
+    // This list ensures that the byte offset the lexer gives us can be matched
+    // with a char index. None means that the byte offset points inside a char
+    // which should not be possible.
+    let mut char_at_byte = vec![None; content.len()];
+    for (i, (pos, _)) in content.char_indices().enumerate() {
+        char_at_byte[pos] = Some(i + 1);
+    }
+    // Push a last value since the byte offset end is exclusive.
+    char_at_byte.push(Some(content.chars().count()));
+
+    // We also need to keep track of the current line and which char index the
+    // previous newline was at. Given a char index we can then subtract the last
+    // newline char index and get the column in the current line of the char.
     let mut line = 1;
-    let mut last_newline_byte = 0; // 1?
+    let mut last_newline = 0;
+
     Token::lexer(&content)
         .spanned()
         .map(|(token, range)| {
             let is_newline = token == Token::Newline;
-            let res = PlacedToken {
+            let placed_token = PlacedToken {
                 token,
                 span: Span {
                     line,
-                    col_start_byte: range.start - last_newline_byte,
-                    col_end_byte: range.end - last_newline_byte,
+                    col_start: char_at_byte[range.start].unwrap() - last_newline,
+                    col_end: char_at_byte[range.end].unwrap() - last_newline,
                 }
             };
             if is_newline {
                 line += 1;
-                last_newline_byte = range.start;
+                last_newline = char_at_byte[range.start].unwrap();
             }
-            res
+            placed_token
         })
         .collect()
 }
