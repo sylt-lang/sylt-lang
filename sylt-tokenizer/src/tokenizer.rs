@@ -4,7 +4,7 @@ pub use token::Token;
 
 mod token;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 /// A location in a file containing source code.
 pub struct Span {
     // TODO(ed): Do this more intelligent, so
@@ -27,7 +27,7 @@ impl Span {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct PlacedToken {
     pub token: Token,
     pub span: Span,
@@ -50,7 +50,7 @@ pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
         char_at_byte[pos] = Some(i + 1);
     }
     // Push a last value since the byte offset end is exclusive.
-    char_at_byte.push(Some(content.chars().count()));
+    char_at_byte.push(Some(content.chars().count() + 1));
 
     // We also need to keep track of the current line and which char index the
     // previous newline was at. Given a char index we can then subtract the last
@@ -96,7 +96,7 @@ pub fn file_to_tokens(file: &Path) -> Result<Vec<PlacedToken>, std::io::Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::Token;
+    use crate::{Token, string_to_tokens};
     use logos::Logos;
 
     fn lex(s: &str) -> Vec<Token> {
@@ -108,6 +108,69 @@ mod tests {
         let res = lexer.next().unwrap();
         assert_eq!(lexer.next(), None);
         res
+    }
+
+    fn vecs_match<T: PartialEq<T>>(a: &Vec<T>, b: &Vec<T>) -> bool {
+        if a.len() == b.len() {
+            a.iter().zip(b.iter()).all(|(a, b)| a == b)
+        } else {
+            false
+        }
+    }
+
+    macro_rules! assert_placed_eq {
+        ($a:expr, $( ($token:expr, $line:expr, $range:expr) ),+ $(,)? ) => {
+            let a = $a;
+            let b = vec![ $(
+                $crate::PlacedToken {
+                    token: $token,
+                    span: $crate::Span {
+                        line: $line,
+                        col_start: $range.start,
+                        col_end: $range.end,
+                    }
+                }
+            ),*];
+            if !vecs_match(&a, &b) {
+                panic!("\n{:?}\ndoes not match\n{:?}", a, b);
+            }
+        };
+    }
+
+    #[test]
+    fn simple_span() {
+        assert_placed_eq!(
+            string_to_tokens("1"),
+            (Token::Int(1), 1, 1..2),
+        );
+        assert_placed_eq!(
+            string_to_tokens("1\n"),
+            (Token::Int(1),  1, 1..2),
+            (Token::Newline, 1, 2..3),
+        );
+        assert_placed_eq!(
+            string_to_tokens("1\n23\n456"),
+            (Token::Int(1),   1, 1..2),
+            (Token::Newline,  1, 2..3),
+            (Token::Int(23),  2, 1..3),
+            (Token::Newline,  2, 3..4),
+            (Token::Int(456), 3, 1..4),
+        );
+    }
+
+    #[test]
+    fn span_with_non_ascii() {
+        // The 'ö' is an error but we want to check that its span is a single char.
+        assert_placed_eq!(
+            string_to_tokens("wow\nwöw\n"),
+            (Token::Identifier(String::from("wow")), 1, 1..4),
+            (Token::Newline,                         1, 4..5),
+
+            (Token::Identifier(String::from("w")),   2, 1..2),
+            (Token::Error,                           2, 2..3),
+            (Token::Identifier(String::from("w")),   2, 3..4),
+            (Token::Newline,                         2, 4..5),
+        );
     }
 
     #[test]
