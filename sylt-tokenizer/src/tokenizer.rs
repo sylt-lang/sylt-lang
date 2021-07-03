@@ -20,34 +20,21 @@ pub struct PlacedToken {
 }
 
 pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
-    let lexer = Token::lexer(&content);
-
-    let mut placed_tokens = lexer.spanned().peekable();
-
-    let mut lined_tokens = Vec::new();
-    let mut line: usize = 1;
-    for (c_idx, c) in content.chars().enumerate() {
-        if let Some((token, t_range)) = placed_tokens.peek() {
-            if t_range.start == c_idx {
-                let token = token.clone();
-                placed_tokens.next();
-                lined_tokens.push(PlacedToken {
-                    token,
-                    span: Span {
-                        line,
-                    }
-                });
+    // Map with side-effects intended
+    let mut line = 1;
+    Token::lexer(&content)
+        .map(|token| {
+            if token == Token::Newline {
+                line += 1;
             }
-        } else {
-            break;
-        }
-
-        if c == '\n' {
-            line += 1;
-        }
-    }
-
-    lined_tokens
+            PlacedToken {
+                token,
+                span: Span {
+                    line,
+                }
+            }
+        })
+        .collect()
 }
 
 pub fn file_to_tokens(file: &Path) -> Result<Vec<PlacedToken>, std::io::Error> {
