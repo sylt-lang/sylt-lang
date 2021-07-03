@@ -15,6 +15,13 @@ pub use self::statement::{Statement, StatementKind};
 
 pub use sylt_tokenizer::Span;
 
+static INVALID_TOKEN: Token = Token::EOF;
+static INVALID_SPAN: Span = Span {
+    line: 0,
+    col_start_byte: 0,
+    col_end_byte: 0,
+};
+
 type T = Token;
 
 pub trait Next {
@@ -243,8 +250,8 @@ impl<'a> Context<'a> {
 
     /// Return the current [Token] and [Span].
     fn peek(&self) -> (&Token, &Span) {
-        let token = self.tokens.get(self.curr).unwrap_or(&T::EOF);
-        let span = self.spans.get(self.curr).unwrap_or(&Span { line: 0 });
+        let token = self.tokens.get(self.curr).unwrap_or(&INVALID_TOKEN);
+        let span = self.spans.get(self.curr).unwrap_or(&INVALID_SPAN);
         (token, span)
     }
 
@@ -651,7 +658,7 @@ fn module(path: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Mo
         (
             use_files,
             Ok(Module {
-                span: Span { line: 0 },
+                span: Span::zero(),
                 statements,
             }),
         )

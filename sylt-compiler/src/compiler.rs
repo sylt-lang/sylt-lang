@@ -953,7 +953,7 @@ impl Compiler {
         let mut block = Block::new(name, 0, &tree.modules[0].0);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
         self.blocks.push(block);
-        self.frames.push(Frame::new(name, Span { line: 0 }));
+        self.frames.push(Frame::new(name, Span::zero()));
         let mut ctx = Context {
             block_slot: self.blocks.len() - 1,
             frame: self.frames.len() - 1,
@@ -975,8 +975,8 @@ impl Compiler {
         }
         let module = &tree.modules[0].1;
 
-        self.read_identifier("start", Span { line: 0 }, ctx, 0);
-        self.add_op(ctx, Span { line: 0 }, Op::Call(0));
+        self.read_identifier("start", Span::zero(), ctx, 0);
+        self.add_op(ctx, Span::zero(), Op::Call(0));
 
         let nil = self.constant(Value::Nil);
         self.add_op(ctx, module.span, nil);
@@ -1016,7 +1016,7 @@ impl Compiler {
                     error!(
                         self,
                         Context::from_namespace(slot),
-                        Span { line: 0 },
+                        Span::zero(),
                         "Reading module '{}' twice! How?",
                         full_path.display()
                     );
@@ -1120,7 +1120,7 @@ impl Compiler {
                         // Just fill in an empty slot since we have no idea.
                         // Unknown is overwritten by the Op::Force in the type checker.
                         let unknown = self.constant(Value::Unknown);
-                        self.add_op(ctx, Span { line: 0 }, unknown);
+                        self.add_op(ctx, Span::zero(), unknown);
 
                         let ty = self.resolve_type(ty, ctx);
                         let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
@@ -1129,7 +1129,7 @@ impl Compiler {
                             error!(self, ctx, statement.span, "Failed to resolve the type");
                             Op::Illegal
                         };
-                        self.add_op(ctx, Span { line: 0 }, op);
+                        self.add_op(ctx, Span::zero(), op);
                     }
 
                     // Already handled in the loop before.

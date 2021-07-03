@@ -11,6 +11,18 @@ pub struct Span {
     // we can show ranges. Maybe even go back
     // to offsets from start of the file.
     pub line: usize,
+    pub col_start_byte: usize,
+    pub col_end_byte: usize,
+}
+
+impl Span {
+    pub fn zero() -> Self {
+        Self {
+            line: 0,
+            col_start_byte: 0,
+            col_end_byte: 0,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -22,17 +34,24 @@ pub struct PlacedToken {
 pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
     // Map with side-effects intended
     let mut line = 1;
+    let mut last_newline_byte = 0; // 1?
     Token::lexer(&content)
-        .map(|token| {
-            if token == Token::Newline {
-                line += 1;
-            }
-            PlacedToken {
+        .spanned()
+        .map(|(token, range)| {
+            let is_newline = token == Token::Newline;
+            let res = PlacedToken {
                 token,
                 span: Span {
                     line,
+                    col_start_byte: range.start - last_newline_byte,
+                    col_end_byte: range.end - last_newline_byte,
                 }
+            };
+            if is_newline {
+                line += 1;
+                last_newline_byte = range.start;
             }
+            res
         })
         .collect()
 }
