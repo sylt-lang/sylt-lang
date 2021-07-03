@@ -96,6 +96,8 @@ pub enum Error {
     CompileError {
         file: PathBuf,
         line: usize,
+        col_start: usize,
+        col_end: usize,
         message: Option<String>,
     },
 
@@ -132,6 +134,8 @@ impl fmt::Display for Error {
             Error::CompileError {
                 file,
                 line,
+                col_start,
+                col_end,
                 message,
             } => {
                 write!(f, "{}: ", "compile error".red())?;
@@ -143,8 +147,20 @@ impl fmt::Display for Error {
                 }
                 write!(
                     f,
-                    "{}\n",
+                    "{}",
                     source_line_at(file, Some(*line)).unwrap_or_else(String::new)
+                )?;
+                write!(
+                    f,
+                    "{: <1$}",
+                    "",
+                    col_start + 6,
+                )?;
+                write!(
+                    f,
+                    "{:^<1$}\n",
+                    "",
+                    col_end - col_start,
                 )
             }
             Error::SyntaxError {

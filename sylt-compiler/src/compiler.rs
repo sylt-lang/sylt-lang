@@ -161,6 +161,8 @@ macro_rules! error {
             let err = Error::CompileError {
                 file: $compiler.file_from_namespace($ctx.namespace).into(),
                 line: $span.line,
+                col_start: $span.col_start,
+                col_end: $span.col_end,
                 message: Some(msg),
             };
             $compiler.errors.push(err);
