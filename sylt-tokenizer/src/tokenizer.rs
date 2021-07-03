@@ -4,10 +4,22 @@ pub use token::Token;
 
 mod token;
 
-pub type PlacedToken = (Token, usize);
-pub type TokenStream = Vec<PlacedToken>;
+#[derive(Debug, Copy, Clone)]
+/// A location in a file containing source code.
+pub struct Span {
+    // TODO(ed): Do this more intelligent, so
+    // we can show ranges. Maybe even go back
+    // to offsets from start of the file.
+    pub line: usize,
+}
 
-pub fn string_to_tokens(content: &str) -> TokenStream {
+#[derive(Debug)]
+pub struct PlacedToken {
+    pub token: Token,
+    pub span: Span,
+}
+
+pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
     let lexer = Token::lexer(&content);
 
     let mut placed_tokens = lexer.spanned().peekable();
@@ -15,11 +27,16 @@ pub fn string_to_tokens(content: &str) -> TokenStream {
     let mut lined_tokens = Vec::new();
     let mut line: usize = 1;
     for (c_idx, c) in content.chars().enumerate() {
-        if let Some((kind, t_range)) = placed_tokens.peek() {
+        if let Some((token, t_range)) = placed_tokens.peek() {
             if t_range.start == c_idx {
-                let kind = kind.clone();
+                let token = token.clone();
                 placed_tokens.next();
-                lined_tokens.push((kind, line));
+                lined_tokens.push(PlacedToken {
+                    token,
+                    span: Span {
+                        line,
+                    }
+                });
             }
         } else {
             break;
@@ -33,7 +50,7 @@ pub fn string_to_tokens(content: &str) -> TokenStream {
     lined_tokens
 }
 
-pub fn file_to_tokens(file: &Path) -> Result<TokenStream, std::io::Error> {
+pub fn file_to_tokens(file: &Path) -> Result<Vec<PlacedToken>, std::io::Error> {
     Ok(string_to_tokens(&fs::read_to_string(file)?))
 }
 
