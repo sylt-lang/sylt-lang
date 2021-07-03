@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
 use sylt_common::prog::Prog;
 use sylt_common::rc::Rc;
@@ -135,7 +135,7 @@ impl Frame {
 
 struct Compiler {
     blocks: Vec<Block>,
-    namespace_id_to_path: HashMap<NamespaceID, String>,
+    namespace_id_to_path: HashMap<NamespaceID, PathBuf>,
 
     namespaces: Vec<Namespace>,
     blobs: Vec<Blob>,
@@ -213,7 +213,7 @@ impl Compiler {
         self.frames.pop().unwrap()
     }
 
-    fn file_from_namespace(&self, namespace: usize) -> &str {
+    fn file_from_namespace(&self, namespace: usize) -> &Path {
         self.namespace_id_to_path.get(&namespace).unwrap()
     }
 
@@ -387,7 +387,7 @@ impl Compiler {
                 ret,
                 body,
             } => {
-                let file = self.file_from_namespace(ctx.namespace);
+                let file = self.file_from_namespace(ctx.namespace).display();
                 let name = format!("fn {} {}:{}", name, file, expression.span.line);
 
                 // === Frame begin ===
@@ -525,9 +525,9 @@ impl Compiler {
                             self,
                             ctx,
                             span,
-                            "Cannot read '{}' in '{}.sy'",
+                            "Cannot read '{}' in '{}'",
                             name,
-                            self.file_from_namespace(namespace)
+                            self.file_from_namespace(namespace).display()
                         );
                     }
                 }
@@ -566,9 +566,9 @@ impl Compiler {
                         self,
                         ctx,
                         span,
-                        "Cannot assign '{}' in '{}.sy'",
+                        "Cannot assign '{}' in '{}'",
                         name,
-                        self.file_from_namespace(namespace)
+                        self.file_from_namespace(namespace).display()
                     );
                 }
             },
@@ -1002,11 +1002,10 @@ impl Compiler {
     }
 
     fn extract_globals(&mut self, tree: &AST) -> HashMap<String, usize> {
-        let mut path_to_namespace_id = HashMap::new();
-        for (full_path, _) in tree.modules.iter() {
-            let slot = path_to_namespace_id.len();
-            let path = full_path.file_stem().unwrap().to_str().unwrap().to_owned();
-            match path_to_namespace_id.entry(path) {
+        let mut full_path_to_namespace_id = HashMap::new();
+        for (path, _) in tree.modules.iter() {
+            let slot = full_path_to_namespace_id.len();
+            match full_path_to_namespace_id.entry(path) {
                 Entry::Vacant(vac) => {
                     vac.insert(slot);
                     self.namespaces.push(Namespace::new());
@@ -1017,16 +1016,24 @@ impl Compiler {
                         self,
                         Context::from_namespace(slot),
                         Span::zero(),
-                        "Reading module '{}' twice! How?",
-                        full_path.display()
+                        "Reading file '{}' twice! How?",
+                        path.display()
                     );
                 }
             }
         }
 
-        self.namespace_id_to_path = path_to_namespace_id
+        self.namespace_id_to_path = full_path_to_namespace_id
             .iter()
-            .map(|(a, b)| (b.clone(), a.clone()))
+            .map(|(a, b)| (*b, (*a).clone()))
+            .collect();
+
+        let path_to_namespace_id: HashMap<_, _> = full_path_to_namespace_id
+            .iter()
+            .map(|(a, b)| (
+                a.file_stem().unwrap().to_str().unwrap().to_string(),
+                *b
+            ))
             .collect();
 
         for (path, module) in tree.modules.iter() {
