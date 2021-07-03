@@ -68,7 +68,7 @@ pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
                     line,
                     col_start: char_at_byte[range.start].unwrap() - last_newline,
                     col_end: char_at_byte[range.end].unwrap() - last_newline,
-                }
+                },
             };
             if is_newline {
                 line += 1;
