@@ -3,7 +3,10 @@ start :: fn {
     a := 2
     a is 2 <=> true
     a is a <=> true
-    a is #fn int -> int <=> false
-    a is #int <=> true
-    a is #float <=> false
+    a is :fn int -> int <=> false
+    a is :int <=> true
+    a is :float <=> false
+
+    b := :int | str
+    b is a
 }
