@@ -6,9 +6,30 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
-use sylt_tokenizer::{Span, Token};
+use sylt_tokenizer::Span;
 
 static INDENT: &'static str = "      ";
+
+fn write_source_line_at(f: &mut fmt::Formatter<'_>, file: &Path, line: usize) -> fmt::Result {
+    let file = if let Ok(file) = File::open(file) {
+        file
+    } else {
+        return write!(f, "Unable to open file {}", file.display());
+    };
+
+    let start_line = (line - 2).max(1);
+    let lines = line - start_line + 1;
+
+    for (line_num, line) in io::BufReader::new(file)
+        .lines()
+        .enumerate()
+        .skip(start_line - 1)
+        .take(lines)
+    {
+        writeln!(f, " {:3} | {}", (line_num + 1).blue(), line.unwrap())?;
+    }
+    Ok(())
+}
 
 fn underline(f: &mut fmt::Formatter<'_>, col_start: usize, len: usize) -> fmt::Result {
     write!(f, "{}", INDENT)?;
@@ -26,40 +47,9 @@ fn underline(f: &mut fmt::Formatter<'_>, col_start: usize, len: usize) -> fmt::R
     )
 }
 
-fn write_source_line_at(f: &mut fmt::Formatter<'_>, file: &Path, span: Span) -> fmt::Result {
-    let file = if let Ok(file) = File::open(file) {
-        file
-    } else {
-        return write!(f, "Unable to open file {}", file.display());
-    };
-
-    let start_line = (span.line - 2).max(1);
-    let lines = span.line - start_line + 1;
-
-    for (line_num, line) in io::BufReader::new(file)
-        .lines()
-        .enumerate()
-        .skip(start_line - 1)
-        .take(lines)
-    {
-        writeln!(f, " {:3} | {}", (line_num + 1).blue(), line.unwrap())?;
-    }
+fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &Path, span: Span) -> fmt::Result {
+    write_source_line_at(f, file, span.line)?;
     underline(f, span.col_start, span.col_end - span.col_start)
-}
-
-fn source_line_at(file: &Path, line: Option<usize>) -> Option<String> {
-    match (File::open(file), line) {
-        (Ok(file), Some(line)) => Some(
-            io::BufReader::new(file)
-                .lines()
-                .enumerate()
-                .filter(|(n, _)| line <= *n + 3 && *n + 3 <= line + 2)
-                .fold(String::from("\n"), |a, (n, l)| {
-                    format!("{} {:3} | {}\n", a, (n + 1).blue(), l.unwrap())
-                }),
-        ),
-        _ => None,
-    }
 }
 
 fn file_line_display(file: &Path, line: Option<usize>) -> String {
@@ -127,8 +117,7 @@ pub enum Error {
 
     SyntaxError {
         file: PathBuf,
-        line: usize,
-        token: Token,
+        span: Span,
         message: Option<String>,
     },
 
@@ -140,7 +129,7 @@ pub enum Error {
 
     GitConflictError {
         file: PathBuf,
-        start: usize,
+        span: Span,
     },
 
     FileNotFound(PathBuf),
@@ -160,11 +149,8 @@ impl fmt::Display for Error {
                 if let Some(message) = message {
                     write!(f, "{}\n", message)?;
                 }
-                write!(
-                    f,
-                    "{}\n",
-                    source_line_at(file, Some(*line)).unwrap_or_else(String::new)
-                )
+
+                write_source_line_at(f, file, *line)
             }
             Error::CompileError {
                 file,
@@ -179,42 +165,34 @@ impl fmt::Display for Error {
                     write!(f, "{}{}\n", INDENT, message)?;
                 }
 
-                write_source_line_at(f, file, *span)
+                write_source_span_at(f, file, *span)
             }
             Error::SyntaxError {
                 file,
-                line,
-                token,
+                span,
                 message,
             } => {
                 write!(f, "{}: ", "syntax error".red())?;
-                write!(f, "{}\n", file_line_display(file, Some(*line)))?;
+                write!(f, "{}\n", file_line_display(file, Some(span.line)))?;
                 write!(
                     f,
-                    "{}Syntax Error on line {} at token {:?}\n",
-                    INDENT, line, token
+                    "{}Syntax Error on line {}\n",
+                    INDENT, span.line,
                 )?;
 
                 if let Some(message) = message {
                     write!(f, "{}{}\n", INDENT, message)?;
                 }
-                write!(
-                    f,
-                    "{}\n",
-                    source_line_at(file, Some(*line)).unwrap_or_else(String::new)
-                )
+
+                write_source_span_at(f, file, *span)
             }
-            Error::GitConflictError { file, start } => {
+            Error::GitConflictError { file, span } => {
                 write!(f, "{}: ", "git conflict error".red())?;
-                write!(f, "{}\n", file_line_display(file, Some(*start)))?;
+                write!(f, "{}\n", file_line_display(file, Some(span.line)))?;
 
-                write!(f, "{}Git conflict marker found at line {}\n", INDENT, start)?;
+                write!(f, "{}Git conflict marker found at line {}\n", INDENT, span.line)?;
 
-                write!(
-                    f,
-                    "{}",
-                    source_line_at(file, Some(*start + 1)).unwrap_or_else(String::new)
-                )
+                write_source_span_at(f, file, *span)
             }
             Error::FileNotFound(path) => {
                 write!(f, "File '{}' not found", path.display())

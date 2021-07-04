@@ -97,6 +97,8 @@ mod tests {
 
             #[allow(unused_imports)]
             use ::sylt_common::error::Error;
+            #[allow(unused_imports)]
+            use ::sylt_tokenizer::Span;
             if !matches!(errs.as_slice(), $expect) {
                 eprintln!("===== Got =====");
                 for err in errs {

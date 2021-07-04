@@ -247,7 +247,7 @@ fn parse_test_settings(contents: String) -> TestSettings {
                 );
             }
             if line.starts_with("@") {
-                line = format!("Error::SyntaxError {{ line: {}, .. }}", &line[1..]);
+                line = format!("Error::SyntaxError {{ span: Span {{ line: {}, ..}}, .. }}", &line[1..]);
             }
             errors.push(line);
         } else if line.starts_with("// flags: ") {

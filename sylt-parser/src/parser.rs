@@ -211,11 +211,6 @@ impl<'a> Context<'a> {
         *self.peek().1
     }
 
-    /// The line currently beeing parsed.
-    fn line(&self) -> usize {
-        self.span().line
-    }
-
     /// Move to the next nth token.
     fn skip(&self, n: usize) -> Self {
         let mut new = *self;
@@ -276,8 +271,7 @@ macro_rules! syntax_error {
             let msg = format!($( $msg ),*).into();
             Error::SyntaxError {
                 file: $ctx.file.to_path_buf(),
-                line: $ctx.line(),
-                token: $ctx.token().clone(),
+                span: $ctx.span(),
                 message: Some(msg),
             }
         }
@@ -696,7 +690,11 @@ pub fn find_conflict_markers(file: &Path) -> Vec<Error> {
         if line.starts_with("<<<<<<<") {
             errs.push(Error::GitConflictError {
                 file: file.to_path_buf(),
-                start: i + 1,
+                span: Span {
+                    line: i + 1,
+                    col_start: 0,
+                    col_end: "<<<<<<<".len(),
+                }
             });
         }
     }
