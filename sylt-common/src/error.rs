@@ -8,6 +8,45 @@ use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 use sylt_tokenizer::{Span, Token};
 
+static INDENT: &'static str = "      ";
+
+fn underline(f: &mut fmt::Formatter<'_>, col_start: usize, len: usize) -> fmt::Result {
+    write!(f, "{}", INDENT)?;
+    write!(
+        f,
+        "{: <1$}",
+        "",
+        col_start,
+    )?;
+    writeln!(
+        f,
+        "{:^<1$}",
+        "",
+        len,
+    )
+}
+
+fn write_source_line_at(f: &mut fmt::Formatter<'_>, file: &Path, span: Span) -> fmt::Result {
+    let file = if let Ok(file) = File::open(file) {
+        file
+    } else {
+        return write!(f, "Unable to open file {}", file.display());
+    };
+
+    let start_line = (span.line - 2).max(1);
+    let lines = span.line - start_line + 1;
+
+    for (line_num, line) in io::BufReader::new(file)
+        .lines()
+        .enumerate()
+        .skip(start_line - 1)
+        .take(lines)
+    {
+        writeln!(f, " {:3} | {}", (line_num + 1).blue(), line.unwrap())?;
+    }
+    underline(f, span.col_start, span.col_end - span.col_start)
+}
+
 fn source_line_at(file: &Path, line: Option<usize>) -> Option<String> {
     match (File::open(file), line) {
         (Ok(file), Some(line)) => Some(
@@ -111,14 +150,12 @@ pub enum Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let indent = "      ";
-
         match self {
             #[rustfmt::skip]
             Error::RuntimeError { kind, phase, file, line, message } => {
                 write!(f, "{} {}: ", phase.red(), "error".red())?;
                 write!(f, "{}\n", file_line_display(file, Some(*line)))?;
-                write!(f, "{}{}\n", indent, kind)?;
+                write!(f, "{}{}\n", INDENT, kind)?;
 
                 if let Some(message) = message {
                     write!(f, "{}\n", message)?;
@@ -136,28 +173,13 @@ impl fmt::Display for Error {
             } => {
                 write!(f, "{}: ", "compile error".red())?;
                 write!(f, "{}\n", file_line_display(file, Some(span.line)))?;
-                write!(f, "{}Failed to compile line {}\n", indent, span.line)?;
+                write!(f, "{}Failed to compile line {}\n", INDENT, span.line)?;
 
                 if let Some(message) = message {
-                    write!(f, "{}{}\n", indent, message)?;
+                    write!(f, "{}{}\n", INDENT, message)?;
                 }
-                write!(
-                    f,
-                    "{}",
-                    source_line_at(file, Some(span.line)).unwrap_or_else(String::new)
-                )?;
-                write!(
-                    f,
-                    "{: <1$}",
-                    "",
-                    span.col_start + 6,
-                )?;
-                write!(
-                    f,
-                    "{:^<1$}\n",
-                    "",
-                    span.col_end - span.col_start,
-                )
+
+                write_source_line_at(f, file, *span)
             }
             Error::SyntaxError {
                 file,
@@ -170,11 +192,11 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "{}Syntax Error on line {} at token {:?}\n",
-                    indent, line, token
+                    INDENT, line, token
                 )?;
 
                 if let Some(message) = message {
-                    write!(f, "{}{}\n", indent, message)?;
+                    write!(f, "{}{}\n", INDENT, message)?;
                 }
                 write!(
                     f,
@@ -186,7 +208,7 @@ impl fmt::Display for Error {
                 write!(f, "{}: ", "git conflict error".red())?;
                 write!(f, "{}\n", file_line_display(file, Some(*start)))?;
 
-                write!(f, "{}Git conflict marker found at line {}\n", indent, start)?;
+                write!(f, "{}Git conflict marker found at line {}\n", INDENT, start)?;
 
                 write!(
                     f,
