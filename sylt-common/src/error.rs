@@ -17,7 +17,7 @@ fn write_source_line_at(f: &mut fmt::Formatter<'_>, file: &Path, line: usize) ->
         return write!(f, "Unable to open file {}", file.display());
     };
 
-    let start_line = (line - 2).max(1);
+    let start_line = (line.saturating_sub(2)).max(1);
     let lines = line - start_line + 1;
 
     for (line_num, line) in io::BufReader::new(file)
@@ -32,7 +32,6 @@ fn write_source_line_at(f: &mut fmt::Formatter<'_>, file: &Path, line: usize) ->
 }
 
 fn underline(f: &mut fmt::Formatter<'_>, col_start: usize, len: usize) -> fmt::Result {
-    write!(f, "{}", INDENT)?;
     write!(
         f,
         "{: <1$}",
@@ -49,6 +48,7 @@ fn underline(f: &mut fmt::Formatter<'_>, col_start: usize, len: usize) -> fmt::R
 
 fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &Path, span: Span) -> fmt::Result {
     write_source_line_at(f, file, span.line)?;
+    write!(f, "{}", INDENT)?;
     underline(f, span.col_start, span.col_end - span.col_start)
 }
 
@@ -291,5 +291,66 @@ impl fmt::Display for RuntimeError {
                 write!(f, "Reached unreachable code")
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn underline() {
+        // A small hack required since we can't construct new Formatters.
+        struct UnderlineTester(usize, usize);
+        impl std::fmt::Display for UnderlineTester {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                super::underline(f, self.0, self.1)
+            }
+        }
+
+        assert_eq!(
+            &format!("{}", UnderlineTester(1, 2)),
+            " ^^\n",
+        );
+        assert_eq!(
+            &format!("{}", UnderlineTester(2, 1)),
+            "  ^\n",
+        );
+        assert_eq!(
+            &format!("{}", UnderlineTester(0, 0)),
+            "\n",
+        );
+        assert_eq!(
+            &format!("{}", UnderlineTester(0, 2)),
+            "^^\n",
+        );
+    }
+
+    #[test]
+    fn write_source_span() {
+        std::env::set_var("NO_COLOR", "1");
+
+        struct SourceSpanTester<'p>(&'p std::path::Path, super::Span);
+        impl<'p> std::fmt::Display for SourceSpanTester<'p> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                super::write_source_span_at(f, self.0, self.1)
+            }
+        }
+
+        let mut tmp = std::env::temp_dir();
+        tmp.push("test.sy");
+
+        let src = "start :: fn {\n  abc := 123\n  def := ghi\n}\n";
+        std::fs::write(&tmp, src).expect(
+            &format!("Unable to write test string to tmp file at {}", tmp.display())
+        );
+
+        assert_eq!(
+            &format!("{}", SourceSpanTester(&tmp, super::Span {
+                line: 1,
+                col_start: 1,
+                col_end: 6,
+            })),
+            "   1 | start :: fn {
+       ^^^^^\n",
+        )
     }
 }
