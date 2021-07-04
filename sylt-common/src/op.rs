@@ -247,7 +247,7 @@ pub enum Op {
     /// into a union type.
     ///
     /// Skipped in the runtime.
-    /// In typechecker
+    /// In the typechecker:
     /// {A, B} - Union - {A | B}
     Union,
 
