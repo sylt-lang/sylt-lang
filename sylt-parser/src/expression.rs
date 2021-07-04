@@ -276,7 +276,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         T::LeftBracket => list(ctx),
         T::LeftBrace => set_or_dict(ctx),
 
-        T::Hash => {
+        T::Colon => {
             let span = ctx.span();
             let (ctx, ty) = parse_type(ctx.skip(1))?;
             Ok((
@@ -712,12 +712,12 @@ mod test {
 
     test!(expression, expr: "-a + b < 3 * true && false / 2" => _);
 
-    test!(expression, type_expr_int: "#int" => _);
-    test!(expression, type_expr_void: "#void" => _);
-    test!(expression, type_expr_float: "#float" => _);
-    test!(expression, type_expr_str: "#str" => _);
-    test!(expression, type_expr_custom: "#A" => _);
-    test!(expression, type_expr_custom_chaining: "#A.b.C" => _);
+    test!(expression, type_expr_int: ":int" => _);
+    test!(expression, type_expr_void: ":void" => _);
+    test!(expression, type_expr_float: ":float" => _);
+    test!(expression, type_expr_str: ":str" => _);
+    test!(expression, type_expr_custom: ":A" => _);
+    test!(expression, type_expr_custom_chaining: ":A.b.C" => _);
 
     test!(expression, void_simple: "fn {}" => _);
     test!(expression, void_argument: "fn a: int { ret a + 1 }" => _);
