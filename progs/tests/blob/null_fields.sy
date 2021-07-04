@@ -1,5 +1,5 @@
 A :: blob {
-    a: int?
+    a: int?,
 }
 
 start :: fn {

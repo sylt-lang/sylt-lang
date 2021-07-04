@@ -2,7 +2,7 @@ A :: blob {
 }
 
 B :: blob {
-    a: int?
+    a: int?,
 }
 
 start :: fn {

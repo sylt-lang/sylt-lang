@@ -292,19 +292,19 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         T::Minus | T::Bang => unary(ctx),
 
         T::Identifier(_) => {
-            // Blob initializations are expressions.
-            if let Ok(result) = blob(ctx) {
-                Ok(result)
-            } else {
-                let span = ctx.span();
-                let (ctx, assign) = assignable(ctx)?;
-                Ok((
+            let span = ctx.span();
+            match (blob(ctx), assignable(ctx)) {
+                (Ok(result), _) => Ok(result),
+                (_, Ok((ctx, assign))) => Ok((
                     ctx,
                     Expression {
                         span,
                         kind: Get(assign),
                     },
-                ))
+                )),
+                (Err((ctx, _)), Err(_)) => {
+                    raise_syntax_error!(ctx, "Neither a blob instantiation or an identifier");
+                }
             }
         }
 
@@ -408,7 +408,8 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
 /// `()` as well as `(,)` are parsed as zero-sized tuples.
 fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let span = ctx.span();
-    let mut ctx = expect!(ctx, T::LeftParen, "Expected '('");
+    let ctx = expect!(ctx, T::LeftParen, "Expected '('");
+    let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
 
     // The expressions contained in the parenthesis.
     let mut exprs = Vec::new();
@@ -435,7 +436,8 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         }
     }
 
-    ctx = expect!(ctx, T::RightParen, "Expected ')'");
+    let ctx = ctx.pop_skip_newlines(skip_newlines);
+    let ctx = expect!(ctx, T::RightParen, "Expected ')'");
 
     use ExpressionKind::Tuple;
     let result = if is_tuple {
@@ -453,16 +455,13 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let span = ctx.span();
     let (ctx, blob) = assignable(ctx)?;
-    let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{' after blob name");
+    let ctx = expect!(ctx, T::LeftBrace, "Expected '{{' after blob name");
+    let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
 
     // The blob's fields.
     let mut fields = Vec::new();
     loop {
         match ctx.token() {
-            T::Newline => {
-                ctx = ctx.skip(1);
-            }
-
             // Done with fields.
             T::RightBrace | T::EOF => {
                 break;
@@ -478,8 +477,12 @@ fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 let (_ctx, expr) = expression(ctx)?;
                 ctx = _ctx; // assign to outer
 
-                if !matches!(ctx.token(), T::Comma | T::Newline | T::RightBrace) {
-                    raise_syntax_error!(ctx, "Expected a delimiter: newline or ','");
+                if !matches!(ctx.token(), T::Comma | T::RightBrace) {
+                    raise_syntax_error!(
+                        ctx,
+                        "Expected a field delimiter ',' - but got {:?}",
+                        ctx.token()
+                    );
                 }
                 ctx = ctx.skip_if(T::Comma);
 
@@ -491,6 +494,8 @@ fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             }
         }
     }
+
+    let ctx = ctx.pop_skip_newlines(skip_newlines);
     let ctx = expect!(ctx, T::RightBrace, "Expected '}}' after blob initalizer");
 
     if matches!(ctx.token(), T::Else) {
@@ -510,10 +515,8 @@ fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 // Parse a list expression, e.g. `[1, 2, a(3)]`
 fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let span = ctx.span();
-    let mut ctx = expect!(ctx, T::LeftBracket, "Expected '['");
-
-    // `l := [\n1` is valid
-    ctx = ctx.skip_while(T::Newline);
+    let ctx = expect!(ctx, T::LeftBracket, "Expected '['");
+    let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
 
     // Inner experssions.
     let mut exprs = Vec::new();
@@ -530,12 +533,12 @@ fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 exprs.push(expr);
                 ctx = _ctx; // assign to outer
                 ctx = ctx.skip_if(T::Comma);
-                ctx = ctx.skip_while(T::Newline); // newlines after expression is valid inside lists
             }
         }
     }
 
-    ctx = expect!(ctx, T::RightBracket, "Expected ']'");
+    let ctx = ctx.pop_skip_newlines(skip_newlines);
+    let ctx = expect!(ctx, T::RightBracket, "Expected ']'");
     use ExpressionKind::List;
     Ok((
         ctx,
@@ -551,7 +554,8 @@ fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 /// `{:}` is parsed as the empty dict and {} is parsed as the empty set.
 fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let span = ctx.span();
-    let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{'");
+    let ctx = expect!(ctx, T::LeftBrace, "Expected '{{'");
+    let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
 
     // The inner values of the set or dict.
     let mut exprs = Vec::new();
@@ -600,7 +604,8 @@ fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         }
     }
 
-    ctx = expect!(ctx, T::RightBrace, "Expected '}}'");
+    let ctx = ctx.pop_skip_newlines(skip_newlines);
+    let ctx = expect!(ctx, T::RightBrace, "Expected '}}'");
 
     use ExpressionKind::{Dict, Set};
     // If we still don't know, assume we're a set.
@@ -683,7 +688,7 @@ mod test {
     test!(expression, call_arrow_grouping: "(1 + 0) -> a' 2, 3" => Get(_));
 
     test!(expression, instance: "A { a: 1 + 1, b: nil }" => Instance { .. });
-    test!(expression, instance_more: "A { a: 2\n c: 2 }" => Instance { .. });
+    test!(expression, instance_more: "A { a: 2, \n c: 2 }" => Instance { .. });
     test!(expression, instance_empty: "A {}" => Instance { .. });
 
     test!(expression, simple: "fn -> {}" => _);

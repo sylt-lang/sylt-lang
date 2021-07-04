@@ -119,6 +119,8 @@ struct LoopFrame {
 }
 
 #[derive(Debug)]
+/// Emulates the runtime stackframe.
+/// [variables] and [upvalues] are used like stacks.
 struct Frame {
     variables: Vec<Variable>,
     upvalues: Vec<Upvalue>,
@@ -484,13 +486,15 @@ impl Compiler {
             return Err(());
         }
 
-        for var in self.frames[frame].variables.iter().rev() {
+        let variables = &self.frames[frame].variables;
+        for var in variables.iter().rev() {
             if &var.name == name && var.active {
                 return Ok(Lookup::Variable(var.clone()));
             }
         }
 
-        for up in self.frames[frame].upvalues.iter().rev() {
+        let upvalues = &self.frames[frame].upvalues;
+        for up in upvalues.iter().rev() {
             if &up.name == name {
                 return Ok(Lookup::Upvalue(up.clone()));
             }
