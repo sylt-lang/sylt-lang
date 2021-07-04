@@ -301,10 +301,10 @@ mod test {
         }
     }
 
-    struct SourceSpanTester(super::Span);
-    impl std::fmt::Display for SourceSpanTester {
+    struct SourceSpanTester<'p>(&'p std::path::Path, super::Span);
+    impl<'p> std::fmt::Display for SourceSpanTester<'p> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            super::write_source_span_at(f, &get_tmp(), self.0)
+            super::write_source_span_at(f, self.0, self.1)
         }
     }
 
@@ -317,27 +317,30 @@ mod test {
     }
 
     fn get_tmp() -> std::path::PathBuf {
+        use rand::Rng;
         let mut tmp = std::env::temp_dir();
-        tmp.push("test.sy");
+        tmp.push(format!("test-{}.sy", rand::thread_rng().gen::<u32>()));
         tmp
     }
 
-    fn write_str_to_tmp(s: &str) {
+    fn write_str_to_tmp(s: &str) -> std::path::PathBuf {
         let tmp = get_tmp();
         std::fs::write(&tmp, s).expect(&format!(
             "Unable to write test string to tmp file at {}",
             tmp.display(),
         ));
+        tmp.clone()
     }
 
     #[test]
     fn write_source_span_simple() {
         std::env::set_var("NO_COLOR", "1");
-        write_str_to_tmp("hello\nstart :: fn {\n  abc := 123\n  def := ghi\n}\n");
+        let p = write_str_to_tmp("hello\nstart :: fn {\n");
         assert_eq!(
             &format!(
                 "{}",
                 SourceSpanTester(
+                    &p,
                     super::Span {
                         line: 2,
                         col_start: 1,
@@ -354,11 +357,12 @@ mod test {
     #[test]
     fn write_source_span_many_lines() {
         std::env::set_var("NO_COLOR", "1");
-        write_str_to_tmp("hello\nhello\nhello\nstart :: fn {\n  abc := 123\n  def := ghi\n}\n");
+        let p = write_str_to_tmp("hello\nhello\nhello\nstart :: fn {\n  abc := 123\n  def := ghi\n}\n");
         assert_eq!(
             &format!(
                 "{}",
                 SourceSpanTester(
+                    &p,
                     super::Span {
                         line: 4,
                         col_start: 1,

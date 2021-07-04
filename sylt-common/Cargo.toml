@@ -10,3 +10,6 @@ sylt-tokenizer = { path = "../sylt-tokenizer" }
 sylt_macro = { path = "../sylt_macro" }
 
 owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
+
+[dev-dependencies]
+rand = "0.8" # for generating random file names for tests
