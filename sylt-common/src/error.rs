@@ -32,18 +32,8 @@ fn write_source_line_at(f: &mut fmt::Formatter<'_>, file: &Path, line: usize) ->
 }
 
 fn underline(f: &mut fmt::Formatter<'_>, col_start: usize, len: usize) -> fmt::Result {
-    write!(
-        f,
-        "{: <1$}",
-        "",
-        col_start,
-    )?;
-    writeln!(
-        f,
-        "{:^<1$}",
-        "",
-        len,
-    )
+    write!(f, "{: <1$}", "", col_start)?;
+    writeln!(f, "{:^<1$}", "", len,)
 }
 
 fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &Path, span: Span) -> fmt::Result {
@@ -174,11 +164,7 @@ impl fmt::Display for Error {
             } => {
                 write!(f, "{}: ", "syntax error".red())?;
                 write!(f, "{}\n", file_line_display(file, Some(span.line)))?;
-                write!(
-                    f,
-                    "{}Syntax Error on line {}\n",
-                    INDENT, span.line,
-                )?;
+                write!(f, "{}Syntax Error on line {}\n", INDENT, span.line)?;
 
                 if let Some(message) = message {
                     write!(f, "{}{}\n", INDENT, message)?;
@@ -190,7 +176,11 @@ impl fmt::Display for Error {
                 write!(f, "{}: ", "git conflict error".red())?;
                 write!(f, "{}\n", file_line_display(file, Some(span.line)))?;
 
-                write!(f, "{}Git conflict marker found at line {}\n", INDENT, span.line)?;
+                write!(
+                    f,
+                    "{}Git conflict marker found at line {}\n",
+                    INDENT, span.line,
+                )?;
 
                 write_source_span_at(f, file, *span)
             }
@@ -296,61 +286,90 @@ impl fmt::Display for RuntimeError {
 
 #[cfg(test)]
 mod test {
+    // A small hack is required to test the functions working on Formatters
+    // since we can't construct new Formatters.
+    //
+    // The formatted span output is very weird to test. Feel free to move the
+    // string around and check that the ^^^ lines up correctly. Spaces matter!
+    //
+    // For some tests, color is disabled by setting the env variable NO_COLOR=1.
+
+    struct UnderlineTester(usize, usize);
+    impl std::fmt::Display for UnderlineTester {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            super::underline(f, self.0, self.1)
+        }
+    }
+
+    struct SourceSpanTester(super::Span);
+    impl std::fmt::Display for SourceSpanTester {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            super::write_source_span_at(f, &get_tmp(), self.0)
+        }
+    }
+
     #[test]
     fn underline() {
-        // A small hack required since we can't construct new Formatters.
-        struct UnderlineTester(usize, usize);
-        impl std::fmt::Display for UnderlineTester {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                super::underline(f, self.0, self.1)
-            }
-        }
+        assert_eq!(&format!("{}", UnderlineTester(1, 2)), " ^^\n");
+        assert_eq!(&format!("{}", UnderlineTester(2, 1)), "  ^\n");
+        assert_eq!(&format!("{}", UnderlineTester(0, 0)), "\n");
+        assert_eq!(&format!("{}", UnderlineTester(0, 2)), "^^\n");
+    }
 
+    fn get_tmp() -> std::path::PathBuf {
+        let mut tmp = std::env::temp_dir();
+        tmp.push("test.sy");
+        tmp
+    }
+
+    fn write_str_to_tmp(s: &str) {
+        let tmp = get_tmp();
+        std::fs::write(&tmp, s).expect(&format!(
+            "Unable to write test string to tmp file at {}",
+            tmp.display(),
+        ));
+    }
+
+    #[test]
+    fn write_source_span_simple() {
+        std::env::set_var("NO_COLOR", "1");
+        write_str_to_tmp("hello\nstart :: fn {\n  abc := 123\n  def := ghi\n}\n");
         assert_eq!(
-            &format!("{}", UnderlineTester(1, 2)),
-            " ^^\n",
-        );
-        assert_eq!(
-            &format!("{}", UnderlineTester(2, 1)),
-            "  ^\n",
-        );
-        assert_eq!(
-            &format!("{}", UnderlineTester(0, 0)),
-            "\n",
-        );
-        assert_eq!(
-            &format!("{}", UnderlineTester(0, 2)),
-            "^^\n",
+            &format!(
+                "{}",
+                SourceSpanTester(
+                    super::Span {
+                        line: 2,
+                        col_start: 1,
+                        col_end: 6,
+                    }
+                )
+            ),
+            "   1 | hello
+   2 | start :: fn {
+       ^^^^^\n",
         );
     }
 
     #[test]
-    fn write_source_span() {
+    fn write_source_span_many_lines() {
         std::env::set_var("NO_COLOR", "1");
-
-        struct SourceSpanTester<'p>(&'p std::path::Path, super::Span);
-        impl<'p> std::fmt::Display for SourceSpanTester<'p> {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                super::write_source_span_at(f, self.0, self.1)
-            }
-        }
-
-        let mut tmp = std::env::temp_dir();
-        tmp.push("test.sy");
-
-        let src = "start :: fn {\n  abc := 123\n  def := ghi\n}\n";
-        std::fs::write(&tmp, src).expect(
-            &format!("Unable to write test string to tmp file at {}", tmp.display())
-        );
-
+        write_str_to_tmp("hello\nhello\nhello\nstart :: fn {\n  abc := 123\n  def := ghi\n}\n");
         assert_eq!(
-            &format!("{}", SourceSpanTester(&tmp, super::Span {
-                line: 1,
-                col_start: 1,
-                col_end: 6,
-            })),
-            "   1 | start :: fn {
+            &format!(
+                "{}",
+                SourceSpanTester(
+                    super::Span {
+                        line: 4,
+                        col_start: 1,
+                        col_end: 6,
+                    }
+                )
+            ),
+            "   2 | hello
+   3 | hello
+   4 | start :: fn {
        ^^^^^\n",
-        )
+        );
     }
 }
