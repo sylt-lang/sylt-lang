@@ -464,6 +464,11 @@ impl VM {
                 }
             }
 
+            Op::Union => {
+                let (a, b) = self.poppop();
+                self.push(Type::maybe_union([a, b].iter(), prog.blobs.as_slice()));
+            }
+
             Op::Link(slot) => {
                 match &prog.constants[slot] {
                     Value::Function(_, _, block) => {
@@ -776,21 +781,21 @@ impl VM {
 
             Op::List(n) => {
                 let n = self.stack.len() - n;
-                let ty = Type::maybe_union(self.stack.split_off(n).iter());
+                let ty = Type::maybe_union(self.stack.split_off(n).iter(), prog.blobs.as_slice());
                 self.push(Type::List(Box::new(ty)));
             }
 
             Op::Set(n) => {
                 let n = self.stack.len() - n;
-                let ty = Type::maybe_union(self.stack.split_off(n).iter());
+                let ty = Type::maybe_union(self.stack.split_off(n).iter(), prog.blobs.as_slice());
                 self.push(Type::Set(Box::new(ty)));
             }
 
             Op::Dict(n) => {
                 let n = self.stack.len() - n;
                 let elems = self.stack.split_off(n);
-                let key = Type::maybe_union(elems.iter().step_by(2));
-                let value = Type::maybe_union(elems.iter().skip(1).step_by(2));
+                let key = Type::maybe_union(elems.iter().step_by(2), prog.blobs.as_slice());
+                let value = Type::maybe_union(elems.iter().skip(1).step_by(2), prog.blobs.as_slice());
                 self.push(Type::Dict(Box::new(key), Box::new(value)));
             }
 

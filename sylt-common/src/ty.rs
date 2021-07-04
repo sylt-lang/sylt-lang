@@ -98,13 +98,9 @@ impl PartialEq for Type {
 
 impl Eq for Type {}
 
-fn maybe_union_type<'a>(v: impl Iterator<Item = &'a Value>) -> Type {
-    let set: HashSet<_> = v.map(Type::from).collect();
-    match set.len() {
-        0 => Type::Unknown,
-        1 => set.into_iter().next().unwrap(),
-        _ => Type::Union(set),
-    }
+fn maybe_union_from_type<'a>(v: impl Iterator<Item = &'a Value>) -> Type {
+    let types: Vec<_> = v.map(Type::from).collect();
+    Type::maybe_union(types.iter(), None)
 }
 
 impl From<&Value> for Type {
@@ -115,17 +111,17 @@ impl From<&Value> for Type {
             Value::Blob(b) => Type::Blob(*b),
             Value::Tuple(v) => Type::Tuple(v.iter().map(Type::from).collect()),
             Value::List(v) => {
-                let t = maybe_union_type(v.borrow().iter());
+                let t = maybe_union_from_type(v.borrow().iter());
                 Type::List(Box::new(t))
             }
             Value::Set(v) => {
-                let t = maybe_union_type(v.borrow().iter());
+                let t = maybe_union_from_type(v.borrow().iter());
                 Type::Set(Box::new(t))
             }
             Value::Dict(v) => {
                 let v = v.borrow();
-                let k = maybe_union_type(v.keys());
-                let v = maybe_union_type(v.values());
+                let k = maybe_union_from_type(v.keys());
+                let v = maybe_union_from_type(v.values());
                 Type::Dict(Box::new(k), Box::new(v))
             }
             Value::Union(v) => Type::Union(v.iter().map(Type::from).collect()),
@@ -225,8 +221,24 @@ impl Type {
         matches!(self, Type::Void | Type::Invalid)
     }
 
-    pub fn maybe_union<'a>(v: impl Iterator<Item = &'a Type>) -> Type {
-        let set: HashSet<_> = v.cloned().collect();
+    pub fn maybe_union<'a, B>(tys: impl Iterator<Item = &'a Type>, blobs: B) -> Type
+        where
+            B: Into<Option<&'a [Blob]>>,
+
+    {
+        let blobs: Option<_> = blobs.into();
+        let mut set = HashSet::new();
+        for ty in tys {
+            match blobs {
+                None => {
+                    set.insert(ty.clone());
+                }
+                Some(blobs) if !set.iter().any(|x| x.fits(ty, blobs).is_ok()) => {
+                    set.insert(ty.clone());
+                }
+                _ => {}
+            }
+        }
         match set.len() {
             0 => Type::Unknown,
             1 => set.into_iter().next().unwrap(),

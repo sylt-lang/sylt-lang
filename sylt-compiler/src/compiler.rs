@@ -403,6 +403,27 @@ impl Compiler {
             }
             Not(a) => self.un_op(a, &[Op::Not], expression.span, ctx),
 
+            IfExpression {
+                condition,
+                pass,
+                fail,
+            } => {
+                self.expression(condition, ctx);
+
+                let skip = self.add_op(ctx, expression.span, Op::Illegal);
+
+                self.expression(pass, ctx);
+                let out = self.add_op(ctx, expression.span, Op::Illegal);
+                let op = Op::JmpFalse(self.next_ip(ctx));
+                self.patch(ctx, skip, op);
+
+                self.expression(fail, ctx);
+                let op = Op::Jmp(self.next_ip(ctx));
+                self.patch(ctx, out, op);
+
+                self.add_op(ctx, expression.span, Op::Union);
+            }
+
             Function {
                 name,
                 params,
