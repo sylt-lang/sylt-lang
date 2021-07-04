@@ -6,7 +6,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
-use sylt_tokenizer::Token;
+use sylt_tokenizer::{Span, Token};
 
 fn source_line_at(file: &Path, line: Option<usize>) -> Option<String> {
     match (File::open(file), line) {
@@ -95,9 +95,7 @@ pub enum Error {
 
     CompileError {
         file: PathBuf,
-        line: usize,
-        col_start: usize,
-        col_end: usize,
+        span: Span,
         message: Option<String>,
     },
 
@@ -133,14 +131,12 @@ impl fmt::Display for Error {
             }
             Error::CompileError {
                 file,
-                line,
-                col_start,
-                col_end,
+                span,
                 message,
             } => {
                 write!(f, "{}: ", "compile error".red())?;
-                write!(f, "{}\n", file_line_display(file, Some(*line)))?;
-                write!(f, "{}Failed to compile line {}\n", indent, line)?;
+                write!(f, "{}\n", file_line_display(file, Some(span.line)))?;
+                write!(f, "{}Failed to compile line {}\n", indent, span.line)?;
 
                 if let Some(message) = message {
                     write!(f, "{}{}\n", indent, message)?;
@@ -148,19 +144,19 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "{}",
-                    source_line_at(file, Some(*line)).unwrap_or_else(String::new)
+                    source_line_at(file, Some(span.line)).unwrap_or_else(String::new)
                 )?;
                 write!(
                     f,
                     "{: <1$}",
                     "",
-                    col_start + 6,
+                    span.col_start + 6,
                 )?;
                 write!(
                     f,
                     "{:^<1$}\n",
                     "",
-                    col_end - col_start,
+                    span.col_end - span.col_start,
                 )
             }
             Error::SyntaxError {
