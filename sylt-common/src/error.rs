@@ -42,15 +42,11 @@ fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &Path, span: Span) -> 
     underline(f, span.col_start, span.col_end - span.col_start)
 }
 
-fn file_line_display(file: &Path, line: Option<usize>) -> String {
+fn file_line_display(file: &Path, line: usize) -> String {
     format!(
         "{}:{}",
         file.display().blue(),
-        if let Some(line) = line {
-            line.blue().to_string()
-        } else {
-            "??".blue().to_string()
-        }
+        line.blue().to_string(),
     )
 }
 
@@ -133,7 +129,7 @@ impl fmt::Display for Error {
             #[rustfmt::skip]
             Error::RuntimeError { kind, phase, file, line, message } => {
                 write!(f, "{} {}: ", phase.red(), "error".red())?;
-                write!(f, "{}\n", file_line_display(file, Some(*line)))?;
+                write!(f, "{}\n", file_line_display(file, *line))?;
                 write!(f, "{}{}\n", INDENT, kind)?;
 
                 if let Some(message) = message {
@@ -148,7 +144,7 @@ impl fmt::Display for Error {
                 message,
             } => {
                 write!(f, "{}: ", "compile error".red())?;
-                write!(f, "{}\n", file_line_display(file, Some(span.line)))?;
+                write!(f, "{}\n", file_line_display(file, span.line))?;
                 write!(f, "{}Failed to compile line {}\n", INDENT, span.line)?;
 
                 if let Some(message) = message {
@@ -163,7 +159,7 @@ impl fmt::Display for Error {
                 message,
             } => {
                 write!(f, "{}: ", "syntax error".red())?;
-                write!(f, "{}\n", file_line_display(file, Some(span.line)))?;
+                write!(f, "{}\n", file_line_display(file, span.line))?;
                 write!(f, "{}Syntax Error on line {}\n", INDENT, span.line)?;
 
                 if let Some(message) = message {
@@ -174,7 +170,7 @@ impl fmt::Display for Error {
             }
             Error::GitConflictError { file, span } => {
                 write!(f, "{}: ", "git conflict error".red())?;
-                write!(f, "{}\n", file_line_display(file, Some(span.line)))?;
+                write!(f, "{}\n", file_line_display(file, span.line))?;
 
                 write!(
                     f,
