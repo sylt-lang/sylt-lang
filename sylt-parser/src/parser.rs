@@ -189,6 +189,7 @@ type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>, Vec<Error>)>;
 pub struct Context<'a> {
     /// All tokens to be parsed.
     pub tokens: &'a [Token],
+    /// The corresponding span for each token. Matches 1:1 with the tokens.
     pub spans: &'a [Span],
     /// The index of the curren token in the token slice.
     pub curr: usize,
