@@ -235,7 +235,7 @@ pub enum Op {
     /// Does not affect the stack.
     Define(usize),
     /// A helper instruction for the typechecker,
-    /// *Assumes* top value on the stack
+    /// *assumes* top value on the stack
     /// is of the given type. Usefull for helping the
     /// type system where it just can't do it.
     /// (The type is looked up in the constants vector)
@@ -243,7 +243,7 @@ pub enum Op {
     /// Does not affect the stack.
     Force(usize),
     /// A helper instruction for the typechecker,
-    /// *Combines* the two top value on the stack
+    /// *combines* the two top value on the stack
     /// into a union type.
     ///
     /// Skipped in the runtime.
