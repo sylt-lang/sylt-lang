@@ -187,6 +187,7 @@ type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>, Vec<Error>)>;
 /// Keeps track of where the parser is currently parsing.
 #[derive(Debug, Copy, Clone)]
 pub struct Context<'a> {
+    pub skip_newlines: bool,
     /// All tokens to be parsed.
     pub tokens: &'a [Token],
     /// The corresponding span for each token. Matches 1:1 with the tokens.
@@ -200,6 +201,7 @@ pub struct Context<'a> {
 impl<'a> Context<'a> {
     fn new(tokens: &'a [Token], spans: &'a [Span], file: &'a Path) -> Self {
         Self {
+            skip_newlines: false,
             tokens,
             spans,
             curr: 0,
@@ -216,6 +218,24 @@ impl<'a> Context<'a> {
     fn skip(&self, n: usize) -> Self {
         let mut new = *self;
         new.curr += n;
+        while self.skip_newlines && matches!(new.token(), T::Newline) {
+            new.curr += 1;
+        }
+        new
+    }
+
+    /// Signals that newlines should be skipped until [pop_skip_newlines].
+    fn push_skip_newlines(&self, skip_newlines: bool) -> (Self, bool) {
+        let mut new = *self;
+        new.skip_newlines = skip_newlines;
+        // If currently on a newline token - we want to skip it.
+        (new.skip(0), self.skip_newlines)
+    }
+
+    /// Reset to old newline skipping state.
+    fn pop_skip_newlines(&self, skip_newlines: bool) -> Self {
+        let mut new = *self;
+        new.skip_newlines = skip_newlines;
         new
     }
 
@@ -233,15 +253,6 @@ impl<'a> Context<'a> {
         } else {
             *self
         }
-    }
-
-    /// Eat until the next non-newline token.
-    fn skip_while(&self, token: T) -> Self {
-        let mut ret = *self;
-        while ret.token() == &token {
-            ret = ret.skip(1);
-        }
-        ret
     }
 
     /// Return the current [Token] and [Span].
@@ -790,6 +801,32 @@ mod test {
                     ctx.tokens.len(),
                     "Parsed too few or too many tokens:\n{}",
                     $str
+                );
+            }
+        };
+    }
+
+    #[macro_export]
+    macro_rules! fail {
+        ($f:ident, $name:ident: $str:expr => $ans:pat) => {
+            #[test]
+            fn $name() {
+                let token_stream = ::sylt_tokenizer::string_to_tokens($str);
+                let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
+                let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
+                let path = ::std::path::PathBuf::from(stringify!($name));
+                let result = $f($crate::Context::new(&tokens, &spans, &path));
+                assert!(
+                    result.is_err(),
+                    "\nSyntax tree test parsed - when it should have failed - for:\n{}\n",
+                    $str,
+                );
+                let (_, result) = result.unwrap_err();
+                assert!(
+                    matches!(result, $ans),
+                    "\nExpected: {}, but got: {:?}",
+                    stringify!($ans),
+                    result
                 );
             }
         };

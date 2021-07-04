@@ -111,7 +111,16 @@ enum Name {
     Namespace(NamespaceID),
 }
 
+#[derive(Debug, Copy, Clone)]
+struct LoopFrame {
+    continue_addr: usize,
+    break_addr: usize,
+    stack_size: usize,
+}
+
 #[derive(Debug)]
+/// Emulates the runtime stackframe.
+/// [variables] and [upvalues] are used like stacks.
 struct Frame {
     variables: Vec<Variable>,
     upvalues: Vec<Upvalue>,
@@ -140,6 +149,7 @@ struct Compiler {
     namespaces: Vec<Namespace>,
     blobs: Vec<Blob>,
 
+    loops: Vec<LoopFrame>,
     frames: Vec<Frame>,
     functions: HashMap<String, (usize, RustFunction)>,
 
@@ -177,6 +187,7 @@ impl Compiler {
             namespaces: Vec::new(),
             blobs: Vec::new(),
 
+            loops: Vec::new(),
             frames: Vec::new(),
             functions: HashMap::new(),
 
@@ -261,6 +272,17 @@ impl Compiler {
             .get_mut(ctx.block_slot)
             .expect("Invalid block id")
             .curr()
+    }
+
+    fn pop_until_size(&mut self, ctx: Context, span: Span, target_size: usize) {
+        while target_size < self.frames[ctx.frame].variables.len() {
+            let var = self.frames[ctx.frame].variables.pop().unwrap();
+            if var.captured {
+                self.add_op(ctx, span, Op::PopUpvalue);
+            } else {
+                self.add_op(ctx, span, Op::Pop);
+            }
+        }
     }
 
     fn assignable(&mut self, ass: &Assignable, ctx: Context) -> Option<usize> {
@@ -464,13 +486,15 @@ impl Compiler {
             return Err(());
         }
 
-        for var in self.frames[frame].variables.iter().rev() {
+        let variables = &self.frames[frame].variables;
+        for var in variables.iter().rev() {
             if &var.name == name && var.active {
                 return Ok(Lookup::Variable(var.clone()));
             }
         }
 
-        for up in self.frames[frame].upvalues.iter().rev() {
+        let upvalues = &self.frames[frame].upvalues;
+        for up in upvalues.iter().rev() {
             if &up.name == name {
                 return Ok(Lookup::Upvalue(up.clone()));
             }
@@ -846,24 +870,36 @@ impl Compiler {
                     self.statement(statement, ctx);
                 }
 
-                while stack_size < self.frames[ctx.frame].variables.len() {
-                    let var = self.frames[ctx.frame].variables.pop().unwrap();
-                    if var.captured {
-                        self.add_op(ctx, statement.span, Op::PopUpvalue);
-                    } else {
-                        self.add_op(ctx, statement.span, Op::Pop);
-                    }
-                }
+                self.pop_until_size(ctx, statement.span, stack_size);
             }
 
             Loop { condition, body } => {
                 let start = self.next_ip(ctx);
                 self.expression(condition, ctx);
                 let jump_from = self.add_op(ctx, condition.span, Op::Illegal);
+
+                // Skip the next op - it's for the break
+                //  start: .. condition ..
+                //         JmpFalse(over)
+                //  break: Jmp(end)
+                //   over: .. loop ..
+                //    end: ..
+                self.add_op(ctx, condition.span, Op::Jmp(jump_from + 3));
+                let break_from = self.add_op(ctx, condition.span, Op::Illegal);
+
+                let stack_size = self.frames[ctx.frame].variables.len();
+                self.loops.push(LoopFrame {
+                    continue_addr: start,
+                    break_addr: break_from,
+                    stack_size,
+                });
                 self.statement(body, ctx);
+                self.loops.pop();
+
                 self.add_op(ctx, body.span, Op::Jmp(start));
                 let out = self.next_ip(ctx);
                 self.patch(ctx, jump_from, Op::JmpFalse(out));
+                self.patch(ctx, break_from, Op::Jmp(out));
             }
 
             #[rustfmt::skip]
@@ -879,6 +915,26 @@ impl Compiler {
 
                 let end = self.next_ip(ctx);
                 self.patch(ctx, jump_out, Op::Jmp(end));
+            }
+
+            Continue {} => match self.loops.last().cloned() {
+                Some(LoopFrame { stack_size, continue_addr, .. }) => {
+                    self.pop_until_size(ctx, statement.span, stack_size);
+                    self.add_op(ctx, statement.span, Op::Jmp(continue_addr));
+                }
+                None => {
+                    error!(self, ctx, statement.span, "`continue` statement not in a loop");
+                }
+            }
+
+            Break {} => match self.loops.last().cloned() {
+                Some(LoopFrame { stack_size, break_addr, .. }) => {
+                    self.pop_until_size(ctx, statement.span, stack_size);
+                    self.add_op(ctx, statement.span, Op::Jmp(break_addr));
+                }
+                None => {
+                    error!(self, ctx, statement.span, "`continue` statement not in a loop");
+                }
             }
 
             Unreachable {} => {
@@ -1166,6 +1222,8 @@ fn all_paths_return(statement: &Statement) -> bool {
         | StatementKind::Definition { .. }
         | StatementKind::StatementExpression { .. }
         | StatementKind::Unreachable
+        | StatementKind::Continue
+        | StatementKind::Break
         | StatementKind::EmptyStatement => false,
 
         StatementKind::If { pass, fail, .. } => all_paths_return(pass) && all_paths_return(fail),

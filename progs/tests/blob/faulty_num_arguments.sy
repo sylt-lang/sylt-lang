@@ -1,6 +1,6 @@
 A :: blob {
-    a: int
-    b: int
+    a: int,
+    b: int,
 }
 
 start :: fn {
