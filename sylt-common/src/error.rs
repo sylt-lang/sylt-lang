@@ -18,7 +18,7 @@ fn write_source_lines_at(f: &mut fmt::Formatter<'_>, file: &Path, line_start: us
     };
 
     let line_start = (line_start.saturating_sub(2)).max(1);
-    let lines = line_end - line_start - 1;
+    let lines = line_end - line_start;
 
     for (line_num, line) in io::BufReader::new(file)
         .lines()
@@ -33,13 +33,16 @@ fn write_source_lines_at(f: &mut fmt::Formatter<'_>, file: &Path, line_start: us
 
 fn underline(f: &mut fmt::Formatter<'_>, col_start: usize, len: usize) -> fmt::Result {
     write!(f, "{: <1$}", "", col_start)?;
-    writeln!(f, "{:^<1$}", "", len,)
+    writeln!(f, "{:^<1$}", "", len)
 }
 
 fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &Path, span: Span) -> fmt::Result {
     write_source_lines_at(f, file, span.line_start, span.line_end)?;
     write!(f, "{}", INDENT)?;
-    underline(f, span.col_start, span.col_end - span.col_start)
+    if span.line_start == span.line_end {
+        underline(f, span.col_start, span.col_end - span.col_start + 1)?;
+    }
+    Ok(())
 }
 
 fn file_line_display(file: &Path, line: usize) -> String {
@@ -136,7 +139,7 @@ impl fmt::Display for Error {
                     write!(f, "{}\n", message)?;
                 }
 
-                write_source_lines_at(f, file, *line, *line + 1)
+                write_source_lines_at(f, file, *line, *line)
             }
             Error::CompileError {
                 file,
@@ -145,7 +148,12 @@ impl fmt::Display for Error {
             } => {
                 write!(f, "{}: ", "compile error".red())?;
                 write!(f, "{}\n", file_line_display(file, span.line_start))?;
-                write!(f, "{}Failed to compile line {}\n", INDENT, span.line_start)?;
+                write!(f, "{}Failed to compile line", INDENT)?;
+                if span.line_start == span.line_end {
+                    write!(f, " {}\n", span.line_start)?;
+                } else {
+                    write!(f, "s {}-{}\n", span.line_start, span.line_end)?;
+                }
 
                 if let Some(message) = message {
                     write!(f, "{}{}\n", INDENT, message)?;
@@ -160,7 +168,12 @@ impl fmt::Display for Error {
             } => {
                 write!(f, "{}: ", "syntax error".red())?;
                 write!(f, "{}\n", file_line_display(file, span.line_start))?;
-                write!(f, "{}Syntax Error on line {}\n", INDENT, span.line_start)?;
+                write!(f, "{}Syntax Error on line", INDENT)?;
+                if span.line_start == span.line_end {
+                    write!(f, " {}\n", span.line_start)?;
+                } else {
+                    write!(f, "s {}-{}\n", span.line_start, span.line_end)?;
+                }
 
                 if let Some(message) = message {
                     write!(f, "{}{}\n", INDENT, message)?;

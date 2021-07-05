@@ -5,15 +5,15 @@ pub use token::Token;
 mod token;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-/// A location in a file containing source code.
+/// A location in a file containing source code. All values are inclusive.
 pub struct Span {
     /// The first line that this Span contains.
     pub line_start: usize,
-    /// The first line that this Span doesn't contain.
+    /// The last line that this Span contains.
     pub line_end: usize,
-    /// The first column that this Span contains.
+    /// The first column on line_start that this Span contains.
     pub col_start: usize,
-    /// The first column that this Span doesn't contain.
+    /// The last column on line_end that this Span contains.
     pub col_end: usize,
 }
 
@@ -104,9 +104,9 @@ pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
                 token,
                 span: Span {
                     line_start: line,
-                    line_end: line + 1,
+                    line_end: line,
                     col_start,
-                    col_end,
+                    col_end: col_end - 1,
                 },
             };
             if is_newline {
