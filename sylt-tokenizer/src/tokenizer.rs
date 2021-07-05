@@ -66,16 +66,11 @@ pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
 
     Token::lexer(&content)
         .spanned()
+        // Contains side-effects.
         .map(|(token, byte_range)| {
             let is_newline = token == Token::Newline;
-            let col_start = char_at_byte[byte_range.start].expect(&format!(
-                "Token {:?} on line {} has invalid start byte offset {:?}",
-                token, line, byte_range
-            )) - last_newline;
-            let col_end = char_at_byte[byte_range.end].expect(&format!(
-                "Token {:?} on line {} has invalid end byte offset {:?}",
-                token, line, byte_range
-            )) - last_newline;
+            let col_start = char_at_byte[byte_range.start].unwrap() - last_newline;
+            let col_end = char_at_byte[byte_range.end].unwrap() - last_newline;
             let placed_token = PlacedToken {
                 token,
                 span: Span {
@@ -85,10 +80,7 @@ pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
                 },
             };
             if is_newline {
-                last_newline = char_at_byte[byte_range.start].expect(&format!(
-                    "Newline token on line {} has invalid start byte offset {:?}",
-                    line, byte_range
-                ));
+                last_newline = char_at_byte[byte_range.start].unwrap();
                 line += 1;
             }
             placed_token
