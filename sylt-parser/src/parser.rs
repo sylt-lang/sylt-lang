@@ -17,8 +17,6 @@ pub use sylt_tokenizer::Span;
 
 type T = Token;
 
-static EOF: Token = Token::EOF;
-
 pub trait Next {
     fn next(&self) -> Self;
 }
@@ -252,7 +250,7 @@ impl<'a> Context<'a> {
 
     /// Return the current [Token] and [Span].
     fn peek(&self) -> (&Token, &Span) {
-        let token = self.tokens.get(self.curr).unwrap_or(&EOF);
+        let token = self.tokens.get(self.curr).unwrap_or(&T::EOF);
         let span = self.spans.get(self.curr).unwrap_or(&ZERO_SPAN);
         (token, span)
     }
