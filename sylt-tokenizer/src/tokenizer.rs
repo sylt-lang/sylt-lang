@@ -48,9 +48,9 @@ impl Span {
             Greater => (other.line_start, other.col_start),
         };
         let (line_end, col_end) = match self.line_end.cmp(&other.line_end) {
-            Less => (self.line_end, self.col_end),
-            Equal => (self.line_end, self.col_end.min(other.col_end)),
-            Greater => (other.line_end, other.col_end),
+            Less => (other.line_end, other.col_end),
+            Equal => (self.line_end, self.col_end.max(other.col_end)),
+            Greater => (self.line_end, self.col_end),
         };
 
         Self {
