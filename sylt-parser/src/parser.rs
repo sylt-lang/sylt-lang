@@ -6,12 +6,14 @@ use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
 use sylt_common::rc::Rc;
 use sylt_common::Type as RuntimeType;
-use sylt_tokenizer::{file_to_tokens, Token};
+use sylt_tokenizer::{PlacedToken, Token, ZERO_SPAN, file_to_tokens};
 
 pub mod expression;
 pub mod statement;
 pub use self::expression::{Expression, ExpressionKind};
 pub use self::statement::{Statement, StatementKind};
+
+pub use sylt_tokenizer::Span;
 
 type T = Token;
 
@@ -21,15 +23,6 @@ pub trait Next {
 
 pub trait Numbered {
     fn to_number(&self) -> usize;
-}
-
-#[derive(Debug, Copy, Clone)]
-/// A location in a file containing source code.
-pub struct Span {
-    // TODO(ed): Do this more intelligent, so
-    // we can show ranges. Maybe even go back
-    // to offsets from start of the file.
-    pub line: usize,
 }
 
 /// Contains modules.
@@ -182,9 +175,6 @@ pub struct Type {
     pub kind: TypeKind,
 }
 
-/// Tokens and their line numbers.
-type Tokens = [(T, usize)];
-
 type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>, Vec<Error>)>;
 
 /// Keeps track of where the parser is currently parsing.
@@ -192,18 +182,21 @@ type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>, Vec<Error>)>;
 pub struct Context<'a> {
     pub skip_newlines: bool,
     /// All tokens to be parsed.
-    pub tokens: &'a Tokens,
-    /// The index of the curren token in the tokens slice.
+    pub tokens: &'a [Token],
+    /// The corresponding span for each token. Matches 1:1 with the tokens.
+    pub spans: &'a [Span],
+    /// The index of the curren token in the token slice.
     pub curr: usize,
     /// The file we're currently parsing.
     pub file: &'a Path,
 }
 
 impl<'a> Context<'a> {
-    fn new(tokens: &'a Tokens, file: &'a Path) -> Self {
+    fn new(tokens: &'a [Token], spans: &'a [Span], file: &'a Path) -> Self {
         Self {
             skip_newlines: false,
             tokens,
+            spans,
             curr: 0,
             file,
         }
@@ -211,14 +204,7 @@ impl<'a> Context<'a> {
 
     /// Get a [Span] representing the current location of the parser.
     fn span(&self) -> Span {
-        Span {
-            line: self.peek().1,
-        }
-    }
-
-    /// The line currently beeing parsed.
-    fn line(&self) -> usize {
-        self.span().line
+        *self.peek().1
     }
 
     /// Move to the next nth token.
@@ -262,9 +248,11 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Return the current [Token] and line number.
-    fn peek(&self) -> &(T, usize) {
-        self.tokens.get(self.curr).unwrap_or(&(T::EOF, 0))
+    /// Return the current [Token] and [Span].
+    fn peek(&self) -> (&Token, &Span) {
+        let token = self.tokens.get(self.curr).unwrap_or(&T::EOF);
+        let span = self.spans.get(self.curr).unwrap_or(&ZERO_SPAN);
+        (token, span)
     }
 
     /// Return the current [Token].
@@ -288,8 +276,7 @@ macro_rules! syntax_error {
             let msg = format!($( $msg ),*).into();
             Error::SyntaxError {
                 file: $ctx.file.to_path_buf(),
-                line: $ctx.line(),
-                token: $ctx.token().clone(),
+                span: $ctx.span(),
                 message: Some(msg),
             }
         }
@@ -626,8 +613,10 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
 /// Returns any errors that occured when parsing the file. Basic error
 /// continuation is performed, so errored statements are skipped until a newline
 /// or EOF.
-fn module(path: &Path, tokens: &Tokens) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
-    let mut ctx = Context::new(tokens, path);
+fn module(path: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
+    let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
+    let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
+    let mut ctx = Context::new(&tokens, &spans, path);
     let mut errors = Vec::new();
     let mut use_files = Vec::new();
     let mut statements = Vec::new();
@@ -668,7 +657,7 @@ fn module(path: &Path, tokens: &Tokens) -> (Vec<PathBuf>, Result<Module, Vec<Err
         (
             use_files,
             Ok(Module {
-                span: Span { line: 0 },
+                span: Span::zero(),
                 statements,
             }),
         )
@@ -706,7 +695,11 @@ pub fn find_conflict_markers(file: &Path) -> Vec<Error> {
         if line.starts_with("<<<<<<<") {
             errs.push(Error::GitConflictError {
                 file: file.to_path_buf(),
-                start: i + 1,
+                span: Span {
+                    line: i + 1,
+                    col_start: 0,
+                    col_end: "<<<<<<<".len(),
+                }
             });
         }
     }
@@ -778,9 +771,11 @@ mod test {
         ($f:ident, $name:ident: $str:expr => $ans:pat) => {
             #[test]
             fn $name() {
-                let tokens = ::sylt_tokenizer::string_to_tokens($str);
+                let token_stream = ::sylt_tokenizer::string_to_tokens($str);
+                let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
+                let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
                 let path = ::std::path::PathBuf::from(stringify!($name));
-                let result = $f($crate::Context::new(&tokens, &path));
+                let result = $f($crate::Context::new(&tokens, &spans, &path));
                 assert!(
                     result.is_ok(),
                     "\nSyntax tree test didn't parse for:\n{}\nErrs: {:?}",
@@ -809,9 +804,11 @@ mod test {
         ($f:ident, $name:ident: $str:expr => $ans:pat) => {
             #[test]
             fn $name() {
-                let tokens = ::sylt_tokenizer::string_to_tokens($str);
+                let token_stream = ::sylt_tokenizer::string_to_tokens($str);
+                let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
+                let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
                 let path = ::std::path::PathBuf::from(stringify!($name));
-                let result = $f($crate::Context::new(&tokens, &path));
+                let result = $f($crate::Context::new(&tokens, &spans, &path));
                 assert!(
                     result.is_err(),
                     "\nSyntax tree test parsed - when it should have failed - for:\n{}\n",

@@ -735,6 +735,7 @@ name = "sylt-common"
 version = "0.1.0"
 dependencies = [
  "owo-colors",
+ "sungod",
  "sylt-tokenizer",
  "sylt_macro",
 ]

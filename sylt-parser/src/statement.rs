@@ -141,10 +141,10 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
     let span = ctx.span();
     let (ctx, kind) = match &ctx.tokens[ctx.curr..] {
-        [(T::Newline, _), ..] => (ctx.skip(1), EmptyStatement),
+        [T::Newline, ..] => (ctx.skip(1), EmptyStatement),
 
         // Block: `{ <statements> }`
-        [(T::LeftBrace, _), ..] => match (block_statement(ctx), expression(ctx)) {
+        [T::LeftBrace, ..] => match (block_statement(ctx), expression(ctx)) {
             (Ok((ctx, stmt)), _) => (ctx, stmt.kind),
             (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
             (Err((ctx, _)), Err(_)) => {
@@ -153,7 +153,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         },
 
         // `use a`
-        [(T::Use, _), (T::Identifier(name), _), ..] => (
+        [T::Use, T::Identifier(name), ..] => (
             ctx.skip(2),
             Use {
                 file: Identifier {
@@ -163,17 +163,17 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             },
         ),
 
-        [(T::Break, _), ..] => (ctx.skip(1), Break),
-        [(T::Continue, _), ..] => (ctx.skip(1), Continue),
-        [(T::Unreachable, _), ..] => (ctx.skip(1), Unreachable),
+        [T::Break, ..] => (ctx.skip(1), Break),
+        [T::Continue, ..] => (ctx.skip(1), Continue),
+        [T::Unreachable, ..] => (ctx.skip(1), Unreachable),
 
-        [(T::Print, _), ..] => {
+        [T::Print, ..] => {
             let (ctx, value) = expression(ctx.skip(1))?;
             (ctx, Print { value })
         }
 
         // `ret <expression>`
-        [(T::Ret, _), ..] => {
+        [T::Ret, ..] => {
             let ctx = ctx.skip(1);
             let (ctx, value) = if matches!(ctx.token(), T::Newline) {
                 (
@@ -190,7 +190,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // `loop <expression> <statement>`, e.g. `loop a < 10 { a += 1 }`
-        [(T::Loop, _), ..] => {
+        [T::Loop, ..] => {
             let ctx = ctx.skip(1);
             let (ctx, condition) = if matches!(ctx.token(), T::LeftBrace) {
                 (
@@ -211,7 +211,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // `if <expression> <statement> [else <statement>]`. Note that the else is optional.
-        [(T::If, _), ..] => {
+        [T::If, ..] => {
             let (ctx, condition) = expression(ctx.skip(1))?;
 
             let (ctx, pass) = statement(ctx)?;
@@ -241,7 +241,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // Blob declaration: `A :: blob { <fields> }
-        [(T::Identifier(name), _), (T::ColonColon, _), (T::Blob, _), ..] => {
+        [T::Identifier(name), T::ColonColon, T::Blob, ..] => {
             let name = name.clone();
             let ctx = expect!(ctx.skip(3), T::LeftBrace, "Expected '{{' to open blob");
             let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
@@ -286,7 +286,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // Constant declaration, e.g. `a :: 1`.
-        [(T::Identifier(name), _), (T::ColonColon, _), ..] => {
+        [T::Identifier(name), T::ColonColon, ..] => {
             let ident = Identifier {
                 name: name.clone(),
                 span: ctx.span(),
@@ -312,7 +312,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // Mutable declaration, e.g. `b := 2`.
-        [(T::Identifier(name), _), (T::ColonEqual, _), ..] => {
+        [T::Identifier(name), T::ColonEqual, ..] => {
             let ident = Identifier {
                 name: name.clone(),
                 span: ctx.span(),
@@ -338,7 +338,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // Variable declaration with specified type, e.g. `c : int = 3` or `b : int | bool : false`.
-        [(T::Identifier(name), _), (T::Colon, _), ..] => {
+        [T::Identifier(name), T::Colon, ..] => {
             let ident = Identifier {
                 name: name.clone(),
                 span: ctx.span(),

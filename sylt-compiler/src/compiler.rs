@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
 use sylt_common::prog::Prog;
 use sylt_common::rc::Rc;
@@ -144,7 +144,7 @@ impl Frame {
 
 struct Compiler {
     blocks: Vec<Block>,
-    namespace_id_to_path: HashMap<NamespaceID, String>,
+    namespace_id_to_path: HashMap<NamespaceID, PathBuf>,
 
     namespaces: Vec<Namespace>,
     blobs: Vec<Blob>,
@@ -170,7 +170,7 @@ macro_rules! error {
             let msg = format!($( $msg ),*).into();
             let err = Error::CompileError {
                 file: $compiler.file_from_namespace($ctx.namespace).into(),
-                line: $span.line,
+                span: $span,
                 message: Some(msg),
             };
             $compiler.errors.push(err);
@@ -224,7 +224,7 @@ impl Compiler {
         self.frames.pop().unwrap()
     }
 
-    fn file_from_namespace(&self, namespace: usize) -> &str {
+    fn file_from_namespace(&self, namespace: usize) -> &Path {
         self.namespace_id_to_path.get(&namespace).unwrap()
     }
 
@@ -409,7 +409,7 @@ impl Compiler {
                 ret,
                 body,
             } => {
-                let file = self.file_from_namespace(ctx.namespace);
+                let file = self.file_from_namespace(ctx.namespace).display();
                 let name = format!("fn {} {}:{}", name, file, expression.span.line);
 
                 // === Frame begin ===
@@ -549,9 +549,9 @@ impl Compiler {
                             self,
                             ctx,
                             span,
-                            "Cannot read '{}' in '{}.sy'",
+                            "Cannot read '{}' in '{}'",
                             name,
-                            self.file_from_namespace(namespace)
+                            self.file_from_namespace(namespace).display()
                         );
                     }
                 }
@@ -590,9 +590,9 @@ impl Compiler {
                         self,
                         ctx,
                         span,
-                        "Cannot assign '{}' in '{}.sy'",
+                        "Cannot assign '{}' in '{}'",
                         name,
-                        self.file_from_namespace(namespace)
+                        self.file_from_namespace(namespace).display()
                     );
                 }
             },
@@ -1009,7 +1009,7 @@ impl Compiler {
         let mut block = Block::new(name, 0, &tree.modules[0].0);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
         self.blocks.push(block);
-        self.frames.push(Frame::new(name, Span { line: 0 }));
+        self.frames.push(Frame::new(name, Span::zero()));
         let mut ctx = Context {
             block_slot: self.blocks.len() - 1,
             frame: self.frames.len() - 1,
@@ -1031,8 +1031,8 @@ impl Compiler {
         }
         let module = &tree.modules[0].1;
 
-        self.read_identifier("start", Span { line: 0 }, ctx, 0);
-        self.add_op(ctx, Span { line: 0 }, Op::Call(0));
+        self.read_identifier("start", Span::zero(), ctx, 0);
+        self.add_op(ctx, Span::zero(), Op::Call(0));
 
         let nil = self.constant(Value::Nil);
         self.add_op(ctx, module.span, nil);
@@ -1058,11 +1058,10 @@ impl Compiler {
     }
 
     fn extract_globals(&mut self, tree: &AST) -> HashMap<String, usize> {
-        let mut path_to_namespace_id = HashMap::new();
-        for (full_path, _) in tree.modules.iter() {
-            let slot = path_to_namespace_id.len();
-            let path = full_path.file_stem().unwrap().to_str().unwrap().to_owned();
-            match path_to_namespace_id.entry(path) {
+        let mut full_path_to_namespace_id = HashMap::new();
+        for (path, _) in tree.modules.iter() {
+            let slot = full_path_to_namespace_id.len();
+            match full_path_to_namespace_id.entry(path) {
                 Entry::Vacant(vac) => {
                     vac.insert(slot);
                     self.namespaces.push(Namespace::new());
@@ -1072,17 +1071,25 @@ impl Compiler {
                     error!(
                         self,
                         Context::from_namespace(slot),
-                        Span { line: 0 },
-                        "Reading module '{}' twice! How?",
-                        full_path.display()
+                        Span::zero(),
+                        "Reading file '{}' twice! How?",
+                        path.display()
                     );
                 }
             }
         }
 
-        self.namespace_id_to_path = path_to_namespace_id
+        self.namespace_id_to_path = full_path_to_namespace_id
             .iter()
-            .map(|(a, b)| (b.clone(), a.clone()))
+            .map(|(a, b)| (*b, (*a).clone()))
+            .collect();
+
+        let path_to_namespace_id: HashMap<_, _> = full_path_to_namespace_id
+            .iter()
+            .map(|(a, b)| (
+                a.file_stem().unwrap().to_str().unwrap().to_string(),
+                *b
+            ))
             .collect();
 
         for (path, module) in tree.modules.iter() {
@@ -1145,7 +1152,7 @@ impl Compiler {
                                 error!(
                                     self,
                                     ctx,
-                                    span,
+                                    *span,
                                     "A global variable with the name '{}' already exists",
                                     name
                                 );
@@ -1176,7 +1183,7 @@ impl Compiler {
                         // Just fill in an empty slot since we have no idea.
                         // Unknown is overwritten by the Op::Force in the type checker.
                         let unknown = self.constant(Value::Unknown);
-                        self.add_op(ctx, Span { line: 0 }, unknown);
+                        self.add_op(ctx, Span::zero(), unknown);
 
                         let ty = self.resolve_type(ty, ctx);
                         let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
@@ -1185,7 +1192,7 @@ impl Compiler {
                             error!(self, ctx, statement.span, "Failed to resolve the type");
                             Op::Illegal
                         };
-                        self.add_op(ctx, Span { line: 0 }, op);
+                        self.add_op(ctx, Span::zero(), op);
                     }
 
                     // Already handled in the loop before.

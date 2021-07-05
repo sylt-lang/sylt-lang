@@ -6,32 +6,47 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
-use sylt_tokenizer::Token;
+use sylt_tokenizer::Span;
 
-fn source_line_at(file: &Path, line: Option<usize>) -> Option<String> {
-    match (File::open(file), line) {
-        (Ok(file), Some(line)) => Some(
-            io::BufReader::new(file)
-                .lines()
-                .enumerate()
-                .filter(|(n, _)| line <= *n + 3 && *n + 3 <= line + 2)
-                .fold(String::from("\n"), |a, (n, l)| {
-                    format!("{} {:3} | {}\n", a, (n + 1).blue(), l.unwrap())
-                }),
-        ),
-        _ => None,
+static INDENT: &'static str = "      ";
+
+fn write_source_line_at(f: &mut fmt::Formatter<'_>, file: &Path, line: usize) -> fmt::Result {
+    let file = if let Ok(file) = File::open(file) {
+        file
+    } else {
+        return write!(f, "Unable to open file {}", file.display());
+    };
+
+    let start_line = (line.saturating_sub(2)).max(1);
+    let lines = line - start_line + 1;
+
+    for (line_num, line) in io::BufReader::new(file)
+        .lines()
+        .enumerate()
+        .skip(start_line - 1)
+        .take(lines)
+    {
+        writeln!(f, " {:3} | {}", (line_num + 1).blue(), line.unwrap())?;
     }
+    Ok(())
 }
 
-fn file_line_display(file: &Path, line: Option<usize>) -> String {
+fn underline(f: &mut fmt::Formatter<'_>, col_start: usize, len: usize) -> fmt::Result {
+    write!(f, "{: <1$}", "", col_start)?;
+    writeln!(f, "{:^<1$}", "", len,)
+}
+
+fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &Path, span: Span) -> fmt::Result {
+    write_source_line_at(f, file, span.line)?;
+    write!(f, "{}", INDENT)?;
+    underline(f, span.col_start, span.col_end - span.col_start)
+}
+
+fn file_line_display(file: &Path, line: usize) -> String {
     format!(
         "{}:{}",
         file.display().blue(),
-        if let Some(line) = line {
-            line.blue().to_string()
-        } else {
-            "??".blue().to_string()
-        }
+        line.blue().to_string(),
     )
 }
 
@@ -88,20 +103,19 @@ pub enum Error {
 
     SyntaxError {
         file: PathBuf,
-        line: usize,
-        token: Token,
+        span: Span,
         message: Option<String>,
     },
 
     CompileError {
         file: PathBuf,
-        line: usize,
+        span: Span,
         message: Option<String>,
     },
 
     GitConflictError {
         file: PathBuf,
-        start: usize,
+        span: Span,
     },
 
     FileNotFound(PathBuf),
@@ -111,76 +125,60 @@ pub enum Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let indent = "      ";
-
         match self {
             #[rustfmt::skip]
             Error::RuntimeError { kind, phase, file, line, message } => {
                 write!(f, "{} {}: ", phase.red(), "error".red())?;
-                write!(f, "{}\n", file_line_display(file, Some(*line)))?;
-                write!(f, "{}{}\n", indent, kind)?;
+                write!(f, "{}\n", file_line_display(file, *line))?;
+                write!(f, "{}{}\n", INDENT, kind)?;
 
                 if let Some(message) = message {
                     write!(f, "{}\n", message)?;
                 }
-                write!(
-                    f,
-                    "{}\n",
-                    source_line_at(file, Some(*line)).unwrap_or_else(String::new)
-                )
+
+                write_source_line_at(f, file, *line)
             }
             Error::CompileError {
                 file,
-                line,
+                span,
                 message,
             } => {
                 write!(f, "{}: ", "compile error".red())?;
-                write!(f, "{}\n", file_line_display(file, Some(*line)))?;
-                write!(f, "{}Failed to compile line {}\n", indent, line)?;
+                write!(f, "{}\n", file_line_display(file, span.line))?;
+                write!(f, "{}Failed to compile line {}\n", INDENT, span.line)?;
 
                 if let Some(message) = message {
-                    write!(f, "{}{}\n", indent, message)?;
+                    write!(f, "{}{}\n", INDENT, message)?;
                 }
-                write!(
-                    f,
-                    "{}\n",
-                    source_line_at(file, Some(*line)).unwrap_or_else(String::new)
-                )
+
+                write_source_span_at(f, file, *span)
             }
             Error::SyntaxError {
                 file,
-                line,
-                token,
+                span,
                 message,
             } => {
                 write!(f, "{}: ", "syntax error".red())?;
-                write!(f, "{}\n", file_line_display(file, Some(*line)))?;
-                write!(
-                    f,
-                    "{}Syntax Error on line {} at token {:?}\n",
-                    indent, line, token
-                )?;
+                write!(f, "{}\n", file_line_display(file, span.line))?;
+                write!(f, "{}Syntax Error on line {}\n", INDENT, span.line)?;
 
                 if let Some(message) = message {
-                    write!(f, "{}{}\n", indent, message)?;
+                    write!(f, "{}{}\n", INDENT, message)?;
                 }
-                write!(
-                    f,
-                    "{}\n",
-                    source_line_at(file, Some(*line)).unwrap_or_else(String::new)
-                )
+
+                write_source_span_at(f, file, *span)
             }
-            Error::GitConflictError { file, start } => {
+            Error::GitConflictError { file, span } => {
                 write!(f, "{}: ", "git conflict error".red())?;
-                write!(f, "{}\n", file_line_display(file, Some(*start)))?;
-
-                write!(f, "{}Git conflict marker found at line {}\n", indent, start)?;
+                write!(f, "{}\n", file_line_display(file, span.line))?;
 
                 write!(
                     f,
-                    "{}",
-                    source_line_at(file, Some(*start + 1)).unwrap_or_else(String::new)
-                )
+                    "{}Git conflict marker found at line {}\n",
+                    INDENT, span.line,
+                )?;
+
+                write_source_span_at(f, file, *span)
             }
             Error::FileNotFound(path) => {
                 write!(f, "File '{}' not found", path.display())
@@ -280,4 +278,95 @@ impl fmt::Display for RuntimeError {
             }
         }
     }
+}
+
+#[cfg(test)]
+mod test {
+    // A small hack is required to test the functions working on Formatters
+    // since we can't construct new Formatters.
+    //
+    // The formatted span output is very weird to test. Feel free to move the
+    // string around and check that the ^^^ lines up correctly. Spaces matter!
+    //
+    // For some tests, color is disabled by setting the env variable NO_COLOR=1.
+
+    struct UnderlineTester(usize, usize);
+    impl std::fmt::Display for UnderlineTester {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            super::underline(f, self.0, self.1)
+        }
+    }
+
+    struct SourceSpanTester<'p>(&'p std::path::Path, super::Span);
+    impl<'p> std::fmt::Display for SourceSpanTester<'p> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            super::write_source_span_at(f, self.0, self.1)
+        }
+    }
+
+    #[test]
+    fn underline() {
+        assert_eq!(&format!("{}", UnderlineTester(1, 2)), " ^^\n");
+        assert_eq!(&format!("{}", UnderlineTester(2, 1)), "  ^\n");
+        assert_eq!(&format!("{}", UnderlineTester(0, 0)), "\n");
+        assert_eq!(&format!("{}", UnderlineTester(0, 2)), "^^\n");
+    }
+
+    fn get_tmp() -> std::path::PathBuf {
+        let mut tmp = std::env::temp_dir();
+        tmp.push(format!("test-{}.sy", sungod::Ra::default().sample::<u32>()));
+        tmp
+    }
+
+    fn write_str_to_tmp(s: &str) -> std::path::PathBuf {
+        let tmp = get_tmp();
+        std::fs::write(&tmp, s).expect(&format!(
+            "Unable to write test string to tmp file at {}",
+            tmp.display(),
+        ));
+        tmp.clone()
+    }
+
+    macro_rules! test_source_span {
+        ($fn:ident, $src:expr, (line: $line:expr, col_start: $col_start:expr, col_end: $col_end:expr), $result:expr $(,)?) => {
+            #[test]
+            fn $fn() {
+                std::env::set_var("NO_COLOR", "1");
+                let path = write_str_to_tmp($src);
+                assert_eq!(
+                    &format!(
+                        "{}",
+                        SourceSpanTester(
+                            &path,
+                            super::Span {
+                                line: $line,
+                                col_start: $col_start,
+                                col_end: $col_end,
+                            }
+                        ),
+                    ),
+                    $result,
+                );
+            }
+        };
+    }
+
+    test_source_span!(
+        write_source_span_display_simple,
+        "hello\nstart :: fn {\n",
+        (line: 2, col_start: 1, col_end: 6),
+        "   1 | hello
+   2 | start :: fn {
+       ^^^^^\n",
+    );
+
+    test_source_span!(
+        write_source_span_display_many_lines,
+        "hello\nhello\nhello\nstart :: fn {\n  abc := 123\n  def := ghi\n}\n",
+        (line: 4, col_start: 1, col_end: 6),
+        "   2 | hello
+   3 | hello
+   4 | start :: fn {
+       ^^^^^\n",
+    );
 }
