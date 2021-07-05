@@ -327,48 +327,46 @@ mod test {
         tmp.clone()
     }
 
-    #[test]
-    fn write_source_span_simple() {
-        std::env::set_var("NO_COLOR", "1");
-        let p = write_str_to_tmp("hello\nstart :: fn {\n");
-        assert_eq!(
-            &format!(
-                "{}",
-                SourceSpanTester(
-                    &p,
-                    super::Span {
-                        line: 2,
-                        col_start: 1,
-                        col_end: 6,
-                    }
-                )
-            ),
-            "   1 | hello
-   2 | start :: fn {
-       ^^^^^\n",
-        );
+    macro_rules! test_source_span {
+        ($fn:ident, $src:expr, (line: $line:expr, col_start: $col_start:expr, col_end: $col_end:expr), $result:expr $(,)?) => {
+            #[test]
+            fn $fn() {
+                std::env::set_var("NO_COLOR", "1");
+                let path = write_str_to_tmp($src);
+                assert_eq!(
+                    &format!(
+                        "{}",
+                        SourceSpanTester(
+                            &path,
+                            super::Span {
+                                line: $line,
+                                col_start: $col_start,
+                                col_end: $col_end,
+                            }
+                        ),
+                    ),
+                    $result,
+                );
+            }
+        };
     }
 
-    #[test]
-    fn write_source_span_many_lines() {
-        std::env::set_var("NO_COLOR", "1");
-        let p = write_str_to_tmp("hello\nhello\nhello\nstart :: fn {\n  abc := 123\n  def := ghi\n}\n");
-        assert_eq!(
-            &format!(
-                "{}",
-                SourceSpanTester(
-                    &p,
-                    super::Span {
-                        line: 4,
-                        col_start: 1,
-                        col_end: 6,
-                    }
-                )
-            ),
-            "   2 | hello
+    test_source_span!(
+        write_source_span_display_simple,
+        "hello\nstart :: fn {\n",
+        (line: 2, col_start: 1, col_end: 6),
+        "   1 | hello
+   2 | start :: fn {
+       ^^^^^\n",
+    );
+
+    test_source_span!(
+        write_source_span_display_many_lines,
+        "hello\nhello\nhello\nstart :: fn {\n  abc := 123\n  def := ghi\n}\n",
+        (line: 4, col_start: 1, col_end: 6),
+        "   2 | hello
    3 | hello
    4 | start :: fn {
        ^^^^^\n",
-        );
-    }
+    );
 }
