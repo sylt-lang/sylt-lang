@@ -1,0 +1,19 @@
+
+f :: fn a: int, b: int -> int {
+    a * b
+}
+
+g :: fn a: int -> bool {
+    a < 10
+}
+
+start :: fn {
+    a := 2 if -> f(2) -> g' else nil
+    a <=> 4
+
+    b := 4 if -> f(3) -> g' else nil
+    b <=> nil
+
+    b := 2 if -> f(2) -> f(2) -> g' else nil
+    b <=> nil
+}
