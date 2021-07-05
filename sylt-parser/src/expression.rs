@@ -412,6 +412,43 @@ fn if_expression<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expr
     ))
 }
 
+fn arrow_call<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
+    let ctx = expect!(ctx, T::Arrow, "Expected '->' in arrow function call");
+    let (ctx, rhs) = expression(ctx)?;
+
+    use ExpressionKind::*;
+    use AssignableKind::{Call, ArrowCall};
+
+    fn prepend_expresion<'t>(ctx: Context<'t>, lhs: Expression, rhs: Expression) -> ParseResult<'t, Expression> {
+        let span = ctx.span();
+        let kind = match rhs.kind {
+            Get(Assignable {
+                kind: Call(callee, args),
+                ..
+            }) => Get(Assignable {
+                kind: ArrowCall(Box::new(lhs), callee, args),
+                span: rhs.span,
+            }),
+
+            Get(Assignable {
+                kind: ArrowCall(pre, callee, args),
+                ..
+            }) => {
+                let (_, pre) = prepend_expresion(ctx, lhs, *pre)?;
+                Get(Assignable {
+                    kind: ArrowCall(Box::new(pre), callee, args),
+                    span: rhs.span,
+                })
+            }
+
+            _ => { raise_syntax_error!(ctx, "Expected a call-expression after '->'"); }
+        };
+        Ok((ctx, Expression { span, kind }))
+    }
+
+    prepend_expresion(ctx, lhs.clone(), rhs)
+}
+
 /// Parse an expression starting from an infix operator. Called by `parse_precedence`.
 fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
     use ExpressionKind::*;
@@ -423,13 +460,17 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
         (T::If, _) => {
             return if_short(ctx, lhs);
         }
+        // The cool arrow syntax. For example: `a->b(2)` compiles to `b(a, 2)`.
+        // #NotLikeOtherOperators
+        (T::Arrow, _) => {
+            return arrow_call(ctx, lhs);
+        }
         _ => {}
     }
 
     // Parse an operator and a following expression
     // until we reach a token with higher precedence.
     let (op, span, ctx) = ctx.eat();
-
     let (ctx, rhs) = parse_precedence(ctx, precedence(op).next())?;
 
     // Left and right of the operator.
@@ -458,24 +499,6 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
         T::AssertEqual => AssertEq(lhs, rhs),
 
         T::In => In(lhs, rhs),
-
-        // The cool arrow syntax. For example: `a->b(2)` compiles to `b(a, 2)`.
-        T::Arrow => {
-            use AssignableKind::{Call, ArrowCall};
-            // Rhs has to be an ExpressionKind::Get(AssignableKind::Call).
-            if let Get(Assignable {
-                kind: Call(callee, args),
-                ..
-            }) = rhs.kind
-            {
-                Get(Assignable {
-                    kind: ArrowCall(lhs, callee, args),
-                    span: rhs.span,
-                })
-            } else {
-                raise_syntax_error!(ctx, "Expected a call-expression after '->'");
-            }
-        }
 
         // Unknown infix operator.
         _ => {
