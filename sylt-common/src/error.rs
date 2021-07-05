@@ -10,20 +10,20 @@ use sylt_tokenizer::Span;
 
 static INDENT: &'static str = "      ";
 
-fn write_source_line_at(f: &mut fmt::Formatter<'_>, file: &Path, line: usize) -> fmt::Result {
+fn write_source_lines_at(f: &mut fmt::Formatter<'_>, file: &Path, line_start: usize, line_end: usize) -> fmt::Result {
     let file = if let Ok(file) = File::open(file) {
         file
     } else {
         return write!(f, "Unable to open file {}", file.display());
     };
 
-    let start_line = (line.saturating_sub(2)).max(1);
-    let lines = line - start_line + 1;
+    let line_start = (line_start.saturating_sub(2)).max(1);
+    let lines = line_end - line_start - 1;
 
     for (line_num, line) in io::BufReader::new(file)
         .lines()
         .enumerate()
-        .skip(start_line - 1)
+        .skip(line_start)
         .take(lines)
     {
         writeln!(f, " {:3} | {}", (line_num + 1).blue(), line.unwrap())?;
@@ -37,7 +37,7 @@ fn underline(f: &mut fmt::Formatter<'_>, col_start: usize, len: usize) -> fmt::R
 }
 
 fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &Path, span: Span) -> fmt::Result {
-    write_source_line_at(f, file, span.line_start)?;
+    write_source_lines_at(f, file, span.line_start, span.line_end)?;
     write!(f, "{}", INDENT)?;
     underline(f, span.col_start, span.col_end - span.col_start)
 }
@@ -136,7 +136,7 @@ impl fmt::Display for Error {
                     write!(f, "{}\n", message)?;
                 }
 
-                write_source_line_at(f, file, *line)
+                write_source_lines_at(f, file, *line, *line + 1)
             }
             Error::CompileError {
                 file,
