@@ -17,7 +17,7 @@ fn write_source_lines_at(f: &mut fmt::Formatter<'_>, file: &Path, line_start: us
         return write!(f, "Unable to open file {}", file.display());
     };
 
-    let line_start = (line_start.saturating_sub(2)).max(1);
+    let line_start = line_start.saturating_sub(3);
     let lines = line_end - line_start;
 
     for (line_num, line) in io::BufReader::new(file)
@@ -368,7 +368,7 @@ mod test {
     test_source_span!(
         write_source_span_display_simple,
         "hello\nstart :: fn {\n",
-        (line: (2, 3), col: (1, 6)),
+        (line: (2, 2), col: (1, 5)),
         "   1 | hello
    2 | start :: fn {
        ^^^^^\n",
@@ -377,7 +377,7 @@ mod test {
     test_source_span!(
         write_source_span_display_many_lines,
         "hello\nhello\nhello\nstart :: fn {\n  abc := 123\n  def := ghi\n}\n",
-        (line: (4, 5), col: (1, 6)),
+        (line: (4, 4), col: (1, 5)),
         "   2 | hello
    3 | hello
    4 | start :: fn {

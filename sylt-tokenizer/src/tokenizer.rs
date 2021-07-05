@@ -154,7 +154,7 @@ mod tests {
                     token: $token,
                     span: $crate::Span {
                         line_start: $line,
-                        line_end: $line + 1,
+                        line_end: $line,
                         col_start: $range.start,
                         col_end: $range.end,
                     }
@@ -170,20 +170,20 @@ mod tests {
     fn simple_span() {
         assert_placed_eq!(
             string_to_tokens("1"),
-            (Token::Int(1), 1, 1..2),
+            (Token::Int(1), 1, 1..1),
         );
         assert_placed_eq!(
             string_to_tokens("1\n"),
-            (Token::Int(1),  1, 1..2),
-            (Token::Newline, 1, 2..3),
+            (Token::Int(1),  1, 1..1),
+            (Token::Newline, 1, 2..2),
         );
         assert_placed_eq!(
             string_to_tokens("1\n23\n456"),
-            (Token::Int(1),   1, 1..2),
-            (Token::Newline,  1, 2..3),
-            (Token::Int(23),  2, 1..3),
-            (Token::Newline,  2, 3..4),
-            (Token::Int(456), 3, 1..4),
+            (Token::Int(1),   1, 1..1),
+            (Token::Newline,  1, 2..2),
+            (Token::Int(23),  2, 1..2),
+            (Token::Newline,  2, 3..3),
+            (Token::Int(456), 3, 1..3),
         );
     }
 
@@ -192,13 +192,13 @@ mod tests {
         // The 'ö' is an error but we want to check that its span is a single char.
         assert_placed_eq!(
             string_to_tokens("wow\nwöw\n"),
-            (Token::Identifier(String::from("wow")), 1, 1..4),
-            (Token::Newline,                         1, 4..5),
+            (Token::Identifier(String::from("wow")), 1, 1..3),
+            (Token::Newline,                         1, 4..4),
 
-            (Token::Identifier(String::from("w")),   2, 1..2),
-            (Token::Error,                           2, 2..3),
-            (Token::Identifier(String::from("w")),   2, 3..4),
-            (Token::Newline,                         2, 4..5),
+            (Token::Identifier(String::from("w")),   2, 1..1),
+            (Token::Error,                           2, 2..2),
+            (Token::Identifier(String::from("w")),   2, 3..3),
+            (Token::Newline,                         2, 4..4),
         );
     }
 
