@@ -28,6 +28,7 @@ jobs:
           --workspace                    \
           --exclude sylt_macro           \
           --timeout 120                  \
+          --exclude-files sylt_macro/    \
           --out Xml
 
       - name: Upload to codecov.io
