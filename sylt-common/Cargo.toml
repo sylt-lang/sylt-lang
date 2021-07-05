@@ -12,4 +12,5 @@ sylt_macro = { path = "../sylt_macro" }
 owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
 
 [dev-dependencies]
-rand = "0.8" # for generating random file names for tests
+# For generating random file names for tests
+sungod = { version = "0.3.1", features = ["default_is_random"] }

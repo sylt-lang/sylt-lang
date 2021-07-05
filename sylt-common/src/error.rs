@@ -313,9 +313,8 @@ mod test {
     }
 
     fn get_tmp() -> std::path::PathBuf {
-        use rand::Rng;
         let mut tmp = std::env::temp_dir();
-        tmp.push(format!("test-{}.sy", rand::thread_rng().gen::<u32>()));
+        tmp.push(format!("test-{}.sy", sungod::Ra::default().sample::<u32>()));
         tmp
     }
 
