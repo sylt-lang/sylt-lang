@@ -1,6 +1,6 @@
 grouping :: fn {
     a := 1 + 2 + 3 if true else -1 * 10 if false else 2 + 2
-    a <=> 4
+    a <=> 6
     b := 1 + 2 + 3 if true else -1 * 10 if true else 2 + 2
     b <=> 6
     c := 1 + 2 + 3 if false else -1 * 10 if true else 2 + 2

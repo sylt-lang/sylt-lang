@@ -356,7 +356,7 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
             T::Else,
             "Expected 'else' after if-expression condition"
         );
-        let (ctx, rhs) = parse_precedence(ctx, precedence(op).next())?;
+        let (ctx, rhs) = parse_precedence(ctx, Prec::No)?;
 
         let condition = Box::new(condition.clone());
         let pass = Box::new(lhs.clone());
