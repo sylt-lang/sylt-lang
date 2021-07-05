@@ -343,6 +343,8 @@ impl Compiler {
     fn expression(&mut self, expression: &Expression, ctx: Context) {
         use ExpressionKind::*;
 
+        let span = expression.span;
+
         match &expression.kind {
             Get(a) => {
                 self.assignable(a, ctx);
@@ -351,35 +353,35 @@ impl Compiler {
             TypeConstant(ty) => {
                 let resolved_ty = self.resolve_type(ty, ctx);
                 let ty_constant = self.constant(Value::Ty(resolved_ty));
-                self.add_op(ctx, expression.span, ty_constant);
+                self.add_op(ctx, span, ty_constant);
             }
 
-            Add(a, b) => self.bin_op(a, b, &[Op::Add], expression.span, ctx),
-            Sub(a, b) => self.bin_op(a, b, &[Op::Sub], expression.span, ctx),
-            Mul(a, b) => self.bin_op(a, b, &[Op::Mul], expression.span, ctx),
-            Div(a, b) => self.bin_op(a, b, &[Op::Div], expression.span, ctx),
+            Add(a, b) => self.bin_op(a, b, &[Op::Add], span, ctx),
+            Sub(a, b) => self.bin_op(a, b, &[Op::Sub], span, ctx),
+            Mul(a, b) => self.bin_op(a, b, &[Op::Mul], span, ctx),
+            Div(a, b) => self.bin_op(a, b, &[Op::Div], span, ctx),
 
-            Eq(a, b) => self.bin_op(a, b, &[Op::Equal], expression.span, ctx),
-            Neq(a, b) => self.bin_op(a, b, &[Op::Equal, Op::Not], expression.span, ctx),
-            Gt(a, b) => self.bin_op(a, b, &[Op::Greater], expression.span, ctx),
-            Gteq(a, b) => self.bin_op(a, b, &[Op::Less, Op::Not], expression.span, ctx),
-            Lt(a, b) => self.bin_op(a, b, &[Op::Less], expression.span, ctx),
-            Lteq(a, b) => self.bin_op(a, b, &[Op::Greater, Op::Not], expression.span, ctx),
+            Eq(a, b) => self.bin_op(a, b, &[Op::Equal], span, ctx),
+            Neq(a, b) => self.bin_op(a, b, &[Op::Equal, Op::Not], span, ctx),
+            Gt(a, b) => self.bin_op(a, b, &[Op::Greater], span, ctx),
+            Gteq(a, b) => self.bin_op(a, b, &[Op::Less, Op::Not], span, ctx),
+            Lt(a, b) => self.bin_op(a, b, &[Op::Less], span, ctx),
+            Lteq(a, b) => self.bin_op(a, b, &[Op::Greater, Op::Not], span, ctx),
 
-            Is(a, b) => self.bin_op(a, b, &[Op::Is], expression.span, ctx),
+            Is(a, b) => self.bin_op(a, b, &[Op::Is], span, ctx),
 
-            AssertEq(a, b) => self.bin_op(a, b, &[Op::Equal, Op::Assert], expression.span, ctx),
+            AssertEq(a, b) => self.bin_op(a, b, &[Op::Equal, Op::Assert], span, ctx),
 
-            Neg(a) => self.un_op(a, &[Op::Neg], expression.span, ctx),
+            Neg(a) => self.un_op(a, &[Op::Neg], span, ctx),
 
-            In(a, b) => self.bin_op(a, b, &[Op::Contains], expression.span, ctx),
+            In(a, b) => self.bin_op(a, b, &[Op::Contains], span, ctx),
 
             And(a, b) => {
                 self.expression(a, ctx);
 
-                self.add_op(ctx, expression.span, Op::Copy(1));
-                let jump = self.add_op(ctx, expression.span, Op::Illegal);
-                self.add_op(ctx, expression.span, Op::Pop);
+                self.add_op(ctx, span, Op::Copy(1));
+                let jump = self.add_op(ctx, span, Op::Illegal);
+                self.add_op(ctx, span, Op::Pop);
 
                 self.expression(b, ctx);
 
@@ -389,19 +391,19 @@ impl Compiler {
             Or(a, b) => {
                 self.expression(a, ctx);
 
-                self.add_op(ctx, expression.span, Op::Copy(1));
-                let skip = self.add_op(ctx, expression.span, Op::Illegal);
-                let jump = self.add_op(ctx, expression.span, Op::Illegal);
+                self.add_op(ctx, span, Op::Copy(1));
+                let skip = self.add_op(ctx, span, Op::Illegal);
+                let jump = self.add_op(ctx, span, Op::Illegal);
 
                 let op = Op::JmpFalse(self.next_ip(ctx));
                 self.patch(ctx, skip, op);
-                self.add_op(ctx, expression.span, Op::Pop);
+                self.add_op(ctx, span, Op::Pop);
 
                 self.expression(b, ctx);
                 let op = Op::Jmp(self.next_ip(ctx));
                 self.patch(ctx, jump, op);
             }
-            Not(a) => self.un_op(a, &[Op::Not], expression.span, ctx),
+            Not(a) => self.un_op(a, &[Op::Not], span, ctx),
 
             IfExpression {
                 condition,
@@ -410,10 +412,10 @@ impl Compiler {
             } => {
                 self.expression(condition, ctx);
 
-                let skip = self.add_op(ctx, expression.span, Op::Illegal);
+                let skip = self.add_op(ctx, span, Op::Illegal);
 
                 self.expression(pass, ctx);
-                let out = self.add_op(ctx, expression.span, Op::Illegal);
+                let out = self.add_op(ctx, span, Op::Illegal);
                 let op = Op::JmpFalse(self.next_ip(ctx));
                 self.patch(ctx, skip, op);
 
@@ -421,7 +423,7 @@ impl Compiler {
                 let op = Op::Jmp(self.next_ip(ctx));
                 self.patch(ctx, out, op);
 
-                self.add_op(ctx, expression.span, Op::Union);
+                self.add_op(ctx, span, Op::Union);
             }
 
             Function {
@@ -431,10 +433,10 @@ impl Compiler {
                 body,
             } => {
                 let file = self.file_from_namespace(ctx.namespace).display();
-                let name = format!("fn {} {}:{}", name, file, expression.span.line_start);
+                let name = format!("fn {} {}:{}", name, file, span.line_start);
 
                 // === Frame begin ===
-                let inner_ctx = self.push_frame_and_block(ctx, &name, expression.span);
+                let inner_ctx = self.push_frame_and_block(ctx, &name, span);
                 let mut param_types = Vec::new();
                 for (ident, ty) in params.iter() {
                     param_types.push(self.resolve_type(&ty, inner_ctx));
@@ -463,7 +465,7 @@ impl Compiler {
                 // === Frame end ===
 
                 let function = self.constant(function);
-                self.add_op(ctx, expression.span, function);
+                self.add_op(ctx, span, function);
             }
 
             Instance { blob, fields } => {
@@ -473,7 +475,7 @@ impl Compiler {
                     self.add_op(ctx, field.span, name);
                     self.expression(field, ctx);
                 }
-                self.add_op(ctx, expression.span, Op::Call(fields.len() * 2));
+                self.add_op(ctx, span, Op::Call(fields.len() * 2));
             }
 
             Tuple(x) | List(x) | Set(x) | Dict(x) => {
@@ -482,7 +484,7 @@ impl Compiler {
                 }
                 self.add_op(
                     ctx,
-                    expression.span,
+                    span,
                     match &expression.kind {
                         Tuple(_) => Op::Tuple(x.len()),
                         List(_) => Op::List(x.len()),
@@ -493,11 +495,11 @@ impl Compiler {
                 );
             }
 
-            Float(a) => self.push(Value::Float(*a), expression.span, ctx),
-            Bool(a) => self.push(Value::Bool(*a), expression.span, ctx),
-            Int(a) => self.push(Value::Int(*a), expression.span, ctx),
-            Str(a) => self.push(Value::String(Rc::new(a.clone())), expression.span, ctx),
-            Nil => self.push(Value::Nil, expression.span, ctx),
+            Float(a) => self.push(Value::Float(*a), span, ctx),
+            Bool(a) => self.push(Value::Bool(*a), span, ctx),
+            Int(a) => self.push(Value::Int(*a), span, ctx),
+            Str(a) => self.push(Value::String(Rc::new(a.clone())), span, ctx),
+            Nil => self.push(Value::Nil, span, ctx),
         }
     }
 
@@ -762,6 +764,8 @@ impl Compiler {
         use StatementKind::*;
         self.panic = false;
 
+        let span = statement.span;
+
         match &statement.kind {
             Use { .. } | EmptyStatement => {}
 
@@ -776,14 +780,14 @@ impl Compiler {
                 } else {
                     error!(
                         self,
-                        ctx, statement.span, "No blob with the name '{}' in this namespace", name
+                        ctx, span, "No blob with the name '{}' in this namespace", name
                     );
                 }
             }
 
             Print { value } => {
                 self.expression(value, ctx);
-                self.add_op(ctx, statement.span, Op::Print);
+                self.add_op(ctx, span, Op::Print);
             }
 
             #[rustfmt::skip]
@@ -793,10 +797,10 @@ impl Compiler {
 
                 if ctx.frame == 0 {
                     // Global
-                    self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
+                    self.set_identifier(&ident.name, span, ctx, ctx.namespace);
                 } else {
                     // Local variable
-                    let slot = self.define(&ident.name, *kind, statement.span);
+                    let slot = self.define(&ident.name, *kind, span);
                     let ty = self.resolve_type(ty, ctx);
                     let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
                         if kind.force() {
@@ -805,10 +809,10 @@ impl Compiler {
                             Op::Define(ty)
                         }
                     } else {
-                        error!(self, ctx, statement.span, "Failed to add type declaration");
+                        error!(self, ctx, span, "Failed to add type declaration");
                         Op::Illegal
                     };
-                    self.add_op(ctx, statement.span, op);
+                    self.add_op(ctx, span, op);
                     self.activate(slot);
                 }
             }
@@ -830,24 +834,24 @@ impl Compiler {
                             return;
                         }
                     };
-                    comp.add_op(ctx, statement.span, op);
+                    comp.add_op(ctx, span, op);
                 };
 
                 match &target.kind {
                     Read(ident) => {
                         if mutator(*kind) {
-                            self.read_identifier(&ident.name, statement.span, ctx, ctx.namespace);
+                            self.read_identifier(&ident.name, span, ctx, ctx.namespace);
                         }
                         self.expression(value, ctx);
 
                         write_mutator_op(self, ctx, *kind);
 
-                        self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
+                        self.set_identifier(&ident.name, span, ctx, ctx.namespace);
                     }
                     Call(_, _) => {
                         error!(
                             self,
-                            ctx, statement.span, "Cannot assign to result from function call"
+                            ctx, span, "Cannot assign to result from function call"
                         );
                     }
                     Access(a, field) => {
@@ -855,7 +859,7 @@ impl Compiler {
                         let slot = self.string(&field.name);
 
                         if mutator(*kind) {
-                            self.add_op(ctx, statement.span, Op::Copy(1));
+                            self.add_op(ctx, span, Op::Copy(1));
                             self.add_op(ctx, field.span, Op::GetField(slot));
                         }
                         self.expression(value, ctx);
@@ -868,20 +872,20 @@ impl Compiler {
                         self.expression(b, ctx);
 
                         if mutator(*kind) {
-                            self.add_op(ctx, statement.span, Op::Copy(2));
-                            self.add_op(ctx, statement.span, Op::GetIndex);
+                            self.add_op(ctx, span, Op::Copy(2));
+                            self.add_op(ctx, span, Op::GetIndex);
                         }
                         self.expression(value, ctx);
                         write_mutator_op(self, ctx, *kind);
 
-                        self.add_op(ctx, statement.span, Op::AssignIndex);
+                        self.add_op(ctx, span, Op::AssignIndex);
                     }
                 }
             }
 
             StatementExpression { value } => {
                 self.expression(value, ctx);
-                self.add_op(ctx, statement.span, Op::Pop);
+                self.add_op(ctx, span, Op::Pop);
             }
 
             Block { statements } => {
@@ -891,7 +895,7 @@ impl Compiler {
                     self.statement(statement, ctx);
                 }
 
-                self.pop_until_size(ctx, statement.span, stack_size);
+                self.pop_until_size(ctx, span, stack_size);
             }
 
             Loop { condition, body } => {
@@ -940,31 +944,31 @@ impl Compiler {
 
             Continue {} => match self.loops.last().cloned() {
                 Some(LoopFrame { stack_size, continue_addr, .. }) => {
-                    self.pop_until_size(ctx, statement.span, stack_size);
-                    self.add_op(ctx, statement.span, Op::Jmp(continue_addr));
+                    self.pop_until_size(ctx, span, stack_size);
+                    self.add_op(ctx, span, Op::Jmp(continue_addr));
                 }
                 None => {
-                    error!(self, ctx, statement.span, "`continue` statement not in a loop");
+                    error!(self, ctx, span, "`continue` statement not in a loop");
                 }
             }
 
             Break {} => match self.loops.last().cloned() {
                 Some(LoopFrame { stack_size, break_addr, .. }) => {
-                    self.pop_until_size(ctx, statement.span, stack_size);
-                    self.add_op(ctx, statement.span, Op::Jmp(break_addr));
+                    self.pop_until_size(ctx, span, stack_size);
+                    self.add_op(ctx, span, Op::Jmp(break_addr));
                 }
                 None => {
-                    error!(self, ctx, statement.span, "`continue` statement not in a loop");
+                    error!(self, ctx, span, "`continue` statement not in a loop");
                 }
             }
 
             Unreachable {} => {
-                self.add_op(ctx, statement.span, Op::Unreachable);
+                self.add_op(ctx, span, Op::Unreachable);
             }
 
             Ret { value } => {
                 self.expression(value, ctx);
-                self.add_op(ctx, statement.span, Op::Return);
+                self.add_op(ctx, span, Op::Return);
             }
         }
     }
