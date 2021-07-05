@@ -1,0 +1,24 @@
+grouping :: fn {
+    a := 1 + 2 + 3 if true else -1 * 10 if false else 2 + 2
+    a <=> 6
+    b := 1 + 2 + 3 if true else -1 * 10 if true else 2 + 2
+    b <=> 6
+    c := 1 + 2 + 3 if false else -1 * 10 if true else 2 + 2
+    c <=> -10
+    d := 1 + 2 + 3 if false else -1 * 10 if false else 2 + 2
+    d <=> 4
+}
+
+simple :: fn {
+    (1 if true else 3) <=> 1
+}
+
+expr :: fn {
+    (1 + (1 if true else 3)) <=> 2
+}
+
+start :: fn {
+    grouping'
+    simple'
+    expr'
+}

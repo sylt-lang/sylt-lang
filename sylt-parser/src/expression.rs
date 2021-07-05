@@ -55,6 +55,13 @@ pub enum ExpressionKind {
     /// `!a`
     Not(Box<Expression>),
 
+    /// Inline If-statements
+    IfExpression {
+        condition: Box<Expression>,
+        pass: Box<Expression>,
+        fail: Box<Expression>,
+    },
+
     /// Functions and closures.
     Function {
         name: String,
@@ -340,6 +347,34 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
     // Parse an operator and a following expression
     // until we reach a token with higher precedence.
     let (op, span, ctx) = ctx.eat();
+
+    // If-expressions are handled seperately
+    if matches!(op, T::If) {
+        let (ctx, condition) = parse_precedence(ctx, Prec::No)?;
+        let ctx = expect!(
+            ctx,
+            T::Else,
+            "Expected 'else' after if-expression condition"
+        );
+        let (ctx, rhs) = parse_precedence(ctx, Prec::No)?;
+
+        let condition = Box::new(condition.clone());
+        let pass = Box::new(lhs.clone());
+        let fail = Box::new(rhs);
+
+        return Ok((
+            ctx,
+            Expression {
+                span,
+                kind: IfExpression {
+                    condition,
+                    pass,
+                    fail,
+                },
+            },
+        ));
+    }
+
     let (ctx, rhs) = parse_precedence(ctx, precedence(op).next())?;
 
     // Left and right of the operator.
@@ -721,4 +756,7 @@ mod test {
 
     test!(expression, void_simple: "fn {}" => _);
     test!(expression, void_argument: "fn a: int { ret a + 1 }" => _);
+
+    test!(expression, if_expr: "a if b else c" => IfExpression { .. });
+    test!(expression, if_expr_more: "1 + 1 + 1 if b else 2 + 2 + 2" => IfExpression { .. });
 }

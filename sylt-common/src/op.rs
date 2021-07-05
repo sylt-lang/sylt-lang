@@ -242,6 +242,14 @@ pub enum Op {
     ///
     /// Does not affect the stack.
     Force(usize),
+    /// A helper instruction for the typechecker,
+    /// *combines* the two top value on the stack
+    /// into a union type.
+    ///
+    /// Skipped in the runtime.
+    /// In the typechecker:
+    /// {A, B} - Union - {A | B}
+    Union,
 
     /// Links the upvalues for the given constant
     /// function. This updates the constant stack.
