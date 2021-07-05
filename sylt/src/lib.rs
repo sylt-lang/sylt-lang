@@ -27,6 +27,11 @@ pub fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Pr
         }
     };
     let tree = sylt_parser::tree(&path)?;
+    if args.dump_tree {
+        println!("VVV TREE VVV");
+        println!("{:#?}", tree);
+        println!("^^^ TREE ^^^");
+    }
     let prog = sylt_compiler::compile(tree, &functions)?;
     Ok(prog)
 }
@@ -63,6 +68,9 @@ pub struct Args {
 
     #[options(long = "skip-typecheck", no_short, help = "Does no type checking what so ever")]
     pub skip_typecheck: bool,
+
+    #[options(long = "dump-tree", no_short, help = "Writes the tree to stdout")]
+    pub dump_tree: bool,
 
     #[options(short = "c", long = "compile", help = "Compile a sylt binary")]
     pub compile_target: Option<PathBuf>,
