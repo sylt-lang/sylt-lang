@@ -37,7 +37,7 @@ fn underline(f: &mut fmt::Formatter<'_>, col_start: usize, len: usize) -> fmt::R
 }
 
 fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &Path, span: Span) -> fmt::Result {
-    write_source_line_at(f, file, span.line)?;
+    write_source_line_at(f, file, span.line_start)?;
     write!(f, "{}", INDENT)?;
     underline(f, span.col_start, span.col_end - span.col_start)
 }
@@ -144,8 +144,8 @@ impl fmt::Display for Error {
                 message,
             } => {
                 write!(f, "{}: ", "compile error".red())?;
-                write!(f, "{}\n", file_line_display(file, span.line))?;
-                write!(f, "{}Failed to compile line {}\n", INDENT, span.line)?;
+                write!(f, "{}\n", file_line_display(file, span.line_start))?;
+                write!(f, "{}Failed to compile line {}\n", INDENT, span.line_start)?;
 
                 if let Some(message) = message {
                     write!(f, "{}{}\n", INDENT, message)?;
@@ -159,8 +159,8 @@ impl fmt::Display for Error {
                 message,
             } => {
                 write!(f, "{}: ", "syntax error".red())?;
-                write!(f, "{}\n", file_line_display(file, span.line))?;
-                write!(f, "{}Syntax Error on line {}\n", INDENT, span.line)?;
+                write!(f, "{}\n", file_line_display(file, span.line_start))?;
+                write!(f, "{}Syntax Error on line {}\n", INDENT, span.line_start)?;
 
                 if let Some(message) = message {
                     write!(f, "{}{}\n", INDENT, message)?;
@@ -170,12 +170,12 @@ impl fmt::Display for Error {
             }
             Error::GitConflictError { file, span } => {
                 write!(f, "{}: ", "git conflict error".red())?;
-                write!(f, "{}\n", file_line_display(file, span.line))?;
+                write!(f, "{}\n", file_line_display(file, span.line_start))?;
 
                 write!(
                     f,
                     "{}Git conflict marker found at line {}\n",
-                    INDENT, span.line,
+                    INDENT, span.line_start,
                 )?;
 
                 write_source_span_at(f, file, *span)
@@ -328,7 +328,7 @@ mod test {
     }
 
     macro_rules! test_source_span {
-        ($fn:ident, $src:expr, (line: $line:expr, col_start: $col_start:expr, col_end: $col_end:expr), $result:expr $(,)?) => {
+        ($fn:ident, $src:expr, (line: ($line_start:expr, $line_end:expr), col: ($col_start:expr, $col_end:expr)), $result:expr $(,)?) => {
             #[test]
             fn $fn() {
                 std::env::set_var("NO_COLOR", "1");
@@ -339,7 +339,8 @@ mod test {
                         SourceSpanTester(
                             &path,
                             super::Span {
-                                line: $line,
+                                line_start: $line_start,
+                                line_end: $line_end,
                                 col_start: $col_start,
                                 col_end: $col_end,
                             }
@@ -354,7 +355,7 @@ mod test {
     test_source_span!(
         write_source_span_display_simple,
         "hello\nstart :: fn {\n",
-        (line: 2, col_start: 1, col_end: 6),
+        (line: (2, 3), col: (1, 6)),
         "   1 | hello
    2 | start :: fn {
        ^^^^^\n",
@@ -363,7 +364,7 @@ mod test {
     test_source_span!(
         write_source_span_display_many_lines,
         "hello\nhello\nhello\nstart :: fn {\n  abc := 123\n  def := ghi\n}\n",
-        (line: 4, col_start: 1, col_end: 6),
+        (line: (4, 5), col: (1, 6)),
         "   2 | hello
    3 | hello
    4 | start :: fn {

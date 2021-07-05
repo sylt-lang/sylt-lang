@@ -13,5 +13,5 @@ start :: fn {
 >>>>>>> 2
 }
 
-// error: Error::GitConflictError { span: Span { line: 3 , .. }, .. }
-// error: Error::GitConflictError { span: Span { line: 9 , .. }, .. }
+// error: Error::GitConflictError { span: Span { line_start: 3 , .. }, .. }
+// error: Error::GitConflictError { span: Span { line_start: 9 , .. }, .. }

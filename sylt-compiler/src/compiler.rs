@@ -31,7 +31,7 @@ impl Variable {
             ty,
             slot,
             kind,
-            line: span.line,
+            line: span.line_start,
 
             captured: false,
             active: false,
@@ -257,7 +257,7 @@ impl Compiler {
         self.blocks
             .get_mut(ctx.block_slot)
             .expect("Invalid block id")
-            .add(op, span.line)
+            .add(op, span.line_start)
     }
 
     fn patch(&mut self, ctx: Context, ip: usize, op: Op) {
@@ -431,7 +431,7 @@ impl Compiler {
                 body,
             } => {
                 let file = self.file_from_namespace(ctx.namespace).display();
-                let name = format!("fn {} {}:{}", name, file, expression.span.line);
+                let name = format!("fn {} {}:{}", name, file, expression.span.line_start);
 
                 // === Frame begin ===
                 let inner_ctx = self.push_frame_and_block(ctx, &name, expression.span);

@@ -2,4 +2,4 @@ use conflict_markers
 
 start :: fn {}
 
-// error: Error::GitConflictError { span: Span { line: 3 , .. }, .. }
+// error: Error::GitConflictError { span: Span { line_start: 3 , .. }, .. }

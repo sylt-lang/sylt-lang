@@ -696,7 +696,8 @@ pub fn find_conflict_markers(file: &Path) -> Vec<Error> {
             errs.push(Error::GitConflictError {
                 file: file.to_path_buf(),
                 span: Span {
-                    line: i + 1,
+                    line_start: i + 1,
+                    line_end: i + 2,
                     col_start: 0,
                     col_end: "<<<<<<<".len(),
                 }

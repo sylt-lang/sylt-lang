@@ -1,5 +1,5 @@
 use logos::Logos;
-use std::{fs, path::Path};
+use std::{cmp::Ordering, fs, path::Path};
 pub use token::Token;
 
 mod token;
@@ -7,10 +7,10 @@ mod token;
 #[derive(Debug, Copy, Clone, PartialEq)]
 /// A location in a file containing source code.
 pub struct Span {
-    // TODO(ed): Do this more intelligent, so
-    // we can show ranges. Maybe even go back
-    // to offsets from start of the file.
-    pub line: usize,
+    /// The first line that this Span contains.
+    pub line_start: usize,
+    /// The first line that this Span doesn't contain.
+    pub line_end: usize,
     /// The first column that this Span contains.
     pub col_start: usize,
     /// The first column that this Span doesn't contain.
@@ -18,7 +18,8 @@ pub struct Span {
 }
 
 pub static ZERO_SPAN: Span = Span {
-    line: 0,
+    line_start: 0,
+    line_end: 0,
     col_start: 0,
     col_end: 0,
 };
@@ -26,9 +27,37 @@ pub static ZERO_SPAN: Span = Span {
 impl Span {
     pub fn zero() -> Self {
         Self {
-            line: 0,
+            line_start: 0,
+            line_end: 0,
             col_start: 0,
             col_end: 0,
+        }
+    }
+
+    pub fn join(&self, other: &Span) -> Span {
+        // For the start, use the smallest line number and the respective
+        // column. If the lines are equal, use the smallest column.
+        //
+        // For the end, do the same but the largest line number and largest
+        // column.
+
+        use Ordering::*;
+        let (line_start, col_start) = match self.line_start.cmp(&other.line_start) {
+            Less => (self.line_start, self.col_start),
+            Equal => (self.line_start, self.col_start.min(other.col_start)),
+            Greater => (other.line_start, other.col_start),
+        };
+        let (line_end, col_end) = match self.line_end.cmp(&other.line_end) {
+            Less => (self.line_end, self.col_end),
+            Equal => (self.line_end, self.col_end.min(other.col_end)),
+            Greater => (other.line_end, other.col_end),
+        };
+
+        Self {
+            line_start,
+            line_end,
+            col_start,
+            col_end,
         }
     }
 }
@@ -74,7 +103,8 @@ pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
             let placed_token = PlacedToken {
                 token,
                 span: Span {
-                    line,
+                    line_start: line,
+                    line_end: line + 1,
                     col_start,
                     col_end,
                 },
@@ -123,7 +153,8 @@ mod tests {
                 $crate::PlacedToken {
                     token: $token,
                     span: $crate::Span {
-                        line: $line,
+                        line_start: $line,
+                        line_end: $line + 1,
                         col_start: $range.start,
                         col_end: $range.end,
                     }
