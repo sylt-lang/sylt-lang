@@ -21,7 +21,7 @@ jobs:
           tar xvzf cargo-tarpaulin-0.16.0-travis.tar.gz
 
       - name: Generate code coverage
-        run: ./cargo-tarpaulin tarpaulin --verbose --no-default-features --ignore-panics --workspace --exclude sylt_macro --timeout 120 --exclude-files sylt_macro/ --out Xml
+        run: ./cargo-tarpaulin tarpaulin --verbose --no-default-features --ignore-panics --workspace --exclude sylt_macro --timeout 120 --exclude-files sylt_macro/ --exclude-files sylt/src/bin --exclude-files sylt/src/main.rs --out Xml
 
       - name: Upload to codecov.io
         env:
