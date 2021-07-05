@@ -62,6 +62,15 @@ pub enum ExpressionKind {
         fail: Box<Expression>,
     },
 
+    /// Copies a value - small hack to simplify shorthand implementation.
+    Duplicate(Box<Expression>),
+
+    /// Inline If-statements
+    IfShort {
+        condition: Box<Expression>,
+        fail: Box<Expression>,
+    },
+
     /// Functions and closures.
     Function {
         name: String,
@@ -340,40 +349,95 @@ fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     Ok((ctx, Expression { span, kind }))
 }
 
+fn if_short<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
+    let span = ctx.span();
+    let ctx = expect!(ctx, T::If, "Expected 'if' at start of if-expression");
+
+    use ExpressionKind::*;
+    let lhs = match ctx.token() {
+        // The duplicate hack doesn't work for arrow functions -
+        // so we have to mess with the stack in the compiler.
+        T::Arrow => lhs.clone(),
+
+        // This is a "hack" to simplify the compilation.
+        // We simply clone the value before doing the compare
+        // so we can keep it.
+        _ => Expression {
+            span: lhs.span,
+            kind: Duplicate(Box::new(lhs.clone())),
+        }
+    };
+
+    println!("PEEK: {:?}", ctx.token());
+    let (ctx, condition) = infix(ctx, &lhs)?;
+    let ctx = expect!(
+        ctx,
+        T::Else,
+        "Expected 'else' after short if-expression condition"
+    );
+    let (ctx, rhs) = parse_precedence(ctx, Prec::No)?;
+
+    let condition = Box::new(condition.clone());
+    let fail = Box::new(rhs);
+    Ok((
+        ctx,
+        Expression {
+            span,
+            kind: IfShort {
+                condition,
+                fail,
+            },
+        },
+    ))
+}
+
+
+fn if_expression<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
+    let span = ctx.span();
+    let ctx = expect!(ctx, T::If, "Expected 'if' at start of if-expression");
+
+    use ExpressionKind::*;
+    let (ctx, condition) = parse_precedence(ctx, Prec::No)?;
+
+    let ctx = expect!(
+        ctx,
+        T::Else,
+        "Expected 'else' after if-expression condition"
+    );
+    let (ctx, rhs) = parse_precedence(ctx, Prec::No)?;
+    let condition = Box::new(condition.clone());
+    let pass = Box::new(lhs.clone());
+    let fail = Box::new(rhs);
+    Ok((
+        ctx,
+        Expression {
+            span,
+            kind: IfExpression {
+                condition,
+                pass,
+                fail,
+            },
+        },
+    ))
+}
+
 /// Parse an expression starting from an infix operator. Called by `parse_precedence`.
 fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
     use ExpressionKind::*;
 
+    match (ctx.token(), precedence(ctx.skip(1).token())) {
+        (T::If, Prec::No) => {
+            return if_expression(ctx, lhs);
+        }
+        (T::If, _) => {
+            return if_short(ctx, lhs);
+        }
+        _ => {}
+    }
+
     // Parse an operator and a following expression
     // until we reach a token with higher precedence.
     let (op, span, ctx) = ctx.eat();
-
-    // If-expressions are handled seperately
-    if matches!(op, T::If) {
-        let (ctx, condition) = parse_precedence(ctx, Prec::No)?;
-        let ctx = expect!(
-            ctx,
-            T::Else,
-            "Expected 'else' after if-expression condition"
-        );
-        let (ctx, rhs) = parse_precedence(ctx, Prec::No)?;
-
-        let condition = Box::new(condition.clone());
-        let pass = Box::new(lhs.clone());
-        let fail = Box::new(rhs);
-
-        return Ok((
-            ctx,
-            Expression {
-                span,
-                kind: IfExpression {
-                    condition,
-                    pass,
-                    fail,
-                },
-            },
-        ));
-    }
 
     let (ctx, rhs) = parse_precedence(ctx, precedence(op).next())?;
 

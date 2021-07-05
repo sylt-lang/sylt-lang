@@ -403,6 +403,8 @@ impl Compiler {
             }
             Not(a) => self.un_op(a, &[Op::Not], expression.span, ctx),
 
+            Duplicate(a) => self.un_op(a, &[Op::Copy(1)], expression.span, ctx),
+
             IfExpression {
                 condition,
                 pass,
@@ -423,6 +425,55 @@ impl Compiler {
 
                 self.add_op(ctx, expression.span, Op::Union);
             }
+
+            IfShort {
+                condition,
+                fail,
+            } => {
+                // Results in 2 values pushed on the stack - since there's a duplicate in
+                // there!
+                //
+                // The call is a special case - it means the code looks like:
+                // ```ignore
+                // a if -> f() else b
+                // ```
+                // So we need to handle this in a special way - hence the stack-juggling.
+                if let Expression { span: call_span, kind: Get(Assignable { kind: AssignableKind::Call(a, expr), .. }) } = &**condition {
+                    assert!(expr.len() > 0, "Has to have at least one expression in short if-expression calls");
+                    // Stack magic! gives us the follow layout: a f a b
+                    // while only evaluating `f` and `a` once!
+                    self.expression(expr.iter().next().unwrap(), ctx);
+                    self.assignable(a, ctx);
+                    self.add_op(ctx, *call_span, Op::Copy(2));
+                    self.add_op(ctx, *call_span, Op::Pop);
+
+                    for expr in expr.iter().skip(1) {
+                        self.expression(expr, ctx);
+                    }
+                    self.add_op(ctx, *call_span, Op::Call(expr.len()));
+
+                } else {
+                    self.expression(condition, ctx);
+                }
+
+                let skip = self.add_op(ctx, expression.span, Op::Illegal);
+                let out = self.add_op(ctx, expression.span, Op::Illegal);
+
+                // Only done during the typechecker - mitigates the pop-operation
+                // so the types can be compound.
+                self.add_op(ctx, expression.span, Op::Copy(1));
+
+                let op = Op::JmpFalse(self.next_ip(ctx));
+                self.patch(ctx, skip, op);
+
+                self.add_op(ctx, expression.span, Op::Pop);
+                self.expression(fail, ctx);
+                let op = Op::Jmp(self.next_ip(ctx));
+                self.patch(ctx, out, op);
+
+                self.add_op(ctx, expression.span, Op::Union);
+            }
+
 
             Function {
                 name,
