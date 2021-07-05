@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
 use sylt_common::rc::Rc;
 use sylt_common::Type as RuntimeType;
-use sylt_tokenizer::{PlacedToken, Token, file_to_tokens};
+use sylt_tokenizer::{PlacedToken, Token, ZERO_SPAN, file_to_tokens};
 
 pub mod expression;
 pub mod statement;
@@ -15,14 +15,9 @@ pub use self::statement::{Statement, StatementKind};
 
 pub use sylt_tokenizer::Span;
 
-static INVALID_TOKEN: Token = Token::EOF;
-static INVALID_SPAN: Span = Span {
-    line: 0,
-    col_start: 0,
-    col_end: 0,
-};
-
 type T = Token;
+
+static EOF: Token = Token::EOF;
 
 pub trait Next {
     fn next(&self) -> Self;
@@ -257,8 +252,8 @@ impl<'a> Context<'a> {
 
     /// Return the current [Token] and [Span].
     fn peek(&self) -> (&Token, &Span) {
-        let token = self.tokens.get(self.curr).unwrap_or(&INVALID_TOKEN);
-        let span = self.spans.get(self.curr).unwrap_or(&INVALID_SPAN);
+        let token = self.tokens.get(self.curr).unwrap_or(&EOF);
+        let span = self.spans.get(self.curr).unwrap_or(&ZERO_SPAN);
         (token, span)
     }
 

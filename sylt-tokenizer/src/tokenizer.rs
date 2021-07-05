@@ -17,6 +17,12 @@ pub struct Span {
     pub col_end: usize,
 }
 
+pub static ZERO_SPAN: Span = Span {
+    line: 0,
+    col_start: 0,
+    col_end: 0,
+};
+
 impl Span {
     pub fn zero() -> Self {
         Self {
