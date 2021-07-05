@@ -138,7 +138,7 @@ mod tests {
         res
     }
 
-    fn vecs_match<T: PartialEq<T>>(a: &Vec<T>, b: &Vec<T>) -> bool {
+    fn vecs_match<T: PartialEq<U>, U>(a: &Vec<T>, b: &Vec<U>) -> bool {
         if a.len() == b.len() {
             a.iter().zip(b.iter()).all(|(a, b)| a == b)
         } else {
