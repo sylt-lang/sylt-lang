@@ -254,6 +254,12 @@ impl VM {
                 self.stack.extend(end);
             }
 
+            Op::Swap => {
+                let (a, b) = self.poppop();
+                self.push(b);
+                self.push(a);
+            }
+
             Op::Yield => {
                 self.frame_mut().ip += 1;
                 return Ok(OpResult::Yield);

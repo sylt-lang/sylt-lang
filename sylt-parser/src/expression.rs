@@ -350,25 +350,16 @@ fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 }
 
 fn if_short<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
+    use ExpressionKind::*;
+
     let span = ctx.span();
     let ctx = expect!(ctx, T::If, "Expected 'if' at start of if-expression");
 
-    use ExpressionKind::*;
-    let lhs = match ctx.token() {
-        // The duplicate hack doesn't work for arrow functions -
-        // so we have to mess with the stack in the compiler.
-        T::Arrow => lhs.clone(),
-
-        // This is a "hack" to simplify the compilation.
-        // We simply clone the value before doing the compare
-        // so we can keep it.
-        _ => Expression {
-            span: lhs.span,
-            kind: Duplicate(Box::new(lhs.clone())),
-        }
+    let lhs = Expression {
+        span: lhs.span,
+        kind: Duplicate(Box::new(lhs.clone())),
     };
 
-    println!("PEEK: {:?}", ctx.token());
     let (ctx, condition) = infix(ctx, &lhs)?;
     let ctx = expect!(
         ctx,
@@ -470,18 +461,15 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
 
         // The cool arrow syntax. For example: `a->b(2)` compiles to `b(a, 2)`.
         T::Arrow => {
-            use AssignableKind::Call;
+            use AssignableKind::{Call, ArrowCall};
             // Rhs has to be an ExpressionKind::Get(AssignableKind::Call).
             if let Get(Assignable {
-                kind: Call(callee, mut args),
+                kind: Call(callee, args),
                 ..
             }) = rhs.kind
             {
-                // Insert lhs as the first argument.
-                args.insert(0, *lhs);
-                // Return the new expression.
                 Get(Assignable {
-                    kind: Call(callee, args),
+                    kind: ArrowCall(lhs, callee, args),
                     span: rhs.span,
                 })
             } else {
@@ -782,7 +770,7 @@ mod test {
     test!(expression, call_args_chaining_bang: "a' 1, 2, 3 .b" => Get(_));
     test!(expression, call_args_chaining_bang_trailing: "a' 1, 2, 3, .b" => Get(_));
 
-    // TODO(ed): Verify 'a! -> b! -> c! == c(b(a()))' in some way
+    // TODO(ed): Verify 'a' -> b' -> c' == c(b(a()))' in some way
     test!(expression, call_arrow: "1 + 0 -> a' 2, 3" => Add(_, _));
     test!(expression, call_arrow_grouping: "(1 + 0) -> a' 2, 3" => Get(_));
 

@@ -292,12 +292,21 @@ impl Compiler {
             Read(ident) => {
                 return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
             }
-            Call(a, expr) => {
-                self.assignable(a, ctx);
+            Call(f, expr) => {
+                self.assignable(f, ctx);
                 for expr in expr.iter() {
                     self.expression(expr, ctx);
                 }
                 self.add_op(ctx, ass.span, Op::Call(expr.len()));
+            }
+            ArrowCall(pre, f, expr) => {
+                self.expression(pre, ctx);
+                self.assignable(f, ctx);
+                self.add_op(ctx, ass.span, Op::Swap);
+                for expr in expr.iter() {
+                    self.expression(expr, ctx);
+                }
+                self.add_op(ctx, ass.span, Op::Call(expr.len() + 1));
             }
             Access(a, field) => {
                 if let Some(namespace) = self.assignable(a, ctx) {
@@ -430,31 +439,9 @@ impl Compiler {
                 condition,
                 fail,
             } => {
-                // Results in 2 values pushed on the stack - since there's a duplicate in
+                // Results in 2 values pushed on the stack - since there's a Duplicate in
                 // there!
-                //
-                // The call is a special case - it means the code looks like:
-                // ```ignore
-                // a if -> f() else b
-                // ```
-                // So we need to handle this in a special way - hence the stack-juggling.
-                if let Expression { span: call_span, kind: Get(Assignable { kind: AssignableKind::Call(a, expr), .. }) } = &**condition {
-                    assert!(expr.len() > 0, "Has to have at least one expression in short if-expression calls");
-                    // Stack magic! gives us the follow layout: a f a b
-                    // while only evaluating `f` and `a` once!
-                    self.expression(expr.iter().next().unwrap(), ctx);
-                    self.assignable(a, ctx);
-                    self.add_op(ctx, *call_span, Op::Copy(2));
-                    self.add_op(ctx, *call_span, Op::Pop);
-
-                    for expr in expr.iter().skip(1) {
-                        self.expression(expr, ctx);
-                    }
-                    self.add_op(ctx, *call_span, Op::Call(expr.len()));
-
-                } else {
-                    self.expression(condition, ctx);
-                }
+                self.expression(condition, ctx);
 
                 let skip = self.add_op(ctx, expression.span, Op::Illegal);
                 let out = self.add_op(ctx, expression.span, Op::Illegal);
@@ -701,7 +688,7 @@ impl Compiler {
                 error!(self, ctx, assignable.span, "This is not a namespace");
                 None
             }
-            Call(_, _) => {
+            ArrowCall(..) | Call(..) => {
                 error!(self, ctx, assignable.span, "Cannot have calls in types");
                 None
             }
@@ -747,11 +734,11 @@ impl Compiler {
                     );
                     Type::Void
                 }),
-            Call(_, _) => {
+            ArrowCall(..) | Call(..) => {
                 error!(self, ctx, assignable.span, "Cannot have calls in types");
                 Type::Void
             }
-            Index(_, _) => {
+            Index(..) => {
                 error!(self, ctx, assignable.span, "Cannot have indexing in types");
                 Type::Void
             }
@@ -895,7 +882,7 @@ impl Compiler {
 
                         self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
                     }
-                    Call(_, _) => {
+                    ArrowCall(..) | Call(..) => {
                         error!(
                             self,
                             ctx, statement.span, "Cannot assign to result from function call"

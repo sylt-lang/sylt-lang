@@ -125,6 +125,8 @@ pub enum AssignableKind {
     Read(Identifier),
     /// A function call.
     Call(Box<Assignable>, Vec<Expression>),
+    /// An arrow function call. `a -> f' b`
+    ArrowCall(Box<Expression>, Box<Assignable>, Vec<Expression>),
     Access(Box<Assignable>, Identifier),
     Index(Box<Assignable>, Box<Expression>),
 }
@@ -520,6 +522,32 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
     sub_assignable(ctx, result)
 }
 
+/// Parse an [AssignableKind::Call]
+fn assignable_arrow_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, Assignable> {
+    let span = ctx.span();
+
+    let (ctx, call) = assignable(ctx)?;
+    use AssignableKind::{Call, ArrowCall};
+    match call.kind {
+        Call(func, args) => {
+            let callee = Expression {
+                span: callee.span,
+                kind: ExpressionKind::Get(callee),
+            };
+            let result = Assignable {
+                span,
+                kind: ArrowCall(Box::new(callee), func, args),
+            };
+            sub_assignable(ctx, result)
+        }
+        _ => {
+            raise_syntax_error!(ctx, "Expected a call-expression after '->'");
+        }
+    }
+
+}
+
+
 /// Parse an [AssignableKind::Index].
 fn assignable_index<'t>(ctx: Context<'t>, indexed: Assignable) -> ParseResult<'t, Assignable> {
     let span = ctx.span();
@@ -566,6 +594,7 @@ fn assignable_dot<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t,
 fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'t, Assignable> {
     match ctx.token() {
         T::Prime | T::LeftParen => assignable_call(ctx, assignable),
+        // T::Arrow => assignable_arrow_call(ctx, assignable),
         T::LeftBracket => assignable_index(ctx, assignable),
         T::Dot => assignable_dot(ctx, assignable),
         _ => Ok((ctx, assignable)),
