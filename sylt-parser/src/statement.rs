@@ -119,17 +119,33 @@ pub fn block_statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     let span = ctx.span();
     let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{' at start of block");
 
+    let mut errs = Vec::new();
     let mut statements = Vec::new();
     // Parse multiple inner statements until } or EOF
     while !matches!(ctx.token(), T::RightBrace | T::EOF) {
-        let (_ctx, stmt) = statement(ctx)?;
-        ctx = _ctx; // assign to outer
-        statements.push(stmt);
+        match statement(ctx) {
+            Ok((_ctx, stmt)) => {
+                ctx = _ctx; // assign to outer
+                statements.push(stmt);
+            }
+            Err((_ctx, mut err)) => {
+                ctx = _ctx.pop_skip_newlines(false);  // assign to outer
+                while !matches!(ctx.token(), T::Newline | T::EOF) {
+                    ctx = ctx.skip(1);
+                }
+                ctx = ctx.skip_if(T::Newline);
+                errs.append(&mut err);
+            }
+        }
     }
 
     let ctx = expect!(ctx, T::RightBrace, "Expected }} after block statement");
-    #[rustfmt::skip]
-    return Ok(( ctx, Statement { span, kind: StatementKind::Block { statements } }));
+    if errs.is_empty() {
+        #[rustfmt::skip]
+        return Ok(( ctx, Statement { span, kind: StatementKind::Block { statements } }));
+    } else {
+        Err(( ctx, errs ))
+    }
 }
 
 /// Parse a single [Statement].
