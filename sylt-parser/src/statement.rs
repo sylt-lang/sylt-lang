@@ -85,9 +85,6 @@ pub enum StatementKind {
         value: Expression,
     },
 
-    #[rustfmt::skip]
-    // TODO(ed): break and continue
-
     /// Groups together statements that are executed after another.
     ///
     /// `{ <statement>.. }`.

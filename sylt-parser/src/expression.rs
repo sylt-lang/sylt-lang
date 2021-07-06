@@ -793,7 +793,6 @@ mod test {
     test!(expression, call_args_chaining_bang: "a' 1, 2, 3 .b" => Get(_));
     test!(expression, call_args_chaining_bang_trailing: "a' 1, 2, 3, .b" => Get(_));
 
-    // TODO(ed): Verify 'a' -> b' -> c' == c(b(a()))' in some way
     test!(expression, call_arrow: "1 + 0 -> a' 2, 3" => Add(_, _));
     test!(expression, call_arrow_grouping: "(1 + 0) -> a' 2, 3" => Get(_));
 
