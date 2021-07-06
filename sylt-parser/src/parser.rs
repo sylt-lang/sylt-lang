@@ -490,6 +490,7 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
         match (ctx.token(), primer) {
             // Done with arguments.
             (T::EOF, _)
+            | (T::Else, _)
             | (T::RightParen, false)
             | (T::Dot, true)
             | (T::Newline, true)

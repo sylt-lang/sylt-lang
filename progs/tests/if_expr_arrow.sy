@@ -9,11 +9,14 @@ g :: fn a: int -> bool {
 
 start :: fn {
     a := 2 if -> f(2) -> g' else nil
-    a <=> 4
+    a <=> 2
 
-    b := 4 if -> f(3) -> g' else nil
+    b := 5 if -> f(3) -> g' else nil
     b <=> nil
 
-    b := 2 if -> f(2) -> f(2) -> g' else nil
-    b <=> nil
+    c := 2 if -> f(2) -> f(2) -> g' else nil
+    c <=> 2
+
+    d := 2 if -> f(3) -> f(2) -> g' else nil
+    d <=> nil
 }
