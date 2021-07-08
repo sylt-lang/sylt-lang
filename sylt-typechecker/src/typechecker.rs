@@ -47,10 +47,11 @@ macro_rules! two_op {
 pub struct VM {
     ignore_error: bool,
 
-    upvalues: Vec<Type>,
-    stack: Vec<Type>,
-    global_types: Vec<Type>,
     ip: usize,
+    stack: Vec<Type>,
+    upvalues: Vec<Type>,
+
+    global_types: Vec<Type>,
     block: Rc<RefCell<Block>>,
 }
 
@@ -126,6 +127,8 @@ impl VM {
     pub(crate) fn new(block: &Rc<RefCell<Block>>, global_types: Vec<Type>) -> Self {
         let mut vm = Self {
             ignore_error: false,
+            ip: 0,
+            stack: Vec::new(),
             upvalues: block
                 .borrow()
                 .upvalues
@@ -133,9 +136,7 @@ impl VM {
                 .map(|(_, _, ty)| ty)
                 .cloned()
                 .collect(),
-            stack: Vec::new(),
             global_types,
-            ip: 0,
             block: Rc::clone(block),
         };
 
