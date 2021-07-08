@@ -204,6 +204,107 @@ impl VM {
         unreachable!();
     }
 
+    fn call_callable(&self, callable: &Type, new_base: usize, prog: &Prog) -> Result<Type, RuntimeError> {
+        let args = self.stack[new_base + 1..].to_vec();
+        match callable {
+            Type::Blob(blob_slot) => {
+                let blob = &prog.blobs[*blob_slot];
+                let values = self.stack[new_base + 1..]
+                    .chunks_exact(2)
+                    .map(|b| {
+                        if let Type::Field(f) = &b[0] {
+                            (f.clone(), b[1].clone())
+                        } else {
+                            unreachable!("Got {:?}, expected field", b[0]);
+                        }
+                    })
+                    .collect::<HashMap<String, Type>>();
+
+                for (field, ty) in values.iter() {
+                    match blob.fields.get(field) {
+                        Some(given_ty) => {
+                            if let Err(msg) = given_ty.fits(ty, &prog.blobs) {
+                                return Err(RuntimeError::FieldTypeMismatch(
+                                    blob.name.clone(),
+                                    field.clone(),
+                                    ty.clone(),
+                                    given_ty.clone(),
+                                    msg,
+                                ));
+                            }
+                        }
+                        None => {
+                            return Err(RuntimeError::UnknownField(
+                                blob.name.clone(),
+                                field.clone(),
+                            ));
+                        }
+                    }
+                }
+
+                for (field, ty) in blob.fields.iter() {
+                    match (values.get(field), ty) {
+                        (Some(t), ty) => {
+                            if let Err(msg) = ty.fits(t, &prog.blobs) {
+                                return Err(RuntimeError::FieldTypeMismatch(
+                                    blob.name.clone(),
+                                    field.clone(),
+                                    ty.clone(),
+                                    t.clone(),
+                                    msg,
+                                ));
+                            }
+                        }
+                        (None, ty) => {
+                            if let Err(msg) = ty.fits(&Type::Void, &prog.blobs) {
+                                return Err(RuntimeError::FieldTypeMismatch(
+                                    blob.name.clone(),
+                                    field.clone(),
+                                    ty.clone(),
+                                    Type::Void,
+                                    msg,
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                Ok(Type::Instance(*blob_slot))
+            }
+
+            Type::Function(fargs, fret) => {
+                for (a, b) in fargs.iter().zip(args.iter()) {
+                    if let Err(msg) = a.fits(b, &prog.blobs) {
+                        return Err(RuntimeError::ArgumentType(
+                            fargs.clone(),
+                            args,
+                            msg,
+                        ));
+                    }
+                }
+                Ok((**fret).clone())
+            }
+
+            Type::ExternFunction(slot) => {
+                let extern_func = prog.functions[*slot];
+                let args: Vec<_> = self.stack[new_base + 1..]
+                    .to_vec()
+                    .into_iter()
+                    .map(Value::from)
+                    .collect();
+                let ctx = RuntimeContext {
+                    typecheck: true,
+                    blobs: &prog.blobs,
+                };
+                extern_func(&args, ctx).map(|r| r.into())
+            }
+
+            Type::Unknown => Ok(Type::Unknown),
+
+            _ => Err(RuntimeError::InvalidProgram),
+        }
+    }
+
     /// Checks the current operation for type errors.
     fn check_op(&mut self, op: Op, prog: &Prog) -> Result<(), Error> {
         match op {
@@ -629,113 +730,12 @@ impl VM {
                 let new_base = self.stack.len() - 1 - num_args;
                 let callable = &self.stack[new_base];
 
-                let call_callable = |callable: &Type| {
-                    let args = self.stack[new_base + 1..].to_vec();
-                    match callable {
-                        Type::Blob(blob_slot) => {
-                            let blob = &prog.blobs[*blob_slot];
-                            let values = self.stack[new_base + 1..]
-                                .chunks_exact(2)
-                                .map(|b| {
-                                    if let Type::Field(f) = &b[0] {
-                                        (f.clone(), b[1].clone())
-                                    } else {
-                                        unreachable!("Got {:?}, expected field", b[0]);
-                                    }
-                                })
-                                .collect::<HashMap<String, Type>>();
-
-                            for (field, ty) in values.iter() {
-                                match blob.fields.get(field) {
-                                    Some(given_ty) => {
-                                        if let Err(msg) = given_ty.fits(ty, &prog.blobs) {
-                                            return Err(RuntimeError::FieldTypeMismatch(
-                                                blob.name.clone(),
-                                                field.clone(),
-                                                ty.clone(),
-                                                given_ty.clone(),
-                                                msg,
-                                            ));
-                                        }
-                                    }
-                                    None => {
-                                        return Err(RuntimeError::UnknownField(
-                                            blob.name.clone(),
-                                            field.clone(),
-                                        ));
-                                    }
-                                }
-                            }
-
-                            for (field, ty) in blob.fields.iter() {
-                                match (values.get(field), ty) {
-                                    (Some(t), ty) => {
-                                        if let Err(msg) = ty.fits(t, &prog.blobs) {
-                                            return Err(RuntimeError::FieldTypeMismatch(
-                                                blob.name.clone(),
-                                                field.clone(),
-                                                ty.clone(),
-                                                t.clone(),
-                                                msg,
-                                            ));
-                                        }
-                                    }
-                                    (None, ty) => {
-                                        if let Err(msg) = ty.fits(&Type::Void, &prog.blobs) {
-                                            return Err(RuntimeError::FieldTypeMismatch(
-                                                blob.name.clone(),
-                                                field.clone(),
-                                                ty.clone(),
-                                                Type::Void,
-                                                msg,
-                                            ));
-                                        }
-                                    }
-                                }
-                            }
-
-                            Ok(Type::Instance(*blob_slot))
-                        }
-
-                        Type::Function(fargs, fret) => {
-                            for (a, b) in fargs.iter().zip(args.iter()) {
-                                if let Err(msg) = a.fits(b, &prog.blobs) {
-                                    return Err(RuntimeError::ArgumentType(
-                                        fargs.clone(),
-                                        args,
-                                        msg,
-                                    ));
-                                }
-                            }
-                            Ok((**fret).clone())
-                        }
-
-                        Type::ExternFunction(slot) => {
-                            let extern_func = prog.functions[*slot];
-                            let args: Vec<_> = self.stack[new_base + 1..]
-                                .to_vec()
-                                .into_iter()
-                                .map(Value::from)
-                                .collect();
-                            let ctx = RuntimeContext {
-                                typecheck: true,
-                                blobs: &prog.blobs,
-                            };
-                            extern_func(&args, ctx).map(|r| r.into())
-                        }
-
-                        Type::Unknown => Ok(Type::Unknown),
-
-                        _ => Err(RuntimeError::InvalidProgram),
-                    }
-                };
-
                 let mut err = None;
                 self.stack[new_base] = match callable {
                     Type::Union(alts) => {
                         let mut returns = HashSet::new();
                         for alt in alts.iter() {
-                            if let Ok(res) = call_callable(&alt) {
+                            if let Ok(res) = self.call_callable(&alt, new_base, prog) {
                                 returns.insert(Type::from(res));
                             }
                         }
@@ -746,7 +746,7 @@ impl VM {
                             Type::Union(returns)
                         }
                     }
-                    _ => match call_callable(callable) {
+                    _ => match self.call_callable(callable, new_base, prog) {
                         Err(e) => {
                             err = Some(e);
                             Type::Void
