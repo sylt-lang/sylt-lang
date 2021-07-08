@@ -39,7 +39,7 @@ pub fn push<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, Runt
             let ls = ls.borrow();
             assert!(ls.len() == 1);
             let ls = Type::from(&ls[0]);
-            let v: Type = Type::from(&*v);
+            let v = Type::from(&*v);
             if ls == v || matches!(ls, Type::Unknown) {
                 Ok(Value::Nil)
             } else {
