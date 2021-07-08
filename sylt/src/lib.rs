@@ -28,9 +28,7 @@ pub fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Pr
     };
     let tree = sylt_parser::tree(&path)?;
     if args.dump_tree {
-        println!("VVV TREE VVV");
-        println!("{:#?}", tree);
-        println!("^^^ TREE ^^^");
+        println!("Syntax tree: {:#?}", tree);
     }
     let prog = sylt_compiler::compile(tree, &functions)?;
     Ok(prog)
