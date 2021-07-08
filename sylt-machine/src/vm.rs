@@ -4,10 +4,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt::Debug;
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::rc::Rc;
-use sylt_common::{
-    Blob, Block, BlockLinkState, Op, Prog, RuntimeContext, RustFunction, Type, UpValue,
-    Value,
-};
+use sylt_common::{Blob, Block, BlockLinkState, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction, Type, UpValue, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -71,16 +68,6 @@ pub struct VM {
     pub print_exec: bool,
 
     extern_functions: Vec<RustFunction>,
-}
-
-#[derive(Eq, PartialEq)]
-pub enum OpResult {
-    Yield,
-    Done,
-
-    // Will never be returned.
-    #[doc(hidden)]
-    Continue,
 }
 
 impl VM {
@@ -199,6 +186,76 @@ impl VM {
         }
     }
 
+    fn print_stack(&self) {
+        let start = self.frame().stack_offset;
+        print!("    {:3} [", start);
+        for (i, s) in self.stack.iter().skip(start).enumerate() {
+            if i != 0 {
+                print!(" ");
+            }
+            print!("{:?}", s.green());
+        }
+        println!("]");
+
+        println!(
+            "{:5} {:05} {:?}",
+            self.frame().block.borrow().line(self.frame().ip).blue(),
+            self.frame().ip.red(),
+            self.frame().block.borrow().ops[self.frame().ip]
+        );
+    }
+
+    #[doc(hidden)]
+    pub fn init(&mut self, prog: &Prog) {
+        let block = Rc::clone(&prog.blocks[0]);
+        self.constants = prog.constants.clone();
+        self.strings = prog.strings.clone();
+        self.blocks = prog.blocks.clone();
+        self.blobs = prog.blobs.clone();
+
+        self.extern_functions = prog.functions.clone();
+        self.stack.clear();
+        self.frames.clear();
+
+        self.push(Value::Function(
+            Rc::new(Vec::new()),
+            Type::Function(Vec::new(), Box::new(Type::Void)),
+            0,
+        ));
+
+        self.frames.push(Frame {
+            stack_offset: 0,
+            block,
+            ip: 0,
+            contains_upvalues: false,
+        });
+    }
+
+    /// Simulates the program.
+    pub fn run(&mut self) -> Result<OpResult, Error> {
+        if self.print_bytecode {
+            println!("\n    [[{}]]\n", "RUNNING".red());
+            self.frame()
+                .block
+                .borrow()
+                .debug_print(Some(&self.constants));
+        }
+
+        loop {
+            #[cfg(debug_assertions)]
+            if self.print_exec {
+                self.print_stack()
+            }
+
+            let op = self.eval_op(self.op())?;
+            if matches!(op, OpResult::Done | OpResult::Yield) {
+                return Ok(op);
+            }
+        }
+    }
+}
+
+impl Machine for VM {
     /// Runs a single operation on the VM
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error> {
         match op {
@@ -741,74 +798,6 @@ impl VM {
         }
         self.frame_mut().ip += 1;
         Ok(OpResult::Continue)
-    }
-
-    fn print_stack(&self) {
-        let start = self.frame().stack_offset;
-        print!("    {:3} [", start);
-        for (i, s) in self.stack.iter().skip(start).enumerate() {
-            if i != 0 {
-                print!(" ");
-            }
-            print!("{:?}", s.green());
-        }
-        println!("]");
-
-        println!(
-            "{:5} {:05} {:?}",
-            self.frame().block.borrow().line(self.frame().ip).blue(),
-            self.frame().ip.red(),
-            self.frame().block.borrow().ops[self.frame().ip]
-        );
-    }
-
-    #[doc(hidden)]
-    pub fn init(&mut self, prog: &Prog) {
-        let block = Rc::clone(&prog.blocks[0]);
-        self.constants = prog.constants.clone();
-        self.strings = prog.strings.clone();
-        self.blocks = prog.blocks.clone();
-        self.blobs = prog.blobs.clone();
-
-        self.extern_functions = prog.functions.clone();
-        self.stack.clear();
-        self.frames.clear();
-
-        self.push(Value::Function(
-            Rc::new(Vec::new()),
-            Type::Function(Vec::new(), Box::new(Type::Void)),
-            0,
-        ));
-
-        self.frames.push(Frame {
-            stack_offset: 0,
-            block,
-            ip: 0,
-            contains_upvalues: false,
-        });
-    }
-
-    /// Simulates the program.
-    pub fn run(&mut self) -> Result<OpResult, Error> {
-        if self.print_bytecode {
-            println!("\n    [[{}]]\n", "RUNNING".red());
-            self.frame()
-                .block
-                .borrow()
-                .debug_print(Some(&self.constants));
-        }
-
-        loop {
-            #[cfg(debug_assertions)]
-            if self.print_exec {
-                self.print_stack()
-            }
-
-            let op = self.eval_op(self.op())?;
-            if matches!(op, OpResult::Done | OpResult::Yield) {
-                return Ok(op);
-            }
-        }
     }
 }
 

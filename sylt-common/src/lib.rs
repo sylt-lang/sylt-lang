@@ -10,7 +10,8 @@ pub mod value;
 
 pub use blob::Blob;
 pub use block::{Block, BlockLinkState};
-pub use op::Op;
+pub use error::Error;
+pub use op::{Op, OpResult};
 pub use prog::Prog;
 pub use ty::Type;
 pub use upvalue::UpValue;
@@ -19,6 +20,10 @@ pub use value::{MatchableValue, Value};
 /// A linkable external function. Created either manually or using
 /// [sylt_macro::extern_function].
 pub type RustFunction = fn(&[Value], RuntimeContext) -> Result<Value, error::RuntimeError>;
+
+pub trait Machine {
+    fn eval_op(&mut self, op: Op) -> Result<OpResult, Error>;
+}
 
 pub struct RuntimeContext<'t> {
     pub typecheck: bool,
