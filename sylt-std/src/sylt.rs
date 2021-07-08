@@ -17,6 +17,20 @@ pub fn dbg<'t>(values: &[Value], _ctx: RuntimeContext<'t>) -> Result<Value, Runt
     Ok(Value::Nil)
 }
 
+#[sylt_macro::sylt_link(call, "sylt_std::sylt")]
+pub fn call(values: &[Value], ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
+    match (values, ctx.typecheck) {
+        ([Value::Function(_, ret, _)], true) => Ok(Value::from(ret)),
+        ([Value::Function(_params, _ret, _)], false) => {
+            Ok(Value::Nil)
+        }
+        (values, _) => Err(RuntimeError::ExternTypeMismatch(
+            "call".to_string(),
+            values.iter().map(Type::from).collect(),
+        ))
+    }
+}
+
 #[sylt_macro::sylt_doc(push, "Appends an element to the end of a list", [One(List(ls)), One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(push, "sylt_std::sylt")]
 pub fn push<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
