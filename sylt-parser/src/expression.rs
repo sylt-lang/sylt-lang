@@ -453,6 +453,9 @@ fn arrow_call<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Express
 fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
     use ExpressionKind::*;
 
+    // If there is no precedence - it's the start of an expression.
+    // All valid operators have a precedence value that is differnt
+    // from `Prec::no`.
     match (ctx.token(), precedence(ctx.skip(1).token())) {
         (T::If, Prec::No) => {
             return if_expression(ctx, lhs);
