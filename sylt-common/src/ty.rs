@@ -149,31 +149,49 @@ impl Type {
     /// Checks if the other type is valid in a place where the self type is. It's an asymmetrical
     /// comparison for types useful when checking assignment.
     pub fn fits(&self, other: &Self, blobs: &[Blob]) -> Result<(), String> {
+        let mut same = HashSet::new();
+        self.inner_fits(other, blobs, &mut same)
+    }
+
+    /// The type-comparison heavy-weight champion.
+    /// Compares types recursively by proving they're not equal.
+    fn inner_fits<'t>(&'t self, other: &'t Self, blobs: &'t [Blob],
+                      same: &mut HashSet<(&'t Type, &'t Type)>) -> Result<(), String> {
+        // If we've seen the pair before - they have to match,
+        // otherwise it isn't done and will fail later. We don't
+        // need to do (infinetly) more work.
+        if same.contains(&(self, other)) {
+            return Ok(());
+        }
+        same.insert((self, other));
+
         match (self, other) {
             (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
-            (Type::List(a), Type::List(b)) => a.fits(b, blobs),
-            (Type::Set(a), Type::Set(b)) => a.fits(b, blobs),
+            (Type::List(a), Type::List(b)) => a.inner_fits(b, blobs, same),
+            (Type::Set(a), Type::Set(b)) => a.inner_fits(b, blobs, same),
             (Type::Dict(ak, av), Type::Dict(bk, bv)) => {
-                ak.fits(bk, blobs)?;
-                av.fits(bv, blobs)
+                ak.inner_fits(bk, blobs, same)?;
+                av.inner_fits(bv, blobs, same)
             }
             (Type::Union(_), Type::Union(b)) => {
                 // NOTE(ed): Does this cause infinite recursion?
-                if b.iter().any(|x| self.fits(x, blobs).is_err()) {
+                if b.iter().any(|x| self.inner_fits(x, blobs, same).is_err()) {
                     Err(format!("'{:?}' doesn't fit a '{:?}'", self, other))
                 } else {
                     Ok(())
                 }
             }
             (Type::Instance(a), Type::Instance(b)) | (Type::Blob(a), Type::Blob(b)) => {
+
+                assert!(same.len() < 10);
+
                 let a_fields = &blobs[*a].fields;
                 let b_fields = &blobs[*b].fields;
                 for (f, t) in a_fields.iter() {
                     if let Some(y) = b_fields.get(f) {
-                        // NOTE(ed): It might be tempting to put a `fits`
-                        // call here. Don't! It will cause infinite recursion
-                        // if a type that has itself as a field in any way.
-                        if t != y {
+                        // This is what the passed in set is for - it breaks this
+                        // recursion.
+                        if t.inner_fits(y, blobs, same).is_err() {
                             return Err(
                                 format!(
                                     "'{}' is not a '{}', field '{:?}' has type '{:?}' but expected '{:?}'",
