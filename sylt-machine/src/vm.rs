@@ -5,7 +5,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt::Debug;
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::rc::Rc;
-use sylt_common::{Blob, Block, BlockLinkState, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction, Type, UpValue, Value};
+use sylt_common::{Blob, Block, BlockLinkState, Frame, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction, Type, UpValue, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -44,14 +44,6 @@ macro_rules! two_op {
         }
         $self.push(c);
     };
-}
-
-#[derive(Debug)]
-struct Frame {
-    stack_offset: usize,
-    block: Rc<RefCell<Block>>,
-    ip: usize,
-    contains_upvalues: bool,
 }
 
 pub struct VM {
@@ -270,8 +262,27 @@ impl Machine for VM {
         &self.blobs
     }
 
+    fn block(&self, slot: usize) -> Rc<RefCell<Block>> {
+        Rc::clone(&self.blocks[slot])
+    }
+
     fn push_value(&mut self, value: Value) {
         self.stack.push(value);
+    }
+
+    fn eval_frame(&mut self, frame: Frame) -> Result<Value, Error> {
+        self.frames.push(frame);
+        let cur_frame = self.frames.len();
+        while self.frames.len() >= cur_frame {
+            #[cfg(debug_assertions)]
+            if self.print_exec {
+                self.print_stack()
+            }
+
+            self.eval_op(self.op())?;
+        }
+        // Take the return value from the stack.
+        Ok(self.stack.pop().unwrap())
     }
 
     /// Runs a single operation on the VM

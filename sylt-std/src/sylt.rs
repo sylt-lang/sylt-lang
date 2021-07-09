@@ -3,7 +3,7 @@ use crate as sylt_std;
 use owo_colors::OwoColorize;
 use sylt_common::error::RuntimeError;
 use sylt_common::rc::Rc;
-use sylt_common::{Blob, Op, RuntimeContext, Type, Value};
+use sylt_common::{Blob, Frame, Op, RuntimeContext, Type, Value};
 
 #[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", [One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(dbg, "sylt_std::sylt")]
@@ -24,12 +24,18 @@ pub fn call(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     match (values.as_ref(), ctx.typecheck) {
         ([Value::Function(params, ret, _)], true) if params.is_empty()
             => return Ok(Value::from(ret)),
-        ([Value::Function(params, ret, slot)], false) => {
+        ([Value::Function(params, ret, block_slot)], false) => {
             if params.is_empty() {
-                let func = Value::Function(Rc::clone(params), ret.clone(), *slot);
+                let func = Value::Function(Rc::clone(params), ret.clone(), *block_slot);
+                let block = Rc::clone(&ctx.machine.block(*block_slot));
                 ctx.machine.push_value(func);
-                ctx.machine.eval_op(Op::Call(0)).unwrap();
-                return Ok(ctx.machine.stack_at(0).into_owned());
+                let frame = Frame {
+                    stack_offset: ctx.stack_base - 1,
+                    block,
+                    ip: 0,
+                    contains_upvalues: true,
+                };
+                return Ok(ctx.machine.eval_frame(frame).unwrap());
             }
         }
         _ => {}

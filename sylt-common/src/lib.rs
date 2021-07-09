@@ -9,12 +9,14 @@ pub mod upvalue;
 pub mod value;
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 
 pub use blob::Blob;
 pub use block::{Block, BlockLinkState};
 pub use error::Error;
 pub use op::{Op, OpResult};
 pub use prog::Prog;
+use rc::Rc;
 pub use ty::Type;
 pub use upvalue::UpValue;
 pub use value::{MatchableValue, Value};
@@ -23,11 +25,21 @@ pub use value::{MatchableValue, Value};
 /// [sylt_macro::extern_function].
 pub type RustFunction = fn(RuntimeContext) -> Result<Value, error::RuntimeError>;
 
+#[derive(Debug)]
+pub struct Frame {
+    pub stack_offset: usize,
+    pub block: Rc<RefCell<Block>>,
+    pub ip: usize,
+    pub contains_upvalues: bool,
+}
+
 pub trait Machine {
     fn stack_from_base(&self, base: usize) -> Cow<[Value]>;
     fn stack_at(&self, at: usize) -> Cow<Value>;
     fn blobs(&self) -> &[Blob];
+    fn block(&self, block_slot: usize) -> Rc<RefCell<Block>>;
     fn push_value(&mut self, value: Value);
+    fn eval_frame(&mut self, frame: Frame) -> Result<Value, Error>;
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error>;
 }
 
