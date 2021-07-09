@@ -3,12 +3,12 @@ use crate as sylt_std;
 use owo_colors::OwoColorize;
 use sylt_common::error::RuntimeError;
 use sylt_common::rc::Rc;
-use sylt_common::{Blob, RuntimeContext, Type, Value};
+use sylt_common::{Blob, Op, RuntimeContext, Type, Value};
 
 #[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", [One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(dbg, "sylt_std::sylt")]
 pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack(ctx.args);
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
     println!(
         "{}: {:?}, {:?}",
         "DBG".purple(),
@@ -20,17 +20,24 @@ pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
 
 #[sylt_macro::sylt_link(call, "sylt_std::sylt")]
 pub fn call(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack(ctx.args);
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
     match (values.as_ref(), ctx.typecheck) {
-        ([Value::Function(_, ret, _)], true) => Ok(Value::from(ret)),
-        ([Value::Function(_params, _ret, _)], false) => {
-            Ok(Value::Nil)
+        ([Value::Function(params, ret, _)], true) if params.is_empty()
+            => return Ok(Value::from(ret)),
+        ([Value::Function(params, ret, slot)], false) => {
+            if params.is_empty() {
+                let func = Value::Function(Rc::clone(params), ret.clone(), *slot);
+                ctx.machine.push_value(func);
+                ctx.machine.eval_op(Op::Call(0)).unwrap();
+                return Ok(ctx.machine.stack_at(0).into_owned());
+            }
         }
-        (values, _) => Err(RuntimeError::ExternTypeMismatch(
-            "call".to_string(),
-            values.iter().map(Type::from).collect(),
-        ))
+        _ => {}
     }
+    return Err(RuntimeError::ExternTypeMismatch(
+        "call".to_string(),
+        values.iter().map(Type::from).collect(),
+    ));
 }
 /*
 #[sylt_macro::sylt_doc(push, "Appends an element to the end of a list", [One(List(ls)), One(Value(val))] Type::Void)]

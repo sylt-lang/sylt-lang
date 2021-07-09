@@ -24,13 +24,15 @@ pub use value::{MatchableValue, Value};
 pub type RustFunction = fn(RuntimeContext) -> Result<Value, error::RuntimeError>;
 
 pub trait Machine {
-    fn stack(&self, base: usize) -> Cow<[Value]>;
+    fn stack_from_base(&self, base: usize) -> Cow<[Value]>;
+    fn stack_at(&self, at: usize) -> Cow<Value>;
     fn blobs(&self) -> &[Blob];
+    fn push_value(&mut self, value: Value);
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error>;
 }
 
 pub struct RuntimeContext<'m> {
     pub typecheck: bool,
-    pub args: usize,
+    pub stack_base: usize,
     pub machine: &'m mut dyn Machine,
 }

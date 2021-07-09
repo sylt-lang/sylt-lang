@@ -308,7 +308,7 @@ impl VM {
                 let extern_func = self.extern_functions[slot];
                 let ctx = RuntimeContext {
                     typecheck: true,
-                    args: new_base + 1,
+                    stack_base: new_base + 1,
                     machine: self,
                 };
                 extern_func(ctx).map(|r| r.into())
@@ -322,12 +322,21 @@ impl VM {
 }
 
 impl Machine for VM {
-    fn stack(&self, base: usize) -> Cow<[Value]> {
+    fn stack_from_base(&self, base: usize) -> Cow<[Value]> {
         Cow::Owned(self.stack[base..].iter().map(Value::from).collect::<Vec<_>>())
+    }
+
+    fn stack_at(&self, at: usize) -> Cow<Value> {
+        let top = self.stack.len() - 1;
+        Cow::Owned(Value::from(&self.stack[top - at]))
     }
 
     fn blobs(&self) -> &[Blob] {
         &self.blobs
+    }
+
+    fn push_value(&mut self, value: Value) {
+        self.stack.push(Type::from(value));
     }
 
     /// Checks the current operation for type errors.

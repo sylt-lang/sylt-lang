@@ -257,12 +257,21 @@ impl VM {
 }
 
 impl Machine for VM {
-    fn stack(&self, base: usize) -> Cow<[Value]> {
+    fn stack_from_base(&self, base: usize) -> Cow<[Value]> {
         Cow::Borrowed(&self.stack[base..])
+    }
+
+    fn stack_at(&self, at: usize) -> Cow<Value> {
+        let top = self.stack.len() - 1;
+        Cow::Borrowed(&self.stack[top - at])
     }
 
     fn blobs(&self) -> &[Blob] {
         &self.blobs
+    }
+
+    fn push_value(&mut self, value: Value) {
+        self.stack.push(value);
     }
 
     /// Runs a single operation on the VM
@@ -768,7 +777,7 @@ impl Machine for VM {
                         let extern_func = self.extern_functions[slot];
                         let ctx = RuntimeContext {
                             typecheck: false,
-                            args: new_base + 1,
+                            stack_base: new_base + 1,
                             machine: self,
                         };
                         let res = match extern_func(ctx) {
