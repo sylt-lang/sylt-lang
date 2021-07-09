@@ -25,6 +25,7 @@ pub type RustFunction = fn(&[Value], RuntimeContext) -> Result<Value, error::Run
 
 pub trait Machine {
     fn stack(&self) -> Cow<[Value]>;
+    fn blobs(&self) -> &[Blob];
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error>;
 }
 

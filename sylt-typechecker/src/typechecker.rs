@@ -330,6 +330,10 @@ impl Machine for VM {
         Cow::Owned(self.stack.iter().map(Value::from).collect::<Vec<_>>())
     }
 
+    fn blobs(&self) -> &[Blob] {
+        &self.blobs
+    }
+
     /// Checks the current operation for type errors.
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error> {
         match op {

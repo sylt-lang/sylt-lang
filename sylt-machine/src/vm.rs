@@ -261,6 +261,10 @@ impl Machine for VM {
         Cow::Borrowed(&self.stack)
     }
 
+    fn blobs(&self) -> &[Blob] {
+        &self.blobs
+    }
+
     /// Runs a single operation on the VM
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error> {
         match op {
