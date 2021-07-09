@@ -257,8 +257,8 @@ impl VM {
 }
 
 impl Machine for VM {
-    fn stack(&self) -> Cow<[Value]> {
-        Cow::Borrowed(&self.stack)
+    fn stack(&self, base: usize) -> Cow<[Value]> {
+        Cow::Borrowed(&self.stack[base..])
     }
 
     fn blobs(&self) -> &[Blob] {

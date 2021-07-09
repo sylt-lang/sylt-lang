@@ -322,8 +322,8 @@ impl VM {
 }
 
 impl Machine for VM {
-    fn stack(&self) -> Cow<[Value]> {
-        Cow::Owned(self.stack.iter().map(Value::from).collect::<Vec<_>>())
+    fn stack(&self, base: usize) -> Cow<[Value]> {
+        Cow::Owned(self.stack[base..].iter().map(Value::from).collect::<Vec<_>>())
     }
 
     fn blobs(&self) -> &[Blob] {

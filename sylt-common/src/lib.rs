@@ -24,7 +24,7 @@ pub use value::{MatchableValue, Value};
 pub type RustFunction = fn(RuntimeContext) -> Result<Value, error::RuntimeError>;
 
 pub trait Machine {
-    fn stack(&self) -> Cow<[Value]>;
+    fn stack(&self, base: usize) -> Cow<[Value]>;
     fn blobs(&self) -> &[Blob];
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error>;
 }

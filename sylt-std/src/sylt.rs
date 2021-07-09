@@ -8,7 +8,7 @@ use sylt_common::{Blob, RuntimeContext, Type, Value};
 #[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", [One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(dbg, "sylt_std::sylt")]
 pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack();
+    let values = ctx.machine.stack(ctx.args);
     println!(
         "{}: {:?}, {:?}",
         "DBG".purple(),
@@ -20,7 +20,7 @@ pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
 
 #[sylt_macro::sylt_link(call, "sylt_std::sylt")]
 pub fn call(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack();
+    let values = ctx.machine.stack(ctx.args);
     match (values.as_ref(), ctx.typecheck) {
         ([Value::Function(_, ret, _)], true) => Ok(Value::from(ret)),
         ([Value::Function(_params, _ret, _)], false) => {
