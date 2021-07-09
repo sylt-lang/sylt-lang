@@ -822,7 +822,7 @@ impl Compiler {
             IsCheck { lhs, rhs } => {
                 let lhs = self.resolve_type(lhs, ctx);
                 let rhs = self.resolve_type(rhs, ctx);
-                if let Err(msg) = lhs.fits(&rhs, &self.blobs) {
+                if let Err(msg) = rhs.fits(&lhs, &self.blobs) {
                     error!(
                         self,
                         ctx, statement.span,

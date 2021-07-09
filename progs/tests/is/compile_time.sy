@@ -14,8 +14,8 @@ C :: blob {
 }
 
 :B is :B
-:A is :B
-:A is :C
-:B is :C
+:B is :A
+:C is :A
+:C is :B
 
 start :: fn { }

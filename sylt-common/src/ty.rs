@@ -34,7 +34,7 @@ impl Hash for Type {
     fn hash<H: Hasher>(&self, h: &mut H) {
         self.to_number().hash(h);
         match self {
-            Type::Field(_) | Type::Invalid => unimplemented!(),
+            Type::Field(f) => f.hash(h),
 
             Type::List(t) | Type::Set(t)
                 => t.as_ref().hash(h),
@@ -67,6 +67,7 @@ impl Hash for Type {
             | Type::Int
             | Type::Float
             | Type::Bool
+            | Type::Invalid
             | Type::ExternFunction(..)
             | Type::String => {}
         }
@@ -173,6 +174,38 @@ impl Type {
                 ak.inner_fits(bk, blobs, same)?;
                 av.inner_fits(bv, blobs, same)
             }
+            (Type::Tuple(a), Type::Tuple(b)) => {
+                for (i, (x, y)) in a.iter().zip(b).enumerate() {
+                    if x.inner_fits(y, blobs, same).is_err() {
+                        return Err(
+                            format!(
+                                "'{:?}' is not a '{:?}', element #{} has type '{:?}' but expected '{:?}'",
+                                self,
+                                other,
+                                i,
+                                y,
+                                x
+                            ));
+                    }
+                }
+                Ok(())
+            }
+            (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
+                for (i, (x, y)) in a_args.iter().zip(b_args).enumerate() {
+                    if x.inner_fits(y, blobs, same).is_err() {
+                        return Err(
+                            format!(
+                                "'{:?}' is not a '{:?}', argument #{} has type '{:?}' but expected '{:?}'",
+                                self,
+                                other,
+                                i,
+                                y,
+                                x
+                        ));
+                    }
+                }
+                a_ret.inner_fits(b_ret, blobs, same)
+            }
             (Type::Union(_), Type::Union(b)) => {
                 // NOTE(ed): Does this cause infinite recursion?
                 if b.iter().any(|x| self.inner_fits(x, blobs, same).is_err()) {
@@ -182,9 +215,6 @@ impl Type {
                 }
             }
             (Type::Instance(a), Type::Instance(b)) | (Type::Blob(a), Type::Blob(b)) => {
-
-                assert!(same.len() < 10);
-
                 let a_fields = &blobs[*a].fields;
                 let b_fields = &blobs[*b].fields;
                 for (f, t) in a_fields.iter() {
@@ -212,14 +242,14 @@ impl Type {
                 Ok(())
             }
             (a, Type::Union(b)) => {
-                if !b.iter().all(|x| x == a) {
+                if !b.iter().all(|x| x.inner_fits(a, blobs, same).is_ok()) {
                     Err(format!("'{:?}' cannot fit a '{:?}'", a, other))
                 } else {
                     Ok(())
                 }
             }
             (Type::Union(a), b) => {
-                if a.iter().any(|x| x == b) {
+                if a.iter().any(|x| x.inner_fits(b, blobs, same).is_ok()) {
                     Ok(())
                 } else {
                     Err(format!("'{:?}' cannot fit a '{:?}'", self, other))
