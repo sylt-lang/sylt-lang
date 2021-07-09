@@ -30,7 +30,7 @@ pub fn call(values: &[Value], ctx: RuntimeContext<'_>) -> Result<Value, RuntimeE
         ))
     }
 }
-
+/*
 #[sylt_macro::sylt_doc(push, "Appends an element to the end of a list", [One(List(ls)), One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(push, "sylt_std::sylt")]
 pub fn push<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
@@ -262,5 +262,5 @@ pub fn pop<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, Runti
         )),
     }
 }
-
+*/
 sylt_macro::sylt_link_gen!("sylt_std::sylt");

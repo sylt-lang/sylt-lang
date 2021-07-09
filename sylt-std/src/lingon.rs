@@ -51,7 +51,7 @@ std::thread_local! {
     static PARTICLES: Mutex<Vec<lingon::renderer::ParticleSystem>> = Mutex::new(Vec::new());
     static GAME: Mutex<Game<std::string::String>> = Mutex::new(Game::new("Lingon - Sylt", 500, 500));
 }
-
+/*
 sylt_macro::extern_function!(
     "sylt_std::lingon"
     l_update
@@ -915,3 +915,4 @@ pub fn l_load_audio<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Val
 }
 
 sylt_macro::sylt_link_gen!("sylt_std::lingon");
+*/
