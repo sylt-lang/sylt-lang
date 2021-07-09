@@ -8,6 +8,8 @@ pub mod ty;
 pub mod upvalue;
 pub mod value;
 
+use std::borrow::Cow;
+
 pub use blob::Blob;
 pub use block::{Block, BlockLinkState};
 pub use error::Error;
@@ -22,6 +24,7 @@ pub use value::{MatchableValue, Value};
 pub type RustFunction = fn(&[Value], RuntimeContext) -> Result<Value, error::RuntimeError>;
 
 pub trait Machine {
+    fn stack(&self) -> Cow<[Value]>;
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error>;
 }
 

@@ -1,4 +1,5 @@
 use owo_colors::OwoColorize;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt::Debug;
@@ -256,6 +257,10 @@ impl VM {
 }
 
 impl Machine for VM {
+    fn stack(&self) -> Cow<[Value]> {
+        Cow::Borrowed(&self.stack)
+    }
+
     /// Runs a single operation on the VM
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error> {
         match op {

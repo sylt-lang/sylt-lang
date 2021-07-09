@@ -1,4 +1,5 @@
 use owo_colors::OwoColorize;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
@@ -325,6 +326,10 @@ impl VM {
 }
 
 impl Machine for VM {
+    fn stack(&self) -> Cow<[Value]> {
+        Cow::Owned(self.stack.iter().map(Value::from).collect::<Vec<_>>())
+    }
+
     /// Checks the current operation for type errors.
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error> {
         match op {
