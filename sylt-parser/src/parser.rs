@@ -125,6 +125,8 @@ pub enum AssignableKind {
     Read(Identifier),
     /// A function call.
     Call(Box<Assignable>, Vec<Expression>),
+    /// An arrow function call. `a -> f' b`
+    ArrowCall(Box<Expression>, Box<Assignable>, Vec<Expression>),
     Access(Box<Assignable>, Identifier),
     Index(Box<Assignable>, Box<Expression>),
 }
@@ -488,6 +490,7 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
         match (ctx.token(), primer) {
             // Done with arguments.
             (T::EOF, _)
+            | (T::Else, _)
             | (T::RightParen, false)
             | (T::Dot, true)
             | (T::Newline, true)

@@ -85,9 +85,6 @@ pub enum StatementKind {
         value: Expression,
     },
 
-    #[rustfmt::skip]
-    // TODO(ed): break and continue
-
     /// Groups together statements that are executed after another.
     ///
     /// `{ <statement>.. }`.
@@ -426,12 +423,16 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 ))
             }
 
-            // TODO(ed): Potenitally risky - might destroy errors aswell
-            if let Ok((ctx, kind)) = assignment(ctx) {
-                (ctx, kind)
-            } else {
-                let (ctx, value) = expression(ctx)?;
-                (ctx, StatementExpression { value })
+            match (assignment(ctx), expression(ctx)) {
+                (Ok((ctx, kind)), _) => (ctx, kind),
+                (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
+                (Err((_, mut ass_errs)), Err((_, mut expr_errs))) => {
+                    ass_errs.append(&mut expr_errs);
+                    ass_errs.push(
+                        syntax_error!(ctx, "Neither an assignment or a expression")
+                    );
+                    return Err((ctx, ass_errs));
+                }
             }
         }
     };

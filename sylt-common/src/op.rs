@@ -23,6 +23,10 @@ pub enum Op {
     ///
     /// {A, B} - Copy(2) - {A, B, A, B}
     Copy(usize),
+    /// Swaps the two top stack elements.
+    ///
+    /// {A, B} - Swap(2) - {B, A}
+    Swap,
     /// Adds the value indexed in the `constants-vector` to the top of the stack.
     /// Also links upvalues if the value is a function.
     ///

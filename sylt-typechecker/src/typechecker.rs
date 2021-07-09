@@ -220,6 +220,12 @@ impl VM {
                 self.stack.extend(end);
             }
 
+            Op::Swap => {
+                let (a, b) = self.poppop();
+                self.push(b);
+                self.push(a);
+            }
+
             Op::ReadLocal(n) => {
                 let ty = self.stack[n].clone();
                 if matches!(ty, Type::Unknown) {

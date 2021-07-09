@@ -292,12 +292,21 @@ impl Compiler {
             Read(ident) => {
                 return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
             }
-            Call(a, expr) => {
-                self.assignable(a, ctx);
+            Call(f, expr) => {
+                self.assignable(f, ctx);
                 for expr in expr.iter() {
                     self.expression(expr, ctx);
                 }
                 self.add_op(ctx, ass.span, Op::Call(expr.len()));
+            }
+            ArrowCall(pre, f, expr) => {
+                self.expression(pre, ctx);
+                self.assignable(f, ctx);
+                self.add_op(ctx, ass.span, Op::Swap);
+                for expr in expr.iter() {
+                    self.expression(expr, ctx);
+                }
+                self.add_op(ctx, ass.span, Op::Call(expr.len() + 1));
             }
             Access(a, field) => {
                 if let Some(namespace) = self.assignable(a, ctx) {
@@ -403,6 +412,8 @@ impl Compiler {
             }
             Not(a) => self.un_op(a, &[Op::Not], expression.span, ctx),
 
+            Duplicate(a) => self.un_op(a, &[Op::Copy(1)], expression.span, ctx),
+
             IfExpression {
                 condition,
                 pass,
@@ -423,6 +434,33 @@ impl Compiler {
 
                 self.add_op(ctx, expression.span, Op::Union);
             }
+
+            IfShort {
+                condition,
+                fail,
+            } => {
+                // Results in 2 values pushed on the stack - since there's a Duplicate in
+                // there!
+                self.expression(condition, ctx);
+
+                let skip = self.add_op(ctx, expression.span, Op::Illegal);
+                let out = self.add_op(ctx, expression.span, Op::Illegal);
+
+                // Only done during the typechecker - mitigates the pop-operation
+                // so the types can be compound.
+                self.add_op(ctx, expression.span, Op::Copy(1));
+
+                let op = Op::JmpFalse(self.next_ip(ctx));
+                self.patch(ctx, skip, op);
+
+                self.add_op(ctx, expression.span, Op::Pop);
+                self.expression(fail, ctx);
+                let op = Op::Jmp(self.next_ip(ctx));
+                self.patch(ctx, out, op);
+
+                self.add_op(ctx, expression.span, Op::Union);
+            }
+
 
             Function {
                 name,
@@ -650,7 +688,7 @@ impl Compiler {
                 error!(self, ctx, assignable.span, "This is not a namespace");
                 None
             }
-            Call(_, _) => {
+            ArrowCall(..) | Call(..) => {
                 error!(self, ctx, assignable.span, "Cannot have calls in types");
                 None
             }
@@ -696,11 +734,11 @@ impl Compiler {
                     );
                     Type::Void
                 }),
-            Call(_, _) => {
+            ArrowCall(..) | Call(..) => {
                 error!(self, ctx, assignable.span, "Cannot have calls in types");
                 Type::Void
             }
-            Index(_, _) => {
+            Index(..) => {
                 error!(self, ctx, assignable.span, "Cannot have indexing in types");
                 Type::Void
             }
@@ -844,7 +882,7 @@ impl Compiler {
 
                         self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
                     }
-                    Call(_, _) => {
+                    ArrowCall(..) | Call(..) => {
                         error!(
                             self,
                             ctx, statement.span, "Cannot assign to result from function call"

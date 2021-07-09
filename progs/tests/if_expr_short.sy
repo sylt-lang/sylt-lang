@@ -1,0 +1,17 @@
+
+sum :: fn a: int, b: int -> int {
+    a + b
+}
+
+sum_is_large :: fn a: int, b: int -> bool {
+    a + b > 3
+}
+
+start :: fn {
+    a := 1 + 2 + 3 if < 2 else 3 + 4
+    a <=> 7
+    b := 3 if -> sum(2) -> sum_is_large(2) else nil
+    b <=> 3
+    c := 3 if -> sum_is_large(-2) else nil
+    c <=> nil
+}
