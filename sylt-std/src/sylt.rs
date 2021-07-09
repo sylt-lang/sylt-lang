@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use crate as sylt_std;
 
 use owo_colors::OwoColorize;
@@ -45,6 +47,40 @@ pub fn call(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         values.iter().map(Type::from).collect(),
     ));
 }
+
+#[sylt_macro::sylt_link(for_each, "sylt_std::sylt")]
+pub fn for_each(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match (values.as_ref(), ctx.typecheck) {
+        ([Value::List(..), Value::Function(_params, _, _)], true) => {
+            //WIP Check number of params.
+            return Ok(Value::Nil);
+        }
+        ([Value::List(values), Value::Function(params, ret, block_slot)], false) => {
+            let values = (**values).clone();
+            let func = Value::Function(Rc::clone(params), ret.clone(), *block_slot);
+            let block = Rc::clone(&ctx.machine.block(*block_slot));
+            for value in values.borrow().iter() {
+                ctx.machine.push_value(func.clone());
+                ctx.machine.push_value(value.clone());
+                let frame = Frame {
+                    stack_offset: ctx.stack_base - 1,
+                    block: Rc::clone(&block),
+                    ip: 0,
+                    contains_upvalues: true,
+                };
+                ctx.machine.eval_frame(frame).unwrap();
+            }
+            return Ok(Value::Nil);
+        }
+        _ => {}
+    }
+    return Err(RuntimeError::ExternTypeMismatch(
+        "for_each".to_string(),
+        values.iter().map(Type::from).collect(),
+    ));
+}
+
 /*
 #[sylt_macro::sylt_doc(push, "Appends an element to the end of a list", [One(List(ls)), One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(push, "sylt_std::sylt")]
