@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::rc::Rc;
-use sylt_common::{Blob, Block, BlockLinkState, Op, Prog, RuntimeContext, RustFunction, Type, Value};
+use sylt_common::{Blob, Block, BlockLinkState, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction, Type, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -115,7 +115,7 @@ fn typecheck_block(
             _ => *op,
         };
 
-        if let Err(e) = vm.check_op(op) {
+        if let Err(e) = vm.eval_op(op) {
             if !vm.ignore_error {
                 errors.push(e);
             }
@@ -322,9 +322,11 @@ impl VM {
             _ => Err(RuntimeError::InvalidProgram),
         }
     }
+}
 
+impl Machine for VM {
     /// Checks the current operation for type errors.
-    fn check_op(&mut self, op: Op) -> Result<(), Error> {
+    fn eval_op(&mut self, op: Op) -> Result<OpResult, Error> {
         match op {
             Op::Illegal => {}
             Op::Unreachable => {}
@@ -884,7 +886,7 @@ impl VM {
                 }
             }
         }
-        Ok(())
+        Ok(OpResult::Done)
     }
 }
 
