@@ -819,6 +819,19 @@ impl Compiler {
                 }
             }
 
+            IsCheck { lhs, rhs } => {
+                let lhs = self.resolve_type(lhs, ctx);
+                let rhs = self.resolve_type(rhs, ctx);
+                if let Err(msg) = lhs.fits(&rhs, &self.blobs) {
+                    error!(
+                        self,
+                        ctx, statement.span,
+                        "Is-check failed - {}",
+                        msg
+                    );
+                }
+            }
+
             Print { value } => {
                 self.expression(value, ctx);
                 self.add_op(ctx, statement.span, Op::Print);
@@ -1257,6 +1270,9 @@ impl Compiler {
                     // Already handled in the loop before.
                     Blob { .. } => (),
 
+                    // Handled later - since we need the type information.
+                    IsCheck { .. } => (),
+
                     _ => {
                         error!(self, ctx, statement.span, "Invalid outer statement");
                     }
@@ -1276,6 +1292,7 @@ fn all_paths_return(statement: &Statement) -> bool {
     match &statement.kind {
         StatementKind::Use { .. }
         | StatementKind::Blob { .. }
+        | StatementKind::IsCheck { .. }
         | StatementKind::Print { .. }
         | StatementKind::Assignment { .. }
         | StatementKind::Definition { .. }
