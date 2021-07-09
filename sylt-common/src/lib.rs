@@ -21,7 +21,7 @@ pub use value::{MatchableValue, Value};
 
 /// A linkable external function. Created either manually or using
 /// [sylt_macro::extern_function].
-pub type RustFunction = fn(&[Value], RuntimeContext) -> Result<Value, error::RuntimeError>;
+pub type RustFunction = fn(RuntimeContext) -> Result<Value, error::RuntimeError>;
 
 pub trait Machine {
     fn stack(&self) -> Cow<[Value]>;
@@ -29,7 +29,8 @@ pub trait Machine {
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error>;
 }
 
-pub struct RuntimeContext<'t> {
+pub struct RuntimeContext<'m> {
     pub typecheck: bool,
-    pub blobs: &'t [Blob],
+    pub args: usize,
+    pub machine: &'m mut dyn Machine,
 }

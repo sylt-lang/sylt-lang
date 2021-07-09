@@ -223,11 +223,11 @@ impl VM {
         unreachable!();
     }
 
-    fn call_callable(&self, callable: &Type, new_base: usize) -> Result<Type, RuntimeError> {
+    fn call_callable(&mut self, callable: Type, new_base: usize) -> Result<Type, RuntimeError> {
         let args = self.stack[new_base + 1..].to_vec();
         match callable {
             Type::Blob(blob_slot) => {
-                let blob = &self.blobs[*blob_slot];
+                let blob = &self.blobs[blob_slot];
                 let values = self.stack[new_base + 1..]
                     .chunks_exact(2)
                     .map(|b| {
@@ -288,7 +288,7 @@ impl VM {
                     }
                 }
 
-                Ok(Type::Instance(*blob_slot))
+                Ok(Type::Instance(blob_slot))
             }
 
             Type::Function(fargs, fret) => {
@@ -301,21 +301,17 @@ impl VM {
                         ));
                     }
                 }
-                Ok((**fret).clone())
+                Ok((*fret).clone())
             }
 
             Type::ExternFunction(slot) => {
-                let extern_func = self.extern_functions[*slot];
-                let args: Vec<_> = self.stack[new_base + 1..]
-                    .to_vec()
-                    .into_iter()
-                    .map(Value::from)
-                    .collect();
+                let extern_func = self.extern_functions[slot];
                 let ctx = RuntimeContext {
                     typecheck: true,
-                    blobs: &self.blobs,
+                    args: new_base + 1,
+                    machine: self,
                 };
-                extern_func(&args, ctx).map(|r| r.into())
+                extern_func(ctx).map(|r| r.into())
             }
 
             Type::Unknown => Ok(Type::Unknown),
@@ -767,8 +763,8 @@ impl Machine for VM {
                 self.stack[new_base] = match callable {
                     Type::Union(alts) => {
                         let mut returns = HashSet::new();
-                        for alt in alts.iter() {
-                            if let Ok(res) = self.call_callable(&alt, new_base) {
+                        for alt in alts.clone().into_iter() {
+                            if let Ok(res) = self.call_callable(alt, new_base) {
                                 returns.insert(Type::from(res));
                             }
                         }
@@ -779,12 +775,15 @@ impl Machine for VM {
                             Type::Union(returns)
                         }
                     }
-                    _ => match self.call_callable(callable, new_base) {
-                        Err(e) => {
-                            err = Some(e);
-                            Type::Void
+                    _ => {
+                        let callable = callable.clone();
+                        match self.call_callable(callable, new_base) {
+                            Err(e) => {
+                                err = Some(e);
+                                Type::Void
+                            }
+                            Ok(v) => Type::from(v),
                         }
-                        Ok(v) => Type::from(v),
                     },
                 };
 

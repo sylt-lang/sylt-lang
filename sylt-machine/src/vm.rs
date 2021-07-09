@@ -768,9 +768,10 @@ impl Machine for VM {
                         let extern_func = self.extern_functions[slot];
                         let ctx = RuntimeContext {
                             typecheck: false,
-                            blobs: &self.blobs,
+                            args: new_base + 1,
+                            machine: self,
                         };
-                        let res = match extern_func(&self.stack[new_base + 1..], ctx) {
+                        let res = match extern_func(ctx) {
                             Ok(value) => value,
                             Err(ek) => error!(self, ek, "Failed in external function"),
                         };
