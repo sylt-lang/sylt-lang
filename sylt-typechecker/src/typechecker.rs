@@ -53,10 +53,12 @@ pub struct VM {
 
     blobs: Vec<Blob>,
     constants: Vec<Value>,
+    strings: Vec<String>,
     extern_functions: Vec<RustFunction>,
 
     global_types: Vec<Type>,
-    block: Rc<RefCell<Block>>,
+    cur_block: usize,
+    blocks: Vec<Rc<RefCell<Block>>>,
 }
 
 // Checks the program for type errors.
@@ -91,7 +93,7 @@ fn typecheck_block(
         block.borrow().debug_print(Some(&prog.constants));
     }
 
-    let mut vm = VM::new(&block, prog, global_types);
+    let mut vm = VM::new(block_slot, prog, global_types);
     let mut errors = Vec::new();
     let ops = (*block).borrow().ops.clone();
     for (ip, op) in ops.iter().enumerate() {
@@ -113,7 +115,7 @@ fn typecheck_block(
             _ => *op,
         };
 
-        if let Err(e) = vm.check_op(op, prog) {
+        if let Err(e) = vm.check_op(op) {
             if !vm.ignore_error {
                 errors.push(e);
             }
@@ -128,23 +130,27 @@ fn typecheck_block(
 }
 
 impl VM {
-    pub(crate) fn new(block: &Rc<RefCell<Block>>, prog: &Prog, global_types: Vec<Type>) -> Self {
+    pub(crate) fn new(cur_block: usize, prog: &Prog, global_types: Vec<Type>) -> Self {
+        let block = Rc::clone(&prog.blocks[cur_block]);
+        let upvalues = block
+            .borrow()
+            .upvalues
+            .iter()
+            .map(|(_, _, ty)| ty)
+            .cloned()
+            .collect();
         let mut vm = Self {
             ignore_error: false,
             ip: 0,
             stack: Vec::new(),
-            upvalues: block
-                .borrow()
-                .upvalues
-                .iter()
-                .map(|(_, _, ty)| ty)
-                .cloned()
-                .collect(),
+            upvalues,
             blobs: prog.blobs.clone(),
             constants: prog.constants.clone(),
+            strings: prog.strings.clone(),
             extern_functions: prog.functions.clone(),
             global_types,
-            block: Rc::clone(block),
+            cur_block,
+            blocks: prog.blocks.clone(),
         };
 
         vm.push(block.borrow().ty.clone());
@@ -167,9 +173,9 @@ impl VM {
 
         println!(
             "{:5} {:05} {:?}",
-            self.block.borrow().line(self.ip).blue(),
+            self.block().borrow().line(self.ip).blue(),
             self.ip.red(),
-            self.block.borrow().ops[self.ip]
+            self.block().borrow().ops[self.ip]
         );
     }
 
@@ -195,19 +201,23 @@ impl VM {
         (b, a) // this matches the order they were on the stack
     }
 
+    fn block(&self) -> Rc<RefCell<Block>> {
+        Rc::clone(&self.blocks[self.cur_block])
+    }
+
     fn error(&self, kind: RuntimeError, message: Option<String>) -> Error {
         Error::RuntimeError {
             kind,
             phase: RuntimePhase::Typecheck,
-            file: self.block.borrow().file.clone(),
-            line: self.block.borrow().line(self.ip),
+            file: self.block().borrow().file.clone(),
+            line: self.block().borrow().line(self.ip),
             message,
         }
     }
 
     /// Stop the program, violently
     fn crash_and_burn(&self) -> ! {
-        println!("Typecheck failed for {}", self.block.borrow().name);
+        println!("Typecheck failed for {}", self.block().borrow().name);
         self.print_stack();
         unreachable!();
     }
@@ -314,7 +324,7 @@ impl VM {
     }
 
     /// Checks the current operation for type errors.
-    fn check_op(&mut self, op: Op, prog: &Prog) -> Result<(), Error> {
+    fn check_op(&mut self, op: Op) -> Result<(), Error> {
         match op {
             Op::Illegal => {}
             Op::Unreachable => {}
@@ -391,8 +401,9 @@ impl VM {
                 self.push(ty);
                 let value = &self.constants[slot];
 
+                //
                 while let Value::Function(_, _, block) = value {
-                    let block = Rc::clone(&prog.blocks[*block]);
+                    let block = Rc::clone(&self.blocks[*block]);
                     match block.borrow().linking {
                         BlockLinkState::Linked => break,
                         BlockLinkState::Nothing => {}
@@ -431,7 +442,7 @@ impl VM {
                 let (inst, expect) = self.poppop();
                 match inst {
                     Type::Instance(ty) => {
-                        let field = &prog.strings[field];
+                        let field = &self.strings[field];
                         let ty = &self.blobs[ty];
                         match ty.fields.get(field) {
                             Some(ty) => {
@@ -461,7 +472,7 @@ impl VM {
             }
 
             Op::GetField(field) => match self.pop() {
-                Type::Instance(ty) => match &*prog.strings[field] {
+                Type::Instance(ty) => match &*self.strings[field] {
                     "_id" => {
                         self.push(Type::Int);
                     }
@@ -476,10 +487,11 @@ impl VM {
                             }
                             _ => {
                                 let name = ty.name.clone();
+                                let field = field.to_string();
                                 self.push(Type::Invalid);
                                 error!(
                                     self,
-                                    RuntimeError::UnknownField(name, field.to_string())
+                                    RuntimeError::UnknownField(name, field)
                                 );
                             }
                         }
@@ -520,7 +532,7 @@ impl VM {
 
             Op::Return => {
                 let to_ret = self.pop();
-                let ret = self.block.borrow().ret().clone();
+                let ret = self.block().borrow().ret().clone();
                 if to_ret != ret {
                     error!(
                         self,
@@ -584,11 +596,10 @@ impl VM {
             Op::Link(slot) => {
                 match &self.constants[slot] {
                     Value::Function(_, _, block) => {
-                        let block = &prog.blocks[*block];
-                        block.borrow_mut().linking = BlockLinkState::Linked;
+                        self.block().borrow_mut().linking = BlockLinkState::Linked;
 
                         let mut types = Vec::new();
-                        for (slot, is_up, ty) in block.borrow().upvalues.iter() {
+                        for (slot, is_up, ty) in self.blocks[*block].borrow().upvalues.iter() {
                             if *is_up {
                                 types.push(ty.clone());
                             } else {
@@ -596,7 +607,7 @@ impl VM {
                             }
                         }
 
-                        let mut block_mut = block.borrow_mut();
+                        let mut block_mut = self.blocks[*block].borrow_mut();
                         for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
                             if *is_up {
                                 continue;
