@@ -18,24 +18,6 @@ pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     Ok(Value::Nil)
 }
 
-#[sylt_macro::sylt_link(call, "sylt_std::sylt")]
-pub fn call(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match values.as_ref() {
-        [callable] => {
-            let callable = callable.clone();
-            ctx.machine.eval_call(callable, &[]).unwrap();
-            return Ok(Value::Nil);
-        }
-        _ => {}
-    }
-
-    return Err(RuntimeError::ExternTypeMismatch(
-        "call".to_string(),
-        values.iter().map(Type::from).collect(),
-    ));
-}
-
 #[sylt_macro::sylt_link(for_each, "sylt_std::sylt")]
 pub fn for_each(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
