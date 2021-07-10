@@ -156,11 +156,16 @@ impl Type {
 
     /// The type-comparison heavy-weight champion.
     /// Compares types recursively by proving they're not equal.
-    fn inner_fits<'t>(&'t self, other: &'t Self, blobs: &'t [Blob],
-                      same: &mut HashSet<(&'t Type, &'t Type)>) -> Result<(), String> {
+    fn inner_fits<'t>(
+        &'t self,
+        other: &'t Self,
+        blobs: &'t [Blob],
+        same: &mut HashSet<(&'t Type, &'t Type)>
+    ) -> Result<(), String> {
+
         // If we've seen the pair before - they have to match,
         // otherwise it isn't done and will fail later. We don't
-        // need to do (infinetly) more work.
+        // need to do (infinitely) more work.
         if same.contains(&(self, other)) {
             return Ok(());
         }
