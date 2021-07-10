@@ -24,15 +24,18 @@ pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
 pub fn call(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     match (values.as_ref(), ctx.typecheck) {
-        ([Value::Function(params, ret, _)], true) if params.is_empty()
-            => return Ok(Value::from(ret)),
-        ([Value::Function(params, ret, block_slot)], false) => {
+        ([Value::Function(_, Type::Function(params, ret), _)], true) => {
             if params.is_empty() {
-                let func = Value::Function(Rc::clone(params), ret.clone(), *block_slot);
+                return Ok(Value::from(ret.as_ref()));
+            }
+        }
+        ([Value::Function(params, ty, block_slot)], false) => {
+            if params.is_empty() {
+                let func = Value::Function(Rc::clone(params), ty.clone(), *block_slot);
                 let block = Rc::clone(&ctx.machine.block(*block_slot));
                 ctx.machine.push_value(func);
                 let frame = Frame {
-                    stack_offset: ctx.stack_base - 1,
+                    stack_offset: ctx.stack_base + 1,
                     block,
                     ip: 0,
                     contains_upvalues: true,
@@ -52,9 +55,13 @@ pub fn call(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 pub fn for_each(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     match (values.as_ref(), ctx.typecheck) {
-        ([Value::List(..), Value::Function(_params, _, _)], true) => {
-            //WIP Check number of params.
-            return Ok(Value::Nil);
+        ([Value::List(_), Value::Function(_, Type::Function(params, ret), _)], true) => {
+            if params.len() == 1 {
+                //TODO(gu): Check that list type matches function parameter type.
+                return Ok(Value::from(ret.as_ref()));
+            } else {
+                //TODO(gu): Report new RuntimeError::? here containing custom error message
+            }
         }
         ([Value::List(values), Value::Function(params, ret, block_slot)], false) => {
             let values = (**values).clone();
@@ -64,7 +71,7 @@ pub fn for_each(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
                 ctx.machine.push_value(func.clone());
                 ctx.machine.push_value(value.clone());
                 let frame = Frame {
-                    stack_offset: ctx.stack_base - 1,
+                    stack_offset: ctx.stack_base + 2,
                     block: Rc::clone(&block),
                     ip: 0,
                     contains_upvalues: true,
