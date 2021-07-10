@@ -32,8 +32,16 @@ D :: blob {
 :fn int, D -> int is : fn int, C -> int
 :fn int, C -> int is : fn int, D -> int
 
+:D | C is :C
+:C is :D | C
+
+// TODO(ed): One of these should fail
+// :D | C is :D
+// :D is :D | D
+
 start :: fn {}
 
+// error: Error::CompileError { .. }
 // error: Error::CompileError { .. }
 // error: Error::CompileError { .. }
 // error: Error::CompileError { .. }

@@ -207,7 +207,6 @@ impl Type {
                 a_ret.inner_fits(b_ret, blobs, same)
             }
             (Type::Union(_), Type::Union(b)) => {
-                // NOTE(ed): Does this cause infinite recursion?
                 if b.iter().any(|x| self.inner_fits(x, blobs, same).is_err()) {
                     Err(format!("'{:?}' doesn't fit a '{:?}'", self, other))
                 } else {
@@ -219,8 +218,6 @@ impl Type {
                 let b_fields = &blobs[*b].fields;
                 for (f, t) in a_fields.iter() {
                     if let Some(y) = b_fields.get(f) {
-                        // This is what the passed in set is for - it breaks this
-                        // recursion.
                         if t.inner_fits(y, blobs, same).is_err() {
                             return Err(
                                 format!(
@@ -243,7 +240,7 @@ impl Type {
             }
             (a, Type::Union(b)) => {
                 if !b.iter().all(|x| x.inner_fits(a, blobs, same).is_ok()) {
-                    Err(format!("'{:?}' cannot fit a '{:?}'", a, other))
+                    Err(format!("'{:?}' cannot fit a '{:?}'", self, other))
                 } else {
                     Ok(())
                 }
