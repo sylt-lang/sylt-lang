@@ -13,7 +13,7 @@ C :: blob {
     c: str,
 }
 
-:A is :B
-:A is :C
+:B is :A
+:C is :A
 
 start :: fn { }
