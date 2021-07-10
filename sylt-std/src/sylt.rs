@@ -18,38 +18,23 @@ pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     Ok(Value::Nil)
 }
 
-/*
 #[sylt_macro::sylt_link(call, "sylt_std::sylt")]
 pub fn call(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match (values.as_ref(), ctx.typecheck) {
-        ([Value::Function(_, Type::Function(params, ret), _)], true) => {
-            if params.is_empty() {
-                return Ok(Value::from(ret.as_ref()));
-            }
-        }
-        ([Value::Function(params, ty, block_slot)], false) => {
-            if params.is_empty() {
-                let func = Value::Function(Rc::clone(params), ty.clone(), *block_slot);
-                let block = Rc::clone(&ctx.machine.block(*block_slot));
-                ctx.machine.push_value(func);
-                let frame = Frame {
-                    stack_offset: ctx.stack_base + 1,
-                    block,
-                    ip: 0,
-                    contains_upvalues: true,
-                };
-                return Ok(ctx.machine.eval_frame(frame).unwrap());
-            }
+    match values.as_ref() {
+        [callable] => {
+            let callable = callable.clone();
+            ctx.machine.eval_call(callable, &[]).unwrap();
+            return Ok(Value::Nil);
         }
         _ => {}
     }
+
     return Err(RuntimeError::ExternTypeMismatch(
         "call".to_string(),
         values.iter().map(Type::from).collect(),
     ));
 }
-*/
 
 #[sylt_macro::sylt_link(for_each, "sylt_std::sylt")]
 pub fn for_each(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
