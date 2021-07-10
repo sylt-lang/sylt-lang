@@ -18,6 +18,7 @@ pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     Ok(Value::Nil)
 }
 
+/*
 #[sylt_macro::sylt_link(call, "sylt_std::sylt")]
 pub fn call(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
@@ -48,38 +49,23 @@ pub fn call(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         values.iter().map(Type::from).collect(),
     ));
 }
+*/
 
 #[sylt_macro::sylt_link(for_each, "sylt_std::sylt")]
 pub fn for_each(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match (values.as_ref(), ctx.typecheck) {
-        ([Value::List(_), Value::Function(_, Type::Function(params, ret), _)], true) => {
-            if params.len() == 1 {
-                //TODO(gu): Check that list type matches function parameter type.
-                return Ok(Value::from(ret.as_ref()));
-            } else {
-                //TODO(gu): Report new RuntimeError::? here containing custom error message
-            }
-        }
-        ([Value::List(values), Value::Function(params, ret, block_slot)], false) => {
-            let values = (**values).clone();
-            let func = Value::Function(Rc::clone(params), ret.clone(), *block_slot);
-            let block = Rc::clone(&ctx.machine.block(*block_slot));
-            for value in values.borrow().iter() {
-                ctx.machine.push_value(func.clone());
-                ctx.machine.push_value(value.clone());
-                let frame = Frame {
-                    stack_offset: ctx.stack_base + 2,
-                    block: Rc::clone(&block),
-                    ip: 0,
-                    contains_upvalues: true,
-                };
-                ctx.machine.eval_frame(frame).unwrap();
+    match values.as_ref() {
+        [Value::List(list), callable] => {
+            let list = Rc::clone(list);
+            let callable = callable.clone();
+            for element in list.borrow().iter() {
+                ctx.machine.eval_call(callable.clone(), &[element]).unwrap();
             }
             return Ok(Value::Nil);
         }
         _ => {}
     }
+
     return Err(RuntimeError::ExternTypeMismatch(
         "for_each".to_string(),
         values.iter().map(Type::from).collect(),

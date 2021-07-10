@@ -35,12 +35,9 @@ pub struct Frame {
 
 pub trait Machine {
     fn stack_from_base(&self, base: usize) -> Cow<[Value]>;
-    fn stack_at(&self, at: usize) -> Cow<Value>;
     fn blobs(&self) -> &[Blob];
-    fn block(&self, block_slot: usize) -> Rc<RefCell<Block>>;
-    fn push_value(&mut self, value: Value);
-    fn eval_frame(&mut self, frame: Frame) -> Result<Value, Error>;
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error>;
+    fn eval_call(&mut self, callable: Value, args: &[&Value]) -> Result<Value, Error>;
 }
 
 pub struct RuntimeContext<'m> {

@@ -252,25 +252,16 @@ impl Machine for VM {
         Cow::Borrowed(&self.stack[base..])
     }
 
-    fn stack_at(&self, at: usize) -> Cow<Value> {
-        let top = self.stack.len() - 1;
-        Cow::Borrowed(&self.stack[top - at])
-    }
-
     fn blobs(&self) -> &[Blob] {
         &self.blobs
     }
 
-    fn block(&self, slot: usize) -> Rc<RefCell<Block>> {
-        Rc::clone(&self.blocks[slot])
-    }
+    fn eval_call(&mut self, callable: Value, args: &[&Value]) -> Result<Value, Error> {
+        self.push(callable);
+        let num_args = args.len();
+        args.iter().for_each(|value| self.push(Value::clone(value)));
+        self.eval_op(Op::Call(num_args))?;
 
-    fn push_value(&mut self, value: Value) {
-        self.stack.push(value);
-    }
-
-    fn eval_frame(&mut self, frame: Frame) -> Result<Value, Error> {
-        self.frames.push(frame);
         let cur_frame = self.frames.len();
         while self.frames.len() >= cur_frame {
             #[cfg(debug_assertions)]
@@ -281,7 +272,7 @@ impl Machine for VM {
             self.eval_op(self.op())?;
         }
         // Take the return value from the stack.
-        Ok(self.stack.pop().unwrap())
+        Ok(self.pop())
     }
 
     /// Runs a single operation on the VM

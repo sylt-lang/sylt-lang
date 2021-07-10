@@ -326,25 +326,19 @@ impl Machine for VM {
         Cow::Owned(self.stack[base..].iter().map(Value::from).collect::<Vec<_>>())
     }
 
-    fn stack_at(&self, at: usize) -> Cow<Value> {
-        let top = self.stack.len() - 1;
-        Cow::Owned(Value::from(&self.stack[top - at]))
-    }
-
     fn blobs(&self) -> &[Blob] {
         &self.blobs
     }
 
-    fn push_value(&mut self, value: Value) {
-        self.stack.push(Type::from(value));
-    }
-
-    fn block(&self, block_slot: usize) -> Rc<RefCell<Block>> {
-        Rc::clone(&self.blocks[block_slot])
-    }
-
-    fn eval_frame(&mut self, frame: Frame) -> Result<Value, Error> {
-        Ok(Value::from(&frame.block.borrow().ty))
+    fn eval_call(&mut self, callable: Value, args: &[&Value]) -> Result<Value, Error> {
+        self.push(Type::from(callable));
+        let num_args = args.len();
+        args.iter().for_each(|value| {
+            self.push(Type::from(*value));
+        });
+        self.eval_op(Op::Call(num_args))?;
+        // Take the return value from the stack.
+        Ok(Value::from(self.pop()))
     }
 
     /// Checks the current operation for type errors.
