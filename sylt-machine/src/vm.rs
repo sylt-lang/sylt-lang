@@ -259,10 +259,14 @@ impl Machine for VM {
         &self.blobs
     }
 
+    /// Calls `callable` with `args`. Continues to run until the call returns and then returns the
+    /// returned value.
     fn eval_call(&mut self, callable: Value, args: &[&Value]) -> Result<Value, Error> {
         self.push(callable);
         let num_args = args.len();
         args.iter().for_each(|value| self.push(Value::clone(value)));
+        // Since the Op::Call below isn't a compiled instruction, we need to store the current
+        // instruction pointer and restore it when we return to this frame.
         let ip = self.frame().ip;
         self.eval_op(Op::Call(num_args))?;
 
@@ -275,6 +279,7 @@ impl Machine for VM {
 
             self.eval_op(self.op())?;
         }
+        // Restore the instruction pointer.
         self.frame_mut().ip = ip;
         // Take the return value from the stack.
         Ok(self.pop())
