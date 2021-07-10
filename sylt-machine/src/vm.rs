@@ -260,6 +260,7 @@ impl Machine for VM {
         self.push(callable);
         let num_args = args.len();
         args.iter().for_each(|value| self.push(Value::clone(value)));
+        let ip = self.frame().ip;
         self.eval_op(Op::Call(num_args))?;
 
         let cur_frame = self.frames.len();
@@ -271,6 +272,7 @@ impl Machine for VM {
 
             self.eval_op(self.op())?;
         }
+        self.frame_mut().ip = ip;
         // Take the return value from the stack.
         Ok(self.pop())
     }

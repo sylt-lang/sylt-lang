@@ -6,4 +6,4 @@ start :: fn {
     [1, 2] -> for_each(g)
 }
 
-// error: #ExternTypeMismatch(..)
+// error: _
