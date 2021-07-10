@@ -26,7 +26,15 @@ D :: blob {
 :C is :D
 :D is :C
 
+:(int, D) is :(int, C)
+:(int, C) is :(int, D)
+
+:fn int, D -> int is : fn int, C -> int
+:fn int, C -> int is : fn int, D -> int
+
 start :: fn {}
 
+// error: Error::CompileError { .. }
+// error: Error::CompileError { .. }
 // error: Error::CompileError { .. }
 // error: Error::CompileError { .. }
