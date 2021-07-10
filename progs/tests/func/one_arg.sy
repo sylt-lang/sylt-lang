@@ -1,5 +1,0 @@
-start :: fn {
-    f := fn a:int { a <=> 1 }
-    f' 1
-
-}

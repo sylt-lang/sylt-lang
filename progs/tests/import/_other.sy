@@ -1,7 +1,0 @@
-a :: fn -> int {
-    ret 1
-}
-
-b :: fn a: int -> int {
-    ret a
-}

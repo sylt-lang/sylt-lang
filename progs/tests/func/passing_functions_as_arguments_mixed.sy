@@ -1,9 +1,0 @@
-start :: fn {
-    g := fn a: int -> int {
-        ret a * 2
-    }
-    f := fn inner: fn int -> int, a: int -> int {
-        ret inner(a)
-    }
-    f(g, 2) <=> 4
-}

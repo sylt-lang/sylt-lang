@@ -1,9 +1,0 @@
-start :: fn {
-    a :: [1, 2, 3]
-    (0 in a) <=> false
-    ("123" in a) <=> true
-    (2 in a) <=> "123"
-}
-
-// error: #TypeMismatch(Type::Int, Type::String)
-// error: #TypeError(_, _)

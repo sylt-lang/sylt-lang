@@ -1,8 +1,0 @@
-start :: fn {
-    a :: {1, 2, 3, 1}
-    (1 in a) <=> true
-    (2 in a) <=> true
-    (3 in a) <=> true
-    (0 in a) <=> false
-    false <=> (4 in a)
-}

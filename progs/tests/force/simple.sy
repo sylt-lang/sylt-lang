@@ -1,5 +1,0 @@
-start :: fn {
-    a :: (1, "not", "an", "int")
-    b: !int = a[0]
-    b
-}

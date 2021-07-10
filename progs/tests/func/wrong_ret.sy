@@ -1,7 +1,0 @@
-start :: fn {
-
-    f : fn -> int = fn {}
-    f
-}
-
-// error: #TypeMismatch(_, _)

@@ -1,9 +1,0 @@
-a :: b
-b :: 1
-
-start :: fn {
-    a <=> b
-}
-
-// error: #InvalidProgram
-// error: #InvalidProgram

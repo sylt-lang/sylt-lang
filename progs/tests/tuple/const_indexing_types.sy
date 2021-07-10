@@ -1,7 +1,0 @@
-start :: fn {
-	a :: (1, "abc")
-	b :: a[0] + 1
-	b :: a[1] + 1
-}
-
-// error: #TypeError(_, _)

@@ -1,7 +1,0 @@
-start :: fn {
-    f := fn a: int -> int {
-        ret a * 2
-    }
-    f(1) <=> 2
-    f(5) <=> 10
-}

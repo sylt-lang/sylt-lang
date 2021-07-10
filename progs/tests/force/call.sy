@@ -1,8 +1,0 @@
-f :: fn -> int | bool {
-    ret 1
-}
-
-start :: fn {
-    a: !int = f'
-    a <=> 1
-}

@@ -1,8 +1,0 @@
-start :: fn {
-    a := 0.0
-    b := 0
-
-    q :: fn {
-        a + as_float(b)
-    }
-}

@@ -1,5 +1,0 @@
-A :: blob {}
-start :: fn {
-    a := A'
-    a
-}

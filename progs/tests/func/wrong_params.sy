@@ -1,6 +1,0 @@
-start :: fn {
-
-    f : fn -> int = fn a: int -> int {}
-}
-
-// error: #TypeMismatch(Type::Int, Type::Void)

@@ -1,6 +1,0 @@
-start :: fn {
-    a: {int: str|int} = {1: 1, 2:"abc", 1.0:1}
-    a
-}
-
-// error: #TypeMismatch(_, _)

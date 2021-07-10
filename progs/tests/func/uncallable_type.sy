@@ -1,8 +1,0 @@
-start :: fn {
-    f := fn i: int {
-        i()
-    }
-    f
-}
-
-// error: #InvalidProgram
