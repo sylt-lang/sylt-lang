@@ -1,9 +1,10 @@
 use owo_colors::OwoColorize;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::rc::Rc;
-use sylt_common::{Block, BlockLinkState, Op, Prog, RuntimeContext, Type, Value};
+use sylt_common::{Blob, Block, BlockLinkState, Frame, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction, Type, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -47,11 +48,18 @@ macro_rules! two_op {
 pub struct VM {
     ignore_error: bool,
 
-    upvalues: Vec<Type>,
-    stack: Vec<Type>,
-    global_types: Vec<Type>,
     ip: usize,
-    block: Rc<RefCell<Block>>,
+    stack: Vec<Type>,
+    upvalues: Vec<Type>,
+
+    blobs: Vec<Blob>,
+    constants: Vec<Value>,
+    strings: Vec<String>,
+    extern_functions: Vec<RustFunction>,
+
+    global_types: Vec<Type>,
+    cur_block: usize,
+    blocks: Vec<Rc<RefCell<Block>>>,
 }
 
 // Checks the program for type errors.
@@ -86,7 +94,7 @@ fn typecheck_block(
         block.borrow().debug_print(Some(&prog.constants));
     }
 
-    let mut vm = VM::new(&block, global_types);
+    let mut vm = VM::new(block_slot, prog, global_types);
     let mut errors = Vec::new();
     let ops = (*block).borrow().ops.clone();
     for (ip, op) in ops.iter().enumerate() {
@@ -108,7 +116,7 @@ fn typecheck_block(
             _ => *op,
         };
 
-        if let Err(e) = vm.check_op(op, prog) {
+        if let Err(e) = vm.eval_op(op) {
             if !vm.ignore_error {
                 errors.push(e);
             }
@@ -123,20 +131,27 @@ fn typecheck_block(
 }
 
 impl VM {
-    pub(crate) fn new(block: &Rc<RefCell<Block>>, global_types: Vec<Type>) -> Self {
+    pub(crate) fn new(cur_block: usize, prog: &Prog, global_types: Vec<Type>) -> Self {
+        let block = Rc::clone(&prog.blocks[cur_block]);
+        let upvalues = block
+            .borrow()
+            .upvalues
+            .iter()
+            .map(|(_, _, ty)| ty)
+            .cloned()
+            .collect();
         let mut vm = Self {
             ignore_error: false,
-            upvalues: block
-                .borrow()
-                .upvalues
-                .iter()
-                .map(|(_, _, ty)| ty)
-                .cloned()
-                .collect(),
-            stack: Vec::new(),
-            global_types,
             ip: 0,
-            block: Rc::clone(block),
+            stack: Vec::new(),
+            upvalues,
+            blobs: prog.blobs.clone(),
+            constants: prog.constants.clone(),
+            strings: prog.strings.clone(),
+            extern_functions: prog.functions.clone(),
+            global_types,
+            cur_block,
+            blocks: prog.blocks.clone(),
         };
 
         vm.push(block.borrow().ty.clone());
@@ -159,9 +174,9 @@ impl VM {
 
         println!(
             "{:5} {:05} {:?}",
-            self.block.borrow().line(self.ip).blue(),
+            self.block().borrow().line(self.ip).blue(),
             self.ip.red(),
-            self.block.borrow().ops[self.ip]
+            self.block().borrow().ops[self.ip]
         );
     }
 
@@ -187,25 +202,147 @@ impl VM {
         (b, a) // this matches the order they were on the stack
     }
 
+    fn block(&self) -> Rc<RefCell<Block>> {
+        Rc::clone(&self.blocks[self.cur_block])
+    }
+
     fn error(&self, kind: RuntimeError, message: Option<String>) -> Error {
         Error::RuntimeError {
             kind,
             phase: RuntimePhase::Typecheck,
-            file: self.block.borrow().file.clone(),
-            line: self.block.borrow().line(self.ip),
+            file: self.block().borrow().file.clone(),
+            line: self.block().borrow().line(self.ip),
             message,
         }
     }
 
     /// Stop the program, violently
     fn crash_and_burn(&self) -> ! {
-        println!("Typecheck failed for {}", self.block.borrow().name);
+        println!("Typecheck failed for {}", self.block().borrow().name);
         self.print_stack();
         unreachable!();
     }
 
+    fn call_callable(&mut self, callable: Type, new_base: usize) -> Result<Type, RuntimeError> {
+        let args = self.stack[new_base + 1..].to_vec();
+        match callable {
+            Type::Blob(blob_slot) => {
+                let blob = &self.blobs[blob_slot];
+                let values = self.stack[new_base + 1..]
+                    .chunks_exact(2)
+                    .map(|b| {
+                        if let Type::Field(f) = &b[0] {
+                            (f.clone(), b[1].clone())
+                        } else {
+                            unreachable!("Got {:?}, expected field", b[0]);
+                        }
+                    })
+                    .collect::<HashMap<String, Type>>();
+
+                for (field, ty) in values.iter() {
+                    match blob.fields.get(field) {
+                        Some(given_ty) => {
+                            if let Err(msg) = given_ty.fits(ty, &self.blobs) {
+                                return Err(RuntimeError::FieldTypeMismatch(
+                                    blob.name.clone(),
+                                    field.clone(),
+                                    ty.clone(),
+                                    given_ty.clone(),
+                                    msg,
+                                ));
+                            }
+                        }
+                        None => {
+                            return Err(RuntimeError::UnknownField(
+                                blob.name.clone(),
+                                field.clone(),
+                            ));
+                        }
+                    }
+                }
+
+                for (field, ty) in blob.fields.iter() {
+                    match (values.get(field), ty) {
+                        (Some(t), ty) => {
+                            if let Err(msg) = ty.fits(t, &self.blobs) {
+                                return Err(RuntimeError::FieldTypeMismatch(
+                                    blob.name.clone(),
+                                    field.clone(),
+                                    ty.clone(),
+                                    t.clone(),
+                                    msg,
+                                ));
+                            }
+                        }
+                        (None, ty) => {
+                            if let Err(msg) = ty.fits(&Type::Void, &self.blobs) {
+                                return Err(RuntimeError::FieldTypeMismatch(
+                                    blob.name.clone(),
+                                    field.clone(),
+                                    ty.clone(),
+                                    Type::Void,
+                                    msg,
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                Ok(Type::Instance(blob_slot))
+            }
+
+            Type::Function(fargs, fret) => {
+                for (a, b) in fargs.iter().zip(args.iter()) {
+                    if let Err(msg) = a.fits(b, &self.blobs) {
+                        return Err(RuntimeError::ArgumentType(
+                            fargs.clone(),
+                            args,
+                            msg,
+                        ));
+                    }
+                }
+                Ok((*fret).clone())
+            }
+
+            Type::ExternFunction(slot) => {
+                let extern_func = self.extern_functions[slot];
+                let ctx = RuntimeContext {
+                    typecheck: true,
+                    stack_base: new_base + 1,
+                    machine: self,
+                };
+                extern_func(ctx).map(|r| r.into())
+            }
+
+            Type::Unknown => Ok(Type::Unknown),
+
+            _ => Err(RuntimeError::InvalidProgram),
+        }
+    }
+}
+
+impl Machine for VM {
+    fn stack_from_base(&self, base: usize) -> Cow<[Value]> {
+        Cow::Owned(self.stack[base..].iter().map(Value::from).collect::<Vec<_>>())
+    }
+
+    fn blobs(&self) -> &[Blob] {
+        &self.blobs
+    }
+
+    fn eval_call(&mut self, callable: Value, args: &[&Value]) -> Result<Value, Error> {
+        self.push(Type::from(callable));
+        let num_args = args.len();
+        args.iter().for_each(|value| {
+            self.push(Type::from(*value));
+        });
+        self.eval_op(Op::Call(num_args))?;
+        // Take the return value from the stack.
+        Ok(Value::from(self.pop()))
+    }
+
     /// Checks the current operation for type errors.
-    fn check_op(&mut self, op: Op, prog: &Prog) -> Result<(), Error> {
+    fn eval_op(&mut self, op: Op) -> Result<OpResult, Error> {
         match op {
             Op::Illegal => {}
             Op::Unreachable => {}
@@ -243,7 +380,7 @@ impl VM {
             Op::AssignLocal(slot) => {
                 let current = self.stack[slot].clone();
                 let given = self.pop();
-                if let Err(msg) = current.fits(&given, &prog.blobs) {
+                if let Err(msg) = current.fits(&given, &self.blobs) {
                     error!(
                         self,
                         RuntimeError::TypeMismatch(current, given),
@@ -273,7 +410,7 @@ impl VM {
             Op::AssignGlobal(slot) => {
                 let current = self.global_types[slot].clone();
                 let given = self.pop();
-                if let Err(msg) = current.fits(&given, &prog.blobs) {
+                if let Err(msg) = current.fits(&given, &self.blobs) {
                     error!(
                         self,
                         RuntimeError::TypeMismatch(current, given),
@@ -284,11 +421,12 @@ impl VM {
             }
 
             Op::Constant(slot) => {
-                let value = &prog.constants[slot];
-                self.push(Type::from(value));
+                let ty = Type::from(&self.constants[slot]);
+                self.push(ty);
+                let value = &self.constants[slot];
 
                 while let Value::Function(_, _, block) = value {
-                    let block = Rc::clone(&prog.blocks[*block]);
+                    let block = Rc::clone(&self.blocks[*block]);
                     match block.borrow().linking {
                         BlockLinkState::Linked => break,
                         BlockLinkState::Nothing => {}
@@ -327,8 +465,8 @@ impl VM {
                 let (inst, expect) = self.poppop();
                 match inst {
                     Type::Instance(ty) => {
-                        let field = &prog.strings[field];
-                        let ty = &prog.blobs[ty];
+                        let field = &self.strings[field];
+                        let ty = &self.blobs[ty];
                         match ty.fields.get(field) {
                             Some(ty) => {
                                 if ty != &expect {
@@ -357,7 +495,7 @@ impl VM {
             }
 
             Op::GetField(field) => match self.pop() {
-                Type::Instance(ty) => match &*prog.strings[field] {
+                Type::Instance(ty) => match &*self.strings[field] {
                     "_id" => {
                         self.push(Type::Int);
                     }
@@ -365,16 +503,18 @@ impl VM {
                         self.push(Type::String);
                     }
                     field => {
-                        let ty = &prog.blobs[ty];
-                        match ty.fields.get(field) {
+                        let ty = &self.blobs[ty];
+                        match ty.fields.get(field).cloned() {
                             Some(ty) => {
-                                self.push(ty.clone());
+                                self.push(ty);
                             }
                             _ => {
+                                let name = ty.name.clone();
+                                let field = field.to_string();
                                 self.push(Type::Invalid);
                                 error!(
                                     self,
-                                    RuntimeError::UnknownField(ty.name.clone(), field.to_string())
+                                    RuntimeError::UnknownField(name, field)
                                 );
                             }
                         }
@@ -400,7 +540,7 @@ impl VM {
             Op::AssignUpvalue(slot) => {
                 let current = self.upvalues.get(slot).unwrap().clone();
                 let up = self.pop();
-                if let Err(msg) = current.fits(&up, &prog.blobs) {
+                if let Err(msg) = current.fits(&up, &self.blobs) {
                     error!(
                         self,
                         RuntimeError::TypeMismatch(up, current),
@@ -415,7 +555,7 @@ impl VM {
 
             Op::Return => {
                 let to_ret = self.pop();
-                let ret = self.block.borrow().ret().clone();
+                let ret = self.block().borrow().ret().clone();
                 if to_ret != ret {
                     error!(
                         self,
@@ -430,7 +570,7 @@ impl VM {
             }
 
             Op::Define(ty) => {
-                let ty = if let Value::Ty(ty) = &prog.constants[ty] {
+                let ty = if let Value::Ty(ty) = &self.constants[ty] {
                     ty.clone()
                 } else {
                     unreachable!("Cannot define variable to non-type");
@@ -440,7 +580,7 @@ impl VM {
                 match (ty, top_type) {
                     (Type::Unknown, top_type) if top_type != Type::Unknown => {}
                     (a, b) => {
-                        if let Err(msg) = a.fits(&b, &prog.blobs) {
+                        if let Err(msg) = a.fits(&b, &self.blobs) {
                             error!(
                                 self,
                                 RuntimeError::TypeMismatch(a.clone(), b),
@@ -457,12 +597,13 @@ impl VM {
 
             Op::Force(ty) => {
                 let old = self.pop();
-                match &prog.constants[ty] {
+                match &self.constants[ty] {
                     Value::Ty(Type::Unknown) => {
                         self.push(old);
                     }
                     Value::Ty(ty) => {
-                        self.push(ty.clone());
+                        let ty = ty.clone();
+                        self.push(ty);
                     }
                     _ => {
                         error!(self, RuntimeError::InvalidProgram, "Can only force types");
@@ -472,17 +613,16 @@ impl VM {
 
             Op::Union => {
                 let (a, b) = self.poppop();
-                self.push(Type::maybe_union([a, b].iter(), prog.blobs.as_slice()));
+                self.push(Type::maybe_union([a, b].iter(), self.blobs.as_slice()));
             }
 
             Op::Link(slot) => {
-                match &prog.constants[slot] {
+                match &self.constants[slot] {
                     Value::Function(_, _, block) => {
-                        let block = &prog.blocks[*block];
-                        block.borrow_mut().linking = BlockLinkState::Linked;
+                        self.block().borrow_mut().linking = BlockLinkState::Linked;
 
                         let mut types = Vec::new();
-                        for (slot, is_up, ty) in block.borrow().upvalues.iter() {
+                        for (slot, is_up, ty) in self.blocks[*block].borrow().upvalues.iter() {
                             if *is_up {
                                 types.push(ty.clone());
                             } else {
@@ -490,7 +630,7 @@ impl VM {
                             }
                         }
 
-                        let mut block_mut = block.borrow_mut();
+                        let mut block_mut = self.blocks[*block].borrow_mut();
                         for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
                             if *is_up {
                                 continue;
@@ -520,13 +660,13 @@ impl VM {
             }
 
             Op::GetIndex => match self.poppop() {
-                (Type::List(a), b) if b.fits(&Type::Int, &prog.blobs).is_ok() => {
+                (Type::List(a), b) if b.fits(&Type::Int, &self.blobs).is_ok() => {
                     self.push((*a).clone());
                 }
-                (Type::Tuple(a), b) if b.fits(&Type::Int, &prog.blobs).is_ok() => {
+                (Type::Tuple(a), b) if b.fits(&Type::Int, &self.blobs).is_ok() => {
                     self.push(Type::Union(a.iter().cloned().collect()));
                 }
-                (Type::Dict(k, v), i) if k.fits(&i, &prog.blobs).is_ok() => {
+                (Type::Dict(k, v), i) if k.fits(&i, &self.blobs).is_ok() => {
                     self.push((*v).clone());
                 }
                 (a, b) => {
@@ -548,7 +688,7 @@ impl VM {
                 Type::Tuple(a) => {
                     self.push(a.get(slot as usize).cloned().unwrap_or(Type::Void));
                 }
-                Type::Dict(k, v) if k.fits(&Type::Int, &prog.blobs).is_ok() => {
+                Type::Dict(k, v) if k.fits(&Type::Int, &self.blobs).is_ok() => {
                     self.push((*v).clone());
                 }
                 a => {
@@ -571,7 +711,7 @@ impl VM {
                     (Type::List(v), Type::Int, n) => match (v.as_ref(), &n) {
                         (Type::Unknown, top_type) if top_type != &Type::Unknown => {}
                         (a, b) => {
-                            if let Err(msg) = a.fits(b, &prog.blobs) {
+                            if let Err(msg) = a.fits(b, &self.blobs) {
                                 error!(
                                     self,
                                     RuntimeError::TypeMismatch(a.clone(), b.clone()),
@@ -582,7 +722,7 @@ impl VM {
                         }
                     },
                     (Type::Dict(k, v), i, n) => {
-                        if let Err(msg) = k.fits(&i, &prog.blobs) {
+                        if let Err(msg) = k.fits(&i, &self.blobs) {
                             error!(
                                 self,
                                 RuntimeError::TypeMismatch(*k.clone(), i.clone()),
@@ -591,7 +731,7 @@ impl VM {
                             );
                         }
 
-                        if let Err(msg) = v.fits(&n, &prog.blobs) {
+                        if let Err(msg) = v.fits(&n, &self.blobs) {
                             error!(
                                 self,
                                 RuntimeError::TypeMismatch(*v.clone(), n.clone()),
@@ -615,7 +755,7 @@ impl VM {
                 match (Type::from(container), Type::from(element)) {
                     (Type::List(v), e) | (Type::Set(v), e) | (Type::Dict(v, _), e) => {
                         self.push(Type::Bool);
-                        if let Err(msg) = v.fits(&e, &prog.blobs) {
+                        if let Err(msg) = v.fits(&e, &self.blobs) {
                             error!(
                                 self,
                                 RuntimeError::TypeMismatch(v.as_ref().clone(), e),
@@ -635,113 +775,12 @@ impl VM {
                 let new_base = self.stack.len() - 1 - num_args;
                 let callable = &self.stack[new_base];
 
-                let call_callable = |callable: &Type| {
-                    let args = self.stack[new_base + 1..].to_vec();
-                    match callable {
-                        Type::Blob(blob_slot) => {
-                            let blob = &prog.blobs[*blob_slot];
-                            let values = self.stack[new_base + 1..]
-                                .chunks_exact(2)
-                                .map(|b| {
-                                    if let Type::Field(f) = &b[0] {
-                                        (f.clone(), b[1].clone())
-                                    } else {
-                                        unreachable!("Got {:?}, expected field", b[0]);
-                                    }
-                                })
-                                .collect::<HashMap<String, Type>>();
-
-                            for (field, ty) in values.iter() {
-                                match blob.fields.get(field) {
-                                    Some(given_ty) => {
-                                        if let Err(msg) = given_ty.fits(ty, &prog.blobs) {
-                                            return Err(RuntimeError::FieldTypeMismatch(
-                                                blob.name.clone(),
-                                                field.clone(),
-                                                ty.clone(),
-                                                given_ty.clone(),
-                                                msg,
-                                            ));
-                                        }
-                                    }
-                                    None => {
-                                        return Err(RuntimeError::UnknownField(
-                                            blob.name.clone(),
-                                            field.clone(),
-                                        ));
-                                    }
-                                }
-                            }
-
-                            for (field, ty) in blob.fields.iter() {
-                                match (values.get(field), ty) {
-                                    (Some(t), ty) => {
-                                        if let Err(msg) = ty.fits(t, &prog.blobs) {
-                                            return Err(RuntimeError::FieldTypeMismatch(
-                                                blob.name.clone(),
-                                                field.clone(),
-                                                ty.clone(),
-                                                t.clone(),
-                                                msg,
-                                            ));
-                                        }
-                                    }
-                                    (None, ty) => {
-                                        if let Err(msg) = ty.fits(&Type::Void, &prog.blobs) {
-                                            return Err(RuntimeError::FieldTypeMismatch(
-                                                blob.name.clone(),
-                                                field.clone(),
-                                                ty.clone(),
-                                                Type::Void,
-                                                msg,
-                                            ));
-                                        }
-                                    }
-                                }
-                            }
-
-                            Ok(Type::Instance(*blob_slot))
-                        }
-
-                        Type::Function(fargs, fret) => {
-                            for (a, b) in fargs.iter().zip(args.iter()) {
-                                if let Err(msg) = a.fits(b, &prog.blobs) {
-                                    return Err(RuntimeError::ArgumentType(
-                                        fargs.clone(),
-                                        args,
-                                        msg,
-                                    ));
-                                }
-                            }
-                            Ok((**fret).clone())
-                        }
-
-                        Type::ExternFunction(slot) => {
-                            let extern_func = prog.functions[*slot];
-                            let args: Vec<_> = self.stack[new_base + 1..]
-                                .to_vec()
-                                .into_iter()
-                                .map(Value::from)
-                                .collect();
-                            let ctx = RuntimeContext {
-                                typecheck: true,
-                                blobs: &prog.blobs,
-                            };
-                            extern_func(&args, ctx).map(|r| r.into())
-                        }
-
-                        Type::Unknown => Ok(Type::Unknown),
-
-                        _ => Err(RuntimeError::InvalidProgram),
-                    }
-                };
-
                 let mut err = None;
                 self.stack[new_base] = match callable {
                     Type::Union(alts) => {
                         let mut returns = HashSet::new();
-                        for alt in alts.iter() {
-                            if let Ok(res) = call_callable(&alt) {
+                        for alt in alts.clone().into_iter() {
+                            if let Ok(res) = self.call_callable(alt, new_base) {
                                 returns.insert(Type::from(res));
                             }
                         }
@@ -752,12 +791,15 @@ impl VM {
                             Type::Union(returns)
                         }
                     }
-                    _ => match call_callable(callable) {
-                        Err(e) => {
-                            err = Some(e);
-                            Type::Void
+                    _ => {
+                        let callable = callable.clone();
+                        match self.call_callable(callable, new_base) {
+                            Err(e) => {
+                                err = Some(e);
+                                Type::Void
+                            }
+                            Ok(v) => Type::from(v),
                         }
-                        Ok(v) => Type::from(v),
                     },
                 };
 
@@ -787,21 +829,21 @@ impl VM {
 
             Op::List(n) => {
                 let n = self.stack.len() - n;
-                let ty = Type::maybe_union(self.stack.split_off(n).iter(), prog.blobs.as_slice());
+                let ty = Type::maybe_union(self.stack.split_off(n).iter(), self.blobs.as_slice());
                 self.push(Type::List(Box::new(ty)));
             }
 
             Op::Set(n) => {
                 let n = self.stack.len() - n;
-                let ty = Type::maybe_union(self.stack.split_off(n).iter(), prog.blobs.as_slice());
+                let ty = Type::maybe_union(self.stack.split_off(n).iter(), self.blobs.as_slice());
                 self.push(Type::Set(Box::new(ty)));
             }
 
             Op::Dict(n) => {
                 let n = self.stack.len() - n;
                 let elems = self.stack.split_off(n);
-                let key = Type::maybe_union(elems.iter().step_by(2), prog.blobs.as_slice());
-                let value = Type::maybe_union(elems.iter().skip(1).step_by(2), prog.blobs.as_slice());
+                let key = Type::maybe_union(elems.iter().step_by(2), self.blobs.as_slice());
+                let value = Type::maybe_union(elems.iter().skip(1).step_by(2), self.blobs.as_slice());
                 self.push(Type::Dict(Box::new(key), Box::new(value)));
             }
 
@@ -868,7 +910,7 @@ impl VM {
                 }
             }
         }
-        Ok(())
+        Ok(OpResult::Done)
     }
 }
 

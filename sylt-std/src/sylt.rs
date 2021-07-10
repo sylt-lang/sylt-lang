@@ -3,11 +3,12 @@ use crate as sylt_std;
 use owo_colors::OwoColorize;
 use sylt_common::error::RuntimeError;
 use sylt_common::rc::Rc;
-use sylt_common::{Blob, RuntimeContext, Type, Value};
+use sylt_common::{Blob, Frame, RuntimeContext, Type, Value};
 
 #[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", [One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(dbg, "sylt_std::sylt")]
-pub fn dbg<'t>(values: &[Value], _ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
     println!(
         "{}: {:?}, {:?}",
         "DBG".purple(),
@@ -17,15 +18,37 @@ pub fn dbg<'t>(values: &[Value], _ctx: RuntimeContext<'t>) -> Result<Value, Runt
     Ok(Value::Nil)
 }
 
+#[sylt_macro::sylt_link(for_each, "sylt_std::sylt")]
+pub fn for_each(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match values.as_ref() {
+        [Value::List(list), callable] => {
+            let list = Rc::clone(list);
+            let callable = callable.clone();
+            for element in list.borrow().iter() {
+                ctx.machine.eval_call(callable.clone(), &[element]).unwrap();
+            }
+            return Ok(Value::Nil);
+        }
+        _ => {}
+    }
+
+    return Err(RuntimeError::ExternTypeMismatch(
+        "for_each".to_string(),
+        values.iter().map(Type::from).collect(),
+    ));
+}
+
 #[sylt_macro::sylt_doc(push, "Appends an element to the end of a list", [One(List(ls)), One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(push, "sylt_std::sylt")]
-pub fn push<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    match (values, ctx.typecheck) {
+pub fn push<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match (values.as_ref(), ctx.typecheck) {
         ([Value::List(ls), v], true) => {
             let ls = ls.borrow();
             assert!(ls.len() == 1);
             let ls = Type::from(&ls[0]);
-            let v: Type = Type::from(&*v);
+            let v = Type::from(&*v);
             if ls == v || matches!(ls, Type::Unknown) {
                 Ok(Value::Nil)
             } else {
@@ -46,8 +69,9 @@ pub fn push<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, Runt
 
 #[sylt_macro::sylt_doc(clear, "Removes all elements from the list", [One(List(ls))] Type::Void)]
 #[sylt_macro::sylt_link(clear, "sylt_std::sylt")]
-pub fn clear<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    match (values, ctx.typecheck) {
+pub fn clear<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match (values.as_ref(), ctx.typecheck) {
         ([Value::List(ls)], _) => {
             ls.borrow_mut().clear();
             Ok(Value::Nil)
@@ -61,8 +85,9 @@ pub fn clear<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, Run
 
 #[sylt_macro::sylt_doc(prepend, "Adds an element to the start of a list", [One(List(ls)), One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(prepend, "sylt_std::sylt")]
-pub fn prepend<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    match (values, ctx.typecheck) {
+pub fn prepend<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match (values.as_ref(), ctx.typecheck) {
         ([Value::List(ls), v], true) => {
             let ls = &ls.borrow();
             assert!(ls.len() == 1);
@@ -88,8 +113,9 @@ pub fn prepend<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, R
 
 #[sylt_macro::sylt_doc(len, "Gives the length of tuples and lists", [One(Tuple(ls))] Type::Int, [One(List(ls))] Type::Int)]
 #[sylt_macro::sylt_link(len, "sylt_std::sylt")]
-pub fn len<'t>(values: &[Value], _: RuntimeContext) -> Result<Value, RuntimeError> {
-    match values {
+pub fn len<'t>(ctx: RuntimeContext) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match values.as_ref() {
         [Value::Tuple(ls)] => Ok(Value::Int(ls.len() as i64)),
         [Value::List(ls)] => Ok(Value::Int(ls.borrow().len() as i64)),
         [_] => Ok(Value::Int(0)),
@@ -228,13 +254,14 @@ pub fn union_type<'t>(a: Type, b: Type, blobs: &[Blob]) -> Type {
 
 #[sylt_macro::sylt_doc(pop, "Removes the last element in the list, and returns it", [One(List(l))] Type::Value)]
 #[sylt_macro::sylt_link(pop, "sylt_std::sylt")]
-pub fn pop<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    match (values, ctx.typecheck) {
+pub fn pop<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match (values.as_ref(), ctx.typecheck) {
         ([Value::List(ls)], true) => {
             let ls = &ls.borrow();
             // TODO(ed): Write correct typing
             let ls = Type::from(&ls[0]);
-            let ret = union_type(ls, Type::Void, ctx.blobs);
+            let ret = union_type(ls, Type::Void, ctx.machine.blobs());
             Ok(Value::from(ret))
         }
         ([Value::List(ls)], false) => {

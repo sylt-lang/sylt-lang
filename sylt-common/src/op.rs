@@ -289,3 +289,14 @@ pub enum Op {
     /// Does not affect the stack.
     Yield,
 }
+
+#[derive(Eq, PartialEq)]
+pub enum OpResult {
+    Yield,
+    Done,
+
+    // Will never be returned.
+    #[doc(hidden)]
+    Continue,
+}
+
