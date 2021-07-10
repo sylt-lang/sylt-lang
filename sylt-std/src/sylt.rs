@@ -49,7 +49,7 @@ pub fn push<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
             assert!(ls.len() == 1);
             let ls = Type::from(&ls[0]);
             let v = Type::from(&*v);
-            if ls == v || matches!(ls, Type::Unknown) {
+            if ls.fits(&v, &ctx.machine.blobs()).is_ok() || matches!(ls, Type::Unknown) {
                 Ok(Value::Nil)
             } else {
                 Err(RuntimeError::TypeMismatch(ls, v))
@@ -93,7 +93,7 @@ pub fn prepend<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
             assert!(ls.len() == 1);
             let ls = Type::from(&ls[0]);
             let v: Type = Type::from(&*v);
-            if ls == v {
+            if ls.fits(&v, ctx.machine.blobs()).is_ok() {
                 Ok(Value::Nil)
             } else {
                 Err(RuntimeError::TypeMismatch(ls, v))
