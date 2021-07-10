@@ -1210,7 +1210,7 @@ impl Compiler {
 
             for statement in module.statements.iter() {
                 use StatementKind::*;
-                let mut namespace = self.namespaces.remove(slot);
+                let mut namespace = self.namespaces[slot].clone();
                 match &statement.kind {
                     Use {
                         file: Identifier { name, span },
