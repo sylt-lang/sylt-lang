@@ -1,0 +1,21 @@
+A :: blob {
+    a: int,
+}
+
+B :: blob {
+    a: int,
+    b: int,
+}
+
+C :: blob {
+    a: int,
+    b: int,
+    c: int,
+}
+
+:B is :B
+:A is :B
+:A is :C
+:B is :C
+
+start :: fn { }

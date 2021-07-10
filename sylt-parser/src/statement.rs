@@ -78,6 +78,14 @@ pub enum StatementKind {
     /// `continue`.
     Continue,
 
+    /// Handles compile time checks of types.
+    ///
+    /// `:A is :B`
+    IsCheck {
+        lhs: Type,
+        rhs: Type,
+    },
+
     /// Returns a value from a function.
     ///
     /// `ret <expression>`.
@@ -175,6 +183,16 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 },
             },
         ),
+
+        // `: A is : B`
+        [T::Colon, ..] => {
+            let ctx = ctx.skip(1);
+            let (ctx, lhs) = parse_type(ctx)?;
+            let ctx = expect!(ctx, T::Is, "Expected 'is' after first type in 'is-check' statement");
+            let ctx = expect!(ctx, T::Colon, "Expected ':' - only type constant are allowed in 'is-check' statements");
+            let (ctx, rhs) = parse_type(ctx)?;
+            (ctx, IsCheck { lhs, rhs })
+        }
 
         [T::Break, ..] => (ctx.skip(1), Break),
         [T::Continue, ..] => (ctx.skip(1), Continue),
@@ -453,6 +471,7 @@ pub fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
         Blob { .. }
         | Definition { .. }
         | Use { .. }
+        | IsCheck { .. }
         | EmptyStatement
         => Ok((ctx, stmt)),
 
@@ -463,6 +482,7 @@ pub fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use super::StatementKind::*;
 
     // NOTE(ed): Expressions are valid statements! :D
     test!(statement, statement_expression: "1 + 1" => _);
@@ -494,6 +514,9 @@ mod test {
     test!(statement, statement_assign_call: "a().b() += 2" => _);
     test!(statement, statement_assign_call_index: "a.c().c.b /= 4" => _);
     test!(statement, statement_idek: "a'.c'.c.b()().c = 0" => _);
+
+    test!(statement, statement_is_check: ":A is :B" => IsCheck { .. });
+    test!(statement, statement_is_check_nested: ":A.c.d is :B.d.d" => IsCheck { .. });
 
     test!(statement, statement_skip_newline: "(1 \n\n+\n 1\n\n)" => _);
     test!(statement, statement_skip_newline_list: "[\n\n 1 \n\n,\n 1\n\n,]" => _);
