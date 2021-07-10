@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::rc::Rc;
-use sylt_common::{Blob, Block, BlockLinkState, Frame, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction, Type, Value};
+use sylt_common::{Blob, Block, BlockLinkState, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction, Type, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {

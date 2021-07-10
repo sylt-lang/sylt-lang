@@ -3,7 +3,7 @@ use crate as sylt_std;
 use owo_colors::OwoColorize;
 use sylt_common::error::RuntimeError;
 use sylt_common::rc::Rc;
-use sylt_common::{Blob, Frame, RuntimeContext, Type, Value};
+use sylt_common::{Blob, RuntimeContext, Type, Value};
 
 #[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", [One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(dbg, "sylt_std::sylt")]
