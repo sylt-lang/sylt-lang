@@ -1,5 +1,6 @@
 use crate::value::Value;
 
+#[derive(Debug)]
 pub struct UpValue {
     slot: usize,
     value: Value,

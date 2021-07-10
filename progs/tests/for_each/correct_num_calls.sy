@@ -1,0 +1,8 @@
+start :: fn {
+    calls := 0
+    [1,2,3] -> for_each(fn a:int {
+        a > 0 <=> true
+        calls += 1
+    })
+    calls <=> 3
+}

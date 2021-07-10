@@ -118,31 +118,31 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
         #[sylt_macro::sylt_doc(#function, #doc , #( #matches ),*)]
         #[sylt_macro::sylt_link(#link_name, #module)]
         pub fn #function (
-            __values: &[sylt_common::Value],
-            __ctx: sylt_common::RuntimeContext
+            ctx: sylt_common::RuntimeContext
         ) -> ::std::result::Result<sylt_common::Value, sylt_common::error::RuntimeError>
         {
             use sylt_common::MatchableValue::*;
             use sylt_common::RustFunction;
             use sylt_common::Value::*;
             use sylt_common::value::make_matchable;
-            if __ctx.typecheck {
-                let matching: Vec<_> = __values.iter().map(make_matchable).collect();
+            let values = ctx.machine.stack_from_base(ctx.stack_base);
+            if ctx.typecheck {
+                let matching: Vec<_> = values.iter().map(make_matchable).collect();
                 #[allow(unused_variables)]
                 match matching.as_slice() {
                     #(#typecheck_blocks),*
                     _ => Err(sylt_common::error::RuntimeError::ExternTypeMismatch(
                         stringify!(#function).to_string(),
-                        __values.iter().map(|v| sylt_common::Type::from(v)).collect()
+                        values.iter().map(|v| sylt_common::Type::from(v)).collect()
                     ))
                 }
             } else {
-                let matching: Vec<_> = __values.iter().map(make_matchable).collect();
+                let matching: Vec<_> = values.iter().map(make_matchable).collect();
                 match matching.as_slice() {
                     #(#eval_blocks),*
                     _ => Err(sylt_common::error::RuntimeError::ExternTypeMismatch(
                         stringify!(#function).to_string(),
-                        __values.iter().map(|v| sylt_common::Type::from(v)).collect()
+                        values.iter().map(|v| sylt_common::Type::from(v)).collect()
                     ))
                 }
             }

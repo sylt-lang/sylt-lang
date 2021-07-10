@@ -1,20 +1,13 @@
 use crate as sylt_std;
 
+use lingon::Game;
+use lingon::random::{Distribute, NoDice, Uniform};
 use lingon::renderer::{Rect, Sprite, Tint, Transform};
-use lingon::{
-    random::{Distribute, NoDice, Uniform},
-    Game,
-};
-use std::{
-    path::PathBuf,
-    sync::Mutex,
-};
+use std::path::PathBuf;
+use std::sync::Mutex;
 use sylt_common::error::RuntimeError;
 use sylt_common::rc::Rc;
-use sylt_common::{
-    RuntimeContext, Type,
-    Value::{self, *},
-};
+use sylt_common::{RuntimeContext, Type, Value};
 
 // Errors are important, they should be easy to write!
 macro_rules! error {
@@ -24,6 +17,7 @@ macro_rules! error {
 }
 
 fn unpack_int_int_tuple(value: &Value) -> (i64, i64) {
+    use Value::{Int, Tuple};
     if let Tuple(tuple) = value {
         if let (Some(Int(w)), Some(Int(h))) = (tuple.get(0), tuple.get(1)) {
             return (*w, *h);
@@ -200,7 +194,7 @@ fn l_gfx_sprite_internal(sprite: &i64, x: &f64, y: &f64, w: &f64, h: &f64, gx: &
     sprite.angle(*rot as f32);
     sprite.rgba(*r as f32, *g as f32, *b as f32, *a as f32);
     GAME.with(|game| game.lock().unwrap().renderer.push(sprite));
-    Nil
+    Value::Nil
 }
 
 sylt_macro::extern_function!(
@@ -862,15 +856,16 @@ sylt_macro::extern_function!(
 );
 
 pub fn sylt_str(s: &str) -> Value {
-    String(Rc::new(s.to_string()))
+    Value::String(Rc::new(s.to_string()))
 }
 
 #[sylt_macro::sylt_doc(l_load_image, "Loads an image and turns it into a sprite sheet",
   [One(String(path))] Type::Tuple)]
 #[sylt_macro::sylt_link(l_load_image, "sylt_std::lingon")]
-pub fn l_load_image<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    match (values, ctx.typecheck) {
-        ([String(path), tilesize], false) => {
+pub fn l_load_image<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match (values.as_ref(), ctx.typecheck) {
+        ([Value::String(path), tilesize], false) => {
             GAME.with(|game| {
                 let mut game = game.lock().unwrap();
                 let path = PathBuf::from(path.as_ref());
@@ -881,12 +876,12 @@ pub fn l_load_image<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Val
                 let slot = game
                     .renderer
                     .add_sprite_sheet(image, (dim.0 as usize, dim.1 as usize));
-                Ok(Tuple(Rc::new(vec![sylt_str("image"), Int(slot as i64)])))
+                Ok(Value::Tuple(Rc::new(vec![sylt_str("image"), Value::Int(slot as i64)])))
             })
         }
-        ([String(_), tilesize], true) => {
+        ([Value::String(_), tilesize], true) => {
             unpack_int_int_tuple(tilesize);
-            Ok(Tuple(Rc::new(vec![sylt_str("image"), Int(0)])))
+            Ok(Value::Tuple(Rc::new(vec![sylt_str("image"), Value::Int(0)])))
         }
         (values, _) => Err(RuntimeError::ExternTypeMismatch(
             "l_load_image".to_string(),
@@ -899,14 +894,16 @@ pub fn l_load_image<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Val
   "Loads a sound and lets you play it using <a href='l_audio_play'>l_audio_play</a>",
   [One(String(path))] Type::Tuple)]
 #[sylt_macro::sylt_link(l_load_audio, "sylt_std::lingon")]
-pub fn l_load_audio<'t>(values: &[Value], ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    match (values, ctx.typecheck) {
-        ([String(path)], false) => {
+pub fn l_load_audio<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match (values.as_ref(), ctx.typecheck) {
+        ([Value::String(path)], false) => {
             let path = PathBuf::from(path.as_ref());
             let audio = GAME.with(|game| game.lock().unwrap().assets.load_audio(path));
-            Ok(Tuple(Rc::new(vec![sylt_str("audio"), Int(*audio as i64)])))
+            Ok(Value::Tuple(Rc::new(vec![sylt_str("audio"), Value::Int(*audio as i64)])))
         }
-        ([String(_)], true) => Ok(Tuple(Rc::new(vec![sylt_str("audio"), Int(0)]))),
+        ([Value::String(_)], true)
+            => Ok(Value::Tuple(Rc::new(vec![sylt_str("audio"), Value::Int(0)]))),
         (values, _) => Err(RuntimeError::ExternTypeMismatch(
             "l_load_image".to_string(),
             values.iter().map(Type::from).collect(),

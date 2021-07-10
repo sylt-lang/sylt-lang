@@ -8,19 +8,40 @@ pub mod ty;
 pub mod upvalue;
 pub mod value;
 
+use std::borrow::Cow;
+use std::cell::RefCell;
+
 pub use blob::Blob;
 pub use block::{Block, BlockLinkState};
-pub use op::Op;
+pub use error::Error;
+pub use op::{Op, OpResult};
 pub use prog::Prog;
+use rc::Rc;
 pub use ty::Type;
 pub use upvalue::UpValue;
 pub use value::{MatchableValue, Value};
 
 /// A linkable external function. Created either manually or using
 /// [sylt_macro::extern_function].
-pub type RustFunction = fn(&[Value], RuntimeContext) -> Result<Value, error::RuntimeError>;
+pub type RustFunction = fn(RuntimeContext) -> Result<Value, error::RuntimeError>;
 
-pub struct RuntimeContext<'t> {
+#[derive(Debug)]
+pub struct Frame {
+    pub stack_offset: usize,
+    pub block: Rc<RefCell<Block>>,
+    pub ip: usize,
+    pub contains_upvalues: bool,
+}
+
+pub trait Machine {
+    fn stack_from_base(&self, base: usize) -> Cow<[Value]>;
+    fn blobs(&self) -> &[Blob];
+    fn eval_op(&mut self, op: Op) -> Result<OpResult, Error>;
+    fn eval_call(&mut self, callable: Value, args: &[&Value]) -> Result<Value, Error>;
+}
+
+pub struct RuntimeContext<'m> {
     pub typecheck: bool,
-    pub blobs: &'t [Blob],
+    pub stack_base: usize,
+    pub machine: &'m mut dyn Machine,
 }

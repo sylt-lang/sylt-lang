@@ -1,0 +1,18 @@
+nop :: fn a:int {
+    print "nop"
+}
+
+start :: fn {
+    fs := 0
+    f :: fn {
+        fs += 1
+    }
+
+    for_each([1,2,3], nop)
+    f'
+    for_each([1,2,3], nop)
+    f'
+    for_each([1,2,3], nop)
+    f'
+    fs <=> 3
+}

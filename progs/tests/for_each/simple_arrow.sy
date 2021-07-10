@@ -1,0 +1,7 @@
+assert_nonzero :: fn a:int {
+    a > 0 <=> true
+}
+
+start :: fn {
+    [1,2,3] -> for_each(assert_nonzero)
+}
