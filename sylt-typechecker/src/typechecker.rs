@@ -419,7 +419,6 @@ impl Machine for VM {
                 self.push(ty);
                 let value = &self.constants[slot];
 
-                //
                 while let Value::Function(_, _, block) = value {
                     let block = Rc::clone(&self.blocks[*block]);
                     match block.borrow().linking {
