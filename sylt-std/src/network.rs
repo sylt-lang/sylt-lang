@@ -37,7 +37,10 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
     thread::spawn(move || {
         for connection in listener.incoming() {
             if let Ok(stream) = connection {
-                listener_handles.lock().unwrap().push(stream.try_clone().unwrap());
+                listener_handles
+                    .lock()
+                    .unwrap()
+                    .push(stream.try_clone().unwrap());
                 let queue = Arc::clone(&queue);
                 thread::spawn(move || {
                     // listen to communication from remote
@@ -76,9 +79,11 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     };
     // Connect to the server.
     let stream = TcpStream::connect(socket_addr).unwrap(); //TODO(gu): Error handling
-    // Store the stream so we can send to it later.
+                                                           // Store the stream so we can send to it later.
     SERVER_HANDLE.with(|server_handle| {
-        server_handle.borrow_mut().insert(stream.try_clone().unwrap());
+        server_handle
+            .borrow_mut()
+            .insert(stream.try_clone().unwrap());
     });
     // Start a thread that receives values from the network and puts them on the queue.
     //todo!()
@@ -126,16 +131,16 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     match values.as_ref() {
-        [callable, args] if matches!(args, Value::List(_))=> {
-            SERVER_HANDLE.with(|handle| {
-                if let Some(mut server) = handle.borrow().as_ref() {
-                    server.write(&bincode::serialize(&(callable, args)).unwrap()).unwrap();
-                    Ok(Value::Bool(true))
-                } else {
-                    Ok(Value::Bool(false))
-                }
-            })
-        }
+        [callable, args] if matches!(args, Value::List(_)) => SERVER_HANDLE.with(|handle| {
+            if let Some(mut server) = handle.borrow().as_ref() {
+                server
+                    .write(&bincode::serialize(&(callable, args)).unwrap())
+                    .unwrap();
+                Ok(Value::Bool(true))
+            } else {
+                Ok(Value::Bool(false))
+            }
+        }),
         _ => {
             return Err(RuntimeError::ExternTypeMismatch(
                 "n_rpc_server".to_string(),
@@ -157,7 +162,11 @@ pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             Vec::new(),
         ))
     });
-    let queue: Vec<_> = queue.unwrap().into_iter().map(|(v1, v2)| (v1.into(), v2.into())).collect(); //TODO(gu): Return error
+    let queue: Vec<_> = queue
+        .unwrap()
+        .into_iter()
+        .map(|(v1, v2)| (v1.into(), v2.into()))
+        .collect(); //TODO(gu): Return error
     for element in queue {
         let args = if let Value::List(args) = element.1 {
             args
