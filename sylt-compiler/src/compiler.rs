@@ -814,7 +814,11 @@ impl Compiler {
                 } else {
                     error!(
                         self,
-                        ctx, statement.span, "No blob with the name '{}' in this namespace", name
+                        ctx,
+                        statement.span,
+                        "No blob with the name '{}' in this namespace (#{})",
+                        name,
+                        ctx.namespace
                     );
                 }
             }
@@ -1169,9 +1173,10 @@ impl Compiler {
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
 
+
+            let mut namespace = self.namespaces[slot].clone();
             for statement in module.statements.iter() {
                 use StatementKind::*;
-                let mut namespace = self.namespaces.remove(slot);
                 match &statement.kind {
                     Blob { name, .. } => match namespace.entry(name.to_owned()) {
                         Entry::Vacant(_) => {
@@ -1199,8 +1204,8 @@ impl Compiler {
                     // Handled below.
                     _ => (),
                 }
-                self.namespaces.insert(slot, namespace);
             }
+            self.namespaces[slot] = namespace;
         }
 
         for (path, module) in tree.modules.iter() {
@@ -1208,9 +1213,9 @@ impl Compiler {
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
 
+            let mut namespace = self.namespaces[slot].clone();
             for statement in module.statements.iter() {
                 use StatementKind::*;
-                let mut namespace = self.namespaces[slot].clone();
                 match &statement.kind {
                     Use {
                         file: Identifier { name, span },
@@ -1277,8 +1282,8 @@ impl Compiler {
                         error!(self, ctx, statement.span, "Invalid outer statement");
                     }
                 }
-                self.namespaces.insert(slot, namespace);
             }
+            self.namespaces[slot] = namespace;
         }
         path_to_namespace_id
     }
