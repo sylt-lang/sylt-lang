@@ -13,8 +13,8 @@ const DEFAULT_PORT: u16 = 8588;
 //TODO(gu): Some type aliases here would go a long way.
 std::thread_local! {
     static RPC_QUEUE: Arc<Mutex<Vec<(Value, Value)>>> = Arc::new(Mutex::new(Vec::new()));
-    static SERVER_HANDLE: RefCell<Option<Arc<Mutex<TcpStream>>>> = RefCell::new(None);
-    static CLIENT_HANDLES: RefCell<Option<Arc<Mutex<Vec<Arc<Mutex<TcpStream>>>>>>> = RefCell::new(None); // yikes
+    static SERVER_HANDLE: RefCell<Option<TcpStream>> = RefCell::new(None);
+    static CLIENT_HANDLES: RefCell<Option<Arc<Mutex<Vec<TcpStream>>>>> = RefCell::new(None); // yikes
 }
 
 /// Starts a server that listens for new connections. Returns true if server startup succeeded, false otherwise.
@@ -32,11 +32,18 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
     let listener = TcpListener::bind(("127.0.0.1", port)).unwrap();
     let handles = Arc::new(Mutex::new(Vec::new()));
     let listener_handles = Arc::clone(&handles);
+    let queue = RPC_QUEUE.with(|queue| Arc::clone(queue));
     thread::spawn(move || {
         for connection in listener.incoming() {
             if let Ok(stream) = connection {
-                let stream = Arc::new(Mutex::new(stream));
-                listener_handles.lock().unwrap().push(stream);
+                listener_handles.lock().unwrap().push(stream.try_clone().unwrap());
+                thread::spawn(move || {
+                    // listen to communication from remote
+                    loop {
+                        let (callable, args) = bincode::deserialize_from(&stream).unwrap();
+                        queue.lock().unwrap().push((callable, args));
+                    }
+                });
             }
         }
     });
@@ -66,12 +73,10 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         }
     };
     // Connect to the server.
-    let stream = Arc::new(Mutex::new(
-        TcpStream::connect(socket_addr).unwrap(), //TODO(gu): Error handling
-    ));
+    let stream = TcpStream::connect(socket_addr).unwrap(); //TODO(gu): Error handling
     // Store the stream so we can send to it later.
     SERVER_HANDLE.with(|server_handle| {
-        server_handle.borrow_mut().insert(Arc::clone(&stream));
+        server_handle.borrow_mut().insert(stream.try_clone().unwrap());
     });
     // Start a thread that receives values from the network and puts them on the queue.
     //todo!()
@@ -121,8 +126,8 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     match values.as_ref() {
         [callable, args] if matches!(args, Value::List(_))=> {
             SERVER_HANDLE.with(|handle| {
-                if let Some(server) = handle.borrow().as_ref() {
-                    server.lock().unwrap().write(&bincode::serialize(&(callable, args)).unwrap()).unwrap();
+                if let Some(mut server) = handle.borrow().as_ref() {
+                    server.write(&bincode::serialize(&(callable, args)).unwrap()).unwrap();
                     Ok(Value::Bool(true))
                 } else {
                     Ok(Value::Bool(false))
