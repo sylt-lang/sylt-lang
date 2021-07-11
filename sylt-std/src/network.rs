@@ -1,10 +1,12 @@
+use crate as sylt_std;
+
 use std::net::{TcpListener, TcpStream};
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use sylt_common::{RuntimeContext, Type, Value, error::RuntimeError};
 
-const DEFAULT_PORT: u16 = 11111;
+const DEFAULT_PORT: u16 = 8588;
 
 std::thread_local! {
     static RPC_QUEUE: Arc<Mutex<Vec<(Value, Value)>>> = Arc::new(Mutex::new(Vec::new()));
@@ -15,6 +17,10 @@ std::thread_local! {
 /// Starts a server that listens for new connections. Returns true if server startup succeeded, false otherwise.
 #[sylt_macro::sylt_link(n_rpc_start_server, "sylt_std::network")]
 pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
+    if ctx.typecheck {
+        return Ok(Value::Bool(true));
+    }
+
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     let port = match values.as_ref() {
         [Value::Int(port)] => *port as u16,
@@ -39,6 +45,10 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
 /// Connects to a server. Returns true if connection succeeded, false otherwise.
 #[sylt_macro::sylt_link(n_rpc_connect, "sylt_std::network")]
 pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
+    if ctx.typecheck {
+        return Ok(Value::Bool(true));
+    }
+
     // Get the ip and port from the arguments.
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     let socket_addr = match values.as_ref() {
@@ -75,7 +85,15 @@ pub fn n_rpc_is_server(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 
 #[sylt_macro::sylt_link(n_rpc_connected_clients, "sylt_std::network")]
 pub fn n_rpc_connected_clients(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    Ok(Value::Int(CLIENT_HANDLES.with(|handles| handles.lock().unwrap().map(|handles| handles.len()).unwrap_or(0))))
+    Ok(Value::Int(CLIENT_HANDLES.with(
+        |handles|
+            handles
+                .lock()
+                .unwrap()
+                .as_ref()
+                .map(|handles| handles.lock().unwrap().len() as i64)
+                .unwrap_or(0)
+    )))
 }
 
 #[sylt_macro::sylt_link(n_rpc_is_client, "sylt_std::network")]
@@ -111,6 +129,10 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 
 #[sylt_macro::sylt_link(n_rpc_resolve, "sylt_std::network")]
 pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
+    if ctx.typecheck {
+        return Ok(Value::Nil);
+    }
+
     let queue = RPC_QUEUE.with(
         |queue| Some(std::mem::replace(queue.lock().ok()?.deref_mut(), Vec::new()))
     );
@@ -130,3 +152,5 @@ pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     }
     Ok(Value::Nil)
 }
+
+sylt_macro::sylt_link_gen!("sylt_std::network");

@@ -27,7 +27,8 @@ criterion = { version = "0.3", optional = true }
 
 [features]
 lingon = [ "sylt-std/lingon" ]
-default = [ "lingon" ]
+network = [ "sylt-std/network" ]
+default = [ "lingon", "network" ]
 
 #[[bench]]
 #name = "sylt_benchmark"
