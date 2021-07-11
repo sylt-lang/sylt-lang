@@ -4,7 +4,7 @@ use std::net::{TcpListener, TcpStream};
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use sylt_common::{RuntimeContext, Type, Value, error::RuntimeError};
+use sylt_common::{error::RuntimeError, RuntimeContext, Type, Value};
 
 const DEFAULT_PORT: u16 = 8588;
 
@@ -52,12 +52,8 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     // Get the ip and port from the arguments.
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     let socket_addr = match values.as_ref() {
-        [Value::String(ip), Value::Int(port)] => {
-            (ip.as_str(), *port as u16)
-        }
-        [Value::String(ip)] => {
-            (ip.as_str(), DEFAULT_PORT)
-        }
+        [Value::String(ip), Value::Int(port)] => (ip.as_str(), *port as u16),
+        [Value::String(ip)] => (ip.as_str(), DEFAULT_PORT),
         _ => {
             return Err(RuntimeError::ExternTypeMismatch(
                 "n_rpc_connect".to_string(),
@@ -67,7 +63,7 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     };
     // Connect to the server.
     let stream = Arc::new(Mutex::new(
-        TcpStream::connect(socket_addr).unwrap() //TODO(gu): Error handling
+        TcpStream::connect(socket_addr).unwrap(), //TODO(gu): Error handling
     ));
     // Store the stream so we can send to it later.
     SERVER_HANDLE.with(|server_handle| {
@@ -80,25 +76,28 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 
 #[sylt_macro::sylt_link(n_rpc_is_server, "sylt_std::network")]
 pub fn n_rpc_is_server(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    Ok(Value::Bool(CLIENT_HANDLES.with(|handles| handles.lock().unwrap().is_some())))
+    Ok(Value::Bool(
+        CLIENT_HANDLES.with(|handles| handles.lock().unwrap().is_some()),
+    ))
 }
 
 #[sylt_macro::sylt_link(n_rpc_connected_clients, "sylt_std::network")]
 pub fn n_rpc_connected_clients(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    Ok(Value::Int(CLIENT_HANDLES.with(
-        |handles|
-            handles
-                .lock()
-                .unwrap()
-                .as_ref()
-                .map(|handles| handles.lock().unwrap().len() as i64)
-                .unwrap_or(0)
-    )))
+    Ok(Value::Int(CLIENT_HANDLES.with(|handles| {
+        handles
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|handles| handles.lock().unwrap().len() as i64)
+            .unwrap_or(0)
+    })))
 }
 
 #[sylt_macro::sylt_link(n_rpc_is_client, "sylt_std::network")]
 pub fn n_rpc_is_client(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    Ok(Value::Bool(SERVER_HANDLE.with(|handle| handle.lock().unwrap().is_some())))
+    Ok(Value::Bool(
+        SERVER_HANDLE.with(|handle| handle.lock().unwrap().is_some()),
+    ))
 }
 
 /// Performs a RPC on all connected clients. Returns true if sending succeeded, false otherwise.
@@ -106,9 +105,7 @@ pub fn n_rpc_is_client(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     match values.as_ref() {
-        [callable, Value::List(rpc_args)] => {
-
-        }
+        [callable, Value::List(rpc_args)] => {}
         _ => {}
     }
     todo!()
@@ -119,9 +116,7 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     match values.as_ref() {
-        [callable, Value::List(rpc_args)] => {
-
-        }
+        [callable, Value::List(rpc_args)] => {}
         _ => {}
     }
     todo!()
@@ -133,9 +128,12 @@ pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         return Ok(Value::Nil);
     }
 
-    let queue = RPC_QUEUE.with(
-        |queue| Some(std::mem::replace(queue.lock().ok()?.deref_mut(), Vec::new()))
-    );
+    let queue = RPC_QUEUE.with(|queue| {
+        Some(std::mem::replace(
+            queue.lock().ok()?.deref_mut(),
+            Vec::new(),
+        ))
+    });
     let queue = queue.unwrap(); //TODO(gu): Return error
     for element in queue {
         let args = if let Value::List(args) = element.1 {
