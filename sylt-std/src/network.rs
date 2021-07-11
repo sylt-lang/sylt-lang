@@ -6,7 +6,7 @@ use std::net::{TcpListener, TcpStream};
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use sylt_common::value::OwnedValue;
+use sylt_common::owned_value::OwnedValue;
 use sylt_common::{error::RuntimeError, RuntimeContext, Type, Value};
 
 const DEFAULT_PORT: u16 = 8588;
