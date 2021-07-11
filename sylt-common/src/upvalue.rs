@@ -1,6 +1,9 @@
+use serde::{Deserialize, Serialize};
+
 use crate::value::Value;
 
 #[derive(Debug)]
+#[derive(Deserialize, Serialize)]
 pub struct UpValue {
     slot: usize,
     value: Value,
