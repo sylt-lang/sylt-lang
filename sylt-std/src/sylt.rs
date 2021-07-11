@@ -261,7 +261,7 @@ sylt_macro::extern_function!(
     angle
     "Calculates the angle of a 2d vector"
     [Two(Float(x), Float(y))] -> Type::Float => {
-        Ok(Float(y.atan2(-*x)))
+        Ok(Float(y.atan2(*x)))
     },
 );
 
