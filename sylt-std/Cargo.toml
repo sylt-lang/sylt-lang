@@ -14,4 +14,6 @@ lingon = { git = "https://github.com/sornas/lingon.git", branch = "main", option
 owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
 
 [features]
-default = [ "lingon" ]
+default = [ "lingon", "network" ]
+
+network = []
