@@ -13,6 +13,7 @@ std::thread_local! {
 }
 
 /// Starts a server that listens for new connections. Returns true if server startup succeeded, false otherwise.
+#[sylt_macro::sylt_link(n_rpc_start_server, "sylt_std::network")]
 pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     let port = match values.as_ref() {
@@ -36,6 +37,7 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
 }
 
 /// Connects to a server. Returns true if connection succeeded, false otherwise.
+#[sylt_macro::sylt_link(n_rpc_connect, "sylt_std::network")]
 pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     // Get the ip and port from the arguments.
     let values = ctx.machine.stack_from_base(ctx.stack_base);
@@ -66,15 +68,18 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Bool(true))
 }
 
+#[sylt_macro::sylt_link(n_rpc_is_server, "sylt_std::network")]
 pub fn n_rpc_is_server(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Bool(CLIENT_HANDLES.with(|handles| handles.lock().unwrap().is_some())))
 }
 
+#[sylt_macro::sylt_link(n_rpc_is_connected, "sylt_std::network")]
 pub fn n_rpc_is_connected(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Bool(SERVER_HANDLE.with(|handle| handle.lock().unwrap().is_some())))
 }
 
 /// Performs a RPC on all connected clients. Returns true if sending succeeded, false otherwise.
+#[sylt_macro::sylt_link(n_rpc_clients, "sylt_std::network")]
 pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     match values.as_ref() {
