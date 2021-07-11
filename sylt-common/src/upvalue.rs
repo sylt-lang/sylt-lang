@@ -1,12 +1,37 @@
 use serde::{Deserialize, Serialize};
 
-use crate::value::Value;
+use crate::value::{OwnedValue, Value};
 
 #[derive(Debug)]
 #[derive(Deserialize, Serialize)]
 pub struct UpValue {
     slot: usize,
     value: Value,
+}
+
+#[derive(Clone, Debug)]
+#[derive(Deserialize, Serialize)]
+pub struct OwnedUpValue {
+    slot: usize,
+    value: OwnedValue,
+}
+
+impl From<OwnedUpValue> for UpValue {
+    fn from(value: OwnedUpValue) -> Self {
+        Self {
+            slot: value.slot,
+            value: value.value.into(),
+        }
+    }
+}
+
+impl From<&UpValue> for OwnedUpValue {
+    fn from(value: &UpValue) -> Self {
+        Self {
+            slot: value.slot,
+            value: (&value.value).into(),
+        }
+    }
 }
 
 impl UpValue {

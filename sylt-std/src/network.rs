@@ -6,15 +6,16 @@ use std::net::{TcpListener, TcpStream};
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use sylt_common::value::OwnedValue;
 use sylt_common::{error::RuntimeError, RuntimeContext, Type, Value};
 
 const DEFAULT_PORT: u16 = 8588;
 
 //TODO(gu): Some type aliases here would go a long way.
 std::thread_local! {
-    static RPC_QUEUE: Arc<Mutex<Vec<(Value, Value)>>> = Arc::new(Mutex::new(Vec::new()));
+    static RPC_QUEUE: Arc<Mutex<Vec<(OwnedValue, OwnedValue)>>> = Arc::new(Mutex::new(Vec::new()));
     static SERVER_HANDLE: RefCell<Option<TcpStream>> = RefCell::new(None);
-    static CLIENT_HANDLES: RefCell<Option<Arc<Mutex<Vec<TcpStream>>>>> = RefCell::new(None); // yikes
+    static CLIENT_HANDLES: RefCell<Option<Arc<Mutex<Vec<TcpStream>>>>> = RefCell::new(None);
 }
 
 /// Starts a server that listens for new connections. Returns true if server startup succeeded, false otherwise.
@@ -37,6 +38,7 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
         for connection in listener.incoming() {
             if let Ok(stream) = connection {
                 listener_handles.lock().unwrap().push(stream.try_clone().unwrap());
+                let queue = Arc::clone(&queue);
                 thread::spawn(move || {
                     // listen to communication from remote
                     loop {
@@ -120,7 +122,7 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 }
 
 /// Performs a RPC on the connected server. Returns true if sending succeeded, false otherwise.
-#[sylt_macro::sylt_link(n_rpc, "sylt_std::network")]
+#[sylt_macro::sylt_link(n_rpc_server, "sylt_std::network")]
 pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     match values.as_ref() {
@@ -155,7 +157,7 @@ pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             Vec::new(),
         ))
     });
-    let queue = queue.unwrap(); //TODO(gu): Return error
+    let queue: Vec<_> = queue.unwrap().into_iter().map(|(v1, v2)| (v1.into(), v2.into())).collect(); //TODO(gu): Return error
     for element in queue {
         let args = if let Value::List(args) = element.1 {
             args
