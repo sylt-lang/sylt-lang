@@ -1,5 +1,7 @@
 use crate as sylt_std;
 
+use std::cell::RefCell;
+use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
@@ -8,10 +10,11 @@ use sylt_common::{error::RuntimeError, RuntimeContext, Type, Value};
 
 const DEFAULT_PORT: u16 = 8588;
 
+//TODO(gu): Some type aliases here would go a long way.
 std::thread_local! {
     static RPC_QUEUE: Arc<Mutex<Vec<(Value, Value)>>> = Arc::new(Mutex::new(Vec::new()));
-    static SERVER_HANDLE: Mutex<Option<Arc<Mutex<TcpStream>>>> = Mutex::new(None);
-    static CLIENT_HANDLES: Mutex<Option<Arc<Mutex<Vec<TcpStream>>>>> = Mutex::new(None);
+    static SERVER_HANDLE: RefCell<Option<Arc<Mutex<TcpStream>>>> = RefCell::new(None);
+    static CLIENT_HANDLES: RefCell<Option<Arc<Mutex<Vec<Arc<Mutex<TcpStream>>>>>>> = RefCell::new(None); // yikes
 }
 
 /// Starts a server that listens for new connections. Returns true if server startup succeeded, false otherwise.
@@ -32,12 +35,13 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
     thread::spawn(move || {
         for connection in listener.incoming() {
             if let Ok(stream) = connection {
+                let stream = Arc::new(Mutex::new(stream));
                 listener_handles.lock().unwrap().push(stream);
             }
         }
     });
     CLIENT_HANDLES.with(|global_handles| {
-        global_handles.lock().unwrap().insert(handles);
+        global_handles.borrow_mut().insert(handles);
     });
     Ok(Value::Bool(true))
 }
@@ -67,7 +71,7 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     ));
     // Store the stream so we can send to it later.
     SERVER_HANDLE.with(|server_handle| {
-        server_handle.lock().unwrap().insert(Arc::clone(&stream));
+        server_handle.borrow_mut().insert(Arc::clone(&stream));
     });
     // Start a thread that receives values from the network and puts them on the queue.
     //todo!()
@@ -77,7 +81,7 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 #[sylt_macro::sylt_link(n_rpc_is_server, "sylt_std::network")]
 pub fn n_rpc_is_server(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Bool(
-        CLIENT_HANDLES.with(|handles| handles.lock().unwrap().is_some()),
+        CLIENT_HANDLES.with(|handles| handles.borrow().is_some()),
     ))
 }
 
@@ -85,8 +89,7 @@ pub fn n_rpc_is_server(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 pub fn n_rpc_connected_clients(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Int(CLIENT_HANDLES.with(|handles| {
         handles
-            .lock()
-            .unwrap()
+            .borrow()
             .as_ref()
             .map(|handles| handles.lock().unwrap().len() as i64)
             .unwrap_or(0)
@@ -96,7 +99,7 @@ pub fn n_rpc_connected_clients(_: RuntimeContext<'_>) -> Result<Value, RuntimeEr
 #[sylt_macro::sylt_link(n_rpc_is_client, "sylt_std::network")]
 pub fn n_rpc_is_client(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Bool(
-        SERVER_HANDLE.with(|handle| handle.lock().unwrap().is_some()),
+        SERVER_HANDLE.with(|handle| handle.borrow().is_some()),
     ))
 }
 
@@ -116,10 +119,23 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     match values.as_ref() {
-        [callable, Value::List(rpc_args)] => {}
-        _ => {}
+        [callable, args] if matches!(args, Value::List(_))=> {
+            SERVER_HANDLE.with(|handle| {
+                if let Some(server) = handle.borrow().as_ref() {
+                    server.lock().unwrap().write(&bincode::serialize(&(callable, args)).unwrap()).unwrap();
+                    Ok(Value::Bool(true))
+                } else {
+                    Ok(Value::Bool(false))
+                }
+            })
+        }
+        _ => {
+            return Err(RuntimeError::ExternTypeMismatch(
+                "n_rpc_server".to_string(),
+                values.iter().map(Type::from).collect(),
+            ));
+        }
     }
-    todo!()
 }
 
 #[sylt_macro::sylt_link(n_rpc_resolve, "sylt_std::network")]

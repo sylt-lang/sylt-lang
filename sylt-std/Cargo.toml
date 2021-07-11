@@ -9,6 +9,7 @@ edition = "2018"
 sylt-common = { path = "../sylt-common" }
 sylt_macro = { path = "../sylt_macro" }
 
+bincode = { version = "1", optional = true }
 lazy_static = "1"
 lingon = { git = "https://github.com/sornas/lingon.git", branch = "main", optional = true }
 owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
@@ -16,4 +17,4 @@ owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
 [features]
 default = [ "lingon", "network" ]
 
-network = []
+network = ["bincode"]
