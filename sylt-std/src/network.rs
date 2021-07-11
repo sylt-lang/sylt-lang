@@ -73,6 +73,11 @@ pub fn n_rpc_is_server(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Bool(CLIENT_HANDLES.with(|handles| handles.lock().unwrap().is_some())))
 }
 
+#[sylt_macro::sylt_link(n_rpc_connected_clients, "sylt_std::network")]
+pub fn n_rpc_connected_clients(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
+    Ok(Value::Int(CLIENT_HANDLES.with(|handles| handles.lock().unwrap().map(|handles| handles.len()).unwrap_or(0))))
+}
+
 #[sylt_macro::sylt_link(n_rpc_is_connected, "sylt_std::network")]
 pub fn n_rpc_is_connected(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Bool(SERVER_HANDLE.with(|handle| handle.lock().unwrap().is_some())))
