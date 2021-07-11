@@ -312,6 +312,22 @@ pub fn magnitude<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     }
 }
 
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt"
+    dot
+    "Computes the scalar product"
+    [One(Float(a)), One(Float(b))] -> Type::Float => {
+        Ok(Float(a * b))
+    },
+    [Two(Float(ax), Float(ay)), Two(Float(bx), Float(by))] -> Type::Float => {
+        Ok(Float(ax * bx + ay * by))
+    },
+    [Three(Float(ax), Float(ay), Float(az)), Three(Float(bx), Float(by), Float(bz))] -> Type::Float => {
+        Ok(Float(ax * bx + ay * by + az * bz))
+    },
+);
+
 pub fn union_type<'t>(a: Type, b: Type, blobs: &[Blob]) -> Type {
     if a.fits(&b, blobs).is_ok() {
         a
