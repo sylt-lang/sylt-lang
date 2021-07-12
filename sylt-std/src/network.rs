@@ -132,8 +132,10 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             return Ok(Value::Bool(false));
         },
     }
-    // Start a thread that receives values from the network and puts them on the queue.
-    //todo!()
+
+    let queue = RPC_QUEUE.with(|queue| Arc::clone(queue));
+    thread::spawn(|| rpc_handle_stream(stream, queue));
+
     Ok(Value::Bool(true))
 }
 
