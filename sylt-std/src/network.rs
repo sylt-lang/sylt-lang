@@ -17,7 +17,7 @@ std::thread_local! {
     static CLIENT_HANDLES: RefCell<Option<Arc<Mutex<Vec<TcpStream>>>>> = RefCell::new(None);
 }
 
-/// Listen for new connections and handle them.
+/// Listen for new connections and accept them.
 fn rpc_listen(
     listener: TcpListener,
     queue: Arc<Mutex<Vec<(OwnedValue, OwnedValue)>>>,
@@ -42,6 +42,7 @@ fn rpc_listen(
     }
 }
 
+/// Receive RPC values from a stream and queue them locally.
 fn rpc_handle_stream(
     stream: TcpStream,
     queue: Arc<Mutex<Vec<(OwnedValue, OwnedValue)>>>,
