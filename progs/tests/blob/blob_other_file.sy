@@ -1,0 +1,6 @@
+use _a
+
+:_a.A is :_a.A
+
+start :: fn {
+}
