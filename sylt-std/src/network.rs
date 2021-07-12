@@ -176,38 +176,44 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     todo!()
 }
 
-#[sylt_macro::sylt_doc(n_rpc_server, "Performs an RPC on the connected server, returning success status.", [One(Value(callable)), One(List(args))] Type::Bool)]
+//TODO(gu): This doc is wrong since this takes variadic arguments.
+#[sylt_macro::sylt_doc(n_rpc_server, "Performs an RPC on the connected server, returning success status.", [One(Value(callable)), One(Value(args))] Type::Bool)]
 #[sylt_macro::sylt_link(n_rpc_server, "sylt_std::network")]
 pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match values.as_ref() {
-        [callable, args] if matches!(args, Value::List(_)) => SERVER_HANDLE.with(|handle| {
-            if let Some(mut server) = handle.borrow().as_ref() {
-                let serialized = match bincode::serialize(&(callable, args)) {
-                    Ok(serialized) => serialized,
-                    Err(e) => {
-                        println!("Error serializing values: {:?}", e);
-                        return Ok(Value::Bool(false));
-                    }
-                };
-                match server.write(&serialized) {
-                    Ok(_) => Ok(Value::Bool(true)),
-                    Err(e) => {
-                        println!("Error sending data to server {:?}", e);
-                        Ok(Value::Bool(false))
-                    },
-                }
-            } else {
-                Ok(Value::Bool(false))
-            }
-        }),
-        _ => {
-            return Err(RuntimeError::ExternTypeMismatch(
-                "n_rpc_server".to_string(),
-                values.iter().map(Type::from).collect(),
-            ));
+    let owned_values: Vec<OwnedValue> = values.iter().map(|v| v.into()).collect();
+
+    let (callable, args) = if owned_values.len() != 0 {
+        let (callable, args) = owned_values.split_at(1);
+        (callable[0].clone(), OwnedValue::List(args.to_vec()))
+    } else {
+        return Err(RuntimeError::ExternTypeMismatch(
+            "n_rpc_server".to_string(),
+            values.iter().map(Type::from).collect(),
+        ));
+    };
+
+    let serialized = match bincode::serialize(&(callable, args)) {
+        Ok(serialized) => serialized,
+        Err(e) => {
+            println!("Error serializing values: {:?}", e);
+            return Ok(Value::Bool(false));
         }
-    }
+    };
+
+    SERVER_HANDLE.with(|server_handle| {
+        if let Some(mut stream) = server_handle.borrow().as_ref() {
+            match stream.write(&serialized) {
+                Ok(_) => Ok(Value::Bool(true)),
+                Err(e) => {
+                    println!("Error sending data to server {:?}", e);
+                    Ok(Value::Bool(false))
+                },
+            }
+        } else {
+            Ok(Value::Bool(false))
+        }
+    })
 }
 
 #[sylt_macro::sylt_doc(n_rpc_resolve, "Resolves the queued RPCs that has been received since the last resolve.", [] Type::Void)]
@@ -223,6 +229,7 @@ pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             Vec::new(),
         )
     });
+    // Convert the queue into Values.
     let queue: Vec<_> = queue
         .into_iter()
         .map(|(v1, v2)| (v1.into(), v2.into()))
