@@ -316,7 +316,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt"
     normalize
     "Returns a unit length vector pointing in the same direction."
-    [Two(Float(x), Float(y))] -> Type::Float => {
+    [Two(Float(x), Float(y))] -> Type::Tuple(vec![Type::Float, Type::Float]) => {
         let length = (x * x + y * y).sqrt();
         let (x, y) = if length != 0.0 {
             (x / length, y / length)
