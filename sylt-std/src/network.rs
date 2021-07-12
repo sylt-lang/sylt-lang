@@ -17,7 +17,7 @@ std::thread_local! {
     static CLIENT_HANDLES: RefCell<Option<Arc<Mutex<Vec<TcpStream>>>>> = RefCell::new(None);
 }
 
-/// Starts a server that listens for new connections. Returns true if server startup succeeded, false otherwise.
+#[sylt_macro::sylt_doc(n_rpc_start_server, "Starts an RPC server on the specified port, returning success status.", [One(Int(port))] Type::Bool)]
 #[sylt_macro::sylt_link(n_rpc_start_server, "sylt_std::network")]
 pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     if ctx.typecheck {
@@ -76,7 +76,7 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
     Ok(Value::Bool(true))
 }
 
-/// Connects to a server. Returns true if connection succeeded, false otherwise.
+#[sylt_macro::sylt_doc(n_rpc_connect, "Connects to an RPC server on the specified IP and port.", [One(String(ip)), One(Int(port))] Type::Bool)]
 #[sylt_macro::sylt_link(n_rpc_connect, "sylt_std::network")]
 pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     if ctx.typecheck {
@@ -122,6 +122,7 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Bool(true))
 }
 
+#[sylt_macro::sylt_doc(n_rpc_is_server, "Returns whether we've started a server or not.", [] Type::Bool)]
 #[sylt_macro::sylt_link(n_rpc_is_server, "sylt_std::network")]
 pub fn n_rpc_is_server(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Bool(
@@ -129,6 +130,7 @@ pub fn n_rpc_is_server(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     ))
 }
 
+#[sylt_macro::sylt_doc(n_rpc_connected_clients, "Returns how many clients are currently connected.", [] Type::Int)]
 #[sylt_macro::sylt_link(n_rpc_connected_clients, "sylt_std::network")]
 pub fn n_rpc_connected_clients(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Int(CLIENT_HANDLES.with(|handles| {
@@ -140,6 +142,7 @@ pub fn n_rpc_connected_clients(_: RuntimeContext<'_>) -> Result<Value, RuntimeEr
     })))
 }
 
+#[sylt_macro::sylt_doc(n_rpc_is_client, "Returns whether we've connected to a client or not.", [] Type::Bool)]
 #[sylt_macro::sylt_link(n_rpc_is_client, "sylt_std::network")]
 pub fn n_rpc_is_client(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Bool(
@@ -147,7 +150,7 @@ pub fn n_rpc_is_client(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     ))
 }
 
-/// Performs a RPC on all connected clients. Returns true if sending succeeded, false otherwise.
+#[sylt_macro::sylt_doc(n_rpc_clients, "Performs an RPC on all connected clients.", [One(Value(callable)), One(List(args))] Type::Unknown)]
 #[sylt_macro::sylt_link(n_rpc_clients, "sylt_std::network")]
 pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
@@ -158,7 +161,7 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     todo!()
 }
 
-/// Performs a RPC on the connected server. Returns true if sending succeeded, false otherwise.
+#[sylt_macro::sylt_doc(n_rpc_server, "Performs an RPC on the connected server, returning success status.", [One(Value(callable)), One(List(args))] Type::Bool)]
 #[sylt_macro::sylt_link(n_rpc_server, "sylt_std::network")]
 pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
@@ -192,6 +195,7 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     }
 }
 
+#[sylt_macro::sylt_doc(n_rpc_resolve, "Resolves the queued RPCs that has been received since the last resolve.", [] Type::Void)]
 #[sylt_macro::sylt_link(n_rpc_resolve, "sylt_std::network")]
 pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     if ctx.typecheck {
