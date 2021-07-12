@@ -678,12 +678,13 @@ impl Compiler {
                         self,
                         ctx,
                         assignable.span,
-                        "While parsing type '{}' is not a namespace",
+                        "While parsing namespace access '{}' is not a namespace",
                         ident.name
                     );
                     None
                 }),
-            Read(ident) => self
+            Read(ident) => {
+                self
                 .namespaces[namespace].get(&ident.name)
                 .and_then(|o| match o {
                     Name::Namespace(namespace) => Some(*namespace),
@@ -694,11 +695,12 @@ impl Compiler {
                         self,
                         ctx,
                         assignable.span,
-                        "While parsing type '{}' is not a namespace",
+                        "While parsing namespace '{}' is not a namespace",
                         ident.name
                     );
                     None
-                }),
+                })
+            }
             ArrowCall(..) | Call(..) => {
                 error!(self, ctx, assignable.span, "Cannot have calls in types");
                 None
@@ -1248,6 +1250,30 @@ impl Compiler {
                         }
                     }
 
+                    // Already handled in the loop before.
+                    Blob { .. } => (),
+
+                    // Handled in the loop after - so namespaces are structured correctly.
+                    Definition { .. } => {}
+
+                    // Handled later - since we need the type information.
+                    IsCheck { .. } => (),
+
+                    _ => (),
+                }
+            }
+            self.namespaces[slot] = namespace;
+        }
+
+        for (path, module) in tree.modules.iter() {
+            let path = path.file_stem().unwrap().to_str().unwrap();
+            let slot = path_to_namespace_id[path];
+            let ctx = Context::from_namespace(slot);
+
+            let mut namespace = self.namespaces[slot].clone();
+            for statement in module.statements.iter() {
+                use StatementKind::*;
+                match &statement.kind {
                     #[rustfmt::skip]
                     Definition { ident: Identifier { name, .. }, kind, ty, .. } => {
                         let var = self.define(name, *kind, statement.span);
@@ -1282,6 +1308,8 @@ impl Compiler {
                         };
                         self.add_op(ctx, Span::zero(), op);
                     }
+
+                    Use { ..  } => { }
 
                     // Already handled in the loop before.
                     Blob { .. } => (),
