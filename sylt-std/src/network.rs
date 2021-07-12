@@ -228,7 +228,7 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         return Ok(Value::Bool(true));
     }
 
-    // Serialice the RPC.
+    // Serialize the RPC.
     let serialized = match bincode::serialize(&get_rpc_args(ctx, "n_rpc_server")?) {
         Ok(serialized) => serialized,
         Err(e) => {
