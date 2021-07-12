@@ -255,6 +255,18 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     })
 }
 
+#[sylt_macro::sylt_doc(n_rpc_disconnect, "Disconnect from the currently connected server.", [] Type::Void)]
+#[sylt_macro::sylt_link(n_rpc_disconnect, "sylt_std::network")]
+pub fn n_rpc_disconnect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
+    if ctx.typecheck {
+        return Ok(Value::Nil);
+    }
+
+    SERVER_HANDLE.with(|server_handle| server_handle.borrow_mut().take());
+
+    Ok(Value::Nil)
+}
+
 #[sylt_macro::sylt_doc(n_rpc_resolve, "Resolves the queued RPCs that has been received since the last resolve.", [] Type::Void)]
 #[sylt_macro::sylt_link(n_rpc_resolve, "sylt_std::network")]
 pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
