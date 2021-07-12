@@ -66,6 +66,7 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
         return Ok(Value::Bool(true));
     }
 
+    // Get the port from the arguments.
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     let port = match values.as_ref() {
         [Value::Int(port)] => *port as u16,
@@ -80,13 +81,15 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
         }
     };
 
-    let queue = RPC_QUEUE.with(|queue| Arc::clone(queue));
+    // Initialize the thread local with our list of client handles.
     let handles = Arc::new(Mutex::new(Vec::new()));
     CLIENT_HANDLES.with(|global_handles| {
         global_handles.borrow_mut().insert(Arc::clone(&handles));
     });
 
-    thread::spawn(|| rpc_listen(listener, queue, handles));
+    // Start listening for new clients.
+    let rpc_queue = RPC_QUEUE.with(|queue| Arc::clone(queue));
+    thread::spawn(|| rpc_listen(listener, rpc_queue, handles));
 
     Ok(Value::Bool(true))
 }
@@ -133,8 +136,9 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         },
     }
 
-    let queue = RPC_QUEUE.with(|queue| Arc::clone(queue));
-    thread::spawn(|| rpc_handle_stream(stream, queue));
+    // Handle incoming RPCs by putting them on the queue.
+    let rpc_queue = RPC_QUEUE.with(|queue| Arc::clone(queue));
+    thread::spawn(|| rpc_handle_stream(stream, rpc_queue));
 
     Ok(Value::Bool(true))
 }
@@ -167,7 +171,8 @@ pub fn n_rpc_is_client(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     ))
 }
 
-fn get_rpc_args(ctx: RuntimeContext<'_>) -> Result<(OwnedValue, OwnedValue), RuntimeError> {
+/// Parse args given to an external function as rpc arguments, i.e. one callable followed by 0..n arguments.
+fn get_rpc_args(ctx: RuntimeContext<'_>, func_name: &str) -> Result<(OwnedValue, OwnedValue), RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     let owned_values: Vec<OwnedValue> = values.iter().map(|v| v.into()).collect();
 
@@ -176,7 +181,7 @@ fn get_rpc_args(ctx: RuntimeContext<'_>) -> Result<(OwnedValue, OwnedValue), Run
         Ok((callable[0].clone(), OwnedValue::List(args.to_vec())))
     } else {
         Err(RuntimeError::ExternTypeMismatch(
-            "n_rpc_server".to_string(),
+            func_name.to_string(),
             values.iter().map(Type::from).collect(),
         ))
     }
@@ -189,7 +194,8 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         return Ok(Value::Nil);
     }
 
-    let serialized = match bincode::serialize(&get_rpc_args(ctx)?) {
+    // Serialize the RPC.
+    let serialized = match bincode::serialize(&get_rpc_args(ctx, "n_rpc_clients")?) {
         Ok(serialized) => serialized,
         Err(e) => {
             println!("Error serializing values: {:?}", e);
@@ -197,8 +203,10 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         }
     };
 
+    // Send the serialized data to all clients.
     CLIENT_HANDLES.with(|client_handles| {
         if let Some(streams) = client_handles.borrow().as_ref() {
+            //TODO(gu): Filter closed streams here (or somewhere else)
             for stream in streams.lock().unwrap().iter_mut() {
                 if let Err(e) = stream.write(&serialized) {
                     println!("Error sending data to a client: {:?}", e);
@@ -220,7 +228,8 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         return Ok(Value::Bool(true));
     }
 
-    let serialized = match bincode::serialize(&get_rpc_args(ctx)?) {
+    // Serialice the RPC.
+    let serialized = match bincode::serialize(&get_rpc_args(ctx, "n_rpc_server")?) {
         Ok(serialized) => serialized,
         Err(e) => {
             println!("Error serializing values: {:?}", e);
@@ -228,6 +237,7 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         }
     };
 
+    // Send the serialized data to the server.
     SERVER_HANDLE.with(|server_handle| {
         if let Some(mut stream) = server_handle.borrow().as_ref() {
             match stream.write(&serialized) {
@@ -250,17 +260,20 @@ pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         return Ok(Value::Nil);
     }
 
+    // Take the current queue.
     let queue = RPC_QUEUE.with(|queue| {
         std::mem::replace(
             queue.lock().unwrap().deref_mut(),
             Vec::new(),
         )
     });
-    // Convert the queue into Values.
-    let queue: Vec<_> = queue
+
+    // Convert the queue into Values that can be evaluated.
+    let queue = queue
         .into_iter()
-        .map(|(v1, v2)| (v1.into(), v2.into()))
-        .collect();
+        .map(|(v1, v2)| (v1.into(), v2.into()));
+
+    // Evaluate each RPC one a time.
     for element in queue {
         let args = if let Value::List(args) = element.1 {
             args
@@ -268,9 +281,9 @@ pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             println!("Tried to resolve non-list argument {:?}", element.1);
             continue;
         };
-        // Create a vec of references to the list. This is kinda weird but it's needed since
-        // the runtime usually doesn't work with owned values, which these values are since
-        // they're cloned from the network.
+        // Create a vec of references to the argument list. This is kinda weird
+        // but it's needed since the runtime usually doesn't handle owned
+        // values.
         let args = args.borrow();
         let borrowed_args: Vec<_> = args.iter().collect();
         ctx.machine.eval_call(element.0, &borrowed_args).unwrap();
