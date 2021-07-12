@@ -11,7 +11,6 @@ use sylt_common::{error::RuntimeError, RuntimeContext, Type, Value};
 
 const DEFAULT_PORT: u16 = 8588;
 
-//TODO(gu): Some type aliases here would go a long way.
 std::thread_local! {
     static RPC_QUEUE: Arc<Mutex<Vec<(OwnedValue, OwnedValue)>>> = Arc::new(Mutex::new(Vec::new()));
     static SERVER_HANDLE: RefCell<Option<TcpStream>> = RefCell::new(None);
@@ -30,22 +29,41 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
         [Value::Int(port)] => *port as u16,
         _ => DEFAULT_PORT,
     };
-    let listener = TcpListener::bind(("127.0.0.1", port)).unwrap();
+    let listener = match TcpListener::bind(("127.0.0.1", port)) {
+        Ok(listener) => listener,
+        Err(e) => {
+            println!("Error binding server to TCP: {:?}", e);
+            return Ok(Value::Bool(false));
+        }
+    };
     let handles = Arc::new(Mutex::new(Vec::new()));
     let listener_handles = Arc::clone(&handles);
     let queue = RPC_QUEUE.with(|queue| Arc::clone(queue));
     thread::spawn(move || {
         for connection in listener.incoming() {
             if let Ok(stream) = connection {
-                listener_handles
-                    .lock()
-                    .unwrap()
-                    .push(stream.try_clone().unwrap());
+                match stream.try_clone() {
+                    Ok(stream) => listener_handles
+                        .lock()
+                        .unwrap()
+                        .push(stream),
+                    Err(e) => {
+                        println!("Error accepting TCP connection: {:?}", e);
+                        println!("Ignoring");
+                        continue;
+                    }
+                }
                 let queue = Arc::clone(&queue);
                 thread::spawn(move || {
                     // listen to communication from remote
                     loop {
-                        let (callable, args) = bincode::deserialize_from(&stream).unwrap();
+                        let (callable, args) = match bincode::deserialize_from(&stream) {
+                            Ok(values) => values,
+                            Err(e) => {
+                                println!("Error reading from client: {:?}", e);
+                                return;
+                            }
+                        };
                         queue.lock().unwrap().push((callable, args));
                     }
                 });
@@ -78,13 +96,27 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         }
     };
     // Connect to the server.
-    let stream = TcpStream::connect(socket_addr).unwrap(); //TODO(gu): Error handling
-                                                           // Store the stream so we can send to it later.
-    SERVER_HANDLE.with(|server_handle| {
-        server_handle
-            .borrow_mut()
-            .insert(stream.try_clone().unwrap());
-    });
+    let stream = match TcpStream::connect(socket_addr) {
+        Ok(stream) => stream,
+        Err(e) => {
+            println!("Error connecting to server: {:?}", e);
+            return Ok(Value::Bool(false));
+        }
+    };
+    // Store the stream so we can send to it later.
+    match stream.try_clone() {
+        Ok(stream) => {
+            SERVER_HANDLE.with(|server_handle| {
+                server_handle
+                    .borrow_mut()
+                    .insert(stream);
+            });
+        },
+        Err(e) => {
+            println!("Error connecting to server: {:?}", e);
+            return Ok(Value::Bool(false));
+        },
+    }
     // Start a thread that receives values from the network and puts them on the queue.
     //todo!()
     Ok(Value::Bool(true))
@@ -133,10 +165,20 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     match values.as_ref() {
         [callable, args] if matches!(args, Value::List(_)) => SERVER_HANDLE.with(|handle| {
             if let Some(mut server) = handle.borrow().as_ref() {
-                server
-                    .write(&bincode::serialize(&(callable, args)).unwrap())
-                    .unwrap();
-                Ok(Value::Bool(true))
+                let serialized = match bincode::serialize(&(callable, args)) {
+                    Ok(serialized) => serialized,
+                    Err(e) => {
+                        println!("Error serializing values: {:?}", e);
+                        return Ok(Value::Bool(false));
+                    }
+                };
+                match server.write(&serialized) {
+                    Ok(_) => Ok(Value::Bool(true)),
+                    Err(e) => {
+                        println!("Error sending data to server {:?}", e);
+                        Ok(Value::Bool(false))
+                    },
+                }
             } else {
                 Ok(Value::Bool(false))
             }
@@ -157,21 +199,21 @@ pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     }
 
     let queue = RPC_QUEUE.with(|queue| {
-        Some(std::mem::replace(
-            queue.lock().ok()?.deref_mut(),
+        std::mem::replace(
+            queue.lock().unwrap().deref_mut(),
             Vec::new(),
-        ))
+        )
     });
     let queue: Vec<_> = queue
-        .unwrap()
         .into_iter()
         .map(|(v1, v2)| (v1.into(), v2.into()))
-        .collect(); //TODO(gu): Return error
+        .collect();
     for element in queue {
         let args = if let Value::List(args) = element.1 {
             args
         } else {
-            panic!();
+            println!("Tried to resolve non-list argument {:?}", element.1);
+            continue;
         };
         // Create a vec of references to the list. This is kinda weird but it's needed since
         // the runtime usually doesn't work with owned values, which these values are since
