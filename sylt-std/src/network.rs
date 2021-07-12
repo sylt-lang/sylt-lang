@@ -14,14 +14,14 @@ const DEFAULT_PORT: u16 = 8588;
 std::thread_local! {
     static RPC_QUEUE: Arc<Mutex<Vec<(OwnedValue, OwnedValue)>>> = Arc::new(Mutex::new(Vec::new()));
     static SERVER_HANDLE: RefCell<Option<TcpStream>> = RefCell::new(None);
-    static CLIENT_HANDLES: RefCell<Option<Arc<Mutex<Vec<TcpStream>>>>> = RefCell::new(None);
+    static CLIENT_HANDLES: RefCell<Option<Arc<Mutex<Vec<(TcpStream, bool)>>>>> = RefCell::new(None);
 }
 
 /// Listen for new connections and accept them.
 fn rpc_listen(
     listener: TcpListener,
     queue: Arc<Mutex<Vec<(OwnedValue, OwnedValue)>>>,
-    handles: Arc<Mutex<Vec<TcpStream>>>,
+    handles: Arc<Mutex<Vec<(TcpStream, bool)>>>,
 ) {
     for connection in listener.incoming() {
         if let Ok(stream) = connection {
@@ -29,7 +29,7 @@ fn rpc_listen(
                 Ok(stream) => handles
                     .lock()
                     .unwrap()
-                    .push(stream),
+                    .push((stream, true)),
                 Err(e) => {
                     println!("Error accepting TCP connection: {:?}", e);
                     println!("Ignoring");
@@ -206,12 +206,14 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     // Send the serialized data to all clients.
     CLIENT_HANDLES.with(|client_handles| {
         if let Some(streams) = client_handles.borrow().as_ref() {
-            //TODO(gu): Filter closed streams here (or somewhere else)
-            for stream in streams.lock().unwrap().iter_mut() {
+            let mut streams = streams.lock().unwrap();
+            for (stream, keep) in streams.iter_mut() {
                 if let Err(e) = stream.write(&serialized) {
                     println!("Error sending data to a client: {:?}", e);
+                    *keep = false;
                 }
             }
+            streams.retain(|(_, keep)| *keep);
         } else {
             println!("Not connected to a server");
         }
