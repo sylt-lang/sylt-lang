@@ -17,6 +17,47 @@ std::thread_local! {
     static CLIENT_HANDLES: RefCell<Option<Arc<Mutex<Vec<TcpStream>>>>> = RefCell::new(None);
 }
 
+/// Listen for new connections and handle them.
+fn rpc_listen(
+    listener: TcpListener,
+    queue: Arc<Mutex<Vec<(OwnedValue, OwnedValue)>>>,
+    handles: Arc<Mutex<Vec<TcpStream>>>,
+) {
+    for connection in listener.incoming() {
+        if let Ok(stream) = connection {
+            match stream.try_clone() {
+                Ok(stream) => handles
+                    .lock()
+                    .unwrap()
+                    .push(stream),
+                Err(e) => {
+                    println!("Error accepting TCP connection: {:?}", e);
+                    println!("Ignoring");
+                    continue;
+                }
+            }
+            let queue = Arc::clone(&queue);
+            thread::spawn(|| rpc_handle_stream(stream, queue));
+        }
+    }
+}
+
+fn rpc_handle_stream(
+    stream: TcpStream,
+    queue: Arc<Mutex<Vec<(OwnedValue, OwnedValue)>>>,
+) {
+    loop {
+        let (callable, args) = match bincode::deserialize_from(&stream) {
+            Ok(values) => values,
+            Err(e) => {
+                println!("Error reading from client: {:?}", e);
+                return;
+            }
+        };
+        queue.lock().unwrap().push((callable, args));
+    }
+}
+
 #[sylt_macro::sylt_doc(n_rpc_start_server, "Starts an RPC server on the specified port, returning success status.", [One(Int(port))] Type::Bool)]
 #[sylt_macro::sylt_link(n_rpc_start_server, "sylt_std::network")]
 pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
@@ -38,43 +79,14 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
         }
     };
 
+    let queue = RPC_QUEUE.with(|queue| Arc::clone(queue));
     let handles = Arc::new(Mutex::new(Vec::new()));
     CLIENT_HANDLES.with(|global_handles| {
         global_handles.borrow_mut().insert(Arc::clone(&handles));
     });
 
-    let queue = RPC_QUEUE.with(|queue| Arc::clone(queue));
-    thread::spawn(move || {
-        for connection in listener.incoming() {
-            if let Ok(stream) = connection {
-                match stream.try_clone() {
-                    Ok(stream) => handles
-                        .lock()
-                        .unwrap()
-                        .push(stream),
-                    Err(e) => {
-                        println!("Error accepting TCP connection: {:?}", e);
-                        println!("Ignoring");
-                        continue;
-                    }
-                }
-                let queue = Arc::clone(&queue);
-                thread::spawn(move || {
-                    // listen to communication from remote
-                    loop {
-                        let (callable, args) = match bincode::deserialize_from(&stream) {
-                            Ok(values) => values,
-                            Err(e) => {
-                                println!("Error reading from client: {:?}", e);
-                                return;
-                            }
-                        };
-                        queue.lock().unwrap().push((callable, args));
-                    }
-                });
-            }
-        }
-    });
+    thread::spawn(|| rpc_listen(listener, queue, handles));
+
     Ok(Value::Bool(true))
 }
 
