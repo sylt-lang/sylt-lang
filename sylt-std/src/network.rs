@@ -29,6 +29,7 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
         [Value::Int(port)] => *port as u16,
         _ => DEFAULT_PORT,
     };
+    // Bind the server.
     let listener = match TcpListener::bind(("127.0.0.1", port)) {
         Ok(listener) => listener,
         Err(e) => {
@@ -36,14 +37,18 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
             return Ok(Value::Bool(false));
         }
     };
+
     let handles = Arc::new(Mutex::new(Vec::new()));
-    let listener_handles = Arc::clone(&handles);
+    CLIENT_HANDLES.with(|global_handles| {
+        global_handles.borrow_mut().insert(Arc::clone(&handles));
+    });
+
     let queue = RPC_QUEUE.with(|queue| Arc::clone(queue));
     thread::spawn(move || {
         for connection in listener.incoming() {
             if let Ok(stream) = connection {
                 match stream.try_clone() {
-                    Ok(stream) => listener_handles
+                    Ok(stream) => handles
                         .lock()
                         .unwrap()
                         .push(stream),
@@ -69,9 +74,6 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
                 });
             }
         }
-    });
-    CLIENT_HANDLES.with(|global_handles| {
-        global_handles.borrow_mut().insert(handles);
     });
     Ok(Value::Bool(true))
 }
