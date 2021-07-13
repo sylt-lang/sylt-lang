@@ -302,7 +302,7 @@ pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         let borrowed_args: Vec<_> = args.iter().collect();
         if let Err(e) = ctx.machine.eval_call(element.0, &borrowed_args) {
             println!("{}", e);
-            panic!("Error evaluating received RPC:");
+            panic!("Error evaluating received RPC");
         }
     }
     Ok(Value::Nil)
