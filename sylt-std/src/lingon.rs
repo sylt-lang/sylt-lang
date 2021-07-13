@@ -860,7 +860,7 @@ pub fn sylt_str(s: &str) -> Value {
 }
 
 #[sylt_macro::sylt_doc(l_load_image, "Loads an image and turns it into a sprite sheet",
-  [One(String(path))] Type::Tuple)]
+  [One(String(path)), Two(Float, Float)] Type::Tuple)]
 #[sylt_macro::sylt_link(l_load_image, "sylt_std::lingon")]
 pub fn l_load_image<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
