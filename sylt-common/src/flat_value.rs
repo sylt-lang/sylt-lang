@@ -28,7 +28,14 @@ pub enum FlatValue {
 }
 
 impl FlatValue {
-    fn pack(value: &Value, pack: &mut Vec<FlatValue>, seen: &mut HashMap<usize, FlatValueID>) -> FlatValueID {
+    pub fn pack(value: &Value) -> Vec<FlatValue> {
+        let mut pack = Vec::new();
+        let mut seen = HashMap::new();
+        Self::pack_inner(value, &mut pack, &mut seen);
+        pack
+    }
+
+    fn pack_inner(value: &Value, pack: &mut Vec<FlatValue>, seen: &mut HashMap<usize, FlatValueID>) -> FlatValueID {
         let ptr = value.unique_id();
         if seen.contains_key(&ptr) {
             return *seen.get(&ptr).unwrap();
@@ -47,23 +54,23 @@ impl FlatValue {
                 values
                     .borrow()
                     .iter()
-                    .map(|(field, value)| (field.clone(), Self::pack(value, pack, seen)))
+                    .map(|(field, value)| (field.clone(), Self::pack_inner(value, pack, seen)))
                     .collect(),
             ),
             Value::Tuple(values) => FlatValue::Tuple(
-                values.iter().map(|value| Self::pack(value, pack, seen)).collect(),
+                values.iter().map(|value| Self::pack_inner(value, pack, seen)).collect(),
             ),
             Value::List(values) => FlatValue::List(
-                values.borrow().iter().map(|value| Self::pack(value, pack, seen)).collect(),
+                values.borrow().iter().map(|value| Self::pack_inner(value, pack, seen)).collect(),
             ),
             Value::Set(values) => FlatValue::Set(
-                values.borrow().iter().map(|value| Self::pack(value, pack, seen)).collect(),
+                values.borrow().iter().map(|value| Self::pack_inner(value, pack, seen)).collect(),
             ),
             Value::Dict(values) => FlatValue::Dict(
                 values
                     .borrow()
                     .iter()
-                    .map(|(v1, v2)| (Self::pack(v1, pack, seen), Self::pack(v2, pack, seen)))
+                    .map(|(v1, v2)| (Self::pack_inner(v1, pack, seen), Self::pack_inner(v2, pack, seen)))
                     .collect(),
             ),
             Value::Float(f) => FlatValue::Float(*f),
@@ -73,7 +80,7 @@ impl FlatValue {
             Value::Function(captured, ty, slot) => FlatValue::Function(
                 captured
                     .iter()
-                    .map(|upvalue| FlatUpValue { slot: upvalue.borrow().slot, value: Self::pack(&upvalue.borrow().value, pack, seen) })
+                    .map(|upvalue| FlatUpValue { slot: upvalue.borrow().slot, value: Self::pack_inner(&upvalue.borrow().value, pack, seen) })
                     .collect(),
                 ty.clone(),
                 *slot,
@@ -117,7 +124,7 @@ impl FlatValue {
         }
     }
 
-    fn unpack(pack: &mut Vec<FlatValue>) -> Value {
+    pub fn unpack(pack: &Vec<FlatValue>) -> Value {
         let mut mapping: Vec<Value> = pack.iter().cloned().map(Self::partial_unpack).collect();
         for (i, x) in mapping.iter().enumerate().rev() {
             match (&pack[i], x) {
