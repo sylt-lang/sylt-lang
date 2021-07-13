@@ -1,11 +1,14 @@
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
+use std::rc::Rc;
 
-use crate::{rc::Rc, ty::Type, upvalue::UpValue};
+use crate::{ty::Type, upvalue::UpValue};
 
 #[derive(Clone)]
+#[derive(Deserialize, Serialize)]
 pub enum Value {
     Field(String),
     Ty(Type),

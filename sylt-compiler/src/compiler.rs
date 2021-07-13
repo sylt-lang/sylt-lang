@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use sylt_common::error::Error;
 use sylt_common::prog::Prog;
-use sylt_common::rc::Rc;
 use sylt_common::{Blob, Block, Op, RustFunction, Type, Value};
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op as ParserOp,
