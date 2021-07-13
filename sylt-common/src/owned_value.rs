@@ -97,6 +97,7 @@ impl From<OwnedValue> for Value {
 
 impl From<&Value> for OwnedValue {
     fn from(value: &Value) -> Self {
+        println!("{:?}", value);
         match value {
             Value::Field(s) => OwnedValue::Field(s.clone()),
             Value::Ty(ty) => OwnedValue::Ty(ty.clone()),

@@ -174,7 +174,10 @@ pub fn n_rpc_is_client(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 /// Parse args given to an external function as rpc arguments, i.e. one callable followed by 0..n arguments.
 fn get_rpc_args(ctx: RuntimeContext<'_>, func_name: &str) -> Result<(OwnedValue, OwnedValue), RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
+    println!("{:?}", values);
     let owned_values: Vec<OwnedValue> = values.iter().map(|v| v.into()).collect();
+
+    println!("{:?}", owned_values);
 
     if owned_values.len() != 0 {
         let (callable, args) = owned_values.split_at(1);
@@ -194,6 +197,8 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         return Ok(Value::Nil);
     }
 
+    println!("Serializing");
+
     // Serialize the RPC.
     let serialized = match bincode::serialize(&get_rpc_args(ctx, "n_rpc_clients")?) {
         Ok(serialized) => serialized,
@@ -202,6 +207,8 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             return Ok(Value::Bool(false));
         }
     };
+
+    println!("Sending");
 
     // Send the serialized data to all clients.
     CLIENT_HANDLES.with(|client_handles| {
@@ -218,6 +225,8 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             println!("Not connected to a server");
         }
     });
+
+    println!("Done");
 
     Ok(Value::Nil)
 }
