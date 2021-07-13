@@ -33,7 +33,7 @@ fn main() -> std::io::Result<()> {
     }
 
     let sylt_args = sylt::Args {
-        file: Some(args.run_file),
+        file: args.run_file,
         is_binary: false,
         compile_target: None,
         verbosity: 0,

@@ -196,6 +196,8 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         return Ok(Value::Nil);
     }
 
+    println!("Serializing");
+
     // Serialize the RPC.
     let serialized = match bincode::serialize(&get_rpc_args(ctx, "n_rpc_clients")?) {
         Ok(serialized) => serialized,
@@ -204,6 +206,8 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             return Ok(Value::Bool(false));
         }
     };
+
+    println!("Sending");
 
     // Send the serialized data to all clients.
     CLIENT_HANDLES.with(|client_handles| {
@@ -220,6 +224,8 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             println!("Not connected to a server");
         }
     });
+
+    println!("Done");
 
     Ok(Value::Nil)
 }
