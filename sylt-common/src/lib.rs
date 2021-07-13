@@ -2,7 +2,7 @@ pub mod blob;
 pub mod block;
 pub mod error;
 pub mod op;
-pub mod owned_value;
+pub mod flat_value;
 pub mod prog;
 pub mod ty;
 pub mod upvalue;
