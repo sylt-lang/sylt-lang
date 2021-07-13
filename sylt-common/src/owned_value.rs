@@ -1,172 +1,173 @@
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
 use crate::{Type, UpValue, Value};
 
+type FlatValueID = usize;
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub enum OwnedValue {
+pub enum FlatValue {
     Field(String),
     Ty(Type),
     Blob(usize),
-    Instance(usize, HashMap<String, OwnedValue>),
-    Tuple(Vec<OwnedValue>),
-    List(Vec<OwnedValue>),
-    Set(HashSet<OwnedValue>),
-    Dict(HashMap<OwnedValue, OwnedValue>),
-    Union(HashSet<OwnedValue>),
+    Instance(usize, HashMap<String, FlatValueID>),
+    Tuple(Vec<FlatValueID>),
+    List(Vec<FlatValueID>),
+    Set(HashSet<FlatValueID>),
+    Dict(HashMap<FlatValueID, FlatValueID>),
     Float(f64),
     Int(i64),
     Bool(bool),
     String(String),
-    Function(Vec<OwnedUpValue>, Type, usize),
+    Function(Vec<FlatUpValue>, Type, usize),
     ExternFunction(usize),
     Unknown,
     Nil,
 }
 
-impl PartialEq for OwnedValue {
-    fn eq(&self, other: &Self) -> bool {
-        Value::from(self.clone()).eq(&Value::from(other.clone()))
-    }
-}
-
-impl Eq for OwnedValue {}
-
-impl Hash for OwnedValue {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        Value::from(self.clone()).hash(state)
-    }
-}
-
-impl From<OwnedValue> for Value {
-    fn from(value: OwnedValue) -> Self {
-        match value {
-            OwnedValue::Field(s) => Value::Field(s),
-            OwnedValue::Ty(ty) => Value::Ty(ty),
-            OwnedValue::Blob(slot) => Value::Blob(slot),
-            OwnedValue::Instance(ty_slot, values) => Value::Instance(
-                ty_slot,
-                Rc::new(RefCell::new(
-                    values
-                        .into_iter()
-                        .map(|(field, value)| (field, value.into()))
-                        .collect(),
-                )),
-            ),
-            OwnedValue::Tuple(values) => Value::Tuple(Rc::new(
-                values.into_iter().map(|value| value.into()).collect(),
-            )),
-            OwnedValue::List(values) => Value::List(Rc::new(RefCell::new(
-                values.into_iter().map(|value| value.into()).collect(),
-            ))),
-            OwnedValue::Set(values) => Value::Set(Rc::new(RefCell::new(
-                values.into_iter().map(|value| value.into()).collect(),
-            ))),
-            OwnedValue::Dict(values) => Value::Dict(Rc::new(RefCell::new(
-                values
-                    .into_iter()
-                    .map(|(v1, v2)| (v1.into(), v2.into()))
-                    .collect(),
-            ))),
-            OwnedValue::Union(values) => {
-                Value::Union(values.into_iter().map(|value| value.into()).collect())
-            }
-            OwnedValue::Float(f) => Value::Float(f),
-            OwnedValue::Int(i) => Value::Int(i),
-            OwnedValue::Bool(b) => Value::Bool(b),
-            OwnedValue::String(s) => Value::String(Rc::new(s)),
-            OwnedValue::Function(captured, ty, slot) => Value::Function(
-                Rc::new(
-                    captured
-                        .into_iter()
-                        .map(|param| Rc::new(RefCell::new(param.into())))
-                        .collect(),
-                ),
-                ty,
-                slot,
-            ),
-            OwnedValue::ExternFunction(slot) => Value::ExternFunction(slot),
-            OwnedValue::Unknown => Value::Unknown,
-            OwnedValue::Nil => Value::Nil,
+impl FlatValue {
+    fn pack(value: &Value, pack: &mut Vec<FlatValue>, seen: &mut HashMap<usize, FlatValueID>) -> FlatValueID {
+        let ptr = value.unique_id();
+        if seen.contains_key(&ptr) {
+            return *seen.get(&ptr).unwrap();
         }
-    }
-}
 
-impl From<&Value> for OwnedValue {
-    fn from(value: &Value) -> Self {
-        match value {
-            Value::Field(s) => OwnedValue::Field(s.clone()),
-            Value::Ty(ty) => OwnedValue::Ty(ty.clone()),
-            Value::Blob(slot) => OwnedValue::Blob(*slot),
-            Value::Instance(ty_slot, values) => OwnedValue::Instance(
+        let id = pack.len();
+        seen.insert(ptr, id);
+        pack.push(FlatValue::Nil);
+
+        let val = match value {
+            Value::Field(s) => FlatValue::Field(s.into()),
+            Value::Ty(ty) => FlatValue::Ty(ty.clone()),
+            Value::Blob(slot) => FlatValue::Blob(*slot),
+            Value::Instance(ty_slot, values) => FlatValue::Instance(
                 *ty_slot,
                 values
                     .borrow()
                     .iter()
-                    .map(|(field, value)| (field.clone(), value.into()))
+                    .map(|(field, value)| (field.clone(), Self::pack(value, pack, seen)))
                     .collect(),
             ),
-            Value::Tuple(values) => {
-                OwnedValue::Tuple(values.iter().map(|value| value.into()).collect())
-            }
-            Value::List(values) => {
-                OwnedValue::List(values.borrow().iter().map(|value| value.into()).collect())
-            }
-            Value::Set(values) => {
-                OwnedValue::Set(values.borrow().iter().map(|value| value.into()).collect())
-            }
-            Value::Dict(values) => OwnedValue::Dict(
+            Value::Tuple(values) => FlatValue::Tuple(
+                values.iter().map(|value| Self::pack(value, pack, seen)).collect(),
+            ),
+            Value::List(values) => FlatValue::List(
+                values.borrow().iter().map(|value| Self::pack(value, pack, seen)).collect(),
+            ),
+            Value::Set(values) => FlatValue::Set(
+                values.borrow().iter().map(|value| Self::pack(value, pack, seen)).collect(),
+            ),
+            Value::Dict(values) => FlatValue::Dict(
                 values
                     .borrow()
                     .iter()
-                    .map(|(v1, v2)| (v1.into(), v2.into()))
+                    .map(|(v1, v2)| (Self::pack(v1, pack, seen), Self::pack(v2, pack, seen)))
                     .collect(),
             ),
-            Value::Union(values) => {
-                OwnedValue::Union(values.iter().map(|value| value.into()).collect())
-            }
-            Value::Float(f) => OwnedValue::Float(*f),
-            Value::Int(i) => OwnedValue::Int(*i),
-            Value::Bool(b) => OwnedValue::Bool(*b),
-            Value::String(s) => OwnedValue::String(String::clone(s)),
-            Value::Function(captured, ty, slot) => OwnedValue::Function(
+            Value::Float(f) => FlatValue::Float(*f),
+            Value::Int(i) => FlatValue::Int(*i),
+            Value::Bool(b) => FlatValue::Bool(*b),
+            Value::String(s) => FlatValue::String(String::clone(s)),
+            Value::Function(captured, ty, slot) => FlatValue::Function(
                 captured
                     .iter()
-                    .map(|param| (&*param.borrow()).into())
+                    .map(|upvalue| FlatUpValue { slot: upvalue.borrow().slot, value: Self::pack(&upvalue.borrow().value, pack, seen) })
                     .collect(),
                 ty.clone(),
                 *slot,
             ),
-            Value::ExternFunction(slot) => OwnedValue::ExternFunction(*slot),
-            Value::Unknown => OwnedValue::Unknown,
-            Value::Nil => OwnedValue::Nil,
+            Value::ExternFunction(slot) => FlatValue::ExternFunction(*slot),
+            Value::Unknown => FlatValue::Unknown,
+            Value::Nil => FlatValue::Nil,
+            Value::Union(_) => {
+                unreachable!("Cannot send union values over the network");
+            }
+        };
+        pack[id] = val;
+        id
+    }
+
+    fn partial_unpack(value: FlatValue) -> Value {
+        match value {
+            FlatValue::Field(s) => Value::Field(s),
+            FlatValue::Ty(ty) => Value::Ty(ty),
+            FlatValue::Blob(slot) => Value::Blob(slot),
+            FlatValue::Instance(ty_slot, _) => Value::Instance(
+                ty_slot,
+                Rc::new(RefCell::new(HashMap::new())),
+            ),
+            FlatValue::Tuple(_) => Value::Tuple(Rc::new(Vec::new())),
+            FlatValue::List(_) => Value::List(Rc::new(RefCell::new(Vec::new()))),
+            FlatValue::Set(_) => Value::Set(Rc::new(RefCell::new(HashSet::new()))),
+            FlatValue::Dict(_) => Value::Dict(Rc::new(RefCell::new(HashMap::new()))),
+            FlatValue::Float(f) => Value::Float(f),
+            FlatValue::Int(i) => Value::Int(i),
+            FlatValue::Bool(b) => Value::Bool(b),
+            FlatValue::String(s) => Value::String(Rc::new(s)),
+            FlatValue::Function(_, ty, slot) => Value::Function(
+                Rc::new(Vec::new()),
+                ty,
+                slot,
+            ),
+            FlatValue::ExternFunction(slot) => Value::ExternFunction(slot),
+            FlatValue::Unknown => Value::Unknown,
+            FlatValue::Nil => Value::Nil,
         }
+    }
+
+    fn unpack(pack: &mut Vec<FlatValue>) -> Value {
+        let mut mapping: Vec<Value> = pack.iter().cloned().map(Self::partial_unpack).collect();
+        for (i, x) in mapping.iter().enumerate().rev() {
+            match (&pack[i], x) {
+                (FlatValue::Instance(_, flat), Value::Instance(_, values)) => {
+                    let mut values = values.borrow_mut();
+                    for (key, id) in flat {
+                        values.insert(key.clone(), mapping[*id].clone());
+                    }
+                }
+                (FlatValue::Tuple(flat), Value::Tuple(values)) => {
+                    let values = unsafe { (Rc::as_ptr(values) as *mut Vec<Value>).as_mut() }.unwrap();
+                    for id in flat {
+                        values.push(mapping[*id].clone());
+                    }
+                }
+                (FlatValue::List(flat), Value::List(values)) => {
+                    let mut values = values.borrow_mut();
+                    for id in flat {
+                        values.push(mapping[*id].clone());
+                    }
+                }
+                (FlatValue::Set(flat), Value::Set(values)) => {
+                    let mut values = values.borrow_mut();
+                    for id in flat {
+                        values.insert(mapping[*id].clone());
+                    }
+                }
+                (FlatValue::Dict(flat), Value::Dict(values)) => {
+                    let mut values = values.borrow_mut();
+                    for (key_id, value_id) in flat {
+                        values.insert(mapping[*key_id].clone(), mapping[*value_id].clone());
+                    }
+                }
+                (FlatValue::Function(flat, _, _), Value::Function(values, _, _)) => {
+                    let values = unsafe { (Rc::as_ptr(values) as *mut Vec<Rc<RefCell<UpValue>>>).as_mut() }.unwrap();
+                    for up in flat {
+                        values.push(Rc::new(RefCell::new(UpValue { slot: up.slot, value: mapping[up.value].clone() })));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        mapping.remove(0)
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct OwnedUpValue {
+pub struct FlatUpValue {
     slot: usize,
-    value: OwnedValue,
+    value: FlatValueID,
 }
 
-impl From<OwnedUpValue> for UpValue {
-    fn from(value: OwnedUpValue) -> Self {
-        Self {
-            slot: value.slot,
-            value: value.value.into(),
-        }
-    }
-}
-
-impl From<&UpValue> for OwnedUpValue {
-    fn from(value: &UpValue) -> Self {
-        Self {
-            slot: value.slot,
-            value: (&value.value).into(),
-        }
-    }
-}

@@ -144,6 +144,28 @@ impl Value {
     pub fn is_nil(&self) -> bool {
         matches!(self, Value::Nil)
     }
+
+    pub fn unique_id(&self) -> usize {
+        match self {
+            Value::Field(s) => s as *const _ as usize,
+            Value::Ty(ty) => ty as *const _ as usize,
+            Value::Blob(b) => b as *const _ as usize,
+            Value::Float(f) => f as *const _ as usize,
+            Value::Int(i) => i as *const _ as usize,
+            Value::Bool(b) => b as *const _ as usize,
+            Value::Union(v) => v as *const _ as usize,
+            Value::Instance(_, v) => Rc::as_ptr(v) as usize,
+            Value::String(s) => Rc::as_ptr(s) as usize,
+            Value::List(v) => Rc::as_ptr(v) as usize,
+            Value::Set(v) => Rc::as_ptr(v) as usize,
+            Value::Dict(v) => Rc::as_ptr(v) as usize,
+            Value::Function(v, _, _) => Rc::as_ptr(v) as usize,
+            Value::Tuple(v) => Rc::as_ptr(v) as usize,
+            Value::Nil => 0,  // TODO(ed): This is not a valid pointer - right?
+            Value::Unknown => 1, // TODO(ed): This is not a valid pointer - right?
+            Value::ExternFunction(slot) => slot + 2,
+        }
+    }
 }
 
 #[derive(Clone)]
