@@ -5,8 +5,11 @@ use std::rc::Rc;
 
 use crate::{Type, UpValue, Value};
 
+/// The serialized version of a pointer.
 type FlatValueID = usize;
 
+/// A value packed with pointers replaced with [FlatValueID],
+/// which point into an accompanying vector.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum FlatValue {
     Field(String),
@@ -27,15 +30,23 @@ pub enum FlatValue {
     Nil,
 }
 
+/// One [Value] packed up and ready to be serialized.
+type FlatValuePack = Vec<FlatValue>;
+
 impl FlatValue {
-    pub fn pack(value: &Value) -> Vec<FlatValue> {
+    /// Makes a value serializable
+    ///
+    /// Since values might have loops - nothing is garanteed about the ordering except that 0 is
+    /// the original value being packed.
+    pub fn pack(value: &Value) -> FlatValuePack {
         let mut pack = Vec::new();
         let mut seen = HashMap::new();
         Self::pack_inner(value, &mut pack, &mut seen);
         pack
     }
 
-    fn pack_inner(value: &Value, pack: &mut Vec<FlatValue>, seen: &mut HashMap<usize, FlatValueID>) -> FlatValueID {
+    /// Helper function to package values recursively into a 'flat' [Vec].
+    fn pack_inner(value: &Value, pack: &mut FlatValuePack, seen: &mut HashMap<usize, FlatValueID>) -> FlatValueID {
         let ptr = value.unique_id();
         if seen.contains_key(&ptr) {
             return *seen.get(&ptr).unwrap();
@@ -96,6 +107,8 @@ impl FlatValue {
         id
     }
 
+    /// Unpacks one value without going deeper. Only the top-level value is unpacked, and all
+    /// sub types are filled with placeholders.
     fn partial_unpack(value: FlatValue) -> Value {
         match value {
             FlatValue::Field(s) => Value::Field(s),
@@ -105,6 +118,7 @@ impl FlatValue {
                 ty_slot,
                 Rc::new(RefCell::new(HashMap::new())),
             ),
+            // Tuple is specificly tricky - since it doesn't have a RefCell.
             FlatValue::Tuple(_) => Value::Tuple(Rc::new(Vec::new())),
             FlatValue::List(_) => Value::List(Rc::new(RefCell::new(Vec::new()))),
             FlatValue::Set(_) => Value::Set(Rc::new(RefCell::new(HashSet::new()))),
@@ -113,6 +127,7 @@ impl FlatValue {
             FlatValue::Int(i) => Value::Int(i),
             FlatValue::Bool(b) => Value::Bool(b),
             FlatValue::String(s) => Value::String(Rc::new(s)),
+            // Function is specificly tricky - since it doesn't have a RefCell.
             FlatValue::Function(_, ty, slot) => Value::Function(
                 Rc::new(Vec::new()),
                 ty,
@@ -124,20 +139,33 @@ impl FlatValue {
         }
     }
 
-    pub fn unpack(pack: &Vec<FlatValue>) -> Value {
+    /// Reconstructs the packaged  Value - with correct references.
+    ///
+    /// Keep in mind that values will be cloned here.
+    pub fn unpack(pack: &FlatValuePack) -> Value {
         let mut mapping: Vec<Value> = pack.iter().cloned().map(Self::partial_unpack).collect();
         for (i, x) in mapping.iter().enumerate().rev() {
             match (&pack[i], x) {
+                (FlatValue::Tuple(flat), Value::Tuple(values)) => {
+                    // We know the Rc hasn't moved out of this function - but we cannot
+                    // garantee the requirements for `get_mut()` here. The container never moves
+                    // so it is safe - this is a very precise piece of code.
+                    let values = unsafe { (Rc::as_ptr(values) as *mut Vec<Value>).as_mut() }.unwrap();
+                    for id in flat {
+                        values.push(mapping[*id].clone());
+                    }
+                }
+                (FlatValue::Function(flat, _, _), Value::Function(values, _, _)) => {
+                    // See the tuple comment
+                    let values = unsafe { (Rc::as_ptr(values) as *mut Vec<Rc<RefCell<UpValue>>>).as_mut() }.unwrap();
+                    for up in flat {
+                        values.push(Rc::new(RefCell::new(UpValue { slot: up.slot, value: mapping[up.value].clone() })));
+                    }
+                }
                 (FlatValue::Instance(_, flat), Value::Instance(_, values)) => {
                     let mut values = values.borrow_mut();
                     for (key, id) in flat {
                         values.insert(key.clone(), mapping[*id].clone());
-                    }
-                }
-                (FlatValue::Tuple(flat), Value::Tuple(values)) => {
-                    let values = unsafe { (Rc::as_ptr(values) as *mut Vec<Value>).as_mut() }.unwrap();
-                    for id in flat {
-                        values.push(mapping[*id].clone());
                     }
                 }
                 (FlatValue::List(flat), Value::List(values)) => {
@@ -158,12 +186,6 @@ impl FlatValue {
                         values.insert(mapping[*key_id].clone(), mapping[*value_id].clone());
                     }
                 }
-                (FlatValue::Function(flat, _, _), Value::Function(values, _, _)) => {
-                    let values = unsafe { (Rc::as_ptr(values) as *mut Vec<Rc<RefCell<UpValue>>>).as_mut() }.unwrap();
-                    for up in flat {
-                        values.push(Rc::new(RefCell::new(UpValue { slot: up.slot, value: mapping[up.value].clone() })));
-                    }
-                }
                 _ => {}
             }
         }
@@ -172,6 +194,7 @@ impl FlatValue {
     }
 }
 
+/// Corresponds to a [UpValue] - but with a serializable id instead of a reference.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FlatUpValue {
     slot: usize,
