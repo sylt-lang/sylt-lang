@@ -6,12 +6,11 @@ use std::net::{TcpListener, TcpStream};
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use sylt_common::flat_value::FlatValue;
+use sylt_common::flat_value::{FlatValue, FlatValuePack};
 use sylt_common::{error::RuntimeError, RuntimeContext, Type, Value};
 
 const DEFAULT_PORT: u16 = 8588;
 
-type FlatValuePack = Vec<sylt_common::flat_value::FlatValue>;
 type RPC = Vec<FlatValuePack>;
 
 std::thread_local! {
@@ -34,8 +33,8 @@ fn rpc_listen(
                     .unwrap()
                     .push((stream, true)),
                 Err(e) => {
-                    println!("Error accepting TCP connection: {:?}", e);
-                    println!("Ignoring");
+                    eprintln!("Error accepting TCP connection: {:?}", e);
+                    eprintln!("Ignoring");
                     continue;
                 }
             }
@@ -54,7 +53,7 @@ fn rpc_handle_stream(
         let rpc = match bincode::deserialize_from(&stream) {
             Ok(rpc) => rpc,
             Err(e) => {
-                println!("Error reading from client: {:?}", e);
+                eprintln!("Error reading from client: {:?}", e);
                 return;
             }
         };
@@ -79,7 +78,7 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
     let listener = match TcpListener::bind(("127.0.0.1", port)) {
         Ok(listener) => listener,
         Err(e) => {
-            println!("Error binding server to TCP: {:?}", e);
+            eprintln!("Error binding server to TCP: {:?}", e);
             return Ok(Value::Bool(false));
         }
     };
@@ -120,7 +119,7 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let stream = match TcpStream::connect(socket_addr) {
         Ok(stream) => stream,
         Err(e) => {
-            println!("Error connecting to server: {:?}", e);
+            eprintln!("Error connecting to server: {:?}", e);
             return Ok(Value::Bool(false));
         }
     };
@@ -134,7 +133,7 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             });
         },
         Err(e) => {
-            println!("Error connecting to server: {:?}", e);
+            eprintln!("Error connecting to server: {:?}", e);
             return Ok(Value::Bool(false));
         },
     }
@@ -196,18 +195,14 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         return Ok(Value::Nil);
     }
 
-    println!("Serializing");
-
     // Serialize the RPC.
     let serialized = match bincode::serialize(&get_rpc_args(ctx, "n_rpc_clients")?) {
         Ok(serialized) => serialized,
         Err(e) => {
-            println!("Error serializing values: {:?}", e);
+            eprintln!("Error serializing values: {:?}", e);
             return Ok(Value::Bool(false));
         }
     };
-
-    println!("Sending");
 
     // Send the serialized data to all clients.
     CLIENT_HANDLES.with(|client_handles| {
@@ -215,17 +210,15 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             let mut streams = streams.lock().unwrap();
             for (stream, keep) in streams.iter_mut() {
                 if let Err(e) = stream.write(&serialized) {
-                    println!("Error sending data to a client: {:?}", e);
+                    eprintln!("Error sending data to a client: {:?}", e);
                     *keep = false;
                 }
             }
             streams.retain(|(_, keep)| *keep);
         } else {
-            println!("Not connected to a server");
+            eprintln!("Not connected to a server");
         }
     });
-
-    println!("Done");
 
     Ok(Value::Nil)
 }
@@ -242,7 +235,7 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let serialized = match bincode::serialize(&get_rpc_args(ctx, "n_rpc_server")?) {
         Ok(serialized) => serialized,
         Err(e) => {
-            println!("Error serializing values: {:?}", e);
+            eprintln!("Error serializing values: {:?}", e);
             return Ok(Value::Bool(false));
         }
     };
@@ -253,7 +246,7 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             match stream.write(&serialized) {
                 Ok(_) => Ok(Value::Bool(true)),
                 Err(e) => {
-                    println!("Error sending data to server: {:?}", e);
+                    eprintln!("Error sending data to server: {:?}", e);
                     Ok(Value::Bool(false))
                 },
             }
