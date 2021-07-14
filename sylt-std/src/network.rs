@@ -6,13 +6,15 @@ use std::net::{TcpListener, TcpStream};
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use sylt_common::owned_value::OwnedValue;
+use sylt_common::flat_value::{FlatValue, FlatValuePack};
 use sylt_common::{error::RuntimeError, RuntimeContext, Type, Value};
 
 const DEFAULT_PORT: u16 = 8588;
 
+type RPC = Vec<FlatValuePack>;
+
 std::thread_local! {
-    static RPC_QUEUE: Arc<Mutex<Vec<(OwnedValue, OwnedValue)>>> = Arc::new(Mutex::new(Vec::new()));
+    static RPC_QUEUE: Arc<Mutex<Vec<RPC>>> = Arc::new(Mutex::new(Vec::new()));
     static SERVER_HANDLE: RefCell<Option<TcpStream>> = RefCell::new(None);
     static CLIENT_HANDLES: RefCell<Option<Arc<Mutex<Vec<(TcpStream, bool)>>>>> = RefCell::new(None);
 }
@@ -20,7 +22,7 @@ std::thread_local! {
 /// Listen for new connections and accept them.
 fn rpc_listen(
     listener: TcpListener,
-    queue: Arc<Mutex<Vec<(OwnedValue, OwnedValue)>>>,
+    queue: Arc<Mutex<Vec<RPC>>>,
     handles: Arc<Mutex<Vec<(TcpStream, bool)>>>,
 ) {
     for connection in listener.incoming() {
@@ -31,8 +33,8 @@ fn rpc_listen(
                     .unwrap()
                     .push((stream, true)),
                 Err(e) => {
-                    println!("Error accepting TCP connection: {:?}", e);
-                    println!("Ignoring");
+                    eprintln!("Error accepting TCP connection: {:?}", e);
+                    eprintln!("Ignoring");
                     continue;
                 }
             }
@@ -45,17 +47,17 @@ fn rpc_listen(
 /// Receive RPC values from a stream and queue them locally.
 fn rpc_handle_stream(
     stream: TcpStream,
-    queue: Arc<Mutex<Vec<(OwnedValue, OwnedValue)>>>,
+    queue: Arc<Mutex<Vec<RPC>>>,
 ) {
     loop {
-        let (callable, args) = match bincode::deserialize_from(&stream) {
-            Ok(values) => values,
+        let rpc = match bincode::deserialize_from(&stream) {
+            Ok(rpc) => rpc,
             Err(e) => {
-                println!("Error reading from client: {:?}", e);
+                eprintln!("Error reading from client: {:?}", e);
                 return;
             }
         };
-        queue.lock().unwrap().push((callable, args));
+        queue.lock().unwrap().push(rpc);
     }
 }
 
@@ -76,7 +78,7 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
     let listener = match TcpListener::bind(("127.0.0.1", port)) {
         Ok(listener) => listener,
         Err(e) => {
-            println!("Error binding server to TCP: {:?}", e);
+            eprintln!("Error binding server to TCP: {:?}", e);
             return Ok(Value::Bool(false));
         }
     };
@@ -117,7 +119,7 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let stream = match TcpStream::connect(socket_addr) {
         Ok(stream) => stream,
         Err(e) => {
-            println!("Error connecting to server: {:?}", e);
+            eprintln!("Error connecting to server: {:?}", e);
             return Ok(Value::Bool(false));
         }
     };
@@ -131,7 +133,7 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             });
         },
         Err(e) => {
-            println!("Error connecting to server: {:?}", e);
+            eprintln!("Error connecting to server: {:?}", e);
             return Ok(Value::Bool(false));
         },
     }
@@ -172,13 +174,12 @@ pub fn n_rpc_is_client(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 }
 
 /// Parse args given to an external function as rpc arguments, i.e. one callable followed by 0..n arguments.
-fn get_rpc_args(ctx: RuntimeContext<'_>, func_name: &str) -> Result<(OwnedValue, OwnedValue), RuntimeError> {
+fn get_rpc_args(ctx: RuntimeContext<'_>, func_name: &str) -> Result<Vec<FlatValuePack>, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
-    let owned_values: Vec<OwnedValue> = values.iter().map(|v| v.into()).collect();
+    let flat_values: Vec<FlatValuePack> = values.iter().map(|v| FlatValue::pack(v)).collect();
 
-    if owned_values.len() != 0 {
-        let (callable, args) = owned_values.split_at(1);
-        Ok((callable[0].clone(), OwnedValue::List(args.to_vec())))
+    if flat_values.len() != 0 {
+        Ok(flat_values)
     } else {
         Err(RuntimeError::ExternTypeMismatch(
             func_name.to_string(),
@@ -198,7 +199,7 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let serialized = match bincode::serialize(&get_rpc_args(ctx, "n_rpc_clients")?) {
         Ok(serialized) => serialized,
         Err(e) => {
-            println!("Error serializing values: {:?}", e);
+            eprintln!("Error serializing values: {:?}", e);
             return Ok(Value::Bool(false));
         }
     };
@@ -209,13 +210,13 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             let mut streams = streams.lock().unwrap();
             for (stream, keep) in streams.iter_mut() {
                 if let Err(e) = stream.write(&serialized) {
-                    println!("Error sending data to a client: {:?}", e);
+                    eprintln!("Error sending data to a client: {:?}", e);
                     *keep = false;
                 }
             }
             streams.retain(|(_, keep)| *keep);
         } else {
-            println!("Not connected to a server");
+            eprintln!("Not connected to a server");
         }
     });
 
@@ -234,7 +235,7 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let serialized = match bincode::serialize(&get_rpc_args(ctx, "n_rpc_server")?) {
         Ok(serialized) => serialized,
         Err(e) => {
-            println!("Error serializing values: {:?}", e);
+            eprintln!("Error serializing values: {:?}", e);
             return Ok(Value::Bool(false));
         }
     };
@@ -245,7 +246,7 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             match stream.write(&serialized) {
                 Ok(_) => Ok(Value::Bool(true)),
                 Err(e) => {
-                    println!("Error sending data to server: {:?}", e);
+                    eprintln!("Error sending data to server: {:?}", e);
                     Ok(Value::Bool(false))
                 },
             }
@@ -285,22 +286,22 @@ pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     // Convert the queue into Values that can be evaluated.
     let queue = queue
         .into_iter()
-        .map(|(v1, v2)| (v1.into(), v2.into()));
+        .map(|rpc| rpc.iter().map(FlatValue::unpack).collect::<Vec<_>>());
 
     // Evaluate each RPC one a time.
-    for element in queue {
-        let args = if let Value::List(args) = element.1 {
-            args
-        } else {
-            println!("Tried to resolve non-list argument {:?}", element.1);
+    for values in queue {
+        if values.is_empty() {
+            eprintln!("Tried to resolve empty RPC");
             continue;
-        };
+        }
         // Create a vec of references to the argument list. This is kinda weird
         // but it's needed since the runtime usually doesn't handle owned
         // values.
-        let args = args.borrow();
-        let borrowed_args: Vec<_> = args.iter().collect();
-        ctx.machine.eval_call(element.0, &borrowed_args).unwrap();
+        let borrowed_values: Vec<_> = values.iter().collect();
+        if let Err(e) = ctx.machine.eval_call(values[0].clone(), &borrowed_values[1..]) {
+            eprintln!("{}", e);
+            panic!("Error evaluating received RPC");
+        }
     }
     Ok(Value::Nil)
 }
