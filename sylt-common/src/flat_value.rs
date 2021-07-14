@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::rc::Rc;
 
 use crate::{Type, UpValue, Value};
 
 /// The serialized version of a pointer.
-type FlatValueID = usize;
+pub type FlatValueID = usize;
 
 /// A value packed with pointers replaced with [FlatValueID],
 /// which point into an accompanying vector.
@@ -31,7 +31,7 @@ pub enum FlatValue {
 }
 
 /// One [Value] packed up and ready to be serialized.
-type FlatValuePack = Vec<FlatValue>;
+pub type FlatValuePack = Vec<FlatValue>;
 
 impl FlatValue {
     /// Makes a value serializable
@@ -47,13 +47,11 @@ impl FlatValue {
 
     /// Helper function to package values recursively into a 'flat' [Vec].
     fn pack_inner(value: &Value, pack: &mut FlatValuePack, seen: &mut HashMap<usize, FlatValueID>) -> FlatValueID {
-        let ptr = value.unique_id();
-        if seen.contains_key(&ptr) {
-            return *seen.get(&ptr).unwrap();
-        }
-
         let id = pack.len();
-        seen.insert(ptr, id);
+        match seen.entry(value.unique_id()) {
+            Entry::Occupied(entry) => { return *entry.get(); }
+            Entry::Vacant(entry) => { entry.insert(id); }
+        }
         pack.push(FlatValue::Nil);
 
         let val = match value {
@@ -143,8 +141,10 @@ impl FlatValue {
     ///
     /// Keep in mind that values will be cloned here.
     pub fn unpack(pack: &FlatValuePack) -> Value {
+        // The first unpacking removes all order requirements,
+        // but it does force us to use a bit of unsafe rust-code.
         let mut mapping: Vec<Value> = pack.iter().cloned().map(Self::partial_unpack).collect();
-        for (i, x) in mapping.iter().enumerate().rev() {
+        for (i, x) in mapping.iter().enumerate() {
             match (&pack[i], x) {
                 (FlatValue::Tuple(flat), Value::Tuple(values)) => {
                     // We know the Rc hasn't moved out of this function - but we cannot
