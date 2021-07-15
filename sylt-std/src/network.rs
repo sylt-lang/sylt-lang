@@ -75,7 +75,7 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
         _ => DEFAULT_PORT,
     };
     // Bind the server.
-    let listener = match TcpListener::bind(("127.0.0.1", port)) {
+    let listener = match TcpListener::bind(("0.0.0.0", port)) {
         Ok(listener) => listener,
         Err(e) => {
             eprintln!("Error binding server to TCP: {:?}", e);
