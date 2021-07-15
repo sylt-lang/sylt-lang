@@ -520,6 +520,8 @@ mod test {
     test!(statement, statement_is_check: ":A is :B" => IsCheck { .. });
     test!(statement, statement_is_check_nested: ":A.c.d is :B.d.d" => IsCheck { .. });
 
+    test!(statement, statement_if_newline: "if 1 \n\n+\n 1\n\n < 2 { }" => _);
+
     test!(statement, statement_skip_newline: "(1 \n\n+\n 1\n\n)" => _);
     test!(statement, statement_skip_newline_list: "[\n\n 1 \n\n,\n 1\n\n,]" => _);
     test!(statement, statement_skip_newline_set: "{\n\n 1 \n\n,\n 1\n\n,}" => _);
