@@ -246,8 +246,8 @@ impl VM {
                                 return Err(RuntimeError::FieldTypeMismatch(
                                     blob.name.clone(),
                                     field.clone(),
-                                    ty.clone(),
                                     given_ty.clone(),
+                                    ty.clone(),
                                     msg,
                                 ));
                             }
