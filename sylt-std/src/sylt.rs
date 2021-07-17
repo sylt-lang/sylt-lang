@@ -238,12 +238,12 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt_std::sylt"
     rem
-    "Returns the remainder after division"
+    "Returns the value x modulo y"
     [One(Float(x)), One(Float(y))] -> Type::Float => {
-        Ok(Float(x % y))
+        Ok(Float(x.rem_euclid(*y)))
     },
     [One(Int(x)), One(Int(y))] -> Type::Int => {
-        Ok(Int(x % y))
+        Ok(Int(x.rem_euclid(*y)))
     },
 );
 
