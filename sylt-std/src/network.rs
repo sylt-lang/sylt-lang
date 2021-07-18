@@ -25,13 +25,16 @@ fn rpc_listen(
     queue: Arc<Mutex<Vec<RPC>>>,
     handles: Arc<Mutex<Vec<(TcpStream, bool)>>>,
 ) {
-    for connection in listener.incoming() {
-        if let Ok(stream) = connection {
+    loop {
+        if let Ok((stream, addr)) = listener.accept() {
             match stream.try_clone() {
-                Ok(stream) => handles
-                    .lock()
-                    .unwrap()
-                    .push((stream, true)),
+                Ok(stream) => {
+                    println!("{:?}", addr);
+                    handles
+                        .lock()
+                        .unwrap()
+                        .push((stream, true));
+                }
                 Err(e) => {
                     eprintln!("Error accepting TCP connection: {:?}", e);
                     eprintln!("Ignoring");
