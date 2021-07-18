@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::ops::DerefMut;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use sylt_common::flat_value::{FlatValue, FlatValuePack};
@@ -268,6 +269,19 @@ pub fn n_rpc_disconnect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> 
     SERVER_HANDLE.with(|server_handle| server_handle.borrow_mut().take());
 
     Ok(Value::Nil)
+}
+
+#[sylt_macro::sylt_doc(n_rpc_current_request_ip, "Get the socket address that sent the currently processed RPC. Empty string if not a server or not processing an RPC.", [] Type::String)]
+#[sylt_macro::sylt_link(n_rpc_current_request_ip, "sylt_std::network")]
+pub fn n_rpc_current_request_ip(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
+    CURRENT_REQUEST_SOCKET_ADDR.with(|current|
+        Ok(Value::String(Rc::new(
+            current
+                .borrow()
+                .map(|socket| socket.to_string())
+                .unwrap_or("".to_string())
+        )))
+    )
 }
 
 #[sylt_macro::sylt_doc(n_rpc_resolve, "Resolves the queued RPCs that has been received since the last resolve.", [] Type::Void)]
