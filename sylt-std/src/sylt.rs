@@ -39,7 +39,8 @@ pub fn for_each(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     ));
 }
 
-#[sylt_macro::sylt_doc(push, "Appends an element to the end of a list", [One(List(ls)), One(Value(val))] Type::Void)]
+#[sylt_macro::sylt_doc(push, "Appends an element to the end of a list",
+  [One(List(ls)), One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(push, "sylt_std::sylt")]
 pub fn push<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
@@ -62,6 +63,38 @@ pub fn push<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
         }
         (values, _) => Err(RuntimeError::ExternTypeMismatch(
             "push".to_string(),
+            values.iter().map(Type::from).collect(),
+        )),
+    }
+}
+
+#[sylt_macro::sylt_doc(add, "Inserts a value into a set",
+  [One(Set(ls)), One(Value(val))] Type::Void)]
+#[sylt_macro::sylt_link(add, "sylt_std::sylt")]
+pub fn add<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match (values.as_ref(), ctx.typecheck) {
+        ([Value::Set(ls), v], true) => {
+            let ls = Type::from(Value::Set(ls.clone()));
+            let ty = if let Type::Set(ty) = &ls {
+                ty
+            } else {
+                unreachable!()
+            };
+            let v = Type::from(&*v);
+            if ty.fits(&v, &ctx.machine.blobs()).is_ok() || matches!(ls, Type::Unknown) {
+                Ok(Value::Nil)
+            } else {
+                Err(RuntimeError::TypeMismatch(ls, v))
+            }
+        }
+        ([Value::Set(ls), v], false) => {
+            // NOTE(ed): Deliberately no type checking.
+            ls.borrow_mut().insert(v.clone());
+            Ok(Value::Nil)
+        }
+        (values, _) => Err(RuntimeError::ExternTypeMismatch(
+            "add".to_string(),
             values.iter().map(Type::from).collect(),
         )),
     }
