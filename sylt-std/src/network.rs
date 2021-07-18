@@ -1,8 +1,9 @@
 use crate as sylt_std;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::io::Write;
-use std::net::{TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -14,26 +15,23 @@ const DEFAULT_PORT: u16 = 8588;
 type RPC = Vec<FlatValuePack>;
 
 std::thread_local! {
-    static RPC_QUEUE: Arc<Mutex<Vec<RPC>>> = Arc::new(Mutex::new(Vec::new()));
+    static RPC_QUEUE: Arc<Mutex<Vec<(RPC, Option<SocketAddr>)>>> = Arc::new(Mutex::new(Vec::new()));
     static SERVER_HANDLE: RefCell<Option<TcpStream>> = RefCell::new(None);
-    static CLIENT_HANDLES: RefCell<Option<Arc<Mutex<Vec<(TcpStream, bool)>>>>> = RefCell::new(None);
+    static CLIENT_HANDLES: RefCell<Option<Arc<Mutex<HashMap<SocketAddr, (TcpStream, bool)>>>>> = RefCell::new(None);
+    static CURRENT_REQUEST_SOCKET_ADDR: RefCell<Option<SocketAddr>> = RefCell::new(None);
 }
 
 /// Listen for new connections and accept them.
 fn rpc_listen(
     listener: TcpListener,
-    queue: Arc<Mutex<Vec<RPC>>>,
-    handles: Arc<Mutex<Vec<(TcpStream, bool)>>>,
+    queue: Arc<Mutex<Vec<(RPC, Option<SocketAddr>)>>>,
+    handles: Arc<Mutex<HashMap<SocketAddr, (TcpStream, bool)>>>,
 ) {
     loop {
         if let Ok((stream, addr)) = listener.accept() {
             match stream.try_clone() {
                 Ok(stream) => {
-                    println!("{:?}", addr);
-                    handles
-                        .lock()
-                        .unwrap()
-                        .push((stream, true));
+                    handles.lock().unwrap().insert(addr, (stream, true));
                 }
                 Err(e) => {
                     eprintln!("Error accepting TCP connection: {:?}", e);
@@ -42,7 +40,7 @@ fn rpc_listen(
                 }
             }
             let queue = Arc::clone(&queue);
-            thread::spawn(|| rpc_handle_stream(stream, queue));
+            thread::spawn(move || rpc_handle_stream(stream, Some(addr), queue));
         }
     }
 }
@@ -50,7 +48,8 @@ fn rpc_listen(
 /// Receive RPC values from a stream and queue them locally.
 fn rpc_handle_stream(
     stream: TcpStream,
-    queue: Arc<Mutex<Vec<RPC>>>,
+    socket_addr: Option<SocketAddr>,
+    queue: Arc<Mutex<Vec<(RPC, Option<SocketAddr>)>>>,
 ) {
     loop {
         let rpc = match bincode::deserialize_from(&stream) {
@@ -60,7 +59,7 @@ fn rpc_handle_stream(
                 return;
             }
         };
-        queue.lock().unwrap().push(rpc);
+        queue.lock().unwrap().push((rpc, socket_addr));
     }
 }
 
@@ -87,7 +86,7 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
     };
 
     // Initialize the thread local with our list of client handles.
-    let handles = Arc::new(Mutex::new(Vec::new()));
+    let handles = Arc::new(Mutex::new(HashMap::new()));
     CLIENT_HANDLES.with(|global_handles| {
         global_handles.borrow_mut().insert(Arc::clone(&handles));
     });
@@ -143,7 +142,7 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 
     // Handle incoming RPCs by putting them on the queue.
     let rpc_queue = RPC_QUEUE.with(|queue| Arc::clone(queue));
-    thread::spawn(|| rpc_handle_stream(stream, rpc_queue));
+    thread::spawn(|| rpc_handle_stream(stream, None, rpc_queue));
 
     Ok(Value::Bool(true))
 }
@@ -211,13 +210,13 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     CLIENT_HANDLES.with(|client_handles| {
         if let Some(streams) = client_handles.borrow().as_ref() {
             let mut streams = streams.lock().unwrap();
-            for (stream, keep) in streams.iter_mut() {
+            for (_, (stream, keep)) in streams.iter_mut() {
                 if let Err(e) = stream.write(&serialized) {
                     eprintln!("Error sending data to a client: {:?}", e);
                     *keep = false;
                 }
             }
-            streams.retain(|(_, keep)| *keep);
+            streams.retain(|_, (_, keep)| *keep);
         } else {
             eprintln!("Not connected to a server");
         }
@@ -289,14 +288,15 @@ pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     // Convert the queue into Values that can be evaluated.
     let queue = queue
         .into_iter()
-        .map(|rpc| rpc.iter().map(FlatValue::unpack).collect::<Vec<_>>());
+        .map(|(rpc, addr)| (rpc.iter().map(FlatValue::unpack).collect::<Vec<_>>(), addr));
 
     // Evaluate each RPC one a time.
-    for values in queue {
+    for (values, addr) in queue {
         if values.is_empty() {
             eprintln!("Tried to resolve empty RPC");
             continue;
         }
+        CURRENT_REQUEST_SOCKET_ADDR.with(|current| *current.borrow_mut() = addr);
         // Create a vec of references to the argument list. This is kinda weird
         // but it's needed since the runtime usually doesn't handle owned
         // values.
@@ -305,6 +305,7 @@ pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             eprintln!("{}", e);
             panic!("Error evaluating received RPC");
         }
+        CURRENT_REQUEST_SOCKET_ADDR.with(|current| current.borrow_mut().take());
     }
     Ok(Value::Nil)
 }
