@@ -2,10 +2,12 @@ use crate as sylt_std;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::io::Write;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::ops::DerefMut;
 use std::rc::Rc;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use sylt_common::flat_value::{FlatValue, FlatValuePack};
@@ -177,9 +179,9 @@ pub fn n_rpc_is_client(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 }
 
 /// Parse args given to an external function as rpc arguments, i.e. one callable followed by 0..n arguments.
-fn get_rpc_args(ctx: RuntimeContext<'_>, func_name: &str) -> Result<Vec<FlatValuePack>, RuntimeError> {
+fn get_rpc_args(ctx: RuntimeContext<'_>, arg_offset: usize, func_name: &str) -> Result<Vec<FlatValuePack>, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
-    let flat_values: Vec<FlatValuePack> = values.iter().map(|v| FlatValue::pack(v)).collect();
+    let flat_values: Vec<FlatValuePack> = values[arg_offset..].iter().map(|v| FlatValue::pack(v)).collect();
 
     if flat_values.len() != 0 {
         Ok(flat_values)
@@ -199,7 +201,7 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     }
 
     // Serialize the RPC.
-    let serialized = match bincode::serialize(&get_rpc_args(ctx, "n_rpc_clients")?) {
+    let serialized = match bincode::serialize(&get_rpc_args(ctx, 0, "n_rpc_clients")?) {
         Ok(serialized) => serialized,
         Err(e) => {
             eprintln!("Error serializing values: {:?}", e);
@@ -219,11 +221,55 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             }
             streams.retain(|_, (_, keep)| *keep);
         } else {
-            eprintln!("Not connected to a server");
+            eprintln!("A server hasn't been started");
         }
     });
 
     Ok(Value::Nil)
+}
+
+
+#[sylt_macro::sylt_doc(n_rpc_client_ip, "Performs an RPC on a specific connected clients.", [One(Value(callable)), One(List(args))] Type::Bool)]
+#[sylt_macro::sylt_link(n_rpc_client_ip, "sylt_std::network")]
+pub fn n_rpc_client_ip(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
+    if ctx.typecheck {
+        return Ok(Value::Bool(true));
+    }
+
+    let ip = match ctx.machine.stack_from_base(ctx.stack_base).get(0) {
+        Some(Value::String(s)) => SocketAddr::from_str(s.as_ref()).unwrap(),
+        _ => {
+            return Ok(Value::Bool(false)); //TODO(gu): Type error here, probably.
+        }
+    };
+
+    // Serialize the RPC.
+    let serialized = match bincode::serialize(&get_rpc_args(ctx, 1, "n_rpc_client_ip")?) {
+        Ok(serialized) => serialized,
+        Err(e) => {
+            eprintln!("Error serializing values: {:?}", e);
+            return Ok(Value::Bool(false));
+        }
+    };
+
+    CLIENT_HANDLES.with(|client_handles| {
+        if let Some(streams) = client_handles.borrow().as_ref() {
+            let mut streams = streams.lock().unwrap();
+            if let Entry::Occupied(mut o) = streams.entry(ip) {
+                let (stream, _) = o.get_mut();
+                if let Err(e) = stream.write(&serialized) {
+                    eprintln!("Error sending data to a specific client {:?}: {:?}", ip, e);
+                    o.remove();
+                }
+                Ok(Value::Bool(true))
+            } else {
+                Ok(Value::Bool(false))
+            }
+        } else {
+            eprintln!("A server hasn't been started");
+            Ok(Value::Bool(false))
+        }
+    })
 }
 
 //TODO(gu): This doc is wrong since this takes variadic arguments.
@@ -235,7 +281,7 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     }
 
     // Serialize the RPC.
-    let serialized = match bincode::serialize(&get_rpc_args(ctx, "n_rpc_server")?) {
+    let serialized = match bincode::serialize(&get_rpc_args(ctx, 0, "n_rpc_server")?) {
         Ok(serialized) => serialized,
         Err(e) => {
             eprintln!("Error serializing values: {:?}", e);
