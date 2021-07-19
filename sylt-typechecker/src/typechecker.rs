@@ -988,7 +988,7 @@ mod op {
             (Type::Int, Type::Int) => Type::Int,
             (Type::String, Type::String) => Type::String,
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, add),
-            (Type::Tuple(t), n) | (n, Type::Tuple(t)) => tuple_dist_op(t, n, add),
+            // (Type::Tuple(t), n) | (n, Type::Tuple(t)) => tuple_dist_op(t, n, add),
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => add(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
             (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, add),
