@@ -402,6 +402,15 @@ sylt_macro::extern_function!(
     },
 );
 
+sylt_macro::extern_function!(
+    "sylt_std::sylt"
+    debug_assertions
+    "Whether the sylt runtime was compiled with debug assertions or not."
+    [] -> Type::Bool => {
+        Ok(Bool(cfg!(debug_assertions)))
+    },
+);
+
 pub fn union_type<'t>(a: Type, b: Type, blobs: &[Blob]) -> Type {
     if a.fits(&b, blobs).is_ok() {
         a
