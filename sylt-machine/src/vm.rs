@@ -262,6 +262,10 @@ impl Machine for VM {
         &self.blobs
     }
 
+    fn args(&self) -> &[String] {
+        &self.args
+    }
+
     /// Calls `callable` with `args`. Continues to run until the call returns and then returns the
     /// returned value.
     fn eval_call(&mut self, callable: Value, args: &[&Value]) -> Result<Value, Error> {

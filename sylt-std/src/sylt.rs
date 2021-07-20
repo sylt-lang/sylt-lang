@@ -1,6 +1,7 @@
 use crate as sylt_std;
 
 use owo_colors::OwoColorize;
+use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
 use sylt_common::error::RuntimeError;
@@ -39,6 +40,29 @@ pub fn for_each(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         values.iter().map(Type::from).collect(),
     ));
 }
+
+#[sylt_macro::sylt_doc(args, "Returns the args parsed into a dict, split on =",
+  [] Type::Dict(Box::new(Type::String), Box::new(Type::String)))]
+#[sylt_macro::sylt_link(args, "sylt_std::sylt")]
+pub fn args<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    if ctx.typecheck {
+        Ok(Value::from(Type::Dict(Box::new(Type::String), Box::new(Type::String))))
+    } else {
+        let mut args = HashMap::new();
+        args.insert(Value::from("prog"), Value::from(&ctx.machine.args()[0]));
+
+        for arg in ctx.machine.args().iter().skip(1) {
+            let (pre, suf) = if let Some((pre, suf)) = arg.split_once("=") {
+                (pre, suf)
+            } else {
+                (arg.as_str(), "")
+            };
+            args.insert(Value::from(pre), Value::from(suf));
+        }
+        Ok(Value::Dict(Rc::new(RefCell::new(args))))
+    }
+}
+
 
 #[sylt_macro::sylt_doc(push, "Appends an element to the end of a list",
   [One(List(ls)), One(Value(val))] Type::Void)]

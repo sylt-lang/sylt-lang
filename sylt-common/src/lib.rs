@@ -38,6 +38,7 @@ pub trait Machine {
     fn blobs(&self) -> &[Blob];
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error>;
     fn eval_call(&mut self, callable: Value, args: &[&Value]) -> Result<Value, Error>;
+    fn args(&self) -> &[String];
 }
 
 pub struct RuntimeContext<'m> {
