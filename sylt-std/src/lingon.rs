@@ -921,17 +921,27 @@ sylt_macro::extern_function!(
     },
 );
 
-sylt_macro::extern_function!(
-    "sylt_std::lingon"
-    l_text_input_update
-    ""
-    [One(String(s))] -> Type::String => {
-        GAME.with(|game| {
-            let mut s = std::string::String::clone(s);
-            game.lock().unwrap().input.text_input_update(&mut s);
-            Ok(Value::String(Rc::new(s)))
-        })
-    },
-);
+#[sylt_macro::sylt_link(l_text_input_update, "sylt_std::lingon")]
+pub fn l_text_input_update<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    if ctx.typecheck {
+        return Ok(Value::from(Type::Tuple(vec![Type::String, Type::Bool])));
+    }
+
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match values.as_ref() {
+        [Value::String(s)] => {
+            GAME.with(|game| {
+                println!("in {}", s);
+                let mut s = std::string::String::clone(s);
+                let found_return = game.lock().unwrap().input.text_input_update(&mut s);
+                println!("out {}", s);
+                let v = Value::Tuple(Rc::new(vec![Value::String(Rc::new(s)), Value::Bool(found_return)]));
+                println!("{:?}", v);
+                Ok(v)
+            })
+        }
+        _ => unimplemented!(),
+    }
+}
 
 sylt_macro::sylt_link_gen!("sylt_std::lingon");
