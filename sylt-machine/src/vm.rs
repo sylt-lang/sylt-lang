@@ -55,6 +55,7 @@ pub struct VM {
     frames: Vec<Frame>,
     blocks: Vec<Rc<RefCell<Block>>>,
     blobs: Vec<Blob>,
+    args: Vec<String>,
 
     constants: Vec<Value>,
     strings: Vec<String>,
@@ -74,6 +75,7 @@ impl VM {
             frames: Vec::new(),
             blocks: Vec::new(),
             blobs: Vec::new(),
+            args: Vec::new(),
 
             constants: Vec::new(),
             strings: Vec::new(),
@@ -201,12 +203,13 @@ impl VM {
     }
 
     #[doc(hidden)]
-    pub fn init(&mut self, prog: &Prog) {
+    pub fn init(&mut self, prog: &Prog, args: &[String]) {
         let block = Rc::clone(&prog.blocks[0]);
         self.constants = prog.constants.clone();
         self.strings = prog.strings.clone();
         self.blocks = prog.blocks.clone();
         self.blobs = prog.blobs.clone();
+        self.args = Vec::from(args);
 
         self.extern_functions = prog.functions.clone();
         self.stack.clear();
