@@ -911,4 +911,27 @@ pub fn l_load_audio<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> 
     }
 }
 
+sylt_macro::extern_function!(
+    "sylt_std::lingon"
+    l_set_text_input_enabled
+    ""
+    [One(Bool(b))] -> Type::Void => {
+        GAME.with(|game| game.lock().unwrap().input.set_text_input_enabled(*b));
+        Ok(Value::Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::lingon"
+    l_text_input_update
+    ""
+    [One(String(s))] -> Type::String => {
+        GAME.with(|game| {
+            let mut s = std::string::String::clone(s);
+            game.lock().unwrap().input.text_input_update(&mut s);
+            Ok(Value::String(Rc::new(s)))
+        })
+    },
+);
+
 sylt_macro::sylt_link_gen!("sylt_std::lingon");
