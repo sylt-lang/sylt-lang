@@ -49,7 +49,7 @@ pub fn args<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
         Ok(Value::from(Type::Dict(Box::new(Type::String), Box::new(Type::String))))
     } else {
         let mut args = HashMap::new();
-        args.insert(Value::from("prog"), Value::from(&ctx.machine.args()[0]));
+        args.insert(Value::from("prog"), Value::from(ctx.machine.args()[0].as_str()));
 
         for arg in ctx.machine.args().iter().skip(1) {
             let (pre, suf) = if let Some((pre, suf)) = arg.split_once("=") {
