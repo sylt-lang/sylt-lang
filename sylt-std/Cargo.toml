@@ -11,7 +11,7 @@ sylt_macro = { path = "../sylt_macro" }
 
 bincode = { version = "1", optional = true }
 lazy_static = "1"
-lingon = { git = "https://github.com/sornas/lingon.git", branch = "main", optional = true }
+lingon = { path = "../../lingon", optional = true }
 owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
 
 [features]
