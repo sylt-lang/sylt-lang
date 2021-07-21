@@ -330,6 +330,10 @@ impl Machine for VM {
         &self.blobs
     }
 
+    fn args(&self) -> &[String] {
+        &[]
+    }
+
     fn eval_call(&mut self, callable: Value, args: &[&Value]) -> Result<Value, Error> {
         self.push(Type::from(callable));
         let num_args = args.len();

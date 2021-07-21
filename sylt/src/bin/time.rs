@@ -1,11 +1,10 @@
 use gumdrop::Options;
-use std::path::PathBuf;
 use std::time::Instant;
 
 #[derive(Default, Debug, Options)]
 pub struct Args {
     #[options(free, required, help = "The file to run")]
-    pub run_file: PathBuf,
+    pub run_file: String,
 
     #[options(
         short = "r",
@@ -33,7 +32,7 @@ fn main() -> std::io::Result<()> {
     }
 
     let sylt_args = sylt::Args {
-        file: args.run_file,
+        args: vec![args.run_file],
         is_binary: false,
         compile_target: None,
         verbosity: 0,

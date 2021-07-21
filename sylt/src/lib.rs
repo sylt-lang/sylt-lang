@@ -23,7 +23,7 @@ pub fn lib_bindings() -> Vec<(String, RustFunction)> {
 }
 
 pub fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
-    let tree = sylt_parser::tree(&args.file)?;
+    let tree = sylt_parser::tree(&PathBuf::from(args.args.first().expect("No file to run")))?;
     if args.dump_tree {
         println!("Syntax tree: {:#?}", tree);
     }
@@ -45,7 +45,7 @@ pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
     let mut vm = sylt_machine::VM::new();
     vm.print_bytecode = args.verbosity >= 1;
     vm.print_exec = args.verbosity >= 2;
-    vm.init(&prog);
+    vm.init(&prog, &args.args);
     if let Err(e) = vm.run() {
         Err(vec![e])
     } else {
@@ -55,9 +55,6 @@ pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
 
 #[derive(Default, Debug, Options)]
 pub struct Args {
-    #[options(free)]
-    pub file: PathBuf,
-
     #[options(short = "r", long = "run", help = "Runs a precompiled sylt binary")]
     pub is_binary: bool,
 
@@ -75,6 +72,9 @@ pub struct Args {
 
     #[options(help = "Print this help")]
     pub help: bool,
+
+    #[options(free)]
+    pub args: Vec<String>,
 }
 
 impl Args {
@@ -125,7 +125,7 @@ mod tests {
                 use ::sylt_common::Type;
 
                 let mut args = $crate::Args::default();
-                args.file = std::path::PathBuf::from(format!("../{}", $path));
+                args.args = vec![format!("../{}", $path)];
                 args.verbosity = if $print { 1 } else { 0 };
                 let res = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
                 $crate::assert_errs!(res, $errs);
