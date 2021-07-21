@@ -52,11 +52,7 @@ pub fn args<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
         args.insert(Value::from("prog"), Value::from(ctx.machine.args()[0].as_str()));
 
         for arg in ctx.machine.args().iter().skip(1) {
-            let (pre, suf) = if let Some((pre, suf)) = arg.split_once("=") {
-                (pre, suf)
-            } else {
-                (arg.as_str(), "")
-            };
+            let (pre, suf) = arg.split_once("=").unwrap_or((arg.as_str(), ""));
             args.insert(Value::from(pre), Value::from(suf));
         }
         Ok(Value::Dict(Rc::new(RefCell::new(args))))
