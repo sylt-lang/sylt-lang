@@ -41,6 +41,29 @@ pub fn for_each(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     ));
 }
 
+#[sylt_macro::sylt_link(map, "sylt_std::sylt")]
+pub fn map(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match values.as_ref() {
+        [Value::List(list), callable] => {
+            let list = Rc::clone(list);
+            let callable = callable.clone();
+            let mapped = list
+                .borrow()
+                .iter()
+                .map(|element| ctx.machine.eval_call(callable.clone(), &[element]).unwrap())
+                .collect();
+            return Ok(Value::List(Rc::new(RefCell::new(mapped))));
+        }
+        _ => {}
+    }
+
+    return Err(RuntimeError::ExternTypeMismatch(
+        "map".to_string(),
+        values.iter().map(Type::from).collect(),
+    ));
+}
+
 #[sylt_macro::sylt_doc(args, "Returns the args parsed into a dict, split on =",
   [] Type::Dict(Box::new(Type::String), Box::new(Type::String)))]
 #[sylt_macro::sylt_link(args, "sylt_std::sylt")]

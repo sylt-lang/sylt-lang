@@ -330,6 +330,20 @@ pub fn n_rpc_current_request_ip(_: RuntimeContext<'_>) -> Result<Value, RuntimeE
     )
 }
 
+sylt_macro::extern_function!(
+    "sylt_std::network"
+    split_ip
+    ""
+    [One(String(ip_port))] -> Type::Tuple(vec![Type::String, Type::Int]) => {
+        let addr = SocketAddr::from_str(ip_port.as_str()).unwrap();
+        Ok(Value::Tuple(Rc::new(vec![
+            Value::String(Rc::new(addr.ip().to_string())),
+            Value::Int(addr.port() as i64),
+        ])))
+    },
+);
+
+
 #[sylt_macro::sylt_doc(n_rpc_resolve, "Resolves the queued RPCs that has been received since the last resolve.", [] Type::Void)]
 #[sylt_macro::sylt_link(n_rpc_resolve, "sylt_std::network")]
 pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
