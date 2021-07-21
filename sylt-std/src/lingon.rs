@@ -931,13 +931,9 @@ pub fn l_text_input_update<'t>(ctx: RuntimeContext<'t>) -> Result<Value, Runtime
     match values.as_ref() {
         [Value::String(s)] => {
             GAME.with(|game| {
-                println!("in {}", s);
                 let mut s = std::string::String::clone(s);
                 let found_return = game.lock().unwrap().input.text_input_update(&mut s);
-                println!("out {}", s);
-                let v = Value::Tuple(Rc::new(vec![Value::String(Rc::new(s)), Value::Bool(found_return)]));
-                println!("{:?}", v);
-                Ok(v)
+                Ok(Value::Tuple(Rc::new(vec![Value::String(Rc::new(s)), Value::Bool(found_return)])))
             })
         }
         _ => unimplemented!(),
