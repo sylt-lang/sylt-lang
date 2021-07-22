@@ -268,6 +268,15 @@ sylt_macro::extern_function!(
 
 sylt_macro::extern_function!(
     "sylt_std::sylt"
+    as_str
+    "Converts to a string representation"
+    [One(Int(i))] -> Type::String => {
+        Ok(Value::String(Rc::new(i.to_string())))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt"
     sqrt
     "Returns the square root"
     [One(Float(x))] -> Type::Float => {
