@@ -496,6 +496,29 @@ pub fn pop<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     }
 }
 
+#[sylt_macro::sylt_link(last, "sylt_std::sylt")]
+pub fn last(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match (values.as_ref(), ctx.typecheck) {
+        ([Value::List(ls)], true) => {
+            let ls = &ls.borrow();
+            // TODO(ed): Write correct typing
+            let ls = Type::from(&ls[0]);
+            let ret = union_type(ls, Type::Void, ctx.machine.blobs());
+            Ok(Value::from(ret))
+        }
+        ([Value::List(ls)], false) => {
+            // NOTE(ed): Deliberately no type checking.
+            let last = ls.borrow_mut().last().cloned().unwrap_or(Value::Nil);
+            Ok(last)
+        }
+        (values, _) => Err(RuntimeError::ExternTypeMismatch(
+            "pop".to_string(),
+            values.iter().map(Type::from).collect(),
+        )),
+    }
+}
+
 sylt_macro::extern_function!(
     "sylt_std::sylt"
     thread_sleep
