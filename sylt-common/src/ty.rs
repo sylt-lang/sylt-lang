@@ -221,6 +221,9 @@ impl Type {
                 }
             }
             (Type::Instance(a), Type::Instance(b)) | (Type::Blob(a), Type::Blob(b)) => {
+                if a == b {
+                    return Ok(());
+                }
                 let a_fields = &blobs[*a].fields;
                 let b_fields = &blobs[*b].fields;
                 for (f, t) in a_fields.iter() {
