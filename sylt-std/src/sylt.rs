@@ -4,6 +4,7 @@ use owo_colors::OwoColorize;
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
+use sungod::Ra;
 use sylt_common::error::RuntimeError;
 use sylt_common::{Blob, RuntimeContext, Type, Value};
 
@@ -18,6 +19,23 @@ pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
         values
     );
     Ok(Value::Nil)
+}
+
+#[sylt_macro::sylt_doc(random_choice, "Selects an element randomly from a list", [One(Value(list))] Type::Unknown)]
+#[sylt_macro::sylt_link(random_choice, "sylt_std::sylt")]
+pub fn random_choice<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match values.as_ref() {
+        [Value::List(list)] => {
+            return Ok(list.borrow()[Ra::ggen::<usize>() % list.borrow().len()].clone());
+        }
+        _ => {}
+    }
+
+    return Err(RuntimeError::ExternTypeMismatch(
+        "random_choice".to_string(),
+        values.iter().map(Type::from).collect(),
+    ));
 }
 
 #[sylt_macro::sylt_link(for_each, "sylt_std::sylt")]
@@ -520,6 +538,29 @@ pub fn pop<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
         ([Value::List(ls)], false) => {
             // NOTE(ed): Deliberately no type checking.
             let last = ls.borrow_mut().pop().unwrap_or(Value::Nil);
+            Ok(last)
+        }
+        (values, _) => Err(RuntimeError::ExternTypeMismatch(
+            "pop".to_string(),
+            values.iter().map(Type::from).collect(),
+        )),
+    }
+}
+
+#[sylt_macro::sylt_link(last, "sylt_std::sylt")]
+pub fn last(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match (values.as_ref(), ctx.typecheck) {
+        ([Value::List(ls)], true) => {
+            let ls = &ls.borrow();
+            // TODO(ed): Write correct typing
+            let ls = Type::from(&ls[0]);
+            let ret = union_type(ls, Type::Void, ctx.machine.blobs());
+            Ok(Value::from(ret))
+        }
+        ([Value::List(ls)], false) => {
+            // NOTE(ed): Deliberately no type checking.
+            let last = ls.borrow_mut().last().cloned().unwrap_or(Value::Nil);
             Ok(last)
         }
         (values, _) => Err(RuntimeError::ExternTypeMismatch(

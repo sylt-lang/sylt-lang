@@ -975,6 +975,7 @@ dependencies = [
  "lazy_static",
  "lingon",
  "owo-colors",
+ "sungod",
  "sylt-common",
  "sylt_macro",
 ]

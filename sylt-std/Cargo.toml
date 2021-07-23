@@ -13,6 +13,7 @@ bincode = { version = "1", optional = true }
 lazy_static = "1"
 lingon = { path = "../../lingon", optional = true }
 owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
+sungod = "0.3"
 
 [features]
 default = [ "lingon", "network" ]
