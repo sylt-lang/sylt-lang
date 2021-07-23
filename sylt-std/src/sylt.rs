@@ -307,9 +307,18 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt_std::sylt"
     as_int
-    "Converts the int to a float"
+    "Converts something to an int"
     [One(Float(t))] -> Type::Int => {
         Ok(Int(*t as i64))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt"
+    as_char
+    "Converts the first char in a string to an int"
+    [One(String(s))] -> Type::Int => {
+        Ok(Int(s.chars().nth(0).unwrap() as i64))
     },
 );
 
@@ -329,7 +338,17 @@ sylt_macro::extern_function!(
     [One(String(s))] -> Type::List(Box::new(Type::Int)) => {
         let chars = s
             .chars()
-            .map(|c| if c.is_ascii() { c } else { '?' } as i64)
+            .map(|c|
+                if c.is_ascii()
+                    || c == 'å'
+                    || c == 'ä'
+                    || c == 'ö'
+                {
+                    c
+                } else {
+                    '?'
+                } as i64
+            )
             .map(Value::Int)
             .collect();
 
