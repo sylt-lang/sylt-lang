@@ -272,7 +272,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt_std::sylt"
     floor
-    "Rounds a floor down (towards -inf)"
+    "Rounds a float down (towards -inf)"
     [One(Float(t))] -> Type::Int => {
         Ok(Int(t.floor() as i64))
     },
