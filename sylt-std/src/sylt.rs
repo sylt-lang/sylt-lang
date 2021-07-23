@@ -92,10 +92,22 @@ pub fn filter(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             let filtered = list
                 .borrow()
                 .iter()
-                .cloned()
                 .filter(|element| ctx.machine.eval_call(callable.clone(), &[element]).unwrap() == Value::Bool(true))
+                .map(Value::clone)
                 .collect();
             return Ok(Value::List(Rc::new(RefCell::new(filtered))));
+        }
+        [Value::Dict(dict), callable] => {
+            let dict = Rc::clone(dict);
+            let callable = callable.clone();
+            let filtered = dict
+                .borrow()
+                .iter()
+                .filter(|(key, value)| ctx.machine.eval_call(callable.clone(), &[key, value]).unwrap() == Value::Bool(true))
+                // We can't .cloned() since we need the inner values cloned, not the outer tuple
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect();
+            return Ok(Value::Dict(Rc::new(RefCell::new(filtered))));
         }
         _ => {}
     }
