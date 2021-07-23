@@ -315,6 +315,15 @@ sylt_macro::extern_function!(
 
 sylt_macro::extern_function!(
     "sylt_std::sylt"
+    floor
+    "Rounds a float down (towards -inf)"
+    [One(Float(t))] -> Type::Int => {
+        Ok(Int(t.floor() as i64))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt"
     as_chars
     "Converts an ASCII string into a list of chars. Non-ASCII is converted to '?'."
     [One(String(s))] -> Type::List(Box::new(Type::Int)) => {
