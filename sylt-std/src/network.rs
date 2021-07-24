@@ -20,7 +20,7 @@ type RPC = Vec<FlatValuePack>;
 std::thread_local! {
     static RPC_QUEUE: Arc<Mutex<Vec<(RPC, Option<SocketAddr>)>>> = Arc::new(Mutex::new(Vec::new()));
     static SERVER_HANDLE: RefCell<Option<TcpStream>> = RefCell::new(None);
-    static CLIENT_HANDLES: RefCell<Option<Arc<Mutex<HashMap<SocketAddr, (TcpStream, bool)>>>>> = RefCell::new(None);
+    static CLIENT_HANDLES: Arc<Mutex<Option<HashMap<SocketAddr, (TcpStream, bool)>>>> = Arc::new(Mutex::new(None));
     static CURRENT_REQUEST_SOCKET_ADDR: RefCell<Option<SocketAddr>> = RefCell::new(None);
 }
 
@@ -28,13 +28,15 @@ std::thread_local! {
 fn rpc_listen(
     listener: TcpListener,
     queue: Arc<Mutex<Vec<(RPC, Option<SocketAddr>)>>>,
-    handles: Arc<Mutex<HashMap<SocketAddr, (TcpStream, bool)>>>,
+    handles: Arc<Mutex<Option<HashMap<SocketAddr, (TcpStream, bool)>>>>,
 ) {
     loop {
         if let Ok((stream, addr)) = listener.accept() {
             match stream.try_clone() {
                 Ok(stream) => {
-                    handles.lock().unwrap().insert(addr, (stream, true));
+                    if let Some(handles) = handles.lock().unwrap().as_mut() {
+                        handles.insert(addr, (stream, true));
+                    }
                 }
                 Err(e) => {
                     eprintln!("Error accepting TCP connection: {:?}", e);
@@ -89,14 +91,29 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
     };
 
     // Initialize the thread local with our list of client handles.
-    let handles = Arc::new(Mutex::new(HashMap::new()));
     CLIENT_HANDLES.with(|global_handles| {
-        global_handles.borrow_mut().insert(Arc::clone(&handles));
+        global_handles.lock().unwrap().insert(HashMap::new());
     });
 
     // Start listening for new clients.
     let rpc_queue = RPC_QUEUE.with(|queue| Arc::clone(queue));
+    let handles = CLIENT_HANDLES.with(|handles| Arc::clone(handles));
     thread::spawn(|| rpc_listen(listener, rpc_queue, handles));
+
+    Ok(Value::Bool(true))
+}
+
+#[sylt_macro::sylt_link(n_rpc_stop_server, "sylt_std::network")]
+pub fn n_rpc_stop_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
+    if ctx.typecheck {
+        return Ok(Value::Bool(true));
+    }
+
+    if n_rpc_is_server(ctx)? == Value::Bool(false) {
+        return Ok(Value::Bool(false));
+    }
+
+
 
     Ok(Value::Bool(true))
 }
@@ -154,7 +171,7 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 #[sylt_macro::sylt_link(n_rpc_is_server, "sylt_std::network")]
 pub fn n_rpc_is_server(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Bool(
-        CLIENT_HANDLES.with(|handles| handles.borrow().is_some()),
+        CLIENT_HANDLES.with(|handles| handles.lock().unwrap().is_some()),
     ))
 }
 
@@ -163,9 +180,10 @@ pub fn n_rpc_is_server(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 pub fn n_rpc_connected_clients(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Int(CLIENT_HANDLES.with(|handles| {
         handles
-            .borrow()
+            .lock()
+            .unwrap()
             .as_ref()
-            .map(|handles| handles.lock().unwrap().len() as i64)
+            .map(|handles| handles.len() as i64)
             .unwrap_or(0)
     })))
 }
@@ -211,8 +229,7 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 
     // Send the serialized data to all clients.
     CLIENT_HANDLES.with(|client_handles| {
-        if let Some(streams) = client_handles.borrow().as_ref() {
-            let mut streams = streams.lock().unwrap();
+        if let Some(streams) = client_handles.lock().unwrap().as_mut() {
             for (_, (stream, keep)) in streams.iter_mut() {
                 if let Err(e) = stream.write(&serialized) {
                     eprintln!("Error sending data to a client: {:?}", e);
@@ -253,8 +270,7 @@ pub fn n_rpc_client_ip(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     };
 
     CLIENT_HANDLES.with(|client_handles| {
-        if let Some(streams) = client_handles.borrow().as_ref() {
-            let mut streams = streams.lock().unwrap();
+        if let Some(streams) = client_handles.lock().unwrap().as_mut() {
             if let Entry::Occupied(mut o) = streams.entry(ip) {
                 let (stream, _) = o.get_mut();
                 if let Err(e) = stream.write(&serialized) {
