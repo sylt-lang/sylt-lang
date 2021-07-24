@@ -121,7 +121,7 @@ pub fn filter(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     }
 
     return Err(RuntimeError::ExternTypeMismatch(
-        "map".to_string(),
+        "filter".to_string(),
         values.iter().map(Type::from).collect(),
     ));
 }
