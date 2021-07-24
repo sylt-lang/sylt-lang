@@ -341,7 +341,13 @@ pub fn n_rpc_disconnect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> 
         return Ok(Value::Nil);
     }
 
-    SERVER_HANDLE.with(|server_handle| server_handle.borrow_mut().take());
+    SERVER_HANDLE.with(|server_handle| {
+        if let Some(handle) = server_handle.borrow_mut().take() {
+            if let Err(e) = handle.shutdown(Shutdown::Both) {
+                eprintln!("Error disconnecting from server: {:?}", e);
+            }
+        }
+    });
 
     Ok(Value::Nil)
 }
