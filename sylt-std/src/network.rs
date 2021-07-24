@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::io::Write;
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::ops::DerefMut;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -36,6 +36,11 @@ fn rpc_listen(
                 Ok(stream) => {
                     if let Some(handles) = handles.lock().unwrap().as_mut() {
                         handles.insert(addr, (stream, true));
+                    } else {
+                        eprintln!("Server has been shutdown, ignoring connection from {:?}", addr);
+                        if let Err(e) = stream.shutdown(Shutdown::Both) {
+                            eprintln!("Error disconnecting client {:?}: {:?}", addr, e)
+                        }
                     }
                 }
                 Err(e) => {
@@ -113,7 +118,15 @@ pub fn n_rpc_stop_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError>
         return Ok(Value::Bool(false));
     }
 
-
+    CLIENT_HANDLES.with(|handles| {
+        if let Some(handles) = handles.lock().unwrap().as_mut().take() {
+            for (addr, (stream, _)) in handles {
+                if let Err(e) = stream.shutdown(Shutdown::Both) {
+                    eprintln!("Error disconnecting client {:?}: {:?}", addr, e);
+                }
+            }
+        }
+    });
 
     Ok(Value::Bool(true))
 }
