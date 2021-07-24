@@ -257,7 +257,7 @@ pub fn len<'t>(ctx: RuntimeContext) -> Result<Value, RuntimeError> {
     match values.as_ref() {
         [Value::Tuple(ls)] => Ok(Value::Int(ls.len() as i64)),
         [Value::List(ls)] => Ok(Value::Int(ls.borrow().len() as i64)),
-        [_] => Ok(Value::Int(0)),
+        [Value::Dict(dict)] => Ok(Value::Int(dict.borrow().len() as i64)),
         values => Err(RuntimeError::ExternTypeMismatch(
             "len".to_string(),
             values.iter().map(Type::from).collect(),
