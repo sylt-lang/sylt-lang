@@ -131,6 +131,7 @@ pub fn n_rpc_stop_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError>
     Ok(Value::Bool(true))
 }
 
+//NOTE(gu): We don't force a disconnect.
 #[sylt_macro::sylt_doc(n_rpc_connect, "Connects to an RPC server on the specified IP and port.", [One(String(ip)), One(Int(port))] Type::Bool)]
 #[sylt_macro::sylt_link(n_rpc_connect, "sylt_std::network")]
 pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
@@ -341,7 +342,13 @@ pub fn n_rpc_disconnect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> 
         return Ok(Value::Nil);
     }
 
-    SERVER_HANDLE.with(|server_handle| server_handle.borrow_mut().take());
+    SERVER_HANDLE.with(|server_handle| {
+        if let Some(handle) = server_handle.borrow_mut().take() {
+            if let Err(e) = handle.shutdown(Shutdown::Both) {
+                eprintln!("Error disconnecting from server: {:?}", e);
+            }
+        }
+    });
 
     Ok(Value::Nil)
 }
