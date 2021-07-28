@@ -3,20 +3,19 @@ pub mod block;
 pub mod error;
 pub mod op;
 pub mod prog;
-pub mod rc;
 pub mod ty;
 pub mod upvalue;
 pub mod value;
 
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 pub use blob::Blob;
 pub use block::{Block, BlockLinkState};
 pub use error::Error;
 pub use op::{Op, OpResult};
 pub use prog::Prog;
-use rc::Rc;
 pub use ty::Type;
 pub use upvalue::UpValue;
 pub use value::{MatchableValue, Value};

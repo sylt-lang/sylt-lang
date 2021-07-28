@@ -2,8 +2,8 @@ use owo_colors::OwoColorize;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::rc::Rc;
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
-use sylt_common::rc::Rc;
 use sylt_common::{
     Blob, Block, BlockLinkState, Frame, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction,
     Type, UpValue, Value,

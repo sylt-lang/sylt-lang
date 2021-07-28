@@ -4,9 +4,9 @@ use lingon::Game;
 use lingon::random::{Distribute, NoDice, Uniform};
 use lingon::renderer::{Rect, Sprite, Tint, Transform};
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Mutex;
 use sylt_common::error::RuntimeError;
-use sylt_common::rc::Rc;
 use sylt_common::{RuntimeContext, Type, Value};
 
 // Errors are important, they should be easy to write!
