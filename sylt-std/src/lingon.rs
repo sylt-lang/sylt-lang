@@ -6,6 +6,7 @@ use lingon::renderer::{Rect, Sprite, Tint, Transform};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU32, Ordering};
 use sylt_common::error::RuntimeError;
 use sylt_common::{RuntimeContext, Type, Value};
 
@@ -42,8 +43,13 @@ fn parse_dist(name: &str) -> Option<Box<dyn lingon::random::Distribute>> {
 }
 
 std::thread_local! {
+    // Thread locals are allowed to reference each other as long as they're not infinitely recursive.
+    static GAME_WINDOW_SIZE: (AtomicU32, AtomicU32) = (AtomicU32::new(500), AtomicU32::new(500));
     static PARTICLES: Mutex<Vec<lingon::renderer::ParticleSystem>> = Mutex::new(Vec::new());
-    static GAME: Mutex<Game<std::string::String>> = Mutex::new(Game::new("Lingon - Sylt", 500, 500));
+    static GAME: Mutex<Game<std::string::String>> = {
+        let (width, height) = GAME_WINDOW_SIZE.with(|(width, height)| (width.load(Ordering::Relaxed), height.load(Ordering::Relaxed)));
+        Mutex::new(Game::new("Lingon - Sylt", width, height))
+    }
 }
 
 sylt_macro::extern_function!(
@@ -80,8 +86,14 @@ sylt_macro::extern_function!(
     "sylt_std::lingon"
     l_set_window_size
     "Sets the dimension of the game window"
-    [Two(Int(x), Int(y))] -> Type::Void => {
-        GAME.with(|game| game.lock().unwrap().set_window_size(*x as u32, *y as u32).unwrap());
+    [Two(Int(new_width), Int(new_height))] -> Type::Void => {
+        let new_width = *new_width as u32;
+        let new_height = *new_height as u32;
+        GAME_WINDOW_SIZE.with(|(width, height)| {
+            width.store(new_width, Ordering::Release);
+            height.store(new_height, Ordering::Release);
+        });
+        GAME.with(|game| game.lock().unwrap().set_window_size(new_width, new_height).unwrap());
         Ok(Value::Nil)
     },
 );
