@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
@@ -8,6 +9,7 @@ pub trait Numbered {
 }
 
 #[derive(Debug, Clone, sylt_macro::Numbered)]
+#[derive(Deserialize, Serialize)]
 pub enum Type {
     Ty,
     Field(String),
