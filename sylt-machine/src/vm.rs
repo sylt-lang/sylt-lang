@@ -2,8 +2,8 @@ use owo_colors::OwoColorize;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::rc::Rc;
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
-use sylt_common::rc::Rc;
 use sylt_common::{
     Blob, Block, BlockLinkState, Frame, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction,
     Type, UpValue, Value,
@@ -55,6 +55,7 @@ pub struct VM {
     frames: Vec<Frame>,
     blocks: Vec<Rc<RefCell<Block>>>,
     blobs: Vec<Blob>,
+    args: Vec<String>,
 
     constants: Vec<Value>,
     strings: Vec<String>,
@@ -74,6 +75,7 @@ impl VM {
             frames: Vec::new(),
             blocks: Vec::new(),
             blobs: Vec::new(),
+            args: Vec::new(),
 
             constants: Vec::new(),
             strings: Vec::new(),
@@ -201,12 +203,13 @@ impl VM {
     }
 
     #[doc(hidden)]
-    pub fn init(&mut self, prog: &Prog) {
+    pub fn init(&mut self, prog: &Prog, args: &[String]) {
         let block = Rc::clone(&prog.blocks[0]);
         self.constants = prog.constants.clone();
         self.strings = prog.strings.clone();
         self.blocks = prog.blocks.clone();
         self.blobs = prog.blobs.clone();
+        self.args = Vec::from(args);
 
         self.extern_functions = prog.functions.clone();
         self.stack.clear();
@@ -257,6 +260,10 @@ impl Machine for VM {
 
     fn blobs(&self) -> &[Blob] {
         &self.blobs
+    }
+
+    fn args(&self) -> &[String] {
+        &self.args
     }
 
     /// Calls `callable` with `args`. Continues to run until the call returns and then returns the
@@ -847,6 +854,12 @@ mod op {
     use super::Value;
     use std::collections::HashSet;
 
+    fn tuple_dist_op(a: &Rc<Vec<Value>>, n: &Value, f: fn(&Value, &Value) -> Value) -> Value {
+        Value::Tuple(Rc::new(
+                a.iter().map(|a| f(a, n)).collect()
+        ))
+    }
+
     fn tuple_bin_op(
         a: &Rc<Vec<Value>>,
         b: &Rc<Vec<Value>>,
@@ -914,6 +927,7 @@ mod op {
             (Value::Int(a), Value::Int(b)) => Value::Int(a + b),
             (Value::String(a), Value::String(b)) => Value::String(Rc::from(format!("{}{}", a, b))),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, add),
+            (Value::Tuple(t), n) | (n, Value::Tuple(t)) => tuple_dist_op(t, n, add),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => add(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, add),
@@ -930,6 +944,7 @@ mod op {
             (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
             (Value::Int(a), Value::Int(b)) => Value::Int(a * b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, mul),
+            (Value::Tuple(t), n) | (n, Value::Tuple(t)) => tuple_dist_op(t, n, mul),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => mul(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, mul),
@@ -942,6 +957,7 @@ mod op {
             (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
             (Value::Int(a), Value::Int(b)) => Value::Int(a / b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, div),
+            (Value::Tuple(t), n) => tuple_dist_op(t, n, div),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => div(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, div),

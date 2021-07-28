@@ -1,4 +1,3 @@
-use crate::rc::Rc;
 use crate::{Op, Type, Value};
 
 use owo_colors::OwoColorize;
@@ -6,6 +5,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use sylt_tokenizer::Span;
 
 static INDENT: &'static str = "      ";
@@ -18,7 +18,7 @@ fn write_source_line_at(f: &mut fmt::Formatter<'_>, file: &Path, line: usize) ->
     };
 
     let start_line = (line.saturating_sub(2)).max(1);
-    let lines = line - start_line + 1;
+    let lines = 1 + line.saturating_sub(start_line);
 
     for (line_num, line) in io::BufReader::new(file)
         .lines()
