@@ -16,6 +16,9 @@ pub fn lib_bindings() -> Vec<(String, RustFunction)> {
     #[cfg(feature = "lingon")]
     lib.append(&mut sylt_std::lingon::_sylt_link());
 
+    #[cfg(feature = "network")]
+    lib.append(&mut sylt_std::network::_sylt_link());
+
     lib
 }
 
