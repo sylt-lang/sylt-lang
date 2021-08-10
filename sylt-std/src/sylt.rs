@@ -1,6 +1,8 @@
 use crate as sylt_std;
 
 use owo_colors::OwoColorize;
+use std::collections::HashMap;
+use std::cell::RefCell;
 use std::rc::Rc;
 use sylt_common::error::RuntimeError;
 use sylt_common::{Blob, Frame, RuntimeContext, Type, Value};
@@ -39,7 +41,25 @@ pub fn for_each(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     ));
 }
 
-#[sylt_macro::sylt_doc(push, "Appends an element to the end of a list", [One(List(ls)), One(Value(val))] Type::Void)]
+#[sylt_macro::sylt_doc(args, "Returns the args parsed into a dict, split on =",
+  [] Type::Dict(Box::new(Type::String), Box::new(Type::String)))]
+#[sylt_macro::sylt_link(args, "sylt_std::sylt")]
+pub fn args<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    if ctx.typecheck {
+        Ok(Value::from(Type::Dict(Box::new(Type::String), Box::new(Type::String))))
+    } else {
+        let mut args = HashMap::new();
+        args.insert(Value::from("prog"), Value::from(ctx.machine.args()[0].as_str()));
+
+        for arg in ctx.machine.args().iter().skip(1) {
+            let (pre, suf) = arg.split_once("=").unwrap_or((arg.as_str(), ""));
+            args.insert(Value::from(pre), Value::from(suf));
+        }
+        Ok(Value::Dict(Rc::new(RefCell::new(args))))
+    }
+}
+
+
 #[sylt_macro::sylt_link(push, "sylt_std::sylt")]
 pub fn push<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);

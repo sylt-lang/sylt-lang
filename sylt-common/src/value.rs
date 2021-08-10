@@ -32,6 +32,12 @@ pub enum Value {
     Nil,
 }
 
+impl From<&str> for Value {
+    fn from(s: &str) -> Self {
+        Value::String(Rc::new(s.to_string()))
+    }
+}
+
 impl From<&Type> for Value {
     fn from(ty: &Type) -> Self {
         match ty {
