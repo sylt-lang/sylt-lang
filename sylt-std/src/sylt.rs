@@ -50,6 +50,14 @@ pub fn for_each(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
             }
             return Ok(Value::Nil);
         }
+        [Value::Dict(dict), callable] => {
+            let dict = Rc::clone(dict);
+            let callable = callable.clone();
+            for (key, value) in dict.borrow().iter() {
+                ctx.machine.eval_call(callable.clone(), &[key, value]).unwrap();
+            }
+            return Ok(Value::Nil);
+        }
         _ => {}
     }
 
