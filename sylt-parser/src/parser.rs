@@ -481,7 +481,7 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
     let mut ctx = expect!(
         ctx,
         T::Prime | T::LeftParen,
-        "Expected '(' or '!' when calling function"
+        "Expected '(' or ' when calling function"
     );
     let mut args = Vec::new();
 
