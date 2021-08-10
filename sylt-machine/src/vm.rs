@@ -854,12 +854,6 @@ mod op {
     use super::Value;
     use std::collections::HashSet;
 
-    fn tuple_dist_op(a: &Rc<Vec<Value>>, n: &Value, f: fn(&Value, &Value) -> Value) -> Value {
-        Value::Tuple(Rc::new(
-                a.iter().map(|a| f(a, n)).collect()
-        ))
-    }
-
     fn tuple_bin_op(
         a: &Rc<Vec<Value>>,
         b: &Rc<Vec<Value>>,
@@ -927,7 +921,6 @@ mod op {
             (Value::Int(a), Value::Int(b)) => Value::Int(a + b),
             (Value::String(a), Value::String(b)) => Value::String(Rc::from(format!("{}{}", a, b))),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, add),
-            (Value::Tuple(t), n) | (n, Value::Tuple(t)) => tuple_dist_op(t, n, add),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => add(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, add),
@@ -944,7 +937,6 @@ mod op {
             (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
             (Value::Int(a), Value::Int(b)) => Value::Int(a * b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, mul),
-            (Value::Tuple(t), n) | (n, Value::Tuple(t)) => tuple_dist_op(t, n, mul),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => mul(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, mul),
@@ -957,7 +949,6 @@ mod op {
             (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
             (Value::Int(a), Value::Int(b)) => Value::Int(a / b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, div),
-            (Value::Tuple(t), n) => tuple_dist_op(t, n, div),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => div(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, div),

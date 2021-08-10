@@ -927,10 +927,6 @@ mod op {
     use super::Type;
     use std::collections::HashSet;
 
-    fn tuple_dist_op(a: &Vec<Type>, n: &Type, f: fn(&Type, &Type) -> Type) -> Type {
-        Type::Tuple(a.iter().map(|a| f(a, n)).collect())
-    }
-
     fn tuple_bin_op(a: &Vec<Type>, b: &Vec<Type>, f: fn(&Type, &Type) -> Type) -> Type {
         Type::Tuple(a.iter().zip(b.iter()).map(|(a, b)| f(a, b)).collect())
     }
@@ -992,8 +988,6 @@ mod op {
             (Type::Int, Type::Int) => Type::Int,
             (Type::String, Type::String) => Type::String,
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, add),
-            // TODO(ed): These need to be removed in more places.
-            // (Type::Tuple(t), n) | (n, Type::Tuple(t)) => tuple_dist_op(t, n, add),
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => add(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
             (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, add),
@@ -1009,10 +1003,7 @@ mod op {
         match (a, b) {
             (Type::Float, Type::Float) => Type::Float,
             (Type::Int, Type::Int) => Type::Int,
-            // TODO(ed): These need to be removed in more places.
-            // (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, mul),
-            (Type::Tuple(t), n) | (n, Type::Tuple(t)) => tuple_dist_op(t, n, mul),
-
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, mul),
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => mul(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
             (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, mul),
@@ -1024,10 +1015,7 @@ mod op {
         match (a, b) {
             (Type::Float, Type::Float) => Type::Float,
             (Type::Int, Type::Int) => Type::Int,
-            // TODO(ed): These need to be removed in more places.
-            // (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, div),
-            (Type::Tuple(t), n) => tuple_dist_op(t, n, div),
-
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, div),
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => div(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
             (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, div),
