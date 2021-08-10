@@ -683,10 +683,23 @@ impl Compiler {
                     );
                     None
                 }),
-            Read(_) => {
-                // Should be unreachable
-                error!(self, ctx, assignable.span, "This is not a namespace");
+            Read(ident) => {
+                self
+                .namespaces[namespace].get(&ident.name)
+                .and_then(|o| match o {
+                    Name::Namespace(namespace) => Some(*namespace),
+                    _ => None,
+                })
+                .or_else(|| {
+                    error!(
+                        self,
+                        ctx,
+                        assignable.span,
+                        "While parsing namespace '{}' is not a namespace",
+                        ident.name
+                    );
                 None
+                })
             }
             ArrowCall(..) | Call(..) => {
                 error!(self, ctx, assignable.span, "Cannot have calls in types");
