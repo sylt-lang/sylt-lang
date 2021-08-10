@@ -515,6 +515,17 @@ sylt_macro::extern_function!(
     },
 );
 
+sylt_macro::extern_function!(
+    "sylt_std::sylt"
+    reflect
+    "Flips the component of 'v' that points towards 'n'"
+    [Two(Float(vx), Float(vy)), Two(Float(nx), Float(ny))]
+    -> Type::Tuple(vec![Type::Float, Type::Float]) => {
+        let s = 2.0 * (vx * nx + vy * ny);
+        Ok(Tuple(Rc::new(vec![Float(vx - s * nx), Float(vy - s * ny)])))
+    },
+);
+
 pub fn union_type<'t>(a: Type, b: Type, blobs: &[Blob]) -> Type {
     if a.fits(&b, blobs).is_ok() {
         a
