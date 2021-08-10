@@ -1,2 +1,2 @@
 
-// error: @_
+// error: Error::CompileError { .. }
