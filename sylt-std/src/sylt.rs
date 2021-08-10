@@ -615,4 +615,14 @@ pub fn last(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     }
 }
 
+sylt_macro::extern_function!(
+    "sylt_std::sylt"
+    thread_sleep
+    "Sleep (blocking) for some time."
+    [One(Float(secs))] -> Type::Void => {
+        std::thread::sleep(std::time::Duration::from_secs_f64(*secs));
+        Ok(Value::Nil)
+    },
+);
+
 sylt_macro::sylt_link_gen!("sylt_std::sylt");
