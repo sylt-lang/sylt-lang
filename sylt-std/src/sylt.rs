@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use sungod::Ra;
 use sylt_common::error::RuntimeError;
-use sylt_common::{Blob, Frame, RuntimeContext, Type, Value};
+use sylt_common::{Blob, RuntimeContext, Type, Value};
 
 #[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", [One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(dbg, "sylt_std::sylt")]
@@ -145,6 +145,8 @@ pub fn args<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
 }
 
 
+#[sylt_macro::sylt_doc(push, "Appends an element to the end of a list",
+  [One(List(ls)), One(Value(val))] Type::Void)]
 #[sylt_macro::sylt_link(push, "sylt_std::sylt")]
 pub fn push<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
@@ -154,7 +156,7 @@ pub fn push<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
             assert!(ls.len() == 1);
             let ls = Type::from(&ls[0]);
             let v = Type::from(&*v);
-            if ls == v || matches!(ls, Type::Unknown) {
+            if ls.fits(&v, &ctx.machine.blobs()).is_ok() || matches!(ls, Type::Unknown) {
                 Ok(Value::Nil)
             } else {
                 Err(RuntimeError::TypeMismatch(ls, v))
@@ -230,7 +232,7 @@ pub fn prepend<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
             assert!(ls.len() == 1);
             let ls = Type::from(&ls[0]);
             let v: Type = Type::from(&*v);
-            if ls == v {
+            if ls.fits(&v, ctx.machine.blobs()).is_ok() {
                 Ok(Value::Nil)
             } else {
                 Err(RuntimeError::TypeMismatch(ls, v))
@@ -305,7 +307,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt_std::sylt"
     as_int
-    "Converts the int to a float"
+    "Converts something to an int"
     [One(Float(t))] -> Type::Int => {
         Ok(Int(*t as i64))
     },
@@ -375,7 +377,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt_std::sylt"
     abs
-    "Returns the square root"
+    "Returns the absolute value"
     [One(Float(x))] -> Type::Float => {
         Ok(Float(x.abs()))
     },
