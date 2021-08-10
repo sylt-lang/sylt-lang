@@ -331,6 +331,31 @@ sylt_macro::extern_function!(
 
 sylt_macro::extern_function!(
     "sylt_std::sylt"
+    as_chars
+    "Converts an ASCII string into a list of chars. Non-ASCII is converted to '?'."
+    [One(String(s))] -> Type::List(Box::new(Type::Int)) => {
+        let chars = s
+            .chars()
+            .map(|c|
+                if c.is_ascii()
+                    || c == 'å'
+                    || c == 'ä'
+                    || c == 'ö'
+                {
+                    c
+                } else {
+                    '?'
+                } as i64
+            )
+            .map(Value::Int)
+            .collect();
+
+        Ok(Value::List(Rc::new(RefCell::new(chars))))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt"
     sqrt
     "Returns the square root"
     [One(Float(x))] -> Type::Float => {
