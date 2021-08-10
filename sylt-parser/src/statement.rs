@@ -243,7 +243,9 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
         // `if <expression> <statement> [else <statement>]`. Note that the else is optional.
         [T::If, ..] => {
+            let (ctx, skip_newlines) = ctx.push_skip_newlines(false);
             let (ctx, condition) = expression(ctx.skip(1))?;
+            let ctx = ctx.pop_skip_newlines(skip_newlines);
 
             let (ctx, pass) = statement(ctx)?;
             // else?
@@ -517,6 +519,8 @@ mod test {
 
     test!(statement, statement_is_check: ":A is :B" => IsCheck { .. });
     test!(statement, statement_is_check_nested: ":A.c.d is :B.d.d" => IsCheck { .. });
+
+    test!(statement, statement_if_newline: "if 1 \n\n+\n 1\n\n < 2 { }" => _);
 
     test!(statement, statement_skip_newline: "(1 \n\n+\n 1\n\n)" => _);
     test!(statement, statement_skip_newline_list: "[\n\n 1 \n\n,\n 1\n\n,]" => _);
