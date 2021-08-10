@@ -453,6 +453,68 @@ sylt_macro::extern_function!(
     },
 );
 
+#[sylt_macro::sylt_doc(magnitude_squared, "Calculates the squared magnitude of the tuple as a vector", [Tuple(Float)] Type::Float)]
+#[sylt_macro::sylt_link(magnitude_squared, "sylt_std::sylt")]
+pub fn magnitude_squared<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match (values.as_ref(), ctx.typecheck) {
+        ([Value::Tuple(ls)], true) => {
+            for value in ls.iter() {
+                if Type::from(value) != Type::Float {
+                    return Err(RuntimeError::ExternTypeMismatch(
+                            "magnitude_squared".to_string(),
+                            values.iter().map(Type::from).collect(),
+                    ));
+                }
+            }
+            Ok(Value::from(Type::Float))
+        }
+        ([Value::Tuple(ls)], false) => {
+            let mut sum = 0.0;
+            for value in ls.iter() {
+                if let Value::Float(value) = value {
+                    sum += value * value;
+                } else {
+                    return Err(RuntimeError::ExternTypeMismatch(
+                            "magnitude_squared".to_string(),
+                            values.iter().map(Type::from).collect(),
+                    ));
+                }
+            }
+            Ok(Value::Float(sum))
+        }
+        (values, _) => Err(RuntimeError::ExternTypeMismatch(
+            "magnitude_squared".to_string(),
+            values.iter().map(Type::from).collect(),
+        )),
+    }
+}
+
+#[sylt_macro::sylt_doc(magnitude, "Calculates the squared magnitude of the tuple as a vector", [Tuple(Float)] Type::Float)]
+#[sylt_macro::sylt_link(magnitude, "sylt_std::sylt")]
+pub fn magnitude<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    if let Value::Float(mag) = magnitude_squared(ctx)? {
+        Ok(Value::Float(mag.abs().sqrt()))
+    } else {
+        unreachable!();
+    }
+}
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt"
+    normalize
+    "Returns a unit length vector pointing in the same direction."
+    [Two(Float(x), Float(y))] -> Type::Tuple(vec![Type::Float, Type::Float]) => {
+        let length = (x * x + y * y).sqrt();
+        let (x, y) = if length != 0.0 {
+            (x / length, y / length)
+        } else {
+            (*x, *y)
+        };
+        Ok(Tuple(Rc::new(vec![Float(x), Float(y)])))
+    },
+);
+
 pub fn union_type<'t>(a: Type, b: Type, blobs: &[Blob]) -> Type {
     if a.fits(&b, blobs).is_ok() {
         a
