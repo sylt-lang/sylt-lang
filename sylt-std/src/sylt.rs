@@ -313,6 +313,15 @@ sylt_macro::extern_function!(
 
 sylt_macro::extern_function!(
     "sylt_std::sylt"
+    as_char
+    "Converts the first char in a string to an int"
+    [One(String(s))] -> Type::Int => {
+        Ok(Int(s.chars().nth(0).unwrap() as i64))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt"
     sqrt
     "Returns the square root"
     [One(Float(x))] -> Type::Float => {
