@@ -444,6 +444,15 @@ sylt_macro::extern_function!(
     },
 );
 
+sylt_macro::extern_function!(
+    "sylt_std::sylt"
+    angle
+    "Calculates the angle of a 2d vector"
+    [Two(Float(x), Float(y))] -> Type::Float => {
+        Ok(Float(y.atan2(*x)))
+    },
+);
+
 pub fn union_type<'t>(a: Type, b: Type, blobs: &[Blob]) -> Type {
     if a.fits(&b, blobs).is_ok() {
         a
