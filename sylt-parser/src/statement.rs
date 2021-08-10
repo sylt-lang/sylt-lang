@@ -243,7 +243,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
         // `if <expression> <statement> [else <statement>]`. Note that the else is optional.
         [T::If, ..] => {
-            let (ctx, skip_newlines) = ctx.push_skip_newlines(false);
+            let (ctx, skip_newlines) = ctx.push_skip_newlines(true);
             let (ctx, condition) = expression(ctx.skip(1))?;
             let ctx = ctx.pop_skip_newlines(skip_newlines);
 
