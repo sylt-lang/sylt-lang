@@ -90,6 +90,42 @@ pub fn map(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     ));
 }
 
+#[sylt_macro::sylt_link(filter, "sylt_std::sylt")]
+pub fn filter(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match values.as_ref() {
+        [Value::List(list), callable] => {
+            let list = Rc::clone(list);
+            let callable = callable.clone();
+            let filtered = list
+                .borrow()
+                .iter()
+                .filter(|element| ctx.machine.eval_call(callable.clone(), &[element]).unwrap() == Value::Bool(true))
+                .map(Value::clone)
+                .collect();
+            return Ok(Value::List(Rc::new(RefCell::new(filtered))));
+        }
+        [Value::Dict(dict), callable] => {
+            let dict = Rc::clone(dict);
+            let callable = callable.clone();
+            let filtered = dict
+                .borrow()
+                .iter()
+                .filter(|(key, value)| ctx.machine.eval_call(callable.clone(), &[key, value]).unwrap() == Value::Bool(true))
+                // We can't .cloned() since we need the inner values cloned, not the outer tuple
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect();
+            return Ok(Value::Dict(Rc::new(RefCell::new(filtered))));
+        }
+        _ => {}
+    }
+
+    return Err(RuntimeError::ExternTypeMismatch(
+        "filter".to_string(),
+        values.iter().map(Type::from).collect(),
+    ));
+}
+
 #[sylt_macro::sylt_doc(args, "Returns the args parsed into a dict, split on =",
   [] Type::Dict(Box::new(Type::String), Box::new(Type::String)))]
 #[sylt_macro::sylt_link(args, "sylt_std::sylt")]
