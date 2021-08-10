@@ -435,6 +435,15 @@ sylt_macro::extern_function!(
     },
 );
 
+sylt_macro::extern_function!(
+    "sylt_std::sylt"
+    pow
+    "Raises the first argument to the power of the second argument"
+    [One(Float(x)), One(Float(y))] -> Type::Float => {
+        Ok(Float(x.powf(*y)))
+    },
+);
+
 pub fn union_type<'t>(a: Type, b: Type, blobs: &[Blob]) -> Type {
     if a.fits(&b, blobs).is_ok() {
         a
