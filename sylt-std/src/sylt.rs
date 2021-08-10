@@ -383,6 +383,18 @@ sylt_macro::extern_function!(
 
 sylt_macro::extern_function!(
     "sylt_std::sylt"
+    sign
+    "Returns the sign of the value"
+    [One(Float(x))] -> Type::Float => {
+        Ok(Float(x.signum()))
+    },
+    [One(Int(x))] -> Type::Float => {
+        Ok(Int(x.signum()))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt"
     clamp
     "Clamps the value 'a' between 'lo' and 'hi'"
     [One(Float(a)), One(Float(lo)), One(Float(hi))] -> Type::Float => {
