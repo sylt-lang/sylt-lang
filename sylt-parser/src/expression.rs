@@ -473,7 +473,39 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
 
     // Parse an operator and a following expression
     // until we reach a token with higher precedence.
+    //
+    // The operator has to be checked before - this
+    // removes an O(x^n).
     let (op, span, ctx) = ctx.eat();
+
+    match op {
+        T::Plus
+        | T::Minus
+        | T::Star
+        | T::Slash
+        | T::EqualEqual
+        | T::NotEqual
+        | T::Greater
+        | T::GreaterEqual
+        | T::Less
+        | T::LessEqual
+        | T::Is
+
+        | T::And
+        | T::Or
+
+        | T::AssertEqual
+
+        | T::In
+        => {}
+
+        // Unknown infix operator.
+        _ => {
+            return Err((ctx, Vec::new()));
+        }
+    };
+
+
     let (ctx, rhs) = parse_precedence(ctx, precedence(op).next())?;
 
     // Left and right of the operator.
@@ -505,7 +537,7 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
 
         // Unknown infix operator.
         _ => {
-            return Err((ctx, Vec::new()));
+            unreachable!();
         }
     };
 
