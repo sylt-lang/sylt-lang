@@ -521,6 +521,7 @@ impl Machine for VM {
                     }
                 },
                 inst => {
+                    self.push(Type::Invalid);
                     error!(
                         self,
                         RuntimeError::TypeError(Op::GetField(field), vec![Type::from(inst)])
