@@ -3,3 +3,5 @@ start :: fn {
     a.a
     a
 }
+
+// error: #TypeError(..)
