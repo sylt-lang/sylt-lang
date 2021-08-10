@@ -316,9 +316,20 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt_std::sylt"
     as_char
-    "Converts the first char in a string to an int"
+    "Converts a string containing a single char to an int"
     [One(String(s))] -> Type::Int => {
-        Ok(Int(s.chars().nth(0).unwrap() as i64))
+        let mut chars = s.chars();
+        let c = match chars.next() {
+            Some(c) => c,
+            //TODO(gu): Actually what went wrong
+            None => return Err(RuntimeError::ExternTypeMismatch("as_char".to_string(), vec![Type::String])),
+        };
+        if chars.next().is_none() {
+            Ok(Int(c as i64))
+        } else {
+            //TODO(gu): Actually what went wrong
+            Err(RuntimeError::ExternTypeMismatch("as_char".to_string(), vec![Type::String]))
+        }
     },
 );
 
