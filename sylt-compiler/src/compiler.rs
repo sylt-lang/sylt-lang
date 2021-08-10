@@ -678,7 +678,7 @@ impl Compiler {
                         self,
                         ctx,
                         assignable.span,
-                        "While parsing type '{}' is not a namespace",
+                        "While parsing namespace access '{}' is not a namespace",
                         ident.name
                     );
                     None
@@ -814,7 +814,11 @@ impl Compiler {
                 } else {
                     error!(
                         self,
-                        ctx, statement.span, "No blob with the name '{}' in this namespace", name
+                        ctx,
+                        statement.span,
+                        "No blob with the name '{}' in this namespace (#{})",
+                        name,
+                        ctx.namespace
                     );
                 }
             }
