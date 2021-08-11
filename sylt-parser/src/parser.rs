@@ -310,6 +310,21 @@ macro_rules! expect {
     };
 }
 
+/// Eat until any one of the specified tokens or reaches EOF.
+#[macro_export]
+macro_rules! until {
+    ($ctx:expr, $( $token:pat )|+ ) => {
+        {
+            let mut ctx = $ctx;
+            while !matches!(ctx.token(), T::EOF | $( $token )|*) {
+                ctx = ctx.skip(1);
+            }
+            ctx
+        }
+    };
+}
+
+
 /// Parse a [Type] definition, e.g. `fn int, int, bool -> bool`.
 fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     use RuntimeType::{Bool, Float, Int, String, Void};
