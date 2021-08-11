@@ -7,5 +7,5 @@ edition = "2018"
 path = "src/compiler.rs"
 
 [dependencies]
-sylt-common = { path = "../sylt-common" }
-sylt-parser = { path = "../sylt-parser" }
+sylt-common = { version = "0.1.0", path = "../sylt-common" }
+sylt-parser = { version = "0.1.0", path = "../sylt-parser" }
