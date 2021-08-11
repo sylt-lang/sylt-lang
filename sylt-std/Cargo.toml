@@ -1,13 +1,13 @@
 [package]
 name = "sylt-std"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-sylt-common = { version = "0.1.0", path = "../sylt-common" }
-sylt_macro = { version = "0.1.0", path = "../sylt_macro" }
+sylt-common = { version = "0.2.0", path = "../sylt-common" }
+sylt_macro = { version = "0.2.0", path = "../sylt_macro" }
 
 bincode = { version = "1", optional = true }
 lazy_static = "1"

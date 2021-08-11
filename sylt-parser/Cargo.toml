@@ -1,12 +1,12 @@
 [package]
 name = "sylt-parser"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2018"
 
 [lib]
 path = "src/parser.rs"
 
 [dependencies]
-sylt-common = { version = "0.1.0", path = "../sylt-common" }
-sylt-tokenizer = { version = "0.1.0", path = "../sylt-tokenizer" }
-sylt_macro = { version = "0.1.0", path = "../sylt_macro" }
+sylt-common = { version = "0.2.0", path = "../sylt-common" }
+sylt-tokenizer = { version = "0.2.0", path = "../sylt-tokenizer" }
+sylt_macro = { version = "0.2.0", path = "../sylt_macro" }
