@@ -135,10 +135,7 @@ pub fn block_statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             }
             Err((_ctx, mut err)) => {
                 ctx = _ctx.pop_skip_newlines(false);  // assign to outer
-                while !matches!(ctx.token(), T::Newline | T::EOF) {
-                    ctx = ctx.skip(1);
-                }
-                ctx = ctx.skip_if(T::Newline);
+                ctx = until!(ctx, T::Newline).skip_if(T::Newline);
                 errs.append(&mut err);
             }
         }
