@@ -3,8 +3,8 @@ use self::statement::outer_statement;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use sylt_common::error::Error;
-use sylt_common::rc::Rc;
 use sylt_common::Type as RuntimeType;
 use sylt_tokenizer::{PlacedToken, Token, ZERO_SPAN, file_to_tokens};
 

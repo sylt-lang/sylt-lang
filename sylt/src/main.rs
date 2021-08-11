@@ -7,10 +7,6 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
-    if args.file.is_none() {
-        return Err("No file to run".to_string());
-    }
-
     let functions = lib_bindings();
     let res = sylt::run_file(&args, functions);
 

@@ -1,4 +1,3 @@
-use crate::rc::Rc;
 use crate::{Op, Type, Value};
 
 use owo_colors::OwoColorize;
@@ -6,6 +5,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use sylt_tokenizer::Span;
 
 static INDENT: &'static str = "      ";

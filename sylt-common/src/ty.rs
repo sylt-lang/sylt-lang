@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
@@ -8,6 +9,7 @@ pub trait Numbered {
 }
 
 #[derive(Debug, Clone, sylt_macro::Numbered)]
+#[derive(Deserialize, Serialize)]
 pub enum Type {
     Ty,
     Field(String),
@@ -219,6 +221,9 @@ impl Type {
                 }
             }
             (Type::Instance(a), Type::Instance(b)) | (Type::Blob(a), Type::Blob(b)) => {
+                if a == b {
+                    return Ok(());
+                }
                 let a_fields = &blobs[*a].fields;
                 let b_fields = &blobs[*b].fields;
                 for (f, t) in a_fields.iter() {
