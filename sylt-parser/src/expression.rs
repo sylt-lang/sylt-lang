@@ -318,8 +318,13 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                         kind: Get(assign),
                     },
                 )),
-                (Err((ctx, _)), Err(_)) => {
-                    raise_syntax_error!(ctx, "Neither a blob instantiation or an identifier");
+                (Err((_, mut blob_errs)), Err((_, mut ass_errs))) => {
+                    let errs = vec![
+                        syntax_error!(ctx, "Neither a blob instantiation or an identifier - see the 2 errors below"),
+                        blob_errs.remove(0),
+                        ass_errs.remove(0),
+                    ];
+                    return Err((ctx, errs));
                 }
             }
         }
