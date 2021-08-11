@@ -219,6 +219,13 @@ impl<'a> Context<'a> {
         new
     }
 
+    /// Back up one token. Will not move past the beginning.
+    fn prev(&self) -> Self {
+        let mut new = *self;
+        new.curr = new.curr.saturating_sub(1);
+        new
+    }
+
     /// Signals that newlines should be skipped until [pop_skip_newlines].
     fn push_skip_newlines(&self, skip_newlines: bool) -> (Self, bool) {
         let mut new = *self;

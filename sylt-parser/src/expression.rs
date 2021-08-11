@@ -1,6 +1,6 @@
 use sylt_common::error::Error;
 
-use crate::statement::block_statement;
+use crate::statement::block;
 
 use super::*;
 
@@ -169,15 +169,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     };
 
     // Parse the function statement.
-    let (ctx, mut statement) = block_statement(ctx)?;
-
-    // If the return type isn't void, check for and apply implicit returns.
-
-    let statements = if let StatementKind::Block { statements } = &mut statement.kind {
-        statements
-    } else {
-        unreachable!("Function blocks should only be blocks");
-    };
+    let (ctx, mut statements) = block(ctx)?;
 
     if !matches!(ret.kind, Resolved(Void)) {
         // If the last statement is an expression statement,
@@ -202,7 +194,10 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         name: "lambda".into(),
         params,
         ret,
-        body: Box::new(statement),
+        body: Box::new(Statement {
+            span: ctx.span(),
+            kind: StatementKind::Block { statements }
+        }),
     };
 
     Ok((

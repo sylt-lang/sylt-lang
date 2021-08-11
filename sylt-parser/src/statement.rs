@@ -120,8 +120,7 @@ pub struct Statement {
     pub kind: StatementKind,
 }
 
-pub fn block_statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
-    let span = ctx.span();
+pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
     let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{' at start of block");
 
     let mut errs = Vec::new();
@@ -144,10 +143,10 @@ pub fn block_statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
     }
 
-    let ctx = expect!(ctx, T::RightBrace, "Expected }} after block statement");
     if errs.is_empty() {
+        let ctx = expect!(ctx, T::RightBrace, "Expected }} after block statement");
         #[rustfmt::skip]
-        return Ok(( ctx, Statement { span, kind: StatementKind::Block { statements } }));
+        return Ok(( ctx, statements ));
     } else {
         Err(( ctx, errs ))
     }
@@ -162,11 +161,11 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
     let span = ctx.span();
     let (ctx, kind) = match &ctx.tokens[ctx.curr..] {
-        [T::Newline, ..] => (ctx.skip(1), EmptyStatement),
+        [T::Newline, ..] => (ctx, EmptyStatement),
 
         // Block: `{ <statements> }`
-        [T::LeftBrace, ..] => match (block_statement(ctx), expression(ctx)) {
-            (Ok((ctx, stmt)), _) => (ctx, stmt.kind),
+        [T::LeftBrace, ..] => match (block(ctx), expression(ctx)) {
+            (Ok((ctx, statements)), _) => (ctx, Block { statements }),
             (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
             (Err((ctx, _)), Err(_)) => {
                 raise_syntax_error!(ctx, "Neither a block nor a valid expression");
@@ -233,7 +232,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             };
             let (ctx, body) = statement(ctx)?;
             (
-                ctx,
+                ctx.prev(),
                 Loop {
                     condition,
                     body: Box::new(body),
@@ -262,7 +261,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             };
 
             (
-                ctx,
+                ctx.prev(),
                 If {
                     condition,
                     pass: Box::new(pass),
@@ -455,7 +454,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
     };
 
-    let ctx = ctx.skip_if(T::Newline);
+    // Newline, RightBrace and Else can end a statment.
+    // We don't give too specific errors when that is not the case.
+    let ctx = if !matches!(ctx.token(), T::RightBrace | T::Else) {
+        expect!(ctx, T::Newline, "Expected newline")
+    } else {
+        ctx
+    };
     let ctx = ctx.pop_skip_newlines(skip_newlines);
     Ok((ctx, Statement { span, kind }))
 }
