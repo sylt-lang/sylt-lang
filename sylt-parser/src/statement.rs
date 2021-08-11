@@ -144,8 +144,8 @@ pub fn block_statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
     }
 
-    let ctx = expect!(ctx, T::RightBrace, "Expected }} after block statement");
     if errs.is_empty() {
+        let ctx = expect!(ctx, T::RightBrace, "Expected }} after block statement");
         #[rustfmt::skip]
         return Ok(( ctx, Statement { span, kind: StatementKind::Block { statements } }));
     } else {
