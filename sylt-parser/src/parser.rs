@@ -310,7 +310,7 @@ macro_rules! expect {
     };
 }
 
-/// Eat until any one of the specified tokens or reaches EOF.
+/// Eat until any one of the specified tokens or EOF.
 #[macro_export]
 macro_rules! until {
     ($ctx:expr, $( $token:pat )|+ ) => {

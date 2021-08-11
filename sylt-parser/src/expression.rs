@@ -747,7 +747,7 @@ fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 if !matches!(ctx.token(), T::Comma | T::RightBrace) {
                     raise_syntax_error!(
                         ctx,
-                        "Expected an element delimiter ',' - but got {:?}",
+                        "Expected an element delimiter ',' but got {:?}",
                         ctx.token()
                     );
                 }
