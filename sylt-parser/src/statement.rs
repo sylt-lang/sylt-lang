@@ -490,43 +490,43 @@ mod test {
     use super::StatementKind::*;
 
     // NOTE(ed): Expressions are valid statements! :D
-    test!(statement, statement_expression: "1 + 1" => _);
-    test!(statement, statement_print: "print 1" => _);
-    test!(statement, statement_break: "break" => _);
-    test!(statement, statement_continue: "continue" => _);
-    test!(statement, statement_mut_declaration: "a := 1 + 1" => _);
-    test!(statement, statement_const_declaration: "a :: 1 + 1" => _);
-    test!(statement, statement_mut_type_declaration: "a :int= 1 + 1" => _);
-    test!(statement, statement_const_type_declaration: "a :int: 1 + 1" => _);
-    test!(statement, statement_force_mut_type_declaration: "a :!int= 1 + 1" => _);
-    test!(statement, statement_force_const_type_declaration: "a :!int: 1 + 1" => _);
-    test!(statement, statement_if: "if 1 { print a }" => _);
-    test!(statement, statement_if_else: "if 1 { print a } else { print b }" => _);
-    test!(statement, statement_loop: "loop 1 { print a }" => _);
-    test!(statement, statement_loop_no_condition: "loop { print a }" => _);
-    test!(statement, statement_ret: "ret 1 + 1" => _);
+    test!(statement, statement_expression: "1 + 1\n" => _);
+    test!(statement, statement_print: "print 1\n" => _);
+    test!(statement, statement_break: "break\n" => _);
+    test!(statement, statement_continue: "continue\n" => _);
+    test!(statement, statement_mut_declaration: "a := 1 + 1\n" => _);
+    test!(statement, statement_const_declaration: "a :: 1 + 1\n" => _);
+    test!(statement, statement_mut_type_declaration: "a :int= 1 + 1\n" => _);
+    test!(statement, statement_const_type_declaration: "a :int: 1 + 1\n" => _);
+    test!(statement, statement_force_mut_type_declaration: "a :!int= 1 + 1\n" => _);
+    test!(statement, statement_force_const_type_declaration: "a :!int: 1 + 1\n" => _);
+    test!(statement, statement_if: "if 1 { print a }\n" => _);
+    test!(statement, statement_if_else: "if 1 { print a } else { print b }\n" => _);
+    test!(statement, statement_loop: "loop 1 { print a }\n" => _);
+    test!(statement, statement_loop_no_condition: "loop { print a }\n" => _);
+    test!(statement, statement_ret: "ret 1 + 1\n" => _);
     test!(statement, statement_ret_newline: "ret \n" => _);
-    test!(statement, statement_unreach: "<!>" => _);
-    test!(statement, statement_blob_empty: "A :: blob {}" => _);
-    test!(statement, statement_blob_comma: "A :: blob { a: int, b: int }" => _);
-    test!(statement, statement_blob_comma_newline: "A :: blob { a: int,\n b: int }" => _);
-    test!(statement, statement_assign: "a = 1" => _);
-    test!(statement, statement_assign_index: "a.b = 1 + 2" => _);
-    test!(statement, statement_add_assign: "a += 2" => _);
-    test!(statement, statement_sub_assign: "a -= 2" => _);
-    test!(statement, statement_mul_assign: "a *= 2" => _);
-    test!(statement, statement_div_assign: "a /= 2" => _);
-    test!(statement, statement_assign_call: "a().b() += 2" => _);
-    test!(statement, statement_assign_call_index: "a.c().c.b /= 4" => _);
-    test!(statement, statement_idek: "a'.c'.c.b()().c = 0" => _);
+    test!(statement, statement_unreach: "<!>\n" => _);
+    test!(statement, statement_blob_empty: "A :: blob {}\n" => _);
+    test!(statement, statement_blob_comma: "A :: blob { a: int, b: int }\n" => _);
+    test!(statement, statement_blob_comma_newline: "A :: blob { a: int,\n b: int }\n" => _);
+    test!(statement, statement_assign: "a = 1\n" => _);
+    test!(statement, statement_assign_index: "a.b = 1 + 2\n" => _);
+    test!(statement, statement_add_assign: "a += 2\n" => _);
+    test!(statement, statement_sub_assign: "a -= 2\n" => _);
+    test!(statement, statement_mul_assign: "a *= 2\n" => _);
+    test!(statement, statement_div_assign: "a /= 2\n" => _);
+    test!(statement, statement_assign_call: "a().b() += 2\n" => _);
+    test!(statement, statement_assign_call_index: "a.c().c.b /= 4\n" => _);
+    test!(statement, statement_idek: "a'.c'.c.b()().c = 0\n" => _);
 
-    test!(statement, statement_is_check: ":A is :B" => IsCheck { .. });
-    test!(statement, statement_is_check_nested: ":A.c.d is :B.d.d" => IsCheck { .. });
+    test!(statement, statement_is_check: ":A is :B\n" => IsCheck { .. });
+    test!(statement, statement_is_check_nested: ":A.c.d is :B.d.d\n" => IsCheck { .. });
 
-    test!(statement, statement_skip_newline: "(1 \n\n+\n 1\n\n)" => _);
-    test!(statement, statement_skip_newline_list: "[\n\n 1 \n\n,\n 1\n\n,]" => _);
-    test!(statement, statement_skip_newline_set: "{\n\n 1 \n\n,\n 1\n\n,}" => _);
-    test!(statement, statement_skip_newline_dict: "{\n\n 1: \n3\n,\n 1\n\n:1,}" => _);
+    test!(statement, statement_skip_newline: "(1 \n\n+\n 1\n\n)\n" => _);
+    test!(statement, statement_skip_newline_list: "[\n\n 1 \n\n,\n 1\n\n,]\n" => _);
+    test!(statement, statement_skip_newline_set: "{\n\n 1 \n\n,\n 1\n\n,}\n" => _);
+    test!(statement, statement_skip_newline_dict: "{\n\n 1: \n3\n,\n 1\n\n:1,}\n" => _);
 
     test!(outer_statement, outer_statement_blob: "B :: blob {}\n" => _);
     test!(outer_statement, outer_statement_blob_no_last_comma: "B :: blob { \na: A\n }\n" => _);
@@ -535,5 +535,5 @@ mod test {
     test!(outer_statement, outer_statement_use: "use ABC\n" => _);
     test!(outer_statement, outer_statement_empty: "\n" => _);
 
-    fail!(statement, statement_blob_newline: "A :: blob { a: int\n b: int }" => _);
+    fail!(statement, statement_blob_newline: "A :: blob { a: int\n b: int }\n" => _);
 }
