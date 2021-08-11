@@ -724,7 +724,7 @@ fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                     );
                 }
                 is_dict = Some(true);
-                ctx = ctx.skip(1);
+                ctx = ctx.skip(1).skip_if(T::Comma);
             }
 
             // Something that's part of an inner expression.
@@ -744,6 +744,13 @@ fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                     exprs.push(expr);
                 }
 
+                if !matches!(ctx.token(), T::Comma | T::RightBrace) {
+                    raise_syntax_error!(
+                        ctx,
+                        "Expected an element delimiter ',' - but got {:?}",
+                        ctx.token()
+                    );
+                }
                 ctx = ctx.skip_if(T::Comma);
             }
         }
