@@ -167,9 +167,9 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
             (Err((_, mut stmt_errs)), Err((_, mut expr_errs))) => {
                 let errs = vec![
+                    syntax_error!(ctx, "Neither a valid block nor expression - inspect the two errors bellow"),
                     stmt_errs.remove(0),
                     expr_errs.remove(0),
-                    syntax_error!(ctx, "Neither a valid block nor expression - inspect the two errors above")
                 ];
                 let ctx = until!(ctx, T::RightBrace);
                 return Err((ctx, errs));
