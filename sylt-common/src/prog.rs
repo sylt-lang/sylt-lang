@@ -1,6 +1,6 @@
 use std::cell::RefCell;
+use std::rc::Rc;
 
-use crate::rc::Rc;
 use crate::{Blob, Block, RustFunction, Value};
 
 #[derive(Clone)]

@@ -2,21 +2,21 @@ pub mod blob;
 pub mod block;
 pub mod error;
 pub mod op;
+pub mod flat_value;
 pub mod prog;
-pub mod rc;
 pub mod ty;
 pub mod upvalue;
 pub mod value;
 
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 pub use blob::Blob;
 pub use block::{Block, BlockLinkState};
 pub use error::Error;
 pub use op::{Op, OpResult};
 pub use prog::Prog;
-use rc::Rc;
 pub use ty::Type;
 pub use upvalue::UpValue;
 pub use value::{MatchableValue, Value};
@@ -38,6 +38,7 @@ pub trait Machine {
     fn blobs(&self) -> &[Blob];
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error>;
     fn eval_call(&mut self, callable: Value, args: &[&Value]) -> Result<Value, Error>;
+    fn args(&self) -> &[String];
 }
 
 pub struct RuntimeContext<'m> {

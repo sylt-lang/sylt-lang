@@ -2,9 +2,9 @@ use owo_colors::OwoColorize;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
-use sylt_common::rc::Rc;
-use sylt_common::{Blob, Block, BlockLinkState, Frame, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction, Type, Value};
+use sylt_common::{Blob, Block, BlockLinkState, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction, Type, Value};
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -246,8 +246,8 @@ impl VM {
                                 return Err(RuntimeError::FieldTypeMismatch(
                                     blob.name.clone(),
                                     field.clone(),
-                                    ty.clone(),
                                     given_ty.clone(),
+                                    ty.clone(),
                                     msg,
                                 ));
                             }
@@ -328,6 +328,10 @@ impl Machine for VM {
 
     fn blobs(&self) -> &[Blob] {
         &self.blobs
+    }
+
+    fn args(&self) -> &[String] {
+        &[]
     }
 
     fn eval_call(&mut self, callable: Value, args: &[&Value]) -> Result<Value, Error> {
