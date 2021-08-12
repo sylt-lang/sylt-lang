@@ -735,7 +735,7 @@ fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             // Something that's part of an inner expression.
             _ => {
                 // Parse the expression.
-                let (_ctx, expr) = expression(ctx)?;
+                let (_ctx, expr) = detail_error!(expression(ctx), "failed to parse dict or set")?;
                 ctx = _ctx; // assign to outer
                 exprs.push(expr);
 
