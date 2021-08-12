@@ -895,7 +895,7 @@ checksum = "b351cad1154eca506fab7bc868ffa732e641171a53d6e75aeaae0a042269c6f4"
 
 [[package]]
 name = "sylt"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "gumdrop",
@@ -912,7 +912,7 @@ dependencies = [
 
 [[package]]
 name = "sylt-common"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "owo-colors",
  "serde",
@@ -923,7 +923,7 @@ dependencies = [
 
 [[package]]
 name = "sylt-compiler"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "sylt-common",
  "sylt-parser",
@@ -931,7 +931,7 @@ dependencies = [
 
 [[package]]
 name = "sylt-machine"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "owo-colors",
  "sylt-common",
@@ -939,7 +939,7 @@ dependencies = [
 
 [[package]]
 name = "sylt-parser"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "sylt-common",
  "sylt-tokenizer",
@@ -948,7 +948,7 @@ dependencies = [
 
 [[package]]
 name = "sylt-std"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bincode",
  "lazy_static",
@@ -961,14 +961,14 @@ dependencies = [
 
 [[package]]
 name = "sylt-tokenizer"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "logos",
 ]
 
 [[package]]
 name = "sylt-typechecker"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "owo-colors",
  "sylt-common",
@@ -976,7 +976,7 @@ dependencies = [
 
 [[package]]
 name = "sylt_macro"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "lazy_static",
  "proc-macro2",
