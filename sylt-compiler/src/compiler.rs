@@ -325,6 +325,9 @@ impl Compiler {
                     self.add_op(ctx, ass.span, Op::GetIndex);
                 }
             }
+            Expression(expr) => {
+                self.expression(expr, ctx);
+            }
         }
         None
     }
@@ -709,6 +712,10 @@ impl Compiler {
                 error!(self, ctx, assignable.span, "Cannot have indexing in types");
                 None
             }
+            Expression(_) => {
+                error!(self, ctx, assignable.span, "Cannot have expressions in types");
+                None
+            }
         }
     }
 
@@ -753,6 +760,10 @@ impl Compiler {
             }
             Index(..) => {
                 error!(self, ctx, assignable.span, "Cannot have indexing in types");
+                Type::Void
+            }
+            Expression(_) => {
+                error!(self, ctx, assignable.span, "Cannot have expressions in types");
                 Type::Void
             }
         }
@@ -954,6 +965,9 @@ impl Compiler {
                         write_mutator_op(self, ctx, *kind);
 
                         self.add_op(ctx, statement.span, Op::AssignIndex);
+                    }
+                    Expression(_) => {
+                        unreachable!();
                     }
                 }
             }
