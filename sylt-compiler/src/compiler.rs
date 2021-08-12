@@ -920,6 +920,9 @@ impl Compiler {
                     }
                     Access(a, field) => {
                         if let Some(namespace) = self.assignable(a, ctx) {
+                            if mutator(*kind) {
+                                self.read_identifier(&field.name, statement.span, ctx, namespace);
+                            }
                             self.expression(value, ctx);
 
                             write_mutator_op(self, ctx, *kind);
