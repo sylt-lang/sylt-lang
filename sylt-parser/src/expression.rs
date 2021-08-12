@@ -171,6 +171,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     // Parse the function statement.
     let (ctx, mut statements) = block(ctx)?;
 
+    // If the return type isn't void, check for and apply implicit returns.
     if !matches!(ret.kind, Resolved(Void)) {
         // If the last statement is an expression statement,
         // replace it with a return statement.

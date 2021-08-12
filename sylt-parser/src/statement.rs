@@ -144,7 +144,7 @@ pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
     }
 
     if errs.is_empty() {
-        let ctx = expect!(ctx, T::RightBrace, "Expected }} after block statement");
+        let ctx = expect!(ctx, T::RightBrace, "Expected }} after block");
         #[rustfmt::skip]
         return Ok(( ctx, statements ));
     } else {
@@ -458,10 +458,10 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
     // Newline, RightBrace and Else can end a statment.
     // We don't give too specific errors when that is not the case.
-    let ctx = if !matches!(ctx.token(), T::RightBrace | T::Else) {
-        expect!(ctx, T::Newline, "Expected newline")
-    } else {
+    let ctx = if matches!(ctx.token(), T::RightBrace | T::Else) {
         ctx
+    } else {
+        expect!(ctx, T::Newline, "Expected newline to end statement")
     };
     let ctx = ctx.pop_skip_newlines(skip_newlines);
     Ok((ctx, Statement { span, kind }))
