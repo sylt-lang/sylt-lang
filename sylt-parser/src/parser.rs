@@ -268,7 +268,44 @@ impl<'a> Context<'a> {
     }
 }
 
-//TODO(gu) None if no message?
+
+/// Add more text to an error message after it has been created.
+#[macro_export]
+macro_rules! detail_error {
+    ($res:expr, $( $msg:expr ),* ) => {
+        {
+            match $res {
+                Ok(res) => Ok(res),
+
+                Err((ctx, mut errs)) => {
+                    // NOTE(ed): I thought about adding the text to ALL errors -
+                    // but decided against this since I suspected it might be confusing.
+                    //
+                    // Maybe the better solution is to make "combination error" with multiple
+                    // errors in it. This was easier to write though.
+                    let err = match errs.first() {
+                        Some(Error::SyntaxError { file, span, message: prev_msg }) =>
+                            Error::SyntaxError {
+                                message: format!("{} - {}", prev_msg, format!($( $msg ),*)).into(),
+                                file: file.into(),
+                                span: *span,
+                            },
+
+                        x =>
+                            unreachable!("Can only detail SyntaxError - but got {:?}", x),
+
+                    };
+                    errs.insert(0, err);
+                    Err((
+                        ctx,
+                        errs
+                    ))
+                }
+            }
+        }
+    };
+}
+
 
 /// Construct a syntax error at the current token with a message.
 #[macro_export]
@@ -279,7 +316,7 @@ macro_rules! syntax_error {
             Error::SyntaxError {
                 file: $ctx.file.to_path_buf(),
                 span: $ctx.span(),
-                message: Some(msg),
+                message: msg,
             }
         }
     };
