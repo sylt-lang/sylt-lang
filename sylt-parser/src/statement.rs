@@ -457,7 +457,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     };
 
     // Newline, RightBrace and Else can end a statment.
-    // We don't give too specific errors when that is not the case.
+    // If a statement does not end, we only report it as a missing newline.
     let ctx = if matches!(ctx.token(), T::RightBrace | T::Else) {
         ctx
     } else {
