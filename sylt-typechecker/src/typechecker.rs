@@ -1008,6 +1008,16 @@ mod op {
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => mul(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
             (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, mul),
+            (Type::Tuple(a), Type::Float) | (Type::Float, Type::Tuple(a))
+                if a.iter().all(|t| t == &Type::Float) =>
+            {
+                Type::Tuple(a.clone())
+            }
+            (Type::Tuple(a), Type::Int) | (Type::Int, Type::Tuple(a))
+                if a.iter().all(|t| t == &Type::Int) =>
+            {
+                Type::Tuple(a.clone())
+            }
             _ => Type::Invalid,
         }
     }
@@ -1020,6 +1030,12 @@ mod op {
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => div(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
             (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, div),
+            (Type::Tuple(a), Type::Float) if a.iter().all(|t| t == &Type::Float) => {
+                Type::Tuple(a.clone())
+            }
+            (Type::Tuple(a), Type::Int) if a.iter().all(|t| t == &Type::Int) => {
+                Type::Tuple(a.clone())
+            }
             _ => Type::Invalid,
         }
     }
