@@ -78,6 +78,28 @@ impl From<Type> for Value {
     }
 }
 
+//NOTE(gu): Macro hygienics makes the following From<&Value> for .. hard to make into a macro.
+
+impl From<&Value> for f64 {
+    fn from(v: &Value) -> Self {
+        if let Value::Float(f) = v {
+            *f
+        } else {
+            panic!("Value is not a float")
+        }
+    }
+}
+
+impl From<&Value> for i64 {
+    fn from(v: &Value) -> Self {
+        if let Value::Int(i) = v {
+            *i
+        } else {
+            panic!("Value is not a float")
+        }
+    }
+}
+
 impl Debug for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // TODO(ed): This needs some cleaning

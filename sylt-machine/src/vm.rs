@@ -940,6 +940,16 @@ mod op {
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => mul(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, mul),
+            (Value::Tuple(t), Value::Float(f)) | (Value::Float(f), Value::Tuple(t))
+                if t.iter().all(|t| matches!(t, Value::Float(_))) =>
+            {
+                Value::Tuple(Rc::new(t.iter().map(|v| Value::Float(f64::from(v) * f)).collect()))
+            }
+            (Value::Tuple(t), Value::Int(i)) | (Value::Int(i), Value::Tuple(t))
+                if t.iter().all(|t| matches!(t, Value::Int(_))) =>
+            {
+                Value::Tuple(Rc::new(t.iter().map(|v| Value::Int(i64::from(v) * i)).collect()))
+            }
             _ => Value::Nil,
         }
     }
@@ -952,6 +962,12 @@ mod op {
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => div(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
             (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, div),
+            (Value::Tuple(a), Value::Float(b)) if a.iter().all(|t| matches!(t, Value::Float(_))) => {
+                Value::Tuple(Rc::new(a.iter().map(|v| Value::Float(f64::from(v) / b)).collect()))
+            }
+            (Value::Tuple(a), Value::Int(b)) if a.iter().all(|t| matches!(t, Value::Int(_))) => {
+                Value::Tuple(Rc::new(a.iter().map(|v| Value::Int(i64::from(v) / b)).collect()))
+            }
             _ => Value::Nil,
         }
     }
