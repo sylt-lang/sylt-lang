@@ -919,17 +919,28 @@ impl Compiler {
                         );
                     }
                     Access(a, field) => {
-                        self.assignable(a, ctx);
-                        let slot = self.string(&field.name);
+                        if let Some(namespace) = self.assignable(a, ctx) {
+                            if mutator(*kind) {
+                                self.read_identifier(&field.name, statement.span, ctx, namespace);
+                            }
+                            self.expression(value, ctx);
 
-                        if mutator(*kind) {
-                            self.add_op(ctx, statement.span, Op::Copy(1));
-                            self.add_op(ctx, field.span, Op::GetField(slot));
+                            write_mutator_op(self, ctx, *kind);
+
+                            self.set_identifier(&field.name, statement.span, ctx, namespace);
+                        } else {
+                            let slot = self.string(&field.name);
+
+                            if mutator(*kind) {
+                                self.add_op(ctx, statement.span, Op::Copy(1));
+                                self.add_op(ctx, field.span, Op::GetField(slot));
+                            }
+                            self.expression(value, ctx);
+
+                            write_mutator_op(self, ctx, *kind);
+
+                            self.add_op(ctx, field.span, Op::AssignField(slot));
                         }
-                        self.expression(value, ctx);
-                        write_mutator_op(self, ctx, *kind);
-
-                        self.add_op(ctx, field.span, Op::AssignField(slot));
                     }
                     Index(a, b) => {
                         self.assignable(a, ctx);
