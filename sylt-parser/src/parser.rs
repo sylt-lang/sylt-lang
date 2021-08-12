@@ -702,13 +702,14 @@ pub fn find_conflict_markers(file: &Path) -> Vec<Error> {
     let mut errs = Vec::new();
     // Search line by line and push any errors we find.
     for (i, line) in s.lines().enumerate() {
-        if line.starts_with("<<<<<<<") {
+        let conflict_marker = "<<<<<<<";
+        if line.starts_with(conflict_marker) {
             errs.push(Error::GitConflictError {
                 file: file.to_path_buf(),
                 span: Span {
                     line: i + 1,
-                    col_start: 0,
-                    col_end: "<<<<<<<".len(),
+                    col_start: 1,
+                    col_end: conflict_marker.len() + 1,
                 }
             });
         }
