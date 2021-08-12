@@ -663,8 +663,7 @@ fn module(path: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Mo
                 errors.append(&mut errs);
 
                 // "Error recovery"
-                ctx = until!(ctx, T::Newline);
-                ctx
+                until!(ctx, T::Newline)
             }
         }
     }
