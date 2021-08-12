@@ -135,7 +135,7 @@ pub fn block_statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             }
             Err((_ctx, mut err)) => {
                 ctx = _ctx.pop_skip_newlines(false);  // assign to outer
-                ctx = until!(ctx, T::Newline).skip_if(T::Newline);
+                ctx = skip_until!(ctx, T::Newline).skip_if(T::Newline);
                 errs.append(&mut err);
             }
         }
@@ -171,7 +171,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     stmt_errs.remove(0),
                     expr_errs.remove(0),
                 ];
-                let ctx = until!(ctx, T::RightBrace);
+                let ctx = skip_until!(ctx, T::RightBrace);
                 return Err((ctx, errs));
             }
         },

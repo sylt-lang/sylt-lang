@@ -312,7 +312,7 @@ macro_rules! expect {
 
 /// Eat until any one of the specified tokens or EOF.
 #[macro_export]
-macro_rules! until {
+macro_rules! skip_until {
     ($ctx:expr, $( $token:pat )|+ ) => {
         {
             let mut ctx = $ctx;
@@ -663,7 +663,7 @@ fn module(path: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Mo
                 errors.append(&mut errs);
 
                 // "Error recovery"
-                until!(ctx, T::Newline)
+                skip_until!(ctx, T::Newline)
             }
         }
     }
