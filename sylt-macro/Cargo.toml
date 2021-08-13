@@ -1,5 +1,5 @@
 [package]
-name = "sylt_macro"
+name = "sylt-macro"
 version = "0.1.0"
 authors = ["Edvard Thörnros <edvard.thornros@gmail.com", "Gustav Sörnäs <gustav@sornas.net>"]
 edition = "2018"
@@ -8,7 +8,7 @@ edition = "2018"
 proc-macro = true
 
 [dependencies]
-syn = { version = "1", features=["full"] }
+syn = { version = "1", features = ["full"] }
 proc-macro2 = "1"
 quote = "1"
 lazy_static = "1"

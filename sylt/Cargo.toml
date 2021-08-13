@@ -14,13 +14,13 @@ name = "sylt"
 sylt-common = { version = "0.1.0", path = "../sylt-common" }
 sylt-compiler = { version = "0.1.0", path = "../sylt-compiler" }
 sylt-machine = { version = "0.1.0", path = "../sylt-machine" }
+sylt-macro = { version = "0.1.0", path = "../sylt-macro" }
 sylt-parser = { version = "0.1.0", path = "../sylt-parser" }
 sylt-std = { version = "0.1.0", path = "../sylt-std", default-features = false }
 sylt-tokenizer = { version = "0.1.0", path = "../sylt-tokenizer" }
 sylt-typechecker = { version = "0.1.0", path = "../sylt-typechecker" }
 
 owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
-sylt_macro = { path = "../sylt_macro" }
 gumdrop = "0.8"
 
 criterion = { version = "0.3", optional = true }
