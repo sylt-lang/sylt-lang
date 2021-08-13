@@ -1,5 +1,11 @@
 [package]
 name = "sylt-common"
+description = """
+Common denominator for the Sylt programming language crates.
+"""
+license = "MIT"
+repository = "https://github.com/FredTheDino/sylt.git"
+readme = "../README.md"
 version = "0.1.0"
 edition = "2018"
 

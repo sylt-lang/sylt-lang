@@ -1,5 +1,11 @@
 [package]
 name = "sylt-tokenizer"
+description = """
+Tokenizer for the Sylt programming language.
+"""
+license = "MIT"
+repository = "https://github.com/FredTheDino/sylt.git"
+readme = "../README.md"
 version = "0.1.0"
 edition = "2018"
 
