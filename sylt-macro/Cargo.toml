@@ -1,7 +1,6 @@
 [package]
 name = "sylt-macro"
 version = "0.1.0"
-authors = ["Edvard Thörnros <edvard.thornros@gmail.com", "Gustav Sörnäs <gustav@sornas.net>"]
 edition = "2018"
 
 [lib]
