@@ -271,7 +271,7 @@ impl<'a> Context<'a> {
 
 /// Add more text to an error message after it has been created.
 #[macro_export]
-macro_rules! detail_error {
+macro_rules! detail_if_error {
     ($res:expr, $( $msg:expr ),* ) => {
         {
             match $res {
