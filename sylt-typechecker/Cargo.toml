@@ -15,4 +15,4 @@ path = "src/typechecker.rs"
 [dependencies]
 sylt-common = { version = "0.2.0", path = "../sylt-common" }
 
-owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
+owo-colors = { version = "2.0.0", git = "https://github.com/FredTheDino/owo-colors.git" }

@@ -25,7 +25,7 @@ sylt-std = { version = "0.2.0", path = "../sylt-std", default-features = false }
 sylt-tokenizer = { version = "0.2.0", path = "../sylt-tokenizer" }
 sylt-typechecker = { version = "0.2.0", path = "../sylt-typechecker" }
 
-owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
+owo-colors = { version = "2.0.0", git = "https://github.com/FredTheDino/owo-colors.git" }
 gumdrop = "0.8"
 
 criterion = { version = "0.3", optional = true }
