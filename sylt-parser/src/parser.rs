@@ -818,6 +818,18 @@ pub fn tree(path: &Path) -> Result<AST, Vec<Error>> {
     if errors.is_empty() {
         Ok(AST { modules })
     } else {
+        // Filter out errors for already seen spans
+        let mut seen = HashSet::new();
+        let errors = errors.into_iter().filter(|err| match err {
+            Error::SyntaxError { span, file, .. } => {
+                let id = (span.clone(), file.clone());
+                let unseen = !seen.contains(&id);
+                seen.insert(id);
+                unseen
+            }
+
+            _ => true
+        }).collect();
         Err(errors)
     }
 }
