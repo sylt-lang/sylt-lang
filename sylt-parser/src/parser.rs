@@ -703,7 +703,7 @@ fn module(path: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Mo
                 }
                 ctx
             }
-            Err((mut ctx, mut errs)) => {
+            Err((ctx, mut errs)) => {
                 errors.append(&mut errs);
 
                 // "Error recovery"
