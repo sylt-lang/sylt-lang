@@ -844,6 +844,9 @@ mod test {
     test!(expression, assignable_mixed_many: "a()[0]()[1]()()()[2][3]" => Get(_));
     test!(expression, assignable_expression: "[0][0]" => Get(_));
     test!(expression, assignable_expression_many: "[0][0][0][0][0]" => Get(_));
+    test!(expression, assignable_expression_blob: "A {}.a" => Get(_));
+    test!(expression, assignable_expression_fn: "(fn { 2 })()" => Get(_));
+    test!(expression, assignable_expression_dict: "{1:2}[1]" => Get(_));
 
     // TODO(ed): This is controverisal
     test!(expression, call_args_chaining_bang: "a' 1, 2, 3 .b" => Get(_));
