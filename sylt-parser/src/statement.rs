@@ -134,10 +134,7 @@ pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
             }
             Err((_ctx, mut err)) => {
                 ctx = _ctx.pop_skip_newlines(false);  // assign to outer
-                while !matches!(ctx.token(), T::Newline | T::EOF) {
-                    ctx = ctx.skip(1);
-                }
-                ctx = ctx.skip_if(T::Newline);
+                ctx = skip_until!(ctx, T::Newline).skip_if(T::Newline);
                 errs.append(&mut err);
             }
         }
@@ -167,8 +164,14 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::LeftBrace, ..] => match (block(ctx), expression(ctx)) {
             (Ok((ctx, statements)), _) => (ctx, Block { statements }),
             (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
-            (Err((ctx, _)), Err(_)) => {
-                raise_syntax_error!(ctx, "Neither a block nor a valid expression");
+            (Err((_, mut stmt_errs)), Err((_, mut expr_errs))) => {
+                let errs = vec![
+                    syntax_error!(ctx, "Neither a valid block nor a valid expression - check the two errors below"),
+                    stmt_errs.remove(0),
+                    expr_errs.remove(0),
+                ];
+                let ctx = skip_until!(ctx, T::RightBrace);
+                return Err((ctx, errs));
             }
         },
 

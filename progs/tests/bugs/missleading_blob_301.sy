@@ -1,0 +1,18 @@
+A :: blob {
+    a: str,
+    b: str,
+}
+
+start :: fn {
+    a := A {
+        a: "a"
+        b: "b",
+    }
+}
+
+// error: @7
+// error: @8
+// error: @9
+// error: @11
+// error: @11
+// error: @11
