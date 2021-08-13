@@ -618,8 +618,8 @@ dependencies = [
 
 [[package]]
 name = "owo-colors"
-version = "1.2.1"
-source = "git+https://github.com/FredTheDino/owo-colors.git#ccb9cf0cd41e21d1c7fa902f1475b84a5bfc01c8"
+version = "2.0.0"
+source = "git+https://github.com/FredTheDino/owo-colors.git#33f70d8c6116d6ac3006310fefe38ac59c7b8c6e"
 
 [[package]]
 name = "plotters"
