@@ -104,7 +104,7 @@ pub enum Error {
     SyntaxError {
         file: PathBuf,
         span: Span,
-        message: Option<String>,
+        message: String,
     },
 
     CompileError {
@@ -162,9 +162,7 @@ impl fmt::Display for Error {
                 write!(f, "{}\n", file_line_display(file, span.line))?;
                 write!(f, "{}Syntax Error on line {}\n", INDENT, span.line)?;
 
-                if let Some(message) = message {
-                    write!(f, "{}{}\n", INDENT, message)?;
-                }
+                write!(f, "{}{}\n", INDENT, message)?;
 
                 write_source_span_at(f, file, *span)
             }
