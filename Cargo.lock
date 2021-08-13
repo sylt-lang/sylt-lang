@@ -903,11 +903,11 @@ dependencies = [
  "sylt-common",
  "sylt-compiler",
  "sylt-machine",
+ "sylt-macro",
  "sylt-parser",
  "sylt-std",
  "sylt-tokenizer",
  "sylt-typechecker",
- "sylt_macro",
 ]
 
 [[package]]
@@ -917,8 +917,8 @@ dependencies = [
  "owo-colors",
  "serde",
  "sungod",
+ "sylt-macro",
  "sylt-tokenizer",
- "sylt_macro",
 ]
 
 [[package]]
@@ -938,12 +938,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "sylt-macro"
+version = "0.2.0"
+dependencies = [
+ "lazy_static",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "sylt-parser"
 version = "0.2.0"
 dependencies = [
  "sylt-common",
+ "sylt-macro",
  "sylt-tokenizer",
- "sylt_macro",
 ]
 
 [[package]]
@@ -956,7 +966,7 @@ dependencies = [
  "owo-colors",
  "sungod",
  "sylt-common",
- "sylt_macro",
+ "sylt-macro",
 ]
 
 [[package]]
@@ -972,16 +982,6 @@ version = "0.2.0"
 dependencies = [
  "owo-colors",
  "sylt-common",
-]
-
-[[package]]
-name = "sylt_macro"
-version = "0.2.0"
-dependencies = [
- "lazy_static",
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

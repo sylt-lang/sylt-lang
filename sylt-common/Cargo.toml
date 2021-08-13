@@ -7,7 +7,7 @@ edition = "2018"
 
 [dependencies]
 sylt-tokenizer = { version = "0.2.0", path = "../sylt-tokenizer" }
-sylt_macro = { version = "0.2.0", path = "../sylt_macro" }
+sylt-macro = { version = "0.2.0", path = "../sylt-macro" }
 
 owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
 serde = { version = "1", features = ["derive", "rc"] }
