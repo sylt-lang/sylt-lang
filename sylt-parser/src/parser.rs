@@ -292,7 +292,7 @@ macro_rules! detail_error {
                             },
 
                         x =>
-                            unreachable!("Can only detail SyntaxError - but got {:?}", x),
+                            unreachable!("Can only detail SyntaxError but got {:?}", x),
 
                     };
                     errs.insert(0, err);
