@@ -1,0 +1,3 @@
+start :: fn {
+    loop true ret
+}

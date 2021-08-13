@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use sylt_common::error::Error;
 use sylt_common::prog::Prog;
-use sylt_common::rc::Rc;
 use sylt_common::{Blob, Block, Op, RustFunction, Type, Value};
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op as ParserOp,
@@ -678,15 +678,28 @@ impl Compiler {
                         self,
                         ctx,
                         assignable.span,
-                        "While parsing type '{}' is not a namespace",
+                        "While parsing namespace access '{}' is not a namespace",
                         ident.name
                     );
                     None
                 }),
-            Read(_) => {
-                // Should be unreachable
-                error!(self, ctx, assignable.span, "This is not a namespace");
+            Read(ident) => {
+                self
+                .namespaces[namespace].get(&ident.name)
+                .and_then(|o| match o {
+                    Name::Namespace(namespace) => Some(*namespace),
+                    _ => None,
+                })
+                .or_else(|| {
+                    error!(
+                        self,
+                        ctx,
+                        assignable.span,
+                        "While parsing namespace '{}' is not a namespace",
+                        ident.name
+                    );
                 None
+                })
             }
             ArrowCall(..) | Call(..) => {
                 error!(self, ctx, assignable.span, "Cannot have calls in types");
@@ -814,7 +827,11 @@ impl Compiler {
                 } else {
                     error!(
                         self,
-                        ctx, statement.span, "No blob with the name '{}' in this namespace", name
+                        ctx,
+                        statement.span,
+                        "No blob with the name '{}' in this namespace (#{})",
+                        name,
+                        ctx.namespace
                     );
                 }
             }
@@ -902,17 +919,28 @@ impl Compiler {
                         );
                     }
                     Access(a, field) => {
-                        self.assignable(a, ctx);
-                        let slot = self.string(&field.name);
+                        if let Some(namespace) = self.assignable(a, ctx) {
+                            if mutator(*kind) {
+                                self.read_identifier(&field.name, statement.span, ctx, namespace);
+                            }
+                            self.expression(value, ctx);
 
-                        if mutator(*kind) {
-                            self.add_op(ctx, statement.span, Op::Copy(1));
-                            self.add_op(ctx, field.span, Op::GetField(slot));
+                            write_mutator_op(self, ctx, *kind);
+
+                            self.set_identifier(&field.name, statement.span, ctx, namespace);
+                        } else {
+                            let slot = self.string(&field.name);
+
+                            if mutator(*kind) {
+                                self.add_op(ctx, statement.span, Op::Copy(1));
+                                self.add_op(ctx, field.span, Op::GetField(slot));
+                            }
+                            self.expression(value, ctx);
+
+                            write_mutator_op(self, ctx, *kind);
+
+                            self.add_op(ctx, field.span, Op::AssignField(slot));
                         }
-                        self.expression(value, ctx);
-                        write_mutator_op(self, ctx, *kind);
-
-                        self.add_op(ctx, field.span, Op::AssignField(slot));
                     }
                     Index(a, b) => {
                         self.assignable(a, ctx);
@@ -1169,9 +1197,9 @@ impl Compiler {
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
 
+            let mut namespace = self.namespaces[slot].clone();
             for statement in module.statements.iter() {
                 use StatementKind::*;
-                let mut namespace = self.namespaces.remove(slot);
                 match &statement.kind {
                     Blob { name, .. } => match namespace.entry(name.to_owned()) {
                         Entry::Vacant(_) => {
@@ -1199,8 +1227,8 @@ impl Compiler {
                     // Handled below.
                     _ => (),
                 }
-                self.namespaces.insert(slot, namespace);
             }
+            self.namespaces[slot] = namespace;
         }
 
         for (path, module) in tree.modules.iter() {
@@ -1208,9 +1236,9 @@ impl Compiler {
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
 
+            let mut namespace = self.namespaces[slot].clone();
             for statement in module.statements.iter() {
                 use StatementKind::*;
-                let mut namespace = self.namespaces.remove(slot);
                 match &statement.kind {
                     Use {
                         file: Identifier { name, span },
@@ -1232,6 +1260,30 @@ impl Compiler {
                         }
                     }
 
+                    // Already handled in the loop before.
+                    Blob { .. } => (),
+
+                    // Handled in the loop after - so namespaces are structured correctly.
+                    Definition { .. } => {}
+
+                    // Handled later - since we need the type information.
+                    IsCheck { .. } => (),
+
+                    _ => (),
+                }
+            }
+            self.namespaces[slot] = namespace;
+        }
+
+        for (path, module) in tree.modules.iter() {
+            let path = path.file_stem().unwrap().to_str().unwrap();
+            let slot = path_to_namespace_id[path];
+            let ctx = Context::from_namespace(slot);
+
+            let mut namespace = self.namespaces[slot].clone();
+            for statement in module.statements.iter() {
+                use StatementKind::*;
+                match &statement.kind {
                     #[rustfmt::skip]
                     Definition { ident: Identifier { name, .. }, kind, ty, .. } => {
                         let var = self.define(name, *kind, statement.span);
@@ -1267,6 +1319,8 @@ impl Compiler {
                         self.add_op(ctx, Span::zero(), op);
                     }
 
+                    Use { ..  } => { }
+
                     // Already handled in the loop before.
                     Blob { .. } => (),
 
@@ -1277,8 +1331,8 @@ impl Compiler {
                         error!(self, ctx, statement.span, "Invalid outer statement");
                     }
                 }
-                self.namespaces.insert(slot, namespace);
             }
+            self.namespaces[slot] = namespace;
         }
         path_to_namespace_id
     }

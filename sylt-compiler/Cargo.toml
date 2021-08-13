@@ -1,11 +1,11 @@
 [package]
 name = "sylt-compiler"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2018"
 
 [lib]
 path = "src/compiler.rs"
 
 [dependencies]
-sylt-common = { path = "../sylt-common" }
-sylt-parser = { path = "../sylt-parser" }
+sylt-common = { version = "0.2.0", path = "../sylt-common" }
+sylt-parser = { version = "0.2.0", path = "../sylt-parser" }

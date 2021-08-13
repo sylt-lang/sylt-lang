@@ -4,9 +4,10 @@ use lingon::Game;
 use lingon::random::{Distribute, NoDice, Uniform};
 use lingon::renderer::{Rect, Sprite, Tint, Transform};
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU32, Ordering};
 use sylt_common::error::RuntimeError;
-use sylt_common::rc::Rc;
 use sylt_common::{RuntimeContext, Type, Value};
 
 // Errors are important, they should be easy to write!
@@ -42,8 +43,13 @@ fn parse_dist(name: &str) -> Option<Box<dyn lingon::random::Distribute>> {
 }
 
 std::thread_local! {
+    // Thread locals are allowed to reference each other as long as they're not infinitely recursive.
+    static GAME_WINDOW_SIZE: (AtomicU32, AtomicU32) = (AtomicU32::new(500), AtomicU32::new(500));
     static PARTICLES: Mutex<Vec<lingon::renderer::ParticleSystem>> = Mutex::new(Vec::new());
-    static GAME: Mutex<Game<std::string::String>> = Mutex::new(Game::new("Lingon - Sylt", 500, 500));
+    static GAME: Mutex<Game<std::string::String>> = {
+        let (width, height) = GAME_WINDOW_SIZE.with(|(width, height)| (width.load(Ordering::Relaxed), height.load(Ordering::Relaxed)));
+        Mutex::new(Game::new("Lingon - Sylt", width, height))
+    }
 }
 
 sylt_macro::extern_function!(
@@ -80,8 +86,14 @@ sylt_macro::extern_function!(
     "sylt_std::lingon"
     l_set_window_size
     "Sets the dimension of the game window"
-    [Two(Int(x), Int(y))] -> Type::Void => {
-        GAME.with(|game| game.lock().unwrap().set_window_size(*x as u32, *y as u32).unwrap());
+    [Two(Int(new_width), Int(new_height))] -> Type::Void => {
+        let new_width = *new_width as u32;
+        let new_height = *new_height as u32;
+        GAME_WINDOW_SIZE.with(|(width, height)| {
+            width.store(new_width, Ordering::Release);
+            height.store(new_height, Ordering::Release);
+        });
+        GAME.with(|game| game.lock().unwrap().set_window_size(new_width, new_height).unwrap());
         Ok(Value::Nil)
     },
 );
@@ -224,7 +236,7 @@ sylt_macro::extern_function!(
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &0.0, r, g, b, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
-        // id, (gx, gy), (x, y), (w), (h), (r, g, b)
+        // id, (gx, gy), (x, y), (w, h), (r, g, b)
         if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
@@ -238,49 +250,49 @@ sylt_macro::extern_function!(
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &0.0, r, g, b, a))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), Four(Float(r), Float(g), Float(b), Float(a))] -> Type::Void => {
-        // id, (gx, gy), (x, y), (w), (h), (r, g, b, a)
+        // id, (gx, gy), (x, y), (w, h), (r, g, b, a)
         if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, &0.0, r, g, b, a))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), One(Float(rot))] -> Type::Void => {
-        // id, (gx, gy), (x), (y), (w), (h)
+        // id, (gx, gy), (x), (y), (w), (h), (rot)
         if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID");
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, rot, &1.0, &1.0, &1.0, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), One(Float(rot))] -> Type::Void => {
-        // id, (gx, gy), (x, y), (w, h)
+        // id, (gx, gy), (x, y), (w, h), (rot)
         if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID");
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, rot, &1.0, &1.0, &1.0, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), One(Float(rot)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
-        // id, (gx, gy), (x), (y), (w), (h), (r, g, b)
+        // id, (gx, gy), (x), (y), (w), (h), (rot), (r, g, b)
         if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, rot, r, g, b, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), One(Float(rot)), Three(Float(r), Float(g), Float(b))] -> Type::Void => {
-        // id, (gx, gy), (x, y), (w), (h), (r, g, b)
+        // id, (gx, gy), (x, y), (w, h), (rot), (r, g, b)
         if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, rot, r, g, b, &1.0))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), One(Float(x)), One(Float(y)), One(Float(w)), One(Float(h)), One(Float(rot)), Four(Float(r), Float(g), Float(b), Float(a))] -> Type::Void => {
-        // id, (gx, gy), (x), (y), (w), (h), (r, g, b, a)
+        // id, (gx, gy), (x), (y), (w), (h), (rot), (r, g, b, a)
         if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
         Ok(l_gfx_sprite_internal(sprite, x, y, w, h, gx, gy, rot, r, g, b, a))
     },
     [Two(String(name), Int(sprite)), Two(Int(gx), Int(gy)), Two(Float(x), Float(y)), Two(Float(w), Float(h)), One(Float(rot)), Four(Float(r), Float(g), Float(b), Float(a))] -> Type::Void => {
-        // id, (gx, gy), (x, y), (w), (h), (r, g, b, a)
+        // id, (gx, gy), (x, y), (w, h), (rot), (r, g, b, a)
         if name.as_ref() != "image" {
             return error!("l_gfx_sprite", "Expected a sprite ID")
         }
@@ -860,7 +872,7 @@ pub fn sylt_str(s: &str) -> Value {
 }
 
 #[sylt_macro::sylt_doc(l_load_image, "Loads an image and turns it into a sprite sheet",
-  [One(String(path))] Type::Tuple)]
+  [One(String(path)), Two(Float, Float)] Type::Tuple)]
 #[sylt_macro::sylt_link(l_load_image, "sylt_std::lingon")]
 pub fn l_load_image<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
@@ -908,6 +920,35 @@ pub fn l_load_audio<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> 
             "l_load_image".to_string(),
             values.iter().map(Type::from).collect(),
         )),
+    }
+}
+
+sylt_macro::extern_function!(
+    "sylt_std::lingon"
+    l_set_text_input_enabled
+    ""
+    [One(Bool(b))] -> Type::Void => {
+        GAME.with(|game| game.lock().unwrap().input.set_text_input_enabled(*b));
+        Ok(Value::Nil)
+    },
+);
+
+#[sylt_macro::sylt_link(l_text_input_update, "sylt_std::lingon")]
+pub fn l_text_input_update<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    if ctx.typecheck {
+        return Ok(Value::from(Type::Tuple(vec![Type::String, Type::Bool])));
+    }
+
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match values.as_ref() {
+        [Value::String(s)] => {
+            GAME.with(|game| {
+                let mut s = std::string::String::clone(s);
+                let found_return = game.lock().unwrap().input.text_input_update(&mut s);
+                Ok(Value::Tuple(Rc::new(vec![Value::String(Rc::new(s)), Value::Bool(found_return)])))
+            })
+        }
+        _ => unimplemented!(),
     }
 }
 

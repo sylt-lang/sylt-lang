@@ -3,8 +3,8 @@ use self::statement::outer_statement;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use sylt_common::error::Error;
-use sylt_common::rc::Rc;
 use sylt_common::Type as RuntimeType;
 use sylt_tokenizer::{PlacedToken, Token, ZERO_SPAN, file_to_tokens};
 
@@ -216,6 +216,13 @@ impl<'a> Context<'a> {
         while self.skip_newlines && matches!(new.token(), T::Newline) {
             new.curr += 1;
         }
+        new
+    }
+
+    /// Back up one token. Will not move past the beginning.
+    fn prev(&self) -> Self {
+        let mut new = *self;
+        new.curr = new.curr.saturating_sub(1);
         new
     }
 
@@ -707,13 +714,14 @@ pub fn find_conflict_markers(file: &Path) -> Vec<Error> {
     let mut errs = Vec::new();
     // Search line by line and push any errors we find.
     for (i, line) in s.lines().enumerate() {
-        if line.starts_with("<<<<<<<") {
+        let conflict_marker = "<<<<<<<";
+        if line.starts_with(conflict_marker) {
             errs.push(Error::GitConflictError {
                 file: file.to_path_buf(),
                 span: Span {
                     line: i + 1,
-                    col_start: 0,
-                    col_end: "<<<<<<<".len(),
+                    col_start: 1,
+                    col_end: conflict_marker.len() + 1,
                 }
             });
         }
