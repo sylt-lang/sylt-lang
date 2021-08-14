@@ -379,8 +379,8 @@ sylt_macro::extern_function!(
     "sylt_std::sylt"
     as_str
     "Converts to a string representation"
-    [One(Int(i))] -> Type::String => {
-        Ok(Value::String(Rc::new(i.to_string())))
+    [One(v)] -> Type::String => {
+        Ok(Value::String(Rc::new(v.to_string())))
     },
 );
 

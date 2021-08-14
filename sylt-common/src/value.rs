@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
@@ -81,6 +81,15 @@ impl From<Type> for Value {
 impl Debug for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.safe_fmt(fmt, &mut HashSet::new())
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::String(s) => write!(fmt, "{}", s),
+            value => value.safe_fmt(fmt, &mut HashSet::new())
+        }
     }
 }
 
