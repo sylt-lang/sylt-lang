@@ -1,0 +1,67 @@
+A :: blob {
+    a: int,
+    b: float,
+}
+
+B :: blob {
+    self: B,
+    _name: void,
+}
+
+start :: fn {
+    // Basic types
+    as_str(-1) <=> "-1"
+    as_str(2.0) <=> "2.0"
+    as_str(2.00000000000182) <=> "2.00000000000182"
+    as_str("3.0") <=> "3.0"
+    as_str(true) <=> "true"
+    as_str(false) <=> "false"
+
+    // List
+    a := []
+    a -> push' a
+    a -> push' 1
+    as_str(a) <=> "[[...], 1]"
+
+    // Tuple
+    print ()
+    print (1,)
+    print (1, 2)
+
+    // Set
+    as_str({}) <=> "{}"
+    as_str({1}) <=> "{1}"
+    print {1, 2}
+    c :: {}
+    c -> add' c
+    as_str(c) <=> "{{...}}"
+
+
+    // Dict
+    as_str({:}) <=> "{:}"
+    print {1: 2}
+    print {1: 2, 3: 4}
+
+    // Blobs
+    print A
+    print A { a: 100, b: 5.3 }
+
+    b : !B = nil
+    b = B { self: b }
+    b.self = b
+    as_str(b) <=> "B {self: B {...}}"
+
+    b._name = nil // :O
+    as_str(b) <=> "? {self: ? {...}}"
+
+    // Functions
+    d :: fn x: int, y: int -> int {
+        x + y
+    }
+    print d
+
+    // Other
+    print pop
+    print :str
+    as_str(nil) <=> "nil"
+}
