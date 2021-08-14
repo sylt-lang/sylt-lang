@@ -967,7 +967,7 @@ impl Compiler {
                         self.add_op(ctx, statement.span, Op::AssignIndex);
                     }
                     Expression(_) => {
-                        unreachable!();
+                        unreachable!("Cannot assign to 'AssignableKind::Expression'");
                     }
                 }
             }
