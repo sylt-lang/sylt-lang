@@ -129,6 +129,7 @@ pub enum AssignableKind {
     ArrowCall(Box<Expression>, Box<Assignable>, Vec<Expression>),
     Access(Box<Assignable>, Identifier),
     Index(Box<Assignable>, Box<Expression>),
+    Expression(Box<Expression>),
 }
 
 /// Something that can be assigned to. The assignable value can be read if the

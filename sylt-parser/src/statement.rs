@@ -166,7 +166,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
             (Err((_, mut stmt_errs)), Err((_, mut expr_errs))) => {
                 let errs = vec![
-                    syntax_error!(ctx, "Neither a valid block nor a valid expression - check the two errors below"),
+                    syntax_error!(ctx, "Neither a valid block nor a valid expression - inspects the two errors below"),
                     stmt_errs.remove(0),
                     expr_errs.remove(0),
                 ];
