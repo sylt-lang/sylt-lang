@@ -80,28 +80,7 @@ impl From<Type> for Value {
 
 impl Debug for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // TODO(ed): This needs some cleaning
-        match self {
-            Value::Field(s) => write!(fmt, "( .{} )", s),
-            Value::Ty(ty) => write!(fmt, "(type {:?})", ty),
-            Value::Blob(b) => write!(fmt, "(blob b{})", b),
-            Value::Instance(b, v) => write!(fmt, "(inst b{} {:?})", b, v),
-            Value::Float(f) => write!(fmt, "(float {})", f),
-            Value::Int(i) => write!(fmt, "(int {})", i),
-            Value::Bool(b) => write!(fmt, "(bool {})", b),
-            Value::String(s) => write!(fmt, "(string \"{}\")", s),
-            Value::List(v) => write!(fmt, "(array {:?})", v),
-            Value::Set(v) => write!(fmt, "(set {:?})", v),
-            Value::Dict(v) => write!(fmt, "(dict {:?})", v),
-            Value::Function(_, ty, block) => {
-                write!(fmt, "(fn #{} {:?})", block, ty)
-            }
-            Value::ExternFunction(slot) => write!(fmt, "(extern fn {})", slot),
-            Value::Unknown => write!(fmt, "(unknown)"),
-            Value::Nil => write!(fmt, "(nil)"),
-            Value::Tuple(v) => write!(fmt, "({:?})", v),
-            Value::Union(v) => write!(fmt, "(U {:?})", v),
-        }
+        self.safe_fmt(fmt, &mut HashSet::new())
     }
 }
 
@@ -170,6 +149,123 @@ impl Value {
             Value::Nil => 0,  // TODO(ed): This is not a valid pointer - right?
             Value::Unknown => 1, // TODO(ed): This is not a valid pointer - right?
             Value::ExternFunction(slot) => slot + 2,
+        }
+    }
+
+    fn safe_fmt(
+        &self,
+        fmt: &mut std::fmt::Formatter<'_>,
+        seen: &mut HashSet<usize>
+    ) -> std::fmt::Result {
+        match self {
+            Value::Field(s) => write!(fmt, "<field .{}>", s),
+            Value::Ty(ty) => write!(fmt, "<type \"{:?}\">", ty),
+            Value::Blob(b) => write!(fmt, "<blob \"{}\">", b),
+            Value::Instance(_, v) => {
+                write!(fmt, "{} {{",
+                    if let Some(Value::String(name)) = v.borrow().get("_name") {
+                        name.as_str()
+                    } else {
+                        "?"
+                    }
+                )?;
+                if seen.contains(&self.unique_id()) {
+                    write!(fmt, "...")?;
+                } else {
+                    seen.insert(self.unique_id());
+                    let mut first = true;
+                    for e in v.borrow().iter() {
+                        if e.0.starts_with("_") {
+                            continue;
+                        }
+                        if !first {
+                            write!(fmt, ", ")?;
+                        }
+                        write!(fmt, "{}", e.0)?;
+                        write!(fmt, ": ")?;
+                        e.1.safe_fmt(fmt, seen)?;
+                        first = false;
+                    }
+                    if v.borrow().len() == 0 {
+                        write!(fmt, ":")?;
+                    }
+                }
+                write!(fmt, "}}")
+            },
+            Value::Float(f) => write!(fmt, "{:?}", f),
+            Value::Int(i) => write!(fmt, "{}", i),
+            Value::Bool(b) => write!(fmt, "{}", b),
+            Value::String(s) => write!(fmt, "\"{}\"", s),
+            Value::List(v) => {
+                write!(fmt, "[")?;
+                if seen.contains(&self.unique_id()) {
+                    write!(fmt, "...")?;
+                } else {
+                    seen.insert(self.unique_id());
+                    for (i, e) in v.borrow().iter().enumerate() {
+                        if i != 0 {
+                            write!(fmt, ", ")?;
+                        }
+                        e.safe_fmt(fmt, seen)?;
+                    }
+                }
+                write!(fmt, "]")
+            },
+            Value::Tuple(v) => {
+                write!(fmt, "(")?;
+                for (i, e) in v.iter().enumerate() {
+                    if i != 0 {
+                        write!(fmt, ", ")?;
+                    }
+                    e.safe_fmt(fmt, seen)?;
+                }
+                if v.len() == 1 {
+                    write!(fmt, ",")?
+                }
+                write!(fmt, ")")
+            },
+            Value::Set(v) => {
+                write!(fmt, "{{")?;
+                if seen.contains(&self.unique_id()) {
+                    write!(fmt, "...")?;
+                } else {
+                    seen.insert(self.unique_id());
+                    for (i, e) in v.borrow().iter().enumerate() {
+                        if i != 0 {
+                            write!(fmt, ", ")?;
+                        }
+                        e.safe_fmt(fmt, seen)?;
+                    }
+                }
+                write!(fmt, "}}")
+            },
+            Value::Dict(v) => {
+                write!(fmt, "{{")?;
+                if seen.contains(&self.unique_id()) {
+                    write!(fmt, "...")?;
+                } else {
+                    seen.insert(self.unique_id());
+                    for (i, e) in v.borrow().iter().enumerate() {
+                        if i != 0 {
+                            write!(fmt, ", ")?;
+                        }
+                        e.0.safe_fmt(fmt, seen)?;
+                        write!(fmt, ": ")?;
+                        e.1.safe_fmt(fmt, seen)?;
+                    }
+                    if v.borrow().len() == 0 {
+                        write!(fmt, ":")?;
+                    }
+                }
+                write!(fmt, "}}")
+            },
+            Value::Function(_, ty, block) => {
+                write!(fmt, "<fn #{} {:?}>", block, ty)
+            },
+            Value::ExternFunction(slot) => write!(fmt, "<extern fn {}>", slot),
+            Value::Unknown => write!(fmt, "unknown"),
+            Value::Nil => write!(fmt, "nil"),
+            Value::Union(v) => write!(fmt, "<U {:?}>", v),
         }
     }
 }
