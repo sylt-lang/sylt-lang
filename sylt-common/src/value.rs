@@ -169,26 +169,24 @@ impl Value {
                         "?"
                     }
                 )?;
-                if seen.contains(&self.unique_id()) {
-                    write!(fmt, "...")?;
-                } else {
-                    seen.insert(self.unique_id());
-                    let mut first = true;
-                    for e in v.borrow().iter() {
-                        if e.0.starts_with("_") {
-                            continue;
-                        }
-                        if !first {
-                            write!(fmt, ", ")?;
-                        }
-                        write!(fmt, "{}", e.0)?;
-                        write!(fmt, ": ")?;
-                        e.1.safe_fmt(fmt, seen)?;
-                        first = false;
+                if !seen.insert(self.unique_id()) {
+                    return write!(fmt, "...}}");
+                }
+                let mut first = true;
+                for e in v.borrow().iter() {
+                    if e.0.starts_with("_") {
+                        continue;
                     }
-                    if v.borrow().len() == 0 {
-                        write!(fmt, ":")?;
+                    if !first {
+                        write!(fmt, ", ")?;
                     }
+                    write!(fmt, "{}", e.0)?;
+                    write!(fmt, ": ")?;
+                    e.1.safe_fmt(fmt, seen)?;
+                    first = false;
+                }
+                if v.borrow().len() == 0 {
+                    write!(fmt, ":")?;
                 }
                 write!(fmt, "}}")
             },
@@ -197,17 +195,15 @@ impl Value {
             Value::Bool(b) => write!(fmt, "{}", b),
             Value::String(s) => write!(fmt, "\"{}\"", s),
             Value::List(v) => {
+                if !seen.insert(self.unique_id()) {
+                    return write!(fmt, "[...]");
+                }
                 write!(fmt, "[")?;
-                if seen.contains(&self.unique_id()) {
-                    write!(fmt, "...")?;
-                } else {
-                    seen.insert(self.unique_id());
-                    for (i, e) in v.borrow().iter().enumerate() {
-                        if i != 0 {
-                            write!(fmt, ", ")?;
-                        }
-                        e.safe_fmt(fmt, seen)?;
+                for (i, e) in v.borrow().iter().enumerate() {
+                    if i != 0 {
+                        write!(fmt, ", ")?;
                     }
+                    e.safe_fmt(fmt, seen)?;
                 }
                 write!(fmt, "]")
             },
@@ -225,37 +221,33 @@ impl Value {
                 write!(fmt, ")")
             },
             Value::Set(v) => {
+                if !seen.insert(self.unique_id()) {
+                    return write!(fmt, "{{...}}");
+                }
                 write!(fmt, "{{")?;
-                if seen.contains(&self.unique_id()) {
-                    write!(fmt, "...")?;
-                } else {
-                    seen.insert(self.unique_id());
-                    for (i, e) in v.borrow().iter().enumerate() {
-                        if i != 0 {
-                            write!(fmt, ", ")?;
-                        }
-                        e.safe_fmt(fmt, seen)?;
+                for (i, e) in v.borrow().iter().enumerate() {
+                    if i != 0 {
+                        write!(fmt, ", ")?;
                     }
+                    e.safe_fmt(fmt, seen)?;
                 }
                 write!(fmt, "}}")
             },
             Value::Dict(v) => {
+                if !seen.insert(self.unique_id()) {
+                    return write!(fmt, "{{...}}");
+                }
                 write!(fmt, "{{")?;
-                if seen.contains(&self.unique_id()) {
-                    write!(fmt, "...")?;
-                } else {
-                    seen.insert(self.unique_id());
-                    for (i, e) in v.borrow().iter().enumerate() {
-                        if i != 0 {
-                            write!(fmt, ", ")?;
-                        }
-                        e.0.safe_fmt(fmt, seen)?;
-                        write!(fmt, ": ")?;
-                        e.1.safe_fmt(fmt, seen)?;
+                for (i, e) in v.borrow().iter().enumerate() {
+                    if i != 0 {
+                        write!(fmt, ", ")?;
                     }
-                    if v.borrow().len() == 0 {
-                        write!(fmt, ":")?;
-                    }
+                    e.0.safe_fmt(fmt, seen)?;
+                    write!(fmt, ": ")?;
+                    e.1.safe_fmt(fmt, seen)?;
+                }
+                if v.borrow().len() == 0 {
+                    write!(fmt, ":")?;
                 }
                 write!(fmt, "}}")
             },
