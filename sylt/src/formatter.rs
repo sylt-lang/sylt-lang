@@ -130,7 +130,13 @@ fn write_expression<W: Write>(dest: &mut W, expression: &Expression, indent: u32
 }
 
 fn write_statement<W: Write>(dest: &mut W, statement: &Statement, indent: u32) -> fmt::Result {
+    // Empty statements don't even deserve their own line!
+    if matches!(statement.kind, StatementKind::EmptyStatement) {
+        return Ok(());
+    }
+
     write_indents(dest, indent)?;
+
     match &statement.kind {
         StatementKind::Assignment { kind, target, value } => {
             write_assignable(dest, target)?;
@@ -149,10 +155,11 @@ fn write_statement<W: Write>(dest: &mut W, statement: &Statement, indent: u32) -
 
             for s in statements {
                 write_statement(dest, s, indent + 1)?;
+                write!(dest, "\n")?;
             }
 
             write_indents(dest, indent)?;
-            write!(dest, "}}\n")?;
+            write!(dest, "}}")?;
         }
         StatementKind::Break => todo!(),
         StatementKind::Continue => todo!(),
@@ -170,7 +177,7 @@ fn write_statement<W: Write>(dest: &mut W, statement: &Statement, indent: u32) -
             }
             write_expression(dest, value, indent)?;
         }
-        StatementKind::EmptyStatement => (),
+        StatementKind::EmptyStatement => unreachable!("Should be handled earlier"),
         StatementKind::If { condition, pass, fail } => todo!(),
         StatementKind::IsCheck { lhs, rhs } => todo!(),
         StatementKind::Loop { condition, body } => todo!(),
@@ -186,7 +193,7 @@ fn write_statement<W: Write>(dest: &mut W, statement: &Statement, indent: u32) -
         }
     }
 
-    write!(dest, "\n")
+    Ok(())
 }
 
 fn write_module(module: &Module) -> fmt::Result {
@@ -195,21 +202,18 @@ fn write_module(module: &Module) -> fmt::Result {
         .statements
         .iter()
         // Side effects incoming!
-        .map(|s| write_statement(&mut formatted, s, 0))
+        .map(|s| {
+            write_statement(&mut formatted, s, 0)?;
+            write!(formatted, "\n")
+        })
         .collect::<Result<Vec<_>, _>>()?;
-    println!("{}", formatted);
+    print!("{}", formatted);
     Ok(())
 }
 
 pub fn format(args: &Args) -> Result<(), Vec<Error>> {
     let tree = sylt_parser::tree(&PathBuf::from(args.args.first().expect("No file to run")))?;
-    let mut first = true;
     for (path, module) in &tree.modules {
-        if !first {
-            println!("")
-        }
-        first = false;
-
         eprintln!("-- {}", path.display());
         write_module(module).unwrap();
     }
