@@ -1,0 +1,19 @@
+[package]
+name = "sylt-macro"
+description = """
+Proc-macros for developing the sylt programming language.
+"""
+license = "MIT"
+repository = "https://github.com/FredTheDino/sylt.git"
+readme = "../README.md"
+version = "0.2.0"
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "1", features = ["full"] }
+proc-macro2 = "1"
+quote = "1"
+lazy_static = "1"
