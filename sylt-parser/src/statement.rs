@@ -451,7 +451,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 (Err((_, mut ass_errs)), Err((_, mut expr_errs))) => {
                     ass_errs.append(&mut expr_errs);
                     ass_errs.push(
-                        syntax_error!(ctx, "Neither an assignment or a expression")
+                        syntax_error!(ctx, "Neither an assignment or an expression")
                     );
                     return Err((ctx, ass_errs));
                 }

@@ -4,7 +4,7 @@ pub use token::Token;
 
 mod token;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 /// A location in a file containing source code.
 pub struct Span {
     // TODO(ed): Do this more intelligent, so
