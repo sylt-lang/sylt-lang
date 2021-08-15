@@ -822,10 +822,7 @@ pub fn tree(path: &Path) -> Result<AST, Vec<Error>> {
         let mut seen = HashSet::new();
         let errors = errors.into_iter().filter(|err| match err {
             Error::SyntaxError { span, file, .. } => {
-                let id = (span.clone(), file.clone());
-                let unseen = !seen.contains(&id);
-                seen.insert(id);
-                unseen
+                seen.insert((span.clone(), file.clone()))
             }
 
             _ => true
