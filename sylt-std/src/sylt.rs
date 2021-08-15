@@ -12,12 +12,20 @@ use sylt_common::{Blob, RuntimeContext, Type, Value};
 #[sylt_macro::sylt_link(dbg, "sylt_std::sylt")]
 pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
-    println!(
-        "{}: {:?}, {:?}",
-        "DBG".purple(),
-        values.iter().map(Type::from).collect::<Vec<_>>(),
-        values
-    );
+    if ctx.typecheck {
+        println!(
+            "{}: {:?}",
+            "TYPECHECK".purple(),
+            values.iter().map(Type::from).collect::<Vec<_>>(),
+        );
+    } else {
+        println!(
+            "{}: {:?}, {:?}",
+            "RUN".purple(),
+            values.iter().map(Type::from).collect::<Vec<_>>(),
+            values
+        );
+    }
     Ok(Value::Nil)
 }
 

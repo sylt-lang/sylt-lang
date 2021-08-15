@@ -14,5 +14,3 @@ start :: fn {
 // error: @8
 // error: @9
 // error: @11
-// error: @11
-// error: @11

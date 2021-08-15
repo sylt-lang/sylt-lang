@@ -129,6 +129,7 @@ pub enum AssignableKind {
     ArrowCall(Box<Expression>, Box<Assignable>, Vec<Expression>),
     Access(Box<Assignable>, Identifier),
     Index(Box<Assignable>, Box<Expression>),
+    Expression(Box<Expression>),
 }
 
 /// Something that can be assigned to. The assignable value can be read if the
@@ -703,7 +704,7 @@ fn module(path: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Mo
                 }
                 ctx
             }
-            Err((mut ctx, mut errs)) => {
+            Err((ctx, mut errs)) => {
                 errors.append(&mut errs);
 
                 // "Error recovery"
@@ -818,6 +819,15 @@ pub fn tree(path: &Path) -> Result<AST, Vec<Error>> {
     if errors.is_empty() {
         Ok(AST { modules })
     } else {
+        // Filter out errors for already seen spans
+        let mut seen = HashSet::new();
+        let errors = errors.into_iter().filter(|err| match err {
+            Error::SyntaxError { span, file, .. } => {
+                seen.insert((span.clone(), file.clone()))
+            }
+
+            _ => true
+        }).collect();
         Err(errors)
     }
 }
