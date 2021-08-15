@@ -7,6 +7,8 @@ use sylt_common::error::Error;
 use sylt_common::prog::Prog;
 use sylt_common::RustFunction;
 
+pub mod formatter;
+
 /// Generates the linking for the standard library, and lingon if it's active.
 pub fn lib_bindings() -> Vec<(String, RustFunction)> {
     let mut lib = Vec::new();
@@ -69,6 +71,9 @@ pub struct Args {
 
     #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
     pub verbosity: u32,
+
+    #[options(long = "format", help = "Run an auto formatter on the supplied file")]
+    pub format: bool,
 
     #[options(help = "Print this help")]
     pub help: bool,

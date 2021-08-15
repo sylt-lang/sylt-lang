@@ -7,8 +7,11 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
-    let functions = lib_bindings();
-    let res = sylt::run_file(&args, functions);
+    let res = if args.format {
+        sylt::formatter::format(&args)
+    } else {
+        sylt::run_file(&args, lib_bindings())
+    };
 
     if let Err(errs) = res {
         for err in errs.iter() {
