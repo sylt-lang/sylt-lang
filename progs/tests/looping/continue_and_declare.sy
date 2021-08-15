@@ -1,0 +1,13 @@
+start :: fn {
+    s := ""
+    i := 0
+    loop i < 3 {
+        next := s + "a"
+        i += 1
+        if i > 2 {
+            continue
+        }
+        s = next
+    }
+    s <=> "aa"
+}

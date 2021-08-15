@@ -274,15 +274,20 @@ impl Compiler {
             .curr()
     }
 
-    fn pop_until_size(&mut self, ctx: Context, span: Span, target_size: usize) {
-        while target_size < self.frames[ctx.frame].variables.len() {
-            let var = self.frames[ctx.frame].variables.pop().unwrap();
+    fn emit_pop_until_size(&mut self, ctx: Context, span: Span, target_size: usize) {
+        let vars: Vec<_> = self.frames[ctx.frame].variables.iter().skip(target_size).rev().cloned().collect();
+        for var in &vars {
             if var.captured {
                 self.add_op(ctx, span, Op::PopUpvalue);
             } else {
                 self.add_op(ctx, span, Op::Pop);
             }
         }
+    }
+
+    fn pop_until_size(&mut self, ctx: Context, span: Span, target_size: usize) {
+        self.emit_pop_until_size(ctx, span, target_size);
+        self.frames[ctx.frame].variables.truncate(target_size);
     }
 
     fn assignable(&mut self, ass: &Assignable, ctx: Context) -> Option<usize> {
@@ -1033,7 +1038,18 @@ impl Compiler {
 
             Continue {} => match self.loops.last().cloned() {
                 Some(LoopFrame { stack_size, continue_addr, .. }) => {
-                    self.pop_until_size(ctx, statement.span, stack_size);
+                    // TODO(ed): Remove this crutch when the typechecker is fixed.
+                    // We emit dummy values that are popped in the typechecker.
+                    let type_checker_skip = self.add_op(ctx, statement.span, Op::Illegal);
+                    let current_stack_size = self.frames[ctx.frame].variables.len();
+                    let nil = self.constant(Value::Nil);
+                    for _ in 0..(current_stack_size - stack_size) {
+                        self.add_op(ctx, statement.span, nil);
+                    }
+                    let end = self.next_ip(ctx);
+                    self.patch(ctx, type_checker_skip, Op::Jmp(end));
+
+                    self.emit_pop_until_size(ctx, statement.span, stack_size);
                     self.add_op(ctx, statement.span, Op::Jmp(continue_addr));
                 }
                 None => {
@@ -1043,7 +1059,18 @@ impl Compiler {
 
             Break {} => match self.loops.last().cloned() {
                 Some(LoopFrame { stack_size, break_addr, .. }) => {
-                    self.pop_until_size(ctx, statement.span, stack_size);
+                    // TODO(ed): Remove this crutch when the typechecker is fixed.
+                    // We emit dummy values that are popped in the typechecker.
+                    let type_checker_skip = self.add_op(ctx, statement.span, Op::Illegal);
+                    let current_stack_size = self.frames[ctx.frame].variables.len();
+                    let nil = self.constant(Value::Nil);
+                    for _ in 0..(current_stack_size - stack_size) {
+                        self.add_op(ctx, statement.span, nil);
+                    }
+                    let end = self.next_ip(ctx);
+                    self.patch(ctx, type_checker_skip, Op::Jmp(end));
+
+                    self.emit_pop_until_size(ctx, statement.span, stack_size);
                     self.add_op(ctx, statement.span, Op::Jmp(break_addr));
                 }
                 None => {

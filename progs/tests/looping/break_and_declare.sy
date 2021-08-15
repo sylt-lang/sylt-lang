@@ -1,0 +1,12 @@
+start :: fn {
+    s := ""
+    loop true {
+        next := s + "a"
+        s = next
+        if s == "aaa" {
+            break
+        }
+        next := s + "a"
+    }
+    s <=> "aaa"
+}
