@@ -17,5 +17,5 @@ fn find_test_paths(directory: &Path) {
 }
 
 fn main() {
-    find_test_paths(Path::new("../progs/"));
+    find_test_paths(Path::new("../tests/"));
 }
