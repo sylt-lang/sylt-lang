@@ -276,7 +276,7 @@ impl Compiler {
 
     fn emit_pop_until_size(&mut self, ctx: Context, span: Span, target_size: usize) {
         let vars: Vec<_> = self.frames[ctx.frame].variables.iter().skip(target_size).rev().cloned().collect();
-        for var in vars.iter() {
+        for var in &vars {
             if var.captured {
                 self.add_op(ctx, span, Op::PopUpvalue);
             } else {
