@@ -24,14 +24,15 @@ start :: fn {
     as_str(a) <=> "[[...], 1]"
 
     // Tuple
-    print ()
-    print (1,)
-    print (1, 2)
+    as_str(()) <=> "()"
+    as_str((1,)) <=> "(1,)"
+    as_str((1, 2)) <=> "(1, 2)"
 
     // Set
     as_str({}) <=> "{}"
     as_str({1}) <=> "{1}"
-    print {1, 2}
+    s :: as_str({1, 2})
+    (s == "{1, 2}" || s == "{2, 1}") <=> true
     c :: {}
     c -> add' c
     as_str(c) <=> "{{...}}"
@@ -39,12 +40,14 @@ start :: fn {
 
     // Dict
     as_str({:}) <=> "{:}"
-    print {1: 2}
-    print {1: 2, 3: 4}
+    as_str({1: 2}) <=> "{1: 2}"
+    d :: as_str({1: 2, 3: 4})
+    (d == "{1: 2, 3: 4}" || d == "{3: 4, 1: 2}") <=> true
 
     // Blobs
     print A
-    print A { a: 100, b: 5.3 }
+    ab :: as_str(A { a: 100, b: 5.3 })
+    (ab == "A {a: 100, b: 5.3}" || ab == "A {b: 5.3, a: 100}") <=> true
 
     b : !B = nil
     b = B { self: b }

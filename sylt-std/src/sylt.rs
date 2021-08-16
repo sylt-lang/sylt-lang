@@ -375,14 +375,18 @@ sylt_macro::extern_function!(
     },
 );
 
-sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    as_str
-    "Converts to a string representation"
-    [One(v)] -> Type::String => {
-        Ok(Value::String(Rc::new(v.to_string())))
-    },
-);
+#[sylt_macro::sylt_doc(as_str, "Converts to a string representation", [_] Type::String)]
+#[sylt_macro::sylt_link(as_str, "sylt_std::sylt")]
+pub fn as_str<'t>(ctx: RuntimeContext) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match values.as_ref() {
+        [v] => Ok(Value::String(Rc::new(v.to_string()))),
+        values => Err(RuntimeError::ExternTypeMismatch(
+            "as_str".to_string(),
+            values.iter().map(Type::from).collect(),
+        )),
+    }
+}
 
 sylt_macro::extern_function!(
     "sylt_std::sylt"
