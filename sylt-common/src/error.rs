@@ -90,15 +90,26 @@ impl fmt::Display for RuntimePhase {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum TypeError {
+    Violating(Type),
+
+    Missmatch {
+        got: Type,
+        expected: Type,
+    }
+}
+
+
 // TODO(ed): Switch to spans for the whole compiler?
 #[derive(Clone, Debug)]
 pub enum Error {
-    RuntimeError {
-        kind: RuntimeError,
-        phase: RuntimePhase,
+    NoFileGiven,
+    FileNotFound(PathBuf),
+    IOError(Rc<std::io::Error>),
+    GitConflictError {
         file: PathBuf,
-        line: usize,
-        message: Option<String>,
+        span: Span,
     },
 
     SyntaxError {
@@ -107,49 +118,49 @@ pub enum Error {
         message: String,
     },
 
+    TypeError {
+        kind: TypeError,
+        file: PathBuf,
+        span: Span,
+        message: Option<String>,
+    },
+
     CompileError {
         file: PathBuf,
         span: Span,
         message: Option<String>,
     },
 
-    GitConflictError {
+    RuntimeError {
+        kind: RuntimeError,
+        phase: RuntimePhase,
         file: PathBuf,
-        span: Span,
+        line: usize,
+        message: Option<String>,
     },
-
-    FileNotFound(PathBuf),
-    NoFileGiven,
-    IOError(Rc<std::io::Error>),
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            #[rustfmt::skip]
-            Error::RuntimeError { kind, phase, file, line, message } => {
-                write!(f, "{} {}: ", phase.red(), "error".red())?;
-                write!(f, "{}\n", file_line_display(file, *line))?;
-                write!(f, "{}{}\n", INDENT, kind)?;
-
-                if let Some(message) = message {
-                    write!(f, "{}\n", message)?;
-                }
-
-                write_source_line_at(f, file, *line)
+            Error::NoFileGiven => {
+                write!(f, "No file to run")
             }
-            Error::CompileError {
-                file,
-                span,
-                message,
-            } => {
-                write!(f, "{}: ", "compile error".red())?;
+            Error::FileNotFound(path) => {
+                write!(f, "File '{}' not found", path.display())
+            }
+            Error::IOError(e) => {
+                write!(f, "Unknown IO error: {}", e)
+            }
+            Error::GitConflictError { file, span } => {
+                write!(f, "{}: ", "git conflict error".red())?;
                 write!(f, "{}\n", file_line_display(file, span.line))?;
-                write!(f, "{}Failed to compile line {}\n", INDENT, span.line)?;
 
-                if let Some(message) = message {
-                    write!(f, "{}{}\n", INDENT, message)?;
-                }
+                write!(
+                    f,
+                    "{}Git conflict marker found at line {}\n",
+                    INDENT, span.line,
+                )?;
 
                 write_source_span_at(f, file, *span)
             }
@@ -166,26 +177,52 @@ impl fmt::Display for Error {
 
                 write_source_span_at(f, file, *span)
             }
-            Error::GitConflictError { file, span } => {
-                write!(f, "{}: ", "git conflict error".red())?;
-                write!(f, "{}\n", file_line_display(file, span.line))?;
+            Error::TypeError {
+                kind,
+                file,
+                span,
+                message,
+            } => {
+                write!(f, "{}: {}\n", "typecheck error".red(), file_line_display(file, span.line))?;
+                write!(f, "{}{}\n", INDENT, kind)?;
 
-                write!(
-                    f,
-                    "{}Git conflict marker found at line {}\n",
-                    INDENT, span.line,
-                )?;
+                if let Some(message) = message {
+                    write!(f, "{}{}\n", INDENT, message)?;
+                }
 
                 write_source_span_at(f, file, *span)
             }
-            Error::FileNotFound(path) => {
-                write!(f, "File '{}' not found", path.display())
+            Error::CompileError {
+                file,
+                span,
+                message,
+            } => {
+                write!(f, "{}: ", "compile error".red())?;
+                write!(f, "{}\n", file_line_display(file, span.line))?;
+                write!(f, "{}Failed to compile line {}\n", INDENT, span.line)?;
+
+                if let Some(message) = message {
+                    write!(f, "{}{}\n", INDENT, message)?;
+                }
+
+                write_source_span_at(f, file, *span)
             }
-            Error::NoFileGiven => {
-                write!(f, "No file to run")
-            }
-            Error::IOError(e) => {
-                write!(f, "Unknown IO error: {}", e)
+            Error::RuntimeError {
+                kind,
+                phase,
+                file,
+                line,
+                message
+            } => {
+                write!(f, "{} {}: ", phase.red(), "error".red())?;
+                write!(f, "{}\n", file_line_display(file, *line))?;
+                write!(f, "{}{}\n", INDENT, kind)?;
+
+                if let Some(message) = message {
+                    write!(f, "{}\n", message)?;
+                }
+
+                write_source_line_at(f, file, *line)
             }
         }
     }
@@ -273,6 +310,20 @@ impl fmt::Display for RuntimeError {
             }
             RuntimeError::Unreachable => {
                 write!(f, "Reached unreachable code")
+            }
+        }
+    }
+}
+
+impl fmt::Display for TypeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TypeError::Missmatch{ got, expected } => {
+                write!(f, "A '{:?}' cannot be a '{:?}'", got, expected)
+            }
+
+            TypeError::Violating(ty) => {
+                write!(f, "Got '{:?}', which doesn't hold", ty)
             }
         }
     }
