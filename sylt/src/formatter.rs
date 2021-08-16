@@ -18,10 +18,27 @@ fn write_identifier<W: Write>(dest: &mut W, identifier: &Identifier) -> fmt::Res
     write!(dest, "{}", identifier.name)
 }
 
-fn write_assignable<W: Write>(dest: &mut W, assignable: &Assignable) -> fmt::Result {
+fn write_arguments<W: Write>(dest: &mut W, indent: u32, arguments: &[Expression]) -> fmt::Result {
+    let mut first = true;
+    for arg in arguments {
+        if !first {
+            write!(dest, ", ")?;
+        }
+        first = false;
+        write_expression(dest, indent, arg)?;
+    }
+    Ok(())
+}
+
+fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: &Assignable) -> fmt::Result {
     match &assignable.kind {
         AssignableKind::Read(identifier) => write_identifier(dest, identifier),
-        AssignableKind::Call(_, _) => todo!(),
+        AssignableKind::Call(callable, args) => {
+            write_assignable(dest, indent, callable)?;
+            write!(dest, "(")?;
+            write_arguments(dest, indent, args)?;
+            write!(dest, ")")
+        },
         AssignableKind::ArrowCall(_, _, _) => todo!(),
         AssignableKind::Access(_, _) => todo!(),
         AssignableKind::Index(_, _) => todo!(),
@@ -52,11 +69,11 @@ fn write_runtime_type<W: Write>(dest: &mut W, ty: &RuntimeType) -> fmt::Result {
     }
 }
 
-fn write_type<W: Write>(dest: &mut W, ty: &Type) -> fmt::Result {
+fn write_type<W: Write>(dest: &mut W, indent: u32, ty: &Type) -> fmt::Result {
     match &ty.kind {
         TypeKind::Implied => unreachable!(),
         TypeKind::Resolved(ty) => write_runtime_type(dest, ty),
-        TypeKind::UserDefined(assignable) => write_assignable(dest, assignable),
+        TypeKind::UserDefined(assignable) => write_assignable(dest, indent, assignable),
         TypeKind::Union(_, _) => todo!(),
         TypeKind::Fn(_, _) => todo!(),
         TypeKind::Tuple(_) => todo!(),
@@ -66,16 +83,16 @@ fn write_type<W: Write>(dest: &mut W, ty: &Type) -> fmt::Result {
     }
 }
 
-fn write_params<W: Write>(dest: &mut W, params: &[(Identifier, Type)]) -> fmt::Result {
+fn write_parameters<W: Write>(dest: &mut W, indent: u32, parameters: &[(Identifier, Type)]) -> fmt::Result {
     let mut first = true;
-    for (identifier, ty) in params {
+    for (identifier, ty) in parameters {
         if !first {
             write!(dest, ", ")?;
         }
         first = false;
         write_identifier(dest, identifier)?;
         write!(dest, ": ")?;
-        write_type(dest, ty)?;
+        write_type(dest, indent, ty)?;
     }
     Ok(())
 }
@@ -106,12 +123,12 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
         ExpressionKind::IfShort { condition, fail } => todo!(),
         ExpressionKind::Function { name: _, params, ret, body } => {
             write!(dest, "fn ")?;
-            write_params(dest, params)?;
+            write_parameters(dest, indent, params)?;
             if matches!(ret.kind, TypeKind::Resolved(RuntimeType::Void)) {
                 write!(dest, " ")?;
             } else {
                 write!(dest, " -> ")?;
-                write_type(dest, ret)?;
+                write_type(dest, indent, ret)?;
                 write!(dest, " ")?;
             }
             write_statement(dest, indent, &*body)
@@ -139,7 +156,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
 
     match &statement.kind {
         StatementKind::Assignment { kind, target, value } => {
-            write_assignable(dest, target)?;
+            write_assignable(dest, indent, target)?;
             write!(dest, " {}= ", match kind {
                 Op::Nop => "",
                 Op::Add => "+",
