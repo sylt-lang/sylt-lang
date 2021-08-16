@@ -18,6 +18,20 @@ fn write_identifier<W: Write>(dest: &mut W, identifier: &Identifier) -> fmt::Res
     write!(dest, "{}", identifier.name)
 }
 
+fn write_parameters<W: Write>(dest: &mut W, indent: u32, parameters: &[(Identifier, Type)]) -> fmt::Result {
+    let mut first = true;
+    for (identifier, ty) in parameters {
+        if !first {
+            write!(dest, ", ")?;
+        }
+        first = false;
+        write_identifier(dest, identifier)?;
+        write!(dest, ": ")?;
+        write_type(dest, indent, ty)?;
+    }
+    Ok(())
+}
+
 fn write_arguments<W: Write>(dest: &mut W, indent: u32, arguments: &[Expression]) -> fmt::Result {
     let mut first = true;
     for arg in arguments {
@@ -28,6 +42,14 @@ fn write_arguments<W: Write>(dest: &mut W, indent: u32, arguments: &[Expression]
         write_expression(dest, indent, arg)?;
     }
     Ok(())
+}
+
+fn write_blob_instance_fields<W: Write>(dest: &mut W, indent: u32, fields: &[(String, Expression)]) -> fmt::Result {
+    todo!()
+}
+
+fn write_blob_type_fields<W: Write>(dest: &mut W, indent: u32, fields: &[(String, Type)]) -> fmt::Result {
+    todo!()
 }
 
 fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: &Assignable) -> fmt::Result {
@@ -96,24 +118,6 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: &Type) -> fmt::Result {
         TypeKind::Set(_) => todo!(),
         TypeKind::Dict(_, _) => todo!(),
     }
-}
-
-fn write_fields<W: Write>(dest: &mut W, indent: u32, fields: &[(String, Expression)]) -> fmt::Result {
-    todo!()
-}
-
-fn write_parameters<W: Write>(dest: &mut W, indent: u32, parameters: &[(Identifier, Type)]) -> fmt::Result {
-    let mut first = true;
-    for (identifier, ty) in parameters {
-        if !first {
-            write!(dest, ", ")?;
-        }
-        first = false;
-        write_identifier(dest, identifier)?;
-        write!(dest, ": ")?;
-        write_type(dest, indent, ty)?;
-    }
-    Ok(())
 }
 
 macro_rules! expr_binary_op {
@@ -202,7 +206,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
         ExpressionKind::Instance { blob, fields } => {
             write_assignable(dest, indent, blob)?;
             write!(dest, " {{\n")?;
-            write_fields(dest, indent + 1, fields)?;
+            write_blob_instance_fields(dest, indent + 1, fields)?;
             write!(dest, "}}")?;
         }
         ExpressionKind::Tuple(_) => todo!(),
