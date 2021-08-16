@@ -40,7 +40,7 @@ fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: &Assignable
             write!(dest, ")")
         },
         AssignableKind::ArrowCall(first, callable, rest) => {
-            write_expression(dest, indent, &*first)?;
+            write_expression(dest, indent, first)?;
             write!(dest, " -> ")?;
             write_assignable(dest, indent, callable)?;
             write!(dest, " ")?;
