@@ -225,8 +225,6 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
         return Ok(());
     }
 
-    write_indents(dest, indent)?;
-
     match &statement.kind {
         StatementKind::Assignment { kind, target, value } => {
             write_assignable(dest, indent, target)?;
@@ -244,6 +242,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             write!(dest, "{{\n")?;
 
             for s in statements {
+                write_indents(dest, indent + 1)?;
                 write_statement(dest, indent + 1, s)?;
                 write!(dest, "\n")?;
             }
