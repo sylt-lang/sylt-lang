@@ -80,7 +80,7 @@ fn write_params<W: Write>(dest: &mut W, params: &[(Identifier, Type)]) -> fmt::R
     Ok(())
 }
 
-fn write_expression<W: Write>(dest: &mut W, expression: &Expression, indent: u32) -> fmt::Result {
+fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression) -> fmt::Result {
     match &expression.kind {
         ExpressionKind::Get(_) => todo!(),
         ExpressionKind::TypeConstant(_) => todo!(),
@@ -114,7 +114,7 @@ fn write_expression<W: Write>(dest: &mut W, expression: &Expression, indent: u32
                 write_type(dest, ret)?;
                 write!(dest, " ")?;
             }
-            write_statement(dest, &*body, indent)
+            write_statement(dest, indent, &*body)
         }
         ExpressionKind::Instance { blob, fields } => todo!(),
         ExpressionKind::Tuple(_) => todo!(),
@@ -129,7 +129,7 @@ fn write_expression<W: Write>(dest: &mut W, expression: &Expression, indent: u32
     }
 }
 
-fn write_statement<W: Write>(dest: &mut W, statement: &Statement, indent: u32) -> fmt::Result {
+fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -> fmt::Result {
     // Empty statements don't even deserve their own line!
     if matches!(statement.kind, StatementKind::EmptyStatement) {
         return Ok(());
@@ -147,14 +147,14 @@ fn write_statement<W: Write>(dest: &mut W, statement: &Statement, indent: u32) -
                 Op::Mul => "*",
                 Op::Div => "/",
             })?;
-            write_expression(dest, value, indent)?;
+            write_expression(dest, indent, value)?;
         }
         StatementKind::Blob { name, fields } => todo!(),
         StatementKind::Block { statements } => {
             write!(dest, "{{\n")?;
 
             for s in statements {
-                write_statement(dest, s, indent + 1)?;
+                write_statement(dest, indent + 1, s)?;
                 write!(dest, "\n")?;
             }
 
@@ -175,7 +175,7 @@ fn write_statement<W: Write>(dest: &mut W, statement: &Statement, indent: u32) -
             } else {
                 todo!()
             }
-            write_expression(dest, value, indent)?;
+            write_expression(dest, indent, value)?;
         }
         StatementKind::EmptyStatement => unreachable!("Should be handled earlier"),
         StatementKind::If { condition, pass, fail } => todo!(),
@@ -203,7 +203,7 @@ fn write_module(module: &Module) -> fmt::Result {
         .iter()
         // Side effects incoming!
         .map(|s| {
-            write_statement(&mut formatted, s, 0)?;
+            write_statement(&mut formatted, 0, s)?;
             write!(formatted, "\n")
         })
         .collect::<Result<Vec<_>, _>>()?;
