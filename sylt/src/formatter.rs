@@ -192,7 +192,10 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
         ExpressionKind::Duplicate(_) => todo!(),
         ExpressionKind::IfShort { condition, fail } => todo!(),
         ExpressionKind::Function { name: _, params, ret, body } => {
-            write!(dest, "fn ")?;
+            write!(dest, "fn")?;
+            if !params.is_empty() {
+                write!(dest, " ")?;
+            }
             write_parameters(dest, indent, params)?;
             if matches!(ret.kind, TypeKind::Resolved(RuntimeType::Void)) {
                 write!(dest, " ")?;
@@ -246,9 +249,11 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             write!(dest, "{{\n")?;
 
             for s in statements {
-                write_indents(dest, indent + 1)?;
-                write_statement(dest, indent + 1, s)?;
-                write!(dest, "\n")?;
+                if !matches!(s.kind, StatementKind::EmptyStatement) {
+                    write_indents(dest, indent + 1)?;
+                    write_statement(dest, indent + 1, s)?;
+                    write!(dest, "\n")?;
+                }
             }
 
             write_indents(dest, indent)?;
