@@ -52,37 +52,6 @@ fn write_blob_type_fields<W: Write>(dest: &mut W, indent: u32, fields: &[(String
     todo!()
 }
 
-fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: &Assignable) -> fmt::Result {
-    match &assignable.kind {
-        AssignableKind::Read(identifier) => write_identifier(dest, identifier),
-        AssignableKind::Call(callable, args) => {
-            write_assignable(dest, indent, callable)?;
-            write!(dest, "(")?;
-            write_arguments(dest, indent, args)?;
-            write!(dest, ")")
-        },
-        AssignableKind::ArrowCall(first, callable, rest) => {
-            write_expression(dest, indent, first)?;
-            write!(dest, " -> ")?;
-            write_assignable(dest, indent, callable)?;
-            write!(dest, " ")?;
-            write_arguments(dest, indent, rest)
-        },
-        AssignableKind::Access(accessable, ident) => {
-            write_assignable(dest, indent, accessable)?;
-            write!(dest, ".")?;
-            write_identifier(dest, ident)
-        },
-        AssignableKind::Index(indexable, index) => {
-            write_assignable(dest, indent, indexable)?;
-            write!(dest, "[")?;
-            write_expression(dest, indent, index)?;
-            write!(dest, "]")
-        },
-        AssignableKind::Expression(expr) => write_expression(dest, indent, expr),
-    }
-}
-
 fn write_runtime_type<W: Write>(dest: &mut W, ty: &RuntimeType) -> fmt::Result {
     match ty {
         RuntimeType::Ty => todo!(),
@@ -117,6 +86,37 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: &Type) -> fmt::Result {
         TypeKind::List(_) => todo!(),
         TypeKind::Set(_) => todo!(),
         TypeKind::Dict(_, _) => todo!(),
+    }
+}
+
+fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: &Assignable) -> fmt::Result {
+    match &assignable.kind {
+        AssignableKind::Read(identifier) => write_identifier(dest, identifier),
+        AssignableKind::Call(callable, args) => {
+            write_assignable(dest, indent, callable)?;
+            write!(dest, "(")?;
+            write_arguments(dest, indent, args)?;
+            write!(dest, ")")
+        },
+        AssignableKind::ArrowCall(first, callable, rest) => {
+            write_expression(dest, indent, first)?;
+            write!(dest, " -> ")?;
+            write_assignable(dest, indent, callable)?;
+            write!(dest, " ")?;
+            write_arguments(dest, indent, rest)
+        },
+        AssignableKind::Access(accessable, ident) => {
+            write_assignable(dest, indent, accessable)?;
+            write!(dest, ".")?;
+            write_identifier(dest, ident)
+        },
+        AssignableKind::Index(indexable, index) => {
+            write_assignable(dest, indent, indexable)?;
+            write!(dest, "[")?;
+            write_expression(dest, indent, index)?;
+            write!(dest, "]")
+        },
+        AssignableKind::Expression(expr) => write_expression(dest, indent, expr),
     }
 }
 
