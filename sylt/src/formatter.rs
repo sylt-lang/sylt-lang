@@ -98,6 +98,10 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: &Type) -> fmt::Result {
     }
 }
 
+fn write_fields<W: Write>(dest: &mut W, indent: u32, fields: &[(String, Expression)]) -> fmt::Result {
+    todo!()
+}
+
 fn write_parameters<W: Write>(dest: &mut W, indent: u32, parameters: &[(Identifier, Type)]) -> fmt::Result {
     let mut first = true;
     for (identifier, ty) in parameters {
@@ -112,27 +116,74 @@ fn write_parameters<W: Write>(dest: &mut W, indent: u32, parameters: &[(Identifi
     Ok(())
 }
 
+macro_rules! expr_binary_op {
+    ($dest:expr, $indent:expr, $lhs:expr, $op:literal, $rhs:expr) => {
+        write_expression($dest, $indent, $lhs)?;
+        write!($dest, $op)?;
+        write_expression($dest, $indent, $rhs)?;
+    };
+}
+
 fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression) -> fmt::Result {
     match &expression.kind {
-        ExpressionKind::Get(_) => todo!(),
-        ExpressionKind::TypeConstant(_) => todo!(),
-        ExpressionKind::Add(_, _) => todo!(),
-        ExpressionKind::Sub(_, _) => todo!(),
-        ExpressionKind::Mul(_, _) => todo!(),
-        ExpressionKind::Div(_, _) => todo!(),
-        ExpressionKind::Neg(_) => todo!(),
-        ExpressionKind::Is(_, _) => todo!(),
-        ExpressionKind::Eq(_, _) => todo!(),
-        ExpressionKind::Neq(_, _) => todo!(),
-        ExpressionKind::Gt(_, _) => todo!(),
-        ExpressionKind::Gteq(_, _) => todo!(),
-        ExpressionKind::Lt(_, _) => todo!(),
-        ExpressionKind::Lteq(_, _) => todo!(),
-        ExpressionKind::AssertEq(_, _) => todo!(),
-        ExpressionKind::In(_, _) => todo!(),
-        ExpressionKind::And(_, _) => todo!(),
-        ExpressionKind::Or(_, _) => todo!(),
-        ExpressionKind::Not(_) => todo!(),
+        ExpressionKind::Get(assignable) => write_assignable(dest, indent, assignable)?,
+        ExpressionKind::TypeConstant(ty) => {
+            write!(dest, ":")?;
+            write_type(dest, indent, ty)?;
+        },
+        ExpressionKind::Add(lhs, rhs) => {
+            expr_binary_op!(dest, indent, lhs, " + ", rhs);
+        }
+        ExpressionKind::Sub(lhs, rhs) => {
+            expr_binary_op!(dest, indent, lhs, " - ", rhs);
+        }
+        ExpressionKind::Mul(lhs, rhs) => {
+            expr_binary_op!(dest, indent, lhs, " * ", rhs);
+        }
+        ExpressionKind::Div(lhs, rhs) => {
+            expr_binary_op!(dest, indent, lhs, " / ", rhs);
+        }
+        ExpressionKind::Neg(expr) => {
+            write!(dest, "-")?;
+            write_expression(dest, indent, expr)?;
+        },
+        ExpressionKind::Is(lhs, rhs) => {
+            expr_binary_op!(dest, indent, lhs, " is ", rhs);
+        }
+        ExpressionKind::Eq(lhs, rhs) => {
+            expr_binary_op!(dest, indent, lhs, " == ", rhs);
+        }
+        ExpressionKind::Neq(lhs, rhs) => {
+            expr_binary_op!(dest, indent, lhs, " != ", rhs);
+        }
+        ExpressionKind::Gt(lhs, rhs) => {
+            expr_binary_op!(dest, indent, lhs, " > ", rhs);
+        },
+        ExpressionKind::Gteq(lhs, rhs) => {
+            expr_binary_op!(dest, indent, lhs, " >= ", rhs);
+        }
+        ExpressionKind::Lt(lhs, rhs) => {
+            expr_binary_op!(dest, indent, lhs, " < ", rhs);
+        }
+        ExpressionKind::Lteq(lhs, rhs) => {
+            expr_binary_op!(dest, indent, lhs, " <= ", rhs);
+        }
+        ExpressionKind::AssertEq(lhs, rhs) => {
+            expr_binary_op!(dest, indent, lhs, " <=> ", rhs);
+        }
+        ExpressionKind::In(lhs, rhs) => {
+            expr_binary_op!(dest, indent, lhs, " in ", rhs);
+        }
+        ExpressionKind::And(lhs, rhs) => {
+            expr_binary_op!(dest, indent, lhs, " && ", rhs);
+        }
+        ExpressionKind::Or(lhs, rhs) => {
+            expr_binary_op!(dest, indent, lhs, " || ", rhs);
+        }
+        ExpressionKind::Not(expr) => {
+            write!(dest, "!")?;
+            write_expression(dest, indent, expr)?;
+        }
         ExpressionKind::IfExpression { condition, pass, fail } => todo!(),
         ExpressionKind::Duplicate(_) => todo!(),
         ExpressionKind::IfShort { condition, fail } => todo!(),
@@ -146,19 +197,26 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
                 write_type(dest, indent, ret)?;
                 write!(dest, " ")?;
             }
-            write_statement(dest, indent, &*body)
+            write_statement(dest, indent, body)?;
         }
-        ExpressionKind::Instance { blob, fields } => todo!(),
+        ExpressionKind::Instance { blob, fields } => {
+            write_assignable(dest, indent, blob)?;
+            write!(dest, " {{\n")?;
+            write_fields(dest, indent + 1, fields)?;
+            write!(dest, "}}")?;
+        }
         ExpressionKind::Tuple(_) => todo!(),
         ExpressionKind::List(_) => todo!(),
         ExpressionKind::Set(_) => todo!(),
         ExpressionKind::Dict(_) => todo!(),
-        ExpressionKind::Float(f) => write!(dest, "{}", f),
-        ExpressionKind::Int(i) => write!(dest, "{}", i),
-        ExpressionKind::Str(s) => write!(dest, "\"{}\"", s),
-        ExpressionKind::Bool(b) => write!(dest, "{}", if *b { "true" } else { "false" }),
-        ExpressionKind::Nil => write!(dest, "nil"),
+        ExpressionKind::Float(f) => write!(dest, "{}", f)?,
+        ExpressionKind::Int(i) => write!(dest, "{}", i)?,
+        ExpressionKind::Str(s) => write!(dest, "\"{}\"", s)?,
+        ExpressionKind::Bool(b) => write!(dest, "{}", if *b { "true" } else { "false" })?,
+        ExpressionKind::Nil => write!(dest, "nil")?,
     }
+
+    Ok(())
 }
 
 fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -> fmt::Result {
