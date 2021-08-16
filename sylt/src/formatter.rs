@@ -39,10 +39,25 @@ fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: &Assignable
             write_arguments(dest, indent, args)?;
             write!(dest, ")")
         },
-        AssignableKind::ArrowCall(_, _, _) => todo!(),
-        AssignableKind::Access(_, _) => todo!(),
-        AssignableKind::Index(_, _) => todo!(),
-        AssignableKind::Expression(_) => todo!(),
+        AssignableKind::ArrowCall(first, callable, rest) => {
+            write_expression(dest, indent, &*first)?;
+            write!(dest, " -> ")?;
+            write_assignable(dest, indent, callable)?;
+            write!(dest, " ")?;
+            write_arguments(dest, indent, rest)
+        },
+        AssignableKind::Access(accessable, ident) => {
+            write_assignable(dest, indent, accessable)?;
+            write!(dest, ".")?;
+            write_identifier(dest, ident)
+        },
+        AssignableKind::Index(indexable, index) => {
+            write_assignable(dest, indent, indexable)?;
+            write!(dest, "[")?;
+            write_expression(dest, indent, index)?;
+            write!(dest, "]")
+        },
+        AssignableKind::Expression(expr) => write_expression(dest, indent, expr),
     }
 }
 
