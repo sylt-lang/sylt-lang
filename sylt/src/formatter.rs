@@ -267,7 +267,16 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             write_expression(dest, indent, value)?;
         }
         StatementKind::EmptyStatement => unreachable!("Should be handled earlier"),
-        StatementKind::If { condition, pass, fail } => todo!(),
+        StatementKind::If { condition, pass, fail } => {
+            write!(dest, "if ")?;
+            write_expression(dest, indent, condition)?;
+            write!(dest, " ")?;
+            write_statement(dest, indent, pass)?;
+            if !matches!(fail.kind, StatementKind::EmptyStatement) {
+                write!(dest, " else ")?;
+                write_statement(dest, indent, fail)?;
+            }
+        }
         StatementKind::IsCheck { lhs, rhs } => todo!(),
         StatementKind::Loop { condition, body } => todo!(),
         StatementKind::Print { value } => todo!(),
