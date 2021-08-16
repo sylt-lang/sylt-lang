@@ -161,6 +161,8 @@ impl Value {
         }
     }
 
+    /// Format the Value to a nice readable format while removing endless
+    /// recursion.
     fn safe_fmt(
         &self,
         fmt: &mut std::fmt::Formatter<'_>,
