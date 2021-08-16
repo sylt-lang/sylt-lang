@@ -121,11 +121,11 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
         ExpressionKind::List(_) => todo!(),
         ExpressionKind::Set(_) => todo!(),
         ExpressionKind::Dict(_) => todo!(),
-        ExpressionKind::Float(_) => todo!(),
-        ExpressionKind::Int(_) => todo!(),
-        ExpressionKind::Str(_) => todo!(),
-        ExpressionKind::Bool(_) => todo!(),
-        ExpressionKind::Nil => todo!(),
+        ExpressionKind::Float(f) => write!(dest, "{}", f),
+        ExpressionKind::Int(i) => write!(dest, "{}", i),
+        ExpressionKind::Str(s) => write!(dest, "\"{}\"", s),
+        ExpressionKind::Bool(b) => write!(dest, "{}", if *b { "true" } else { "false" }),
+        ExpressionKind::Nil => write!(dest, "nil"),
     }
 }
 
