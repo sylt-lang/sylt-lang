@@ -1,7 +1,10 @@
 use std::fmt::{self, Write};
 use std::path::PathBuf;
 use sylt_common::{Error, Type as RuntimeType};
-use sylt_parser::{Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op, Statement, StatementKind, Type, TypeKind, VarKind};
+use sylt_parser::{
+    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op, Statement,
+    StatementKind, Type, TypeKind, VarKind,
+};
 
 use crate::Args;
 
@@ -18,7 +21,11 @@ fn write_identifier<W: Write>(dest: &mut W, identifier: &Identifier) -> fmt::Res
     write!(dest, "{}", identifier.name)
 }
 
-fn write_parameters<W: Write>(dest: &mut W, indent: u32, parameters: &[(Identifier, Type)]) -> fmt::Result {
+fn write_parameters<W: Write>(
+    dest: &mut W,
+    indent: u32,
+    parameters: &[(Identifier, Type)],
+) -> fmt::Result {
     let mut first = true;
     for (identifier, ty) in parameters {
         if !first {
@@ -44,11 +51,19 @@ fn write_arguments<W: Write>(dest: &mut W, indent: u32, arguments: &[Expression]
     Ok(())
 }
 
-fn write_blob_instance_fields<W: Write>(dest: &mut W, indent: u32, fields: &[(String, Expression)]) -> fmt::Result {
+fn write_blob_instance_fields<W: Write>(
+    dest: &mut W,
+    indent: u32,
+    fields: &[(String, Expression)],
+) -> fmt::Result {
     todo!()
 }
 
-fn write_blob_type_fields<W: Write>(dest: &mut W, indent: u32, fields: &[(String, Type)]) -> fmt::Result {
+fn write_blob_type_fields<W: Write>(
+    dest: &mut W,
+    indent: u32,
+    fields: &[(String, Type)],
+) -> fmt::Result {
     todo!()
 }
 
@@ -97,25 +112,25 @@ fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: &Assignable
             write!(dest, "(")?;
             write_arguments(dest, indent, args)?;
             write!(dest, ")")
-        },
+        }
         AssignableKind::ArrowCall(first, callable, rest) => {
             write_expression(dest, indent, first)?;
             write!(dest, " -> ")?;
             write_assignable(dest, indent, callable)?;
             write!(dest, " ")?;
             write_arguments(dest, indent, rest)
-        },
+        }
         AssignableKind::Access(accessable, ident) => {
             write_assignable(dest, indent, accessable)?;
             write!(dest, ".")?;
             write_identifier(dest, ident)
-        },
+        }
         AssignableKind::Index(indexable, index) => {
             write_assignable(dest, indent, indexable)?;
             write!(dest, "[")?;
             write_expression(dest, indent, index)?;
             write!(dest, "]")
-        },
+        }
         AssignableKind::Expression(expr) => write_expression(dest, indent, expr),
     }
 }
@@ -134,7 +149,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
         ExpressionKind::TypeConstant(ty) => {
             write!(dest, ":")?;
             write_type(dest, indent, ty)?;
-        },
+        }
         ExpressionKind::Add(lhs, rhs) => {
             expr_binary_op!(dest, indent, lhs, " + ", rhs);
         }
@@ -150,7 +165,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
         ExpressionKind::Neg(expr) => {
             write!(dest, "-")?;
             write_expression(dest, indent, expr)?;
-        },
+        }
         ExpressionKind::Is(lhs, rhs) => {
             expr_binary_op!(dest, indent, lhs, " is ", rhs);
         }
@@ -162,7 +177,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
         }
         ExpressionKind::Gt(lhs, rhs) => {
             expr_binary_op!(dest, indent, lhs, " > ", rhs);
-        },
+        }
         ExpressionKind::Gteq(lhs, rhs) => {
             expr_binary_op!(dest, indent, lhs, " >= ", rhs);
         }
@@ -188,10 +203,19 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
             write!(dest, "!")?;
             write_expression(dest, indent, expr)?;
         }
-        ExpressionKind::IfExpression { condition, pass, fail } => todo!(),
+        ExpressionKind::IfExpression {
+            condition,
+            pass,
+            fail,
+        } => todo!(),
         ExpressionKind::Duplicate(_) => todo!(),
         ExpressionKind::IfShort { condition, fail } => todo!(),
-        ExpressionKind::Function { name: _, params, ret, body } => {
+        ExpressionKind::Function {
+            name: _,
+            params,
+            ret,
+            body,
+        } => {
             write!(dest, "fn")?;
             if !params.is_empty() {
                 write!(dest, " ")?;
@@ -233,15 +257,23 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
     }
 
     match &statement.kind {
-        StatementKind::Assignment { kind, target, value } => {
+        StatementKind::Assignment {
+            kind,
+            target,
+            value,
+        } => {
             write_assignable(dest, indent, target)?;
-            write!(dest, " {}= ", match kind {
-                Op::Nop => "",
-                Op::Add => "+",
-                Op::Sub => "-",
-                Op::Mul => "*",
-                Op::Div => "/",
-            })?;
+            write!(
+                dest,
+                " {}= ",
+                match kind {
+                    Op::Nop => "",
+                    Op::Add => "+",
+                    Op::Sub => "-",
+                    Op::Mul => "*",
+                    Op::Div => "/",
+                }
+            )?;
             write_expression(dest, indent, value)?;
         }
         StatementKind::Blob { name, fields } => todo!(),
@@ -261,22 +293,35 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
         }
         StatementKind::Break => todo!(),
         StatementKind::Continue => todo!(),
-        StatementKind::Definition { ident, kind, ty, value } => {
+        StatementKind::Definition {
+            ident,
+            kind,
+            ty,
+            value,
+        } => {
             write_identifier(dest, ident)?;
             if matches!(ty.kind, TypeKind::Implied) {
-                write!(dest, " {} ", match kind {
-                    VarKind::Const => "::",
-                    VarKind::Mutable => ":=",
-                    VarKind::ForceConst => unreachable!(),
-                    VarKind::ForceMutable => unreachable!(),
-                })?;
+                write!(
+                    dest,
+                    " {} ",
+                    match kind {
+                        VarKind::Const => "::",
+                        VarKind::Mutable => ":=",
+                        VarKind::ForceConst => unreachable!(),
+                        VarKind::ForceMutable => unreachable!(),
+                    }
+                )?;
             } else {
                 todo!()
             }
             write_expression(dest, indent, value)?;
         }
         StatementKind::EmptyStatement => unreachable!("Should be handled earlier"),
-        StatementKind::If { condition, pass, fail } => {
+        StatementKind::If {
+            condition,
+            pass,
+            fail,
+        } => {
             write!(dest, "if ")?;
             write_expression(dest, indent, condition)?;
             write!(dest, " ")?;
@@ -292,15 +337,15 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             write_expression(dest, indent, condition)?;
             write!(dest, " ")?;
             write_statement(dest, indent, body)?;
-        },
+        }
         StatementKind::Print { value } => {
             write!(dest, "print ")?;
             write_expression(dest, indent, value)?;
-        },
+        }
         StatementKind::Ret { value } => {
             write!(dest, "ret ")?;
             write_expression(dest, indent, value)?;
-        },
+        }
         StatementKind::StatementExpression { value } => todo!(),
         StatementKind::Unreachable => {
             write!(dest, "<!>")?;
