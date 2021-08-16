@@ -278,9 +278,20 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             }
         }
         StatementKind::IsCheck { lhs, rhs } => todo!(),
-        StatementKind::Loop { condition, body } => todo!(),
-        StatementKind::Print { value } => todo!(),
-        StatementKind::Ret { value } => todo!(),
+        StatementKind::Loop { condition, body } => {
+            write!(dest, "loop ")?;
+            write_expression(dest, indent, condition)?;
+            write!(dest, " ")?;
+            write_statement(dest, indent, body)?;
+        },
+        StatementKind::Print { value } => {
+            write!(dest, "print ")?;
+            write_expression(dest, indent, value)?;
+        },
+        StatementKind::Ret { value } => {
+            write!(dest, "ret ")?;
+            write_expression(dest, indent, value)?;
+        },
         StatementKind::StatementExpression { value } => todo!(),
         StatementKind::Unreachable => {
             write!(dest, "<!>")?;
