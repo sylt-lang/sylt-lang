@@ -841,9 +841,9 @@ dependencies = [
 
 [[package]]
 name = "serde_cbor"
-version = "0.11.1"
+version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e18acfa2f90e8b735b2836ab8d538de304cbb6729a7360729ea5a895d15a622"
+checksum = "2bef2ebfde456fb76bbcf9f59315333decc4fda0b2b44b420243c11e0f5ec1f5"
 dependencies = [
  "half",
  "serde",
@@ -903,11 +903,11 @@ dependencies = [
  "sylt-common",
  "sylt-compiler",
  "sylt-machine",
+ "sylt-macro",
  "sylt-parser",
  "sylt-std",
  "sylt-tokenizer",
  "sylt-typechecker",
- "sylt_macro",
 ]
 
 [[package]]
@@ -917,8 +917,8 @@ dependencies = [
  "owo-colors",
  "serde",
  "sungod",
+ "sylt-macro",
  "sylt-tokenizer",
- "sylt_macro",
 ]
 
 [[package]]
@@ -938,12 +938,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "sylt-macro"
+version = "0.2.0"
+dependencies = [
+ "lazy_static",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "sylt-parser"
 version = "0.2.0"
 dependencies = [
  "sylt-common",
+ "sylt-macro",
  "sylt-tokenizer",
- "sylt_macro",
 ]
 
 [[package]]
@@ -956,7 +966,7 @@ dependencies = [
  "owo-colors",
  "sungod",
  "sylt-common",
- "sylt_macro",
+ "sylt-macro",
 ]
 
 [[package]]
@@ -972,16 +982,6 @@ version = "0.2.0"
 dependencies = [
  "owo-colors",
  "sylt-common",
-]
-
-[[package]]
-name = "sylt_macro"
-version = "0.2.0"
-dependencies = [
- "lazy_static",
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

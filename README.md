@@ -18,12 +18,9 @@ Sylt is written entirely in Rust. There are two main ways of using it.
 ### New repository
 
 1. `$ cargo new <game name>`
-2. Add this to your Cargo.toml:
+2. Depend on the latest version of the `sylt`-crate with the `lingon`-feature enabled.
 ```toml
-[dependencies.sylt]
-git = "https://github.com/FredTheDino/sylt-lang.git"
-branch = "main"
-features = [ "lingon" ]
+sylt = { version = "x.y.z", features = ["lingon"] }
 ```
 3. Add something like this to your `src/main.rs`:
 ```rust
@@ -31,14 +28,16 @@ use std::path::Path;
 
 fn main() {
     let args = sylt::Args {
-        file: Some(Path::new("game.sy").to_path_buf()),  // or read from args
-        is_binary: false,
-        compile_target: None,
-        verbosity: 0,
-        help: false,
+        args: vec!["game.sy".to_string()],
+
+        ..sylt::Args::default()
     };
 
-    sylt::run_file(&args, sylt::lib_bindings()).unwrap();
+    if let Err(errs) = sylt::run_file(&args, sylt::lib_bindings()) {
+        for e in errs.iter() {
+            eprintln!("{}", e);
+        }
+    }
 }
 ```
 4. Write your game! Here's an example to get you started:
@@ -63,20 +62,19 @@ update :: fn delta: float -> void {
 
 draw :: fn {
     rgb :: (sin(l_time()), cos(l_time()), 0.0)
-    l_gfx_rect! x, y, 1.0, 1.0, rgb
+    l_gfx_rect' x, y, 1.0, 1.0, rgb
 }
 
 start :: fn {
-    init!
-    for _ in inf(0) {
-        _
+    init'
+    loop {
         if l_input_down("quit") {
             break
         }
-        l_update!
-        update! l_delta!
-        draw!
-        l_render!
+        l_update'
+        update' l_delta'
+        draw'
+        l_render'
     }
 }
 ```
@@ -84,7 +82,7 @@ start :: fn {
 
 ### Fork
 
-Forking sylt and hacking away makes it easy to do changes to the language, the
+Forking Sylt and hacking away makes it easy to do changes to the language, the
 standard library and the bindings to Lingon, of which the latter two are
 probably more interesting.
 

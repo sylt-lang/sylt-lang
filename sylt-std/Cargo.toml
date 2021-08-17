@@ -1,5 +1,11 @@
 [package]
 name = "sylt-std"
+description = """
+Standard library for the Sylt programming language.
+"""
+license = "MIT"
+repository = "https://github.com/FredTheDino/sylt.git"
+readme = "../README.md"
 version = "0.2.0"
 edition = "2018"
 
@@ -7,12 +13,12 @@ edition = "2018"
 
 [dependencies]
 sylt-common = { version = "0.2.0", path = "../sylt-common" }
-sylt_macro = { version = "0.2.0", path = "../sylt_macro" }
+sylt-macro = { version = "0.2.0", path = "../sylt-macro" }
 
 bincode = { version = "1", optional = true }
 lazy_static = "1"
-lingon = { git = "https://github.com/sornas/lingon.git", branch = "main", optional = true }
-owo-colors = { git = "https://github.com/FredTheDino/owo-colors.git" }
+lingon = { version = "0.1.0", git = "https://github.com/sornas/lingon.git", branch = "main", optional = true }
+owo-colors = { version = "2.0.0", git = "https://github.com/FredTheDino/owo-colors.git" }
 sungod = "0.3"
 
 [features]

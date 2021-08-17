@@ -321,7 +321,7 @@ fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
 pub fn find_tests(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     assert!(tokens.is_empty());
 
-    let tokens = find_test_paths(Path::new("progs/"));
+    let tokens = find_test_paths(Path::new("tests/"));
     proc_macro::TokenStream::from(tokens)
 }
 
