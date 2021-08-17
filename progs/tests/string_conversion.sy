@@ -45,7 +45,6 @@ start :: fn {
     (d == "{1: 2, 3: 4}" || d == "{3: 4, 1: 2}") <=> true
 
     // Blobs
-    print A
     ab :: as_str(A { a: 100, b: 5.3 })
     (ab == "A {a: 100, b: 5.3}" || ab == "A {b: 5.3, a: 100}") <=> true
 
@@ -61,10 +60,9 @@ start :: fn {
     d :: fn x: int, y: int -> int {
         x + y
     }
-    print d
+    print(d)
 
     // Other
-    print pop
-    print :str
+    print(A, pop, :str)
     as_str(nil) <=> "nil"
 }

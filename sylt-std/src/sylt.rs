@@ -650,4 +650,18 @@ sylt_macro::extern_function!(
     },
 );
 
+#[sylt_macro::sylt_doc(print, "Prints values to stdout", args Type::Void)]
+#[sylt_macro::sylt_link(print, "sylt_std::sylt")]
+pub fn print<'t>(ctx: RuntimeContext) -> Result<Value, RuntimeError> {
+    if !ctx.typecheck {
+        println!("{}", ctx.machine
+            .stack_from_base(ctx.stack_base)
+            .iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<_>>()
+            .join(" "));
+    }
+    Ok(Value::Nil)
+}
+
 sylt_macro::sylt_link_gen!("sylt_std::sylt");

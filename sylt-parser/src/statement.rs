@@ -24,13 +24,6 @@ pub enum StatementKind {
         fields: HashMap<String, Type>,
     },
 
-    /// Prints to standard out.
-    ///
-    /// `print <expression>`.
-    Print {
-        value: Expression,
-    },
-
     /// Assigns to a variable (`a = <expression>`), optionally with an operator
     /// applied (`a += <expression>`)
     Assignment {
@@ -199,11 +192,6 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Break, ..] => (ctx.skip(1), Break),
         [T::Continue, ..] => (ctx.skip(1), Continue),
         [T::Unreachable, ..] => (ctx.skip(1), Unreachable),
-
-        [T::Print, ..] => {
-            let (ctx, value) = expression(ctx.skip(1))?;
-            (ctx, Print { value })
-        }
 
         // `ret <expression>`
         [T::Ret, ..] => {
@@ -496,7 +484,6 @@ mod test {
 
     // NOTE(ed): Expressions are valid statements! :D
     test!(statement, statement_expression: "1 + 1\n" => _);
-    test!(statement, statement_print: "print 1\n" => _);
     test!(statement, statement_break: "break\n" => _);
     test!(statement, statement_continue: "continue\n" => _);
     test!(statement, statement_mut_declaration: "a := 1 + 1\n" => _);
@@ -505,10 +492,10 @@ mod test {
     test!(statement, statement_const_type_declaration: "a :int: 1 + 1\n" => _);
     test!(statement, statement_force_mut_type_declaration: "a :!int= 1 + 1\n" => _);
     test!(statement, statement_force_const_type_declaration: "a :!int: 1 + 1\n" => _);
-    test!(statement, statement_if: "if 1 { print a }\n" => _);
-    test!(statement, statement_if_else: "if 1 { print a } else { print b }\n" => _);
-    test!(statement, statement_loop: "loop 1 { print a }\n" => _);
-    test!(statement, statement_loop_no_condition: "loop { print a }\n" => _);
+    test!(statement, statement_if: "if 1 { a }\n" => _);
+    test!(statement, statement_if_else: "if 1 { a } else { b }\n" => _);
+    test!(statement, statement_loop: "loop 1 { a }\n" => _);
+    test!(statement, statement_loop_no_condition: "loop { a }\n" => _);
     test!(statement, statement_ret: "ret 1 + 1\n" => _);
     test!(statement, statement_ret_newline: "ret \n" => _);
     test!(statement, statement_unreach: "<!>\n" => _);

@@ -1,5 +1,5 @@
 nop :: fn a:int {
-    print "nop"
+    print("nop")
 }
 
 start :: fn {

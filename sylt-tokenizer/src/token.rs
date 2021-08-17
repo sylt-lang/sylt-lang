@@ -36,9 +36,6 @@ pub enum Token {
     #[token("blob")]
     Blob,
 
-    #[token("print")]
-    Print,
-
     #[token("yield")]
     Yield,
 

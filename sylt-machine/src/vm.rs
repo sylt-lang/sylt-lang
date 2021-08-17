@@ -817,10 +817,6 @@ impl Machine for VM {
                 }
             }
 
-            Op::Print => {
-                println!("PRINT: {:?}", self.pop());
-            }
-
             Op::Return => {
                 let last = self.frames.pop().unwrap();
                 if self.frames.is_empty() {
