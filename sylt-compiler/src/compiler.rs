@@ -10,6 +10,8 @@ use sylt_parser::{
     Span, Statement, StatementKind, Type as ParserType, TypeKind, VarKind, AST,
 };
 
+mod typechecker;
+
 type VarSlot = usize;
 
 #[derive(Debug, Clone)]
@@ -1158,6 +1160,8 @@ impl Compiler {
         };
 
         let path_to_namespace_id = self.extract_globals(&tree);
+
+        typechecker::check(&tree, &mut self)?;
 
         for (full_path, module) in tree.modules.iter() {
             let path = full_path.file_stem().unwrap().to_str().unwrap();
