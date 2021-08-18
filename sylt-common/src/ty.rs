@@ -284,6 +284,10 @@ impl Type {
         let blobs: Option<_> = blobs.into();
         let mut set = HashSet::new();
         for ty in tys {
+            // Invalid types cannot be unioned
+            if matches!(ty, Type::Invalid) {
+                return Type::Invalid;
+            }
             match blobs {
                 None => {
                     set.insert(ty.clone());
