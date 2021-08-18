@@ -94,10 +94,16 @@ impl fmt::Display for RuntimePhase {
 pub enum TypeError {
     Violating(Type),
 
+    BinOp {
+        lhs: Type,
+        rhs: Type,
+        op: String,
+    },
+
     Missmatch {
         got: Type,
         expected: Type,
-    }
+    },
 }
 
 
@@ -320,6 +326,10 @@ impl fmt::Display for TypeError {
         match self {
             TypeError::Missmatch{ got, expected } => {
                 write!(f, "A '{:?}' cannot be a '{:?}'", got, expected)
+            }
+
+            TypeError::BinOp{ op, lhs, rhs } => {
+                write!(f, "{} is not defined for '{:?}' and '{:?}'", op, lhs, rhs)
             }
 
             TypeError::Violating(ty) => {
