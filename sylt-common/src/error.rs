@@ -65,6 +65,7 @@ pub enum RuntimeError {
     ExternError(String, String),
     ValueError(Op, Vec<Value>),
     UnknownField(String, String),
+    ImmutableField(String),
     ArgumentCount(usize, usize),
 
     /// (Indexed value, length, index)
@@ -250,6 +251,9 @@ impl fmt::Display for RuntimeError {
             }
             RuntimeError::UnknownField(obj, field) => {
                 write!(f, "Cannot find field '{}' on blob {:?}", field, obj)
+            }
+            RuntimeError::ImmutableField(field) => {
+                write!(f, "Cannot mutate field '{}' - since it is immutable", field)
             }
             RuntimeError::ArgumentCount(expected, given) => {
                 write!(
