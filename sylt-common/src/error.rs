@@ -253,7 +253,7 @@ impl fmt::Display for RuntimeError {
                 write!(f, "Cannot find field '{}' on blob {:?}", field, obj)
             }
             RuntimeError::ImmutableField(field) => {
-                write!(f, "Cannot mutate field '{}' - since it is immutable", field)
+                write!(f, "Cannot mutate field '{}' since it is immutable", field)
             }
             RuntimeError::ArgumentCount(expected, given) => {
                 write!(
