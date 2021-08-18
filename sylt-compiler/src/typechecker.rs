@@ -1,9 +1,9 @@
-#![allow(unused_imports)]
+#![allow(unused_imports, unused)]
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use sylt_common::error::Error;
+use sylt_common::error::{Error, TypeError};
 use sylt_common::prog::Prog;
 use sylt_common::{Blob, Block, Op, RustFunction, Type, Value};
 use sylt_parser::{
@@ -13,37 +13,347 @@ use sylt_parser::{
 
 use crate::Compiler;
 
-macro_rules! error {
-    ($compiler:expr, $ctx:expr, $span:expr, $( $msg:expr ),+ ) => {
-        if !$compiler.panic {
-            $compiler.panic = true;
-
-            let msg = format!($( $msg ),*).into();
-            let err = Error::CompileError {
-                file: $compiler.file_from_namespace($ctx.namespace).into(),
+macro_rules! error_if_invalid_type {
+    ($self:expr, $ty:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
+        if matches!($ty, Type::Invalid) {
+            let err = Error::TypeError {
+                kind: $kind,
+                file: $self.compiler.file_from_namespace($self.namespace).into(),
                 span: $span,
-                message: Some(msg),
+                message: Some(format!($( $msg ),*)),
             };
-            $compiler.errors.push(err);
+            return Err(vec![err]);
+        }
+    };
+    ($self:expr, $ty:expr, $span:expr, $kind:expr) => {
+        if matches!($ty, Type::Invalid) {
+            let err = Error::TypeError {
+                kind: $kind,
+                file: $self.compiler.file_from_namespace($self.namespace).into(),
+                span: $span,
+                message: None,
+            };
+            return Err(vec![err]);
         }
     };
 }
 
-struct TypeChecker {
+struct TypeChecker<'c> {
+    compiler: &'c mut Compiler,
+    namespace: usize,
 }
 
-impl TypeChecker {
-    fn new() -> Self {
+impl<'c> TypeChecker<'c> {
+    fn new(compiler: &'c mut Compiler) -> Self {
         Self {
+            compiler,
+            namespace: 0,
         }
     }
 
-    fn check(self, tree: &AST, compiler: &mut Compiler) -> Result<(), Vec<Error>> {
-        Ok(())
+    fn bin_op(&mut self, span: Span, lhs: &Expression, rhs: &Expression, op: fn(&Type, &Type) -> Type, name: &str) -> Result<Type, Vec<Error>> {
+        let lhs = self.expression(lhs)?;
+        let rhs = self.expression(rhs)?;
+        let res = op(&lhs, &rhs);
+        error_if_invalid_type!(self,
+            res,
+            span,
+            TypeError::BinOp { lhs, rhs, op: name.into() }
+        );
+        Ok(res)
+    }
+
+    fn expression(&mut self, expression: &Expression) -> Result<Type, Vec<Error>> {
+        use ExpressionKind as EK;
+        let span = expression.span;
+        let res = match &expression.kind {
+            EK::Add(a, b)  => self.bin_op(span, a, b, op::add,      "Addition")?,
+            EK::Sub(a, b)  => self.bin_op(span, a, b, op::sub,      "Subtraction")?,
+            EK::Mul(a, b)  => self.bin_op(span, a, b, op::mul,      "Multiplication")?,
+            EK::Div(a, b)  => self.bin_op(span, a, b, op::div,      "Division")?,
+            EK::AssertEq(a, b) | EK::Eq(a, b) | EK::Neq(a, b)
+                => self.bin_op(span, a, b, op::eq,       "Equality")?,
+            EK::Gt(a, b) | EK::Gteq(a, b) | EK::Lt(a, b) | EK::Lteq(a, b)
+                => self.bin_op(span, a, b, op::cmp,  "Comparison")?,
+            EK::And(a, b)   => self.bin_op(span, a, b, op::and,       "Boolean and")?,
+            EK::Or(a, b)    => self.bin_op(span, a, b, op::or,       "Boolean or")?,
+
+            EK::In(_, _) => todo!(),
+            EK::Is(_, _) => todo!(),
+
+            EK::Neg(_) => todo!(),
+            EK::Not(_) => todo!(),
+
+            EK::IfExpression { condition, pass, fail } => todo!(),
+            EK::Duplicate(expr) => self.expression(expr)?,
+            EK::Tuple(values) => {
+                let mut types = Vec::new();
+                for v in values.iter() {
+                    types.push(self.expression(v)?);
+                }
+                Type::Tuple(types)
+            }
+            EK::Float(_) => Type::Float,
+            EK::Int(_) => Type::Int,
+            EK::Str(_) => Type::String,
+            EK::Bool(_) => Type::Bool,
+            EK::TypeConstant(_) => Type::Ty,
+            EK::Nil => Type::Void,
+
+            EK::Function{ name, params, ret, body } => {
+                let ret = self.statement(body)?
+                              .expect("A function that doesn't return a value");
+                // TODO
+                Type::Function(Vec::new(), Box::new(ret))
+            }
+
+            _ => todo!(),
+        };
+        Ok(res)
+    }
+
+    fn statement(&mut self, statement: &Statement) -> Result<Option<Type>, Vec<Error>> {
+        let span = statement.span;
+        let ret = match &statement.kind {
+            StatementKind::Use { file } => None,
+            StatementKind::Blob { name, fields } => todo!(),
+            StatementKind::Print { value } => todo!(),
+            StatementKind::Assignment { kind, target, value } => {
+                self.expression(value)?;
+                None
+            }
+            StatementKind::Definition { ident, kind, ty, value } => {
+                self.expression(value)?;
+                None
+            }
+            StatementKind::If { condition, pass, fail } => todo!(),
+            StatementKind::Loop { condition, body } => todo!(),
+            StatementKind::Break => todo!(),
+            StatementKind::Continue => todo!(),
+            StatementKind::IsCheck { lhs, rhs } => todo!(),
+            StatementKind::Block { statements } => {
+                let mut errors = Vec::new();
+                let mut rets = Vec::new();
+                for stmt in statements {
+                    match self.statement(stmt) {
+                        Ok(Some(ty)) => {
+                            rets.push(ty);
+                        }
+                        Ok(None) => {}
+                        Err(mut errs) => {
+                            errors.append(&mut errs);
+                        }
+                    }
+                }
+
+                if !errors.is_empty() {
+                    return Err(errors);
+                }
+                Some(Type::maybe_union(rets.iter(), self.compiler.blobs.as_slice()))
+            }
+
+            StatementKind::Ret { value } => Some(self.expression(value)?),
+            StatementKind::StatementExpression { value } => { self.expression(value)?; None },
+
+            StatementKind::Unreachable | StatementKind::EmptyStatement => { None },
+        };
+        Ok(ret)
+    }
+
+    fn solve(mut self, tree: &mut AST, to_namespace: &HashMap<String, usize>) -> Result<(), Vec<Error>> {
+        let mut errors = Vec::new();
+        for (full_path, module) in &tree.modules {
+            let path = full_path.file_stem().unwrap().to_str().unwrap();
+            self.namespace = to_namespace[path];
+            for stmt in &module.statements {
+                if let Err(mut errs) = self.statement(&stmt) {
+                    errors.append(&mut errs);
+                }
+            }
+        }
+
+        if !errors.is_empty() {
+            Err(errors)
+        } else {
+            Ok(())
+        }
     }
 }
 
-pub(crate) fn check(tree: &AST, compiler: &mut Compiler) -> Result<(), Vec<Error>> {
-    TypeChecker::new().check(tree, compiler)
+pub(crate) fn solve(compiler: &mut Compiler, tree: &mut AST, to_namespace: &HashMap<String, usize>) -> Result<(), Vec<Error>> {
+    TypeChecker::new(compiler).solve(tree, to_namespace)
 }
 
+///
+/// Module with all the operators that can be applied
+/// to values.
+///
+/// Broken out because they need to be recursive.
+mod op {
+    use super::Type;
+    use std::collections::HashSet;
+
+    fn tuple_bin_op(a: &Vec<Type>, b: &Vec<Type>, f: fn(&Type, &Type) -> Type) -> Type {
+        Type::Tuple(a.iter().zip(b.iter()).map(|(a, b)| f(a, b)).collect())
+    }
+
+    fn tuple_un_op(a: &Vec<Type>, f: fn(&Type) -> Type) -> Type {
+        Type::Tuple(a.iter().map(f).collect())
+    }
+
+    fn union_un_op(a: &HashSet<Type>, f: fn(&Type) -> Type) -> Type {
+        a.iter()
+            .find_map(|x| {
+                let x = f(x);
+                if x.is_nil() {
+                    None
+                } else {
+                    Some(x)
+                }
+            })
+            .unwrap_or(Type::Invalid)
+    }
+
+    fn union_bin_op(a: &HashSet<Type>, b: &Type, f: fn(&Type, &Type) -> Type) -> Type {
+        a.iter()
+            .find_map(|x| {
+                let x = f(x, b);
+                if x.is_nil() {
+                    None
+                } else {
+                    Some(x)
+                }
+            })
+            .unwrap_or(Type::Invalid)
+    }
+
+    pub fn neg(value: &Type) -> Type {
+        match value {
+            Type::Float => Type::Float,
+            Type::Int => Type::Int,
+            Type::Tuple(a) => tuple_un_op(a, neg),
+            Type::Union(v) => union_un_op(&v, neg),
+            Type::Unknown => Type::Unknown,
+            _ => Type::Invalid,
+        }
+    }
+
+    pub fn not(value: &Type) -> Type {
+        match value {
+            Type::Bool => Type::Bool,
+            Type::Tuple(a) => tuple_un_op(a, not),
+            Type::Union(v) => union_un_op(&v, not),
+            Type::Unknown => Type::Bool,
+            _ => Type::Invalid,
+        }
+    }
+
+    pub fn add(a: &Type, b: &Type) -> Type {
+        match (a, b) {
+            (Type::Float, Type::Float) => Type::Float,
+            (Type::Int, Type::Int) => Type::Int,
+            (Type::String, Type::String) => Type::String,
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, add),
+            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => add(a, a),
+            (Type::Unknown, Type::Unknown) => Type::Unknown,
+            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, add),
+            _ => Type::Invalid,
+        }
+    }
+
+    pub fn sub(a: &Type, b: &Type) -> Type {
+        add(a, &neg(b))
+    }
+
+    pub fn mul(a: &Type, b: &Type) -> Type {
+        match (a, b) {
+            (Type::Float, Type::Float) => Type::Float,
+            (Type::Int, Type::Int) => Type::Int,
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, mul),
+            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => mul(a, a),
+            (Type::Unknown, Type::Unknown) => Type::Unknown,
+            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, mul),
+            _ => Type::Invalid,
+        }
+    }
+
+    pub fn div(a: &Type, b: &Type) -> Type {
+        match (a, b) {
+            (Type::Float, Type::Float) => Type::Float,
+            (Type::Int, Type::Int) => Type::Int,
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, div),
+            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => div(a, a),
+            (Type::Unknown, Type::Unknown) => Type::Unknown,
+            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, div),
+            _ => Type::Invalid,
+        }
+    }
+
+    pub fn eq(a: &Type, b: &Type) -> Type {
+        match (a, b) {
+            (Type::Float, Type::Float) => Type::Bool,
+            (Type::Int, Type::Int) => Type::Bool,
+            (Type::String, Type::String) => Type::Bool,
+            (Type::Bool, Type::Bool) => Type::Bool,
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => a
+                .iter()
+                .zip(b.iter())
+                .find_map(|(a, b)| match eq(a, b) {
+                    Type::Bool => None,
+                    a => Some(a),
+                })
+                .unwrap_or(Type::Bool),
+            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => eq(a, a),
+            (Type::Unknown, Type::Unknown) => Type::Unknown,
+            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, eq),
+            (Type::Void, Type::Void) => Type::Bool,
+            (Type::List(a), Type::List(b)) => eq(a, b),
+            _ => Type::Invalid,
+        }
+    }
+
+    pub fn cmp(a: &Type, b: &Type) -> Type {
+        match (a, b) {
+            (Type::Float, Type::Float)
+            | (Type::Int, Type::Int)
+            | (Type::Float, Type::Int)
+            | (Type::Int, Type::Float) => Type::Bool,
+            (Type::String, Type::String) => Type::Bool,
+            (Type::Bool, Type::Bool) => Type::Bool,
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => a
+                .iter()
+                .zip(b.iter())
+                .find_map(|(a, b)| match cmp(a, b) {
+                    Type::Bool => None,
+                    a => Some(a),
+                })
+                .unwrap_or(Type::Bool),
+            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => cmp(a, a),
+            (Type::Unknown, Type::Unknown) => Type::Unknown,
+            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, cmp),
+            _ => Type::Invalid,
+        }
+    }
+
+    pub fn and(a: &Type, b: &Type) -> Type {
+        match (a, b) {
+            (Type::Bool, Type::Bool) => Type::Bool,
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, and),
+            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => and(a, a),
+            (Type::Unknown, Type::Unknown) => Type::Unknown,
+            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, and),
+            _ => Type::Invalid,
+        }
+    }
+
+    pub fn or(a: &Type, b: &Type) -> Type {
+        match (a, b) {
+            (Type::Bool, Type::Bool) => Type::Bool,
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, or),
+            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => or(a, a),
+            (Type::Unknown, Type::Unknown) => Type::Unknown,
+            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, or),
+            _ => Type::Invalid,
+        }
+    }
+}

@@ -1129,7 +1129,7 @@ impl Compiler {
 
     fn compile(
         mut self,
-        tree: AST,
+        mut tree: AST,
         functions: &[(String, RustFunction)],
     ) -> Result<Prog, Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
@@ -1160,16 +1160,16 @@ impl Compiler {
         };
 
         let path_to_namespace_id = self.extract_globals(&tree);
+        typechecker::solve(&mut self, &mut tree, &path_to_namespace_id)?;
+        println!("\n\nOLD TYPECHECKER\n\n");
 
-        typechecker::check(&tree, &mut self)?;
-
-        for (full_path, module) in tree.modules.iter() {
+        for (full_path, module) in &tree.modules {
             let path = full_path.file_stem().unwrap().to_str().unwrap();
             ctx.namespace = path_to_namespace_id[path];
             self.module_functions(module, ctx);
         }
 
-        for (full_path, module) in tree.modules.iter() {
+        for (full_path, module) in &tree.modules {
             let path = full_path.file_stem().unwrap().to_str().unwrap();
             ctx.namespace = path_to_namespace_id[path];
             self.module_not_functions(module, ctx);
