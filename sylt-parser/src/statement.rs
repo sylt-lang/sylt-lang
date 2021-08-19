@@ -113,6 +113,33 @@ pub struct Statement {
     pub kind: StatementKind,
 }
 
+pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, String> {
+    let mut result = String::new();
+    match ctx.token() {
+        T::Identifier(f) => result.push_str(f),
+        T::Slash => result.push_str("/"),
+        _ => return Err((
+            skip_until!(ctx, T::Newline),
+            vec![syntax_error!(ctx, "Expected '/' or file name")]
+        )),
+    }
+
+    let mut ctx = ctx.skip(1);
+    while !matches!(ctx.token(), T::Newline) {
+        match (ctx.token(), result.chars().last().unwrap()) {
+            (T::Identifier(f), '/') => result.push_str(f),
+            (T::Slash, _) => result.push_str("/"),
+            _ => return Err((
+                skip_until!(ctx, T::Newline),
+                vec![syntax_error!(ctx, "Expected '/' or file name")]
+            )),
+        }
+        ctx = ctx.skip(1);
+    }
+
+    Ok(( ctx, result ))
+}
+
 pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
     let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{' at start of block");
 
@@ -169,15 +196,18 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         },
 
         // `use a`
-        [T::Use, T::Identifier(name), ..] => (
-            ctx.skip(2),
-            Use {
-                file: Identifier {
-                    span: ctx.skip(1).span(),
-                    name: name.clone(),
-                },
-            },
-        ),
+        [T::Use, ..] => {
+            let (ctx, path) = path(ctx.skip(1))?;
+            (
+                ctx,
+                Use {
+                    file: Identifier {
+                        span: ctx.span(),
+                        name: path,
+                    },
+                }
+            )
+        },
 
         // `: A is : B`
         [T::Colon, ..] => {
