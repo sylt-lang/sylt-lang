@@ -100,6 +100,11 @@ pub enum TypeError {
         op: String,
     },
 
+    UniOp {
+        val: Type,
+        op: String,
+    },
+
     Missmatch {
         got: Type,
         expected: Type,
@@ -324,12 +329,16 @@ impl fmt::Display for RuntimeError {
 impl fmt::Display for TypeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TypeError::Missmatch{ got, expected } => {
+            TypeError::Missmatch { got, expected } => {
                 write!(f, "A '{:?}' cannot be a '{:?}'", got, expected)
             }
 
-            TypeError::BinOp{ op, lhs, rhs } => {
+            TypeError::BinOp { op, lhs, rhs } => {
                 write!(f, "{} is not defined for '{:?}' and '{:?}'", op, lhs, rhs)
+            }
+
+            TypeError::UniOp { op, val } => {
+                write!(f, "{} is not defined for '{:?}'", op, val)
             }
 
             TypeError::Violating(ty) => {

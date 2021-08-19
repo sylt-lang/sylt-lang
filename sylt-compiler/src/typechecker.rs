@@ -66,14 +66,29 @@ impl<'c> TypeChecker<'c> {
             self,
             res,
             span,
-            TypeError::BinOp {
-                lhs,
-                rhs,
-                op: name.into()
-            }
+            TypeError::BinOp { lhs, rhs, op: name.into() }
         );
         Ok(res)
     }
+
+    fn uni_op(
+        &mut self,
+        span: Span,
+        val: &Expression,
+        op: fn(&Type) -> Type,
+        name: &str,
+    ) -> Result<Type, Vec<Error>> {
+        let val = self.expression(val)?;
+        let res = op(&val);
+        error_if_invalid_type!(
+            self,
+            res,
+            span,
+            TypeError::UniOp { val, op: name.into() }
+        );
+        Ok(res)
+    }
+
 
     fn expression(&mut self, expression: &Expression) -> Result<Type, Vec<Error>> {
         use ExpressionKind as EK;
@@ -89,14 +104,15 @@ impl<'c> TypeChecker<'c> {
             EK::Gt(a, b) | EK::Gteq(a, b) | EK::Lt(a, b) | EK::Lteq(a, b) => {
                 self.bin_op(span, a, b, op::cmp, "Comparison")?
             }
+
+            EK::Is(a, b) => self.bin_op(span, a, b, |a, b| Type::Ty, "Is")?,
+            EK::In(a, b) => self.bin_op(span, a, b, op::contains, "Containment")?,
+
+            EK::Neg(a) => self.uni_op(span, a, op::neg, "Negation")?,
+
             EK::And(a, b) => self.bin_op(span, a, b, op::and, "Boolean and")?,
             EK::Or(a, b) => self.bin_op(span, a, b, op::or, "Boolean or")?,
-
-            EK::In(_, _) => todo!(),
-            EK::Is(_, _) => todo!(),
-
-            EK::Neg(_) => todo!(),
-            EK::Not(_) => todo!(),
+            EK::Not(a) => self.uni_op(span, a, op::not, "Boolean not")?,
 
             EK::IfExpression {
                 condition,
@@ -398,6 +414,17 @@ mod op {
     }
 
     pub fn or(a: &Type, b: &Type) -> Type {
+        match (a, b) {
+            (Type::Bool, Type::Bool) => Type::Bool,
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, or),
+            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => or(a, a),
+            (Type::Unknown, Type::Unknown) => Type::Unknown,
+            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, or),
+            _ => Type::Invalid,
+        }
+    }
+
+    pub fn contains(a: &Type, b: &Type) -> Type {
         match (a, b) {
             (Type::Bool, Type::Bool) => Type::Bool,
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, or),
