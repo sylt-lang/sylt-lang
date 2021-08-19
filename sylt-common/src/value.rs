@@ -173,12 +173,13 @@ impl Value {
             Value::Ty(ty) => write!(fmt, "<type \"{:?}\">", ty),
             Value::Blob(b) => write!(fmt, "<blob \"{}\">", b),
             Value::Instance(_, v) => {
-                write!(fmt, "{} {{",
+                write!(fmt, "{} (0x{:x}) {{",
                     if let Some(Value::String(name)) = v.borrow().get("_name") {
                         name.as_str()
                     } else {
-                        "?"
-                    }
+                        unreachable!("Got blob without a name")
+                    },
+                    self.unique_id()
                 )?;
                 if !seen.insert(self.unique_id()) {
                     return write!(fmt, "...}}");

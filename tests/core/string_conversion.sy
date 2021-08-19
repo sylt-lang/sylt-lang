@@ -5,7 +5,6 @@ A :: blob {
 
 B :: blob {
     self: B,
-    _name: void,
 }
 
 start :: fn {
@@ -46,15 +45,12 @@ start :: fn {
 
     // Blobs
     ab :: as_str(A { a: 100, b: 5.3 })
-    (ab == "A {a: 100, b: 5.3}" || ab == "A {b: 5.3, a: 100}") <=> true
+    print(ab)
 
     b : !B = nil
     b = B { self: b }
     b.self = b
-    as_str(b) <=> "B {self: B {...}}"
-
-    b._name = nil // :O
-    as_str(b) <=> "? {self: ? {...}}"
+    print(b)
 
     // Functions
     d :: fn x: int, y: int -> int {
