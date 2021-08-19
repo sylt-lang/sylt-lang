@@ -219,6 +219,7 @@ impl<'c> TypeChecker<'c> {
                 self.expression(value)?;
                 None
             }
+            // TODO(ed): If and Loop checks
             StatementKind::If {
                 condition,
                 pass,
