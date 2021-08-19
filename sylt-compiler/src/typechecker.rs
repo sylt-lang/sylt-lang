@@ -51,14 +51,26 @@ impl<'c> TypeChecker<'c> {
         }
     }
 
-    fn bin_op(&mut self, span: Span, lhs: &Expression, rhs: &Expression, op: fn(&Type, &Type) -> Type, name: &str) -> Result<Type, Vec<Error>> {
+    fn bin_op(
+        &mut self,
+        span: Span,
+        lhs: &Expression,
+        rhs: &Expression,
+        op: fn(&Type, &Type) -> Type,
+        name: &str,
+    ) -> Result<Type, Vec<Error>> {
         let lhs = self.expression(lhs)?;
         let rhs = self.expression(rhs)?;
         let res = op(&lhs, &rhs);
-        error_if_invalid_type!(self,
+        error_if_invalid_type!(
+            self,
             res,
             span,
-            TypeError::BinOp { lhs, rhs, op: name.into() }
+            TypeError::BinOp {
+                lhs,
+                rhs,
+                op: name.into()
+            }
         );
         Ok(res)
     }
@@ -67,16 +79,18 @@ impl<'c> TypeChecker<'c> {
         use ExpressionKind as EK;
         let span = expression.span;
         let res = match &expression.kind {
-            EK::Add(a, b)  => self.bin_op(span, a, b, op::add,      "Addition")?,
-            EK::Sub(a, b)  => self.bin_op(span, a, b, op::sub,      "Subtraction")?,
-            EK::Mul(a, b)  => self.bin_op(span, a, b, op::mul,      "Multiplication")?,
-            EK::Div(a, b)  => self.bin_op(span, a, b, op::div,      "Division")?,
-            EK::AssertEq(a, b) | EK::Eq(a, b) | EK::Neq(a, b)
-                => self.bin_op(span, a, b, op::eq,       "Equality")?,
-            EK::Gt(a, b) | EK::Gteq(a, b) | EK::Lt(a, b) | EK::Lteq(a, b)
-                => self.bin_op(span, a, b, op::cmp,  "Comparison")?,
-            EK::And(a, b)   => self.bin_op(span, a, b, op::and,       "Boolean and")?,
-            EK::Or(a, b)    => self.bin_op(span, a, b, op::or,       "Boolean or")?,
+            EK::Add(a, b) => self.bin_op(span, a, b, op::add, "Addition")?,
+            EK::Sub(a, b) => self.bin_op(span, a, b, op::sub, "Subtraction")?,
+            EK::Mul(a, b) => self.bin_op(span, a, b, op::mul, "Multiplication")?,
+            EK::Div(a, b) => self.bin_op(span, a, b, op::div, "Division")?,
+            EK::AssertEq(a, b) | EK::Eq(a, b) | EK::Neq(a, b) => {
+                self.bin_op(span, a, b, op::eq, "Equality")?
+            }
+            EK::Gt(a, b) | EK::Gteq(a, b) | EK::Lt(a, b) | EK::Lteq(a, b) => {
+                self.bin_op(span, a, b, op::cmp, "Comparison")?
+            }
+            EK::And(a, b) => self.bin_op(span, a, b, op::and, "Boolean and")?,
+            EK::Or(a, b) => self.bin_op(span, a, b, op::or, "Boolean or")?,
 
             EK::In(_, _) => todo!(),
             EK::Is(_, _) => todo!(),
@@ -84,7 +98,11 @@ impl<'c> TypeChecker<'c> {
             EK::Neg(_) => todo!(),
             EK::Not(_) => todo!(),
 
-            EK::IfExpression { condition, pass, fail } => todo!(),
+            EK::IfExpression {
+                condition,
+                pass,
+                fail,
+            } => todo!(),
             EK::Duplicate(expr) => self.expression(expr)?,
             EK::Tuple(values) => {
                 let mut types = Vec::new();
@@ -100,9 +118,15 @@ impl<'c> TypeChecker<'c> {
             EK::TypeConstant(_) => Type::Ty,
             EK::Nil => Type::Void,
 
-            EK::Function{ name, params, ret, body } => {
-                let ret = self.statement(body)?
-                              .expect("A function that doesn't return a value");
+            EK::Function {
+                name,
+                params,
+                ret,
+                body,
+            } => {
+                let ret = self
+                    .statement(body)?
+                    .expect("A function that doesn't return a value");
                 // TODO
                 Type::Function(Vec::new(), Box::new(ret))
             }
@@ -118,15 +142,28 @@ impl<'c> TypeChecker<'c> {
             StatementKind::Use { file } => None,
             StatementKind::Blob { name, fields } => todo!(),
             StatementKind::Print { value } => todo!(),
-            StatementKind::Assignment { kind, target, value } => {
+            StatementKind::Assignment {
+                kind,
+                target,
+                value,
+            } => {
                 self.expression(value)?;
                 None
             }
-            StatementKind::Definition { ident, kind, ty, value } => {
+            StatementKind::Definition {
+                ident,
+                kind,
+                ty,
+                value,
+            } => {
                 self.expression(value)?;
                 None
             }
-            StatementKind::If { condition, pass, fail } => todo!(),
+            StatementKind::If {
+                condition,
+                pass,
+                fail,
+            } => todo!(),
             StatementKind::Loop { condition, body } => todo!(),
             StatementKind::Break => todo!(),
             StatementKind::Continue => todo!(),
@@ -149,18 +186,28 @@ impl<'c> TypeChecker<'c> {
                 if !errors.is_empty() {
                     return Err(errors);
                 }
-                Some(Type::maybe_union(rets.iter(), self.compiler.blobs.as_slice()))
+                Some(Type::maybe_union(
+                    rets.iter(),
+                    self.compiler.blobs.as_slice(),
+                ))
             }
 
             StatementKind::Ret { value } => Some(self.expression(value)?),
-            StatementKind::StatementExpression { value } => { self.expression(value)?; None },
+            StatementKind::StatementExpression { value } => {
+                self.expression(value)?;
+                None
+            }
 
-            StatementKind::Unreachable | StatementKind::EmptyStatement => { None },
+            StatementKind::Unreachable | StatementKind::EmptyStatement => None,
         };
         Ok(ret)
     }
 
-    fn solve(mut self, tree: &mut AST, to_namespace: &HashMap<String, usize>) -> Result<(), Vec<Error>> {
+    fn solve(
+        mut self,
+        tree: &mut AST,
+        to_namespace: &HashMap<String, usize>,
+    ) -> Result<(), Vec<Error>> {
         let mut errors = Vec::new();
         for (full_path, module) in &tree.modules {
             let path = full_path.file_stem().unwrap().to_str().unwrap();
@@ -180,7 +227,11 @@ impl<'c> TypeChecker<'c> {
     }
 }
 
-pub(crate) fn solve(compiler: &mut Compiler, tree: &mut AST, to_namespace: &HashMap<String, usize>) -> Result<(), Vec<Error>> {
+pub(crate) fn solve(
+    compiler: &mut Compiler,
+    tree: &mut AST,
+    to_namespace: &HashMap<String, usize>,
+) -> Result<(), Vec<Error>> {
     TypeChecker::new(compiler).solve(tree, to_namespace)
 }
 
