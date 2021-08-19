@@ -375,14 +375,21 @@ sylt_macro::extern_function!(
     },
 );
 
-sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    as_str
-    "Converts to a string representation"
-    [One(Int(i))] -> Type::String => {
-        Ok(Value::String(Rc::new(i.to_string())))
-    },
-);
+#[sylt_macro::sylt_doc(as_str, "Converts to a string representation", [_] Type::String)]
+#[sylt_macro::sylt_link(as_str, "sylt_std::sylt")]
+pub fn as_str<'t>(ctx: RuntimeContext) -> Result<Value, RuntimeError> {
+    if ctx.typecheck {
+        return Ok("".into());
+    }
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match values.as_ref() {
+        [v] => Ok(Value::String(Rc::new(v.to_string()))),
+        values => Err(RuntimeError::ExternTypeMismatch(
+            "as_str".to_string(),
+            values.iter().map(Type::from).collect(),
+        )),
+    }
+}
 
 sylt_macro::extern_function!(
     "sylt_std::sylt"
@@ -645,5 +652,19 @@ sylt_macro::extern_function!(
         Ok(Value::Nil)
     },
 );
+
+#[sylt_macro::sylt_doc(print, "Prints values to stdout", args Type::Void)]
+#[sylt_macro::sylt_link(print, "sylt_std::sylt")]
+pub fn print<'t>(ctx: RuntimeContext) -> Result<Value, RuntimeError> {
+    if !ctx.typecheck {
+        println!("{}", ctx.machine
+            .stack_from_base(ctx.stack_base)
+            .iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<_>>()
+            .join(" "));
+    }
+    Ok(Value::Nil)
+}
 
 sylt_macro::sylt_link_gen!("sylt_std::sylt");

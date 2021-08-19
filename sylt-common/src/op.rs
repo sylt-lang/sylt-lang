@@ -271,11 +271,6 @@ pub enum Op {
     /// {F, A, B} - Call(2) - {F(A, B)}
     Call(usize),
 
-    /// Prints and pops the top value on the stack.
-    ///
-    /// {A} - Print - {}
-    Print,
-
     /// Pops the current stackframe and replaces
     /// slot 0 with the top value. Also pops
     /// upvalues.

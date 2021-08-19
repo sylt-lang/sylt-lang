@@ -865,11 +865,6 @@ impl Compiler {
                 }
             }
 
-            Print { value } => {
-                self.expression(value, ctx);
-                self.add_op(ctx, statement.span, Op::Print);
-            }
-
             #[rustfmt::skip]
             Definition { ident, kind, ty, value } => {
                 // TODO(ed): Don't use type here - type check the tree first.
@@ -1388,7 +1383,6 @@ fn all_paths_return(statement: &Statement) -> bool {
         StatementKind::Use { .. }
         | StatementKind::Blob { .. }
         | StatementKind::IsCheck { .. }
-        | StatementKind::Print { .. }
         | StatementKind::Assignment { .. }
         | StatementKind::Definition { .. }
         | StatementKind::StatementExpression { .. }

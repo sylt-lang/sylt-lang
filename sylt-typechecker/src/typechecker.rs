@@ -576,10 +576,6 @@ impl Machine for VM {
                 }
             }
 
-            Op::Print => {
-                self.pop();
-            }
-
             Op::Define(ty) => {
                 let ty = if let Value::Ty(ty) = &self.constants[ty] {
                     ty.clone()
