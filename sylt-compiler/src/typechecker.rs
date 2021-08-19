@@ -106,7 +106,27 @@ impl<'c> TypeChecker<'c> {
             }
 
             EK::Is(a, b) => self.bin_op(span, a, b, |a, b| Type::Ty, "Is")?,
-            EK::In(a, b) => self.bin_op(span, a, b, op::contains, "Containment")?,
+            EK::In(a, b) => {
+                let a = self.expression(a)?;
+                let b = self.expression(b)?;
+                // TODO(ed): Verify the order here
+                let ret = match (&a, &b) {
+                    (a, Type::List(b))
+                    | (a, Type::Set(b))
+                    | (a, Type::Dict(b, _)) => b.fits(a, self.compiler.blobs.as_slice()),
+                    _ => Err("".into()),
+                };
+                if let Err(msg) = ret {
+                    let err = Error::TypeError {
+                        kind: TypeError::BinOp { lhs: a, rhs: b, op: "Containment".into() },
+                        file: self.compiler.file_from_namespace(self.namespace).into(),
+                        span,
+                        message: if msg.is_empty() { None } else { Some(format!("because {}", msg)) },
+                    };
+                    return Err(vec![err]);
+                }
+                Type::Bool
+            }
 
             EK::Neg(a) => self.uni_op(span, a, op::neg, "Negation")?,
 
@@ -133,6 +153,25 @@ impl<'c> TypeChecker<'c> {
             EK::Bool(_) => Type::Bool,
             EK::TypeConstant(_) => Type::Ty,
             EK::Nil => Type::Void,
+
+            EK::Set(values) => {
+                let mut types = Vec::new();
+                let mut errors = Vec::new();
+                for v in values {
+                    match self.expression(v) {
+                        Ok(ty) => {
+                            types.push(ty);
+                        }
+                        Err(mut errs) => {
+                            errors.append(&mut errs);
+                        }
+                    }
+                }
+                Type::Set(Box::new(Type::maybe_union(
+                    types.iter(),
+                    self.compiler.blobs.as_slice(),
+                )))
+            }
 
             EK::Function {
                 name,
@@ -414,17 +453,6 @@ mod op {
     }
 
     pub fn or(a: &Type, b: &Type) -> Type {
-        match (a, b) {
-            (Type::Bool, Type::Bool) => Type::Bool,
-            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, or),
-            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => or(a, a),
-            (Type::Unknown, Type::Unknown) => Type::Unknown,
-            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, or),
-            _ => Type::Invalid,
-        }
-    }
-
-    pub fn contains(a: &Type, b: &Type) -> Type {
         match (a, b) {
             (Type::Bool, Type::Bool) => Type::Bool,
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, or),
