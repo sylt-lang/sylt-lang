@@ -89,6 +89,10 @@ impl<'c> TypeChecker<'c> {
         Ok(res)
     }
 
+    fn expression_union_or_errors<'a>(&mut self, expressions: impl Iterator<Item = &'a Expression>) -> Result<Type, Vec<Error>> {
+        let ty: Vec<Type> = expressions.map(|e| self.expression(e)).collect::<Result<Vec<Type>, Vec<Error>>>()?;
+        Ok(Type::maybe_union(ty.iter(), self.compiler.blobs.as_slice()))
+    }
 
     fn expression(&mut self, expression: &Expression) -> Result<Type, Vec<Error>> {
         use ExpressionKind as EK;
@@ -155,22 +159,19 @@ impl<'c> TypeChecker<'c> {
             EK::Nil => Type::Void,
 
             EK::Set(values) => {
-                let mut types = Vec::new();
-                let mut errors = Vec::new();
-                for v in values {
-                    match self.expression(v) {
-                        Ok(ty) => {
-                            types.push(ty);
-                        }
-                        Err(mut errs) => {
-                            errors.append(&mut errs);
-                        }
-                    }
-                }
-                Type::Set(Box::new(Type::maybe_union(
-                    types.iter(),
-                    self.compiler.blobs.as_slice(),
-                )))
+                let ty = self.expression_union_or_errors(values.iter())?;
+                Type::Set(Box::new(ty))
+            }
+
+            EK::List(values) => {
+                let ty = self.expression_union_or_errors(values.iter())?;
+                Type::List(Box::new(ty))
+            }
+
+            EK::Dict(values) => {
+                let key = self.expression_union_or_errors(values.iter().skip(0).step_by(2))?;
+                let val = self.expression_union_or_errors(values.iter().skip(1).step_by(2))?;
+                Type::Dict(Box::new(key), Box::new(val))
             }
 
             EK::Function {
@@ -196,7 +197,11 @@ impl<'c> TypeChecker<'c> {
         let ret = match &statement.kind {
             StatementKind::Use { file } => None,
             StatementKind::Blob { name, fields } => todo!(),
-            StatementKind::Print { value } => todo!(),
+            StatementKind::Print { value } => {
+                // TODO(ed): Remove this
+                println!("TY: {:?}", self.expression(value)?);
+                None
+            }
             StatementKind::Assignment {
                 kind,
                 target,
