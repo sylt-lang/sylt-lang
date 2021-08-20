@@ -676,7 +676,7 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
 /// Returns any errors that occured when parsing the file. Basic error
 /// continuation is performed, so errored statements are skipped until a newline
 /// or EOF.
-fn module(path: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
+fn module(path: &Path, _root: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
     let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
     let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
     let mut ctx = Context::new(&tokens, &spans, path);
@@ -695,7 +695,9 @@ fn module(path: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Mo
                 use StatementKind::*;
                 // Yank `use`s and add it to the used-files list.
                 if let Use { file, .. } = &statement.kind {
-                    let file = PathBuf::from(format!("{}.sy", file.name));
+                    let file = path.parent()
+                        .unwrap()
+                        .join(format!("{}.sy", file.name));
                     use_files.push(file);
                 }
                 // Only push non-empty statements.
@@ -782,12 +784,11 @@ pub fn tree(path: &Path) -> Result<AST, Vec<Error>> {
     // Files we want to parse but haven't yet.
     let mut to_visit = Vec::new();
     let root = path.parent().unwrap();
-    to_visit.push(PathBuf::from(path.file_name().unwrap()));
+    to_visit.push(PathBuf::from(path));
 
     let mut modules = Vec::new();
     let mut errors = Vec::new();
     while let Some(file) = to_visit.pop() {
-        let file = root.join(file);
         if visited.contains(&file) {
             continue;
         }
@@ -802,7 +803,7 @@ pub fn tree(path: &Path) -> Result<AST, Vec<Error>> {
         match file_to_tokens(&file) {
             Ok(tokens) => {
                 // Parse the module.
-                let (mut next, result) = module(&file, &tokens);
+                let (mut next, result) = module(&file, &root, &tokens);
                 match result {
                     Ok(module) => modules.push((file.clone(), module)),
                     Err(mut errs) => errors.append(&mut errs),
