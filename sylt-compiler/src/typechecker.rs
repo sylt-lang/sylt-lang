@@ -45,9 +45,22 @@ macro_rules! type_error {
     };
 }
 
+struct Variable {
+    ident: Identifier,
+    ty: Type,
+    kind: VarKind,
+}
+
+impl Variable {
+    fn new(ident: Identifier, ty: Type, kind: VarKind) -> Self {
+        Self { ident, ty, kind }
+    }
+}
+
 struct TypeChecker<'c> {
     compiler: &'c mut Compiler,
     namespace: usize,
+    stack: Vec<Variable>,
 }
 
 impl<'c> TypeChecker<'c> {
@@ -55,11 +68,20 @@ impl<'c> TypeChecker<'c> {
         Self {
             compiler,
             namespace: 0,
+            stack: Vec::new(),
         }
     }
 
     fn file(&self) -> PathBuf {
         self.compiler.file_from_namespace(self.namespace).into()
+    }
+
+    fn compiler_context(&self) -> crate::Context {
+        crate::Context::from_namespace(self.namespace)
+    }
+
+    fn get(&mut self, assignable: &Assignable) -> Result<Type, Vec<Error>> {
+        Ok(Type::Int)
     }
 
     fn bin_op(
@@ -218,7 +240,25 @@ impl<'c> TypeChecker<'c> {
                 target,
                 value,
             } => {
-                self.expression(value)?;
+                let value = self.expression(value)?;
+                let target = self.get(target)?;
+                let value = match kind {
+                    ParserOp::Nop => value,
+                    ParserOp::Add => op::add(&target, &value),
+                    ParserOp::Sub => op::sub(&target, &value),
+                    ParserOp::Mul => op::mul(&target, &value),
+                    ParserOp::Div => op::div(&target, &value),
+                };
+                // TODO(ed): Is the fits-order correct?
+                if let Err(reason) = target.fits(&value, self.compiler.blobs.as_slice()) {
+                    return type_error!(
+                        self,
+                        span,
+                        TypeError::MismatchAssign { got: value, expected: target },
+                        "because {}",
+                        reason
+                    );
+                }
                 None
             }
             StatementKind::Definition {
@@ -227,7 +267,35 @@ impl<'c> TypeChecker<'c> {
                 ty,
                 value,
             } => {
-                self.expression(value)?;
+                let ty = self.compiler.resolve_type(ty, self.compiler_context());
+                let value = self.expression(value)?;
+                let fit = ty.fits(&value, self.compiler.blobs.as_slice());
+                let ty = match (kind.force(), fit) {
+                    (true, Ok(_)) => {
+                        return type_error!(
+                            self,
+                            span,
+                            TypeError::UnnessecaryForce {
+                                got: ty,
+                                expected: value,
+                            }
+                        )
+                    }
+                    (true, Err(_)) => ty,
+                    (false, Ok(_)) => ty,
+                    (false, Err(reason)) => {
+                        return type_error!(
+                            self,
+                            span,
+                            TypeError::Missmatch {
+                                got: ty,
+                                expected: value,
+                            },
+                            "because {}", reason
+                        )
+                    }
+                };
+                self.stack.push(Variable::new(ident.clone(), ty, *kind));
                 None
             }
             StatementKind::If {
@@ -269,6 +337,8 @@ impl<'c> TypeChecker<'c> {
             }
             StatementKind::IsCheck { lhs, rhs } => todo!(),
             StatementKind::Block { statements } => {
+                let stack_size = self.stack.len();
+
                 let mut errors = Vec::new();
                 let mut rets = Vec::new();
                 for stmt in statements {
@@ -282,6 +352,8 @@ impl<'c> TypeChecker<'c> {
                         }
                     }
                 }
+
+                self.stack.truncate(stack_size);
 
                 if !errors.is_empty() {
                     return Err(errors);

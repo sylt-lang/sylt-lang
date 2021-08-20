@@ -105,7 +105,18 @@ pub enum TypeError {
         op: String,
     },
 
+    // TODO(ed): Fix the spelling
     Missmatch {
+        got: Type,
+        expected: Type,
+    },
+
+    MismatchAssign {
+        got: Type,
+        expected: Type,
+    },
+
+    UnnessecaryForce {
         got: Type,
         expected: Type,
     },
@@ -333,6 +344,11 @@ impl fmt::Display for TypeError {
                 write!(f, "A '{:?}' cannot be a '{:?}'", got, expected)
             }
 
+            TypeError::MismatchAssign { got, expected } => {
+                write!(f, "Cannot assign a '{:?}' to a '{:?}'", got, expected)
+            }
+
+
             TypeError::BinOp { op, lhs, rhs } => {
                 write!(f, "{} is not defined for '{:?}' and '{:?}'", op, lhs, rhs)
             }
@@ -343,6 +359,10 @@ impl fmt::Display for TypeError {
 
             TypeError::Violating(ty) => {
                 write!(f, "Got '{:?}', which doesn't hold", ty)
+            }
+
+            TypeError::UnnessecaryForce { got, expected } => {
+                write!(f, "This type force is unnessecary, '{:?}' is a '{:?}'", got, expected)
             }
         }
     }
