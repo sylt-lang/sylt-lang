@@ -45,6 +45,7 @@ macro_rules! type_error {
     };
 }
 
+#[derive(Clone, Debug)]
 struct Variable {
     ident: Identifier,
     ty: Type,
@@ -80,8 +81,19 @@ impl<'c> TypeChecker<'c> {
         crate::Context::from_namespace(self.namespace)
     }
 
-    fn get(&mut self, assignable: &Assignable) -> Result<Type, Vec<Error>> {
-        Ok(Type::Int)
+    fn get(&mut self, assignable: &Assignable) -> Result<Variable, Vec<Error>> {
+        match &assignable.kind {
+            AssignableKind::Read(ident) => {
+                // TODO(ed): Fix this
+                return Ok(self.stack.iter().rev().find(|var| var.ident.name == ident.name).unwrap().clone());
+            }
+            AssignableKind::Call(_, _) => todo!(),
+            AssignableKind::ArrowCall(_, _, _) => todo!(),
+            AssignableKind::Access(_, _) => todo!(),
+            AssignableKind::Index(_, _) => todo!(),
+            AssignableKind::Expression(_) => todo!(),
+        };
+        todo!();
     }
 
     fn bin_op(
@@ -241,20 +253,33 @@ impl<'c> TypeChecker<'c> {
                 value,
             } => {
                 let value = self.expression(value)?;
-                let target = self.get(target)?;
-                let value = match kind {
-                    ParserOp::Nop => value,
-                    ParserOp::Add => op::add(&target, &value),
-                    ParserOp::Sub => op::sub(&target, &value),
-                    ParserOp::Mul => op::mul(&target, &value),
-                    ParserOp::Div => op::div(&target, &value),
-                };
-                // TODO(ed): Is the fits-order correct?
-                if let Err(reason) = target.fits(&value, self.compiler.blobs.as_slice()) {
+                let variable = self.get(target)?;
+                if variable.kind.immutable() {
+                    // TODO(ed): I want this to point to the equal-sign, the parser is
+                    // probably a bit off.
+                    // TODO(ed): This should not be a type error - prefereably a compile error?
                     return type_error!(
                         self,
                         span,
-                        TypeError::MismatchAssign { got: value, expected: target },
+                        TypeError::Mutability { ident: variable.ident.name }
+                    );
+                }
+                let target_ty = variable.ty;
+                let value = match kind {
+                    ParserOp::Nop => value,
+                    ParserOp::Add => op::add(&target_ty, &value),
+                    ParserOp::Sub => op::sub(&target_ty, &value),
+                    ParserOp::Mul => op::mul(&target_ty, &value),
+                    ParserOp::Div => op::div(&target_ty, &value),
+                };
+                // TODO(ed): Is the fits-order correct?
+                if let Err(reason) = target_ty.fits(&value, self.compiler.blobs.as_slice()) {
+                    // TODO(ed): I want this to point to the equal-sign, the parser is
+                    // probably a bit off.
+                    return type_error!(
+                        self,
+                        span,
+                        TypeError::MismatchAssign { got: value, expected: target_ty },
                         "because {}",
                         reason
                     );
@@ -282,7 +307,7 @@ impl<'c> TypeChecker<'c> {
                         )
                     }
                     (true, Err(_)) => ty,
-                    (false, Ok(_)) => ty,
+                    (false, Ok(_)) => value,
                     (false, Err(reason)) => {
                         return type_error!(
                             self,

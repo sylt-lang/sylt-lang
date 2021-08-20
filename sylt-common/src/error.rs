@@ -116,6 +116,10 @@ pub enum TypeError {
         expected: Type,
     },
 
+    Mutability {
+        ident: String,
+    },
+
     UnnessecaryForce {
         got: Type,
         expected: Type,
@@ -348,6 +352,9 @@ impl fmt::Display for TypeError {
                 write!(f, "Cannot assign a '{:?}' to a '{:?}'", got, expected)
             }
 
+            TypeError::Mutability { ident } => {
+                write!(f, "'{}' is constant, constants are immutable", ident)
+            }
 
             TypeError::BinOp { op, lhs, rhs } => {
                 write!(f, "{} is not defined for '{:?}' and '{:?}'", op, lhs, rhs)
