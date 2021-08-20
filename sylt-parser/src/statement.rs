@@ -12,8 +12,11 @@ pub enum StatementKind {
     /// "Imports" another file.
     ///
     /// `use <file>`.
+    /// `use <folder>/<file>`.
+    /// `use <file> as <alias>`.
     Use {
         file: Identifier,
+        file_alias: Option<String>,
     },
 
     /// Defines a new Blob.
@@ -125,7 +128,8 @@ pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, String> {
     }
 
     let mut ctx = ctx.skip(1);
-    while !matches!(ctx.token(), T::Newline) {
+    // FIXME: This will not work for folders or files named "as"
+    while !matches!(ctx.token(), T::Newline | T::As) {
         match (ctx.token(), result.chars().last().unwrap()) {
             (T::Identifier(f), '/') => result.push_str(f),
             (T::Slash, _) => result.push_str("/"),
@@ -195,16 +199,26 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             }
         },
 
-        // `use a`
+        // `use path/to/file`
+        // `use path/to/file as alias`
         [T::Use, ..] => {
-            let (ctx, path) = path(ctx.skip(1))?;
+            let (path_ctx, path) = path(ctx.skip(1))?;
+            let (ctx, alias) = match &path_ctx.tokens[path_ctx.curr..] {
+                [T::As, T::Identifier(alias), ..] => (path_ctx.skip(2), Some(alias.clone())),
+                [T::As, ..] => return Err((
+                    skip_until!(path_ctx, T::Newline),
+                    vec![syntax_error!(path_ctx.skip(1), "Expected alias")]
+                )),
+                [..] => (path_ctx, None),
+            };
             (
                 ctx,
                 Use {
                     file: Identifier {
-                        span: ctx.span(),
+                        span: path_ctx.span(),
                         name: path,
                     },
+                    file_alias: alias,
                 }
             )
         },

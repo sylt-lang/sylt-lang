@@ -1265,12 +1265,19 @@ impl Compiler {
             for statement in module.statements.iter() {
                 use StatementKind::*;
                 match &statement.kind {
-                    Use {
-                        file: Identifier { name, span },
-                    } => {
+                    Use { file: Identifier { name, span }, file_alias, .. } => {
                         let use_path = root.join(format!("{}.sy", name));
                         let other = path_to_namespace_id[&use_path];
-                        match namespace.entry(PathBuf::from(name).file_stem().unwrap().to_str().unwrap().to_string()) {
+                        let namespace_name = match file_alias {
+                            Some(alias) => alias.clone(),
+                            None => PathBuf::from(name)
+                                .file_stem()
+                                .unwrap()
+                                .to_str()
+                                .unwrap()
+                                .to_string(),
+                        };
+                        match namespace.entry(namespace_name) {
                             Entry::Vacant(vac) => {
                                 vac.insert(Name::Namespace(other));
                             }

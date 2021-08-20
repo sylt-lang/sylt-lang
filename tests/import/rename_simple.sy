@@ -1,0 +1,5 @@
+use _constants as consts
+
+start :: fn {
+    print(consts.two())
+}
