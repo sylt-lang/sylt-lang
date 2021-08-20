@@ -1152,17 +1152,14 @@ impl Compiler {
             ..Context::from_namespace(0)
         };
 
-        let root = tree.modules.first().unwrap().0.parent().unwrap();
         let path_to_namespace_id = self.extract_globals(&tree);
 
-        for (full_path, module) in tree.modules.iter() {
-            let path = full_path.strip_prefix(root).unwrap().to_str().unwrap();
+        for (path, module) in tree.modules.iter() {
             ctx.namespace = path_to_namespace_id[path];
             self.module_functions(module, ctx);
         }
 
-        for (full_path, module) in tree.modules.iter() {
-            let path = full_path.strip_prefix(root).unwrap().to_str().unwrap();
+        for (path, module) in tree.modules.iter() {
             ctx.namespace = path_to_namespace_id[path];
             self.module_not_functions(module, ctx);
         }
@@ -1194,12 +1191,12 @@ impl Compiler {
         }
     }
 
-    fn extract_globals(&mut self, tree: &AST) -> HashMap<String, usize> {
+    fn extract_globals(&mut self, tree: &AST) -> HashMap<PathBuf, usize> {
         let root = tree.modules.first().unwrap().0.parent().unwrap();
-        let mut full_path_to_namespace_id = HashMap::new();
+        let mut path_to_namespace_id = HashMap::<PathBuf, usize>::new();
         for (path, _) in tree.modules.iter() {
-            let slot = full_path_to_namespace_id.len();
-            match full_path_to_namespace_id.entry(path) {
+            let slot = path_to_namespace_id.len();
+            match path_to_namespace_id.entry(path.into()) {
                 Entry::Vacant(vac) => {
                     vac.insert(slot);
                     self.namespaces.push(Namespace::new());
@@ -1217,21 +1214,12 @@ impl Compiler {
             }
         }
 
-        self.namespace_id_to_path = full_path_to_namespace_id
+        self.namespace_id_to_path = path_to_namespace_id
             .iter()
             .map(|(a, b)| (*b, (*a).clone()))
             .collect();
 
-        let path_to_namespace_id: HashMap<_, _> = full_path_to_namespace_id
-            .iter()
-            .map(|(a, b)| (
-                a.strip_prefix(root).unwrap().to_str().unwrap().to_string(),
-                *b
-            ))
-            .collect();
-
         for (path, module) in tree.modules.iter() {
-            let path = path.strip_prefix(root).unwrap().to_str().unwrap();
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
 
@@ -1270,7 +1258,6 @@ impl Compiler {
         }
 
         for (path, module) in tree.modules.iter() {
-            let path = path.strip_prefix(root).unwrap().to_str().unwrap();
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
 
@@ -1281,7 +1268,8 @@ impl Compiler {
                     Use {
                         file: Identifier { name, span },
                     } => {
-                        let other = path_to_namespace_id[&format!("{}.sy", name)];
+                        let use_path = root.join(format!("{}.sy", name));
+                        let other = path_to_namespace_id[&use_path];
                         match namespace.entry(PathBuf::from(name).file_stem().unwrap().to_str().unwrap().to_string()) {
                             Entry::Vacant(vac) => {
                                 vac.insert(Name::Namespace(other));
@@ -1314,7 +1302,6 @@ impl Compiler {
         }
 
         for (path, module) in tree.modules.iter() {
-            let path = path.strip_prefix(root).unwrap().to_str().unwrap();
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
 
