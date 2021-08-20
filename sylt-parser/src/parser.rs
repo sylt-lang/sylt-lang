@@ -184,6 +184,8 @@ type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>, Vec<Error>)>;
 #[derive(Debug, Copy, Clone)]
 pub struct Context<'a> {
     pub skip_newlines: bool,
+    /// The index of the last token of the last statement parsed.
+    last_statement: usize,
     /// All tokens to be parsed.
     pub tokens: &'a [Token],
     /// The corresponding span for each token. Matches 1:1 with the tokens.
@@ -198,6 +200,7 @@ impl<'a> Context<'a> {
     fn new(tokens: &'a [Token], spans: &'a [Span], file: &'a Path) -> Self {
         Self {
             skip_newlines: false,
+            last_statement: 0,
             tokens,
             spans,
             curr: 0,
@@ -208,6 +211,18 @@ impl<'a> Context<'a> {
     /// Get a [Span] representing the current location of the parser.
     fn span(&self) -> Span {
         *self.peek().1
+    }
+
+    fn comments_since_last_statement(&self) -> Vec<String> {
+        self.tokens
+            .iter()
+            .skip(self.last_statement)
+            .take(self.curr - self.last_statement)
+            .filter_map(|t| match t {
+                Token::Comment(c) => Some(c.clone()),
+                _ => None,
+            })
+            .collect()
     }
 
     /// Move to the next nth token.
@@ -257,6 +272,13 @@ impl<'a> Context<'a> {
         let mut new = *self;
         new.skip_newlines = skip_newlines;
         new
+    }
+
+    fn push_last_statement_location(&self) -> Self {
+        Self {
+            last_statement: self.curr,
+            ..*self
+        }
     }
 
     fn skip_if(&self, token: T) -> Self {

@@ -470,10 +470,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         expect!(ctx, T::Newline, "Expected newline to end statement")
     };
     let ctx = ctx.pop_skip_newlines(skip_newlines);
+    // Get all comments since the last statement.
+    let comments = ctx.comments_since_last_statement();
+    let ctx = ctx.push_last_statement_location();
     Ok((ctx, Statement {
         span,
         kind,
-        comments: Vec::new(),
+        comments,
     }))
 }
 
