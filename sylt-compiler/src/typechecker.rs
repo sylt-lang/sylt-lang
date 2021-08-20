@@ -13,28 +13,35 @@ use sylt_parser::{
 
 use crate::Compiler;
 
-macro_rules! error_if_invalid_type {
+macro_rules! type_error_if_invalid {
     ($self:expr, $ty:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
         if matches!($ty, Type::Invalid) {
-            let err = Error::TypeError {
-                kind: $kind,
-                file: $self.compiler.file_from_namespace($self.namespace).into(),
-                span: $span,
-                message: Some(format!($( $msg ),*)),
-            };
-            return Err(vec![err]);
+            return type_error!($self, $span, $kind, $( $msg ),*);
         }
     };
     ($self:expr, $ty:expr, $span:expr, $kind:expr) => {
         if matches!($ty, Type::Invalid) {
-            let err = Error::TypeError {
-                kind: $kind,
-                file: $self.compiler.file_from_namespace($self.namespace).into(),
-                span: $span,
-                message: None,
-            };
-            return Err(vec![err]);
+            return type_error!($self, $span, $kind);
         }
+    };
+}
+
+macro_rules! type_error {
+    ($self:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
+        Err(vec![Error::TypeError {
+            kind: $kind,
+            file: $self.file(),
+            span: $span,
+            message: Some(format!($( $msg ),*)),
+        }])
+    };
+    ($self:expr, $span:expr, $kind:expr) => {
+        Err(vec![Error::TypeError {
+            kind: $kind,
+            file: $self.file(),
+            span: $span,
+            message: None,
+        }])
     };
 }
 
@@ -51,6 +58,10 @@ impl<'c> TypeChecker<'c> {
         }
     }
 
+    fn file(&self) -> PathBuf {
+        self.compiler.file_from_namespace(self.namespace).into()
+    }
+
     fn bin_op(
         &mut self,
         span: Span,
@@ -62,7 +73,7 @@ impl<'c> TypeChecker<'c> {
         let lhs = self.expression(lhs)?;
         let rhs = self.expression(rhs)?;
         let res = op(&lhs, &rhs);
-        error_if_invalid_type!(
+        type_error_if_invalid!(
             self,
             res,
             span,
@@ -80,7 +91,7 @@ impl<'c> TypeChecker<'c> {
     ) -> Result<Type, Vec<Error>> {
         let val = self.expression(val)?;
         let res = op(&val);
-        error_if_invalid_type!(
+        type_error_if_invalid!(
             self,
             res,
             span,
@@ -123,7 +134,7 @@ impl<'c> TypeChecker<'c> {
                 if let Err(msg) = ret {
                     let err = Error::TypeError {
                         kind: TypeError::BinOp { lhs: a, rhs: b, op: "Containment".into() },
-                        file: self.compiler.file_from_namespace(self.namespace).into(),
+                        file: self.file(),
                         span,
                         message: if msg.is_empty() { None } else { Some(format!("because {}", msg)) },
                     };
@@ -219,15 +230,43 @@ impl<'c> TypeChecker<'c> {
                 self.expression(value)?;
                 None
             }
-            // TODO(ed): If and Loop checks
             StatementKind::If {
                 condition,
                 pass,
                 fail,
-            } => todo!(),
-            StatementKind::Loop { condition, body } => todo!(),
-            StatementKind::Break => todo!(),
-            StatementKind::Continue => todo!(),
+            } => {
+                let ty = self.expression(condition)?;
+                if !matches!(ty, Type::Bool) {
+                    return type_error!(
+                        self,
+                        condition.span,
+                        TypeError::Missmatch {
+                            got: ty,
+                            expected: Type::Bool,
+                        },
+                        "Only boolean expressions are valid if-statement conditions"
+                    )
+                }
+                self.statement(pass)?;
+                self.statement(fail)?;
+                None
+            }
+            StatementKind::Loop { condition, body } => {
+                let ty = self.expression(condition)?;
+                if !matches!(ty, Type::Bool) {
+                    return type_error!(
+                        self,
+                        condition.span,
+                        TypeError::Missmatch {
+                            got: ty,
+                            expected: Type::Bool,
+                        },
+                        "Only boolean expressions are valid if-statement conditions"
+                    )
+                }
+                self.statement(body)?;
+                None
+            }
             StatementKind::IsCheck { lhs, rhs } => todo!(),
             StatementKind::Block { statements } => {
                 let mut errors = Vec::new();
@@ -259,7 +298,10 @@ impl<'c> TypeChecker<'c> {
                 None
             }
 
-            StatementKind::Unreachable | StatementKind::EmptyStatement => None,
+            StatementKind::Continue
+            | StatementKind::Break
+            | StatementKind::Unreachable
+            | StatementKind::EmptyStatement => None,
         };
         Ok(ret)
     }
