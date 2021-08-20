@@ -189,7 +189,7 @@ pub struct Context<'a> {
     /// The corresponding span for each token. Matches 1:1 with the tokens.
     pub spans: &'a [Span],
     /// The index of the curren token in the token slice.
-    pub curr: usize,
+    curr: usize,
     /// The file we're currently parsing.
     pub file: &'a Path,
 }
@@ -213,9 +213,22 @@ impl<'a> Context<'a> {
     /// Move to the next nth token.
     fn skip(&self, n: usize) -> Self {
         let mut new = *self;
-        new.curr += n;
+        let mut skipped = 0;
+        while skipped < n {
+            if matches!(new.token(), T::Comment(_)) {
+                // Comments aren't "real" tokens so we skip them.
+                new.curr += 1;
+            } else {
+                new.curr += 1;
+                skipped += 1;
+            }
+        }
+        new = skip_while!(new, T::Comment(_));
+        if self.skip_newlines {
+            new = skip_while!(new, T::Newline);
+        }
         while self.skip_newlines && matches!(new.token(), T::Newline) {
-            new.curr += 1;
+            new = new.skip(1);
         }
         new
     }
@@ -224,6 +237,10 @@ impl<'a> Context<'a> {
     fn prev(&self) -> Self {
         let mut new = *self;
         new.curr = new.curr.saturating_sub(1);
+        // Continue going backwards if we're at a comment.
+        while matches!(new.token(), T::Comment(_)) {
+            new.curr = new.curr.saturating_sub(1);
+        }
         new
     }
 
@@ -268,6 +285,17 @@ impl<'a> Context<'a> {
     /// Return the current [Token].
     fn token(&self) -> &T {
         &self.peek().0
+    }
+
+    fn tokens_forward<const N: usize>(&self) -> [Token; N] {
+        const ERROR: Token = Token::Error;
+        let mut res = [ERROR; N];
+        let mut ctx = *self;
+        for i in 0..N {
+            res[i] = ctx.token().clone();
+            ctx = ctx.skip(1);
+        }
+        res
     }
 
     /// Eat a [Token] and move to the next.
@@ -355,6 +383,20 @@ macro_rules! expect {
     };
 }
 
+/// Eat any number of occurences of the specified tokens.
+#[macro_export]
+macro_rules! skip_while {
+    ($ctx:expr, $( $token: pat )|+ ) => {
+        {
+            let mut ctx = $ctx;
+            while matches!(ctx.token(), $( $token )|*) {
+                ctx = ctx.skip(1);
+            }
+            ctx
+        }
+    };
+}
+
 /// Eat until any one of the specified tokens or EOF.
 #[macro_export]
 macro_rules! skip_until {
@@ -368,7 +410,6 @@ macro_rules! skip_until {
         }
     };
 }
-
 
 /// Parse a [Type] definition, e.g. `fn int, int, bool -> bool`.
 fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {

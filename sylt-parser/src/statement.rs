@@ -157,7 +157,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     let (ctx, skip_newlines) = ctx.push_skip_newlines(false);
 
     let span = ctx.span();
-    let (ctx, kind) = match &ctx.tokens[ctx.curr..] {
+    let (ctx, kind) = match &ctx.tokens_forward::<4>() {
         [T::Newline, ..] => (ctx, EmptyStatement),
 
         // Block: `{ <statements> }`
