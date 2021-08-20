@@ -300,7 +300,7 @@ impl<'c> TypeChecker<'c> {
                         return type_error!(
                             self,
                             span,
-                            TypeError::UnnessecaryForce {
+                            TypeError::ExessiveForce {
                                 got: ty,
                                 expected: value,
                             }

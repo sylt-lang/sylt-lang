@@ -120,7 +120,7 @@ pub enum TypeError {
         ident: String,
     },
 
-    UnnessecaryForce {
+    ExessiveForce {
         got: Type,
         expected: Type,
     },
@@ -368,7 +368,7 @@ impl fmt::Display for TypeError {
                 write!(f, "Got '{:?}', which doesn't hold", ty)
             }
 
-            TypeError::UnnessecaryForce { got, expected } => {
+            TypeError::ExessiveForce { got, expected } => {
                 write!(f, "This type force is unnessecary, '{:?}' is a '{:?}'", got, expected)
             }
         }
