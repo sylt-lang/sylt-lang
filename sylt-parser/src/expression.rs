@@ -179,11 +179,13 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         if let Some(Statement {
             span,
             kind: StatementKind::StatementExpression { value },
+            comments,
         }) = last_statement
         {
             statements.push(Statement {
                 span,
                 kind: StatementKind::Ret { value },
+                comments
             });
         } else if let Some(statement) = last_statement {
             statements.push(statement);
@@ -197,7 +199,8 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         ret,
         body: Box::new(Statement {
             span: ctx.span(),
-            kind: StatementKind::Block { statements }
+            kind: StatementKind::Block { statements },
+            comments: Vec::new(),
         }),
     };
 

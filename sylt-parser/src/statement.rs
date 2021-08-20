@@ -118,6 +118,7 @@ pub enum StatementKind {
 pub struct Statement {
     pub span: Span,
     pub kind: StatementKind,
+    pub comments: Vec<String>,
 }
 
 pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
@@ -157,7 +158,8 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     let (ctx, skip_newlines) = ctx.push_skip_newlines(false);
 
     let span = ctx.span();
-    let (ctx, kind) = match &ctx.tokens_forward::<4>() {
+    //NOTE(gu): Explicit lookahead.
+    let (ctx, kind) = match &ctx.tokens_forward::<3>() {
         [T::Newline, ..] => (ctx, EmptyStatement),
 
         // Block: `{ <statements> }`
@@ -261,6 +263,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     Statement {
                         span: ctx.span(),
                         kind: EmptyStatement,
+                        comments: Vec::new(),
                     },
                 )
             };
@@ -467,7 +470,11 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         expect!(ctx, T::Newline, "Expected newline to end statement")
     };
     let ctx = ctx.pop_skip_newlines(skip_newlines);
-    Ok((ctx, Statement { span, kind }))
+    Ok((ctx, Statement {
+        span,
+        kind,
+        comments: Vec::new(),
+    }))
 }
 
 /// Parse an outer statement.
