@@ -256,6 +256,11 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
         return Ok(());
     }
 
+    for comment in &statement.comments {
+        write!(dest, "{}\n", comment)?;
+        write_indents(dest, indent)?;
+    }
+
     match &statement.kind {
         StatementKind::Assignment {
             kind,
