@@ -116,34 +116,6 @@ pub struct Statement {
     pub kind: StatementKind,
 }
 
-pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, String> {
-    let mut result = String::new();
-    match ctx.token() {
-        T::Identifier(f) => result.push_str(f),
-        T::Slash => result.push_str("/"),
-        _ => return Err((
-            skip_until!(ctx, T::Newline),
-            vec![syntax_error!(ctx, "Expected '/' or file name")]
-        )),
-    }
-
-    let mut ctx = ctx.skip(1);
-    // FIXME: This will not work for folders or files named "as"
-    while !matches!(ctx.token(), T::Newline | T::As) {
-        match (ctx.token(), result.chars().last().unwrap()) {
-            (T::Identifier(f), '/') => result.push_str(f),
-            (T::Slash, _) => result.push_str("/"),
-            _ => return Err((
-                skip_until!(ctx, T::Newline),
-                vec![syntax_error!(ctx, "Expected '/' or file name")]
-            )),
-        }
-        ctx = ctx.skip(1);
-    }
-
-    Ok(( ctx, result ))
-}
-
 pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
     let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{' at start of block");
 
@@ -201,22 +173,22 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
         // `use path/to/file`
         // `use path/to/file as alias`
-        [T::Use, ..] => {
-            let (path_ctx, path) = path(ctx.skip(1))?;
-            let (ctx, alias) = match &path_ctx.tokens[path_ctx.curr..] {
-                [T::As, T::Identifier(alias), ..] => (path_ctx.skip(2), Some(alias.clone())),
+        [T::Use(path), ..] => {
+            let ctx = ctx.skip(1);
+            let (ctx, alias) = match &ctx.tokens[ctx.curr..] {
+                [T::As, T::Identifier(alias), ..] => (ctx.skip(2), Some(alias.clone())),
                 [T::As, ..] => return Err((
-                    skip_until!(path_ctx, T::Newline),
-                    vec![syntax_error!(path_ctx.skip(1), "Expected alias")]
+                    skip_until!(ctx, T::Newline),
+                    vec![syntax_error!(ctx.skip(1), "Expected alias")]
                 )),
-                [..] => (path_ctx, None),
+                [..] => (ctx, None),
             };
             (
                 ctx,
                 Use {
                     file: Identifier {
-                        span: path_ctx.span(),
-                        name: path,
+                        span: ctx.span(),
+                        name: path.clone(),
                     },
                     file_alias: alias,
                 }

@@ -132,8 +132,8 @@ pub enum Token {
     #[token("\n")]
     Newline,
 
-    #[token("use")]
-    Use,
+    #[regex(r"use /?([A-Za-z_][A-Za-z0-9_]*/?)*", |lex| lex.slice()[4..].to_string())]
+    Use(String),
     #[token("from")]
     From,
     #[token("as")]
