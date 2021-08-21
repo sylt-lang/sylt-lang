@@ -117,28 +117,20 @@ pub struct Statement {
 }
 
 pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, String> {
+    let mut ctx = ctx;
     let mut result = String::new();
-    match ctx.token() {
-        T::Identifier(f) => result.push_str(f),
-        T::Slash => result.push_str("/"),
-        _ => return Err((
-            skip_until!(ctx, T::Newline),
-            vec![syntax_error!(ctx, "Expected '/' or file name")]
-        )),
-    }
-
-    let mut ctx = ctx.skip(1);
-    // FIXME: This will not work for folders or files named "as"
-    while !matches!(ctx.token(), T::Newline | T::As) {
-        match (ctx.token(), result.chars().last().unwrap()) {
-            (T::Identifier(f), '/') => result.push_str(f),
-            (T::Slash, _) => result.push_str("/"),
-            _ => return Err((
-                skip_until!(ctx, T::Newline),
-                vec![syntax_error!(ctx, "Expected '/' or file name")]
-            )),
-        }
+    expect!(ctx, T::Slash | T::Identifier(_), "Expected file path");
+    if matches!(ctx.token(), T::Slash) {
+        result.push_str("/");
         ctx = ctx.skip(1);
+    }
+    while let T::Identifier(f) = ctx.token() {
+        result.push_str(f);
+        ctx = ctx.skip(1);
+        if matches!(ctx.token(), T::Slash) {
+            result.push_str("/");
+            ctx = ctx.skip(1);
+        }
     }
 
     Ok(( ctx, result ))
