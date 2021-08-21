@@ -16,7 +16,7 @@ pub enum StatementKind {
     /// `use <file> as <alias>`.
     Use {
         file: Identifier,
-        file_alias: Option<String>,
+        file_alias: Option<Identifier>,
     },
 
     /// Defines a new Blob.
@@ -198,25 +198,26 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         // `use path/to/file`
         // `use path/to/file as alias`
         [T::Use, ..] => {
-            let (path_ctx, path) = path(ctx.skip(1))?;
-            let (ctx, alias) = match &path_ctx.tokens[path_ctx.curr..] {
-                [T::As, T::Identifier(alias), ..] => (path_ctx.skip(2), Some(alias.clone())),
+            let (ctx, path) = path(ctx.skip(1))?;
+            let file = Identifier {
+                span: ctx.span(),
+                name: path,
+            };
+            let (ctx, file_alias) = match &ctx.tokens[ctx.curr..] {
+                [T::As, T::Identifier(alias), ..] => (
+                    ctx.skip(2),
+                    Some(Identifier {
+                        span: ctx.skip(1).span(),
+                        name: alias.clone(),
+                    })
+                ),
                 [T::As, ..] => raise_syntax_error!(
-                    skip_until!(path_ctx, T::Newline),
+                    skip_until!(ctx, T::Newline),
                     "Expected alias"
                 ),
-                [..] => (path_ctx, None),
+                [..] => (ctx, None),
             };
-            (
-                ctx,
-                Use {
-                    file: Identifier {
-                        span: path_ctx.span(),
-                        name: path,
-                    },
-                    file_alias: alias,
-                }
-            )
+            (ctx, Use { file, file_alias })
         },
 
         // `: A is : B`

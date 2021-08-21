@@ -1269,7 +1269,7 @@ impl Compiler {
                         let use_path = root.join(format!("{}.sy", name));
                         let other = path_to_namespace_id[&use_path];
                         let namespace_name = match file_alias {
-                            Some(alias) => alias.clone(),
+                            Some(alias) => alias.name.clone(),
                             None => PathBuf::from(name)
                                 .file_stem()
                                 .unwrap()
