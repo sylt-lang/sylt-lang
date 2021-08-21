@@ -133,11 +133,11 @@ impl<'c> TypeChecker<'c> {
     }
 
     fn assignable(&mut self, assignable: &Assignable) -> Result<Lookup, Vec<Error>> {
+        use AssignableKind as AK;
         use Lookup::*;
         let span = assignable.span;
         match &assignable.kind {
-            AssignableKind::Read(ident) => {
-                // TODO(ed): Fix this
+            AK::Read(ident) => {
                 if let Some(var) = self.stack.iter().rev().find(|var| var.ident.name == ident.name) {
                     return Ok(Value(var.ty.clone(), var.kind));
                 }
@@ -159,9 +159,9 @@ impl<'c> TypeChecker<'c> {
                 }
                 unreachable!();
             }
-            AssignableKind::Call(lhs, args) => {
+            AK::Call(fun, args) => {
                 // TODO(ed): External functions need a different lookup.
-                let ty = match self.assignable(lhs)? {
+                let ty = match self.assignable(fun)? {
                     Value(ty, _) => ty,
                     Namespace(_) => {
                         return err_type_error!(
@@ -208,10 +208,18 @@ impl<'c> TypeChecker<'c> {
 
                 return Ok(Value(Type::clone(&ret), VarKind::Const));
             }
-            AssignableKind::ArrowCall(_, _, _) => todo!(),
-            AssignableKind::Access(_, _) => todo!(),
-            AssignableKind::Index(_, _) => todo!(),
-            AssignableKind::Expression(expr) => {
+            AK::ArrowCall(extra, fun, args) => {
+                // DRY
+                let mut args = args.clone();
+                args.insert(0, Expression::clone(extra));
+                return self.assignable(&Assignable {
+                    span,
+                    kind: AK::Call(Box::clone(fun), args),
+                });
+            }
+            AK::Access(_, _) => todo!(),
+            AK::Index(_, _) => todo!(),
+            AK::Expression(expr) => {
                 return Ok(Value(self.expression(&expr)?, VarKind::Const));
             }
         };
