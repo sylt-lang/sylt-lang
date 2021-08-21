@@ -192,7 +192,7 @@ pub struct Context<'a> {
     pub curr: usize,
     /// The file we're currently parsing.
     pub file: &'a Path,
-    /// The root from where we're currently parsing.
+    /// The source root - the top most folder.
     pub root: &'a Path,
 }
 

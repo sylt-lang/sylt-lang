@@ -225,12 +225,14 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let resolved_path = {
                 // Importing a folder is the same as importing exports.sy
                 // in the folder.
-                let bare_name = file.name.trim_start_matches("/").trim_end_matches("/");
                 let parent = if file.name.starts_with("/") {
                     ctx.root
                 } else {
                     ctx.file.parent().unwrap()
                 };
+                let bare_name = file.name
+                    .trim_start_matches("/")
+                    .trim_end_matches("/");
                 parent.join(if file.name == "/" {
                     format!("exports.sy")
                 } else if file.name.ends_with("/") {

@@ -1266,7 +1266,6 @@ impl Compiler {
                 match &statement.kind {
                     Use { file: Identifier { name, span }, file_alias, resolved_path } => {
                         let bare_name = name.trim_end_matches("/");
-                        let other = path_to_namespace_id[resolved_path];
                         let namespace_name = match file_alias {
                             Some(alias) => alias.name.clone(),
                             None => match PathBuf::from(bare_name).file_stem() {
@@ -1286,6 +1285,7 @@ impl Compiler {
                         };
                         match namespace.entry(namespace_name) {
                             Entry::Vacant(vac) => {
+                                let other = path_to_namespace_id[resolved_path];
                                 vac.insert(Name::Namespace(other));
                             }
                             Entry::Occupied(_) => {
