@@ -369,6 +369,7 @@ impl<'c> TypeChecker<'c> {
                         Some(lhs) => match lhs.fits(rhs, self.compiler.blobs.as_slice()) {
                             Ok(_) => {}
                             Err(reason) => {
+                                // TODO(ed): Not super sold on this error message - it can be better.
                                 errors.push(type_error!(
                                     self,
                                     *span,
@@ -396,6 +397,7 @@ impl<'c> TypeChecker<'c> {
                     }
                     // TODO(ed): Is this the right order?
                     if let Err(_) = Type::Void.fits(&ty, self.compiler.blobs.as_slice()) {
+                        // TODO(ed): Not super sold on this error message - it can be better.
                         errors.push(type_error!(
                             self,
                             span,
