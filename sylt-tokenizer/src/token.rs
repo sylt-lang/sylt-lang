@@ -134,6 +134,10 @@ pub enum Token {
 
     #[token("use")]
     Use,
+    #[token("from")]
+    From,
+    #[token("as")]
+    As,
 
     #[token("<<<<<<<")]
     GitConflictBegin,
