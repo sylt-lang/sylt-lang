@@ -113,6 +113,11 @@ impl<'c> TypeChecker<'c> {
                 if let Some(var) = self.stack.iter().rev().find(|var| var.ident.name == ident.name) {
                     return Ok(var.clone());
                 }
+                dbg!(&self.namespaces[self.namespace]);
+                match &self.namespaces[self.namespace][&ident.name] {
+                    Name::Global(Some((ty, kind))) => { return Ok(Variable::new(ident.clone(), ty.clone(), *kind)); },
+                    x => todo!("X: {:?} - {:?}", assignable.kind, x),
+                }
                 unreachable!();
             }
             AssignableKind::Call(_, _) => todo!(),
@@ -288,21 +293,37 @@ impl<'c> TypeChecker<'c> {
                     );
                 }
                 let target_ty = variable.ty;
-                let value = match kind {
-                    ParserOp::Nop => value,
+                let result = match kind {
+                    ParserOp::Nop => value.clone(),
                     ParserOp::Add => op::add(&target_ty, &value),
                     ParserOp::Sub => op::sub(&target_ty, &value),
                     ParserOp::Mul => op::mul(&target_ty, &value),
                     ParserOp::Div => op::div(&target_ty, &value),
                 };
+                type_error_if_invalid!(
+                    self,
+                    result,
+                    span,
+                    TypeError::BinOp {
+                        lhs: target_ty.clone(),
+                        rhs: value.clone(),
+                        op: match kind  {
+                            ParserOp::Nop => unreachable!(),
+                            ParserOp::Add => "Addition",
+                            ParserOp::Sub => "Subtraction",
+                            ParserOp::Mul => "Multiplication",
+                            ParserOp::Div => "Division",
+                        }.to_string()
+                    }
+                );
                 // TODO(ed): Is the fits-order correct?
-                if let Err(reason) = target_ty.fits(&value, self.compiler.blobs.as_slice()) {
+                if let Err(reason) = target_ty.fits(&result, self.compiler.blobs.as_slice()) {
                     // TODO(ed): I want this to point to the equal-sign, the parser is
                     // probably a bit off.
                     return type_error!(
                         self,
                         span,
-                        TypeError::MismatchAssign { got: value, expected: target_ty },
+                        TypeError::MismatchAssign { got: result, expected: target_ty },
                         "because {}",
                         reason
                     );
@@ -467,6 +488,7 @@ impl<'c> TypeChecker<'c> {
                     x => unreachable!("X: {:?}", x),
                 };
                 namespace.insert(ident.name.clone(), Name::Global(Some(name)));
+                dbg!(&namespace);
             }
             _ => {},
         }
@@ -488,9 +510,11 @@ impl<'c> TypeChecker<'c> {
                 if let Err(mut errs) = self.outer_definition(&mut namespace, &stmt) {
                     errors.append(&mut errs);
                 }
+                // Make sure it's updated all the time! :D
+                self.namespaces[self.namespace] = namespace.clone();
             }
-            self.namespaces[self.namespace] = namespace;
         }
+        dbg!(&self.namespaces);
 
 
         for (path, module) in &tree.modules {
