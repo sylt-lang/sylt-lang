@@ -85,7 +85,10 @@ impl<'c> TypeChecker<'c> {
         match &assignable.kind {
             AssignableKind::Read(ident) => {
                 // TODO(ed): Fix this
-                return Ok(self.stack.iter().rev().find(|var| var.ident.name == ident.name).unwrap().clone());
+                if let Some(var) = self.stack.iter().rev().find(|var| var.ident.name == ident.name) {
+                    return Ok(var.clone());
+                }
+                unreachable!();
             }
             AssignableKind::Call(_, _) => todo!(),
             AssignableKind::ArrowCall(_, _, _) => todo!(),
