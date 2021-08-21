@@ -132,7 +132,7 @@ impl<'c> TypeChecker<'c> {
         compiler::Context::from_namespace(self.namespace)
     }
 
-    fn assignable(&mut self, assignable: &Assignable) -> Result<Lookup, Vec<Error>> {
+    fn assignable(&mut self, assignable: &Assignable, namespace: usize) -> Result<Lookup, Vec<Error>> {
         use AssignableKind as AK;
         use Lookup::*;
         let span = assignable.span;
@@ -161,7 +161,7 @@ impl<'c> TypeChecker<'c> {
             }
             AK::Call(fun, args) => {
                 // TODO(ed): External functions need a different lookup.
-                let ty = match self.assignable(fun)? {
+                let ty = match self.assignable(fun, namespace)? {
                     Value(ty, _) => ty,
                     Namespace(_) => {
                         return err_type_error!(
@@ -215,15 +215,63 @@ impl<'c> TypeChecker<'c> {
                 return self.assignable(&Assignable {
                     span,
                     kind: AK::Call(Box::clone(fun), args),
-                });
+                }, namespace);
             }
-            AK::Access(_, _) => todo!(),
-            AK::Index(_, _) => todo!(),
+            AK::Access(thing, field) => {
+                match self.assignable(thing, namespace)? {
+                    Value(ty, kind) => {
+                        match &ty {
+                            Type::Blob(blob) => {
+                                let blob = &self.compiler.blobs[*blob];
+                            }
+                            ty => {
+                                return err_type_error!(
+                                    self,
+                                    span,
+                                    TypeError::Violating(ty.clone()),
+                                    "Only namespaces and blobs support '.'-access"
+                                );
+                            }
+                        }
+                    }
+                    Namespace(namespace) => {
+                        return self.assignable(&Assignable {
+                            span: field.span,
+                            kind: AK::Read(field.clone()),
+                        }, namespace);
+                    }
+                }
+            }
+            AK::Index(thing, index) => {
+                let (thing, kind) = if let Value(val, kind) = self.assignable(thing, namespace)? {
+                    (val, kind)
+                } else {
+                    return err_type_error!(
+                        self,
+                        span,
+                        TypeError::NamespaceNotExpression
+                    );
+                };
+                let index = self.expression(index)?;
+                todo!();
+                let ret = match (thing, index) {
+                    (Type::List(ret), index) => {
+                        Type::clone(&ret)
+                    }
+                    (Type::Tuple(ret), index) => {
+                        // CHECK const errors
+                        Type::clone(&ret[0])
+                    }
+                    _ => {
+                        panic!();
+                    }
+                };
+                return Ok(Value(ret, kind));
+            }
             AK::Expression(expr) => {
                 return Ok(Value(self.expression(&expr)?, VarKind::Const));
             }
         };
-        todo!();
     }
 
     fn bin_op(
@@ -273,7 +321,7 @@ impl<'c> TypeChecker<'c> {
         use ExpressionKind as EK;
         let span = expression.span;
         let res = match &expression.kind {
-            EK::Get(assignable) => match self.assignable(assignable)? {
+            EK::Get(assignable) => match self.assignable(assignable, self.namespace)? {
                 Lookup::Value(value, _) => {
                     value
                 }
@@ -388,7 +436,7 @@ impl<'c> TypeChecker<'c> {
             EK::IfShort { condition, fail } => todo!(),
 
             EK::Instance { blob, fields } => {
-                let blob = match self.assignable(blob)? {
+                let blob = match self.assignable(blob, self.namespace)? {
                     Lookup::Value(Type::Blob(blob), _) => {
                         self.compiler.blobs[blob].clone()
                     }
@@ -482,7 +530,7 @@ impl<'c> TypeChecker<'c> {
                 value,
             } => {
                 let value = self.expression(value)?;
-                let target_ty = match self.assignable(target)? {
+                let target_ty = match self.assignable(target, self.namespace)? {
                     Lookup::Value(_, kind) if kind.immutable() => {
                         // TODO(ed): I want this to point to the equal-sign, the parser is
                         // probably a bit off.
