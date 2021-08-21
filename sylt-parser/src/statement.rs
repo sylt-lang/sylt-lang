@@ -12,11 +12,16 @@ pub enum StatementKind {
     /// "Imports" another file.
     ///
     /// `use <file>`.
+    /// `use /<file>`.
+    /// `use <folder>/`.
     /// `use <folder>/<file>`.
+    /// `use / as <alias>`.
     /// `use <file> as <alias>`.
+    /// `use <folder>/ as <alias>`.
     Use {
         file: Identifier,
         file_alias: Option<Identifier>,
+        resolved_path: PathBuf,
     },
 
     /// Defines a new Blob.
@@ -217,7 +222,24 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 ),
                 [..] => (ctx, None),
             };
-            (ctx, Use { file, file_alias })
+            let resolved_path = {
+                // Importing a folder is the same as importing exports.sy
+                // in the folder.
+                let bare_name = file.name.trim_start_matches("/").trim_end_matches("/");
+                let parent = if file.name.starts_with("/") {
+                    ctx.root
+                } else {
+                    ctx.file.parent().unwrap()
+                };
+                parent.join(if file.name == "/" {
+                    format!("exports.sy")
+                } else if file.name.ends_with("/") {
+                    format!("{}/exports.sy", bare_name)
+                } else {
+                    format!("{}.sy", bare_name)
+                })
+            };
+            (ctx, Use { file, file_alias, resolved_path })
         },
 
         // `: A is : B`

@@ -1192,7 +1192,6 @@ impl Compiler {
     }
 
     fn extract_globals(&mut self, tree: &AST) -> HashMap<PathBuf, usize> {
-        let root = tree.modules.first().unwrap().0.parent().unwrap();
         let mut path_to_namespace_id = HashMap::<PathBuf, usize>::new();
         for (path, _) in tree.modules.iter() {
             let slot = path_to_namespace_id.len();
@@ -1265,23 +1264,9 @@ impl Compiler {
             for statement in module.statements.iter() {
                 use StatementKind::*;
                 match &statement.kind {
-                    Use { file: Identifier { name, span }, file_alias, .. } => {
-                        // Importing a folder is the same as importing exports.sy
-                        // in the folder.
-                        let bare_name = name.trim_start_matches("/").trim_end_matches("/");
-                        let parent = if name.starts_with("/") {
-                            root
-                        } else {
-                            path.parent().unwrap()
-                        };
-                        let use_path = parent.join(if name == "/" {
-                            format!("exports.sy")
-                        } else if name.ends_with("/") {
-                            format!("{}/exports.sy", bare_name)
-                        } else {
-                            format!("{}.sy", bare_name)
-                        });
-                        let other = path_to_namespace_id[&use_path];
+                    Use { file: Identifier { name, span }, file_alias, resolved_path } => {
+                        let bare_name = name.trim_end_matches("/");
+                        let other = path_to_namespace_id[resolved_path];
                         let namespace_name = match file_alias {
                             Some(alias) => alias.name.clone(),
                             None => match PathBuf::from(bare_name).file_stem() {
