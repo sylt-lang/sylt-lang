@@ -200,7 +200,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Use, ..] => {
             let (ctx, path) = path(ctx.skip(1))?;
             let file = Identifier {
-                span: ctx.span(),
+                span: ctx.prev().span(),
                 name: path,
             };
             let (ctx, file_alias) = match &ctx.tokens[ctx.curr..] {

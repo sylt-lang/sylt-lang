@@ -1266,16 +1266,38 @@ impl Compiler {
                 use StatementKind::*;
                 match &statement.kind {
                     Use { file: Identifier { name, span }, file_alias, .. } => {
-                        let use_path = root.join(format!("{}.sy", name));
+                        // Importing a folder is the same as importing exports.sy
+                        // in the folder.
+                        let bare_name = name.trim_start_matches("/").trim_end_matches("/");
+                        let parent = if name.starts_with("/") {
+                            root
+                        } else {
+                            path.parent().unwrap()
+                        };
+                        let use_path = parent.join(if name == "/" {
+                            format!("exports.sy")
+                        } else if name.ends_with("/") {
+                            format!("{}/exports.sy", bare_name)
+                        } else {
+                            format!("{}.sy", bare_name)
+                        });
                         let other = path_to_namespace_id[&use_path];
                         let namespace_name = match file_alias {
                             Some(alias) => alias.name.clone(),
-                            None => PathBuf::from(name)
-                                .file_stem()
-                                .unwrap()
-                                .to_str()
-                                .unwrap()
-                                .to_string(),
+                            None => match PathBuf::from(bare_name).file_stem() {
+                                Some(name) => name.to_str()
+                                    .unwrap()
+                                    .to_string(),
+                                None => {
+                                    error!(
+                                        self,
+                                        ctx,
+                                        *span,
+                                        "Using root requires alias"
+                                    );
+                                    "".to_string()
+                                }
+                            }
                         };
                         match namespace.entry(namespace_name) {
                             Entry::Vacant(vac) => {

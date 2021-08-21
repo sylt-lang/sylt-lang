@@ -1,0 +1,5 @@
+use / as root
+
+test :: fn {
+    print(root.text)
+}

@@ -695,9 +695,21 @@ fn module(path: &Path, _root: &Path, token_stream: &[PlacedToken]) -> (Vec<PathB
                 use StatementKind::*;
                 // Yank `use`s and add it to the used-files list.
                 if let Use { file, .. } = &statement.kind {
-                    let file = path.parent()
-                        .unwrap()
-                        .join(format!("{}.sy", file.name));
+                    // Importing a folder is the same as importing exports.sy
+                    // in the folder.
+                    let bare_name = file.name.trim_start_matches("/").trim_end_matches("/");
+                    let parent = if file.name.starts_with("/") {
+                        _root
+                    } else {
+                        path.parent().unwrap()
+                    };
+                    let file = parent.join(if file.name == "/" {
+                        format!("exports.sy")
+                    } else if file.name.ends_with("/") {
+                        format!("{}/exports.sy", bare_name)
+                    } else {
+                        format!("{}.sy", bare_name)
+                    });
                     use_files.push(file);
                 }
                 // Only push non-empty statements.
