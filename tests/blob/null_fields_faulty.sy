@@ -7,7 +7,7 @@ B :: blob {
 
 start :: fn {
     a : !B = A'
-    print a.a
+    print(a.a)
 }
 
 // error: #UnknownField(_, _)

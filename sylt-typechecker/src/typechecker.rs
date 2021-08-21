@@ -470,6 +470,12 @@ impl Machine for VM {
                 match inst {
                     Type::Instance(ty) => {
                         let field = &self.strings[field];
+                        if field == "_name" || field == "_id" {
+                            error!(
+                                self,
+                                RuntimeError::ImmutableField(field.clone())
+                            );
+                        }
                         let ty = &self.blobs[ty];
                         match ty.fields.get(field) {
                             Some(ty) => {
@@ -568,10 +574,6 @@ impl Machine for VM {
                         "Value does not match return type"
                     );
                 }
-            }
-
-            Op::Print => {
-                self.pop();
             }
 
             Op::Define(ty) => {

@@ -243,13 +243,8 @@ impl<'c> TypeChecker<'c> {
     fn statement(&mut self, statement: &Statement) -> Result<Option<Type>, Vec<Error>> {
         let span = statement.span;
         let ret = match &statement.kind {
-            StatementKind::Use { file } => None,
+            StatementKind::Use { file, file_alias } => None,
             StatementKind::Blob { name, fields } => todo!(),
-            StatementKind::Print { value } => {
-                // TODO(ed): Remove this
-                println!("TY: {:?}", self.expression(value)?);
-                None
-            }
             StatementKind::Assignment {
                 kind,
                 target,
@@ -409,11 +404,10 @@ impl<'c> TypeChecker<'c> {
     fn solve(
         mut self,
         tree: &mut AST,
-        to_namespace: &HashMap<String, usize>,
+        to_namespace: &HashMap<PathBuf, usize>,
     ) -> Result<(), Vec<Error>> {
         let mut errors = Vec::new();
-        for (full_path, module) in &tree.modules {
-            let path = full_path.file_stem().unwrap().to_str().unwrap();
+        for (path, module) in &tree.modules {
             self.namespace = to_namespace[path];
             for stmt in &module.statements {
                 if let Err(mut errs) = self.statement(&stmt) {
@@ -433,7 +427,7 @@ impl<'c> TypeChecker<'c> {
 pub(crate) fn solve(
     compiler: &mut Compiler,
     tree: &mut AST,
-    to_namespace: &HashMap<String, usize>,
+    to_namespace: &HashMap<PathBuf, usize>,
 ) -> Result<(), Vec<Error>> {
     TypeChecker::new(compiler).solve(tree, to_namespace)
 }

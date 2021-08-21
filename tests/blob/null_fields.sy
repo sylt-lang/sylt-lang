@@ -4,5 +4,5 @@ A :: blob {
 
 start :: fn {
     a := A'
-    print a.a
+    print(a.a)
 }

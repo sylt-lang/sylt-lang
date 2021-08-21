@@ -867,11 +867,6 @@ impl Compiler {
                 }
             }
 
-            Print { value } => {
-                self.expression(value, ctx);
-                self.add_op(ctx, statement.span, Op::Print);
-            }
-
             #[rustfmt::skip]
             Definition { ident, kind, ty, value } => {
                 // TODO(ed): Don't use type here - type check the tree first.
@@ -1163,14 +1158,12 @@ impl Compiler {
         typechecker::solve(&mut self, &mut tree, &path_to_namespace_id)?;
         println!("\n\nOLD TYPECHECKER\n\n");
 
-        for (full_path, module) in &tree.modules {
-            let path = full_path.file_stem().unwrap().to_str().unwrap();
+        for (path, module) in tree.modules.iter() {
             ctx.namespace = path_to_namespace_id[path];
             self.module_functions(module, ctx);
         }
 
-        for (full_path, module) in &tree.modules {
-            let path = full_path.file_stem().unwrap().to_str().unwrap();
+        for (path, module) in tree.modules.iter() {
             ctx.namespace = path_to_namespace_id[path];
             self.module_not_functions(module, ctx);
         }
@@ -1202,11 +1195,12 @@ impl Compiler {
         }
     }
 
-    fn extract_globals(&mut self, tree: &AST) -> HashMap<String, usize> {
-        let mut full_path_to_namespace_id = HashMap::new();
+    fn extract_globals(&mut self, tree: &AST) -> HashMap<PathBuf, usize> {
+        let root = tree.modules.first().unwrap().0.parent().unwrap();
+        let mut path_to_namespace_id = HashMap::<PathBuf, usize>::new();
         for (path, _) in tree.modules.iter() {
-            let slot = full_path_to_namespace_id.len();
-            match full_path_to_namespace_id.entry(path) {
+            let slot = path_to_namespace_id.len();
+            match path_to_namespace_id.entry(path.into()) {
                 Entry::Vacant(vac) => {
                     vac.insert(slot);
                     self.namespaces.push(Namespace::new());
@@ -1224,21 +1218,12 @@ impl Compiler {
             }
         }
 
-        self.namespace_id_to_path = full_path_to_namespace_id
+        self.namespace_id_to_path = path_to_namespace_id
             .iter()
             .map(|(a, b)| (*b, (*a).clone()))
             .collect();
 
-        let path_to_namespace_id: HashMap<_, _> = full_path_to_namespace_id
-            .iter()
-            .map(|(a, b)| (
-                a.file_stem().unwrap().to_str().unwrap().to_string(),
-                *b
-            ))
-            .collect();
-
         for (path, module) in tree.modules.iter() {
-            let path = path.file_stem().unwrap().to_str().unwrap();
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
 
@@ -1277,7 +1262,6 @@ impl Compiler {
         }
 
         for (path, module) in tree.modules.iter() {
-            let path = path.file_stem().unwrap().to_str().unwrap();
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
 
@@ -1285,11 +1269,19 @@ impl Compiler {
             for statement in module.statements.iter() {
                 use StatementKind::*;
                 match &statement.kind {
-                    Use {
-                        file: Identifier { name, span },
-                    } => {
-                        let other = path_to_namespace_id[name];
-                        match namespace.entry(name.to_owned()) {
+                    Use { file: Identifier { name, span }, file_alias } => {
+                        let use_path = root.join(format!("{}.sy", name));
+                        let other = path_to_namespace_id[&use_path];
+                        let namespace_name = match file_alias {
+                            Some(alias) => alias.name.clone(),
+                            None => PathBuf::from(name)
+                                .file_stem()
+                                .unwrap()
+                                .to_str()
+                                .unwrap()
+                                .to_string(),
+                        };
+                        match namespace.entry(namespace_name) {
                             Entry::Vacant(vac) => {
                                 vac.insert(Name::Namespace(other));
                             }
@@ -1321,7 +1313,6 @@ impl Compiler {
         }
 
         for (path, module) in tree.modules.iter() {
-            let path = path.file_stem().unwrap().to_str().unwrap();
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
 
@@ -1392,7 +1383,6 @@ fn all_paths_return(statement: &Statement) -> bool {
         StatementKind::Use { .. }
         | StatementKind::Blob { .. }
         | StatementKind::IsCheck { .. }
-        | StatementKind::Print { .. }
         | StatementKind::Assignment { .. }
         | StatementKind::Definition { .. }
         | StatementKind::StatementExpression { .. }
