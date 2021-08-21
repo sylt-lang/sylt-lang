@@ -119,7 +119,11 @@ pub struct Statement {
 pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, String> {
     let mut ctx = ctx;
     let mut result = String::new();
-    expect!(ctx, T::Slash | T::Identifier(_), "Expected file path");
+    expect!(
+        ctx,
+        T::Slash | T::Identifier(_),
+        "Expected identifier or slash at start of use path"
+    );
     if matches!(ctx.token(), T::Slash) {
         result.push_str("/");
         ctx = ctx.skip(1);
@@ -197,10 +201,10 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let (path_ctx, path) = path(ctx.skip(1))?;
             let (ctx, alias) = match &path_ctx.tokens[path_ctx.curr..] {
                 [T::As, T::Identifier(alias), ..] => (path_ctx.skip(2), Some(alias.clone())),
-                [T::As, ..] => return Err((
+                [T::As, ..] => raise_syntax_error!(
                     skip_until!(path_ctx, T::Newline),
-                    vec![syntax_error!(path_ctx.skip(1), "Expected alias")]
-                )),
+                    "Expected alias"
+                ),
                 [..] => (path_ctx, None),
             };
             (
