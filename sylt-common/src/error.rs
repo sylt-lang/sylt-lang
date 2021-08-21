@@ -117,14 +117,16 @@ pub enum TypeError {
         expected: Type,
     },
 
-    Mutability {
-        ident: String,
-    },
+    Mutability,
 
     ExessiveForce {
         got: Type,
         expected: Type,
     },
+
+    NamespaceNotExpression,
+
+    // TODO(ed): Some of these are more like compile errors
 }
 
 
@@ -356,8 +358,8 @@ impl fmt::Display for TypeError {
                 write!(f, "Cannot assign a '{:?}' to a '{:?}'", got, expected)
             }
 
-            TypeError::Mutability { ident } => {
-                write!(f, "'{}' is constant, constants are immutable", ident)
+            TypeError::Mutability => {
+                write!(f, "Constants are immutable")
             }
 
             TypeError::BinOp { op, lhs, rhs } => {
@@ -374,6 +376,10 @@ impl fmt::Display for TypeError {
 
             TypeError::ExessiveForce { got, expected } => {
                 write!(f, "This type force is unnessecary, '{:?}' is a '{:?}'", got, expected)
+            }
+
+            TypeError::NamespaceNotExpression => {
+                write!(f, "This resolves to a namespace, not a value")
             }
         }
     }

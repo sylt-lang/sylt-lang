@@ -164,6 +164,7 @@ struct Compiler {
     values: HashMap<Value, usize>,
 }
 
+#[macro_export]
 macro_rules! error {
     ($compiler:expr, $ctx:expr, $span:expr, $( $msg:expr ),+ ) => {
         if !$compiler.panic {
@@ -1155,8 +1156,6 @@ impl Compiler {
         };
 
         let path_to_namespace_id = self.extract_globals(&tree);
-        typechecker::solve(&mut self, &mut tree, &path_to_namespace_id)?;
-        println!("\n\nOLD TYPECHECKER\n\n");
 
         for (path, module) in tree.modules.iter() {
             ctx.namespace = path_to_namespace_id[path];
@@ -1167,11 +1166,14 @@ impl Compiler {
             ctx.namespace = path_to_namespace_id[path];
             self.module_not_functions(module, ctx);
         }
-        let module = &tree.modules[0].1;
+
+        typechecker::solve(&mut self, &mut tree, &path_to_namespace_id)?;
+        println!("\n\nOLD TYPECHECKER\n\n");
 
         self.read_identifier("start", Span::zero(), ctx, 0);
         self.add_op(ctx, Span::zero(), Op::Call(0));
 
+        let module = &tree.modules[0].1;
         let nil = self.constant(Value::Nil);
         self.add_op(ctx, module.span, nil);
         self.add_op(ctx, module.span, Op::Return);

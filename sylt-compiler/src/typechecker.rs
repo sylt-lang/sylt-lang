@@ -11,22 +11,23 @@ use sylt_parser::{
     Span, Statement, StatementKind, Type as ParserType, TypeKind, VarKind, AST,
 };
 
-use crate::Compiler;
+use crate as compiler;
+use compiler::Compiler;
 
 macro_rules! type_error_if_invalid {
     ($self:expr, $ty:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
         if matches!($ty, Type::Invalid) {
-            return type_error!($self, $span, $kind, $( $msg ),*);
+            return err_type_error!($self, $span, $kind, $( $msg ),*);
         }
     };
     ($self:expr, $ty:expr, $span:expr, $kind:expr) => {
         if matches!($ty, Type::Invalid) {
-            return type_error!($self, $span, $kind);
+            return err_type_error!($self, $span, $kind);
         }
     };
 }
 
-macro_rules! type_error {
+macro_rules! err_type_error {
     ($self:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
         Err(vec![Error::TypeError {
             kind: $kind,
@@ -42,6 +43,25 @@ macro_rules! type_error {
             span: $span,
             message: None,
         }])
+    };
+}
+
+macro_rules! type_error {
+    ($self:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
+        Error::TypeError {
+            kind: $kind,
+            file: $self.file(),
+            span: $span,
+            message: Some(format!($( $msg ),*)),
+        }
+    };
+    ($self:expr, $span:expr, $kind:expr) => {
+        Error::TypeError {
+            kind: $kind,
+            file: $self.file(),
+            span: $span,
+            message: None,
+        }
     };
 }
 
@@ -72,6 +92,12 @@ enum Name {
     Namespace(usize),
 }
 
+#[derive(Debug, Clone)]
+enum Lookup {
+    Value(Type, VarKind),
+    Namespace(usize),
+}
+
 impl<'c> TypeChecker<'c> {
     fn new(compiler: &'c mut Compiler) -> Self {
         let mut namespaces = compiler
@@ -82,9 +108,9 @@ impl<'c> TypeChecker<'c> {
                 .map(|(k, v)| (
                     k.clone(),
                     match v {
-                        crate::Name::Global(_) => Name::Global(None),
-                        crate::Name::Blob(b) => Name::Blob(*b),
-                        crate::Name::Namespace(n) => Name::Namespace(*n),
+                        compiler::Name::Global(_) => Name::Global(None),
+                        compiler::Name::Blob(b) => Name::Blob(*b),
+                        compiler::Name::Namespace(n) => Name::Namespace(*n),
                     }
                 )).collect()
             ).collect();
@@ -102,21 +128,34 @@ impl<'c> TypeChecker<'c> {
         self.compiler.file_from_namespace(self.namespace).into()
     }
 
-    fn compiler_context(&self) -> crate::Context {
-        crate::Context::from_namespace(self.namespace)
+    fn compiler_context(&self) -> compiler::Context {
+        compiler::Context::from_namespace(self.namespace)
     }
 
-    fn get(&mut self, assignable: &Assignable) -> Result<Variable, Vec<Error>> {
+    fn assignable(&mut self, assignable: &Assignable) -> Result<Lookup, Vec<Error>> {
+        use Lookup::*;
+        let span = assignable.span;
         match &assignable.kind {
             AssignableKind::Read(ident) => {
                 // TODO(ed): Fix this
                 if let Some(var) = self.stack.iter().rev().find(|var| var.ident.name == ident.name) {
-                    return Ok(var.clone());
+                    return Ok(Value(var.ty.clone(), var.kind));
                 }
-                dbg!(&self.namespaces[self.namespace]);
                 match &self.namespaces[self.namespace][&ident.name] {
-                    Name::Global(Some((ty, kind))) => { return Ok(Variable::new(ident.clone(), ty.clone(), *kind)); },
-                    x => todo!("X: {:?} - {:?}", assignable.kind, x),
+                    Name::Global(Some((ty, kind))) => {
+                        return Ok(Value(ty.clone(), *kind));
+                    },
+                    Name::Global(None) => {
+                        // TODO(ed): This error should be caught earlier in the compiler - no point
+                        // doing it twice.
+                        unreachable!("Reading global before declaration");
+                    }
+                    Name::Blob(blob) => {
+                        return Ok(Value(Type::Blob(*blob), VarKind::Const));
+                    },
+                    Name::Namespace(id) => {
+                        return Ok(Namespace(*id))
+                    },
                 }
                 unreachable!();
             }
@@ -124,7 +163,9 @@ impl<'c> TypeChecker<'c> {
             AssignableKind::ArrowCall(_, _, _) => todo!(),
             AssignableKind::Access(_, _) => todo!(),
             AssignableKind::Index(_, _) => todo!(),
-            AssignableKind::Expression(_) => todo!(),
+            AssignableKind::Expression(expr) => {
+                return Ok(Value(self.expression(&expr)?, VarKind::Const));
+            }
         };
         todo!();
     }
@@ -176,6 +217,19 @@ impl<'c> TypeChecker<'c> {
         use ExpressionKind as EK;
         let span = expression.span;
         let res = match &expression.kind {
+            EK::Get(assignable) => match self.assignable(assignable)? {
+                Lookup::Value(value, _) => {
+                    value
+                }
+                Lookup::Namespace(_) => {
+                    return err_type_error!(
+                        self,
+                        span,
+                        TypeError::NamespaceNotExpression
+                    );
+                }
+            },
+
             EK::Add(a, b) => self.bin_op(span, a, b, op::add, "Addition")?,
             EK::Sub(a, b) => self.bin_op(span, a, b, op::sub, "Subtraction")?,
             EK::Mul(a, b) => self.bin_op(span, a, b, op::mul, "Multiplication")?,
@@ -258,14 +312,105 @@ impl<'c> TypeChecker<'c> {
                 ret,
                 body,
             } => {
+                let stack_size = self.stack.len();
+                let mut param_types = Vec::new();
+                for (ident, ty) in params {
+                    let ty = self.compiler.resolve_type(ty, self.compiler_context());
+                    param_types.push(ty.clone());
+                    self.stack.push(Variable::new(ident.clone(), ty, VarKind::Const));
+                }
+
                 let ret = self
                     .statement(body)?
                     .expect("A function that doesn't return a value");
-                // TODO
-                Type::Function(Vec::new(), Box::new(ret))
+
+                self.stack.truncate(stack_size);
+
+                Type::Function(param_types, Box::new(ret))
             }
 
-            _ => todo!(),
+            EK::IfShort { condition, fail } => todo!(),
+
+            EK::Instance { blob, fields } => {
+                let blob = match self.assignable(blob)? {
+                    Lookup::Value(Type::Blob(blob), _) => {
+                        self.compiler.blobs[blob].clone()
+                    }
+                    Lookup::Value(ty, _) => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::Violating(ty),
+                            "A blob was expected when instancing"
+                        );
+                    }
+                    Lookup::Namespace(_) => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::NamespaceNotExpression
+                        );
+                    }
+                };
+                let mut errors = Vec::new();
+                let mut initalizer = HashMap::new();
+                for (name, expr) in fields {
+                    let ty = match self.expression(&expr) {
+                        Ok(ty) => (ty, expr.span),
+                        Err(mut errs) => {
+                            errors.append(&mut errs);
+                            continue;
+                        }
+                    };
+                    initalizer.insert(name.clone(), ty);
+                }
+                for (name, (rhs, span)) in initalizer.iter() {
+                    match blob.fields.get(name) {
+                        Some(lhs) => match lhs.fits(rhs, self.compiler.blobs.as_slice()) {
+                            Ok(_) => {}
+                            Err(reason) => {
+                                errors.push(type_error!(
+                                    self,
+                                    *span,
+                                    TypeError::Missmatch { expected: lhs.clone(), got: rhs.clone() },
+                                    "because {}.{} is a '{:?}' and {}",
+                                    blob.name,
+                                    name,
+                                    lhs,
+                                    reason
+                                ));
+                            }
+                        }
+                        None => {
+                        }
+                    }
+                }
+                // No point checking that all fields are there if they're the wrong type,
+                // we'll get duplicate errors.
+                if !errors.is_empty() {
+                    return Err(errors);
+                }
+                for (name, ty) in blob.fields {
+                    if initalizer.contains_key(&name) {
+                        continue;
+                    }
+                    // TODO(ed): Is this the right order?
+                    if let Err(_) = Type::Void.fits(&ty, self.compiler.blobs.as_slice()) {
+                        errors.push(type_error!(
+                            self,
+                            span,
+                            TypeError::Missmatch { got: Type::Void, expected: ty },
+                            "Only nullable fields can be ommitted, {}.{} is not nullable",
+                            blob.name,
+                            name
+                        ));
+                    }
+                }
+                if !errors.is_empty() {
+                    return Err(errors);
+                }
+                Type::Instance(blob.id)
+            }
         };
         Ok(res)
     }
@@ -274,25 +419,35 @@ impl<'c> TypeChecker<'c> {
         let span = statement.span;
         let ret = match &statement.kind {
             StatementKind::Use { file, file_alias } => None,
-            StatementKind::Blob { name, fields } => todo!(),
+            StatementKind::Blob { name, fields } => None,
             StatementKind::Assignment {
                 kind,
                 target,
                 value,
             } => {
                 let value = self.expression(value)?;
-                let variable = self.get(target)?;
-                if variable.kind.immutable() {
-                    // TODO(ed): I want this to point to the equal-sign, the parser is
-                    // probably a bit off.
-                    // TODO(ed): This should not be a type error - prefereably a compile error?
-                    return type_error!(
-                        self,
-                        span,
-                        TypeError::Mutability { ident: variable.ident.name }
-                    );
-                }
-                let target_ty = variable.ty;
+                let target_ty = match self.assignable(target)? {
+                    Lookup::Value(_, kind) if kind.immutable() => {
+                        // TODO(ed): I want this to point to the equal-sign, the parser is
+                        // probably a bit off.
+                        // TODO(ed): This should not be a type error - prefereably a compile error?
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::Mutability
+                        );
+                    }
+                    Lookup::Namespace(_) => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::NamespaceNotExpression
+                        );
+                    }
+                    Lookup::Value(ty, _) => {
+                        ty
+                    }
+                };
                 let result = match kind {
                     ParserOp::Nop => value.clone(),
                     ParserOp::Add => op::add(&target_ty, &value),
@@ -320,7 +475,7 @@ impl<'c> TypeChecker<'c> {
                 if let Err(reason) = target_ty.fits(&result, self.compiler.blobs.as_slice()) {
                     // TODO(ed): I want this to point to the equal-sign, the parser is
                     // probably a bit off.
-                    return type_error!(
+                    return err_type_error!(
                         self,
                         span,
                         TypeError::MismatchAssign { got: result, expected: target_ty },
@@ -341,7 +496,7 @@ impl<'c> TypeChecker<'c> {
                 let fit = ty.fits(&value, self.compiler.blobs.as_slice());
                 let ty = match (kind.force(), fit) {
                     (true, Ok(_)) => {
-                        return type_error!(
+                        return err_type_error!(
                             self,
                             span,
                             TypeError::ExessiveForce {
@@ -353,7 +508,7 @@ impl<'c> TypeChecker<'c> {
                     (true, Err(_)) => ty,
                     (false, Ok(_)) => value,
                     (false, Err(reason)) => {
-                        return type_error!(
+                        return err_type_error!(
                             self,
                             span,
                             TypeError::Missmatch {
@@ -374,7 +529,7 @@ impl<'c> TypeChecker<'c> {
             } => {
                 let ty = self.expression(condition)?;
                 if !matches!(ty, Type::Bool) {
-                    return type_error!(
+                    return err_type_error!(
                         self,
                         condition.span,
                         TypeError::Missmatch {
@@ -391,7 +546,7 @@ impl<'c> TypeChecker<'c> {
             StatementKind::Loop { condition, body } => {
                 let ty = self.expression(condition)?;
                 if !matches!(ty, Type::Bool) {
-                    return type_error!(
+                    return err_type_error!(
                         self,
                         condition.span,
                         TypeError::Missmatch {
@@ -458,7 +613,7 @@ impl<'c> TypeChecker<'c> {
                         let fit = ty.fits(&value, self.compiler.blobs.as_slice());
                         let ty = match (kind.force(), fit) {
                             (true, Ok(_)) => {
-                                return type_error!(
+                                return err_type_error!(
                                     self,
                                     span,
                                     TypeError::ExessiveForce {
@@ -470,7 +625,7 @@ impl<'c> TypeChecker<'c> {
                             (true, Err(_)) => ty,
                             (false, Ok(_)) => value,
                             (false, Err(reason)) => {
-                                return type_error!(
+                                return err_type_error!(
                                     self,
                                     span,
                                     TypeError::Missmatch {
@@ -488,7 +643,6 @@ impl<'c> TypeChecker<'c> {
                     x => unreachable!("X: {:?}", x),
                 };
                 namespace.insert(ident.name.clone(), Name::Global(Some(name)));
-                dbg!(&namespace);
             }
             _ => {},
         }
@@ -502,21 +656,6 @@ impl<'c> TypeChecker<'c> {
         to_namespace: &HashMap<PathBuf, usize>,
     ) -> Result<(), Vec<Error>> {
         let mut errors = Vec::new();
-
-        for (path, module) in &tree.modules {
-            self.namespace = to_namespace[path];
-            let mut namespace = self.namespaces[self.namespace].clone();
-            for stmt in &module.statements {
-                if let Err(mut errs) = self.outer_definition(&mut namespace, &stmt) {
-                    errors.append(&mut errs);
-                }
-                // Make sure it's updated all the time! :D
-                self.namespaces[self.namespace] = namespace.clone();
-            }
-        }
-        dbg!(&self.namespaces);
-
-
         for (path, module) in &tree.modules {
             self.namespace = to_namespace[path];
             for stmt in &module.statements {
