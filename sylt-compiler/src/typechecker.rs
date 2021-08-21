@@ -159,7 +159,55 @@ impl<'c> TypeChecker<'c> {
                 }
                 unreachable!();
             }
-            AssignableKind::Call(_, _) => todo!(),
+            AssignableKind::Call(lhs, args) => {
+                // TODO(ed): External functions need a different lookup.
+                let ty = match self.assignable(lhs)? {
+                    Value(ty, _) => ty,
+                    Namespace(_) => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::NamespaceNotExpression
+                        );
+                    }
+                };
+                let (params, ret) = match ty {
+                    Type::Function(params, ret) => (params, ret),
+                    ty => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::Violating(ty.clone()),
+                            "{:?} cannot be called as a function",
+                            ty
+                        );
+                    }
+                };
+                let args = args.iter().map(|e| self.expression(e)).collect::<Result<Vec<_>, Vec<_>>>()?;
+                for (i, (arg, par)) in args.iter().zip(params.iter()).enumerate() {
+                    if let Err(reason) = par.fits(arg, self.compiler.blobs.as_slice()) {
+                        // TODO(ed): Point to the argument maybe?
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::Missmatch { got: arg.clone(), expected: par.clone() },
+                            "argument #{}, because {}",
+                            i,
+                            reason
+                        )
+                    }
+                }
+
+                if args.len() != params.len() {
+                    return err_type_error!(
+                        self,
+                        span,
+                        TypeError::WrongArity { got: args.len(), expected: params.len() }
+                    )
+                }
+
+                return Ok(Value(Type::clone(&ret), VarKind::Const));
+            }
             AssignableKind::ArrowCall(_, _, _) => todo!(),
             AssignableKind::Access(_, _) => todo!(),
             AssignableKind::Index(_, _) => todo!(),
@@ -420,8 +468,6 @@ impl<'c> TypeChecker<'c> {
     fn statement(&mut self, statement: &Statement) -> Result<Option<Type>, Vec<Error>> {
         let span = statement.span;
         let ret = match &statement.kind {
-            StatementKind::Use { file, file_alias } => None,
-            StatementKind::Blob { name, fields } => None,
             StatementKind::Assignment {
                 kind,
                 target,
@@ -596,7 +642,9 @@ impl<'c> TypeChecker<'c> {
                 None
             }
 
-            StatementKind::Continue
+            StatementKind::Use { .. }
+            | StatementKind::Blob { .. }
+            | StatementKind::Continue
             | StatementKind::Break
             | StatementKind::Unreachable
             | StatementKind::EmptyStatement => None,

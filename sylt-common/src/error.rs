@@ -127,6 +127,10 @@ pub enum TypeError {
     NamespaceNotExpression,
 
     // TODO(ed): Some of these are more like compile errors
+    WrongArity {
+        got: usize,
+        expected: usize,
+    },
 }
 
 
@@ -381,6 +385,11 @@ impl fmt::Display for TypeError {
             TypeError::NamespaceNotExpression => {
                 write!(f, "This resolves to a namespace, not a value")
             }
+
+            TypeError::WrongArity { got, expected } => {
+                write!(f, "Expected {} arguments but got {}", expected, got)
+            }
+
         }
     }
 }
