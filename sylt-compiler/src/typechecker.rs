@@ -61,17 +61,42 @@ impl Variable {
 struct TypeChecker<'c> {
     compiler: &'c mut Compiler,
     namespace: usize,
+    namespaces: Vec<HashMap<String, Name>>,
     stack: Vec<Variable>,
+}
+
+#[derive(Debug, Clone)]
+enum Name {
+    Blob(usize),
+    Global(Option<(Type, VarKind)>),
+    Namespace(usize),
 }
 
 impl<'c> TypeChecker<'c> {
     fn new(compiler: &'c mut Compiler) -> Self {
+        let mut namespaces = compiler
+            .namespaces
+            .iter()
+            .map(|n| n
+                .iter()
+                .map(|(k, v)| (
+                    k.clone(),
+                    match v {
+                        crate::Name::Global(_) => Name::Global(None),
+                        crate::Name::Blob(b) => Name::Blob(*b),
+                        crate::Name::Namespace(n) => Name::Namespace(*n),
+                    }
+                )).collect()
+            ).collect();
+
         Self {
             compiler,
             namespace: 0,
+            namespaces,
             stack: Vec::new(),
         }
     }
+
 
     fn file(&self) -> PathBuf {
         self.compiler.file_from_namespace(self.namespace).into()
@@ -401,12 +426,73 @@ impl<'c> TypeChecker<'c> {
         Ok(ret)
     }
 
+    fn outer_definition(&mut self, namespace: &mut HashMap<String, Name>, stmt: &Statement) -> Result<(), Vec<Error>> {
+        let span = stmt.span;
+        match &stmt.kind {
+            StatementKind::Definition { ident, kind, ty, value } => {
+                let name = match &namespace[&ident.name] {
+                    Name::Global(None) => {
+                        let ty = self.compiler.resolve_type(ty, self.compiler_context());
+                        let value = self.expression(value)?;
+                        let fit = ty.fits(&value, self.compiler.blobs.as_slice());
+                        let ty = match (kind.force(), fit) {
+                            (true, Ok(_)) => {
+                                return type_error!(
+                                    self,
+                                    span,
+                                    TypeError::ExessiveForce {
+                                        got: ty,
+                                        expected: value,
+                                    }
+                                )
+                            }
+                            (true, Err(_)) => ty,
+                            (false, Ok(_)) => value,
+                            (false, Err(reason)) => {
+                                return type_error!(
+                                    self,
+                                    span,
+                                    TypeError::Missmatch {
+                                        got: ty,
+                                        expected: value,
+                                    },
+                                    "because {}", reason
+                                )
+                            }
+                        };
+                        (ty, *kind)
+                    }
+                    // TODO(ed): Throw earlier errors before typechecking -
+                    // so we don't have to care about the duplicates.
+                    x => unreachable!("X: {:?}", x),
+                };
+                namespace.insert(ident.name.clone(), Name::Global(Some(name)));
+            }
+            _ => {},
+        }
+        Ok(())
+
+    }
+
     fn solve(
         mut self,
         tree: &mut AST,
         to_namespace: &HashMap<PathBuf, usize>,
     ) -> Result<(), Vec<Error>> {
         let mut errors = Vec::new();
+
+        for (path, module) in &tree.modules {
+            self.namespace = to_namespace[path];
+            let mut namespace = self.namespaces[self.namespace].clone();
+            for stmt in &module.statements {
+                if let Err(mut errs) = self.outer_definition(&mut namespace, &stmt) {
+                    errors.append(&mut errs);
+                }
+            }
+            self.namespaces[self.namespace] = namespace;
+        }
+
+
         for (path, module) in &tree.modules {
             self.namespace = to_namespace[path];
             for stmt in &module.statements {

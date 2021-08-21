@@ -1195,6 +1195,7 @@ impl Compiler {
         }
     }
 
+    // TODO(ed): This should probably be cleaned up and moves out of the compiler?
     fn extract_globals(&mut self, tree: &AST) -> HashMap<PathBuf, usize> {
         let root = tree.modules.first().unwrap().0.parent().unwrap();
         let mut path_to_namespace_id = HashMap::<PathBuf, usize>::new();
