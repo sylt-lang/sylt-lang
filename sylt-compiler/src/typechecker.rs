@@ -188,8 +188,10 @@ impl<'c> TypeChecker<'c> {
                         );
                     }
                 };
+                let args = args.iter().map(|e| self.expression(e)).collect::<Result<Vec<_>, Vec<_>>>()?;
                 let (params, ret) = match ty {
                     Type::Function(params, ret) => (params, ret),
+                    Type::Unknown => (args.clone(), Box::new(Type::Unknown)),
                     ty => {
                         return err_type_error!(
                             self,
@@ -200,7 +202,6 @@ impl<'c> TypeChecker<'c> {
                         );
                     }
                 };
-                let args = args.iter().map(|e| self.expression(e)).collect::<Result<Vec<_>, Vec<_>>>()?;
                 for (i, (arg, par)) in args.iter().zip(params.iter()).enumerate() {
                     if let Err(reason) = par.fits(arg, self.compiler.blobs.as_slice()) {
                         // TODO(ed): Point to the argument maybe?
@@ -518,7 +519,7 @@ impl<'c> TypeChecker<'c> {
                     .expect("A function that doesn't return a value");
 
                 // TODO(ed): We can catch types being too lenient here
-                if let Err(reason) = actual_ret.fits(&ret, self.compiler.blobs.as_slice()) {
+                if let Err(reason) = ret.fits(&actual_ret, self.compiler.blobs.as_slice()) {
                     return err_type_error!(
                         self,
                         span,
