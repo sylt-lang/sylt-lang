@@ -240,6 +240,12 @@ fn parse_test_settings(contents: String) -> TestSettings {
     for line in contents.split("\n") {
         if line.starts_with("// error: ") {
             let mut line = line.strip_prefix("// error: ").unwrap().to_string();
+            if line.starts_with("$") {
+                line = format!(
+                    "Error::TypeError {{ kind: TypeError::{}, .. }}",
+                    &line[1..]
+                );
+            }
             if line.starts_with("#") {
                 line = format!(
                     "Error::RuntimeError {{ kind: RuntimeError::{}, .. }}",

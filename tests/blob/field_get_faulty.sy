@@ -9,6 +9,5 @@ f :: fn a:int -> int {
     ret a
 }
 
-// error: #UnknownField(_, _)
-// error: #UnknownField(_, _)
-// error: #TypeMismatch(Type::Void, Type::Int)
+// error: $UnknownField {..}
+// error: $UnknownField {..}
