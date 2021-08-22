@@ -659,9 +659,10 @@ impl<'c> TypeChecker<'c> {
     }
 
     fn statement(&mut self, statement: &Statement) -> Result<Option<Type>, Vec<Error>> {
+        use StatementKind as SK;
         let span = statement.span;
         let ret = match &statement.kind {
-            StatementKind::Assignment {
+            SK::Assignment {
                 kind,
                 target,
                 value,
@@ -726,7 +727,7 @@ impl<'c> TypeChecker<'c> {
                 }
                 None
             }
-            StatementKind::Definition {
+            SK::Definition {
                 ident,
                 kind,
                 ty,
@@ -778,7 +779,7 @@ impl<'c> TypeChecker<'c> {
                 self.stack[slot].ty = ty;
                 None
             }
-            StatementKind::If {
+            SK::If {
                 condition,
                 pass,
                 fail,
@@ -799,7 +800,7 @@ impl<'c> TypeChecker<'c> {
                 self.statement(fail)?;
                 None
             }
-            StatementKind::Loop { condition, body } => {
+            SK::Loop { condition, body } => {
                 let ty = self.expression(condition)?;
                 if !matches!(ty, Type::Bool) {
                     return err_type_error!(
@@ -815,11 +816,11 @@ impl<'c> TypeChecker<'c> {
                 self.statement(body)?;
                 None
             }
-            StatementKind::IsCheck { lhs, rhs } => {
+            SK::IsCheck { lhs, rhs } => {
                 // Checked in the compiler
                 None
             }
-            StatementKind::Block { statements } => {
+            SK::Block { statements } => {
                 let stack_size = self.stack.len();
 
                 let mut errors = Vec::new();
@@ -847,17 +848,17 @@ impl<'c> TypeChecker<'c> {
                 ))
             }
 
-            StatementKind::Ret { value } => Some(self.expression(value)?),
-            StatementKind::StatementExpression { value } => {
+            SK::Ret { value } => Some(self.expression(value)?),
+            SK::StatementExpression { value } => {
                 None
             }
 
-            StatementKind::Use { .. }
-            | StatementKind::Blob { .. }
-            | StatementKind::Continue
-            | StatementKind::Break
-            | StatementKind::Unreachable
-            | StatementKind::EmptyStatement => None,
+            SK::Use { .. }
+            | SK::Blob { .. }
+            | SK::Continue
+            | SK::Break
+            | SK::Unreachable
+            | SK::EmptyStatement => None,
         };
         Ok(ret)
     }
