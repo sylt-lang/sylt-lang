@@ -945,8 +945,6 @@ impl<'c> TypeChecker<'c> {
             }
         }
 
-        dbg!(&self.namespaces);
-
         let mut errors = Vec::new();
         for (path, module) in &tree.modules {
             self.namespace = to_namespace[path];
