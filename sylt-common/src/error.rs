@@ -131,6 +131,15 @@ pub enum TypeError {
         got: usize,
         expected: usize,
     },
+
+    UnknownField {
+        blob: String,
+        field: String,
+    },
+    TupleIndexOutOfRange {
+        got: i64,
+        length: usize,
+    }
 }
 
 
@@ -389,7 +398,12 @@ impl fmt::Display for TypeError {
             TypeError::WrongArity { got, expected } => {
                 write!(f, "Expected {} arguments but got {}", expected, got)
             }
-
+            TypeError::UnknownField { blob, field } => {
+                write!(f, "Cannot find field '{}.{}'", blob, field)
+            }
+            TypeError::TupleIndexOutOfRange { length, got } => {
+                write!(f, "A tuple of length {} has no element {}", length, got)
+            }
         }
     }
 }

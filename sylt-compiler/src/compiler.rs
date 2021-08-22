@@ -449,6 +449,7 @@ impl Compiler {
             IfShort {
                 condition,
                 fail,
+                ..
             } => {
                 // Results in 2 values pushed on the stack - since there's a Duplicate in
                 // there!

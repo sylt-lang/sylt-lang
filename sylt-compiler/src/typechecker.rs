@@ -223,6 +223,16 @@ impl<'c> TypeChecker<'c> {
                         match &ty {
                             Type::Blob(blob) => {
                                 let blob = &self.compiler.blobs[*blob];
+                                match blob.fields.get(&field.name) {
+                                    Some(ty) => Ok(Value(ty.clone(), VarKind::Mutable)),
+                                    None => {
+                                        return err_type_error!(
+                                            self,
+                                            field.span,
+                                            TypeError::UnknownField { blob: blob.name.clone(), field: field.name.clone() }
+                                        );
+                                    }
+                                }
                             }
                             ty => {
                                 return err_type_error!(
@@ -242,9 +252,10 @@ impl<'c> TypeChecker<'c> {
                     }
                 }
             }
-            AK::Index(thing, index) => {
-                let (thing, kind) = if let Value(val, kind) = self.assignable(thing, namespace)? {
-                    (val, kind)
+            AK::Index(thing, index_expr) => {
+                // TODO(ed): We could disallow mutating via reference here - not sure we want to thought.
+                let thing = if let Value(val, _) = self.assignable(thing, namespace)? {
+                    val
                 } else {
                     return err_type_error!(
                         self,
@@ -252,26 +263,89 @@ impl<'c> TypeChecker<'c> {
                         TypeError::NamespaceNotExpression
                     );
                 };
-                let index = self.expression(index)?;
-                todo!();
+                let index = self.expression(index_expr)?;
                 let ret = match (thing, index) {
                     (Type::List(ret), index) => {
-                        Type::clone(&ret)
+                        if let Err(reason) = index.fits(&Type::Int, self.compiler.blobs.as_slice()) {
+                            return err_type_error!(
+                                self,
+                                span,
+                                TypeError::Missmatch {
+                                    got: index,
+                                    expected: Type::Int,
+                                },
+                                "List indexing requires '{:?}' and {}",
+                                Type::Int,
+                                reason
+                            )
+                        }
+                        Value(Type::clone(&ret), VarKind::Mutable)
                     }
-                    (Type::Tuple(ret), index) => {
-                        // CHECK const errors
-                        Type::clone(&ret[0])
+                    (Type::Tuple(kinds), index) => {
+                        if let Err(reason) = index.fits(&Type::Int, self.compiler.blobs.as_slice()) {
+                            return err_type_error!(
+                                self,
+                                span,
+                                TypeError::Missmatch {
+                                    got: index,
+                                    expected: Type::Int,
+                                },
+                                "Tuple indexing requires '{:?}' and {}",
+                                Type::Int,
+                                reason
+                            )
+                        }
+                        // TODO(ed): Clean this up a bit
+                        let val = if let ExpressionKind::Int(index) = index_expr.kind {
+                            if let Some(val) = kinds.get(index as usize) {
+                                val.clone()
+                            } else {
+                                return err_type_error!(
+                                    self,
+                                    span,
+                                    TypeError::TupleIndexOutOfRange {
+                                        length: kinds.len(),
+                                        got: index,
+                                    }
+                                );
+                            }
+                        } else {
+                            Type::maybe_union(kinds.iter(), self.compiler.blobs.as_slice())
+                        };
+                        Value(val, VarKind::Const)
                     }
-                    _ => {
-                        panic!();
+                    (Type::Dict(key, val), index) => {
+                        if let Err(reason) = index.fits(&key, self.compiler.blobs.as_slice()) {
+                            return err_type_error!(
+                                self,
+                                span,
+                                TypeError::Missmatch {
+                                    got: index,
+                                    expected: Type::clone(&key),
+                                },
+                                "Dict key-type is '{:?}' and {}",
+                                key,
+                                reason
+                            )
+                        }
+                        Value(Type::clone(&val), VarKind::Mutable)
+                    }
+                    (ty, _) => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::Violating(ty.clone()),
+                            "'{:?}' cannot be indexed, only List, Tuple and Dict can be",
+                            ty
+                        );
                     }
                 };
-                return Ok(Value(ret, kind));
+                return Ok(ret);
             }
             AK::Expression(expr) => {
                 return Ok(Value(self.expression(&expr)?, VarKind::Const));
             }
-        };
+        }
     }
 
     fn bin_op(
@@ -374,11 +448,6 @@ impl<'c> TypeChecker<'c> {
             EK::Or(a, b) => self.bin_op(span, a, b, op::or, "Boolean or")?,
             EK::Not(a) => self.uni_op(span, a, op::not, "Boolean not")?,
 
-            EK::IfExpression {
-                condition,
-                pass,
-                fail,
-            } => todo!(),
             EK::Duplicate(expr) => self.expression(expr)?,
             EK::Tuple(values) => {
                 let mut types = Vec::new();
@@ -433,7 +502,51 @@ impl<'c> TypeChecker<'c> {
                 Type::Function(param_types, Box::new(ret))
             }
 
-            EK::IfShort { condition, fail } => todo!(),
+            EK::IfExpression {
+                condition,
+                pass,
+                fail,
+            } => {
+                let condition_ty = self.expression(condition)?;
+                if !matches!(condition_ty, Type::Bool) {
+                    return err_type_error!(
+                        self,
+                        condition.span,
+                        TypeError::Missmatch {
+                            got: condition_ty,
+                            expected: Type::Bool,
+                        },
+                        "Only boolean expressions are valid if-expression conditions"
+                    )
+                }
+
+                // TODO(ed) check nullables and the actual condition
+                Type::maybe_union(
+                    [self.expression(pass)?, self.expression(fail)?].iter(),
+                    self.compiler.blobs.as_slice(),
+                )
+            }
+
+            EK::IfShort { lhs, condition, fail } => {
+                let condition_ty = self.expression(condition)?;
+                if !matches!(condition_ty, Type::Bool) {
+                    return err_type_error!(
+                        self,
+                        condition.span,
+                        TypeError::Missmatch {
+                            got: condition_ty,
+                            expected: Type::Bool,
+                        },
+                        "Only boolean expressions are valid if-expression conditions"
+                    )
+                }
+
+                // TODO(ed) check nullables and the actual condition
+                Type::maybe_union(
+                    [self.expression(lhs)?, self.expression(fail)?].iter(),
+                    self.compiler.blobs.as_slice(),
+                )
+            }
 
             EK::Instance { blob, fields } => {
                 let blob = match self.assignable(blob, self.namespace)? {
@@ -663,7 +776,10 @@ impl<'c> TypeChecker<'c> {
                 self.statement(body)?;
                 None
             }
-            StatementKind::IsCheck { lhs, rhs } => todo!(),
+            StatementKind::IsCheck { lhs, rhs } => {
+                // Checked in the compiler
+                None
+            }
             StatementKind::Block { statements } => {
                 let stack_size = self.stack.len();
 
