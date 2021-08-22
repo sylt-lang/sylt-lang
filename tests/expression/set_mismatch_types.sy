@@ -3,4 +3,4 @@ start :: fn {
     a
 }
 
-// error: #TypeMismatch(_, _)
+// error: $Missmatch { .. }

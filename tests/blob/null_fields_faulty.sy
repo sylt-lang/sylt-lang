@@ -6,7 +6,7 @@ B :: blob {
 }
 
 start :: fn {
-    a : !B = A'
+    a : !B = A {}
     print(a.a)
 }
 

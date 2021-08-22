@@ -8,5 +8,5 @@ start :: fn {
     a._name = "abc"
 }
 
-// error: #ImmutableField(..)
-// error: #ImmutableField(..)
+// error: $Mutability
+// error: $Mutability
