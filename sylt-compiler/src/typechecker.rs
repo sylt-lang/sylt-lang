@@ -511,7 +511,7 @@ impl<'c> TypeChecker<'c> {
                     .expect("A function that doesn't return a value");
 
                 // TODO(ed): We can catch types being too lenient here
-                if let Err(reason) = ret.fits(&actual_ret, self.compiler.blobs.as_slice()) {
+                if let Err(reason) = actual_ret.fits(&ret, self.compiler.blobs.as_slice()) {
                     return err_type_error!(
                         self,
                         span,
@@ -763,7 +763,7 @@ impl<'c> TypeChecker<'c> {
                         )
                     }
                     (true, Err(_)) => ty,
-                    (false, Ok(_)) => value,
+                    (false, Ok(_)) => if matches!(ty, Type::Unknown) { value } else { ty },
                     (false, Err(reason)) => {
                         return err_type_error!(
                             self,
