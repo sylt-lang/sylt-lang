@@ -231,7 +231,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     }
                 ),
                 [T::As, ..] => raise_syntax_error!(
-                    skip_until!(ctx, T::Newline),
+                    ctx.skip(1),
                     "Expected alias"
                 ),
                 [..] => {

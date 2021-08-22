@@ -1,5 +1,5 @@
 use / as root
 
 test :: fn {
-    print(root.text)
+    root.text <=> "Bottom text"
 }
