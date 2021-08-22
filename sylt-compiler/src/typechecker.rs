@@ -157,7 +157,13 @@ impl<'c> TypeChecker<'c> {
                         return Ok(Namespace(*id))
                     },
                 }
-                unreachable!();
+                if let Some(fun) = self.compiler.functions.get(&ident.name) {
+                    // TODO(ed): This needs work - we preferably want to
+                    // know this type.
+                    return Ok(Value(Type::Unknown, VarKind::Const));
+                } else {
+                    unreachable!("Should have been caught earlier!")
+                }
             }
             AK::Call(fun, args) => {
                 // TODO(ed): External functions need a different lookup.
