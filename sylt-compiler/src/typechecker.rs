@@ -148,7 +148,12 @@ impl<'c> TypeChecker<'c> {
                     Some(Name::Global(None)) => {
                         // TODO(ed): This error should be caught earlier in the compiler - no point
                         // doing it twice.
-                        unreachable!("Reading global before declaration");
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::UnresolvedName(ident.name.clone()),
+                            "Read before being defined"
+                        );
                     }
                     Some(Name::Blob(blob)) => {
                         return Ok(Value(Type::Blob(*blob), VarKind::Const));
@@ -235,25 +240,27 @@ impl<'c> TypeChecker<'c> {
                         match &ty {
                             Type::Instance(blob) => {
                                 let blob = &self.compiler.blobs[*blob];
+                                dbg!(&blob.fields);
                                 match blob.fields.get(&field.name) {
                                     Some(ty) => Ok(Value(ty.clone(), VarKind::Mutable)),
-                                    None => {
-                                        return err_type_error!(
+                                    None => match field.name.as_str() {
+                                        // TODO(ed): These result in poor error messages
+                                        "_id" => Ok(Value(Type::Int, VarKind::Const)),
+                                        "_name" => Ok(Value(Type::String, VarKind::Const)),
+                                        _ => err_type_error!(
                                             self,
                                             field.span,
                                             TypeError::UnknownField { blob: blob.name.clone(), field: field.name.clone() }
-                                        );
+                                        ),
                                     }
                                 }
                             }
-                            ty => {
-                                return err_type_error!(
-                                    self,
-                                    span,
-                                    TypeError::Violating(ty.clone()),
-                                    "Only namespaces and blob instances support '.'-access"
-                                );
-                            }
+                            ty => err_type_error!(
+                                self,
+                                span,
+                                TypeError::Violating(ty.clone()),
+                                "Only namespaces and blob instances support '.'-access"
+                            ),
                         }
                     }
                     Namespace(namespace) => {
