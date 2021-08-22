@@ -1168,6 +1168,10 @@ impl Compiler {
             self.module_not_functions(module, ctx);
         }
 
+        if !self.errors.is_empty() {
+            return Err(self.errors);
+        }
+
         typechecker::solve(&mut self, &mut tree, &path_to_namespace_id)?;
         println!("\n\nOLD TYPECHECKER\n\n");
 

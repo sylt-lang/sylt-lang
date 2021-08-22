@@ -141,28 +141,34 @@ impl<'c> TypeChecker<'c> {
                 if let Some(var) = self.stack.iter().rev().find(|var| var.ident.name == ident.name) {
                     return Ok(Value(var.ty.clone(), var.kind));
                 }
-                match &self.namespaces[self.namespace][&ident.name] {
-                    Name::Global(Some((ty, kind))) => {
+                match &self.namespaces[self.namespace].get(&ident.name) {
+                    Some(Name::Global(Some((ty, kind)))) => {
                         return Ok(Value(ty.clone(), *kind));
-                    },
-                    Name::Global(None) => {
+                    }
+                    Some(Name::Global(None)) => {
                         // TODO(ed): This error should be caught earlier in the compiler - no point
                         // doing it twice.
                         unreachable!("Reading global before declaration");
                     }
-                    Name::Blob(blob) => {
+                    Some(Name::Blob(blob)) => {
                         return Ok(Value(Type::Blob(*blob), VarKind::Const));
-                    },
-                    Name::Namespace(id) => {
+                    }
+                    Some(Name::Namespace(id)) => {
                         return Ok(Namespace(*id))
-                    },
+                    }
+                    None => {}
                 }
                 if let Some(fun) = self.compiler.functions.get(&ident.name) {
                     // TODO(ed): This needs work - we preferably want to
                     // know this type.
                     return Ok(Value(Type::Unknown, VarKind::Const));
                 } else {
-                    unreachable!("Should have been caught earlier!")
+                    return err_type_error!(
+                        self,
+                        span,
+                        TypeError::UnresolvedName(ident.name.clone()),
+                        "This error should not occur"
+                    );
                 }
             }
             AK::Call(fun, args) => {
@@ -177,6 +183,7 @@ impl<'c> TypeChecker<'c> {
                         );
                     }
                 };
+                dbg!(&ty);
                 let (params, ret) = match ty {
                     Type::Function(params, ret) => (params, ret),
                     ty => {
@@ -499,9 +506,21 @@ impl<'c> TypeChecker<'c> {
                     self.stack.push(Variable::new(ident.clone(), ty, VarKind::Const));
                 }
 
-                let ret = self
+                let ret = self.compiler.resolve_type(ret, self.compiler_context());
+                let actual_ret = self
                     .statement(body)?
                     .expect("A function that doesn't return a value");
+
+                // TODO(ed): We can catch types being too lenient here
+                if let Err(reason) = ret.fits(&actual_ret, self.compiler.blobs.as_slice()) {
+                    return err_type_error!(
+                        self,
+                        span,
+                        TypeError::Missmatch { got: actual_ret, expected: ret },
+                        "Return type doesn't match, {}",
+                        reason
+                    );
+                }
 
                 self.stack.truncate(stack_size);
 
@@ -714,6 +733,9 @@ impl<'c> TypeChecker<'c> {
                 ty,
                 value,
             } => {
+                let slot = self.stack.len();
+                self.stack.push(Variable::new(ident.clone(), Type::Unknown, *kind));
+
                 let ty = self.compiler.resolve_type(ty, self.compiler_context());
                 let value = self.expression(value)?;
                 let fit = ty.fits(&value, self.compiler.blobs.as_slice());
@@ -742,7 +764,7 @@ impl<'c> TypeChecker<'c> {
                         )
                     }
                 };
-                self.stack.push(Variable::new(ident.clone(), ty, *kind));
+                self.stack[slot].ty = ty;
                 None
             }
             StatementKind::If {
@@ -816,7 +838,7 @@ impl<'c> TypeChecker<'c> {
 
             StatementKind::Ret { value } => Some(self.expression(value)?),
             StatementKind::StatementExpression { value } => {
-                self.expression(value)?;
+                dbg!(self.expression(value)?);
                 None
             }
 

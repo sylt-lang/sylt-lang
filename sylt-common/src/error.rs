@@ -136,10 +136,13 @@ pub enum TypeError {
         blob: String,
         field: String,
     },
+
     TupleIndexOutOfRange {
         got: i64,
         length: usize,
-    }
+    },
+
+    UnresolvedName(String),
 }
 
 
@@ -403,6 +406,9 @@ impl fmt::Display for TypeError {
             }
             TypeError::TupleIndexOutOfRange { length, got } => {
                 write!(f, "A tuple of length {} has no element {}", length, got)
+            }
+            TypeError::UnresolvedName(name) => {
+                write!(f, "Cannot resolve '{}'", name)
             }
         }
     }
