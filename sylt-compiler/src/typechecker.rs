@@ -141,7 +141,7 @@ impl<'c> TypeChecker<'c> {
                 if let Some(var) = self.stack.iter().rev().find(|var| var.ident.name == ident.name) {
                     return Ok(Value(var.ty.clone(), var.kind));
                 }
-                match &self.namespaces[self.namespace].get(&ident.name) {
+                match &self.namespaces[namespace].get(&ident.name) {
                     Some(Name::Global(Some((ty, kind)))) => {
                         return Ok(Value(ty.clone(), *kind));
                     }
@@ -644,7 +644,7 @@ impl<'c> TypeChecker<'c> {
                         continue;
                     }
                     // TODO(ed): Is this the right order?
-                    if let Err(_) = Type::Void.fits(&ty, self.compiler.blobs.as_slice()) {
+                    if let Err(_) = ty.fits(&Type::Void, self.compiler.blobs.as_slice()) {
                         // TODO(ed): Not super sold on this error message - it can be better.
                         errors.push(type_error!(
                             self,
