@@ -1,0 +1,105 @@
+use _import
+a := 1
+
+A :: blob {
+    a: int,
+    b: int?,
+}
+
+f :: fn a: int -> int {
+    a + 1
+}
+
+start :: fn {
+    // Simple stuff
+    1 + 1
+    "abc" + 1
+
+    (1, 2) + (3, 4) * 1
+
+    !true
+    !1
+    -1
+
+    1 in {1, 2, 3}
+    1 in {"abc", "abc"}
+
+    a: {str|int: int} = {"ab": 2, 2: 2}
+    a: {int|float} = [2, 2, 2.0]
+
+    // Conditions
+    if 1 {
+    }
+
+    loop 1 + 1 * 2 {
+    }
+
+    // Variables
+    a := 1
+    a = 3
+    a = "abc"
+
+    b :: "abc"
+    b = "abc"
+
+    a = 2
+    a += "abc"
+
+    // Blobs
+    c :: A {
+        a: 1.0,
+        b: nil,
+    }
+    c.a
+    c.abc
+
+    A {
+        a: 1.0
+    }
+
+    // Wrong functions
+    q := f' 1
+    q := f' 1.0
+    q := 1 -> f'
+    q := 1.0 -> f'
+
+    // Namespace access
+    _import.q + 1
+    _import.q + 1.0
+
+    // If expressions
+    1.0 + 1.0 if true else 2.0
+    (1.0 if < 0.0 else 2.0) + 1.0
+
+    // Indexing
+    a :: [1, 2, 3]
+    a[0]
+    a["abc"]
+
+    a :: (1, "abc", 1)
+    a[1] + "abc"
+    a[1] + 123
+    a["abc"] + 123
+    a[8] + 123
+
+    a :: {"abc": 1, "bcd": 2}
+    a["abc"] + 123
+    a["qqq"] + 123
+    a[123] + 123
+}
+
+// Inital assign
+// error: $Missmatch { .. }
+// Conditions
+// error: $Missmatch { expected: Type::Bool, .. }
+// error: $Missmatch { expected: Type::Bool, .. }
+
+// Other assign
+// error: $MismatchAssign { got: Type::String, expected: Type::Int }
+// error: $Mutability
+
+
+// error: $BinOp { lhs: Type::Int, rhs: Type::String, .. }
+// error: $Missmatch { got: Type::Float, expected: Type::Int }
+// error: $Missmatch { got: Type::Float, expected: Type::Int }
+// error: $Missmatch { got: Type::Float, expected: Type::Int }
