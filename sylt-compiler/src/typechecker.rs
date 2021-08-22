@@ -183,7 +183,6 @@ impl<'c> TypeChecker<'c> {
                         );
                     }
                 };
-                dbg!(&ty);
                 let (params, ret) = match ty {
                     Type::Function(params, ret) => (params, ret),
                     ty => {
@@ -234,7 +233,7 @@ impl<'c> TypeChecker<'c> {
                 match self.assignable(thing, namespace)? {
                     Value(ty, kind) => {
                         match &ty {
-                            Type::Blob(blob) => {
+                            Type::Instance(blob) => {
                                 let blob = &self.compiler.blobs[*blob];
                                 match blob.fields.get(&field.name) {
                                     Some(ty) => Ok(Value(ty.clone(), VarKind::Mutable)),
@@ -252,7 +251,7 @@ impl<'c> TypeChecker<'c> {
                                     self,
                                     span,
                                     TypeError::Violating(ty.clone()),
-                                    "Only namespaces and blobs support '.'-access"
+                                    "Only namespaces and blob instances support '.'-access"
                                 );
                             }
                         }
