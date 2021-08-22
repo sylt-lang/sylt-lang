@@ -19,9 +19,8 @@ pub enum StatementKind {
     /// `use <file> as <alias>`.
     /// `use <folder>/ as <alias>`.
     Use {
-        file: Identifier,
-        file_alias: Option<Identifier>,
-        resolved_path: PathBuf,
+        ident: Identifier,
+        file: PathBuf,
     },
 
     /// Defines a new Blob.
@@ -204,44 +203,56 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         // `use path/to/file as alias`
         [T::Use, ..] => {
             let (ctx, path) = path(ctx.skip(1))?;
-            let file = Identifier {
-                span: ctx.prev().span(),
-                name: path,
-            };
-            let (ctx, file_alias) = match &ctx.tokens[ctx.curr..] {
-                [T::As, T::Identifier(alias), ..] => (
-                    ctx.skip(2),
-                    Some(Identifier {
-                        span: ctx.skip(1).span(),
-                        name: alias.clone(),
-                    })
-                ),
-                [T::As, ..] => raise_syntax_error!(
-                    skip_until!(ctx, T::Newline),
-                    "Expected alias"
-                ),
-                [..] => (ctx, None),
-            };
-            let resolved_path = {
-                // Importing a folder is the same as importing exports.sy
-                // in the folder.
-                let parent = if file.name.starts_with("/") {
+            let bare_name = path
+                .trim_start_matches("/")
+                .trim_end_matches("/");
+            let file = {
+                let parent = if path.starts_with("/") {
                     ctx.root
                 } else {
                     ctx.file.parent().unwrap()
                 };
-                let bare_name = file.name
-                    .trim_start_matches("/")
-                    .trim_end_matches("/");
-                parent.join(if file.name == "/" {
+                // Importing a folder is the same as importing exports.sy
+                // in the folder.
+                parent.join(if path == "/" {
                     format!("exports.sy")
-                } else if file.name.ends_with("/") {
+                } else if path.ends_with("/") {
                     format!("{}/exports.sy", bare_name)
                 } else {
                     format!("{}.sy", bare_name)
                 })
             };
-            (ctx, Use { file, file_alias, resolved_path })
+            let (ctx, ident) = match &ctx.tokens[ctx.curr..] {
+                [T::As, T::Identifier(alias), ..] => (
+                    ctx.skip(2),
+                    Identifier {
+                        span: ctx.skip(1).span(),
+                        name: alias.clone(),
+                    }
+                ),
+                [T::As, ..] => raise_syntax_error!(
+                    skip_until!(ctx, T::Newline),
+                    "Expected alias"
+                ),
+                [..] => {
+                    if path == "/" {
+                        raise_syntax_error!(ctx, "Using root requires alias");
+                    }
+                    let span = if path.ends_with("/") {
+                        ctx.prev().prev().span()
+                    } else {
+                        ctx.prev().span()
+                    };
+                    let name = PathBuf::from(bare_name)
+                        .file_stem()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .to_string();
+                    (ctx, Identifier { span, name })
+                },
+            };
+            (ctx, Use { ident, file })
         },
 
         // `: A is : B`

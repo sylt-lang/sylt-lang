@@ -1264,37 +1264,19 @@ impl Compiler {
             for statement in module.statements.iter() {
                 use StatementKind::*;
                 match &statement.kind {
-                    Use { file: Identifier { name, span }, file_alias, resolved_path } => {
-                        let bare_name = name.trim_end_matches("/");
-                        let namespace_name = match file_alias {
-                            Some(alias) => alias.name.clone(),
-                            None => match PathBuf::from(bare_name).file_stem() {
-                                Some(name) => name.to_str()
-                                    .unwrap()
-                                    .to_string(),
-                                None => {
-                                    error!(
-                                        self,
-                                        ctx,
-                                        *span,
-                                        "Using root requires alias"
-                                    );
-                                    "".to_string()
-                                }
-                            }
-                        };
-                        match namespace.entry(namespace_name) {
+                    Use { ident, file } => {
+                        match namespace.entry(ident.name.clone()) {
                             Entry::Vacant(vac) => {
-                                let other = path_to_namespace_id[resolved_path];
+                                let other = path_to_namespace_id[file];
                                 vac.insert(Name::Namespace(other));
                             }
                             Entry::Occupied(_) => {
                                 error!(
                                     self,
                                     ctx,
-                                    *span,
+                                    ident.span,
                                     "A global variable with the name '{}' already exists",
-                                    name
+                                    ident.name
                                 );
                             }
                         }

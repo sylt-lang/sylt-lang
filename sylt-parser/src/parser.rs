@@ -697,8 +697,8 @@ fn module(path: &Path, root: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBu
             Ok((ctx, statement)) => {
                 use StatementKind::*;
                 // Yank `use`s and add it to the used-files list.
-                if let Use { resolved_path, .. } = &statement.kind {
-                    use_files.push(resolved_path.clone());
+                if let Use { file, .. } = &statement.kind {
+                    use_files.push(file.clone());
                 }
                 // Only push non-empty statements.
                 if !matches!(statement.kind, EmptyStatement) {
