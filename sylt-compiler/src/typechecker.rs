@@ -734,9 +734,21 @@ impl<'c> TypeChecker<'c> {
                 value,
             } => {
                 let slot = self.stack.len();
-                self.stack.push(Variable::new(ident.clone(), Type::Unknown, *kind));
-
                 let ty = self.compiler.resolve_type(ty, self.compiler_context());
+                let ty = if matches!(ty, Type::Unknown) {
+                    // Special case if it's a function
+                    if let ExpressionKind::Function { name, params, ret, .. } = &value.kind {
+                        let params = params.iter().map(|(_, ty)| self.compiler.resolve_type(ty, self.compiler_context())).collect();
+                        let ret = self.compiler.resolve_type(ret, self.compiler_context());
+                        Type::Function(params, Box::new(ret))
+                    } else {
+                        Type::Unknown
+                    }
+                } else {
+                    ty
+                };
+                self.stack.push(Variable::new(ident.clone(), ty.clone(), *kind));
+
                 let value = self.expression(value)?;
                 let fit = ty.fits(&value, self.compiler.blobs.as_slice());
                 let ty = match (kind.force(), fit) {
@@ -838,7 +850,6 @@ impl<'c> TypeChecker<'c> {
 
             StatementKind::Ret { value } => Some(self.expression(value)?),
             StatementKind::StatementExpression { value } => {
-                dbg!(self.expression(value)?);
                 None
             }
 
@@ -852,13 +863,26 @@ impl<'c> TypeChecker<'c> {
         Ok(ret)
     }
 
-    fn outer_definition(&mut self, namespace: &mut HashMap<String, Name>, stmt: &Statement) -> Result<(), Vec<Error>> {
+    fn outer_definition(&mut self, namespace: usize, stmt: &Statement) -> Result<(), Vec<Error>> {
         let span = stmt.span;
         match &stmt.kind {
             StatementKind::Definition { ident, kind, ty, value } => {
-                let name = match &namespace[&ident.name] {
+                let name = match &self.namespaces[namespace][&ident.name] {
                     Name::Global(None) => {
                         let ty = self.compiler.resolve_type(ty, self.compiler_context());
+                        let ty = if matches!(ty, Type::Unknown) {
+                            // Special case if it's a function
+                            if let ExpressionKind::Function { name, params, ret, .. } = &value.kind {
+                                let params = params.iter().map(|(_, ty)| self.compiler.resolve_type(ty, self.compiler_context())).collect();
+                                let ret = self.compiler.resolve_type(ret, self.compiler_context());
+                                Type::Function(params, Box::new(ret))
+                            } else {
+                                Type::Unknown
+                            }
+                        } else {
+                            ty
+                        };
+                        self.namespaces[namespace].insert(ident.name.clone(), Name::Global(Some((ty.clone(), *kind))));
                         let value = self.expression(value)?;
                         let fit = ty.fits(&value, self.compiler.blobs.as_slice());
                         let ty = match (kind.force(), fit) {
@@ -892,7 +916,7 @@ impl<'c> TypeChecker<'c> {
                     // so we don't have to care about the duplicates.
                     x => unreachable!("X: {:?}", x),
                 };
-                namespace.insert(ident.name.clone(), Name::Global(Some(name)));
+                self.namespaces[namespace].insert(ident.name.clone(), Name::Global(Some(name)));
             }
             _ => {},
         }
@@ -905,6 +929,16 @@ impl<'c> TypeChecker<'c> {
         tree: &mut AST,
         to_namespace: &HashMap<PathBuf, usize>,
     ) -> Result<(), Vec<Error>> {
+
+        for (path, module) in &tree.modules {
+            let namespace = to_namespace[path];
+            for stmt in &module.statements {
+                self.outer_definition(namespace, &stmt);
+            }
+        }
+
+        dbg!(&self.namespaces);
+
         let mut errors = Vec::new();
         for (path, module) in &tree.modules {
             self.namespace = to_namespace[path];
