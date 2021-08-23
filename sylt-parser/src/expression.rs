@@ -284,6 +284,8 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use ExpressionKind::{Get, TypeConstant};
 
     match ctx.token() {
+        T::Fn => function(ctx),
+
         T::LeftParen => grouping_or_tuple(ctx),
         T::LeftBracket => list(ctx),
         T::LeftBrace => set_or_dict(ctx),
@@ -788,10 +790,7 @@ fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 /// expression that follows precedence rules.
 
 pub fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-    match ctx.token() {
-        T::Fn => function(ctx),
-        _ => parse_precedence(ctx, Prec::No),
-    }
+    parse_precedence(ctx, Prec::No)
 }
 
 // NOTE(ed): It's really hard to write good tests, Rust refuses to deref the boxes

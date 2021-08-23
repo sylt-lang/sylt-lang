@@ -1,0 +1,10 @@
+start :: fn {
+    a :: fn -> fn int -> int { fn a: int -> int { 1 + a } }()(1)
+    2 <=> a
+    a :: fn -> int { 2 }()
+    2 <=> a
+    a :: fn -> int { 2 }'
+    2 <=> a
+}
+
+
