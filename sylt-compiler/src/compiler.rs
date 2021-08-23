@@ -1277,7 +1277,7 @@ impl Compiler {
             for statement in module.statements.iter() {
                 use StatementKind::*;
                 match &statement.kind {
-                    Use { file: Identifier { name, span }, file_alias } => {
+                    Use { file: Identifier { name, span }, file_alias, .. } => {
                         let use_path = root.join(format!("{}.sy", name));
                         let other = path_to_namespace_id[&use_path];
                         let namespace_name = match file_alias {
