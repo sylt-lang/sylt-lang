@@ -1192,7 +1192,6 @@ impl Compiler {
     }
 
     fn extract_globals(&mut self, tree: &AST) -> HashMap<PathBuf, usize> {
-        let root = tree.modules.first().unwrap().0.parent().unwrap();
         let mut path_to_namespace_id = HashMap::<PathBuf, usize>::new();
         for (path, _) in tree.modules.iter() {
             let slot = path_to_namespace_id.len();
@@ -1265,29 +1264,19 @@ impl Compiler {
             for statement in module.statements.iter() {
                 use StatementKind::*;
                 match &statement.kind {
-                    Use { file: Identifier { name, span }, file_alias, .. } => {
-                        let use_path = root.join(format!("{}.sy", name));
-                        let other = path_to_namespace_id[&use_path];
-                        let namespace_name = match file_alias {
-                            Some(alias) => alias.name.clone(),
-                            None => PathBuf::from(name)
-                                .file_stem()
-                                .unwrap()
-                                .to_str()
-                                .unwrap()
-                                .to_string(),
-                        };
-                        match namespace.entry(namespace_name) {
+                    Use { ident, file } => {
+                        match namespace.entry(ident.name.clone()) {
                             Entry::Vacant(vac) => {
+                                let other = path_to_namespace_id[file];
                                 vac.insert(Name::Namespace(other));
                             }
                             Entry::Occupied(_) => {
                                 error!(
                                     self,
                                     ctx,
-                                    *span,
+                                    ident.span,
                                     "A global variable with the name '{}' already exists",
-                                    name
+                                    ident.name
                                 );
                             }
                         }
