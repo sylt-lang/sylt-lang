@@ -132,7 +132,7 @@ impl<'c> TypeChecker<'c> {
         compiler::Context::from_namespace(self.namespace)
     }
 
-    fn solve_recurseive(&self, span: Span, generics: &mut HashMap<String, Type>, par: &Type, arg: &Type) -> Result<Type, Vec<Error>> {
+    fn solve_generics_recursively(&self, span: Span, generics: &mut HashMap<String, Type>, par: &Type, arg: &Type) -> Result<Type, Vec<Error>> {
         Ok(match (par, arg) {
             (_, Type::Generic(_)) => {
                 return err_type_error!(
@@ -165,17 +165,17 @@ impl<'c> TypeChecker<'c> {
             }
             (x, y) if x == y => x.clone(),
 
-            (Type::Tuple(a), Type::Tuple(b)) => Type::Tuple(a.iter().zip(b.iter()).map(|(a, b)| self.solve_recurseive(span, generics, a, b)).collect::<Result<Vec<_>, _>>()?),
+            (Type::Tuple(a), Type::Tuple(b)) => Type::Tuple(a.iter().zip(b.iter()).map(|(a, b)| self.solve_generics_recursively(span, generics, a, b)).collect::<Result<Vec<_>, _>>()?),
             // (Type::Union(a), Type::Union(b)) =>a.iter().any(|x| x == b),
-            (Type::List(a), Type::List(b)) => Type::List(Box::new(self.solve_recurseive(span, generics, a, b)?)),
-            (Type::Set(a), Type::Set(b)) => Type::Set(Box::new(self.solve_recurseive(span, generics, a, b)?)),
+            (Type::List(a), Type::List(b)) => Type::List(Box::new(self.solve_generics_recursively(span, generics, a, b)?)),
+            (Type::Set(a), Type::Set(b)) => Type::Set(Box::new(self.solve_generics_recursively(span, generics, a, b)?)),
             (Type::Dict(ak, av), Type::Dict(bk, bv)) => Type::Dict(
-                Box::new(self.solve_recurseive(span, generics, ak, bk)?),
-                Box::new(self.solve_recurseive(span, generics, av, bv)?),
+                Box::new(self.solve_generics_recursively(span, generics, ak, bk)?),
+                Box::new(self.solve_generics_recursively(span, generics, av, bv)?),
             ),
             (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
-                let args = a_args.iter().zip(b_args.iter()).map(|(a, b)| self.solve_recurseive(span, generics, a, b)).collect::<Result<Vec<_>, _>>()?;
-                let ret = Box::new(self.solve_recurseive(span, generics, a_ret, b_ret)?);
+                let args = a_args.iter().zip(b_args.iter()).map(|(a, b)| self.solve_generics_recursively(span, generics, a, b)).collect::<Result<Vec<_>, _>>()?;
+                let ret = Box::new(self.solve_generics_recursively(span, generics, a_ret, b_ret)?);
                 Type::Function(args, ret)
             }
             _ => {
@@ -192,7 +192,9 @@ impl<'c> TypeChecker<'c> {
     fn resolve_functions_from_args(&self, span: Span, args: Vec<Type>, ty: Type) -> Result<(Vec<Type>, Type), Vec<Error>> {
         let (params, ret) = match ty {
             Type::Function(params, ret) => (params, ret),
-            Type::Unknown => (args.clone(), Box::new(Type::Unknown)),
+            Type::Unknown => {
+                return Ok((args.clone(), Type::Unknown));
+            },
             ty => {
                 return err_type_error!(
                     self,
@@ -213,7 +215,7 @@ impl<'c> TypeChecker<'c> {
         }
 
         let mut generics: HashMap<_, Type> = HashMap::new();
-        for (i, (par, arg)) in params.iter().zip(args.iter()).enumerate() {
+        for (par, arg) in params.iter().zip(args.iter()) {
             if matches!(arg, Type::Generic(_)) {
                 return err_type_error!(
                     self,
@@ -222,7 +224,7 @@ impl<'c> TypeChecker<'c> {
                     "Generics are not supported as arguments - only parameters"
                 );
             }
-            self.solve_recurseive(span, &mut generics, par, arg)?;
+            self.solve_generics_recursively(span, &mut generics, par, arg)?;
         }
         let ret = if let Type::Generic(ret) = *ret {
             match generics.get(&ret) {
