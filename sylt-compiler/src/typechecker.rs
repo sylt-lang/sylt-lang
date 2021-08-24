@@ -132,6 +132,130 @@ impl<'c> TypeChecker<'c> {
         compiler::Context::from_namespace(self.namespace)
     }
 
+    fn solve_recurseive(&self, span: Span, generics: &mut HashMap<String, Type>, par: &Type, arg: &Type) -> Result<Type, Vec<Error>> {
+        let arg = match &arg {
+            Type::Generic(_) => {
+                return err_type_error!(
+                    self,
+                    span,
+                    TypeError::Violating(arg.clone()),
+                    "Generics are not supported as arguments - only parameters"
+                );
+            }
+            Type::Field(_) => unreachable!("Field types shouldn't be possible to instantiate."),
+            Type::Ty
+            | Type::Invalid
+            | Type::Void
+            | Type::Unknown
+            | Type::Int
+            | Type::Float
+            | Type::Bool
+            | Type::String => arg,
+            Type::Tuple(_) => todo!(),
+            Type::Union(_) => todo!(),
+            Type::List(_) => todo!(),
+            Type::Set(_) => todo!(),
+            Type::Dict(_, _) => todo!(),
+            Type::Function(_, _) => todo!(),
+            Type::Blob(_) => todo!(),
+            Type::Instance(_) => todo!(),
+            Type::ExternFunction(_) => todo!(),
+        };
+        if let Type::Generic(name) = par {
+            match generics.entry(name.clone()) {
+                Entry::Occupied(known) => {
+                    let known = known.get();
+                    if let Err(reason) = known.fits(&arg, self.compiler.blobs.as_slice()) {
+                        // TODO(ed): Point to the argument maybe?
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::Missmatch { got: arg.clone(), expected: known.clone() },
+                            "because {}. The type was infered from previous arguments.",
+                            reason
+                        )
+                    }
+                }
+                Entry::Vacant(unknown) => {
+                    unknown.insert(arg.clone());
+                }
+            }
+        }
+        Ok(arg.clone())
+    }
+
+    fn resolve_functions_from_args(&self, span: Span, args: Vec<Type>, ty: Type) -> Result<(Vec<Type>, Type), Vec<Error>> {
+        let (params, ret) = match ty {
+            Type::Function(params, ret) => (params, ret),
+            Type::Unknown => (args.clone(), Box::new(Type::Unknown)),
+            ty => {
+                return err_type_error!(
+                    self,
+                    span,
+                    TypeError::Violating(ty.clone()),
+                    "{:?} cannot be called as a function",
+                    ty
+                );
+            }
+        };
+
+        if args.len() != params.len() {
+            return err_type_error!(
+                self,
+                span,
+                TypeError::WrongArity { got: args.len(), expected: params.len() }
+            )
+        }
+
+        let mut generics: HashMap<_, Type> = HashMap::new();
+        for (i, (par, arg)) in params.iter().zip(args.iter()).enumerate() {
+            if matches!(arg, Type::Generic(_)) {
+                return err_type_error!(
+                    self,
+                    span,
+                    TypeError::Violating(arg.clone()),
+                    "Generics are not supported as arguments - only parameters"
+                );
+            }
+            eprintln!("{:?} {:?}", par, arg);
+            match (par, arg) {
+                (Type::Generic(g), arg) => {
+                    self.solve_recurseive(span, &mut generics, par, arg)?;
+                }
+
+                (par, arg) => {
+                    if let Err(reason) = par.fits(&arg, self.compiler.blobs.as_slice()) {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::Missmatch { got: arg.clone(), expected: par.clone() },
+                            "argument #{}, because {}",
+                            i,
+                            reason
+                        )
+                    }
+                }
+            }
+        }
+        let ret = if let Type::Generic(ret) = *ret {
+            match generics.get(&ret) {
+                Some(ty) => ty.clone(),
+                None => {
+                    return err_type_error!(
+                        self,
+                        span,
+                        TypeError::Mutability, // TODO(ed): Wrong error
+                        "Generics are only allowed if they can be deduced from the function signature, '#{}' is not mentioned in the parameters",
+                        ret
+                    )
+                }
+            }
+        } else {
+            Type::clone(&ret)
+        };
+        Ok((args, ret))
+    }
+
     fn assignable(&mut self, assignable: &Assignable, namespace: usize) -> Result<Lookup, Vec<Error>> {
         use AssignableKind as AK;
         use Lookup::*;
@@ -163,10 +287,8 @@ impl<'c> TypeChecker<'c> {
                     }
                     None => {}
                 }
-                if let Some(fun) = self.compiler.functions.get(&ident.name) {
-                    // TODO(ed): This needs work - we preferably want to
-                    // know this type.
-                    return Ok(Value(Type::Unknown, VarKind::Const));
+                if let Some((_, _, ty)) = self.compiler.functions.get(&ident.name) {
+                    return Ok(Value(ty.clone(), VarKind::Const));
                 } else {
                     return err_type_error!(
                         self,
@@ -184,45 +306,15 @@ impl<'c> TypeChecker<'c> {
                         return err_type_error!(
                             self,
                             span,
-                            TypeError::NamespaceNotExpression
+                            TypeError::NamespaceNotExpression,
+                            "Namespace cannot be called like a function"
                         );
                     }
                 };
+                eprintln!("A: {:?}", ty);
                 let args = args.iter().map(|e| self.expression(e)).collect::<Result<Vec<_>, Vec<_>>>()?;
-                let (params, ret) = match ty {
-                    Type::Function(params, ret) => (params, ret),
-                    Type::Unknown => (args.clone(), Box::new(Type::Unknown)),
-                    ty => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::Violating(ty.clone()),
-                            "{:?} cannot be called as a function",
-                            ty
-                        );
-                    }
-                };
-                for (i, (arg, par)) in args.iter().zip(params.iter()).enumerate() {
-                    if let Err(reason) = par.fits(arg, self.compiler.blobs.as_slice()) {
-                        // TODO(ed): Point to the argument maybe?
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::Missmatch { got: arg.clone(), expected: par.clone() },
-                            "argument #{}, because {}",
-                            i,
-                            reason
-                        )
-                    }
-                }
-
-                if args.len() != params.len() {
-                    return err_type_error!(
-                        self,
-                        span,
-                        TypeError::WrongArity { got: args.len(), expected: params.len() }
-                    )
-                }
+                let (params, ret) = self.resolve_functions_from_args(span, args, ty.clone())?;
+                eprintln!("B: => {:?} -> {:?}", params, ret);
 
                 return Ok(Value(Type::clone(&ret), VarKind::Const));
             }
@@ -937,7 +1029,6 @@ impl<'c> TypeChecker<'c> {
         tree: &mut AST,
         to_namespace: &HashMap<PathBuf, usize>,
     ) -> Result<(), Vec<Error>> {
-
         for (path, module) in &tree.modules {
             let namespace = to_namespace[path];
             for stmt in &module.statements {

@@ -9,8 +9,8 @@ use sungod::Ra;
 use sylt_common::error::RuntimeError;
 use sylt_common::{Blob, RuntimeContext, Type, Value};
 
-#[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", "#X -> void")]
-#[sylt_macro::sylt_link(dbg, "sylt_std::sylt", "#X -> void")]
+#[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", "fn #X -> void")]
+#[sylt_macro::sylt_link(dbg, "sylt_std::sylt", "fn #X -> void")]
 pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     if ctx.typecheck {
@@ -30,8 +30,8 @@ pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     Ok(Value::Nil)
 }
 
-#[sylt_macro::sylt_doc(one, "Returns 1", "int -> int")]
-#[sylt_macro::sylt_link(one, "sylt_std::sylt", "int -> int")]
+#[sylt_macro::sylt_doc(one, "Returns 1", "fn int -> int")]
+#[sylt_macro::sylt_link(one, "sylt_std::sylt", "fn int -> int")]
 pub fn num<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     Ok(Value::Int(1))
 }
@@ -587,24 +587,6 @@ sylt_macro::extern_function!(
     },
 );
 
-pub fn union_type<'t>(a: Type, b: Type, blobs: &[Blob]) -> Type {
-    if a.fits(&b, blobs).is_ok() {
-        a
-    } else if b.fits(&a, blobs).is_ok() {
-        b
-    } else {
-        match (a, b) {
-            (Type::Union(a), Type::Union(b)) => Type::Union(a.union(&b).cloned().collect()),
-            (b, Type::Union(a)) | (Type::Union(a), b) => {
-                let mut a = a.clone();
-                a.insert(b.clone());
-                Type::Union(a)
-            }
-            (a, b) => Type::Union([a, b].iter().cloned().collect()),
-        }
-    }
-}
-
 #[sylt_macro::sylt_doc(pop, "Removes the last element in the list, and returns it", [One(List(l))] Type::Value)]
 #[sylt_macro::sylt_link(pop, "sylt_std::sylt")]
 pub fn pop<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
@@ -662,8 +644,68 @@ sylt_macro::extern_function!(
     },
 );
 
-#[sylt_macro::sylt_doc(print, "Prints values to stdout", args Type::Void)]
-#[sylt_macro::sylt_link(print, "sylt_std::sylt")]
+*/
+
+pub fn union_type<'t>(a: Type, b: Type, blobs: &[Blob]) -> Type {
+    if a.fits(&b, blobs).is_ok() {
+        a
+    } else if b.fits(&a, blobs).is_ok() {
+        b
+    } else {
+        match (a, b) {
+            (Type::Union(a), Type::Union(b)) => Type::Union(a.union(&b).cloned().collect()),
+            (b, Type::Union(a)) | (Type::Union(a), b) => {
+                let mut a = a.clone();
+                a.insert(b.clone());
+                Type::Union(a)
+            }
+            (a, b) => Type::Union([a, b].iter().cloned().collect()),
+        }
+    }
+}
+
+#[sylt_macro::sylt_doc(pop, "Removes the last element in the list, and returns it", "fn [#X] -> #X")]
+#[sylt_macro::sylt_link(pop, "sylt_std::sylt", "fn [#X] -> #X")]
+pub fn pop<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match (values.as_ref(), ctx.typecheck) {
+        ([Value::List(ls)], true) => {
+            let ls = &ls.borrow();
+            // TODO(ed): Write correct typing
+            let ls = Type::from(&ls[0]);
+            let ret = union_type(ls, Type::Void, ctx.machine.blobs());
+            Ok(Value::from(ret))
+        }
+        ([Value::List(ls)], false) => {
+            // NOTE(ed): Deliberately no type checking.
+            let last = ls.borrow_mut().pop().unwrap_or(Value::Nil);
+            Ok(last)
+        }
+        (values, _) => Err(RuntimeError::ExternTypeMismatch(
+            "pop".to_string(),
+            values.iter().map(Type::from).collect(),
+        )),
+    }
+}
+
+#[sylt_macro::sylt_doc(as_str, "Converts to a string representation", "fn #X -> str")]
+#[sylt_macro::sylt_link(as_str, "sylt_std::sylt", "fn #X -> str")]
+pub fn as_str<'t>(ctx: RuntimeContext) -> Result<Value, RuntimeError> {
+    if ctx.typecheck {
+        return Ok("".into());
+    }
+    let values = ctx.machine.stack_from_base(ctx.stack_base);
+    match values.as_ref() {
+        [v] => Ok(Value::String(Rc::new(v.to_string()))),
+        values => Err(RuntimeError::ExternTypeMismatch(
+            "as_str".to_string(),
+            values.iter().map(Type::from).collect(),
+        )),
+    }
+}
+
+#[sylt_macro::sylt_doc(print, "Prints values to stdout", "fn [#X] -> void")]
+#[sylt_macro::sylt_link(print, "sylt_std::sylt", "fn [#X] -> void")]
 pub fn print<'t>(ctx: RuntimeContext) -> Result<Value, RuntimeError> {
     if !ctx.typecheck {
         println!("{}", ctx.machine
@@ -675,7 +717,6 @@ pub fn print<'t>(ctx: RuntimeContext) -> Result<Value, RuntimeError> {
     }
     Ok(Value::Nil)
 }
-*/
 
 sylt_macro::sylt_link_gen!("sylt_std::sylt");
 
