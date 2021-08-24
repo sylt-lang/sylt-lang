@@ -303,7 +303,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         }
 
         T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
-        T::Minus | T::Bang => unary(ctx),
+        T::Minus | T::Not | T::Bang => unary(ctx),
 
         T::Identifier(_) => {
             let span = ctx.span();
@@ -343,7 +343,7 @@ fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
     let kind = match op {
         T::Minus => Neg(expr),
-        T::Bang => Not(expr),
+        T::Not | T::Bang => Not(expr),
 
         _ => {
             raise_syntax_error!(ctx, "Invalid unary operator");
