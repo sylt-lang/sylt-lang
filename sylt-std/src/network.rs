@@ -73,7 +73,7 @@ fn rpc_handle_stream(
     }
 }
 
-#[sylt_macro::sylt_doc(n_rpc_start_server, "Starts an RPC server on the specified port, returning success status.", [One(Int(port))] Type::Bool)]
+#[sylt_macro::sylt_doc(n_rpc_start_server, "Starts an RPC server on the specified port, returning success status.", "int -> bool")]
 #[sylt_macro::sylt_link(n_rpc_start_server, "sylt_std::network")]
 pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     if ctx.typecheck {

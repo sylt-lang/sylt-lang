@@ -1,3 +1,4 @@
+#![allow(unused)]
 use crate as sylt_std;
 
 use owo_colors::OwoColorize;
@@ -8,7 +9,7 @@ use sungod::Ra;
 use sylt_common::error::RuntimeError;
 use sylt_common::{Blob, RuntimeContext, Type, Value};
 
-#[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", [One(Value(val))] Type::Void)]
+#[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", "#X -> void")]
 #[sylt_macro::sylt_link(dbg, "sylt_std::sylt")]
 pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
@@ -29,7 +30,15 @@ pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     Ok(Value::Nil)
 }
 
-#[sylt_macro::sylt_doc(random_choice, "Selects an element randomly from a list", [One(Value(list))] Type::Unknown)]
+#[sylt_macro::sylt_doc(one, "Returns 1", "int -> int")]
+#[sylt_macro::sylt_link(one, "sylt_std::sylt")]
+pub fn num<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
+    Ok(Value::Int(1))
+}
+
+
+/*
+#[sylt_macro::sylt_doc(random_choice, "Selects an element randomly from a list", "[#X] -> #X")]
 #[sylt_macro::sylt_link(random_choice, "sylt_std::sylt")]
 pub fn random_choice<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
@@ -666,5 +675,7 @@ pub fn print<'t>(ctx: RuntimeContext) -> Result<Value, RuntimeError> {
     }
     Ok(Value::Nil)
 }
+*/
 
 sylt_macro::sylt_link_gen!("sylt_std::sylt");
+

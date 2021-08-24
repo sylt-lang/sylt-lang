@@ -24,6 +24,7 @@ struct ExternFunction {
     _as: Option<Token![as]>,
     name: Option<syn::Ident>,
     doc: Option<syn::LitStr>,
+    signature: Option<syn::LitStr>,
     blocks: Vec<ExternBlock>,
 }
 
@@ -48,6 +49,7 @@ impl Parse for ExternFunction {
             _as: None,
             name: None,
             doc: None,
+            signature: None,
             blocks: Vec::new(),
         };
         if input.peek(Token![as]) {
@@ -524,7 +526,7 @@ pub fn sylt_link_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
 struct SyltDoc {
     name: syn::Ident,
     comment: syn::LitStr,
-    args: Vec<(syn::Pat, syn::Expr)>,
+    signature: syn::LitStr,
 }
 
 impl Parse for SyltDoc {
@@ -532,18 +534,13 @@ impl Parse for SyltDoc {
         let name: syn::Ident = input.parse()?;
         let _comma: Token![,] = input.parse()?;
         let comment = input.parse()?;
-
-        let mut args = Vec::new();
-        while !input.is_empty() {
-            let _comma: Token![,] = input.parse()?;
-            let arg = (input.parse()?, input.parse()?);
-            args.push(arg);
-        }
+        let _comma: Token![,] = input.parse()?;
+        let signature = input.parse()?;
 
         Ok(SyltDoc {
             name,
             comment,
-            args,
+            signature,
         })
     }
 }
@@ -581,15 +578,10 @@ pub fn sylt_doc(
     let doc: SyltDoc = parse_macro_input!(attrib);
 
     let doc = format!(
-        "{{ \"name\": \"{}\", \"comment\": \"{}\", \"signature\": [{}]}}",
+        "{{ \"name\": \"{}\", \"comment\": \"{}\", \"signature\": {}}}",
         doc.name.to_string(),
         doc.comment.value().replace("\n", "\\n"),
-        doc.args
-            .iter()
-            .map(|(p, r)| format!("\"{}\"", quote! { #p -> #r }.to_string()))
-            .collect::<Vec<_>>()
-            .join(",")
-            .replace("\n", ""),
+        doc.signature.value().split(" \n\t").collect::<Vec<_>>().join(" "),
     );
     let mut doc_file = DOC.lock().unwrap();
     doc_file.docs.push(doc);
