@@ -235,7 +235,7 @@ fn precedence(token: &T) -> Prec {
     use Prec;
 
     match token {
-        T::LeftBracket => Prec::Index,
+        T::LeftBracket | T::Dot | T::LeftParen => Prec::Index,
 
         T::Star | T::Slash => Prec::Factor,
 
