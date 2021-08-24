@@ -466,7 +466,7 @@ enum LinkState {
 
 struct ModuleLink {
     state: LinkState,
-    mapping: Vec<(String, String)>,
+    mapping: Vec<(String, String, String)>,
 }
 
 impl ModuleLink {
@@ -507,19 +507,20 @@ pub fn sylt_link_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
     let funs: Vec<_> = link
         .mapping
         .iter()
-        .map(|(ident, name)| {
+        .map(|(ident, name, signature)| {
             let ident = proc_macro2::TokenStream::from_str(&ident).unwrap();
             quote! {
-                (#name.to_string(), #ident),
+                (#name.to_string(), #ident, #signature.to_string()),
             }
         })
         .collect();
 
     let tokens = quote! {
-        pub fn _sylt_link() -> Vec<(std::string::String, ::sylt_common::RustFunction)> {
+        pub fn _sylt_link() -> Vec<(std::string::String, ::sylt_common::RustFunction, std::string::String)> {
             vec! [ #(#funs)* ]
         }
     };
+    eprintln!("{}", tokens.to_string());
     proc_macro::TokenStream::from(tokens)
 }
 
@@ -595,6 +596,8 @@ struct SyltLink {
     name: syn::Ident,
     _comma: Token![,],
     module: syn::LitStr,
+    __comma: Token![,],
+    signature: syn::LitStr,
 }
 
 impl Parse for SyltLink {
@@ -603,6 +606,8 @@ impl Parse for SyltLink {
             name: input.parse()?,
             _comma: input.parse()?,
             module: input.parse()?,
+            __comma: input.parse()?,
+            signature: input.parse()?,
         })
     }
 }
@@ -630,6 +635,7 @@ pub fn sylt_link(
     links.mapping.push((
         format!("{}::{}", link.module.value(), fun),
         link.name.to_string().clone(),
+        link.signature.value().to_string(),
     ));
 
     let tokens = quote! {

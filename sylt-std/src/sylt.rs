@@ -10,7 +10,7 @@ use sylt_common::error::RuntimeError;
 use sylt_common::{Blob, RuntimeContext, Type, Value};
 
 #[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", "#X -> void")]
-#[sylt_macro::sylt_link(dbg, "sylt_std::sylt")]
+#[sylt_macro::sylt_link(dbg, "sylt_std::sylt", "#X -> void")]
 pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     if ctx.typecheck {
@@ -31,7 +31,7 @@ pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
 }
 
 #[sylt_macro::sylt_doc(one, "Returns 1", "int -> int")]
-#[sylt_macro::sylt_link(one, "sylt_std::sylt")]
+#[sylt_macro::sylt_link(one, "sylt_std::sylt", "int -> int")]
 pub fn num<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     Ok(Value::Int(1))
 }

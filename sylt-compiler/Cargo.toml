@@ -14,4 +14,5 @@ path = "src/compiler.rs"
 
 [dependencies]
 sylt-common = { version = "0.2.0", path = "../sylt-common" }
+sylt-tokenizer = { version = "0.2.0", path = "../sylt-tokenizer" }
 sylt-parser = { version = "0.2.0", path = "../sylt-parser" }

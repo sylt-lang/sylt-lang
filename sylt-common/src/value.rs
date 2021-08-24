@@ -42,6 +42,7 @@ impl From<&Type> for Value {
     fn from(ty: &Type) -> Self {
         match ty {
             Type::Field(s) => Value::Field(s.clone()),
+            Type::Generic(_) => panic!("Generics are not supported!"),
             Type::Void => Value::Nil,
             Type::Blob(b) => Value::Blob(*b),
             Type::Instance(b) => Value::Instance(*b, Rc::new(RefCell::new(HashMap::new()))),

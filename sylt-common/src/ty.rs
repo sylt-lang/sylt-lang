@@ -12,6 +12,7 @@ pub trait Numbered {
 #[derive(Deserialize, Serialize)]
 pub enum Type {
     Ty,
+    Generic(String),
     Field(String),
     Void,
     Unknown,
@@ -36,6 +37,8 @@ impl Hash for Type {
     fn hash<H: Hasher>(&self, h: &mut H) {
         self.to_number().hash(h);
         match self {
+            Type::Generic(name) => name.hash(h),
+
             Type::Field(f) => f.hash(h),
 
             Type::List(t) | Type::Set(t)
