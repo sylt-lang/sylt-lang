@@ -520,7 +520,6 @@ pub fn sylt_link_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
             vec! [ #(#funs)* ]
         }
     };
-    eprintln!("{}", tokens.to_string());
     proc_macro::TokenStream::from(tokens)
 }
 
