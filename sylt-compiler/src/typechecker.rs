@@ -133,8 +133,8 @@ impl<'c> TypeChecker<'c> {
     }
 
     fn solve_recurseive(&self, span: Span, generics: &mut HashMap<String, Type>, par: &Type, arg: &Type) -> Result<Type, Vec<Error>> {
-        let arg = match &arg {
-            Type::Generic(_) => {
+        Ok(match (par, arg) {
+            (_, Type::Generic(_)) => {
                 return err_type_error!(
                     self,
                     span,
@@ -142,46 +142,51 @@ impl<'c> TypeChecker<'c> {
                     "Generics are not supported as arguments - only parameters"
                 );
             }
-            Type::Field(_) => unreachable!("Field types shouldn't be possible to instantiate."),
-            Type::Ty
-            | Type::Invalid
-            | Type::Void
-            | Type::Unknown
-            | Type::Int
-            | Type::Float
-            | Type::Bool
-            | Type::String => arg,
-            Type::Tuple(_) => todo!(),
-            Type::Union(_) => todo!(),
-            Type::List(_) => todo!(),
-            Type::Set(_) => todo!(),
-            Type::Dict(_, _) => todo!(),
-            Type::Function(_, _) => todo!(),
-            Type::Blob(_) => todo!(),
-            Type::Instance(_) => todo!(),
-            Type::ExternFunction(_) => todo!(),
-        };
-        if let Type::Generic(name) = par {
-            match generics.entry(name.clone()) {
-                Entry::Occupied(known) => {
-                    let known = known.get();
-                    if let Err(reason) = known.fits(&arg, self.compiler.blobs.as_slice()) {
-                        // TODO(ed): Point to the argument maybe?
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::Missmatch { got: arg.clone(), expected: known.clone() },
-                            "because {}. The type was infered from previous arguments.",
-                            reason
-                        )
+            (Type::Generic(name), ty) => {
+                match generics.entry(name.clone()) {
+                    Entry::Occupied(known) => {
+                        let known = known.get();
+                        if let Err(reason) = known.fits(&arg, self.compiler.blobs.as_slice()) {
+                            // TODO(ed): Point to the argument maybe?
+                            return err_type_error!(
+                                self,
+                                span,
+                                TypeError::Missmatch { got: arg.clone(), expected: known.clone() },
+                                "because {}. The type was infered from previous arguments.",
+                                reason
+                            )
+                        }
+                        known.clone()
+                    }
+                    Entry::Vacant(unknown) => {
+                        unknown.insert(arg.clone()).clone()
                     }
                 }
-                Entry::Vacant(unknown) => {
-                    unknown.insert(arg.clone());
-                }
             }
-        }
-        Ok(arg.clone())
+            (x, y) if x == y => x.clone(),
+
+            (Type::Tuple(a), Type::Tuple(b)) => Type::Tuple(a.iter().zip(b.iter()).map(|(a, b)| self.solve_recurseive(span, generics, a, b)).collect::<Result<Vec<_>, _>>()?),
+            // (Type::Union(a), Type::Union(b)) =>a.iter().any(|x| x == b),
+            (Type::List(a), Type::List(b)) => Type::List(Box::new(self.solve_recurseive(span, generics, a, b)?)),
+            (Type::Set(a), Type::Set(b)) => Type::Set(Box::new(self.solve_recurseive(span, generics, a, b)?)),
+            (Type::Dict(ak, av), Type::Dict(bk, bv)) => Type::Dict(
+                Box::new(self.solve_recurseive(span, generics, ak, bk)?),
+                Box::new(self.solve_recurseive(span, generics, av, bv)?),
+            ),
+            (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
+                let args = a_args.iter().zip(b_args.iter()).map(|(a, b)| self.solve_recurseive(span, generics, a, b)).collect::<Result<Vec<_>, _>>()?;
+                let ret = Box::new(self.solve_recurseive(span, generics, a_ret, b_ret)?);
+                Type::Function(args, ret)
+            }
+            _ => {
+                // TODO(ed): Point to the argument maybe?
+                return err_type_error!(
+                    self,
+                    span,
+                    TypeError::Missmatch { got: arg.clone(), expected: par.clone() }
+                );
+            }
+        })
     }
 
     fn resolve_functions_from_args(&self, span: Span, args: Vec<Type>, ty: Type) -> Result<(Vec<Type>, Type), Vec<Error>> {
@@ -217,25 +222,7 @@ impl<'c> TypeChecker<'c> {
                     "Generics are not supported as arguments - only parameters"
                 );
             }
-            eprintln!("{:?} {:?}", par, arg);
-            match (par, arg) {
-                (Type::Generic(g), arg) => {
-                    self.solve_recurseive(span, &mut generics, par, arg)?;
-                }
-
-                (par, arg) => {
-                    if let Err(reason) = par.fits(&arg, self.compiler.blobs.as_slice()) {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::Missmatch { got: arg.clone(), expected: par.clone() },
-                            "argument #{}, because {}",
-                            i,
-                            reason
-                        )
-                    }
-                }
-            }
+            self.solve_recurseive(span, &mut generics, par, arg)?;
         }
         let ret = if let Type::Generic(ret) = *ret {
             match generics.get(&ret) {
@@ -311,10 +298,8 @@ impl<'c> TypeChecker<'c> {
                         );
                     }
                 };
-                eprintln!("A: {:?}", ty);
                 let args = args.iter().map(|e| self.expression(e)).collect::<Result<Vec<_>, Vec<_>>>()?;
                 let (params, ret) = self.resolve_functions_from_args(span, args, ty.clone())?;
-                eprintln!("B: => {:?} -> {:?}", params, ret);
 
                 return Ok(Value(Type::clone(&ret), VarKind::Const));
             }
