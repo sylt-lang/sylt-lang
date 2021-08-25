@@ -25,3 +25,6 @@ sungod = "0.3"
 default = [ "lingon", "network" ]
 
 network = ["bincode"]
+
+[lib]
+doctest = false

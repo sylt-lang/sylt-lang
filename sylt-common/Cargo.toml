@@ -21,3 +21,6 @@ serde = { version = "1", features = ["derive", "rc"] }
 [dev-dependencies]
 # For generating random file names for tests
 sungod = { version = "0.3.1", features = ["default_is_random"] }
+
+[lib]
+doctest = false

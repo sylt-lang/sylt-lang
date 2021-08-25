@@ -11,6 +11,7 @@ edition = "2018"
 
 [lib]
 path = "src/tokenizer.rs"
+doctest = false
 
 [dependencies]
 logos = "0.12"
