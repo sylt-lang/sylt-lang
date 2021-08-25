@@ -11,6 +11,7 @@ edition = "2018"
 
 [lib]
 path = "src/parser.rs"
+doctest = false
 
 [dependencies]
 sylt-common = { version = "0.2.0", path = "../sylt-common" }
