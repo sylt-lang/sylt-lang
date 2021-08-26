@@ -9,147 +9,99 @@ use sungod::Ra;
 use sylt_common::error::RuntimeError;
 use sylt_common::{Blob, RuntimeContext, Type, Value};
 
-#[sylt_macro::sylt_doc(dbg, "Writes the type and value of anything you enter", "fn #X -> void")]
-#[sylt_macro::sylt_link(dbg, "sylt_std::sylt", "fn #X -> void")]
-pub fn dbg<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    if ctx.typecheck {
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    atan2,
+    ? "Returns the angle of a direction - relative to +x, where the first argument is x",
+    -> "fn float, float -> float",
+    [Float(x), Float(y)] => {
+        Ok(Float(y.atan2(*x)))
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    dbg,
+    ? "Writes the type and value of anything you enter",
+    -> "fn #X -> void",
+    [Float(x), Float(y)] => {
         println!(
-            "{}: {:?}",
-            "TYPECHECK".purple(),
-            values.iter().map(Type::from).collect::<Vec<_>>(),
-        );
-    } else {
-        println!(
-            "{}: {:?}, {:?}",
-            "RUN".purple(),
+            "DBG: {:?}, {:?}",
             values.iter().map(Type::from).collect::<Vec<_>>(),
             values
         );
+        Ok(Nil)
     }
-    Ok(Value::Nil)
-}
+);
 
-#[sylt_macro::sylt_doc(one, "Returns 1", "fn int -> int")]
-#[sylt_macro::sylt_link(one, "sylt_std::sylt", "fn int -> int")]
-pub fn num<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    Ok(Value::Int(1))
-}
-
-
-/*
-#[sylt_macro::sylt_doc(random_choice, "Selects an element randomly from a list", "[#X] -> #X")]
-#[sylt_macro::sylt_link(random_choice, "sylt_std::sylt")]
-pub fn random_choice<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match values.as_ref() {
-        [Value::List(list)] => {
-            return Ok(list.borrow()[Ra::ggen::<usize>() % list.borrow().len()].clone());
-        }
-        _ => {}
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    random_choice,
+    ? "Selects an element randomly from a list",
+    -> "fn [#X] -> #X",
+    [Value::List(list)] => {
+        Ok(list.borrow()[Ra::ggen::<usize>() % list.borrow().len()].clone())
     }
+);
 
-    return Err(RuntimeError::ExternTypeMismatch(
-        "random_choice".to_string(),
-        values.iter().map(Type::from).collect(),
-    ));
-}
-
-#[sylt_macro::sylt_link(for_each, "sylt_std::sylt")]
-pub fn for_each(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match values.as_ref() {
-        [Value::List(list), callable] => {
-            let list = Rc::clone(list);
-            let callable = callable.clone();
-            for element in list.borrow().iter() {
-                ctx.machine.eval_call(callable.clone(), &[element]).unwrap();
-            }
-            return Ok(Value::Nil);
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    for_each,
+    ? "Does something for each element in a list",
+    -> "fn [#X], fn #X -> void -> void",
+    [List(list), callable] => {
+        let list = Rc::clone(list);
+        let callable = callable.clone();
+        for element in list.borrow().iter() {
+            ctx.machine.eval_call(callable.clone(), &[element]).unwrap();
         }
-        [Value::Dict(dict), callable] => {
-            let dict = Rc::clone(dict);
-            let callable = callable.clone();
-            for (key, value) in dict.borrow().iter() {
-                ctx.machine.eval_call(callable.clone(), &[key, value]).unwrap();
-            }
-            return Ok(Value::Nil);
-        }
-        _ => {}
+        Ok(Nil)
     }
+);
 
-    return Err(RuntimeError::ExternTypeMismatch(
-        "for_each".to_string(),
-        values.iter().map(Type::from).collect(),
-    ));
-}
 
-#[sylt_macro::sylt_link(map, "sylt_std::sylt")]
-pub fn map(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match values.as_ref() {
-        [Value::List(list), callable] => {
-            let list = Rc::clone(list);
-            let callable = callable.clone();
-            let mapped = list
-                .borrow()
-                .iter()
-                .map(|element| ctx.machine.eval_call(callable.clone(), &[element]).unwrap())
-                .collect();
-            return Ok(Value::List(Rc::new(RefCell::new(mapped))));
-        }
-        _ => {}
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    map,
+    ? "Applies a function to all elements in a list",
+    -> "fn [#X], fn #X -> #Y -> [#Y]",
+    [List(list), callable] => {
+        let list = Rc::clone(list);
+        let callable = callable.clone();
+        let mapped = list
+            .borrow()
+            .iter()
+            .map(|element| ctx.machine.eval_call(callable.clone(), &[element]).unwrap())
+            .collect();
+        Ok(List(Rc::new(RefCell::new(mapped))))
     }
+);
 
-    return Err(RuntimeError::ExternTypeMismatch(
-        "map".to_string(),
-        values.iter().map(Type::from).collect(),
-    ));
-}
 
-#[sylt_macro::sylt_link(filter, "sylt_std::sylt")]
-pub fn filter(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match values.as_ref() {
-        [Value::List(list), callable] => {
-            let list = Rc::clone(list);
-            let callable = callable.clone();
-            let filtered = list
-                .borrow()
-                .iter()
-                .filter(|element| ctx.machine.eval_call(callable.clone(), &[element]).unwrap() == Value::Bool(true))
-                .map(Value::clone)
-                .collect();
-            return Ok(Value::List(Rc::new(RefCell::new(filtered))));
-        }
-        [Value::Dict(dict), callable] => {
-            let dict = Rc::clone(dict);
-            let callable = callable.clone();
-            let filtered = dict
-                .borrow()
-                .iter()
-                .filter(|(key, value)| ctx.machine.eval_call(callable.clone(), &[key, value]).unwrap() == Value::Bool(true))
-                // We can't .cloned() since we need the inner values cloned, not the outer tuple
-                .map(|(key, value)| (key.clone(), value.clone()))
-                .collect();
-            return Ok(Value::Dict(Rc::new(RefCell::new(filtered))));
-        }
-        _ => {}
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    filter,
+    ? "Creates a new list with the elements that pass the test function",
+    -> "fn [#X], fn #X -> bool -> [#X]",
+    [List(list), callable] => {
+        let list = Rc::clone(list);
+        let callable = callable.clone();
+        let filtered = list
+            .borrow()
+            .iter()
+            .filter(|element| ctx.machine.eval_call(callable.clone(), &[element]).unwrap() == Bool(true))
+            .cloned()
+            .collect();
+        Ok(List(Rc::new(RefCell::new(filtered))))
     }
+);
 
-    return Err(RuntimeError::ExternTypeMismatch(
-        "filter".to_string(),
-        values.iter().map(Type::from).collect(),
-    ));
-}
-
-#[sylt_macro::sylt_doc(args, "Returns the args parsed into a dict, split on =",
-  [] Type::Dict(Box::new(Type::String), Box::new(Type::String)))]
-#[sylt_macro::sylt_link(args, "sylt_std::sylt")]
-pub fn args<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    if ctx.typecheck {
-        Ok(Value::from(Type::Dict(Box::new(Type::String), Box::new(Type::String))))
-    } else {
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    args,
+    ? "Returns the args parsed into a dict, split on =",
+    -> "fn -> {str:str}",
+    values => {
         let mut args = HashMap::new();
         args.insert(Value::from("prog"), Value::from(ctx.machine.args()[0].as_str()));
 
@@ -157,184 +109,126 @@ pub fn args<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
             let (pre, suf) = arg.split_once("=").unwrap_or((arg.as_str(), ""));
             args.insert(Value::from(pre), Value::from(suf));
         }
-        Ok(Value::Dict(Rc::new(RefCell::new(args))))
+        Ok(Dict(Rc::new(RefCell::new(args))))
     }
-}
-
-
-#[sylt_macro::sylt_doc(push, "Appends an element to the end of a list",
-  [One(List(ls)), One(Value(val))] Type::Void)]
-#[sylt_macro::sylt_link(push, "sylt_std::sylt")]
-pub fn push<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match (values.as_ref(), ctx.typecheck) {
-        ([Value::List(ls), v], true) => {
-            let ls = ls.borrow();
-            assert!(ls.len() == 1);
-            let ls = Type::from(&ls[0]);
-            let v = Type::from(&*v);
-            if ls.fits(&v, &ctx.machine.blobs()).is_ok() || matches!(ls, Type::Unknown) {
-                Ok(Value::Nil)
-            } else {
-                Err(RuntimeError::TypeMismatch(ls, v))
-            }
-        }
-        ([Value::List(ls), v], false) => {
-            // NOTE(ed): Deliberately no type checking.
-            ls.borrow_mut().push(v.clone());
-            Ok(Value::Nil)
-        }
-        (values, _) => Err(RuntimeError::ExternTypeMismatch(
-            "push".to_string(),
-            values.iter().map(Type::from).collect(),
-        )),
-    }
-}
-
-#[sylt_macro::sylt_doc(add, "Inserts a value into a set",
-  [One(Set(ls)), One(Value(val))] Type::Void)]
-#[sylt_macro::sylt_link(add, "sylt_std::sylt")]
-pub fn add<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match (values.as_ref(), ctx.typecheck) {
-        ([Value::Set(ls), v], true) => {
-            let ls = Type::from(Value::Set(ls.clone()));
-            let ty = if let Type::Set(ty) = &ls {
-                ty
-            } else {
-                unreachable!()
-            };
-            let v = Type::from(&*v);
-            if ty.fits(&v, &ctx.machine.blobs()).is_ok() || matches!(ls, Type::Unknown) {
-                Ok(Value::Nil)
-            } else {
-                Err(RuntimeError::TypeMismatch(ls, v))
-            }
-        }
-        ([Value::Set(ls), v], false) => {
-            // NOTE(ed): Deliberately no type checking.
-            ls.borrow_mut().insert(v.clone());
-            Ok(Value::Nil)
-        }
-        (values, _) => Err(RuntimeError::ExternTypeMismatch(
-            "add".to_string(),
-            values.iter().map(Type::from).collect(),
-        )),
-    }
-}
-
-#[sylt_macro::sylt_doc(clear, "Removes all elements from the list", [One(List(ls))] Type::Void)]
-#[sylt_macro::sylt_link(clear, "sylt_std::sylt")]
-pub fn clear<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match (values.as_ref(), ctx.typecheck) {
-        ([Value::List(ls)], _) => {
-            ls.borrow_mut().clear();
-            Ok(Value::Nil)
-        }
-        (values, _) => Err(RuntimeError::ExternTypeMismatch(
-            "empty".to_string(),
-            values.iter().map(Type::from).collect(),
-        )),
-    }
-}
-
-#[sylt_macro::sylt_doc(prepend, "Adds an element to the start of a list", [One(List(ls)), One(Value(val))] Type::Void)]
-#[sylt_macro::sylt_link(prepend, "sylt_std::sylt")]
-pub fn prepend<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match (values.as_ref(), ctx.typecheck) {
-        ([Value::List(ls), v], true) => {
-            let ls = &ls.borrow();
-            assert!(ls.len() == 1);
-            let ls = Type::from(&ls[0]);
-            let v: Type = Type::from(&*v);
-            if ls.fits(&v, ctx.machine.blobs()).is_ok() {
-                Ok(Value::Nil)
-            } else {
-                Err(RuntimeError::TypeMismatch(ls, v))
-            }
-        }
-        ([Value::List(ls), v], false) => {
-            // NOTE(ed): Deliberately no type checking.
-            ls.borrow_mut().insert(0, v.clone());
-            Ok(Value::Nil)
-        }
-        (values, _) => Err(RuntimeError::ExternTypeMismatch(
-            "prepend".to_string(),
-            values.iter().map(Type::from).collect(),
-        )),
-    }
-}
-
-#[sylt_macro::sylt_doc(len, "Gives the length of tuples and lists", [One(Tuple(ls))] Type::Int, [One(List(ls))] Type::Int)]
-#[sylt_macro::sylt_link(len, "sylt_std::sylt")]
-pub fn len<'t>(ctx: RuntimeContext) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match values.as_ref() {
-        [Value::Tuple(ls)] => Ok(Value::Int(ls.len() as i64)),
-        [Value::List(ls)] => Ok(Value::Int(ls.borrow().len() as i64)),
-        [Value::Dict(dict)] => Ok(Value::Int(dict.borrow().len() as i64)),
-        values => Err(RuntimeError::ExternTypeMismatch(
-            "len".to_string(),
-            values.iter().map(Type::from).collect(),
-        )),
-    }
-}
-
-sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    atan2
-    ""
-    [One(Float(x)), One(Float(y))] -> Type::Float => {
-        Ok(Float(y.atan2(*x)))
-    },
 );
 
 sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    sin
-    "The sine function you know and love from trigonometry class"
-    [One(Float(t))] -> Type::Float => {
+    "sylt_std::sylt",
+    push,
+    ? "Appends an element to the end of a list",
+    -> "fn [#X], #X -> void",
+    [List(ls), v] => {
+        ls.borrow_mut().push(v.clone());
+        Ok(Nil)
+    }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    add,
+    ? "Inserts a value into a set",
+    -> "fn {#X}, #X -> void",
+    [Set(ls), v] => {
+        // NOTE(ed): Deliberately no type checking.
+        ls.borrow_mut().insert(v.clone());
+        Ok(Nil)
+    }
+);
+
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    clear,
+    ? "Removes all elements from the list",
+    -> "fn [#X] -> void",
+    [List(ls)] => {
+        // NOTE(ed): Deliberately no type checking.
+        ls.borrow_mut().clear();
+        Ok(Nil)
+    }
+);
+
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    prepend,
+    ? "Adds an element to the start of a list",
+    -> "fn [#X] -> void",
+    [List(ls), v] => {
+        // NOTE(ed): Deliberately no type checking.
+        ls.borrow_mut().insert(0, v.clone());
+        Ok(Value::Nil)
+    }
+);
+
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    list_len,
+    ? "Gives the length of list",
+    -> "fn [#X] -> int",
+    [List(ls)] => {
+        Ok(Int(ls.borrow().len() as i64))
+    }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    dict_len,
+    ? "Gives the length of a dict",
+    -> "fn [#X] -> int",
+    [Dict(ls)] => {
+        Ok(Int(ls.borrow().len() as i64))
+    }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    sin,
+    ? "The sine function you know and love from trigonometry class",
+    -> "fn float -> float",
+    [Float(t)] => {
         Ok(Float(t.sin()))
-    },
+    }
 );
 
 sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    cos
-    "The cosine function you know and love from trigonometry class"
-    [One(Float(t))] -> Type::Float => {
+    "sylt_std::sylt",
+    cos,
+    ? "The cosine function you know and love from trigonometry class",
+    -> "fn float -> float",
+    [Float(t)] => {
         Ok(Float(t.cos()))
-    },
+    }
 );
 
 sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    as_float
-    "Converts the int to a float"
-    [One(Int(t))] -> Type::Float => {
+    "sylt_std::sylt",
+    as_float,
+    ? "Converts an int to a float",
+    -> "fn int -> float",
+    [Int(t)] => {
         Ok(Float(*t as f64))
-    },
-    [Two(Int(t), Int(u))] -> Type::Tuple(vec![Type::Float, Type::Float]) => {
-        Ok(Tuple(Rc::new(vec![Float(*t as f64), Float(*u as f64)])))
-    },
+    }
 );
 
 sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    as_int
-    "Converts something to an int"
-    [One(Float(t))] -> Type::Int => {
+    "sylt_std::sylt",
+    as_int,
+    ? "Converts something to an int",
+    -> "fn float -> int",
+    [Float(t)] => {
         Ok(Int(*t as i64))
-    },
+    }
 );
 
 sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    as_char
-    "Converts a string containing a single char to an int"
-    [One(String(s))] -> Type::Int => {
+    "sylt_std::sylt",
+    as_char,
+    ? "Converts a string containing a single char to an int",
+    -> "fn str -> int",
+    [Value::String(s)] => {
         let mut chars = s.chars();
         let c = match chars.next() {
             Some(c) => c,
@@ -347,23 +241,23 @@ sylt_macro::extern_function!(
             //TODO(gu): Actually what went wrong
             Err(RuntimeError::ExternTypeMismatch("as_char".to_string(), vec![Type::String]))
         }
-    },
+    }
 );
 
 sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    floor
-    "Rounds a float down (towards -inf)"
-    [One(Float(t))] -> Type::Int => {
-        Ok(Int(t.floor() as i64))
-    },
+    "sylt_std::sylt",
+    floor,
+    ? "Rounds a float down (towards -inf)",
+    -> "fn float -> int",
+    [Float(t)] => { Ok(Int(t.floor() as i64)) }
 );
 
 sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    as_chars
-    "Converts an ASCII string into a list of chars. Non-ASCII is converted to '?'."
-    [One(String(s))] -> Type::List(Box::new(Type::Int)) => {
+    "sylt_std::sylt",
+    as_chars,
+    ? "Converts an ASCII string into a list of chars. Non-ASCII is converted to '?'.",
+    -> "str -> [int]",
+    [Value::String(s)] => {
         let chars = s
             .chars()
             .map(|c|
@@ -377,346 +271,234 @@ sylt_macro::extern_function!(
                     '?'
                 } as i64
             )
-            .map(Value::Int)
+            .map(Int)
             .collect();
 
-        Ok(Value::List(Rc::new(RefCell::new(chars))))
-    },
-);
-
-#[sylt_macro::sylt_doc(as_str, "Converts to a string representation", [_] Type::String)]
-#[sylt_macro::sylt_link(as_str, "sylt_std::sylt")]
-pub fn as_str<'t>(ctx: RuntimeContext) -> Result<Value, RuntimeError> {
-    if ctx.typecheck {
-        return Ok("".into());
-    }
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match values.as_ref() {
-        [v] => Ok(Value::String(Rc::new(v.to_string()))),
-        values => Err(RuntimeError::ExternTypeMismatch(
-            "as_str".to_string(),
-            values.iter().map(Type::from).collect(),
-        )),
-    }
-}
-
-sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    sqrt
-    "Returns the square root"
-    [One(Float(x))] -> Type::Float => {
-        Ok(Float(x.sqrt()))
+        Ok(List(Rc::new(RefCell::new(chars))))
     },
 );
 
 sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    abs
-    "Returns the absolute value"
-    [One(Float(x))] -> Type::Float => {
-        Ok(Float(x.abs()))
+    "sylt_std::sylt",
+    sqrt,
+    ? "Returns the square root",
+    -> "fn float -> float",
+    [Float(x)] => { Ok(Float(x.sqrt())) }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    abs,
+    ? "Returns the absolute value",
+    -> "fn float -> float",
+    [Float(x)] => { Ok(Float(x.abs())) }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    sign,
+    ? "Returns the sign of the value",
+    -> "fn #X -> #X", // TODO(ed): Figure out how we can limit x...
+    [Float(x)] => { Ok(Float(x.signum())) },
+    [Int(x)] => { Ok(Int(x.signum())) }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    clamp,
+    ? "Clamps the value 'a' between 'lo' and 'hi'",
+    -> "fn #X, #X, #X -> #X", // TODO(ed): Figure out how we can limit x...
+    [Float(a), Float(lo), Float(hi)] => { Ok(Float(a.min(*hi).max(*lo))) },
+    [Int(a), Int(lo), Int(hi)] => { Ok(Int(*a.min(hi).max(lo))) }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    min,
+    ? "Returns the smallest",
+    -> "fn float, float -> float",
+    [Float(a), Float(b)] => { Ok(Float(a.min(*b))) }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    max,
+    ? "Returns the largest",
+    -> "fn float, float -> float",
+    [Float(a), Float(b)] => { Ok(Float(a.max(*b))) }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    rem,
+    ? "Returns the value x modulo y",
+    -> "fn #X, #X -> #X",
+    [Float(x), Float(y)] => { Ok(Float(x.rem_euclid(*y))) },
+    [Int(x), Int(y)] => { Ok(Int(x.rem_euclid(*y))) }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    pow,
+    ? "Raises the first argument to the power of the second argument",
+    -> "fn float, float -> float",
+    [Float(x), Float(y)] => { Ok(Float(x.powf(*y))) }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    angle,
+    ? "Calculates the angle of a 2d vector",
+    -> "fn (float, float) -> float",
+    [Tuple(v)] => {
+        let (x, y) = break_up_vec(v);
+        Ok(Float(y.atan2(x)))
     },
 );
 
 sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    sign
-    "Returns the sign of the value"
-    [One(Float(x))] -> Type::Float => {
-        Ok(Float(x.signum()))
-    },
-    [One(Int(x))] -> Type::Float => {
-        Ok(Int(x.signum()))
-    },
-);
-
-sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    clamp
-    "Clamps the value 'a' between 'lo' and 'hi'"
-    [One(Float(a)), One(Float(lo)), One(Float(hi))] -> Type::Float => {
-        Ok(Float(a.min(*hi).max(*lo)))
-    },
-    [One(Int(a)), One(Int(lo)), One(Int(hi))] -> Type::Int => {
-        Ok(Int(*a.min(hi).max(lo))) //TODO Other borrows than above
-    },
-);
-
-sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    min
-    "Returns the smallest"
-    [One(Float(a)), One(Float(b))] -> Type::Float => {
-        Ok(Float(a.min(*b)))
-    },
-);
-
-sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    max
-    "Returns the largest"
-    [One(Float(a)), One(Float(b))] -> Type::Float => {
-        Ok(Float(a.max(*b)))
-    },
-);
-
-sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    rem
-    "Returns the value x modulo y"
-    [One(Float(x)), One(Float(y))] -> Type::Float => {
-        Ok(Float(x.rem_euclid(*y)))
-    },
-    [One(Int(x)), One(Int(y))] -> Type::Int => {
-        Ok(Int(x.rem_euclid(*y)))
-    },
-);
-
-sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    pow
-    "Raises the first argument to the power of the second argument"
-    [One(Float(x)), One(Float(y))] -> Type::Float => {
-        Ok(Float(x.powf(*y)))
-    },
-);
-
-sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    angle
-    "Calculates the angle of a 2d vector"
-    [Two(Float(x), Float(y))] -> Type::Float => {
-        Ok(Float(y.atan2(*x)))
-    },
-);
-
-#[sylt_macro::sylt_doc(magnitude_squared, "Calculates the squared magnitude of the tuple as a vector", [Tuple(Float)] Type::Float)]
-#[sylt_macro::sylt_link(magnitude_squared, "sylt_std::sylt")]
-pub fn magnitude_squared<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match (values.as_ref(), ctx.typecheck) {
-        ([Value::Tuple(ls)], true) => {
-            for value in ls.iter() {
-                if Type::from(value) != Type::Float {
-                    return Err(RuntimeError::ExternTypeMismatch(
-                            "magnitude_squared".to_string(),
-                            values.iter().map(Type::from).collect(),
-                    ));
-                }
+    "sylt_std::sylt",
+    magnitude_squared,
+    ? "Calculates the squared magnitude of the tuple as a vector",
+    -> "fn (float, float) -> float",
+    [Tuple(ls)] => {
+        let mut sum = 0.0;
+        for value in ls.iter() {
+            if let Float(value) = value {
+                sum += value * value;
             }
-            Ok(Value::from(Type::Float))
         }
-        ([Value::Tuple(ls)], false) => {
-            let mut sum = 0.0;
-            for value in ls.iter() {
-                if let Value::Float(value) = value {
-                    sum += value * value;
-                } else {
-                    return Err(RuntimeError::ExternTypeMismatch(
-                            "magnitude_squared".to_string(),
-                            values.iter().map(Type::from).collect(),
-                    ));
-                }
-            }
-            Ok(Value::Float(sum))
-        }
-        (values, _) => Err(RuntimeError::ExternTypeMismatch(
-            "magnitude_squared".to_string(),
-            values.iter().map(Type::from).collect(),
-        )),
+        Ok(Float(sum))
     }
-}
+);
 
-#[sylt_macro::sylt_doc(magnitude, "Calculates the squared magnitude of the tuple as a vector", [Tuple(Float)] Type::Float)]
-#[sylt_macro::sylt_link(magnitude, "sylt_std::sylt")]
-pub fn magnitude<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    if let Value::Float(mag) = magnitude_squared(ctx)? {
-        Ok(Value::Float(mag.abs().sqrt()))
-    } else {
-        unreachable!();
-    }
-}
 
 sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    normalize
-    "Returns a unit length vector pointing in the same direction."
-    [Two(Float(x), Float(y))] -> Type::Tuple(vec![Type::Float, Type::Float]) => {
+    "sylt_std::sylt",
+    magnitude,
+    ? "Calculates the squared magnitude of the tuple as a vector",
+    -> "fn (float, float) -> float",
+    _ => {
+        if let Value::Float(mag) = magnitude_squared(ctx)? {
+            Ok(Value::Float(mag.abs().sqrt()))
+        } else {
+            unreachable!();
+        }
+    }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    normalize,
+    ? "Returns a unit length vector pointing in the same direction.",
+    -> "fn (float, float) -> (float, float)",
+    [Tuple(v)] => {
+        let (x, y) = break_up_vec(v);
         let length = (x * x + y * y).sqrt();
         let (x, y) = if length != 0.0 {
             (x / length, y / length)
         } else {
-            (*x, *y)
+            (x, y)
         };
         Ok(Tuple(Rc::new(vec![Float(x), Float(y)])))
-    },
+    }
 );
 
 sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    reflect
-    "Flips the component of 'v' that points towards 'n'"
-    [Two(Float(vx), Float(vy)), Two(Float(nx), Float(ny))]
-    -> Type::Tuple(vec![Type::Float, Type::Float]) => {
+    "sylt_std::sylt",
+    reflect,
+    ? "Flips the component of 'v' that points towards 'n'",
+    -> "fn (float, float), (float, float) -> (float, float)",
+    [Tuple(v), Tuple(n)] => {
+        let (vx, vy) = break_up_vec(v);
+        let (nx, ny) = break_up_vec(n);
         let s = 2.0 * (vx * nx + vy * ny);
         Ok(Tuple(Rc::new(vec![Float(vx - s * nx), Float(vy - s * ny)])))
     },
 );
 
+fn break_up_vec(vec: &[Value]) -> (f64, f64) {
+    use Value::Float;
+    match vec {
+        [Float(x), Float(y)] => (*x, *y),
+        _ => panic!("Only suport 2d vectors!"),
+    }
+}
+
 sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    dot
-    "Computes the scalar product"
-    [One(Float(a)), One(Float(b))] -> Type::Float => {
-        Ok(Float(a * b))
-    },
-    [Two(Float(ax), Float(ay)), Two(Float(bx), Float(by))] -> Type::Float => {
+    "sylt_std::sylt",
+    dot,
+    ? "Computes the scalar product",
+    -> "fn (float, float) -> float",
+    [Tuple(a), Tuple(b)] => {
+        let (ax, ay) = break_up_vec(a);
+        let (bx, by) = break_up_vec(b);
         Ok(Float(ax * bx + ay * by))
-    },
-    [Three(Float(ax), Float(ay), Float(az)), Three(Float(bx), Float(by), Float(bz))] -> Type::Float => {
-        Ok(Float(ax * bx + ay * by + az * bz))
-    },
+    }
+);
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    debug_assertions,
+    ? "Whether the sylt runtime was compiled with debug assertions or not.",
+    -> "fn -> bool",
+    [] => { Ok(Bool(cfg!(debug_assertions))) }
+);
+
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    pop,
+    ? "Removes the last element in the list, and returns it",
+    -> "fn [#X] -> #X?",
+    [List(ls)] => {
+        Ok(ls.borrow_mut().pop().unwrap_or(Nil))
+    }
 );
 
 sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    debug_assertions
-    "Whether the sylt runtime was compiled with debug assertions or not."
-    [] -> Type::Bool => {
-        Ok(Bool(cfg!(debug_assertions)))
-    },
+    "sylt_std::sylt",
+    last,
+    ? "Returns the last element in a list",
+    -> "fn [#X] -> #X?",
+    [List(ls)] => {
+        Ok(ls.borrow().last().cloned().unwrap_or(Nil))
+    }
 );
 
-#[sylt_macro::sylt_doc(pop, "Removes the last element in the list, and returns it", [One(List(l))] Type::Value)]
-#[sylt_macro::sylt_link(pop, "sylt_std::sylt")]
-pub fn pop<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match (values.as_ref(), ctx.typecheck) {
-        ([Value::List(ls)], true) => {
-            let ls = &ls.borrow();
-            // TODO(ed): Write correct typing
-            let ls = Type::from(&ls[0]);
-            let ret = union_type(ls, Type::Void, ctx.machine.blobs());
-            Ok(Value::from(ret))
-        }
-        ([Value::List(ls)], false) => {
-            // NOTE(ed): Deliberately no type checking.
-            let last = ls.borrow_mut().pop().unwrap_or(Value::Nil);
-            Ok(last)
-        }
-        (values, _) => Err(RuntimeError::ExternTypeMismatch(
-            "pop".to_string(),
-            values.iter().map(Type::from).collect(),
-        )),
-    }
-}
-
-#[sylt_macro::sylt_link(last, "sylt_std::sylt")]
-pub fn last(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match (values.as_ref(), ctx.typecheck) {
-        ([Value::List(ls)], true) => {
-            let ls = &ls.borrow();
-            // TODO(ed): Write correct typing
-            let ls = Type::from(&ls[0]);
-            let ret = union_type(ls, Type::Void, ctx.machine.blobs());
-            Ok(Value::from(ret))
-        }
-        ([Value::List(ls)], false) => {
-            // NOTE(ed): Deliberately no type checking.
-            let last = ls.borrow_mut().last().cloned().unwrap_or(Value::Nil);
-            Ok(last)
-        }
-        (values, _) => Err(RuntimeError::ExternTypeMismatch(
-            "pop".to_string(),
-            values.iter().map(Type::from).collect(),
-        )),
-    }
-}
 
 sylt_macro::extern_function!(
-    "sylt_std::sylt"
-    thread_sleep
-    "Sleep (blocking) for some time."
-    [One(Float(secs))] -> Type::Void => {
+    "sylt_std::sylt",
+    thread_sleep,
+    ? "Sleep (blocking) for some time.",
+    -> "fn float -> void",
+    [Float(secs)] => {
         std::thread::sleep(std::time::Duration::from_secs_f64(*secs));
-        Ok(Value::Nil)
+        Ok(Nil)
     },
 );
 
-*/
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    as_str,
+    ? "Converts to a string representation",
+    -> "fn #X -> str",
+    [v] => { Ok(Value::String(Rc::new(v.to_string()))) }
+);
 
-pub fn union_type<'t>(a: Type, b: Type, blobs: &[Blob]) -> Type {
-    if a.fits(&b, blobs).is_ok() {
-        a
-    } else if b.fits(&a, blobs).is_ok() {
-        b
-    } else {
-        match (a, b) {
-            (Type::Union(a), Type::Union(b)) => Type::Union(a.union(&b).cloned().collect()),
-            (b, Type::Union(a)) | (Type::Union(a), b) => {
-                let mut a = a.clone();
-                a.insert(b.clone());
-                Type::Union(a)
-            }
-            (a, b) => Type::Union([a, b].iter().cloned().collect()),
-        }
-    }
-}
-
-#[sylt_macro::sylt_doc(pop, "Removes the last element in the list, and returns it", "fn [#X] -> #X")]
-#[sylt_macro::sylt_link(pop, "sylt_std::sylt", "fn [#X] -> #X")]
-pub fn pop<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match (values.as_ref(), ctx.typecheck) {
-        ([Value::List(ls)], true) => {
-            let ls = &ls.borrow();
-            // TODO(ed): Write correct typing
-            let ls = Type::from(&ls[0]);
-            let ret = union_type(ls, Type::Void, ctx.machine.blobs());
-            Ok(Value::from(ret))
-        }
-        ([Value::List(ls)], false) => {
-            // NOTE(ed): Deliberately no type checking.
-            let last = ls.borrow_mut().pop().unwrap_or(Value::Nil);
-            Ok(last)
-        }
-        (values, _) => Err(RuntimeError::ExternTypeMismatch(
-            "pop".to_string(),
-            values.iter().map(Type::from).collect(),
-        )),
-    }
-}
-
-#[sylt_macro::sylt_doc(as_str, "Converts to a string representation", "fn #X -> str")]
-#[sylt_macro::sylt_link(as_str, "sylt_std::sylt", "fn #X -> str")]
-pub fn as_str<'t>(ctx: RuntimeContext) -> Result<Value, RuntimeError> {
-    if ctx.typecheck {
-        return Ok("".into());
-    }
-    let values = ctx.machine.stack_from_base(ctx.stack_base);
-    match values.as_ref() {
-        [v] => Ok(Value::String(Rc::new(v.to_string()))),
-        values => Err(RuntimeError::ExternTypeMismatch(
-            "as_str".to_string(),
-            values.iter().map(Type::from).collect(),
-        )),
-    }
-}
-
-#[sylt_macro::sylt_doc(print, "Prints values to stdout", "fn [#X] -> void")]
-#[sylt_macro::sylt_link(print, "sylt_std::sylt", "fn [#X] -> void")]
-pub fn print<'t>(ctx: RuntimeContext) -> Result<Value, RuntimeError> {
-    if !ctx.typecheck {
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    print,
+    ? "Prints values to stdout",
+    -> "fn #X -> void",
+    _ => {
         println!("{}", ctx.machine
             .stack_from_base(ctx.stack_base)
             .iter()
             .map(|v| v.to_string())
             .collect::<Vec<_>>()
             .join(" "));
+        Ok(Nil)
     }
-    Ok(Value::Nil)
-}
+);
 
 sylt_macro::sylt_link_gen!("sylt_std::sylt");
-
