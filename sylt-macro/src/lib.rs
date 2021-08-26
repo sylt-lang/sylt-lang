@@ -11,20 +11,16 @@ use syn::{
 
 struct ExternBlock {
     pattern: Pat,
-    _arrow: Token![->],
-    return_ty: Expr,
     _fat_arrow: Token![=>],
     block: Expr,
-    _comma: Token![,],
 }
 
 struct ExternFunction {
     module: syn::LitStr,
     function: syn::Ident,
-    _as: Option<Token![as]>,
     name: Option<syn::Ident>,
-    doc: Option<syn::LitStr>,
-    signature: Option<syn::LitStr>,
+    doc: syn::LitStr,
+    signature: syn::LitStr,
     blocks: Vec<ExternBlock>,
 }
 
@@ -32,37 +28,57 @@ impl Parse for ExternBlock {
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(Self {
             pattern: input.parse()?,
-            _arrow: input.parse()?,
-            return_ty: input.parse()?,
             _fat_arrow: input.parse()?,
             block: input.parse()?,
-            _comma: input.parse()?,
         })
     }
 }
 
 impl Parse for ExternFunction {
     fn parse(input: ParseStream) -> Result<Self> {
-        let mut res = Self {
-            module: input.parse()?,
-            function: input.parse()?,
-            _as: None,
-            name: None,
-            doc: None,
-            signature: None,
-            blocks: Vec::new(),
+        let module = input.parse()?;
+        let _: Token![,] = input.parse()?;
+        let function = input.parse()?;
+        let name = if input.peek(Token![as]) {
+            let _as: Token![as] = input.parse()?;
+            input.parse()?
+        } else {
+            None
         };
-        if input.peek(Token![as]) {
-            res._as = input.parse()?;
-            res.name = input.parse()?;
+        let _: Token![,] = input.parse()?;
+        let mut doc = None;
+        let mut ty = None;
+        loop {
+            if input.peek(Token![?]) {
+                let _: Token![?] = input.parse()?;
+                doc = Some(input.parse()?);
+            } else if input.peek(Token![->]) {
+                let _: Token![->] = input.parse()?;
+                ty = Some(input.parse()?);
+            } else {
+                break
+            }
+            let _: Token![,] = input.parse()?;
         }
-        if input.peek(syn::LitStr) {
-            res.doc = input.parse()?;
+        if doc.is_none() {
+            panic!("Function {} lacks documentation", function);
         }
+        if ty.is_none() {
+            panic!("Function {} lacks documentation", function);
+        }
+        let mut blocks = Vec::new();
         while !input.is_empty() {
-            res.blocks.push(input.parse()?);
+            blocks.push(input.parse()?);
+            let _: Option<Token![,]> = input.parse()?;
         }
-        Ok(res)
+        Ok(Self {
+            module,
+            function,
+            name,
+            doc: doc.unwrap(),
+            signature: ty.unwrap(),
+            blocks,
+        })
     }
 }
 
@@ -71,35 +87,17 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
     let parsed: ExternFunction = parse_macro_input!(tokens);
     let module = parsed.module;
     let function = parsed.function;
-    let doc = if parsed.doc.is_some() {
-        let doc = parsed.doc.unwrap();
-        quote! { #doc }
-    } else {
-        eprintln!(
-            "Missing doc-string: {} :: {}",
-            module.value(),
-            function.to_string()
-        );
-        quote! { "Undocumented" }
-    };
-
-    #[rustfmt::skip]
-    let matches: Vec<_> = parsed
-        .blocks
-        .iter()
-        .map(|ExternBlock { pattern, return_ty, .. }| quote! { #pattern #return_ty })
-        .collect();
-
     let link_name = parsed.name.unwrap_or_else(|| function.clone());
+    let doc = parsed.doc;
+    let signature = parsed.signature;
 
     let typecheck_blocks: Vec<_> = parsed
         .blocks
         .iter()
         .map(|block| {
             let pat = block.pattern.clone();
-            let ty = block.return_ty.clone();
             quote! {
-                #pat => { Ok(sylt_common::Value::from(#ty)) }
+                #pat => { Ok(sylt_common::Value::from(Type::Unknown)) }
             }
         })
         .collect();
@@ -117,8 +115,8 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
         .collect();
 
     let tokens = quote! {
-        #[sylt_macro::sylt_doc(#function, #doc , #( #matches ),*)]
-        #[sylt_macro::sylt_link(#link_name, #module)]
+        #[sylt_macro::sylt_doc(#link_name, #doc, #signature)]
+        #[sylt_macro::sylt_link(#link_name, #module, #signature)]
         pub fn #function (
             ctx: sylt_common::RuntimeContext
         ) -> ::std::result::Result<sylt_common::Value, sylt_common::error::RuntimeError>
@@ -126,12 +124,11 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
             use sylt_common::MatchableValue::*;
             use sylt_common::RustFunction;
             use sylt_common::Value::*;
-            use sylt_common::value::make_matchable;
+            use std::borrow::Cow;
             let values = ctx.machine.stack_from_base(ctx.stack_base);
             if ctx.typecheck {
-                let matching: Vec<_> = values.iter().map(make_matchable).collect();
                 #[allow(unused_variables)]
-                match matching.as_slice() {
+                match &*values {
                     #(#typecheck_blocks),*
                     _ => Err(sylt_common::error::RuntimeError::ExternTypeMismatch(
                         stringify!(#function).to_string(),
@@ -139,8 +136,7 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
                     ))
                 }
             } else {
-                let matching: Vec<_> = values.iter().map(make_matchable).collect();
-                match matching.as_slice() {
+                match &*values {
                     #(#eval_blocks),*
                     _ => Err(sylt_common::error::RuntimeError::ExternTypeMismatch(
                         stringify!(#function).to_string(),
