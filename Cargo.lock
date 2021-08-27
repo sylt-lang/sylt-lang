@@ -141,6 +141,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "colored"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3616f750b84d8f0de8a58bda93e08e2a81ad3f523089b05f1dffecab48c6cbd"
+dependencies = [
+ "atty",
+ "lazy_static",
+ "winapi",
+]
+
+[[package]]
 name = "criterion"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -617,11 +628,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "owo-colors"
-version = "2.0.0"
-source = "git+https://github.com/FredTheDino/owo-colors.git#33f70d8c6116d6ac3006310fefe38ac59c7b8c6e"
-
-[[package]]
 name = "plotters"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -897,9 +903,9 @@ checksum = "b351cad1154eca506fab7bc868ffa732e641171a53d6e75aeaae0a042269c6f4"
 name = "sylt"
 version = "0.2.0"
 dependencies = [
+ "colored",
  "criterion",
  "gumdrop",
- "owo-colors",
  "sylt-common",
  "sylt-compiler",
  "sylt-machine",
@@ -914,7 +920,7 @@ dependencies = [
 name = "sylt-common"
 version = "0.2.0"
 dependencies = [
- "owo-colors",
+ "colored",
  "serde",
  "sungod",
  "sylt-macro",
@@ -933,7 +939,7 @@ dependencies = [
 name = "sylt-machine"
 version = "0.2.0"
 dependencies = [
- "owo-colors",
+ "colored",
  "sylt-common",
 ]
 
@@ -961,9 +967,9 @@ name = "sylt-std"
 version = "0.2.0"
 dependencies = [
  "bincode",
+ "colored",
  "lazy_static",
  "lingon",
- "owo-colors",
  "sungod",
  "sylt-common",
  "sylt-macro",
@@ -980,7 +986,7 @@ dependencies = [
 name = "sylt-typechecker"
 version = "0.2.0"
 dependencies = [
- "owo-colors",
+ "colored",
  "sylt-common",
 ]
 

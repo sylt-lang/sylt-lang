@@ -16,4 +16,4 @@ doctest = false
 [dependencies]
 sylt-common = { version = "0.2.0", path = "../sylt-common" }
 
-owo-colors = { version = "2.0.0", git = "https://github.com/FredTheDino/owo-colors.git" }
+colored = "2"

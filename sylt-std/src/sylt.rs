@@ -1,6 +1,6 @@
 use crate as sylt_std;
 
-use owo_colors::OwoColorize;
+use colored::Colorize;
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;

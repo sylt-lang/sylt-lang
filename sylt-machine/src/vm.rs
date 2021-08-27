@@ -1,4 +1,4 @@
-use owo_colors::OwoColorize;
+use colored::Colorize;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
@@ -165,8 +165,8 @@ impl VM {
             .debug_print(Some(&self.constants));
         println!(
             "    ip: {}, line: {}\n",
-            self.frame().ip.blue(),
-            self.frame().block.borrow().line(self.frame().ip).blue()
+            self.frame().ip.to_string().blue(),
+            self.frame().block.borrow().line(self.frame().ip).to_string().blue()
         );
         unreachable!();
     }
@@ -190,14 +190,14 @@ impl VM {
             if i != 0 {
                 print!(" ");
             }
-            print!("{:?}", s.green());
+            print!("{}", format!("{:?}", s).green());
         }
         println!("]");
 
         println!(
             "{:5} {:05} {:?}",
-            self.frame().block.borrow().line(self.frame().ip).blue(),
-            self.frame().ip.red(),
+            self.frame().block.borrow().line(self.frame().ip).to_string().blue(),
+            self.frame().ip.to_string().red(),
             self.frame().block.borrow().ops[self.frame().ip]
         );
     }
