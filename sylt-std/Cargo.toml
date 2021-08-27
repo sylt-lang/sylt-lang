@@ -28,3 +28,4 @@ network = ["bincode"]
 
 [lib]
 doctest = false
+test = false

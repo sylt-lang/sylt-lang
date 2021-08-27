@@ -12,6 +12,7 @@ edition = "2018"
 [lib]
 path = "src/compiler.rs"
 doctest = false
+test = false
 
 [dependencies]
 sylt-common = { version = "0.2.0", path = "../sylt-common" }
