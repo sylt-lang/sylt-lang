@@ -12,7 +12,7 @@ use sylt_common::{Blob, RuntimeContext, Type, Value};
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     atan2,
-    ? "Returns the angle of a direction - relative to +x, where the first argument is x",
+    ? "Returns the angle of a direction relative to +x, where the first argument is x",
     -> "fn float, float -> float",
     [Float(x), Float(y)] => {
         Ok(Float(y.atan2(*x)))
