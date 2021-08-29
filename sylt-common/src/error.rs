@@ -1,6 +1,6 @@
 use crate::{Op, Type, Value};
 
-use owo_colors::OwoColorize;
+use colored::Colorize;
 use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead};
@@ -26,7 +26,7 @@ fn write_source_line_at(f: &mut fmt::Formatter<'_>, file: &Path, line: usize) ->
         .skip(start_line - 1)
         .take(lines)
     {
-        writeln!(f, " {:3} | {}", (line_num + 1).blue(), line.unwrap())?;
+        writeln!(f, " {:>3} | {}", (line_num + 1).to_string().blue(), line.unwrap())?;
     }
     Ok(())
 }
@@ -45,8 +45,8 @@ fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &Path, span: Span) -> 
 fn file_line_display(file: &Path, line: usize) -> String {
     format!(
         "{}:{}",
-        file.display().blue(),
-        line.blue().to_string(),
+        file.display().to_string().blue(),
+        line.to_string().blue(),
     )
 }
 
@@ -129,7 +129,7 @@ impl fmt::Display for Error {
         match self {
             #[rustfmt::skip]
             Error::RuntimeError { kind, phase, file, line, message } => {
-                write!(f, "{} {}: ", phase.red(), "error".red())?;
+                write!(f, "{} {}: ", phase.to_string().red(), "error".red())?;
                 write!(f, "{}\n", file_line_display(file, *line))?;
                 write!(f, "{}{}\n", INDENT, kind)?;
 
