@@ -164,21 +164,15 @@ sylt_macro::extern_function!(
 );
 
 
+// TODO(er): Add length of string, set and tuple(?)
 sylt_macro::extern_function!(
     "sylt_std::sylt",
-    list_len,
+    len,
     ? "Gives the length of list",
-    -> "fn [#X] -> int",
+    -> "fn [#X] | {#X: #Y} -> int",
     [List(ls)] => {
         Ok(Int(ls.borrow().len() as i64))
-    }
-);
-
-sylt_macro::extern_function!(
-    "sylt_std::sylt",
-    dict_len,
-    ? "Gives the length of a dict",
-    -> "fn [#X] -> int",
+    },
     [Dict(ls)] => {
         Ok(Int(ls.borrow().len() as i64))
     }

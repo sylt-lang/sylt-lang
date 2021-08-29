@@ -927,6 +927,7 @@ version = "0.2.0"
 dependencies = [
  "sylt-common",
  "sylt-parser",
+ "sylt-tokenizer",
 ]
 
 [[package]]
