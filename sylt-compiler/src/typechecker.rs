@@ -742,6 +742,14 @@ impl<'c> TypeChecker<'c> {
                             }
                         }
                         None => {
+                            errors.push(type_error!(
+                                self,
+                                *span,
+                                TypeError::UnknownField { blob: blob.name.clone(), field: name.clone() },
+                                "{}.{} does not exist on the original blob type",
+                                blob.name,
+                                name
+                            ));
                         }
                     }
                 }
@@ -755,7 +763,7 @@ impl<'c> TypeChecker<'c> {
                         continue;
                     }
                     // TODO(ed): Is this the right order?
-                    if let Err(_) = ty.fits(&Type::Void, self.compiler.blobs.as_slice()) {
+                    if let Err(_) = Type::Void.fits(&ty, self.compiler.blobs.as_slice()) {
                         // TODO(ed): Not super sold on this error message - it can be better.
                         errors.push(type_error!(
                             self,
