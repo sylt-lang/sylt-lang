@@ -166,33 +166,6 @@ impl<'c> TypeChecker<'c> {
             (x, y) if x.fits(&y, self.compiler.blobs.as_slice()).is_ok() => x.clone(),
 
             (Type::Tuple(a), Type::Tuple(b)) => Type::Tuple(a.iter().zip(b.iter()).map(|(a, b)| self.solve_generics_recursively(span, generics, a, b)).collect::<Result<Vec<_>, _>>()?),
-            (Type::Union(a), b) => {
-                for t in a {
-                    let mut new_generics = generics.clone();
-                    match self.solve_generics_recursively(span, &mut new_generics, t, b) {
-                        Ok(ty) => {
-                            *generics = new_generics;
-                            return Ok(ty);
-                        },
-                        Err(errors) => { dbg!(errors); },
-                    }
-                }
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::Missmatch { got: arg.clone(), expected: par.clone() },
-                    "Argument cannot be assigned to union."
-                );
-            }
-            (a, Type::Union(b)) => {
-                // TODO: This needs to be done before the one over.
-                for t in b {
-                    let mut new_generics = generics.clone();
-                    self.solve_generics_recursively(span, &mut new_generics, a, t)?;
-                    *generics = new_generics;
-                }
-                a.clone()
-            }
             (Type::List(a), Type::List(b)) => Type::List(Box::new(self.solve_generics_recursively(span, generics, a, b)?)),
             (Type::Set(a), Type::Set(b)) => Type::Set(Box::new(self.solve_generics_recursively(span, generics, a, b)?)),
             (Type::Dict(ak, av), Type::Dict(bk, bv)) => Type::Dict(
@@ -203,6 +176,39 @@ impl<'c> TypeChecker<'c> {
                 let args = a_args.iter().zip(b_args.iter()).map(|(a, b)| self.solve_generics_recursively(span, generics, a, b)).collect::<Result<Vec<_>, _>>()?;
                 let ret = Box::new(self.solve_generics_recursively(span, generics, a_ret, b_ret)?);
                 Type::Function(args, ret)
+            }
+            (a, Type::Union(b)) => {
+                // This is technically wrong, since we might do guesses here that aren't valid.
+                // But it works for our uses.
+                for t in b {
+                    let mut new_generics = generics.clone();
+                    self.solve_generics_recursively(span, &mut new_generics, a, t)?;
+                    *generics = new_generics;
+                }
+                a.clone()
+            }
+            (Type::Union(a), b) => {
+                let ret = a.iter()
+                    .map(|ty| {
+                        let mut new_generics = generics.clone();
+                        let ret = self.solve_generics_recursively(span, &mut new_generics, ty, b);
+                        if ret.is_ok() {
+                            *generics = new_generics;
+                        }
+                        // I feel like there's a better way to do this
+                        // Deliberatly swap, so we get all errors.
+                        match ret {
+                            Ok(x) => Err(x),
+                            Err(x) => Ok(x),
+                        }
+                    })
+                    .collect::<Result<Vec<_>, Type>>();
+                match ret {
+                    Err(ty) => ty,
+                    Ok(errs) => {
+                        return Err(errs.into_iter().fold(Vec::new(), |mut out, mut err| { out.append(&mut err); out }));
+                    }
+                }
             }
             _ => {
                 // TODO(ed): Point to the argument maybe?
