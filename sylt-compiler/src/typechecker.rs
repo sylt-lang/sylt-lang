@@ -349,6 +349,7 @@ impl<'c> TypeChecker<'c> {
                 match self.assignable(thing, namespace)? {
                     Value(ty, kind) => {
                         match &ty {
+                            Type::Unknown => { Ok(Value(Type::Unknown, VarKind::Mutable)) }
                             Type::Instance(blob) => {
                                 let blob = &self.compiler.blobs[*blob];
                                 dbg!(&blob.fields);
