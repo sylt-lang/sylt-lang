@@ -10,6 +10,19 @@ use crate::Args;
 
 static INDENT: &'static str = "    ";
 
+macro_rules! write_comma_separated {
+    ($dest:expr, $indent:expr, $write:expr, $values:expr) => {
+        let mut first = true;
+        for value in $values {
+            if !first {
+                write!($dest, ", ")?;
+            }
+            first = false;
+            $write($dest, $indent, value)?;
+        }
+    };
+}
+
 fn write_indents<W: Write>(dest: &mut W, indent: u32) -> fmt::Result {
     for _ in 0..indent {
         write!(dest, "{}", INDENT)?;
@@ -39,18 +52,6 @@ fn write_parameters<W: Write>(
     Ok(())
 }
 
-fn write_arguments<W: Write>(dest: &mut W, indent: u32, arguments: &[Expression]) -> fmt::Result {
-    let mut first = true;
-    for arg in arguments {
-        if !first {
-            write!(dest, ", ")?;
-        }
-        first = false;
-        write_expression(dest, indent, arg)?;
-    }
-    Ok(())
-}
-
 fn write_blob_instance_fields<W: Write>(
     dest: &mut W,
     indent: u32,
@@ -69,20 +70,52 @@ fn write_blob_type_fields<W: Write>(
 
 fn write_runtime_type<W: Write>(dest: &mut W, ty: &RuntimeType) -> fmt::Result {
     match ty {
-        RuntimeType::Ty => todo!(),
-        RuntimeType::Field(_) => todo!(),
+        RuntimeType::Ty => panic!(),
+        RuntimeType::Field(s) => write!(dest, "{}", s), //TODO(gu): ?
         RuntimeType::Void => write!(dest, "nil"),
         RuntimeType::Unknown => panic!(),
         RuntimeType::Int => write!(dest, "int"),
         RuntimeType::Float => write!(dest, "float"),
         RuntimeType::Bool => write!(dest, "bool"),
         RuntimeType::String => write!(dest, "str"),
-        RuntimeType::Tuple(_) => todo!(),
-        RuntimeType::Union(_) => todo!(),
-        RuntimeType::List(_) => todo!(),
-        RuntimeType::Set(_) => todo!(),
-        RuntimeType::Dict(_, _) => todo!(),
-        RuntimeType::Function(_, _) => todo!(),
+        RuntimeType::Tuple(types) => {
+            write!(dest, "(")?;
+            if types.is_empty() {
+                write!(dest, ",")?;
+            } else {
+                write_runtime_types(dest, &types.iter().collect::<Vec<_>>())?;
+            }
+            write!(dest, ")")
+        }
+        RuntimeType::Union(ty1) => write_runtime_types(dest, &ty1.iter().collect::<Vec<_>>()),
+        RuntimeType::List(ty) => {
+            write!(dest, "[")?;
+            write_runtime_type(dest, ty)?;
+            write!(dest, "]")
+        }
+        RuntimeType::Set(ty) => {
+            write!(dest, "{{")?;
+            write_runtime_type(dest, ty)?;
+            write!(dest, "}}")
+        }
+        RuntimeType::Dict(key, val) => {
+            write!(dest, "{{")?;
+            write_runtime_type(dest, key)?;
+            write!(dest, ": ")?;
+            write_runtime_type(dest, val)?;
+            write!(dest, "}}")
+        }
+        // fn int, bool -> bool
+        // fn -> void
+        RuntimeType::Function(params, ret) => {
+            write!(dest, "fn")?;
+            if !params.is_empty() {
+                write!(dest, " ")?;
+                write_runtime_types(dest, &params.iter().collect::<Vec<_>>())?;
+            }
+            write!(dest, " -> ")?;
+            write_runtime_type(dest, ret)
+        }
         RuntimeType::Blob(_) => todo!(),
         RuntimeType::Instance(_) => todo!(),
         RuntimeType::ExternFunction(_) => todo!(),
@@ -95,13 +128,55 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: &Type) -> fmt::Result {
         TypeKind::Implied => unreachable!(),
         TypeKind::Resolved(ty) => write_runtime_type(dest, ty),
         TypeKind::UserDefined(assignable) => write_assignable(dest, indent, assignable),
-        TypeKind::Union(_, _) => todo!(),
-        TypeKind::Fn(_, _) => todo!(),
-        TypeKind::Tuple(_) => todo!(),
-        TypeKind::List(_) => todo!(),
-        TypeKind::Set(_) => todo!(),
-        TypeKind::Dict(_, _) => todo!(),
+        TypeKind::Union(ty, rest) => {
+            write_type(dest, indent, ty)?;
+            write!(dest, " | ")?;
+            write_type(dest, indent, rest)
+        },
+        TypeKind::Fn(params, ret) => {
+            write!(dest, "fn")?;
+            if !params.is_empty() {
+                write!(dest, " ")?;
+                write_types(dest, indent, &params.iter().collect::<Vec<_>>())?;
+            }
+            write!(dest, " -> ")?;
+            write_type(dest, indent, ret)
+        }
+        TypeKind::Tuple(types) => {
+            write!(dest, "(")?;
+            if types.is_empty() {
+                write!(dest, ",")?;
+            } else {
+                write_types(dest, indent, &types.iter().collect::<Vec<_>>())?;
+            }
+            write!(dest, ")")
+        }
+        TypeKind::List(ty) => {
+            write!(dest, "[")?;
+            write_type(dest, indent, ty)?;
+            write!(dest, "]")
+        }
+        TypeKind::Set(ty) => {
+            write!(dest, "{{")?;
+            write_type(dest, indent, ty)?;
+            write!(dest, "}}")
+        }
+        TypeKind::Dict(key, val) => {
+            write!(dest, "{{")?;
+            write_type(dest, indent, key)?;
+            write!(dest, ": ")?;
+            write_type(dest, indent, val)?;
+            write!(dest, "}}")
+        }
     }
+}
+
+fn write_runtime_types<W: Write>(dest: &mut W, types: &[&RuntimeType]) -> fmt::Result {
+    todo!()
+}
+
+fn write_types<W: Write>(dest: &mut W, indent: u32, types: &[&Type]) -> fmt::Result {
+    todo!()
 }
 
 fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: &Assignable) -> fmt::Result {
@@ -110,7 +185,7 @@ fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: &Assignable
         AssignableKind::Call(callable, args) => {
             write_assignable(dest, indent, callable)?;
             write!(dest, "(")?;
-            write_arguments(dest, indent, args)?;
+            write_comma_separated!(dest, indent, write_expression, args);
             write!(dest, ")")
         }
         AssignableKind::ArrowCall(first, callable, rest) => {
@@ -118,7 +193,8 @@ fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: &Assignable
             write!(dest, " -> ")?;
             write_assignable(dest, indent, callable)?;
             write!(dest, " ")?;
-            write_arguments(dest, indent, rest)
+            write_comma_separated!(dest, indent, write_expression, rest);
+            Ok(())
         }
         AssignableKind::Access(accessable, ident) => {
             write_assignable(dest, indent, accessable)?;
@@ -236,10 +312,40 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
             write_blob_instance_fields(dest, indent + 1, fields)?;
             write!(dest, "}}")?;
         }
-        ExpressionKind::Tuple(_) => todo!(),
-        ExpressionKind::List(_) => todo!(),
-        ExpressionKind::Set(_) => todo!(),
-        ExpressionKind::Dict(_) => todo!(),
+        ExpressionKind::Tuple(exprs) => {
+            write!(dest, "(")?;
+            if exprs.is_empty() {
+                write!(dest, ",")?;
+            } else {
+                write_comma_separated!(dest, indent, write_expression, exprs);
+            }
+            write!(dest, ")")?;
+        }
+        ExpressionKind::List(exprs) => {
+            write!(dest, "[")?;
+            write_comma_separated!(dest, indent, write_expression, exprs);
+            write!(dest, "]")?;
+        }
+        ExpressionKind::Set(exprs) => {
+            write!(dest, "{{")?;
+            write_comma_separated!(dest, indent, write_expression, exprs);
+            write!(dest, "}}")?;
+        }
+        ExpressionKind::Dict(exprs) => {
+            write!(dest, "{{")?;
+            let mut first = true;
+            let mut exprs = exprs.iter();
+            while let Some(expr) = exprs.next() {
+                if !first {
+                    write!(dest, ", ")?;
+                }
+                first = false;
+                write_expression(dest, indent, expr)?;
+                write!(dest, ": ")?;
+                write_expression(dest, indent, exprs.next().unwrap())?;
+            }
+            write!(dest, "}}")?;
+        }
         ExpressionKind::Float(f) => write!(dest, "{}", f)?,
         ExpressionKind::Int(i) => write!(dest, "{}", i)?,
         ExpressionKind::Str(s) => write!(dest, "\"{}\"", s)?,
@@ -281,7 +387,15 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             )?;
             write_expression(dest, indent, value)?;
         }
-        StatementKind::Blob { name, fields } => todo!(),
+        StatementKind::Blob { name, fields } => {
+            write!(dest, "{}", name)?;
+            write!(dest, " :: blob {{\n")?;
+            for (field, ty) in fields {
+                write_indents(dest, indent + 1)?;
+                write!(dest, "{}: ", field)?;
+                write_type(dest, indent, ty)?;
+            }
+        }
         StatementKind::Block { statements } => {
             write!(dest, "{{\n")?;
 
@@ -296,8 +410,8 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             write_indents(dest, indent)?;
             write!(dest, "}}")?;
         }
-        StatementKind::Break => todo!(),
-        StatementKind::Continue => todo!(),
+        StatementKind::Break => write!(dest, "break")?,
+        StatementKind::Continue => write!(dest, "continue")?,
         StatementKind::Definition {
             ident,
             kind,
@@ -336,7 +450,11 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
                 write_statement(dest, indent, fail)?;
             }
         }
-        StatementKind::IsCheck { lhs, rhs } => todo!(),
+        StatementKind::IsCheck { lhs, rhs } => {
+            write_type(dest, indent, lhs)?;
+            write!(dest, " is ")?;
+            write_type(dest, indent, rhs)?;
+        }
         StatementKind::Loop { condition, body } => {
             write!(dest, "loop ")?;
             write_expression(dest, indent, condition)?;
