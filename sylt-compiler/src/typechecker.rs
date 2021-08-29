@@ -446,7 +446,7 @@ impl<'c> TypeChecker<'c> {
                         Value(val, VarKind::Const)
                     }
                     (Type::Dict(key, val), index) => {
-                        if let Err(reason) = index.fits(&key, self.compiler.blobs.as_slice()) {
+                        if let Err(reason) = key.fits(&index, self.compiler.blobs.as_slice()) {
                             return err_type_error!(
                                 self,
                                 span,
@@ -874,9 +874,11 @@ impl<'c> TypeChecker<'c> {
                 } else {
                     ty
                 };
-                self.stack.push(Variable::new(ident.clone(), ty.clone(), *kind));
 
-                let value = self.expression(value)?;
+                let value = self.expression(value);
+                self.stack.push(Variable::new(ident.clone(), ty.clone(), *kind));
+                let value = value?;
+
                 let fit = ty.fits(&value, self.compiler.blobs.as_slice());
                 let ty = match (kind.force(), fit) {
                     (true, Ok(_)) => {
@@ -1010,7 +1012,8 @@ impl<'c> TypeChecker<'c> {
                         } else {
                             ty
                         };
-                        self.namespaces[namespace].insert(ident.name.clone(), Name::Global(Some((ty.clone(), *kind))));
+                        let name = Name::Global(Some((ty.clone(), *kind)));
+                        self.namespaces[namespace].insert(ident.name.clone(), name);
                         let value = self.expression(value)?;
                         let fit = ty.fits(&value, self.compiler.blobs.as_slice());
                         let ty = match (kind.force(), fit) {
