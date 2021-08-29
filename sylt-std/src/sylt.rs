@@ -22,17 +22,18 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     dbg,
-    ? "Writes the type and value of anything you enter",
-    -> "fn #X -> void",
-    [Float(x), Float(y)] => {
+    ? "Prints values to stdout",
+    -> "fn #X -> #X",
+    [value] => {
         println!(
             "DBG: {:?}, {:?}",
-            values.iter().map(Type::from).collect::<Vec<_>>(),
-            values
+            Type::from(value),
+            value
         );
-        Ok(Nil)
+        Ok(value.clone())
     }
 );
+
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",
