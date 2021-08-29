@@ -64,7 +64,7 @@ impl Parse for ExternFunction {
             panic!("Function {} lacks documentation", function);
         }
         if ty.is_none() {
-            panic!("Function {} lacks documentation", function);
+            panic!("Function {} lacks function signature", function);
         }
         let mut blocks = Vec::new();
         while !input.is_empty() {
@@ -124,7 +124,6 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
             use sylt_common::MatchableValue::*;
             use sylt_common::RustFunction;
             use sylt_common::Value::*;
-            use std::borrow::Cow;
             let values = ctx.machine.stack_from_base(ctx.stack_base);
             if ctx.typecheck {
                 #[allow(unused_variables)]
