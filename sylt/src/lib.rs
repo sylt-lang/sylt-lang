@@ -29,7 +29,7 @@ pub fn compile(args: &Args, functions: ExternFuncionList) -> Result<Prog, Vec<Er
     if args.dump_tree {
         println!("Syntax tree: {:#?}", tree);
     }
-    let prog = sylt_compiler::compile(tree, &functions)?;
+    let prog = sylt_compiler::compile(!args.skip_typecheck, tree, &functions)?;
     Ok(prog)
 }
 
@@ -37,9 +37,6 @@ pub fn compile(args: &Args, functions: ExternFuncionList) -> Result<Prog, Vec<Er
 /// external functions.
 pub fn run_file(args: &Args, functions: ExternFuncionList) -> Result<(), Vec<Error>> {
     let prog = compile(args, functions)?;
-    if !args.skip_typecheck {
-        sylt_typechecker::typecheck(&prog, args.verbosity)?;
-    }
     run(&prog, &args)
 }
 
