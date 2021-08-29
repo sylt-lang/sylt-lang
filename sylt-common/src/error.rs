@@ -106,7 +106,6 @@ pub enum TypeError {
         op: String,
     },
 
-    // TODO(ed): Fix the spelling
     Mismatch {
         got: Type,
         expected: Type,
