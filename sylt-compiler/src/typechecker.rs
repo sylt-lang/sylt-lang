@@ -151,7 +151,7 @@ impl<'c> TypeChecker<'c> {
                             return err_type_error!(
                                 self,
                                 span,
-                                TypeError::Missmatch { got: arg.clone(), expected: known.clone() },
+                                TypeError::Mismatch { got: arg.clone(), expected: known.clone() },
                                 "because {}. The type was infered from previous arguments.",
                                 reason
                             )
@@ -215,7 +215,7 @@ impl<'c> TypeChecker<'c> {
                 return err_type_error!(
                     self,
                     span,
-                    TypeError::Missmatch { got: arg.clone(), expected: par.clone() }
+                    TypeError::Mismatch { got: arg.clone(), expected: par.clone() }
                 );
             }
         })
@@ -334,7 +334,6 @@ impl<'c> TypeChecker<'c> {
                 };
                 let args = args.iter().map(|e| self.expression(e)).collect::<Result<Vec<_>, Vec<_>>>()?;
                 let (params, ret) = self.resolve_functions_from_args(span, args, ty.clone())?;
-
                 return Ok(Value(Type::clone(&ret), VarKind::Const));
             }
             AK::ArrowCall(extra, fun, args) => {
@@ -401,7 +400,7 @@ impl<'c> TypeChecker<'c> {
                             return err_type_error!(
                                 self,
                                 span,
-                                TypeError::Missmatch {
+                                TypeError::Mismatch {
                                     got: index,
                                     expected: Type::Int,
                                 },
@@ -417,7 +416,7 @@ impl<'c> TypeChecker<'c> {
                             return err_type_error!(
                                 self,
                                 span,
-                                TypeError::Missmatch {
+                                TypeError::Mismatch {
                                     got: index,
                                     expected: Type::Int,
                                 },
@@ -450,7 +449,7 @@ impl<'c> TypeChecker<'c> {
                             return err_type_error!(
                                 self,
                                 span,
-                                TypeError::Missmatch {
+                                TypeError::Mismatch {
                                     got: index,
                                     expected: Type::clone(&key),
                                 },
@@ -634,7 +633,7 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         span,
-                        TypeError::Missmatch { got: actual_ret, expected: ret },
+                        TypeError::Mismatch { got: actual_ret, expected: ret },
                         "Return type doesn't match, {}",
                         reason
                     );
@@ -655,7 +654,7 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         condition.span,
-                        TypeError::Missmatch {
+                        TypeError::Mismatch {
                             got: condition_ty,
                             expected: Type::Bool,
                         },
@@ -676,7 +675,7 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         condition.span,
-                        TypeError::Missmatch {
+                        TypeError::Mismatch {
                             got: condition_ty,
                             expected: Type::Bool,
                         },
@@ -733,7 +732,7 @@ impl<'c> TypeChecker<'c> {
                                 errors.push(type_error!(
                                     self,
                                     *span,
-                                    TypeError::Missmatch { expected: lhs.clone(), got: rhs.clone() },
+                                    TypeError::Mismatch { expected: lhs.clone(), got: rhs.clone() },
                                     "because {}.{} is a '{:?}' and {}",
                                     blob.name,
                                     name,
@@ -761,7 +760,7 @@ impl<'c> TypeChecker<'c> {
                         errors.push(type_error!(
                             self,
                             span,
-                            TypeError::Missmatch { got: Type::Void, expected: ty },
+                            TypeError::Mismatch { got: Type::Void, expected: ty },
                             "Only nullable fields can be ommitted, {}.{} is not nullable",
                             blob.name,
                             name
@@ -887,7 +886,7 @@ impl<'c> TypeChecker<'c> {
                         return err_type_error!(
                             self,
                             span,
-                            TypeError::Missmatch {
+                            TypeError::Mismatch {
                                 got: ty,
                                 expected: value,
                             },
@@ -908,7 +907,7 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         condition.span,
-                        TypeError::Missmatch {
+                        TypeError::Mismatch {
                             got: ty,
                             expected: Type::Bool,
                         },
@@ -925,7 +924,7 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         condition.span,
-                        TypeError::Missmatch {
+                        TypeError::Mismatch {
                             got: ty,
                             expected: Type::Bool,
                         },
@@ -1022,7 +1021,7 @@ impl<'c> TypeChecker<'c> {
                                 return err_type_error!(
                                     self,
                                     span,
-                                    TypeError::Missmatch {
+                                    TypeError::Mismatch {
                                         got: ty,
                                         expected: value,
                                     },
