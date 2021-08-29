@@ -352,7 +352,6 @@ impl<'c> TypeChecker<'c> {
                             Type::Unknown => { Ok(Value(Type::Unknown, VarKind::Mutable)) }
                             Type::Instance(blob) => {
                                 let blob = &self.compiler.blobs[*blob];
-                                dbg!(&blob.fields);
                                 match blob.fields.get(&field.name) {
                                     Some(ty) => Ok(Value(ty.clone(), VarKind::Mutable)),
                                     None => match field.name.as_str() {
@@ -763,8 +762,7 @@ impl<'c> TypeChecker<'c> {
                     if initalizer.contains_key(&name) {
                         continue;
                     }
-                    // TODO(ed): Is this the right order?
-                    if let Err(_) = Type::Void.fits(&ty, self.compiler.blobs.as_slice()) {
+                    if let Err(_) = ty.fits(&Type::Void, self.compiler.blobs.as_slice()) {
                         // TODO(ed): Not super sold on this error message - it can be better.
                         errors.push(type_error!(
                             self,
