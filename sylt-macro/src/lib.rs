@@ -359,7 +359,7 @@ pub fn derive_enumerate(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
 
     let item = quote! {
         impl ::std::convert::TryFrom<usize> for #ident {
-            type Error = std::string::String;
+            type Error = ::std::string::String;
 
             fn try_from(u: usize) -> ::std::result::Result<Self, Self::Error> {
                 match u {
@@ -511,7 +511,7 @@ pub fn sylt_link_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
         .collect();
 
     let tokens = quote! {
-        pub fn _sylt_link() -> Vec<(std::string::String, ::sylt_common::RustFunction, std::string::String)> {
+        pub fn _sylt_link() -> Vec<(::std::string::String, ::sylt_common::RustFunction, ::std::string::String)> {
             vec! [ #(#funs)* ]
         }
     };
