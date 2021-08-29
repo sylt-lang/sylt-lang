@@ -107,7 +107,7 @@ pub enum TypeError {
     },
 
     // TODO(ed): Fix the spelling
-    Missmatch {
+    Mismatch {
         got: Type,
         expected: Type,
     },
@@ -366,7 +366,7 @@ impl fmt::Display for RuntimeError {
 impl fmt::Display for TypeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TypeError::Missmatch { got, expected } => {
+            TypeError::Mismatch { got, expected } => {
                 write!(f, "A '{:?}' cannot be a '{:?}'", got, expected)
             }
 
