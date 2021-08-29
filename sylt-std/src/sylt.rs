@@ -39,7 +39,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     random_choice,
     ? "Selects an element randomly from a list",
-    -> "fn [#X] -> #X",
+    -> "fn [#ITEM] -> #ITEM",
     [Value::List(list)] => {
         Ok(list.borrow()[Ra::ggen::<usize>() % list.borrow().len()].clone())
     }
@@ -49,7 +49,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     for_each,
     ? "Does something for each element in a list",
-    -> "fn [#X], fn #X -> void -> void",
+    -> "fn [#ITEM], fn #ITEM -> void -> void",
     [List(list), callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
@@ -65,7 +65,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     map,
     ? "Applies a function to all elements in a list",
-    -> "fn [#X], fn #X -> #Y -> [#Y]",
+    -> "fn [#ITEM], fn #ITEM -> #OUT -> [#OUT]",
     [List(list), callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
@@ -83,7 +83,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     filter,
     ? "Creates a new list with the elements that pass the test function",
-    -> "fn [#X], fn #X -> bool -> [#X]",
+    -> "fn [#ITEM], fn #ITEM -> bool -> [#ITEM]",
     [List(list), callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
@@ -118,7 +118,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     push,
     ? "Appends an element to the end of a list",
-    -> "fn [#X], #X -> void",
+    -> "fn [#ITEM], #ITEM -> void",
     [List(ls), v] => {
         ls.borrow_mut().push(v.clone());
         Ok(Nil)
@@ -129,7 +129,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     add,
     ? "Inserts a value into a set",
-    -> "fn {#X}, #X -> void",
+    -> "fn {#ITEM}, #ITEM -> void",
     [Set(ls), v] => {
         // NOTE(ed): Deliberately no type checking.
         ls.borrow_mut().insert(v.clone());
@@ -142,7 +142,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     clear,
     ? "Removes all elements from the list",
-    -> "fn [#X] -> void",
+    -> "fn [#ITEM] -> void",
     [List(ls)] => {
         // NOTE(ed): Deliberately no type checking.
         ls.borrow_mut().clear();
@@ -155,7 +155,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     prepend,
     ? "Adds an element to the start of a list",
-    -> "fn [#X] -> void",
+    -> "fn [#ITEM] -> void",
     [List(ls), v] => {
         // NOTE(ed): Deliberately no type checking.
         ls.borrow_mut().insert(0, v.clone());
@@ -169,7 +169,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     len,
     ? "Gives the length of list",
-    -> "fn [#X] | {#X: #Y} -> int",
+    -> "fn [#ITEM] | {#KEY: #VALUE} -> int",
     [List(ls)] => {
         Ok(Int(ls.borrow().len() as i64))
     },
@@ -444,7 +444,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     pop,
     ? "Removes the last element in the list, and returns it",
-    -> "fn [#X] -> #X?",
+    -> "fn [#ITEM] -> #ITEM?",
     [List(ls)] => {
         Ok(ls.borrow_mut().pop().unwrap_or(Nil))
     }
@@ -454,7 +454,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     last,
     ? "Returns the last element in a list",
-    -> "fn [#X] -> #X?",
+    -> "fn [#ITEM] -> #ITEM?",
     [List(ls)] => {
         Ok(ls.borrow().last().cloned().unwrap_or(Nil))
     }
