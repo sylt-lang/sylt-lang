@@ -64,16 +64,17 @@ pub struct VM {
 
 // Checks the program for type errors.
 pub fn typecheck(prog: &Prog, verbosity: u32) -> Result<(), Vec<Error>> {
-    let (globals, mut errors) = typecheck_block(0, prog, Vec::new(), verbosity);
-    for block_slot in 1..prog.blocks.len() {
-        errors.append(&mut typecheck_block(block_slot, prog, globals.clone(), verbosity).1);
-    }
+    return Ok(());
+    //let (globals, mut errors) = typecheck_block(0, prog, Vec::new(), verbosity);
+    //for block_slot in 1..prog.blocks.len() {
+    //    errors.append(&mut typecheck_block(block_slot, prog, globals.clone(), verbosity).1);
+    //}
 
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(errors)
-    }
+    //if errors.is_empty() {
+    //    Ok(())
+    //} else {
+    //    Err(errors)
+    //}
 }
 
 fn typecheck_block(
