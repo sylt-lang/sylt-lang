@@ -31,9 +31,10 @@ gumdrop = "0.8"
 criterion = { version = "0.3", optional = true }
 
 [features]
+# TODO(ed): Re-enable "lingon"
 lingon = [ "sylt-std/lingon" ]
 network = [ "sylt-std/network" ]
-default = [ "lingon", "network" ]
+default = [ "network" ]
 
 #[[bench]]
 #name = "sylt_benchmark"
