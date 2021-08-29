@@ -89,10 +89,10 @@ start :: fn {
 }
 
 // Inital assign
-// error: $Missmatch { .. }
+// error: $Mismatch { .. }
 // Conditions
-// error: $Missmatch { expected: Type::Bool, .. }
-// error: $Missmatch { expected: Type::Bool, .. }
+// error: $Mismatch { expected: Type::Bool, .. }
+// error: $Mismatch { expected: Type::Bool, .. }
 
 // Other assign
 // error: $MismatchAssign { got: Type::String, expected: Type::Int }
@@ -100,6 +100,6 @@ start :: fn {
 
 
 // error: $BinOp { lhs: Type::Int, rhs: Type::String, .. }
-// error: $Missmatch { got: Type::Float, expected: Type::Int }
-// error: $Missmatch { got: Type::Float, expected: Type::Int }
-// error: $Missmatch { got: Type::Float, expected: Type::Int }
+// error: $Mismatch { got: Type::Float, expected: Type::Int }
+// error: $Mismatch { got: Type::Float, expected: Type::Int }
+// error: $Mismatch { got: Type::Float, expected: Type::Int }

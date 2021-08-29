@@ -4,4 +4,4 @@ start :: fn {
     f
 }
 
-// error: $Missmatch { .. }
+// error: $Mismatch { .. }
