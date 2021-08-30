@@ -272,6 +272,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
             write_assignable(dest, indent, blob)?;
             write!(dest, " {{\n")?;
             write_blob_instance_fields(dest, indent + 1, fields)?;
+            write_indents(dest, indent)?;
             write!(dest, "}}")?;
         }
         ExpressionKind::Tuple(exprs) => {
