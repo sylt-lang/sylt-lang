@@ -157,6 +157,10 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     // Newlines have meaning in statements - thus they shouldn't be skipped.
     let (ctx, skip_newlines) = ctx.push_skip_newlines(false);
 
+    // Get all comments since the last statement.
+    let mut comments = ctx.comments_since_last_statement();
+    let ctx = ctx.push_last_statement_location();
+
     let span = ctx.span();
     //NOTE(gu): Explicit lookahead.
     let (ctx, kind) = match &ctx.tokens_forward::<3>() {
@@ -470,8 +474,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         expect!(ctx, T::Newline, "Expected newline to end statement")
     };
     let ctx = ctx.pop_skip_newlines(skip_newlines);
-    // Get all comments since the last statement.
-    let comments = ctx.comments_since_last_statement();
+    comments.append(&mut ctx.comments_since_last_statement());
     let ctx = ctx.push_last_statement_location();
     Ok((ctx, Statement {
         span,

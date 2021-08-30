@@ -229,21 +229,23 @@ impl<'a> Context<'a> {
     fn skip(&self, n: usize) -> Self {
         let mut new = *self;
         let mut skipped = 0;
+        // Skip n tokens.
         while skipped < n {
             if matches!(new.token(), T::Comment(_)) {
-                // Comments aren't "real" tokens so we skip them.
+                // Skip comments without counting as a token.
                 new.curr += 1;
             } else {
                 new.curr += 1;
                 skipped += 1;
             }
         }
-        new = skip_while!(new, T::Comment(_));
-        if self.skip_newlines {
-            new = skip_while!(new, T::Newline);
-        }
-        while self.skip_newlines && matches!(new.token(), T::Newline) {
-            new = new.skip(1);
+        // Skip trailing comments and (maybe) newlines.
+        loop {
+            match new.token() {
+                T::Comment(_) => new.curr += 1,
+                T::Newline if self.skip_newlines => new.curr += 1,
+                _ => break,
+            }
         }
         new
     }
@@ -762,9 +764,9 @@ fn module(path: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Mo
                     use_files.push(file);
                 }
                 // Only push non-empty statements.
-                if !matches!(statement.kind, EmptyStatement) {
+                // if !matches!(statement.kind, EmptyStatement) {
                     statements.push(statement);
-                }
+                //}
                 ctx
             }
             Err((ctx, mut errs)) => {
