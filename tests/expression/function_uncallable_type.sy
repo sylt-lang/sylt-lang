@@ -5,4 +5,4 @@ start :: fn {
     f
 }
 
-// error: #InvalidProgram
+// error: $Violating(Type::Int)

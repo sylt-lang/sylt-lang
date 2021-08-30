@@ -8,4 +8,4 @@ start :: fn {
     a
 }
 
-// error: #UnknownField(_, _)
+// error: $UnknownField { .. }

@@ -1,0 +1,10 @@
+start :: fn {
+    if 1 {
+    }
+
+    loop 1 + 1 * 2 {
+    }
+}
+
+// error: $Mismatch { expected: Type::Bool, .. }
+// error: $Mismatch { expected: Type::Bool, .. }

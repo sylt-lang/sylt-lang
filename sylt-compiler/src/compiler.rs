@@ -1128,6 +1128,7 @@ impl Compiler {
 
     fn compile(
         mut self,
+        typecheck: bool,
         mut tree: AST,
         functions: &[(String, RustFunction, String)],
     ) -> Result<Prog, Vec<Error>> {
@@ -1175,8 +1176,9 @@ impl Compiler {
             return Err(self.errors);
         }
 
-        typechecker::solve(&mut self, &mut tree, &path_to_namespace_id)?;
-        println!("\n\nOLD TYPECHECKER\n\n");
+        if typecheck {
+            typechecker::solve(&mut self, &mut tree, &path_to_namespace_id)?;
+        }
 
         self.read_identifier("start", Span::zero(), ctx, 0);
         self.add_op(ctx, Span::zero(), Op::Call(0));
@@ -1403,8 +1405,8 @@ fn parse_signature(func_name: &str, sig: &str) -> ParserType {
     }
 }
 
-pub fn compile(prog: AST, functions: &[(String, RustFunction, String)]) -> Result<Prog, Vec<Error>> {
-    Compiler::new().compile(prog, functions)
+pub fn compile(typecheck: bool, prog: AST, functions: &[(String, RustFunction, String)]) -> Result<Prog, Vec<Error>> {
+    Compiler::new().compile(typecheck, prog, functions)
 }
 
 fn all_paths_return(statement: &Statement) -> bool {
