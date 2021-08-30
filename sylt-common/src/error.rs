@@ -1,6 +1,6 @@
 use crate::{Op, Type, Value};
 
-use owo_colors::OwoColorize;
+use colored::Colorize;
 use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead};
@@ -26,7 +26,7 @@ fn write_source_line_at(f: &mut fmt::Formatter<'_>, file: &Path, line: usize) ->
         .skip(start_line - 1)
         .take(lines)
     {
-        writeln!(f, " {:3} | {}", (line_num + 1).blue(), line.unwrap())?;
+        writeln!(f, " {:>3} | {}", (line_num + 1).to_string().blue(), line.unwrap())?;
     }
     Ok(())
 }
@@ -45,8 +45,8 @@ fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &Path, span: Span) -> 
 fn file_line_display(file: &Path, line: usize) -> String {
     format!(
         "{}:{}",
-        file.display().blue(),
-        line.blue().to_string(),
+        file.display().to_string().blue(),
+        line.to_string().blue(),
     )
 }
 
@@ -199,7 +199,6 @@ impl fmt::Display for Error {
             Error::GitConflictError { file, span } => {
                 write!(f, "{}: ", "git conflict error".red())?;
                 write!(f, "{}\n", file_line_display(file, span.line))?;
-
                 write!(
                     f,
                     "{}Git conflict marker found at line {}\n",
@@ -207,6 +206,17 @@ impl fmt::Display for Error {
                 )?;
 
                 write_source_span_at(f, file, *span)
+            }
+            #[rustfmt::skip]
+            Error::RuntimeError { kind, phase, file, line, message } => {
+                write!(f, "{} {}: ", phase.to_string().red(), "error".red())?;
+                write!(f, "{}\n", file_line_display(file, *line))?;
+                write!(f, "{}{}\n", INDENT, kind)?;
+                if let Some(message) = message {
+                    write!(f, "{}\n", message)?;
+                }
+
+                write_source_line_at(f, file, *line)
             }
             Error::SyntaxError {
                 file,
@@ -250,23 +260,6 @@ impl fmt::Display for Error {
                 }
 
                 write_source_span_at(f, file, *span)
-            }
-            Error::RuntimeError {
-                kind,
-                phase,
-                file,
-                line,
-                message
-            } => {
-                write!(f, "{} {}: ", phase.red(), "error".red())?;
-                write!(f, "{}\n", file_line_display(file, *line))?;
-                write!(f, "{}{}\n", INDENT, kind)?;
-
-                if let Some(message) = message {
-                    write!(f, "{}\n", message)?;
-                }
-
-                write_source_line_at(f, file, *line)
             }
         }
     }

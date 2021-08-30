@@ -1,4 +1,4 @@
-use owo_colors::OwoColorize;
+use colored::Colorize;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
@@ -165,8 +165,8 @@ impl VM {
             .debug_print(Some(&self.constants));
         println!(
             "    ip: {}, line: {}\n",
-            self.frame().ip.blue(),
-            self.frame().block.borrow().line(self.frame().ip).blue()
+            self.frame().ip.to_string().blue(),
+            self.frame().block.borrow().line(self.frame().ip).to_string().blue()
         );
         unreachable!();
     }
@@ -190,14 +190,14 @@ impl VM {
             if i != 0 {
                 print!(" ");
             }
-            print!("{:?}", s.green());
+            print!("{}", format!("{:?}", s).green());
         }
         println!("]");
 
         println!(
             "{:5} {:05} {:?}",
-            self.frame().block.borrow().line(self.frame().ip).blue(),
-            self.frame().ip.red(),
+            self.frame().block.borrow().line(self.frame().ip).to_string().blue(),
+            self.frame().ip.to_string().red(),
             self.frame().block.borrow().ops[self.frame().ip]
         );
     }
@@ -269,7 +269,7 @@ impl Machine for VM {
     /// Calls `callable` with `args`. Continues to run until the call returns and then returns the
     /// returned value.
     fn eval_call(&mut self, callable: Value, args: &[&Value]) -> Result<Value, Error> {
-        self.push(callable);
+        self.push(callable.clone());
         let num_args = args.len();
         args.iter().for_each(|value| self.push(Value::clone(value)));
         // Since the Op::Call below isn't a compiled instruction, we need to store the current
@@ -277,14 +277,16 @@ impl Machine for VM {
         let ip = self.frame().ip;
         self.eval_op(Op::Call(num_args))?;
 
-        let cur_frame = self.frames.len();
-        while self.frames.len() >= cur_frame {
-            #[cfg(debug_assertions)]
-            if self.print_exec {
-                self.print_stack()
-            }
+        if !matches!(callable, Value::ExternFunction(..)) {
+            let cur_frame = self.frames.len();
+            while self.frames.len() >= cur_frame {
+                #[cfg(debug_assertions)]
+                if self.print_exec {
+                    self.print_stack()
+                }
 
-            self.eval_op(self.op())?;
+                self.eval_op(self.op())?;
+            }
         }
         // Restore the instruction pointer.
         self.frame_mut().ip = ip;

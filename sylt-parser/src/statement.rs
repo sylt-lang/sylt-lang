@@ -12,11 +12,15 @@ pub enum StatementKind {
     /// "Imports" another file.
     ///
     /// `use <file>`.
+    /// `use /<file>`.
+    /// `use <folder>/`.
     /// `use <folder>/<file>`.
+    /// `use / as <alias>`.
     /// `use <file> as <alias>`.
+    /// `use <folder>/ as <alias>`.
     Use {
-        file: Identifier,
-        file_alias: Option<Identifier>,
+        ident: Identifier,
+        file: PathBuf,
     },
 
     /// Defines a new Blob.
@@ -199,25 +203,56 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         // `use path/to/file as alias`
         [T::Use, ..] => {
             let (ctx, path) = path(ctx.skip(1))?;
-            let file = Identifier {
-                span: ctx.span(),
-                name: path,
+            let bare_name = path
+                .trim_start_matches("/")
+                .trim_end_matches("/");
+            let file = {
+                let parent = if path.starts_with("/") {
+                    ctx.root
+                } else {
+                    ctx.file.parent().unwrap()
+                };
+                // Importing a folder is the same as importing exports.sy
+                // in the folder.
+                parent.join(if path == "/" {
+                    format!("exports.sy")
+                } else if path.ends_with("/") {
+                    format!("{}/exports.sy", bare_name)
+                } else {
+                    format!("{}.sy", bare_name)
+                })
             };
-            let (ctx, file_alias) = match &ctx.tokens[ctx.curr..] {
+            let (ctx, ident) = match &ctx.tokens[ctx.curr..] {
                 [T::As, T::Identifier(alias), ..] => (
                     ctx.skip(2),
-                    Some(Identifier {
+                    Identifier {
                         span: ctx.skip(1).span(),
                         name: alias.clone(),
-                    })
+                    }
                 ),
                 [T::As, ..] => raise_syntax_error!(
-                    skip_until!(ctx, T::Newline),
+                    ctx.skip(1),
                     "Expected alias"
                 ),
-                [..] => (ctx, None),
+                [..] => {
+                    if path == "/" {
+                        raise_syntax_error!(ctx, "Using root requires alias");
+                    }
+                    let span = if path.ends_with("/") {
+                        ctx.prev().prev().span()
+                    } else {
+                        ctx.prev().span()
+                    };
+                    let name = PathBuf::from(bare_name)
+                        .file_stem()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .to_string();
+                    (ctx, Identifier { span, name })
+                },
             };
-            (ctx, Use { file, file_alias })
+            (ctx, Use { ident, file })
         },
 
         // `: A is : B`

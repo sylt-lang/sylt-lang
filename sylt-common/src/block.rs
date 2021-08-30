@@ -1,4 +1,4 @@
-use owo_colors::OwoColorize;
+use colored::Colorize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -81,11 +81,11 @@ impl Block {
             println!(
                 "{}{:05} {:?}{}",
                 if self.line_offsets.contains_key(&i) {
-                    format!("{:5} ", self.line_offsets[&i].blue())
+                    format!("{:5} ", self.line_offsets[&i].to_string().blue())
                 } else {
                     format!("    {} ", "|".blue())
                 },
-                i.red(),
+                i.to_string().red(),
                 s,
                 match (s, constants) {
                     (Op::Constant(c), Some(constants))

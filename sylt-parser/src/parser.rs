@@ -194,16 +194,19 @@ pub struct Context<'a> {
     pub curr: usize,
     /// The file we're currently parsing.
     pub file: &'a Path,
+    /// The source root - the top most folder.
+    pub root: &'a Path,
 }
 
 impl<'a> Context<'a> {
-    pub fn new(tokens: &'a [Token], spans: &'a [Span], file: &'a Path) -> Self {
+    pub fn new(tokens: &'a [Token], spans: &'a [Span], file: &'a Path, root: &'a Path) -> Self {
         Self {
             skip_newlines: false,
             tokens,
             spans,
             curr: 0,
             file,
+            root
         }
     }
 
@@ -694,10 +697,10 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
 /// Returns any errors that occured when parsing the file. Basic error
 /// continuation is performed, so errored statements are skipped until a newline
 /// or EOF.
-fn module(path: &Path, _root: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
+fn module(path: &Path, root: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
     let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
     let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
-    let mut ctx = Context::new(&tokens, &spans, path);
+    let mut ctx = Context::new(&tokens, &spans, path, root);
     let mut errors = Vec::new();
     let mut use_files = Vec::new();
     let mut statements = Vec::new();
@@ -713,10 +716,7 @@ fn module(path: &Path, _root: &Path, token_stream: &[PlacedToken]) -> (Vec<PathB
                 use StatementKind::*;
                 // Yank `use`s and add it to the used-files list.
                 if let Use { file, .. } = &statement.kind {
-                    let file = path.parent()
-                        .unwrap()
-                        .join(format!("{}.sy", file.name));
-                    use_files.push(file);
+                    use_files.push(file.clone());
                 }
                 // Only push non-empty statements.
                 if !matches!(statement.kind, EmptyStatement) {
@@ -864,7 +864,7 @@ mod test {
                 let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
                 let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
                 let path = ::std::path::PathBuf::from(stringify!($name));
-                let result = $f($crate::Context::new(&tokens, &spans, &path));
+                let result = $f($crate::Context::new(&tokens, &spans, &path, &path));
                 assert!(
                     result.is_ok(),
                     "\nSyntax tree test didn't parse for:\n{}\nErrs: {:?}",
@@ -897,7 +897,7 @@ mod test {
                 let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
                 let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
                 let path = ::std::path::PathBuf::from(stringify!($name));
-                let result = $f($crate::Context::new(&tokens, &spans, &path));
+                let result = $f($crate::Context::new(&tokens, &spans, &path, &path));
                 assert!(
                     result.is_err(),
                     "\nSyntax tree test parsed - when it should have failed - for:\n{}\n",

@@ -1,0 +1,11 @@
+use / as folder
+use subdir/
+use subdir/_use_root
+
+two :: 2
+
+start :: fn {
+    subdir._numbers.one <=> 1
+    folder.text <=> "Bottom text"
+    _use_root.test()
+}

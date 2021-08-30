@@ -10,8 +10,17 @@ version = "0.2.0"
 edition = "2018"
 default-run = "sylt"
 
+[[bin]]
+name = "time"
+test = false
+
+[[bin]]
+name = "sylt"
+test = false
+
 [lib]
 name = "sylt"
+doctest = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -24,7 +33,7 @@ sylt-parser = { version = "0.2.0", path = "../sylt-parser" }
 sylt-std = { version = "0.2.0", path = "../sylt-std", default-features = false }
 sylt-tokenizer = { version = "0.2.0", path = "../sylt-tokenizer" }
 
-owo-colors = { version = "2.0.0", git = "https://github.com/FredTheDino/owo-colors.git" }
+colored = "2"
 gumdrop = "0.8"
 
 criterion = { version = "0.3", optional = true }

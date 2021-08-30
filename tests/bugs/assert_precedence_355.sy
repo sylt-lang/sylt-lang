@@ -1,0 +1,8 @@
+A :: blob {
+    a: int
+}
+
+start :: fn {
+    2 <=> fn -> int { 2 }()
+    A { a: 1 }.a <=> A { a: 1 }.a
+}

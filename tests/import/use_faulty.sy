@@ -6,6 +6,8 @@ use +
 use =
 use {}
 use ret/break
+use /
+
 use
 
 start :: fn {}
@@ -19,3 +21,4 @@ start :: fn {}
 // error: @7
 // error: @8
 // error: @9
+// error: @11

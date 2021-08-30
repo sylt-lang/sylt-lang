@@ -110,10 +110,14 @@ pub enum Token {
     #[token("fn")]
     Fn,
 
+    #[token("and")]
     #[token("&&")]
     And,
+    #[token("or")]
     #[token("||")]
     Or,
+    #[token("not")]
+    Not,
     #[token("!")]
     Bang,
     #[token("?")]
