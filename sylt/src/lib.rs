@@ -7,8 +7,10 @@ use sylt_common::error::Error;
 use sylt_common::prog::Prog;
 use sylt_common::RustFunction;
 
+type ExternFuncionList = Vec<(String, RustFunction, String)>;
+
 /// Generates the linking for the standard library, and lingon if it's active.
-pub fn lib_bindings() -> Vec<(String, RustFunction)> {
+pub fn lib_bindings() -> ExternFuncionList {
     let mut lib = Vec::new();
 
     lib.append(&mut sylt_std::sylt::_sylt_link());
@@ -22,22 +24,19 @@ pub fn lib_bindings() -> Vec<(String, RustFunction)> {
     lib
 }
 
-pub fn compile(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<Prog, Vec<Error>> {
+pub fn compile(args: &Args, functions: ExternFuncionList) -> Result<Prog, Vec<Error>> {
     let tree = sylt_parser::tree(&PathBuf::from(args.args.first().expect("No file to run")))?;
     if args.dump_tree {
         println!("Syntax tree: {:#?}", tree);
     }
-    let prog = sylt_compiler::compile(tree, &functions)?;
+    let prog = sylt_compiler::compile(!args.skip_typecheck, tree, &functions)?;
     Ok(prog)
 }
 
 /// Compiles, links and runs the given file. The supplied functions are callable
 /// external functions.
-pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(), Vec<Error>> {
+pub fn run_file(args: &Args, functions: ExternFuncionList) -> Result<(), Vec<Error>> {
     let prog = compile(args, functions)?;
-    if !args.skip_typecheck {
-        sylt_typechecker::typecheck(&prog, args.verbosity)?;
-    }
     run(&prog, &args)
 }
 

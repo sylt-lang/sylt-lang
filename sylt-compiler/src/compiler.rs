@@ -6,6 +6,7 @@ use sylt_common::error::Error;
 use sylt_common::prog::Prog;
 use sylt_common::{Blob, Block, Op, RustFunction, Type, Value};
 use sylt_parser::{
+    Context as ParserContext,
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op as ParserOp,
     Span, Statement, StatementKind, Type as ParserType, TypeKind, VarKind, AST,
 };
@@ -153,7 +154,7 @@ struct Compiler {
 
     loops: Vec<LoopFrame>,
     frames: Vec<Frame>,
-    functions: HashMap<String, (usize, RustFunction)>,
+    functions: HashMap<String, (usize, RustFunction, Type)>,
 
     panic: bool,
     errors: Vec<Error>,
@@ -611,7 +612,7 @@ impl Compiler {
                 }
                 Some(Name::Namespace(new_namespace)) => return Some(*new_namespace),
                 None => {
-                    if let Some((slot, _)) = self.functions.get(name) {
+                    if let Some((slot, _, _)) = self.functions.get(name) {
                         let slot = *slot;
                         let op = self.constant(Value::ExternFunction(slot));
                         self.add_op(ctx, span, op);
@@ -806,6 +807,7 @@ impl Compiler {
                 Box::new(self.resolve_type(key, ctx)),
                 Box::new(self.resolve_type(value, ctx)),
             ),
+            Generic(name) => Type::Generic(name.name.clone()),
         }
     }
 
@@ -1126,25 +1128,11 @@ impl Compiler {
 
     fn compile(
         mut self,
+        typecheck: bool,
         mut tree: AST,
-        functions: &[(String, RustFunction)],
+        functions: &[(String, RustFunction, String)],
     ) -> Result<Prog, Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
-        let num_functions = functions.len();
-        self.functions = functions
-            .to_vec()
-            .into_iter()
-            .enumerate()
-            .map(|(i, (s, f))| (s, (i, f)))
-            .collect();
-        assert_eq!(
-            num_functions,
-            self.functions.len(),
-            "There are {} names and {} extern functions - some extern functions share name",
-            self.functions.len(),
-            num_functions
-        );
-
         let name = "/preamble/";
         let mut block = Block::new(name, 0, &tree.modules[0].0);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
@@ -1157,6 +1145,22 @@ impl Compiler {
         };
 
         let path_to_namespace_id = self.extract_globals(&tree);
+
+        let num_functions = functions.len();
+        self.functions = functions
+            .to_vec()
+            .into_iter()
+            .enumerate()
+            .map(|(i, (s, f, sig))| (s.clone(), (i, f, self.resolve_type(&parse_signature(&s, &sig), ctx))))
+            .collect();
+        assert_eq!(
+            num_functions,
+            self.functions.len(),
+            "There are {} names and {} extern functions - some extern functions share name",
+            self.functions.len(),
+            num_functions
+        );
+
 
         for (path, module) in tree.modules.iter() {
             ctx.namespace = path_to_namespace_id[path];
@@ -1172,8 +1176,9 @@ impl Compiler {
             return Err(self.errors);
         }
 
-        typechecker::solve(&mut self, &mut tree, &path_to_namespace_id)?;
-        println!("\n\nOLD TYPECHECKER\n\n");
+        if typecheck {
+            typechecker::solve(&mut self, &mut tree, &path_to_namespace_id)?;
+        }
 
         self.read_identifier("start", Span::zero(), ctx, 0);
         self.add_op(ctx, Span::zero(), Op::Call(0));
@@ -1192,7 +1197,7 @@ impl Compiler {
                     .into_iter()
                     .map(|x| Rc::new(RefCell::new(x)))
                     .collect(),
-                functions: functions.iter().map(|(_, f)| *f).collect(),
+                functions: functions.iter().map(|(_, f, _)| *f).collect(),
                 blobs: self.blobs,
                 constants: self.constants,
                 strings: self.strings,
@@ -1382,8 +1387,26 @@ impl Compiler {
     }
 }
 
-pub fn compile(prog: AST, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
-    Compiler::new().compile(prog, functions)
+// TODO(ed): Move this up into sylt?
+fn parse_signature(func_name: &str, sig: &str) -> ParserType {
+    let token_stream = sylt_tokenizer::string_to_tokens(sig);
+    let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
+    let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
+    let path = PathBuf::from(func_name);
+    let ctx = ParserContext::new(&tokens, &spans, &path);
+    match sylt_parser::parse_type(ctx) {
+        Ok((_, ty)) => ty,
+        Err((_, errs)) => {
+            for err in errs {
+                eprintln!("{}", err);
+            }
+            panic!("Error parsing function signature for {}", func_name);
+        }
+    }
+}
+
+pub fn compile(typecheck: bool, prog: AST, functions: &[(String, RustFunction, String)]) -> Result<Prog, Vec<Error>> {
+    Compiler::new().compile(typecheck, prog, functions)
 }
 
 fn all_paths_return(statement: &Statement) -> bool {
@@ -1405,5 +1428,18 @@ fn all_paths_return(statement: &Statement) -> bool {
         StatementKind::Block { statements } => statements.iter().any(all_paths_return),
 
         StatementKind::Ret { .. } => true,
+    }
+}
+
+pub(crate) fn first_ok_or_errs<I, T, E>(mut iter: I) -> Result<T, Vec<E>>
+where I: Iterator<Item = Result<T, E>>
+{
+    let mut errs = Vec::new();
+    loop {
+        match iter.next() {
+            Some(Ok(t)) => return Ok(t),
+            Some(Err(e)) => errs.push(e),
+            None => return Err(errs),
+        }
     }
 }

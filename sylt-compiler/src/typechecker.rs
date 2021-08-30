@@ -11,7 +11,7 @@ use sylt_parser::{
     Span, Statement, StatementKind, Type as ParserType, TypeKind, VarKind, AST,
 };
 
-use crate as compiler;
+use crate::{self as compiler, first_ok_or_errs};
 use compiler::Compiler;
 
 macro_rules! type_error_if_invalid {
@@ -132,6 +132,150 @@ impl<'c> TypeChecker<'c> {
         compiler::Context::from_namespace(self.namespace)
     }
 
+    fn solve_generics_recursively(&self, span: Span, generics: &mut HashMap<String, Type>, par: &Type, arg: &Type) -> Result<Type, Vec<Error>> {
+        Ok(match (par, arg) {
+            (_, Type::Generic(_)) => {
+                return err_type_error!(
+                    self,
+                    span,
+                    TypeError::Violating(arg.clone()),
+                    "Generics are not supported as arguments - only parameters"
+                );
+            }
+            (Type::Generic(name), ty) => {
+                match generics.entry(name.clone()) {
+                    Entry::Occupied(known) => {
+                        let known = known.get();
+                        if let Err(reason) = known.fits(&arg, self.compiler.blobs.as_slice()) {
+                            // TODO(ed): Point to the argument maybe?
+                            return err_type_error!(
+                                self,
+                                span,
+                                TypeError::Mismatch { got: arg.clone(), expected: known.clone() },
+                                "because {}. The type was inferred from previous arguments.",
+                                reason
+                            )
+                        }
+                        known.clone()
+                    }
+                    Entry::Vacant(unknown) => {
+                        unknown.insert(arg.clone()).clone()
+                    }
+                }
+            }
+            (x, y) if x.fits(&y, self.compiler.blobs.as_slice()).is_ok() => x.clone(),
+
+            (Type::Tuple(a), Type::Tuple(b)) => Type::Tuple(a.iter().zip(b.iter()).map(|(a, b)| self.solve_generics_recursively(span, generics, a, b)).collect::<Result<Vec<_>, _>>()?),
+            (Type::List(a), Type::List(b)) => Type::List(Box::new(self.solve_generics_recursively(span, generics, a, b)?)),
+            (Type::Set(a), Type::Set(b)) => Type::Set(Box::new(self.solve_generics_recursively(span, generics, a, b)?)),
+            (Type::Dict(ak, av), Type::Dict(bk, bv)) => Type::Dict(
+                Box::new(self.solve_generics_recursively(span, generics, ak, bk)?),
+                Box::new(self.solve_generics_recursively(span, generics, av, bv)?),
+            ),
+            (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
+                let args = a_args.iter().zip(b_args.iter()).map(|(a, b)| self.solve_generics_recursively(span, generics, a, b)).collect::<Result<Vec<_>, _>>()?;
+                let ret = Box::new(self.solve_generics_recursively(span, generics, a_ret, b_ret)?);
+                Type::Function(args, ret)
+            }
+            (a, Type::Union(b)) => {
+                // This is technically wrong, it fails when guesses don't hold, like
+                // `fn #X | #Y, #Y, #X -> void`, if we give in `int, int, float`.
+                // We would assume:
+                //   #X = int,
+                //   #Y = int,
+                // and fail on the third argument. Even though:
+                //   #X = float,
+                //   #Y = int,
+                // would work.
+                //
+                // This complexity requires a lot more code and was therefore skipped.
+                for t in b {
+                    let mut new_generics = generics.clone();
+                    self.solve_generics_recursively(span, &mut new_generics, a, t)?;
+                    *generics = new_generics;
+                }
+                a.clone()
+            }
+            (Type::Union(a), b) => {
+                first_ok_or_errs(a.iter()
+                    .map(|ty| {
+                        let mut new_generics = generics.clone();
+                        let ret = self.solve_generics_recursively(span, &mut new_generics, ty, b);
+                        if ret.is_ok() {
+                            *generics = new_generics;
+                        }
+                        ret
+                    })
+                )
+                .map_err(|errs| errs.into_iter().flatten().collect::<Vec<_>>())?
+            }
+            _ => {
+                // TODO(ed): Point to the argument maybe?
+                return err_type_error!(
+                    self,
+                    span,
+                    TypeError::Mismatch { got: arg.clone(), expected: par.clone() }
+                );
+            }
+        })
+    }
+
+    fn resolve_functions_from_args(&self, span: Span, args: Vec<Type>, ty: Type) -> Result<(Vec<Type>, Type), Vec<Error>> {
+        let (params, ret) = match ty {
+            Type::Function(params, ret) => (params, ret),
+            Type::Unknown => {
+                return Ok((args.clone(), Type::Unknown));
+            },
+            ty => {
+                return err_type_error!(
+                    self,
+                    span,
+                    TypeError::Violating(ty.clone()),
+                    "{:?} cannot be called as a function",
+                    ty
+                );
+            }
+        };
+
+        if args.len() != params.len() {
+            return err_type_error!(
+                self,
+                span,
+                TypeError::WrongArity { got: args.len(), expected: params.len() }
+            )
+        }
+
+        let mut generics: HashMap<_, Type> = HashMap::new();
+        for (par, arg) in params.iter().zip(args.iter()) {
+            if matches!(arg, Type::Generic(_)) {
+                return err_type_error!(
+                    self,
+                    span,
+                    TypeError::Violating(arg.clone()),
+                    "Generics are not supported as arguments - only parameters"
+                );
+            }
+            self.solve_generics_recursively(span, &mut generics, par, arg)?;
+        }
+        let ret = if let Type::Generic(ret) = *ret {
+            match generics.get(&ret) {
+                Some(ty) => ty.clone(),
+                None => {
+                    return err_type_error!(
+                        self,
+                        span,
+                        TypeError::Mutability, // TODO(ed): Wrong error
+                        "Generics are only allowed if they can be deduced from the function signature, but '#{}' is not mentioned in the parameters",
+                        ret
+                    )
+                }
+            }
+        } else {
+            Type::clone(&ret)
+        };
+        Ok((args, ret))
+    }
+
     fn assignable(&mut self, assignable: &Assignable, namespace: usize) -> Result<Lookup, Vec<Error>> {
         use AssignableKind as AK;
         use Lookup::*;
@@ -163,10 +307,8 @@ impl<'c> TypeChecker<'c> {
                     }
                     None => {}
                 }
-                if let Some(fun) = self.compiler.functions.get(&ident.name) {
-                    // TODO(ed): This needs work - we preferably want to
-                    // know this type.
-                    return Ok(Value(Type::Unknown, VarKind::Const));
+                if let Some((_, _, ty)) = self.compiler.functions.get(&ident.name) {
+                    return Ok(Value(ty.clone(), VarKind::Const));
                 } else {
                     return err_type_error!(
                         self,
@@ -184,46 +326,13 @@ impl<'c> TypeChecker<'c> {
                         return err_type_error!(
                             self,
                             span,
-                            TypeError::NamespaceNotExpression
+                            TypeError::NamespaceNotExpression,
+                            "Namespace cannot be called like a function"
                         );
                     }
                 };
                 let args = args.iter().map(|e| self.expression(e)).collect::<Result<Vec<_>, Vec<_>>>()?;
-                let (params, ret) = match ty {
-                    Type::Function(params, ret) => (params, ret),
-                    Type::Unknown => (args.clone(), Box::new(Type::Unknown)),
-                    ty => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::Violating(ty.clone()),
-                            "{:?} cannot be called as a function",
-                            ty
-                        );
-                    }
-                };
-                for (i, (arg, par)) in args.iter().zip(params.iter()).enumerate() {
-                    if let Err(reason) = par.fits(arg, self.compiler.blobs.as_slice()) {
-                        // TODO(ed): Point to the argument maybe?
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::Mismatch { got: arg.clone(), expected: par.clone() },
-                            "argument #{}, because {}",
-                            i,
-                            reason
-                        )
-                    }
-                }
-
-                if args.len() != params.len() {
-                    return err_type_error!(
-                        self,
-                        span,
-                        TypeError::WrongArity { got: args.len(), expected: params.len() }
-                    )
-                }
-
+                let (params, ret) = self.resolve_functions_from_args(span, args, ty.clone())?;
                 return Ok(Value(Type::clone(&ret), VarKind::Const));
             }
             AK::ArrowCall(extra, fun, args) => {
@@ -239,9 +348,9 @@ impl<'c> TypeChecker<'c> {
                 match self.assignable(thing, namespace)? {
                     Value(ty, kind) => {
                         match &ty {
+                            Type::Unknown => { Ok(Value(Type::Unknown, VarKind::Mutable)) }
                             Type::Instance(blob) => {
                                 let blob = &self.compiler.blobs[*blob];
-                                dbg!(&blob.fields);
                                 match blob.fields.get(&field.name) {
                                     Some(ty) => Ok(Value(ty.clone(), VarKind::Mutable)),
                                     None => match field.name.as_str() {
@@ -335,7 +444,7 @@ impl<'c> TypeChecker<'c> {
                         Value(val, VarKind::Const)
                     }
                     (Type::Dict(key, val), index) => {
-                        if let Err(reason) = index.fits(&key, self.compiler.blobs.as_slice()) {
+                        if let Err(reason) = key.fits(&index, self.compiler.blobs.as_slice()) {
                             return err_type_error!(
                                 self,
                                 span,
@@ -439,7 +548,7 @@ impl<'c> TypeChecker<'c> {
                 self.bin_op(span, a, b, op::cmp, "Comparison")?
             }
 
-            EK::Is(a, b) => self.bin_op(span, a, b, |a, b| Type::Ty, "Is")?,
+            EK::Is(a, b) => self.bin_op(span, a, b, |a, b| Type::Bool, "Is")?,
             EK::In(a, b) => {
                 let a = self.expression(a)?;
                 let b = self.expression(b)?;
@@ -632,6 +741,14 @@ impl<'c> TypeChecker<'c> {
                             }
                         }
                         None => {
+                            errors.push(type_error!(
+                                self,
+                                *span,
+                                TypeError::UnknownField { blob: blob.name.clone(), field: name.clone() },
+                                "{}.{} does not exist on the original blob type",
+                                blob.name,
+                                name
+                            ));
                         }
                     }
                 }
@@ -644,14 +761,13 @@ impl<'c> TypeChecker<'c> {
                     if initalizer.contains_key(&name) {
                         continue;
                     }
-                    // TODO(ed): Is this the right order?
                     if let Err(_) = ty.fits(&Type::Void, self.compiler.blobs.as_slice()) {
                         // TODO(ed): Not super sold on this error message - it can be better.
                         errors.push(type_error!(
                             self,
                             span,
                             TypeError::Mismatch { got: Type::Void, expected: ty },
-                            "Only nullable fields can be ommitted, {}.{} is not nullable",
+                            "Only nullable fields can be omitted, {}.{} is not nullable",
                             blob.name,
                             name
                         ));
@@ -755,9 +871,11 @@ impl<'c> TypeChecker<'c> {
                 } else {
                     ty
                 };
-                self.stack.push(Variable::new(ident.clone(), ty.clone(), *kind));
 
-                let value = self.expression(value)?;
+                let value = self.expression(value);
+                self.stack.push(Variable::new(ident.clone(), ty.clone(), *kind));
+                let value = value?;
+
                 let fit = ty.fits(&value, self.compiler.blobs.as_slice());
                 let ty = match (kind.force(), fit) {
                     (true, Ok(_)) => {
@@ -858,6 +976,7 @@ impl<'c> TypeChecker<'c> {
 
             SK::Ret { value } => Some(self.expression(value)?),
             SK::StatementExpression { value } => {
+                self.expression(value)?;
                 None
             }
 
@@ -890,7 +1009,8 @@ impl<'c> TypeChecker<'c> {
                         } else {
                             ty
                         };
-                        self.namespaces[namespace].insert(ident.name.clone(), Name::Global(Some((ty.clone(), *kind))));
+                        let name = Name::Global(Some((ty.clone(), *kind)));
+                        self.namespaces[namespace].insert(ident.name.clone(), name);
                         let value = self.expression(value)?;
                         let fit = ty.fits(&value, self.compiler.blobs.as_slice());
                         let ty = match (kind.force(), fit) {
@@ -937,7 +1057,6 @@ impl<'c> TypeChecker<'c> {
         tree: &mut AST,
         to_namespace: &HashMap<PathBuf, usize>,
     ) -> Result<(), Vec<Error>> {
-
         for (path, module) in &tree.modules {
             let namespace = to_namespace[path];
             for stmt in &module.statements {

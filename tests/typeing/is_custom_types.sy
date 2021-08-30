@@ -3,8 +3,8 @@ B :: blob { a: int }
 C :: blob { }
 
 start :: fn {
-    false <=> B is A
-    true <=> A is B
-    true <=> A is C
-    true <=> C is A
+    false <=> (B is A)
+    true <=> (A is B)
+    true <=> (A is C)
+    true <=> (C is A)
 }

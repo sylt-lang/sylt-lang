@@ -22,6 +22,7 @@ owo-colors = { version = "2.0.0", git = "https://github.com/FredTheDino/owo-colo
 sungod = "0.3"
 
 [features]
-default = [ "lingon", "network" ]
+# TODO(ed): Reneable "lingon" when ported
+default = [ "network" ]
 
 network = ["bincode"]

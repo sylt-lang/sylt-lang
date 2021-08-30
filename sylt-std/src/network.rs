@@ -73,8 +73,8 @@ fn rpc_handle_stream(
     }
 }
 
-#[sylt_macro::sylt_doc(n_rpc_start_server, "Starts an RPC server on the specified port, returning success status.", [One(Int(port))] Type::Bool)]
-#[sylt_macro::sylt_link(n_rpc_start_server, "sylt_std::network")]
+#[sylt_macro::sylt_doc(n_rpc_start_server, "Starts an RPC server on the specified port, returning success status.", "fn int -> bool")]
+#[sylt_macro::sylt_link(n_rpc_start_server, "sylt_std::network", "fn int -> bool")]
 pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     if ctx.typecheck {
         return Ok(Value::Bool(true));
@@ -108,7 +108,7 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
     Ok(Value::Bool(true))
 }
 
-#[sylt_macro::sylt_link(n_rpc_stop_server, "sylt_std::network")]
+#[sylt_macro::sylt_link(n_rpc_stop_server, "sylt_std::network", "fn -> bool")]
 pub fn n_rpc_stop_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     if ctx.typecheck {
         return Ok(Value::Bool(true));
@@ -132,8 +132,8 @@ pub fn n_rpc_stop_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError>
 }
 
 //NOTE(gu): We don't force a disconnect.
-#[sylt_macro::sylt_doc(n_rpc_connect, "Connects to an RPC server on the specified IP and port.", [One(String(ip)), One(Int(port))] Type::Bool)]
-#[sylt_macro::sylt_link(n_rpc_connect, "sylt_std::network")]
+#[sylt_macro::sylt_doc(n_rpc_connect, "Connects to an RPC server on the specified IP and port.", "fn str, int -> bool")]
+#[sylt_macro::sylt_link(n_rpc_connect, "sylt_std::network", "fn str, int -> bool")]
 pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     if ctx.typecheck {
         return Ok(Value::Bool(true));
@@ -181,16 +181,16 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Bool(true))
 }
 
-#[sylt_macro::sylt_doc(n_rpc_is_server, "Returns whether we've started a server or not.", [] Type::Bool)]
-#[sylt_macro::sylt_link(n_rpc_is_server, "sylt_std::network")]
+#[sylt_macro::sylt_doc(n_rpc_is_server, "Returns whether we've started a server or not.", "fn -> bool")]
+#[sylt_macro::sylt_link(n_rpc_is_server, "sylt_std::network", "fn -> bool")]
 pub fn n_rpc_is_server(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Bool(
         CLIENT_HANDLES.with(|handles| handles.lock().unwrap().is_some()),
     ))
 }
 
-#[sylt_macro::sylt_doc(n_rpc_connected_clients, "Returns how many clients are currently connected.", [] Type::Int)]
-#[sylt_macro::sylt_link(n_rpc_connected_clients, "sylt_std::network")]
+#[sylt_macro::sylt_doc(n_rpc_connected_clients, "Returns how many clients are currently connected.", "fn -> int")]
+#[sylt_macro::sylt_link(n_rpc_connected_clients, "sylt_std::network", "fn -> int")]
 pub fn n_rpc_connected_clients(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Int(CLIENT_HANDLES.with(|handles| {
         handles
@@ -202,8 +202,8 @@ pub fn n_rpc_connected_clients(_: RuntimeContext<'_>) -> Result<Value, RuntimeEr
     })))
 }
 
-#[sylt_macro::sylt_doc(n_rpc_is_client, "Returns whether we've connected to a client or not.", [] Type::Bool)]
-#[sylt_macro::sylt_link(n_rpc_is_client, "sylt_std::network")]
+#[sylt_macro::sylt_doc(n_rpc_is_client, "Returns whether we've connected to a client or not.", "fn -> bool")]
+#[sylt_macro::sylt_link(n_rpc_is_client, "sylt_std::network", "fn -> bool")]
 pub fn n_rpc_is_client(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Bool(
         SERVER_HANDLE.with(|handle| handle.borrow().is_some()),
@@ -225,8 +225,8 @@ fn get_rpc_args(ctx: RuntimeContext<'_>, arg_offset: usize, func_name: &str) -> 
     }
 }
 
-#[sylt_macro::sylt_doc(n_rpc_clients, "Performs an RPC on all connected clients.", [One(Value(callable)), One(List(args))] Type::Void)]
-#[sylt_macro::sylt_link(n_rpc_clients, "sylt_std::network")]
+#[sylt_macro::sylt_doc(n_rpc_clients, "Performs an RPC on all connected clients.", "fn #X, [#Y] -> void")]
+#[sylt_macro::sylt_link(n_rpc_clients, "sylt_std::network", "fn #X, [#Y] -> void")]
 pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     if ctx.typecheck {
         return Ok(Value::Nil);
@@ -260,8 +260,8 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 }
 
 
-#[sylt_macro::sylt_doc(n_rpc_client_ip, "Performs an RPC on a specific connected clients.", [One(Value(callable)), One(List(args))] Type::Bool)]
-#[sylt_macro::sylt_link(n_rpc_client_ip, "sylt_std::network")]
+#[sylt_macro::sylt_doc(n_rpc_client_ip, "Performs an RPC on a specific connected clients.", "fn #X, [#Y] -> bool")]
+#[sylt_macro::sylt_link(n_rpc_client_ip, "sylt_std::network", "fn #X, [#Y] -> bool")]
 pub fn n_rpc_client_ip(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     if ctx.typecheck {
         return Ok(Value::Bool(true));
@@ -303,8 +303,8 @@ pub fn n_rpc_client_ip(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 }
 
 //TODO(gu): This doc is wrong since this takes variadic arguments.
-#[sylt_macro::sylt_doc(n_rpc_server, "Performs an RPC on the connected server, returning success status.", [One(Value(callable)), One(Value(args))] Type::Bool)]
-#[sylt_macro::sylt_link(n_rpc_server, "sylt_std::network")]
+#[sylt_macro::sylt_doc(n_rpc_server, "Performs an RPC on the connected server, returning success status.", "fn #X, #Y -> bool")]
+#[sylt_macro::sylt_link(n_rpc_server, "sylt_std::network", "fn #X, #Y -> bool")]
 pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     if ctx.typecheck {
         return Ok(Value::Bool(true));
@@ -335,8 +335,8 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     })
 }
 
-#[sylt_macro::sylt_doc(n_rpc_disconnect, "Disconnect from the currently connected server.", [] Type::Void)]
-#[sylt_macro::sylt_link(n_rpc_disconnect, "sylt_std::network")]
+#[sylt_macro::sylt_doc(n_rpc_disconnect, "Disconnect from the currently connected server.", "fn -> void")]
+#[sylt_macro::sylt_link(n_rpc_disconnect, "sylt_std::network", "fn -> void")]
 pub fn n_rpc_disconnect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     if ctx.typecheck {
         return Ok(Value::Nil);
@@ -353,8 +353,8 @@ pub fn n_rpc_disconnect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> 
     Ok(Value::Nil)
 }
 
-#[sylt_macro::sylt_doc(n_rpc_current_request_ip, "Get the socket address that sent the currently processed RPC. Empty string if not a server or not processing an RPC.", [] Type::String)]
-#[sylt_macro::sylt_link(n_rpc_current_request_ip, "sylt_std::network")]
+#[sylt_macro::sylt_doc(n_rpc_current_request_ip, "Get the socket address that sent the currently processed RPC. Empty string if not a server or not processing an RPC.", "fn -> str")]
+#[sylt_macro::sylt_link(n_rpc_current_request_ip, "sylt_std::network", "fn -> str")]
 pub fn n_rpc_current_request_ip(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     CURRENT_REQUEST_SOCKET_ADDR.with(|current|
         Ok(Value::String(Rc::new(
@@ -367,10 +367,11 @@ pub fn n_rpc_current_request_ip(_: RuntimeContext<'_>) -> Result<Value, RuntimeE
 }
 
 sylt_macro::extern_function!(
-    "sylt_std::network"
-    split_ip
-    ""
-    [One(String(ip_port))] -> Type::Tuple(vec![Type::String, Type::Int]) => {
+    "sylt_std::network",
+    split_ip,
+    ? "",
+    -> "fn str -> (str, int)",
+    [String(ip_port)] => {
         let addr = SocketAddr::from_str(ip_port.as_str()).unwrap();
         Ok(Value::Tuple(Rc::new(vec![
             Value::String(Rc::new(addr.ip().to_string())),
@@ -380,8 +381,8 @@ sylt_macro::extern_function!(
 );
 
 
-#[sylt_macro::sylt_doc(n_rpc_resolve, "Resolves the queued RPCs that has been received since the last resolve.", [] Type::Void)]
-#[sylt_macro::sylt_link(n_rpc_resolve, "sylt_std::network")]
+#[sylt_macro::sylt_doc(n_rpc_resolve, "Resolves the queued RPCs that has been received since the last resolve.", "fn -> void")]
+#[sylt_macro::sylt_link(n_rpc_resolve, "sylt_std::network", "fn -> void")]
 pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     if ctx.typecheck {
         return Ok(Value::Nil);

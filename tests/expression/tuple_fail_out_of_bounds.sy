@@ -3,4 +3,4 @@ start :: fn {
     a[2]
 }
 
-// error: #IndexOutOfBounds(_, 2, 2)
+// error: $TupleIndexOutOfRange { .. }

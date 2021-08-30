@@ -12,6 +12,7 @@ pub trait Numbered {
 #[derive(Deserialize, Serialize)]
 pub enum Type {
     Ty,
+    Generic(String),
     Field(String),
     Void,
     Unknown,
@@ -36,6 +37,8 @@ impl Hash for Type {
     fn hash<H: Hasher>(&self, h: &mut H) {
         self.to_number().hash(h);
         match self {
+            Type::Generic(name) => name.hash(h),
+
             Type::Field(f) => f.hash(h),
 
             Type::List(t) | Type::Set(t)
@@ -210,6 +213,14 @@ impl Type {
                                 x
                         ));
                     }
+                }
+                if a_args.len() != b_args.len() {
+                    return Err(
+                        format!(
+                            "mismatching arity, {} != {}",
+                            a_args.len(),
+                            b_args.len()
+                        ));
                 }
                 a_ret.inner_fits(b_ret, blobs, same)
             }
