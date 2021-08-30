@@ -57,15 +57,13 @@ fn write_blob_instance_fields<W: Write>(
     indent: u32,
     fields: &[(String, Expression)],
 ) -> fmt::Result {
-    todo!()
+    for (field, expr) in fields {
+        write_indents(dest, indent)?;
+        write!(dest, "{}: ", field)?;
+        write_expression(dest, indent, expr)?;
+        write!(dest, "\n")?;
 }
-
-fn write_blob_type_fields<W: Write>(
-    dest: &mut W,
-    indent: u32,
-    fields: &[(String, Type)],
-) -> fmt::Result {
-    todo!()
+    Ok(())
 }
 
 fn write_runtime_type<W: Write>(dest: &mut W, ty: &RuntimeType) -> fmt::Result {
