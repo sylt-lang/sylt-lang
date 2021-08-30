@@ -169,6 +169,8 @@ pub enum TypeKind {
     Set(Box<Type>),
     /// `(key, value)`.
     Dict(Box<Type>, Box<Type>),
+    /// A generic type
+    Generic(Identifier),
 }
 
 /// A parsed type. Contains any [TypeKind].
@@ -197,7 +199,7 @@ pub struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-    fn new(tokens: &'a [Token], spans: &'a [Span], file: &'a Path, root: &'a Path) -> Self {
+    pub fn new(tokens: &'a [Token], spans: &'a [Span], file: &'a Path, root: &'a Path) -> Self {
         Self {
             skip_newlines: false,
             tokens,
@@ -374,7 +376,7 @@ macro_rules! skip_until {
 
 
 /// Parse a [Type] definition, e.g. `fn int, int, bool -> bool`.
-fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
+pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     use RuntimeType::{Bool, Float, Int, String, Void};
     use TypeKind::*;
     let span = ctx.span();
@@ -390,6 +392,22 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                 (ctx, UserDefined(assignable))
             }
         },
+
+        T::Hash => {
+            let ctx = ctx.skip(1);
+            match ctx.token() {
+                T::Identifier(name) => {
+                    let ident = Identifier {
+                        name: name.to_string(),
+                        span: ctx.span(),
+                    };
+                    (ctx.skip(1), Generic(ident))
+                }
+                _ => {
+                    raise_syntax_error!(ctx, "Expected identifier when parsing generic type");
+                }
+            }
+        }
 
         // Function type
         T::Fn => {

@@ -59,6 +59,8 @@ start :: fn {
     print(d)
 
     // Other
-    print(A, pop, :str)
+    print' A
+    print' pop
+    print' :str
     as_str(nil) <=> "nil"
 }

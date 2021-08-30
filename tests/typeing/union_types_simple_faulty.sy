@@ -22,7 +22,5 @@ start :: fn {
     f(true) <=> g(true)
 }
 
-// error: #TypeMismatch(_, _)
-// error: #TypeMismatch(_, _)
-// error: #TypeError(_, _)
-// error: #TypeError(_, _)
+// error: $BinOp { .. }
+// error: $BinOp { .. }

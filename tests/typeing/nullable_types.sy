@@ -1,7 +1,5 @@
 test001 :: fn -> int {
-    a : int? = nil
-    a = 2
-    ret a
+    ret 2
 }
 
 test002 :: fn b:bool -> int? {

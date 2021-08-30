@@ -8,5 +8,4 @@ start :: fn {
 	f(a) <=> 0
 }
 
-// error: #ArgumentType(_, _, _)
-// error: #TypeError(_, _)
+// error: $Mismatch { .. }

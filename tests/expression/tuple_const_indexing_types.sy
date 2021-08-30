@@ -4,4 +4,4 @@ start :: fn {
 	b :: a[1] + 1
 }
 
-// error: #TypeError(_, _)
+// error: $BinOp { lhs: Type::String, rhs: Type::Int, .. }

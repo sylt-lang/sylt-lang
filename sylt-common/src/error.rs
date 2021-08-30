@@ -91,15 +91,69 @@ impl fmt::Display for RuntimePhase {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum TypeError {
+    Violating(Type),
+
+    BinOp {
+        lhs: Type,
+        rhs: Type,
+        op: String,
+    },
+
+    UniOp {
+        val: Type,
+        op: String,
+    },
+
+    Mismatch {
+        got: Type,
+        expected: Type,
+    },
+
+    MismatchAssign {
+        got: Type,
+        expected: Type,
+    },
+
+    Mutability,
+
+    ExcessiveForce {
+        got: Type,
+        expected: Type,
+    },
+
+    NamespaceNotExpression,
+
+    // TODO(ed): Some of these are more like compile errors
+    WrongArity {
+        got: usize,
+        expected: usize,
+    },
+
+    UnknownField {
+        blob: String,
+        field: String,
+    },
+
+    TupleIndexOutOfRange {
+        got: i64,
+        length: usize,
+    },
+
+    UnresolvedName(String),
+}
+
+
 // TODO(ed): Switch to spans for the whole compiler?
 #[derive(Clone, Debug)]
 pub enum Error {
-    RuntimeError {
-        kind: RuntimeError,
-        phase: RuntimePhase,
+    NoFileGiven,
+    FileNotFound(PathBuf),
+    IOError(Rc<std::io::Error>),
+    GitConflictError {
         file: PathBuf,
-        line: usize,
-        message: Option<String>,
+        span: Span,
     },
 
     SyntaxError {
@@ -108,36 +162,89 @@ pub enum Error {
         message: String,
     },
 
+    TypeError {
+        kind: TypeError,
+        file: PathBuf,
+        span: Span,
+        message: Option<String>,
+    },
+
     CompileError {
         file: PathBuf,
         span: Span,
         message: Option<String>,
     },
 
-    GitConflictError {
+    RuntimeError {
+        kind: RuntimeError,
+        phase: RuntimePhase,
         file: PathBuf,
-        span: Span,
+        line: usize,
+        message: Option<String>,
     },
-
-    FileNotFound(PathBuf),
-    NoFileGiven,
-    IOError(Rc<std::io::Error>),
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Error::NoFileGiven => {
+                write!(f, "No file to run")
+            }
+            Error::FileNotFound(path) => {
+                write!(f, "File '{}' not found", path.display())
+            }
+            Error::IOError(e) => {
+                write!(f, "Unknown IO error: {}", e)
+            }
+            Error::GitConflictError { file, span } => {
+                write!(f, "{}: ", "git conflict error".red())?;
+                write!(f, "{}\n", file_line_display(file, span.line))?;
+                write!(
+                    f,
+                    "{}Git conflict marker found at line {}\n",
+                    INDENT, span.line,
+                )?;
+
+                write_source_span_at(f, file, *span)
+            }
             #[rustfmt::skip]
             Error::RuntimeError { kind, phase, file, line, message } => {
                 write!(f, "{} {}: ", phase.to_string().red(), "error".red())?;
                 write!(f, "{}\n", file_line_display(file, *line))?;
                 write!(f, "{}{}\n", INDENT, kind)?;
-
                 if let Some(message) = message {
                     write!(f, "{}\n", message)?;
                 }
 
                 write_source_line_at(f, file, *line)
+            }
+            Error::SyntaxError {
+                file,
+                span,
+                message,
+            } => {
+                write!(f, "{}: ", "syntax error".red())?;
+                write!(f, "{}\n", file_line_display(file, span.line))?;
+                write!(f, "{}Syntax Error on line {}\n", INDENT, span.line)?;
+
+                write!(f, "{}{}\n", INDENT, message)?;
+
+                write_source_span_at(f, file, *span)
+            }
+            Error::TypeError {
+                kind,
+                file,
+                span,
+                message,
+            } => {
+                write!(f, "{}: {}\n", "typecheck error".red(), file_line_display(file, span.line))?;
+                write!(f, "{}{}\n", INDENT, kind)?;
+
+                if let Some(message) = message {
+                    write!(f, "{}{}\n", INDENT, message)?;
+                }
+
+                write_source_span_at(f, file, *span)
             }
             Error::CompileError {
                 file,
@@ -153,40 +260,6 @@ impl fmt::Display for Error {
                 }
 
                 write_source_span_at(f, file, *span)
-            }
-            Error::SyntaxError {
-                file,
-                span,
-                message,
-            } => {
-                write!(f, "{}: ", "syntax error".red())?;
-                write!(f, "{}\n", file_line_display(file, span.line))?;
-                write!(f, "{}Syntax Error on line {}\n", INDENT, span.line)?;
-
-                write!(f, "{}{}\n", INDENT, message)?;
-
-                write_source_span_at(f, file, *span)
-            }
-            Error::GitConflictError { file, span } => {
-                write!(f, "{}: ", "git conflict error".red())?;
-                write!(f, "{}\n", file_line_display(file, span.line))?;
-
-                write!(
-                    f,
-                    "{}Git conflict marker found at line {}\n",
-                    INDENT, span.line,
-                )?;
-
-                write_source_span_at(f, file, *span)
-            }
-            Error::FileNotFound(path) => {
-                write!(f, "File '{}' not found", path.display())
-            }
-            Error::NoFileGiven => {
-                write!(f, "No file to run")
-            }
-            Error::IOError(e) => {
-                write!(f, "Unknown IO error: {}", e)
             }
         }
     }
@@ -277,6 +350,57 @@ impl fmt::Display for RuntimeError {
             }
             RuntimeError::Unreachable => {
                 write!(f, "Reached unreachable code")
+            }
+        }
+    }
+}
+
+impl fmt::Display for TypeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TypeError::Mismatch { got, expected } => {
+                write!(f, "A '{:?}' cannot be a '{:?}'", got, expected)
+            }
+
+            TypeError::MismatchAssign { got, expected } => {
+                write!(f, "Cannot assign a '{:?}' to a '{:?}'", got, expected)
+            }
+
+            TypeError::Mutability => {
+                write!(f, "Constants are immutable")
+            }
+
+            TypeError::BinOp { op, lhs, rhs } => {
+                write!(f, "{} is not defined for '{:?}' and '{:?}'", op, lhs, rhs)
+            }
+
+            TypeError::UniOp { op, val } => {
+                write!(f, "{} is not defined for '{:?}'", op, val)
+            }
+
+            TypeError::Violating(ty) => {
+                write!(f, "Got '{:?}', which it cannot be", ty)
+            }
+
+            TypeError::ExcessiveForce { got, expected } => {
+                write!(f, "This type force is unnessecary, '{:?}' is a '{:?}'", got, expected)
+            }
+
+            TypeError::NamespaceNotExpression => {
+                write!(f, "This resolves to a namespace, not a value")
+            }
+
+            TypeError::WrongArity { got, expected } => {
+                write!(f, "Expected {} arguments but got {}", expected, got)
+            }
+            TypeError::UnknownField { blob, field } => {
+                write!(f, "Cannot find field '{}.{}'", blob, field)
+            }
+            TypeError::TupleIndexOutOfRange { length, got } => {
+                write!(f, "A tuple of length {} has no element {}", length, got)
+            }
+            TypeError::UnresolvedName(name) => {
+                write!(f, "Cannot resolve '{}'", name)
             }
         }
     }

@@ -10,6 +10,6 @@ start :: fn {
     c[0] == "str"
 }
 
-// error: #TypeError(_, _)
-// error: #TypeError(_, _)
-// error: #TypeError(_, _)
+// error: $BinOp { .. }
+// error: $BinOp { .. }
+// error: $BinOp { .. }

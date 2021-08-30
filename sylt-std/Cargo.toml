@@ -22,7 +22,8 @@ colored = "2"
 sungod = "0.3"
 
 [features]
-default = [ "lingon", "network" ]
+# TODO(ed): Reneable "lingon" when ported
+default = [ "network" ]
 
 network = ["bincode"]
 

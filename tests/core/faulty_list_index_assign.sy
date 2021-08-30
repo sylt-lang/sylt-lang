@@ -10,5 +10,5 @@ start :: fn {
     q.a[0] = "fail"
 }
 
-// error: #TypeMismatch(Type::Int, Type::String)
-// error: #TypeMismatch(Type::Int, Type::String)
+// error: $MismatchAssign { got: Type::String, expected: Type::Int }
+// error: $MismatchAssign { got: Type::String, expected: Type::Int }

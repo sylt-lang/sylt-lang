@@ -67,6 +67,7 @@ pub enum ExpressionKind {
 
     /// Inline If-statements
     IfShort {
+        lhs: Box<Expression>,
         condition: Box<Expression>,
         fail: Box<Expression>,
     },
@@ -371,6 +372,7 @@ fn if_short<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expressio
     );
     let (ctx, rhs) = parse_precedence(ctx, Prec::No)?;
 
+    let lhs = Box::new(lhs);
     let condition = Box::new(condition.clone());
     let fail = Box::new(rhs);
     Ok((
@@ -378,6 +380,7 @@ fn if_short<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expressio
         Expression {
             span,
             kind: IfShort {
+                lhs,
                 condition,
                 fail,
             },

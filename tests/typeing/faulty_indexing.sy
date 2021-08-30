@@ -1,0 +1,22 @@
+start :: fn {
+    a :: [1, 2, 3]
+    a[0]
+    a["abc"]
+
+    a :: (1, "abc", 1)
+    a[1] + "abc"
+    a[1] + 123
+    a["abc"] + 123
+    a[8] + 123
+
+    a :: {"abc": 1, "bcd": 2}
+    a["abc"] + 123
+    a["qqq"] + 123
+    a[123] + 123
+}
+
+// error: $Mismatch { .. }
+// error: $BinOp { .. }
+// error: $Mismatch { .. }
+// error: $TupleIndexOutOfRange { .. }
+// error: $Mismatch { .. }

@@ -4,4 +4,4 @@ start :: fn {
     a
 }
 
-// error: #TypeMismatch(Type::Int, Type::Float)
+// error: $MismatchAssign{ expected: Type::Int, got: Type::Float }
