@@ -4,7 +4,6 @@ start :: fn {
 
     b : [str] = [1, "str"]
 
-    // TODO(ed)
     c := [1, "str"]
     push(c, 0.1)
 }
