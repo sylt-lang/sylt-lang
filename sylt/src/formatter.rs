@@ -313,11 +313,6 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
 }
 
 fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -> fmt::Result {
-    // Empty statements don't even deserve their own line!
-    if matches!(statement.kind, StatementKind::EmptyStatement) {
-        return Ok(());
-    }
-
     for comment in &statement.comments {
         write!(dest, "{}\n", comment)?;
         write_indents(dest, indent)?;
@@ -356,11 +351,9 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             write!(dest, "{{\n")?;
 
             for s in statements {
-                if !matches!(s.kind, StatementKind::EmptyStatement) {
                     write_indents(dest, indent + 1)?;
                     write_statement(dest, indent + 1, s)?;
                     write!(dest, "\n")?;
-                }
             }
 
             write_indents(dest, indent)?;
@@ -391,7 +384,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             }
             write_expression(dest, indent, value)?;
         }
-        StatementKind::EmptyStatement => unreachable!("Should be handled earlier"),
+        StatementKind::EmptyStatement => (),
         StatementKind::If {
             condition,
             pass,
@@ -401,11 +394,9 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             write_expression(dest, indent, condition)?;
             write!(dest, " ")?;
             write_statement(dest, indent, pass)?;
-            if !matches!(fail.kind, StatementKind::EmptyStatement) {
                 write!(dest, " else ")?;
                 write_statement(dest, indent, fail)?;
             }
-        }
         StatementKind::IsCheck { lhs, rhs } => {
             write_type(dest, indent, lhs)?;
             write!(dest, " is ")?;
