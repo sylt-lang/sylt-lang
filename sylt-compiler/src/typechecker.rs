@@ -11,7 +11,7 @@ use sylt_parser::{
     Span, Statement, StatementKind, Type as ParserType, TypeKind, VarKind, AST,
 };
 
-use crate as compiler;
+use crate::{self as compiler, first_ok_or_errs};
 use compiler::Compiler;
 
 macro_rules! type_error_if_invalid {
@@ -188,27 +188,17 @@ impl<'c> TypeChecker<'c> {
                 a.clone()
             }
             (Type::Union(a), b) => {
-                let ret = a.iter()
+                first_ok_or_errs(a.iter()
                     .map(|ty| {
                         let mut new_generics = generics.clone();
                         let ret = self.solve_generics_recursively(span, &mut new_generics, ty, b);
                         if ret.is_ok() {
                             *generics = new_generics;
                         }
-                        // I feel like there's a better way to do this
-                        // Deliberatly swap, so we get all errors.
-                        match ret {
-                            Ok(x) => Err(x),
-                            Err(x) => Ok(x),
-                        }
+                        ret
                     })
-                    .collect::<Result<Vec<_>, Type>>();
-                match ret {
-                    Err(ty) => ty,
-                    Ok(errs) => {
-                        return Err(errs.into_iter().fold(Vec::new(), |mut out, mut err| { out.append(&mut err); out }));
-                    }
-                }
+                )
+                .map_err(|errs| errs.into_iter().flatten().collect::<Vec<_>>())?
             }
             _ => {
                 // TODO(ed): Point to the argument maybe?
