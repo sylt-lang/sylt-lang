@@ -1,0 +1,20 @@
+A :: blob {
+    a: int,
+    b: int?,
+}
+
+start :: fn {
+    c :: A {
+        a: 1.0,
+        b: nil,
+    }
+    c.a
+    c.abc
+
+    A {
+        a: 1.0
+    }
+}
+
+// error: $Mismatch { got: Type::Float, expected: Type::Int }
+// error: $Mismatch { got: Type::Float, expected: Type::Int }

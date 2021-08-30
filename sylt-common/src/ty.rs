@@ -214,6 +214,14 @@ impl Type {
                         ));
                     }
                 }
+                if a_args.len() != b_args.len() {
+                    return Err(
+                        format!(
+                            "mismatching arity, {} != {}",
+                            a_args.len(),
+                            b_args.len()
+                        ));
+                }
                 a_ret.inner_fits(b_ret, blobs, same)
             }
             (Type::Union(_), Type::Union(b)) => {

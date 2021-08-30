@@ -349,9 +349,9 @@ impl<'c> TypeChecker<'c> {
                 match self.assignable(thing, namespace)? {
                     Value(ty, kind) => {
                         match &ty {
+                            Type::Unknown => { Ok(Value(Type::Unknown, VarKind::Mutable)) }
                             Type::Instance(blob) => {
                                 let blob = &self.compiler.blobs[*blob];
-                                dbg!(&blob.fields);
                                 match blob.fields.get(&field.name) {
                                     Some(ty) => Ok(Value(ty.clone(), VarKind::Mutable)),
                                     None => match field.name.as_str() {
@@ -445,7 +445,7 @@ impl<'c> TypeChecker<'c> {
                         Value(val, VarKind::Const)
                     }
                     (Type::Dict(key, val), index) => {
-                        if let Err(reason) = index.fits(&key, self.compiler.blobs.as_slice()) {
+                        if let Err(reason) = key.fits(&index, self.compiler.blobs.as_slice()) {
                             return err_type_error!(
                                 self,
                                 span,
@@ -549,7 +549,7 @@ impl<'c> TypeChecker<'c> {
                 self.bin_op(span, a, b, op::cmp, "Comparison")?
             }
 
-            EK::Is(a, b) => self.bin_op(span, a, b, |a, b| Type::Ty, "Is")?,
+            EK::Is(a, b) => self.bin_op(span, a, b, |a, b| Type::Bool, "Is")?,
             EK::In(a, b) => {
                 let a = self.expression(a)?;
                 let b = self.expression(b)?;
@@ -742,6 +742,14 @@ impl<'c> TypeChecker<'c> {
                             }
                         }
                         None => {
+                            errors.push(type_error!(
+                                self,
+                                *span,
+                                TypeError::UnknownField { blob: blob.name.clone(), field: name.clone() },
+                                "{}.{} does not exist on the original blob type",
+                                blob.name,
+                                name
+                            ));
                         }
                     }
                 }
@@ -754,7 +762,6 @@ impl<'c> TypeChecker<'c> {
                     if initalizer.contains_key(&name) {
                         continue;
                     }
-                    // TODO(ed): Is this the right order?
                     if let Err(_) = ty.fits(&Type::Void, self.compiler.blobs.as_slice()) {
                         // TODO(ed): Not super sold on this error message - it can be better.
                         errors.push(type_error!(
@@ -865,9 +872,11 @@ impl<'c> TypeChecker<'c> {
                 } else {
                     ty
                 };
-                self.stack.push(Variable::new(ident.clone(), ty.clone(), *kind));
 
-                let value = self.expression(value)?;
+                let value = self.expression(value);
+                self.stack.push(Variable::new(ident.clone(), ty.clone(), *kind));
+                let value = value?;
+
                 let fit = ty.fits(&value, self.compiler.blobs.as_slice());
                 let ty = match (kind.force(), fit) {
                     (true, Ok(_)) => {
@@ -1001,7 +1010,8 @@ impl<'c> TypeChecker<'c> {
                         } else {
                             ty
                         };
-                        self.namespaces[namespace].insert(ident.name.clone(), Name::Global(Some((ty.clone(), *kind))));
+                        let name = Name::Global(Some((ty.clone(), *kind)));
+                        self.namespaces[namespace].insert(ident.name.clone(), name);
                         let value = self.expression(value)?;
                         let fit = ty.fits(&value, self.compiler.blobs.as_slice());
                         let ty = match (kind.force(), fit) {

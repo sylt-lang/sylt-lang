@@ -5,5 +5,5 @@ start :: fn {
     (2 in a) <=> "123"
 }
 
-// error: #TypeMismatch(Type::Int, Type::String)
-// error: #TypeError(_, _)
+// error: $BinOp { .. }
+// error: $BinOp { .. }
