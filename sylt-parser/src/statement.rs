@@ -12,8 +12,15 @@ pub enum StatementKind {
     /// "Imports" another file.
     ///
     /// `use <file>`.
+    /// `use /<file>`.
+    /// `use <folder>/`.
+    /// `use <folder>/<file>`.
+    /// `use / as <alias>`.
+    /// `use <file> as <alias>`.
+    /// `use <folder>/ as <alias>`.
     Use {
-        file: Identifier,
+        ident: Identifier,
+        file: PathBuf,
     },
 
     /// Defines a new Blob.
@@ -22,13 +29,6 @@ pub enum StatementKind {
     Blob {
         name: String,
         fields: HashMap<String, Type>,
-    },
-
-    /// Prints to standard out.
-    ///
-    /// `print <expression>`.
-    Print {
-        value: Expression,
     },
 
     /// Assigns to a variable (`a = <expression>`), optionally with an operator
@@ -121,6 +121,30 @@ pub struct Statement {
     pub comments: Vec<String>,
 }
 
+pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, String> {
+    let mut ctx = ctx;
+    let mut result = String::new();
+    expect!(
+        ctx,
+        T::Slash | T::Identifier(_),
+        "Expected identifier or slash at start of use path"
+    );
+    if matches!(ctx.token(), T::Slash) {
+        result.push_str("/");
+        ctx = ctx.skip(1);
+    }
+    while let T::Identifier(f) = ctx.token() {
+        result.push_str(f);
+        ctx = ctx.skip(1);
+        if matches!(ctx.token(), T::Slash) {
+            result.push_str("/");
+            ctx = ctx.skip(1);
+        }
+    }
+
+    Ok(( ctx, result ))
+}
+
 pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
     let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{' at start of block");
 
@@ -181,16 +205,61 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             }
         },
 
-        // `use a`
-        [T::Use, T::Identifier(name), ..] => (
-            ctx.skip(2),
-            Use {
-                file: Identifier {
-                    span: ctx.skip(1).span(),
-                    name: name.clone(),
+        // `use path/to/file`
+        // `use path/to/file as alias`
+        [T::Use, ..] => {
+            let (ctx, path) = path(ctx.skip(1))?;
+            let bare_name = path
+                .trim_start_matches("/")
+                .trim_end_matches("/");
+            let file = {
+                let parent = if path.starts_with("/") {
+                    ctx.root
+                } else {
+                    ctx.file.parent().unwrap()
+                };
+                // Importing a folder is the same as importing exports.sy
+                // in the folder.
+                parent.join(if path == "/" {
+                    format!("exports.sy")
+                } else if path.ends_with("/") {
+                    format!("{}/exports.sy", bare_name)
+                } else {
+                    format!("{}.sy", bare_name)
+                })
+            };
+            let (ctx, ident) = match &ctx.tokens[ctx.curr..] {
+                [T::As, T::Identifier(alias), ..] => (
+                    ctx.skip(2),
+                    Identifier {
+                        span: ctx.skip(1).span(),
+                        name: alias.clone(),
+                    }
+                ),
+                [T::As, ..] => raise_syntax_error!(
+                    ctx.skip(1),
+                    "Expected alias"
+                ),
+                [..] => {
+                    if path == "/" {
+                        raise_syntax_error!(ctx, "Using root requires alias");
+                    }
+                    let span = if path.ends_with("/") {
+                        ctx.prev().prev().span()
+                    } else {
+                        ctx.prev().span()
+                    };
+                    let name = PathBuf::from(bare_name)
+                        .file_stem()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .to_string();
+                    (ctx, Identifier { span, name })
                 },
-            },
-        ),
+            };
+            (ctx, Use { ident, file })
+        },
 
         // `: A is : B`
         [T::Colon, ..] => {
@@ -205,11 +274,6 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Break, ..] => (ctx.skip(1), Break),
         [T::Continue, ..] => (ctx.skip(1), Continue),
         [T::Unreachable, ..] => (ctx.skip(1), Unreachable),
-
-        [T::Print, ..] => {
-            let (ctx, value) = expression(ctx.skip(1))?;
-            (ctx, Print { value })
-        }
 
         // `ret <expression>`
         [T::Ret, ..] => {
@@ -509,7 +573,6 @@ mod test {
 
     // NOTE(ed): Expressions are valid statements! :D
     test!(statement, statement_expression: "1 + 1\n" => _);
-    test!(statement, statement_print: "print 1\n" => _);
     test!(statement, statement_break: "break\n" => _);
     test!(statement, statement_continue: "continue\n" => _);
     test!(statement, statement_mut_declaration: "a := 1 + 1\n" => _);
@@ -518,10 +581,10 @@ mod test {
     test!(statement, statement_const_type_declaration: "a :int: 1 + 1\n" => _);
     test!(statement, statement_force_mut_type_declaration: "a :!int= 1 + 1\n" => _);
     test!(statement, statement_force_const_type_declaration: "a :!int: 1 + 1\n" => _);
-    test!(statement, statement_if: "if 1 { print a }\n" => _);
-    test!(statement, statement_if_else: "if 1 { print a } else { print b }\n" => _);
-    test!(statement, statement_loop: "loop 1 { print a }\n" => _);
-    test!(statement, statement_loop_no_condition: "loop { print a }\n" => _);
+    test!(statement, statement_if: "if 1 { a }\n" => _);
+    test!(statement, statement_if_else: "if 1 { a } else { b }\n" => _);
+    test!(statement, statement_loop: "loop 1 { a }\n" => _);
+    test!(statement, statement_loop_no_condition: "loop { a }\n" => _);
     test!(statement, statement_ret: "ret 1 + 1\n" => _);
     test!(statement, statement_ret_newline: "ret \n" => _);
     test!(statement, statement_unreach: "<!>\n" => _);
@@ -553,6 +616,9 @@ mod test {
     test!(outer_statement, outer_statement_blob_yes_last_comma: "B :: blob { \na: A,\n }\n" => _);
     test!(outer_statement, outer_statement_declaration: "B :: fn -> {}\n" => _);
     test!(outer_statement, outer_statement_use: "use ABC\n" => _);
+    test!(outer_statement, outer_statement_use_rename: "use a as b\n" => _);
+    test!(outer_statement, outer_statement_use_subdir: "use a/b/c/d/e\n" => _);
+    test!(outer_statement, outer_statement_use_subdir_rename: "use a/b as c\n" => _);
     test!(outer_statement, outer_statement_empty: "\n" => _);
 
     fail!(statement, statement_blob_newline: "A :: blob { a: int\n b: int }\n" => _);

@@ -6,9 +6,12 @@ use sylt_common::error::Error;
 use sylt_common::prog::Prog;
 use sylt_common::{Blob, Block, Op, RustFunction, Type, Value};
 use sylt_parser::{
+    Context as ParserContext,
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op as ParserOp,
     Span, Statement, StatementKind, Type as ParserType, TypeKind, VarKind, AST,
 };
+
+mod typechecker;
 
 type VarSlot = usize;
 
@@ -151,7 +154,7 @@ struct Compiler {
 
     loops: Vec<LoopFrame>,
     frames: Vec<Frame>,
-    functions: HashMap<String, (usize, RustFunction)>,
+    functions: HashMap<String, (usize, RustFunction, Type)>,
 
     panic: bool,
     errors: Vec<Error>,
@@ -162,6 +165,7 @@ struct Compiler {
     values: HashMap<Value, usize>,
 }
 
+#[macro_export]
 macro_rules! error {
     ($compiler:expr, $ctx:expr, $span:expr, $( $msg:expr ),+ ) => {
         if !$compiler.panic {
@@ -446,6 +450,7 @@ impl Compiler {
             IfShort {
                 condition,
                 fail,
+                ..
             } => {
                 // Results in 2 values pushed on the stack - since there's a Duplicate in
                 // there!
@@ -607,7 +612,7 @@ impl Compiler {
                 }
                 Some(Name::Namespace(new_namespace)) => return Some(*new_namespace),
                 None => {
-                    if let Some((slot, _)) = self.functions.get(name) {
+                    if let Some((slot, _, _)) = self.functions.get(name) {
                         let slot = *slot;
                         let op = self.constant(Value::ExternFunction(slot));
                         self.add_op(ctx, span, op);
@@ -802,6 +807,7 @@ impl Compiler {
                 Box::new(self.resolve_type(key, ctx)),
                 Box::new(self.resolve_type(value, ctx)),
             ),
+            Generic(name) => Type::Generic(name.name.clone()),
         }
     }
 
@@ -863,11 +869,6 @@ impl Compiler {
                         msg
                     );
                 }
-            }
-
-            Print { value } => {
-                self.expression(value, ctx);
-                self.add_op(ctx, statement.span, Op::Print);
             }
 
             #[rustfmt::skip]
@@ -1127,25 +1128,11 @@ impl Compiler {
 
     fn compile(
         mut self,
-        tree: AST,
-        functions: &[(String, RustFunction)],
+        typecheck: bool,
+        mut tree: AST,
+        functions: &[(String, RustFunction, String)],
     ) -> Result<Prog, Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
-        let num_functions = functions.len();
-        self.functions = functions
-            .to_vec()
-            .into_iter()
-            .enumerate()
-            .map(|(i, (s, f))| (s, (i, f)))
-            .collect();
-        assert_eq!(
-            num_functions,
-            self.functions.len(),
-            "There are {} names and {} extern functions - some extern functions share name",
-            self.functions.len(),
-            num_functions
-        );
-
         let name = "/preamble/";
         let mut block = Block::new(name, 0, &tree.modules[0].0);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
@@ -1159,22 +1146,44 @@ impl Compiler {
 
         let path_to_namespace_id = self.extract_globals(&tree);
 
-        for (full_path, module) in tree.modules.iter() {
-            let path = full_path.file_stem().unwrap().to_str().unwrap();
+        let num_functions = functions.len();
+        self.functions = functions
+            .to_vec()
+            .into_iter()
+            .enumerate()
+            .map(|(i, (s, f, sig))| (s.clone(), (i, f, self.resolve_type(&parse_signature(&s, &sig), ctx))))
+            .collect();
+        assert_eq!(
+            num_functions,
+            self.functions.len(),
+            "There are {} names and {} extern functions - some extern functions share name",
+            self.functions.len(),
+            num_functions
+        );
+
+
+        for (path, module) in tree.modules.iter() {
             ctx.namespace = path_to_namespace_id[path];
             self.module_functions(module, ctx);
         }
 
-        for (full_path, module) in tree.modules.iter() {
-            let path = full_path.file_stem().unwrap().to_str().unwrap();
+        for (path, module) in tree.modules.iter() {
             ctx.namespace = path_to_namespace_id[path];
             self.module_not_functions(module, ctx);
         }
-        let module = &tree.modules[0].1;
+
+        if !self.errors.is_empty() {
+            return Err(self.errors);
+        }
+
+        if typecheck {
+            typechecker::solve(&mut self, &mut tree, &path_to_namespace_id)?;
+        }
 
         self.read_identifier("start", Span::zero(), ctx, 0);
         self.add_op(ctx, Span::zero(), Op::Call(0));
 
+        let module = &tree.modules[0].1;
         let nil = self.constant(Value::Nil);
         self.add_op(ctx, module.span, nil);
         self.add_op(ctx, module.span, Op::Return);
@@ -1188,7 +1197,7 @@ impl Compiler {
                     .into_iter()
                     .map(|x| Rc::new(RefCell::new(x)))
                     .collect(),
-                functions: functions.iter().map(|(_, f)| *f).collect(),
+                functions: functions.iter().map(|(_, f, _)| *f).collect(),
                 blobs: self.blobs,
                 constants: self.constants,
                 strings: self.strings,
@@ -1198,11 +1207,12 @@ impl Compiler {
         }
     }
 
-    fn extract_globals(&mut self, tree: &AST) -> HashMap<String, usize> {
-        let mut full_path_to_namespace_id = HashMap::new();
+    // TODO(ed): This should probably be cleaned up and moves out of the compiler?
+    fn extract_globals(&mut self, tree: &AST) -> HashMap<PathBuf, usize> {
+        let mut path_to_namespace_id = HashMap::<PathBuf, usize>::new();
         for (path, _) in tree.modules.iter() {
-            let slot = full_path_to_namespace_id.len();
-            match full_path_to_namespace_id.entry(path) {
+            let slot = path_to_namespace_id.len();
+            match path_to_namespace_id.entry(path.into()) {
                 Entry::Vacant(vac) => {
                     vac.insert(slot);
                     self.namespaces.push(Namespace::new());
@@ -1220,21 +1230,12 @@ impl Compiler {
             }
         }
 
-        self.namespace_id_to_path = full_path_to_namespace_id
+        self.namespace_id_to_path = path_to_namespace_id
             .iter()
             .map(|(a, b)| (*b, (*a).clone()))
             .collect();
 
-        let path_to_namespace_id: HashMap<_, _> = full_path_to_namespace_id
-            .iter()
-            .map(|(a, b)| (
-                a.file_stem().unwrap().to_str().unwrap().to_string(),
-                *b
-            ))
-            .collect();
-
         for (path, module) in tree.modules.iter() {
-            let path = path.file_stem().unwrap().to_str().unwrap();
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
 
@@ -1273,7 +1274,6 @@ impl Compiler {
         }
 
         for (path, module) in tree.modules.iter() {
-            let path = path.file_stem().unwrap().to_str().unwrap();
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
 
@@ -1281,21 +1281,19 @@ impl Compiler {
             for statement in module.statements.iter() {
                 use StatementKind::*;
                 match &statement.kind {
-                    Use {
-                        file: Identifier { name, span },
-                    } => {
-                        let other = path_to_namespace_id[name];
-                        match namespace.entry(name.to_owned()) {
+                    Use { ident, file } => {
+                        match namespace.entry(ident.name.clone()) {
                             Entry::Vacant(vac) => {
+                                let other = path_to_namespace_id[file];
                                 vac.insert(Name::Namespace(other));
                             }
                             Entry::Occupied(_) => {
                                 error!(
                                     self,
                                     ctx,
-                                    *span,
+                                    ident.span,
                                     "A global variable with the name '{}' already exists",
-                                    name
+                                    ident.name
                                 );
                             }
                         }
@@ -1317,7 +1315,6 @@ impl Compiler {
         }
 
         for (path, module) in tree.modules.iter() {
-            let path = path.file_stem().unwrap().to_str().unwrap();
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
 
@@ -1379,8 +1376,26 @@ impl Compiler {
     }
 }
 
-pub fn compile(prog: AST, functions: &[(String, RustFunction)]) -> Result<Prog, Vec<Error>> {
-    Compiler::new().compile(prog, functions)
+// TODO(ed): Move this up into sylt?
+fn parse_signature(func_name: &str, sig: &str) -> ParserType {
+    let token_stream = sylt_tokenizer::string_to_tokens(sig);
+    let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
+    let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
+    let path = PathBuf::from(func_name);
+    let ctx = ParserContext::new(&tokens, &spans, &path, &path);
+    match sylt_parser::parse_type(ctx) {
+        Ok((_, ty)) => ty,
+        Err((_, errs)) => {
+            for err in errs {
+                eprintln!("{}", err);
+            }
+            panic!("Error parsing function signature for {}", func_name);
+        }
+    }
+}
+
+pub fn compile(typecheck: bool, prog: AST, functions: &[(String, RustFunction, String)]) -> Result<Prog, Vec<Error>> {
+    Compiler::new().compile(typecheck, prog, functions)
 }
 
 fn all_paths_return(statement: &Statement) -> bool {
@@ -1388,7 +1403,6 @@ fn all_paths_return(statement: &Statement) -> bool {
         StatementKind::Use { .. }
         | StatementKind::Blob { .. }
         | StatementKind::IsCheck { .. }
-        | StatementKind::Print { .. }
         | StatementKind::Assignment { .. }
         | StatementKind::Definition { .. }
         | StatementKind::StatementExpression { .. }
@@ -1403,5 +1417,18 @@ fn all_paths_return(statement: &Statement) -> bool {
         StatementKind::Block { statements } => statements.iter().any(all_paths_return),
 
         StatementKind::Ret { .. } => true,
+    }
+}
+
+pub(crate) fn first_ok_or_errs<I, T, E>(mut iter: I) -> Result<T, Vec<E>>
+where I: Iterator<Item = Result<T, E>>
+{
+    let mut errs = Vec::new();
+    loop {
+        match iter.next() {
+            Some(Ok(t)) => return Ok(t),
+            Some(Err(e)) => errs.push(e),
+            None => return Err(errs),
+        }
     }
 }

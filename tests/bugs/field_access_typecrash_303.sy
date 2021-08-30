@@ -4,4 +4,4 @@ start :: fn {
     a
 }
 
-// error: #TypeError(..)
+// error: $Violating(Type::Int)

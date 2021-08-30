@@ -36,9 +36,6 @@ pub enum Token {
     #[token("blob")]
     Blob,
 
-    #[token("print")]
-    Print,
-
     #[token("yield")]
     Yield,
 
@@ -113,10 +110,14 @@ pub enum Token {
     #[token("fn")]
     Fn,
 
+    #[token("and")]
     #[token("&&")]
     And,
+    #[token("or")]
     #[token("||")]
     Or,
+    #[token("not")]
+    Not,
     #[token("!")]
     Bang,
     #[token("?")]
@@ -137,6 +138,10 @@ pub enum Token {
 
     #[token("use")]
     Use,
+    #[token("from")]
+    From,
+    #[token("as")]
+    As,
 
     #[token("<<<<<<<")]
     GitConflictBegin,

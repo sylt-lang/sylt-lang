@@ -3,6 +3,6 @@ A :: blob {
 }
 
 start :: fn {
-    a := A'
-    print a.a
+    a := A {}
+    print(a.a)
 }

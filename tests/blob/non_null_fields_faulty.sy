@@ -3,9 +3,8 @@ A :: blob {
 }
 
 start :: fn {
-    a := A'
-    print a.a
+    a := A {}
+    print' a.a
 }
 
-// error: #FieldTypeMismatch(_, _, _, _, _)
-// error: #TypeError(_, _)
+// error: $Mismatch { .. }

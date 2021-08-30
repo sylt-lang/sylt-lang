@@ -169,6 +169,8 @@ pub enum TypeKind {
     Set(Box<Type>),
     /// `(key, value)`.
     Dict(Box<Type>, Box<Type>),
+    /// A generic type
+    Generic(Identifier),
 }
 
 /// A parsed type. Contains any [TypeKind].
@@ -194,10 +196,12 @@ pub struct Context<'a> {
     curr: usize,
     /// The file we're currently parsing.
     pub file: &'a Path,
+    /// The source root - the top most folder.
+    pub root: &'a Path,
 }
 
 impl<'a> Context<'a> {
-    fn new(tokens: &'a [Token], spans: &'a [Span], file: &'a Path) -> Self {
+    pub fn new(tokens: &'a [Token], spans: &'a [Span], file: &'a Path, root: &'a Path) -> Self {
         Self {
             skip_newlines: false,
             last_statement: 0,
@@ -205,6 +209,7 @@ impl<'a> Context<'a> {
             spans,
             curr: 0,
             file,
+            root
         }
     }
 
@@ -436,7 +441,7 @@ macro_rules! skip_until {
 }
 
 /// Parse a [Type] definition, e.g. `fn int, int, bool -> bool`.
-fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
+pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     use RuntimeType::{Bool, Float, Int, String, Void};
     use TypeKind::*;
     let span = ctx.span();
@@ -452,6 +457,22 @@ fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                 (ctx, UserDefined(assignable))
             }
         },
+
+        T::Hash => {
+            let ctx = ctx.skip(1);
+            match ctx.token() {
+                T::Identifier(name) => {
+                    let ident = Identifier {
+                        name: name.to_string(),
+                        span: ctx.span(),
+                    };
+                    (ctx.skip(1), Generic(ident))
+                }
+                _ => {
+                    raise_syntax_error!(ctx, "Expected identifier when parsing generic type");
+                }
+            }
+        }
 
         // Function type
         T::Fn => {
@@ -741,10 +762,10 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
 /// Returns any errors that occured when parsing the file. Basic error
 /// continuation is performed, so errored statements are skipped until a newline
 /// or EOF.
-fn module(path: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
+fn module(path: &Path, root: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
     let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
     let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
-    let mut ctx = Context::new(&tokens, &spans, path);
+    let mut ctx = Context::new(&tokens, &spans, path, root);
     let mut errors = Vec::new();
     let mut use_files = Vec::new();
     let mut statements = Vec::new();
@@ -760,8 +781,7 @@ fn module(path: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Mo
                 use StatementKind::*;
                 // Yank `use`s and add it to the used-files list.
                 if let Use { file, .. } = &statement.kind {
-                    let file = PathBuf::from(format!("{}.sy", file.name));
-                    use_files.push(file);
+                    use_files.push(file.clone());
                 }
                 // Only push non-empty statements.
                 // if !matches!(statement.kind, EmptyStatement) {
@@ -847,12 +867,11 @@ pub fn tree(path: &Path) -> Result<AST, Vec<Error>> {
     // Files we want to parse but haven't yet.
     let mut to_visit = Vec::new();
     let root = path.parent().unwrap();
-    to_visit.push(PathBuf::from(path.file_name().unwrap()));
+    to_visit.push(PathBuf::from(path));
 
     let mut modules = Vec::new();
     let mut errors = Vec::new();
     while let Some(file) = to_visit.pop() {
-        let file = root.join(file);
         if visited.contains(&file) {
             continue;
         }
@@ -867,7 +886,7 @@ pub fn tree(path: &Path) -> Result<AST, Vec<Error>> {
         match file_to_tokens(&file) {
             Ok(tokens) => {
                 // Parse the module.
-                let (mut next, result) = module(&file, &tokens);
+                let (mut next, result) = module(&file, &root, &tokens);
                 match result {
                     Ok(module) => modules.push((file.clone(), module)),
                     Err(mut errs) => errors.append(&mut errs),
@@ -910,7 +929,7 @@ mod test {
                 let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
                 let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
                 let path = ::std::path::PathBuf::from(stringify!($name));
-                let result = $f($crate::Context::new(&tokens, &spans, &path));
+                let result = $f($crate::Context::new(&tokens, &spans, &path, &path));
                 assert!(
                     result.is_ok(),
                     "\nSyntax tree test didn't parse for:\n{}\nErrs: {:?}",
@@ -943,7 +962,7 @@ mod test {
                 let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
                 let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
                 let path = ::std::path::PathBuf::from(stringify!($name));
-                let result = $f($crate::Context::new(&tokens, &spans, &path));
+                let result = $f($crate::Context::new(&tokens, &spans, &path, &path));
                 assert!(
                     result.is_err(),
                     "\nSyntax tree test parsed - when it should have failed - for:\n{}\n",

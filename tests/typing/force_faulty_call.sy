@@ -7,4 +7,4 @@ start :: fn {
     a <=> 1
 }
 
-// error: #TypeMismatch(Type::Int, _)
+// error: $Mismatch { got: Type::Int, .. }

@@ -1,0 +1,5 @@
+use subdir/_numbers as nums
+
+start :: fn {
+    nums.one <=> 1
+}

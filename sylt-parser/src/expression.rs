@@ -67,6 +67,7 @@ pub enum ExpressionKind {
 
     /// Inline If-statements
     IfShort {
+        lhs: Box<Expression>,
         condition: Box<Expression>,
         fail: Box<Expression>,
     },
@@ -238,7 +239,7 @@ fn precedence(token: &T) -> Prec {
     use Prec;
 
     match token {
-        T::LeftBracket => Prec::Index,
+        T::LeftBracket | T::Dot | T::LeftParen => Prec::Index,
 
         T::Star | T::Slash => Prec::Factor,
 
@@ -287,6 +288,8 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use ExpressionKind::{Get, TypeConstant};
 
     match ctx.token() {
+        T::Fn => function(ctx),
+
         T::LeftParen => grouping_or_tuple(ctx),
         T::LeftBracket => list(ctx),
         T::LeftBrace => set_or_dict(ctx),
@@ -304,7 +307,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         }
 
         T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
-        T::Minus | T::Bang => unary(ctx),
+        T::Minus | T::Not | T::Bang => unary(ctx),
 
         T::Identifier(_) => {
             let span = ctx.span();
@@ -344,7 +347,7 @@ fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
     let kind = match op {
         T::Minus => Neg(expr),
-        T::Bang => Not(expr),
+        T::Not | T::Bang => Not(expr),
 
         _ => {
             raise_syntax_error!(ctx, "Invalid unary operator");
@@ -372,6 +375,7 @@ fn if_short<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expressio
     );
     let (ctx, rhs) = parse_precedence(ctx, Prec::No)?;
 
+    let lhs = Box::new(lhs);
     let condition = Box::new(condition.clone());
     let fail = Box::new(rhs);
     Ok((
@@ -379,6 +383,7 @@ fn if_short<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expressio
         Expression {
             span,
             kind: IfShort {
+                lhs,
                 condition,
                 fail,
             },
@@ -791,10 +796,7 @@ fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 /// expression that follows precedence rules.
 
 pub fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-    match ctx.token() {
-        T::Fn => function(ctx),
-        _ => parse_precedence(ctx, Prec::No),
-    }
+    parse_precedence(ctx, Prec::No)
 }
 
 // NOTE(ed): It's really hard to write good tests, Rust refuses to deref the boxes
