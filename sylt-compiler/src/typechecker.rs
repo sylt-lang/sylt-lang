@@ -549,7 +549,7 @@ impl<'c> TypeChecker<'c> {
                 self.bin_op(span, a, b, op::cmp, "Comparison")?
             }
 
-            EK::Is(a, b) => self.bin_op(span, a, b, |a, b| Type::Ty, "Is")?,
+            EK::Is(a, b) => self.bin_op(span, a, b, |a, b| Type::Bool, "Is")?,
             EK::In(a, b) => {
                 let a = self.expression(a)?;
                 let b = self.expression(b)?;
