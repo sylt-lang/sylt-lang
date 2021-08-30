@@ -70,56 +70,12 @@ fn write_blob_type_fields<W: Write>(
 
 fn write_runtime_type<W: Write>(dest: &mut W, ty: &RuntimeType) -> fmt::Result {
     match ty {
-        RuntimeType::Ty => panic!(),
-        RuntimeType::Field(s) => write!(dest, "{}", s), //TODO(gu): ?
         RuntimeType::Void => write!(dest, "nil"),
-        RuntimeType::Unknown => panic!(),
         RuntimeType::Int => write!(dest, "int"),
         RuntimeType::Float => write!(dest, "float"),
         RuntimeType::Bool => write!(dest, "bool"),
         RuntimeType::String => write!(dest, "str"),
-        RuntimeType::Tuple(types) => {
-            write!(dest, "(")?;
-            if types.is_empty() {
-                write!(dest, ",")?;
-            } else {
-                write_runtime_types(dest, &types.iter().collect::<Vec<_>>())?;
-            }
-            write!(dest, ")")
-        }
-        RuntimeType::Union(ty1) => write_runtime_types(dest, &ty1.iter().collect::<Vec<_>>()),
-        RuntimeType::List(ty) => {
-            write!(dest, "[")?;
-            write_runtime_type(dest, ty)?;
-            write!(dest, "]")
-        }
-        RuntimeType::Set(ty) => {
-            write!(dest, "{{")?;
-            write_runtime_type(dest, ty)?;
-            write!(dest, "}}")
-        }
-        RuntimeType::Dict(key, val) => {
-            write!(dest, "{{")?;
-            write_runtime_type(dest, key)?;
-            write!(dest, ": ")?;
-            write_runtime_type(dest, val)?;
-            write!(dest, "}}")
-        }
-        // fn int, bool -> bool
-        // fn -> void
-        RuntimeType::Function(params, ret) => {
-            write!(dest, "fn")?;
-            if !params.is_empty() {
-                write!(dest, " ")?;
-                write_runtime_types(dest, &params.iter().collect::<Vec<_>>())?;
-            }
-            write!(dest, " -> ")?;
-            write_runtime_type(dest, ret)
-        }
-        RuntimeType::Blob(_) => todo!(),
-        RuntimeType::Instance(_) => todo!(),
-        RuntimeType::ExternFunction(_) => todo!(),
-        RuntimeType::Invalid => panic!(),
+        t => unreachable!("{:?} should not be present in the syntax tree", t),
     }
 }
 
