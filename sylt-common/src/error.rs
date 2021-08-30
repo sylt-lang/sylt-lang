@@ -400,7 +400,7 @@ impl fmt::Display for TypeError {
                 write!(f, "A tuple of length {} has no element {}", length, got)
             }
             TypeError::UnresolvedName(name) => {
-                write!(f, "Cannot resolve '{}'", name)
+                write!(f, "Cannot resolve name '{}'", name)
             }
         }
     }

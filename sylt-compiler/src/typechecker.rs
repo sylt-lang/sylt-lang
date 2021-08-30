@@ -313,8 +313,7 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         span,
-                        TypeError::UnresolvedName(ident.name.clone()),
-                        "This error should not occur"
+                        TypeError::UnresolvedName(ident.name.clone())
                     );
                 }
             }
