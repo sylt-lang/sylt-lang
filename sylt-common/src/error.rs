@@ -379,7 +379,7 @@ impl fmt::Display for TypeError {
             }
 
             TypeError::Violating(ty) => {
-                write!(f, "Got '{:?}', which doesn't hold", ty)
+                write!(f, "Got '{:?}', which cannot be", ty)
             }
 
             TypeError::ExcessiveForce { got, expected } => {
