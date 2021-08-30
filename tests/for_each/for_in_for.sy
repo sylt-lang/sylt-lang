@@ -2,7 +2,7 @@ start :: fn {
     values := [1,2,3,4]
     values -> for_each' fn a:int {
         values -> for_each' fn b:int {
-            print (a, b)
+            print' (a, b)
         }
     }
 }
