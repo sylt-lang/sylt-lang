@@ -352,7 +352,10 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
                 write_indents(dest, indent + 1)?;
                 write!(dest, "{}: ", field)?;
                 write_type(dest, indent, ty)?;
+                write!(dest, ",\n")?;
             }
+            write_indents(dest, indent)?;
+            write!(dest, "}}")?;
         }
         StatementKind::Block { statements } => {
             write!(dest, "{{\n")?;
