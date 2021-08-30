@@ -62,7 +62,7 @@ fn write_blob_instance_fields<W: Write>(
         write!(dest, "{}: ", field)?;
         write_expression(dest, indent, expr)?;
         write!(dest, "\n")?;
-}
+    }
     Ok(())
 }
 
@@ -378,16 +378,25 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             if matches!(ty.kind, TypeKind::Implied) {
                 write!(
                     dest,
-                    " {} ",
+                    "{}",
                     match kind {
-                        VarKind::Const => "::",
-                        VarKind::Mutable => ":=",
-                        VarKind::ForceConst => unreachable!(),
-                        VarKind::ForceMutable => unreachable!(),
+                        VarKind::Const => " :: ",
+                        VarKind::Mutable => " := ",
+                        VarKind::ForceConst => unreachable!("can't force an implied type"),
+                        VarKind::ForceMutable => unreachable!("can't force an implied type"),
                     }
                 )?;
             } else {
-                todo!()
+                write!(dest, ": ")?;
+                match kind {
+                    VarKind::ForceConst | VarKind::ForceMutable => write!(dest, "!")?,
+                    VarKind::Const | VarKind::Mutable => (),
+                }
+                write_type(dest, indent, ty)?;
+                match kind {
+                    VarKind::Const | VarKind::ForceConst => write!(dest, " : ")?,
+                    VarKind::Mutable | VarKind::ForceMutable => write!(dest, " = ")?,
+                }
             }
             write_expression(dest, indent, value)?;
         }
