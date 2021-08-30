@@ -152,7 +152,7 @@ impl<'c> TypeChecker<'c> {
                                 self,
                                 span,
                                 TypeError::Mismatch { got: arg.clone(), expected: known.clone() },
-                                "because {}. The type was infered from previous arguments.",
+                                "because {}. The type was inferred from previous arguments.",
                                 reason
                             )
                         }
@@ -178,8 +178,17 @@ impl<'c> TypeChecker<'c> {
                 Type::Function(args, ret)
             }
             (a, Type::Union(b)) => {
-                // This is technically wrong, since we might do guesses here that aren't valid.
-                // But it works for our uses.
+                // This is technically wrong, it fails when guesses don't hold, like
+                // `fn #X | #Y, #Y, #X -> void`, if we give in `int, int, float`.
+                // We would assume:
+                //   #X = int,
+                //   #Y = int,
+                // and fail on the third argument. Even though:
+                //   #X = float,
+                //   #Y = int,
+                // would work.
+                //
+                // This complexity requires a lot more code and was therefore skipped.
                 for t in b {
                     let mut new_generics = generics.clone();
                     self.solve_generics_recursively(span, &mut new_generics, a, t)?;
@@ -751,7 +760,7 @@ impl<'c> TypeChecker<'c> {
                             self,
                             span,
                             TypeError::Mismatch { got: Type::Void, expected: ty },
-                            "Only nullable fields can be ommitted, {}.{} is not nullable",
+                            "Only nullable fields can be omitted, {}.{} is not nullable",
                             blob.name,
                             name
                         ));
