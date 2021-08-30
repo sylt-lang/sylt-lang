@@ -143,7 +143,7 @@ pub enum Token {
     #[token(">>>>>>>")]
     GitConflictEnd,
 
-    #[regex(r"//[^\n]*", |lex| lex.slice().to_string())]
+    #[regex(r"//[^\n]*", |lex| lex.slice()[2..].trim_start().to_string())]
     Comment(String),
 
     #[regex(r"[ \t\r]", logos::skip)]
