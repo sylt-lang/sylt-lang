@@ -127,12 +127,9 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: &Type) -> fmt::Result {
     }
 }
 
-fn write_runtime_types<W: Write>(dest: &mut W, types: &[&RuntimeType]) -> fmt::Result {
-    todo!()
-}
-
 fn write_types<W: Write>(dest: &mut W, indent: u32, types: &[&Type]) -> fmt::Result {
-    todo!()
+    write_comma_separated!(dest, indent, write_type, types);
+    Ok(())
 }
 
 fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: &Assignable) -> fmt::Result {
