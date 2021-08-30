@@ -476,9 +476,6 @@ fn write_module(module: &Module) -> fmt::Result {
 
 pub fn format(args: &Args) -> Result<(), Vec<Error>> {
     let tree = sylt_parser::tree(&PathBuf::from(args.args.first().expect("No file to run")))?;
-    for (path, module) in &tree.modules {
-        eprintln!("-- {}", path.display());
-        write_module(module).unwrap();
-    }
+    write_module(&tree.modules[0].1).unwrap();
     Ok(())
 }
