@@ -351,9 +351,9 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             write!(dest, "{{\n")?;
 
             for s in statements {
-                    write_indents(dest, indent + 1)?;
-                    write_statement(dest, indent + 1, s)?;
-                    write!(dest, "\n")?;
+                write_indents(dest, indent + 1)?;
+                write_statement(dest, indent + 1, s)?;
+                write!(dest, "\n")?;
             }
 
             write_indents(dest, indent)?;
@@ -394,9 +394,9 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             write_expression(dest, indent, condition)?;
             write!(dest, " ")?;
             write_statement(dest, indent, pass)?;
-                write!(dest, " else ")?;
-                write_statement(dest, indent, fail)?;
-            }
+            write!(dest, " else ")?;
+            write_statement(dest, indent, fail)?;
+        }
         StatementKind::IsCheck { lhs, rhs } => {
             write_type(dest, indent, lhs)?;
             write!(dest, " is ")?;
@@ -416,7 +416,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             write!(dest, "ret ")?;
             write_expression(dest, indent, value)?;
         }
-        StatementKind::StatementExpression { value } => todo!(),
+        StatementKind::StatementExpression { value } => write_expression(dest, indent, value)?,
         StatementKind::Unreachable => {
             write!(dest, "<!>")?;
         }
