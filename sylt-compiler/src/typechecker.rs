@@ -266,7 +266,7 @@ impl<'c> TypeChecker<'c> {
                         self,
                         span,
                         TypeError::Mutability, // TODO(ed): Wrong error
-                        "Generics are only allowed if they can be deduced from the function signature, '#{}' is not mentioned in the parameters",
+                        "Generics are only allowed if they can be deduced from the function signature, but '#{}' is not mentioned in the parameters",
                         ret
                     )
                 }

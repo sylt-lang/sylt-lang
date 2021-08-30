@@ -169,7 +169,7 @@ pub enum TypeKind {
     Set(Box<Type>),
     /// `(key, value)`.
     Dict(Box<Type>, Box<Type>),
-    /// A genric type
+    /// A generic type
     Generic(Identifier),
 }
 
