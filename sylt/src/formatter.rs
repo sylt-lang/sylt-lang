@@ -409,12 +409,23 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             pass,
             fail,
         } => {
+            if matches!(fail.kind, StatementKind::EmptyStatement) {
+                for comment in &fail.comments {
+                    write!(dest, "// {}\n", comment)?;
+                    write_indents(dest, indent)?;
+                }
+            }
+
             write!(dest, "if ")?;
             write_expression(dest, indent, condition)?;
             write!(dest, " ")?;
             write_statement(dest, indent, pass)?;
-            write!(dest, " else ")?;
-            write_statement(dest, indent, fail)?;
+            if !matches!(fail.kind, StatementKind::EmptyStatement) {
+                write!(dest, " else ")?;
+                write_statement(dest, indent, fail)?;
+            } else {
+
+            }
         }
         StatementKind::IsCheck { lhs, rhs } => {
             write_type(dest, indent, lhs)?;
