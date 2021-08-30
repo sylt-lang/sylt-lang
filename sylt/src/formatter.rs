@@ -234,9 +234,20 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
             condition,
             pass,
             fail,
-        } => todo!(),
-        ExpressionKind::Duplicate(_) => todo!(),
-        ExpressionKind::IfShort { condition, fail } => todo!(),
+        } => {
+            write_expression(dest, indent, pass)?;
+            write!(dest, " if ")?;
+            write_expression(dest, indent, condition)?;
+            write!(dest, " else ")?;
+            write_expression(dest, indent, fail)?;
+        }
+        ExpressionKind::Duplicate(expr) => write_expression(dest, indent, expr)?,
+        ExpressionKind::IfShort { condition, fail } => {
+            write!(dest, "if ")?;
+            write_expression(dest, indent, condition)?;
+            write!(dest, " else ")?;
+            write_expression(dest, indent, fail)?;
+        }
         ExpressionKind::Function {
             name: _,
             params,
