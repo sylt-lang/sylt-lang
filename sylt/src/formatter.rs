@@ -360,7 +360,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
         StatementKind::Block { statements } => {
             write!(dest, "{{\n")?;
 
-            for s in statements {
+            for s in &merge_empty_statements(statements.clone()) {
                 write_indents(dest, indent + 1)?;
                 write_statement(dest, indent + 1, s)?;
                 write!(dest, "\n")?;
@@ -461,8 +461,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
 
 fn write_module(module: &Module) -> fmt::Result {
     let mut formatted = String::new();
-    module
-        .statements
+    merge_empty_statements(module.statements.clone())
         .iter()
         // Side effects incoming!
         .map(|s| {
@@ -472,6 +471,28 @@ fn write_module(module: &Module) -> fmt::Result {
         .collect::<Result<Vec<_>, _>>()?;
     print!("{}", formatted);
     Ok(())
+}
+
+/// Replace consecutive empty statements with one empty statement with all comments of the previous statements.
+fn merge_empty_statements(mut statements: Vec<Statement>) -> Vec<Statement> {
+    // Reverse since
+    // - we always want to remove and look at the first statement and
+    // - pop() is faster than remove(0).
+    statements.reverse();
+
+    let mut ret = Vec::new();
+    while let Some(mut statement) = statements.pop() {
+        if !matches!(statement.kind, StatementKind::EmptyStatement) {
+            ret.push(statement);
+            continue;
+        }
+        // Begin eating empty statements
+        while matches!(statements.last().map(|s| &s.kind), Some(StatementKind::EmptyStatement)) {
+            statement.comments.append(&mut statements.pop().unwrap().comments);
+        }
+        ret.push(statement);
+    }
+    ret
 }
 
 pub fn format(args: &Args) -> Result<(), Vec<Error>> {
