@@ -1429,10 +1429,9 @@ fn all_paths_return(statement: &Statement) -> bool {
     }
 }
 
-pub(crate) fn first_ok_or_errs<I, T, E>(iter: I) -> Result<T, Vec<E>>
-where I: IntoIterator<Item = Result<T, E>>
+pub(crate) fn first_ok_or_errs<I, T, E>(mut iter: I) -> Result<T, Vec<E>>
+where I: Iterator<Item = Result<T, E>>
 {
-    let mut iter = iter.into_iter();
     let mut errs = Vec::new();
     loop {
         match iter.next() {
