@@ -576,7 +576,7 @@ pub fn sylt_doc(
         "{{ \"name\": \"{}\", \"comment\": \"{}\", \"signature\": {}}}",
         doc.name.to_string(),
         doc.comment.value().replace("\n", "\\n"),
-        doc.signature.value().split(" \n\t").collect::<Vec<_>>().join(" "),
+        doc.signature.value().split_whitespace().collect::<Vec<_>>().join(" "),
     );
     let mut doc_file = DOC.lock().unwrap();
     doc_file.docs.push(doc);
