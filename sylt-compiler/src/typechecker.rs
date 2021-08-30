@@ -882,7 +882,7 @@ impl<'c> TypeChecker<'c> {
                         return err_type_error!(
                             self,
                             span,
-                            TypeError::ExessiveForce {
+                            TypeError::ExcessiveForce {
                                 got: ty,
                                 expected: value,
                             }
@@ -1018,7 +1018,7 @@ impl<'c> TypeChecker<'c> {
                                 return err_type_error!(
                                     self,
                                     span,
-                                    TypeError::ExessiveForce {
+                                    TypeError::ExcessiveForce {
                                         got: ty,
                                         expected: value,
                                     }

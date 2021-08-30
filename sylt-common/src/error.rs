@@ -118,7 +118,7 @@ pub enum TypeError {
 
     Mutability,
 
-    ExessiveForce {
+    ExcessiveForce {
         got: Type,
         expected: Type,
     },
@@ -382,7 +382,7 @@ impl fmt::Display for TypeError {
                 write!(f, "Got '{:?}', which doesn't hold", ty)
             }
 
-            TypeError::ExessiveForce { got, expected } => {
+            TypeError::ExcessiveForce { got, expected } => {
                 write!(f, "This type force is unnessecary, '{:?}' is a '{:?}'", got, expected)
             }
 
