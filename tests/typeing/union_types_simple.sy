@@ -31,6 +31,6 @@ start :: fn {
     f(true) <=> g(true)
 
     1 <=> h' false
-    q :: h' true
+    q : !fn -> int : h' true
     1 <=> q()
 }
