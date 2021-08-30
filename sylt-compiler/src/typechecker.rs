@@ -959,7 +959,7 @@ impl<'c> TypeChecker<'c> {
                         Ok(None) => {}
                         Err(mut errs) => {
                             errors.append(&mut errs);
-                        }
+                       }
                     }
                 }
 
@@ -1073,6 +1073,21 @@ impl<'c> TypeChecker<'c> {
                 }
             }
         }
+
+        self.assignable(&Assignable {
+            span: Span::zero(),
+            kind: AssignableKind::Call(
+                Box::new(Assignable {
+                    span: Span::zero(),
+                    kind: AssignableKind::Read(Identifier {
+                        span: Span::zero(),
+                        name: "start".to_string()
+                    }),
+                }),
+                Vec::new(),
+            )},
+            0
+        )?;
 
         if !errors.is_empty() {
             Err(errors)
