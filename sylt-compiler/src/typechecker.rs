@@ -1,14 +1,10 @@
-#![allow(unused_imports, unused)]
-use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
-use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::path::PathBuf;
 use sylt_common::error::{Error, TypeError};
-use sylt_common::prog::Prog;
-use sylt_common::{Blob, Block, Op, RustFunction, Type, Value};
+use sylt_common::Type;
 use sylt_parser::{
-    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op as ParserOp,
-    Span, Statement, StatementKind, Type as ParserType, TypeKind, VarKind, AST,
+    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp,
+    Span, Statement, StatementKind, VarKind, AST,
 };
 
 use crate::{self as compiler, first_ok_or_errs};
