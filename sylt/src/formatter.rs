@@ -1,7 +1,7 @@
 use std::fmt::{self, Write};
 use std::path::PathBuf;
 use sylt_common::{Error, Type as RuntimeType};
-use sylt_parser::statement::UseIdentifier;
+use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op, Statement,
     StatementKind, Type, TypeKind, VarKind,
@@ -446,10 +446,10 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
         StatementKind::Unreachable => {
             write!(dest, "<!>")?;
         }
-        StatementKind::Use { name, alias, file: _ } => {
+        StatementKind::Use { path, name, file: _ } => {
             write!(dest, "use ")?;
-            write_identifier(dest, name)?;
-            if let UseIdentifier::Alias(alias) = alias {
+            write_identifier(dest, path)?;
+            if let NameIdentifier::Alias(alias) = name {
                 write!(dest, " as ")?;
                 write_identifier(dest, alias)?;
             }

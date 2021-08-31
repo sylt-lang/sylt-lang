@@ -2,7 +2,7 @@ use super::*;
 
 /// The different ways a namespace is introduced by a use statement.
 #[derive(Debug, Clone)]
-pub enum UseIdentifier {
+pub enum NameIdentifier {
     /// When the identifier is implicit from the path. For example, `use a/b` introduces `b`.
     Implicit(Identifier),
     /// When the identifier is an alias. For example, `use a/b as c` introduces `c`.
@@ -28,8 +28,8 @@ pub enum StatementKind {
     /// `use <file> as <alias>`.
     /// `use <folder>/ as <alias>`.
     Use {
-        name: Identifier,
-        alias: UseIdentifier,
+        path: Identifier,
+        name: NameIdentifier,
         file: PathBuf,
     },
 
@@ -244,7 +244,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let (ctx, alias) = match &ctx.tokens_forward::<2>() {
                 [T::As, T::Identifier(alias), ..] => (
                     ctx.skip(2),
-                    UseIdentifier::Alias(Identifier {
+                    NameIdentifier::Alias(Identifier {
                         span: ctx.skip(1).span(),
                         name: alias.clone(),
                     })
@@ -268,14 +268,14 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         .to_str()
                         .unwrap()
                         .to_string();
-                    (ctx, UseIdentifier::Implicit(Identifier { span, name }))
+                    (ctx, NameIdentifier::Implicit(Identifier { span, name }))
                 },
             };
             let name = Identifier {
                 span: name_span,
                 name,
             };
-            (ctx, Use { name, alias, file })
+            (ctx, Use { path: name, name: alias, file })
         },
 
         // `: A is : B`
