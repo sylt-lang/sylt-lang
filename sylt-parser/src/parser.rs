@@ -186,7 +186,7 @@ type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>, Vec<Error>)>;
 #[derive(Debug, Copy, Clone)]
 pub struct Context<'a> {
     pub skip_newlines: bool,
-    /// The index of the last token of the last statement parsed.
+    /// The index of the end token of the last statement parsed.
     last_statement: usize,
     /// All tokens to be parsed.
     ///
@@ -237,15 +237,12 @@ impl<'a> Context<'a> {
     fn skip(&self, n: usize) -> Self {
         let mut new = *self;
         let mut skipped = 0;
-        // Skip n tokens.
+        // Skip n non comment tokens.
         while skipped < n {
-            if matches!(new.token(), T::Comment(_)) {
-                // Skip comments without counting as a token.
-                new.curr += 1;
-            } else {
-                new.curr += 1;
+            if !matches!(new.token(), T::Comment(_)) {
                 skipped += 1;
             }
+            new.curr += 1;
         }
         // Skip trailing comments and (maybe) newlines.
         loop {

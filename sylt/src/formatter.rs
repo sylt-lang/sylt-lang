@@ -425,8 +425,6 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             if !matches!(fail.kind, StatementKind::EmptyStatement) {
                 write!(dest, " else ")?;
                 write_statement(dest, indent, fail)?;
-            } else {
-
             }
         }
         StatementKind::IsCheck { lhs, rhs } => {
