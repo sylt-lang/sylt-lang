@@ -71,7 +71,7 @@ pub struct Args {
     #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
     pub verbosity: u32,
 
-    #[options(long = "format", help = "Run an auto formatter on the supplied file")]
+    #[options(long = "format", help = "Run an auto formatter on the supplied file and print the result to stdout.")]
     pub format: bool,
 
     #[options(help = "Print this help")]
