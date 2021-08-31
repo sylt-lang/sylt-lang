@@ -385,14 +385,14 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
                 )?;
             } else {
                 write!(dest, ": ")?;
-                match kind {
-                    VarKind::ForceConst | VarKind::ForceMutable => write!(dest, "!")?,
-                    VarKind::Const | VarKind::Mutable => (),
+                if kind.force() {
+                    write!(dest, "!")?;
                 }
                 write_type(dest, indent, ty)?;
-                match kind {
-                    VarKind::Const | VarKind::ForceConst => write!(dest, " : ")?,
-                    VarKind::Mutable | VarKind::ForceMutable => write!(dest, " = ")?,
+                if kind.immutable() {
+                    write!(dest, " : ")?;
+                } else {
+                    write!(dest, " = ")?;
                 }
             }
             write_expression(dest, indent, value)?;
