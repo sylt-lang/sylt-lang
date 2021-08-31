@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
+use std::fmt::{Debug, Display};
 
 use crate::{Blob, Value};
 
@@ -8,7 +9,7 @@ pub trait Numbered {
     fn to_number(&self) -> usize;
 }
 
-#[derive(Debug, Clone, sylt_macro::Numbered)]
+#[derive(Clone, sylt_macro::Numbered)]
 #[derive(Deserialize, Serialize)]
 pub enum Type {
     Ty,
@@ -31,6 +32,64 @@ pub enum Type {
     ExternFunction(usize),
 
     Invalid,
+}
+
+impl Debug for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self, f)
+    }
+}
+
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Ty => write!(f, "Type"),
+            Type::Generic(name) => write!(f, "#{}", name),
+            Type::Field(name) => write!(f, ".{}", name),
+            Type::Void => write!(f, "void"),
+            Type::Unknown => write!(f, "?"),
+            Type::Int => write!(f, "int"),
+            Type::Float => write!(f, "float"),
+            Type::Bool => write!(f, "bool"),
+            Type::String => write!(f, "str"),
+            Type::Tuple(names) => {
+                write!(f, "(")?;
+                for (i, n) in names.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", n)?;
+                }
+                write!(f, ")")
+            }
+            Type::Union(names) => {
+                for (i, n) in names.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, " | ")?;
+                    }
+                    write!(f, "{}", n)?;
+                }
+                Ok(())
+            }
+            Type::List(name) => write!(f, "[{}]", name),
+            Type::Set(name) => write!(f, "{{{}}}", name),
+            Type::Dict(key, value) => write!(f, "{{{}: {}}}", key, value),
+            Type::Function(args, ret) => {
+                write!(f, "fn ")?;
+                for (i, n) in args.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", n)?;
+                }
+                write!(f, " -> {}", ret)
+            }
+            Type::Blob(id) => write!(f, "Blob({})", id),
+            Type::Instance(id) => write!(f, "Instance({})", id),
+            Type::ExternFunction(id) => write!(f, "ExternFunction({})", id),
+            Type::Invalid => write!(f, "Invalid"),
+        }
+    }
 }
 
 impl Hash for Type {
