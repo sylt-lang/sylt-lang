@@ -466,6 +466,8 @@ fn write_module(module: &Module) -> fmt::Result {
 }
 
 /// Replace consecutive empty statements with one empty statement with all comments of the previous statements.
+//TODO(gu): Rewrite the formatter to use moves instead of borrows. Then we wouldn't need to clone when passing
+//          into this function.
 fn merge_empty_statements(mut statements: Vec<Statement>) -> Vec<Statement> {
     // Reverse since
     // - we always want to remove and look at the first statement and
