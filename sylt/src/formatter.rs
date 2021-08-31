@@ -341,8 +341,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             write_expression(dest, indent, value)?;
         }
         StatementKind::Blob { name, fields } => {
-            write!(dest, "{}", name)?;
-            write!(dest, " :: blob {{\n")?;
+            write!(dest, "{} :: blob {{\n", name)?;
             for (field, ty) in fields {
                 write_indents(dest, indent + 1)?;
                 write!(dest, "{}: ", field)?;
