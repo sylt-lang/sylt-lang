@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn comment() {
-        assert_eq!(lex("// a\n1").len(), 2);
+        assert_eq!(lex("// a\n1").len(), 3);
         assert_eq!(lex("1// a\n2").len(), 3);
         assert_eq!(lex("1\n// a\n2").len(), 4); // newline is also a token
     }
