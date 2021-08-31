@@ -189,6 +189,9 @@ pub struct Context<'a> {
     /// The index of the last token of the last statement parsed.
     last_statement: usize,
     /// All tokens to be parsed.
+    ///
+    /// If you want to look ahead, you should probably use
+    /// [Context::tokens_forward] since it filters comments.
     pub tokens: &'a [Token],
     /// The corresponding span for each token. Matches 1:1 with the tokens.
     pub spans: &'a [Span],

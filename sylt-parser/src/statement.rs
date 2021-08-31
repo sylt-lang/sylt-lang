@@ -241,7 +241,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     format!("{}.sy", name)
                 })
             };
-            let (ctx, alias) = match &ctx.tokens[ctx.curr..] {
+            let (ctx, alias) = match &ctx.tokens_forward::<2>() {
                 [T::As, T::Identifier(alias), ..] => (
                     ctx.skip(2),
                     UseIdentifier::Alias(Identifier {
