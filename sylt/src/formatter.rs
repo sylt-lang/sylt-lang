@@ -287,16 +287,20 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
         }
         ExpressionKind::Dict(exprs) => {
             write!(dest, "{{")?;
-            let mut first = true;
-            let mut exprs = exprs.iter();
-            while let Some(expr) = exprs.next() {
-                if !first {
-                    write!(dest, ", ")?;
+            if exprs.is_empty() {
+                write!(dest, ":")?;
+            } else {
+                let mut first = true;
+                let mut exprs = exprs.iter();
+                while let Some(expr) = exprs.next() {
+                    if !first {
+                        write!(dest, ", ")?;
+                    }
+                    first = false;
+                    write_expression(dest, indent, expr)?;
+                    write!(dest, ": ")?;
+                    write_expression(dest, indent, exprs.next().unwrap())?;
                 }
-                first = false;
-                write_expression(dest, indent, expr)?;
-                write!(dest, ": ")?;
-                write_expression(dest, indent, exprs.next().unwrap())?;
             }
             write!(dest, "}}")?;
         }
