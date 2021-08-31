@@ -1,6 +1,0 @@
-start :: fn {
-    if true {
-        print 123
-    }
-    // this
-}

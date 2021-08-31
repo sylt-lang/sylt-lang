@@ -5,6 +5,7 @@ use std::rc::Rc;
 use sylt_common::error::Error;
 use sylt_common::prog::Prog;
 use sylt_common::{Blob, Block, Op, RustFunction, Type, Value};
+use sylt_parser::statement::UseIdentifier;
 use sylt_parser::{
     Context as ParserContext,
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op as ParserOp,
@@ -1281,7 +1282,11 @@ impl Compiler {
             for statement in module.statements.iter() {
                 use StatementKind::*;
                 match &statement.kind {
-                    Use { ident, file } => {
+                    Use { name: _, alias, file } => {
+                        let ident = match alias {
+                            UseIdentifier::Implicit(ident) => ident,
+                            UseIdentifier::Alias(ident) => ident,
+                        };
                         match namespace.entry(ident.name.clone()) {
                             Entry::Vacant(vac) => {
                                 let other = path_to_namespace_id[file];

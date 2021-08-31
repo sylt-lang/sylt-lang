@@ -1,5 +1,14 @@
 use super::*;
 
+/// The different ways a namespace is introduced by a use statement.
+#[derive(Debug, Clone)]
+pub enum UseIdentifier {
+    /// When the identifier is implicit from the path. For example, `use a/b` introduces `b`.
+    Implicit(Identifier),
+    /// When the identifier is an alias. For example, `use a/b as c` introduces `c`.
+    Alias(Identifier),
+}
+
 /// The different kinds of [Statement]s.
 ///
 /// There are both shorter statements like `a = b + 1` as well as longer
@@ -19,7 +28,8 @@ pub enum StatementKind {
     /// `use <file> as <alias>`.
     /// `use <folder>/ as <alias>`.
     Use {
-        ident: Identifier,
+        name: Identifier,
+        alias: UseIdentifier,
         file: PathBuf,
     },
 
@@ -208,10 +218,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         // `use path/to/file`
         // `use path/to/file as alias`
         [T::Use, ..] => {
-            let (ctx, path) = path(ctx.skip(1))?;
-            let bare_name = path
+            let ctx = ctx.skip(1);
+            let name_span = ctx.span();
+            let (ctx, path) = path(ctx)?;
+            let name = path
                 .trim_start_matches("/")
-                .trim_end_matches("/");
+                .trim_end_matches("/")
+                .to_string();
             let file = {
                 let parent = if path.starts_with("/") {
                     ctx.root
@@ -223,18 +236,18 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 parent.join(if path == "/" {
                     format!("exports.sy")
                 } else if path.ends_with("/") {
-                    format!("{}/exports.sy", bare_name)
+                    format!("{}/exports.sy", name)
                 } else {
-                    format!("{}.sy", bare_name)
+                    format!("{}.sy", name)
                 })
             };
-            let (ctx, ident) = match &ctx.tokens[ctx.curr..] {
+            let (ctx, alias) = match &ctx.tokens[ctx.curr..] {
                 [T::As, T::Identifier(alias), ..] => (
                     ctx.skip(2),
-                    Identifier {
+                    UseIdentifier::Alias(Identifier {
                         span: ctx.skip(1).span(),
                         name: alias.clone(),
-                    }
+                    })
                 ),
                 [T::As, ..] => raise_syntax_error!(
                     ctx.skip(1),
@@ -249,16 +262,20 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     } else {
                         ctx.prev().span()
                     };
-                    let name = PathBuf::from(bare_name)
+                    let name = PathBuf::from(&name)
                         .file_stem()
                         .unwrap()
                         .to_str()
                         .unwrap()
                         .to_string();
-                    (ctx, Identifier { span, name })
+                    (ctx, UseIdentifier::Implicit(Identifier { span, name }))
                 },
             };
-            (ctx, Use { ident, file })
+            let name = Identifier {
+                span: name_span,
+                name,
+            };
+            (ctx, Use { name, alias, file })
         },
 
         // `: A is : B`

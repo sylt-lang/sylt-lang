@@ -1,6 +1,7 @@
 use std::fmt::{self, Write};
 use std::path::PathBuf;
 use sylt_common::{Error, Type as RuntimeType};
+use sylt_parser::statement::UseIdentifier;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op, Statement,
     StatementKind, Type, TypeKind, VarKind,
@@ -122,6 +123,7 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: &Type) -> fmt::Result {
             write_type(dest, indent, val)?;
             write!(dest, "}}")
         }
+        TypeKind::Generic(ident) => write_identifier(dest, ident),
     }
 }
 
@@ -242,7 +244,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
             write_expression(dest, indent, fail)?;
         }
         ExpressionKind::Duplicate(expr) => write_expression(dest, indent, expr)?,
-        ExpressionKind::IfShort { condition, fail } => {
+        ExpressionKind::IfShort { condition, fail, lhs: _ } => {
             write!(dest, "if ")?;
             write_expression(dest, indent, condition)?;
             write!(dest, " else ")?;
@@ -438,10 +440,6 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             write!(dest, " ")?;
             write_statement(dest, indent, body)?;
         }
-        StatementKind::Print { value } => {
-            write!(dest, "print ")?;
-            write_expression(dest, indent, value)?;
-        }
         StatementKind::Ret { value } => {
             write!(dest, "ret ")?;
             write_expression(dest, indent, value)?;
@@ -450,9 +448,13 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
         StatementKind::Unreachable => {
             write!(dest, "<!>")?;
         }
-        StatementKind::Use { file } => {
+        StatementKind::Use { name, alias, file: _ } => {
             write!(dest, "use ")?;
-            write_identifier(dest, file)?;
+            write_identifier(dest, name)?;
+            if let UseIdentifier::Alias(alias) = alias {
+                write!(dest, " as ")?;
+                write_identifier(dest, alias)?;
+            }
         }
     }
 
