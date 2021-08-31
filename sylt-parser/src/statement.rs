@@ -201,7 +201,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
     let span = ctx.span();
     //NOTE(gu): Explicit lookahead.
-    let (ctx, kind) = match &ctx.tokens_forward::<3>() {
+    let (ctx, kind) = match &ctx.tokens_lookahead::<3>() {
         [T::Newline, ..] => (ctx, EmptyStatement),
 
         // Block: `{ <statements> }`
@@ -245,7 +245,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     format!("{}.sy", name)
                 })
             };
-            let (ctx, alias) = match &ctx.tokens_forward::<2>() {
+            let (ctx, alias) = match &ctx.tokens_lookahead::<2>() {
                 [T::As, T::Identifier(alias), ..] => (
                     ctx.skip(2),
                     NameIdentifier::Alias(Identifier {

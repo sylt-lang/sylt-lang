@@ -316,7 +316,7 @@ impl<'a> Context<'a> {
         &self.peek().0
     }
 
-    fn tokens_forward<const N: usize>(&self) -> [Token; N] {
+    fn tokens_lookahead<const N: usize>(&self) -> [Token; N] {
         const ERROR: Token = Token::Error;
         let mut res = [ERROR; N];
         let mut ctx = *self;
