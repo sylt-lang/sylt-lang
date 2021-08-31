@@ -786,10 +786,7 @@ fn module(path: &Path, root: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBu
                 if let Use { file, .. } = &statement.kind {
                     use_files.push(file.clone());
                 }
-                // Only push non-empty statements.
-                // if !matches!(statement.kind, EmptyStatement) {
-                    statements.push(statement);
-                //}
+                statements.push(statement);
                 ctx
             }
             Err((ctx, mut errs)) => {
