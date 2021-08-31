@@ -1370,6 +1370,9 @@ impl Compiler {
                     // Handled later - since we need the type information.
                     IsCheck { .. } => (),
 
+                    // Valid here, just ignore it.
+                    EmptyStatement => (),
+
                     _ => {
                         error!(self, ctx, statement.span, "Invalid outer statement");
                     }
