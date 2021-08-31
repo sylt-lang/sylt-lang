@@ -131,7 +131,8 @@ pub struct Statement {
     pub comments: Vec<String>,
 }
 
-pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, String> {
+pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
+    let span = ctx.span();
     let mut ctx = ctx;
     let mut result = String::new();
     expect!(
@@ -152,7 +153,10 @@ pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, String> {
         }
     }
 
-    Ok(( ctx, result ))
+    Ok((ctx, Identifier {
+        span,
+        name: result,
+    }))
 }
 
 pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
@@ -219,8 +223,8 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         // `use path/to/file as alias`
         [T::Use, ..] => {
             let ctx = ctx.skip(1);
-            let name_span = ctx.span();
-            let (ctx, path) = path(ctx)?;
+            let (ctx, path_ident) = path(ctx)?;
+            let path = &path_ident.name;
             let name = path
                 .trim_start_matches("/")
                 .trim_end_matches("/")
@@ -235,7 +239,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 // in the folder.
                 parent.join(if path == "/" {
                     format!("exports.sy")
-                } else if path.ends_with("/") {
+                } else if path_ident.name.ends_with("/") {
                     format!("{}/exports.sy", name)
                 } else {
                     format!("{}.sy", name)
@@ -271,11 +275,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     (ctx, NameIdentifier::Implicit(Identifier { span, name }))
                 },
             };
-            let name = Identifier {
-                span: name_span,
-                name,
-            };
-            (ctx, Use { path: name, name: alias, file })
+            (ctx, Use { path: path_ident, name: alias, file })
         },
 
         // `: A is : B`
