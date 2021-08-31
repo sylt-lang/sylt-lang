@@ -67,21 +67,10 @@ fn write_blob_instance_fields<W: Write>(
     Ok(())
 }
 
-fn write_runtime_type<W: Write>(dest: &mut W, ty: &RuntimeType) -> fmt::Result {
-    match ty {
-        RuntimeType::Void => write!(dest, "nil"),
-        RuntimeType::Int => write!(dest, "int"),
-        RuntimeType::Float => write!(dest, "float"),
-        RuntimeType::Bool => write!(dest, "bool"),
-        RuntimeType::String => write!(dest, "str"),
-        t => unreachable!("{:?} should not be present in the syntax tree", t),
-    }
-}
-
 fn write_type<W: Write>(dest: &mut W, indent: u32, ty: &Type) -> fmt::Result {
     match &ty.kind {
         TypeKind::Implied => unreachable!(),
-        TypeKind::Resolved(ty) => write_runtime_type(dest, ty),
+        TypeKind::Resolved(ty) => write!(dest, "{}", ty),
         TypeKind::UserDefined(assignable) => write_assignable(dest, indent, assignable),
         TypeKind::Union(ty, rest) => {
             write_type(dest, indent, ty)?;
