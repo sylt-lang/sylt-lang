@@ -62,7 +62,7 @@ fn write_blob_instance_fields<W: Write>(
         write_indents(dest, indent)?;
         write!(dest, "{}: ", field)?;
         write_expression(dest, indent, expr)?;
-        write!(dest, "\n")?;
+        write!(dest, ",\n")?;
     }
     Ok(())
 }
