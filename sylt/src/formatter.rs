@@ -76,7 +76,7 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: &Type) -> fmt::Result {
             write_type(dest, indent, ty)?;
             write!(dest, " | ")?;
             write_type(dest, indent, rest)
-        },
+        }
         TypeKind::Fn(params, ret) => {
             write!(dest, "fn")?;
             if !params.is_empty() {
@@ -233,7 +233,11 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
             write_expression(dest, indent, fail)?;
         }
         ExpressionKind::Duplicate(expr) => write_expression(dest, indent, expr)?,
-        ExpressionKind::IfShort { condition, fail, lhs: _ } => {
+        ExpressionKind::IfShort {
+            condition,
+            fail,
+            lhs: _,
+        } => {
             write!(dest, "if ")?;
             write_expression(dest, indent, condition)?;
             write!(dest, " else ")?;
@@ -438,7 +442,11 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
         StatementKind::Unreachable => {
             write!(dest, "<!>")?;
         }
-        StatementKind::Use { path, name, file: _ } => {
+        StatementKind::Use {
+            path,
+            name,
+            file: _,
+        } => {
             write!(dest, "use ")?;
             write_identifier(dest, path)?;
             if let NameIdentifier::Alias(alias) = name {
@@ -481,8 +489,13 @@ fn merge_empty_statements(mut statements: Vec<Statement>) -> Vec<Statement> {
             continue;
         }
         // Begin eating empty statements
-        while matches!(statements.last().map(|s| &s.kind), Some(StatementKind::EmptyStatement)) {
-            statement.comments.append(&mut statements.pop().unwrap().comments);
+        while matches!(
+            statements.last().map(|s| &s.kind),
+            Some(StatementKind::EmptyStatement)
+        ) {
+            statement
+                .comments
+                .append(&mut statements.pop().unwrap().comments);
         }
         ret.push(statement);
     }
