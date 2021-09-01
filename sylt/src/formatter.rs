@@ -134,8 +134,9 @@ fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: &Assignable
             write_expression(dest, indent, first)?;
             write!(dest, " -> ")?;
             write_assignable(dest, indent, callable)?;
-            write!(dest, " ")?;
+            write!(dest, "(")?;
             write_comma_separated!(dest, indent, write_expression, rest);
+            write!(dest, ")")?;
             Ok(())
         }
         AssignableKind::Access(accessable, ident) => {
