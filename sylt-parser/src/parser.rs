@@ -795,6 +795,15 @@ fn module(path: &Path, root: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBu
         }
     }
 
+    let trailing_comments = ctx.comments_since_last_statement();
+    if !trailing_comments.is_empty() {
+        statements.push(Statement {
+            span: ctx.span(),
+            kind: StatementKind::EmptyStatement,
+            comments: trailing_comments,
+        });
+    }
+
     if errors.is_empty() {
         (
             use_files,
