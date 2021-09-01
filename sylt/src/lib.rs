@@ -139,5 +139,5 @@ mod tests {
         };
     }
 
-    sylt_macro::find_tests!();
+    sylt_macro::find_tests!(test_file);
 }

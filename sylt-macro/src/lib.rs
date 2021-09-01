@@ -271,7 +271,7 @@ fn parse_test_settings(contents: String) -> TestSettings {
     settings
 }
 
-fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
+fn find_test_paths(directory: &Path, macro_path: &syn::Path) -> proc_macro2::TokenStream {
     let mut tests = quote! {};
 
     for entry in std::fs::read_dir(directory).unwrap() {
@@ -283,7 +283,7 @@ fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
         }
 
         if path.is_dir() {
-            tests.extend(find_test_paths(&path));
+            tests.extend(find_test_paths(&path, macro_path));
         } else {
             assert!(
                 !path.to_str().unwrap().contains(","),
@@ -299,7 +299,7 @@ fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
 
             // TODO(ed): Make a flag for skipping the test
             let tokens = quote! {
-                test_file!(#test_name, #path_string, #print, #wanted_errs);
+                #macro_path!(#test_name, #path_string, #print, #wanted_errs);
             };
 
             tests.extend(tokens);
@@ -322,9 +322,9 @@ fn find_test_paths(directory: &Path) -> proc_macro2::TokenStream {
 
 #[proc_macro]
 pub fn find_tests(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    assert!(tokens.is_empty());
+    let macro_path: syn::Path = parse_macro_input!(tokens);
 
-    let tokens = find_test_paths(Path::new("tests/"));
+    let tokens = find_test_paths(Path::new("tests/"), &macro_path);
     proc_macro::TokenStream::from(tokens)
 }
 
