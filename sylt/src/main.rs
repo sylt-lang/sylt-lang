@@ -7,17 +7,24 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
-    let res = if args.format {
-        sylt::formatter::format(&args)
+    let errs = if args.format {
+        match sylt::formatter::format(&args) {
+            Ok(formatted) => {
+                print!("{}", formatted);
+                Vec::new()
+            }
+            Err(errs) => errs,
+        }
     } else {
-        sylt::run_file(&args, lib_bindings())
+        sylt::run_file(&args, lib_bindings()).err().unwrap_or_else(Vec::new)
     };
 
-    if let Err(errs) = res {
+    if errs.is_empty() {
+        Ok(())
+    } else {
         for err in errs.iter() {
             println!("{}", err);
         }
-        return Err(format!("{} errors occured.", errs.len()));
+        Err(format!("{} errors occured.", errs.len()))
     }
-    Ok(())
 }
