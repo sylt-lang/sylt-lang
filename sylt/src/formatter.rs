@@ -308,7 +308,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
             }
             write!(dest, "}}")?;
         }
-        ExpressionKind::Float(f) => write!(dest, "{}", f)?,
+        ExpressionKind::Float(f) => write!(dest, "{:?}", f)?,
         ExpressionKind::Int(i) => write!(dest, "{}", i)?,
         ExpressionKind::Str(s) => write!(dest, "\"{}\"", s)?,
         ExpressionKind::Bool(b) => write!(dest, "{}", if *b { "true" } else { "false" })?,
