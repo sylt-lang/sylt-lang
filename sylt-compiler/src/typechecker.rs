@@ -1,14 +1,10 @@
-#![allow(unused_imports, unused)]
-use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
-use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::path::PathBuf;
 use sylt_common::error::{Error, TypeError};
-use sylt_common::prog::Prog;
-use sylt_common::{Blob, Block, Op, RustFunction, Type, Value};
+use sylt_common::Type;
 use sylt_parser::{
-    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op as ParserOp,
-    Span, Statement, StatementKind, Type as ParserType, TypeKind, VarKind, AST,
+    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp,
+    Span, Statement, StatementKind, VarKind, AST,
 };
 
 use crate::{self as compiler, first_ok_or_errs};
@@ -100,7 +96,7 @@ enum Lookup {
 
 impl<'c> TypeChecker<'c> {
     fn new(compiler: &'c mut Compiler) -> Self {
-        let mut namespaces = compiler
+        let namespaces = compiler
             .namespaces
             .iter()
             .map(|n| n
@@ -142,7 +138,7 @@ impl<'c> TypeChecker<'c> {
                     "Generics are not supported as arguments - only parameters"
                 );
             }
-            (Type::Generic(name), ty) => {
+            (Type::Generic(name), _) => {
                 match generics.entry(name.clone()) {
                     Entry::Occupied(known) => {
                         let known = known.get();
@@ -332,7 +328,7 @@ impl<'c> TypeChecker<'c> {
                     }
                 };
                 let args = args.iter().map(|e| self.expression(e)).collect::<Result<Vec<_>, Vec<_>>>()?;
-                let (params, ret) = self.resolve_functions_from_args(span, args, ty.clone())?;
+                let (_params, ret) = self.resolve_functions_from_args(span, args, ty.clone())?;
                 return Ok(Value(Type::clone(&ret), VarKind::Const));
             }
             AK::ArrowCall(extra, fun, args) => {
@@ -346,7 +342,7 @@ impl<'c> TypeChecker<'c> {
             }
             AK::Access(thing, field) => {
                 match self.assignable(thing, namespace)? {
-                    Value(ty, kind) => {
+                    Value(ty, _kind) => {
                         match &ty {
                             Type::Unknown => { Ok(Value(Type::Unknown, VarKind::Mutable)) }
                             Type::Instance(blob) => {
@@ -548,7 +544,7 @@ impl<'c> TypeChecker<'c> {
                 self.bin_op(span, a, b, op::cmp, "Comparison")?
             }
 
-            EK::Is(a, b) => self.bin_op(span, a, b, |a, b| Type::Bool, "Is")?,
+            EK::Is(a, b) => self.bin_op(span, a, b, |_a, _b| Type::Bool, "Is")?,
             EK::In(a, b) => {
                 let a = self.expression(a)?;
                 let b = self.expression(b)?;
@@ -609,7 +605,7 @@ impl<'c> TypeChecker<'c> {
             }
 
             EK::Function {
-                name,
+                name: _,
                 params,
                 ret,
                 body,
@@ -861,7 +857,7 @@ impl<'c> TypeChecker<'c> {
                 let ty = self.compiler.resolve_type(ty, self.compiler_context());
                 let ty = if matches!(ty, Type::Unknown) {
                     // Special case if it's a function
-                    if let ExpressionKind::Function { name, params, ret, .. } = &value.kind {
+                    if let ExpressionKind::Function { params, ret, .. } = &value.kind {
                         let params = params.iter().map(|(_, ty)| self.compiler.resolve_type(ty, self.compiler_context())).collect();
                         let ret = self.compiler.resolve_type(ret, self.compiler_context());
                         Type::Function(params, Box::new(ret))
@@ -942,7 +938,7 @@ impl<'c> TypeChecker<'c> {
                 self.statement(body)?;
                 None
             }
-            SK::IsCheck { lhs, rhs } => {
+            SK::IsCheck { .. } => {
                 // Checked in the compiler
                 None
             }
@@ -999,7 +995,7 @@ impl<'c> TypeChecker<'c> {
                         let ty = self.compiler.resolve_type(ty, self.compiler_context());
                         let ty = if matches!(ty, Type::Unknown) {
                             // Special case if it's a function
-                            if let ExpressionKind::Function { name, params, ret, .. } = &value.kind {
+                            if let ExpressionKind::Function { params, ret, .. } = &value.kind {
                                 let params = params.iter().map(|(_, ty)| self.compiler.resolve_type(ty, self.compiler_context())).collect();
                                 let ret = self.compiler.resolve_type(ret, self.compiler_context());
                                 Type::Function(params, Box::new(ret))
@@ -1060,7 +1056,9 @@ impl<'c> TypeChecker<'c> {
         for (path, module) in &tree.modules {
             let namespace = to_namespace[path];
             for stmt in &module.statements {
-                self.outer_definition(namespace, &stmt);
+                // Ignore errors since they'll be caught later and
+                // there are false positives.
+                let _ = self.outer_definition(namespace, &stmt);
             }
         }
 
