@@ -3,10 +3,9 @@ use self::statement::outer_statement;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use sylt_common::error::Error;
 use sylt_common::Type as RuntimeType;
-use sylt_tokenizer::{PlacedToken, Token, ZERO_SPAN, file_to_tokens};
+use sylt_tokenizer::{PlacedToken, Token, ZERO_SPAN, string_to_tokens};
 
 pub mod expression;
 pub mod statement;
@@ -829,20 +828,9 @@ fn module(path: &Path, root: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBu
 /// - [Error::FileNotFound] if the file couldn't be found.
 /// - [Error::GitConflictError] if conflict markers were found.
 /// - Any [Error::IOError] that occured when reading the file.
-pub fn find_conflict_markers(file: &Path) -> Vec<Error> {
-    let s = match std::fs::read_to_string(file) {
-        Ok(s) => s,
-        Err(e) => {
-            return vec![if matches!(e.kind(), std::io::ErrorKind::NotFound) {
-                Error::FileNotFound(file.to_path_buf())
-            } else {
-                Error::IOError(Rc::new(e))
-            }]
-        }
-    };
+pub fn find_conflict_markers(file: &Path, source: &str) -> Vec<Error> {
     let mut errs = Vec::new();
-    // Search line by line and push any errors we find.
-    for (i, line) in s.lines().enumerate() {
+    for (i, line) in source.lines().enumerate() {
         let conflict_marker = "<<<<<<<";
         if line.starts_with(conflict_marker) {
             errs.push(Error::GitConflictError {
@@ -867,7 +855,10 @@ pub fn find_conflict_markers(file: &Path) -> Vec<Error> {
 ///
 /// Returns any errors that occured when parsing the file(s). Basic error
 /// continuation is performed as documented in [module].
-pub fn tree(path: &Path) -> Result<AST, Vec<Error>> {
+pub fn tree<F>(path: &Path, reader: F) -> Result<AST, Vec<Error>>
+    where
+        F: Fn(&Path) -> Result<String, Error>
+{
     // Files we've already parsed. This ensures circular includes don't parse infinitely.
     let mut visited = HashSet::new();
     // Files we want to parse but haven't yet.
@@ -881,16 +872,18 @@ pub fn tree(path: &Path) -> Result<AST, Vec<Error>> {
         if visited.contains(&file) {
             continue;
         }
-        // Look for conflict markers
-        let mut conflict_errors = find_conflict_markers(&file);
-        if !conflict_errors.is_empty() {
-            errors.append(&mut conflict_errors);
-            visited.insert(file);
-            continue;
-        }
         // Lex into tokens.
-        match file_to_tokens(&file) {
-            Ok(tokens) => {
+        match reader(&file) {
+            Ok(source) => {
+                // Look for conflict markers
+                let mut conflict_errors = find_conflict_markers(&file, &source);
+                if !conflict_errors.is_empty() {
+                    errors.append(&mut conflict_errors);
+                    visited.insert(file);
+                    continue;
+                }
+
+                let tokens = string_to_tokens(&source);
                 // Parse the module.
                 let (mut next, result) = module(&file, &root, &tokens);
                 match result {
