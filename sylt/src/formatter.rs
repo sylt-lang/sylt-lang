@@ -512,10 +512,6 @@ fn merge_empty_statements(mut statements: Vec<Statement>) -> Vec<Statement> {
 
     let mut ret = Vec::new();
     while let Some(mut statement) = statements.pop() {
-        if !matches!(statement.kind, StatementKind::EmptyStatement) {
-            ret.push(statement);
-            continue;
-        }
         // Begin eating empty statements
         while matches!(
             statements.last().map(|s| &s.kind),
