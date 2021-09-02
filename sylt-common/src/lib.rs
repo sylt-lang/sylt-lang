@@ -19,7 +19,7 @@ pub use op::{Op, OpResult};
 pub use prog::Prog;
 pub use ty::Type;
 pub use upvalue::UpValue;
-pub use value::{MatchableValue, Value};
+pub use value::Value;
 
 /// A linkable external function. Created either manually or using
 /// [sylt_macro::extern_function].

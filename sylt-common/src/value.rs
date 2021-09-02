@@ -10,7 +10,6 @@ use crate::{ty::Type, upvalue::UpValue};
 #[derive(Clone)]
 #[derive(Deserialize, Serialize)]
 pub enum Value {
-    Field(String),
     Ty(Type),
     Blob(usize),
     Instance(usize, Rc<RefCell<HashMap<String, Value>>>),
@@ -18,17 +17,12 @@ pub enum Value {
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
     Dict(Rc<RefCell<HashMap<Value, Value>>>),
-    Union(HashSet<Value>),
     Float(f64),
     Int(i64),
     Bool(bool),
     String(Rc<String>),
     Function(Rc<Vec<Rc<RefCell<UpValue>>>>, Type, usize),
     ExternFunction(usize),
-    /// This value should not be present when running, only when type checking.
-    /// Most operations are valid but produce funky results.
-    Unknown,
-    /// Should not be present when running.
     Nil,
 }
 
@@ -41,13 +35,15 @@ impl From<&str> for Value {
 impl From<&Type> for Value {
     fn from(ty: &Type) -> Self {
         match ty {
-            Type::Field(s) => Value::Field(s.clone()),
-            Type::Generic(_) => panic!("Generics are not supported!"),
+
+            Type::Unknown
+            | Type::Invalid
+            | Type::Generic(_)
+            | Type::Union(_) => panic!("This type cannot be represented as a value!"),
             Type::Void => Value::Nil,
             Type::Blob(b) => Value::Blob(*b),
             Type::Instance(b) => Value::Instance(*b, Rc::new(RefCell::new(HashMap::new()))),
             Type::Tuple(fields) => Value::Tuple(Rc::new(fields.iter().map(Value::from).collect())),
-            Type::Union(v) => Value::Union(v.iter().map(Value::from).collect()),
             Type::List(v) => Value::List(Rc::new(RefCell::new(vec![Value::from(v.as_ref())]))),
             Type::Set(v) => {
                 let mut s = HashSet::new();
@@ -59,7 +55,6 @@ impl From<&Type> for Value {
                 s.insert(Value::from(k.as_ref()), Value::from(v.as_ref()));
                 Value::Dict(Rc::new(RefCell::new(s)))
             }
-            Type::Unknown | Type::Invalid => Value::Unknown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),
             Type::Bool => Value::Bool(true),
@@ -107,7 +102,6 @@ impl PartialEq<Value> for Value {
             (Value::List(a), Value::List(b)) => a == b,
             (Value::Set(a), Value::Set(b)) => a == b,
             (Value::Dict(a), Value::Dict(b)) => a == b,
-            (Value::Union(a), b) | (b, Value::Union(a)) => a.iter().any(|x| x == b),
             (Value::Nil, Value::Nil) => true,
             _ => false,
         }
@@ -142,13 +136,11 @@ impl Value {
 
     pub fn unique_id(&self) -> usize {
         match self {
-            Value::Field(s) => s as *const _ as usize,
             Value::Ty(ty) => ty as *const _ as usize,
             Value::Blob(b) => b as *const _ as usize,
             Value::Float(f) => f as *const _ as usize,
             Value::Int(i) => i as *const _ as usize,
             Value::Bool(b) => b as *const _ as usize,
-            Value::Union(v) => v as *const _ as usize,
             Value::Instance(_, v) => Rc::as_ptr(v) as usize,
             Value::String(s) => Rc::as_ptr(s) as usize,
             Value::List(v) => Rc::as_ptr(v) as usize,
@@ -157,7 +149,6 @@ impl Value {
             Value::Function(v, _, _) => Rc::as_ptr(v) as usize,
             Value::Tuple(v) => Rc::as_ptr(v) as usize,
             Value::Nil => 0,  // TODO(ed): This is not a valid pointer - right?
-            Value::Unknown => 1, // TODO(ed): This is not a valid pointer - right?
             Value::ExternFunction(slot) => slot + 2,
         }
     }
@@ -170,7 +161,6 @@ impl Value {
         seen: &mut HashSet<usize>
     ) -> std::fmt::Result {
         match self {
-            Value::Field(s) => write!(fmt, "<field .{}>", s),
             Value::Ty(ty) => write!(fmt, "<type \"{:?}\">", ty),
             Value::Blob(b) => write!(fmt, "<blob \"{}\">", b),
             Value::Instance(_, v) => {
@@ -268,39 +258,7 @@ impl Value {
                 write!(fmt, "<fn #{} {:?}>", block, ty)
             },
             Value::ExternFunction(slot) => write!(fmt, "<extern fn {}>", slot),
-            Value::Unknown => write!(fmt, "unknown"),
             Value::Nil => write!(fmt, "nil"),
-            Value::Union(v) => write!(fmt, "<U {:?}>", v),
         }
-    }
-}
-
-#[derive(Clone)]
-pub enum MatchableValue<'t> {
-    Empty,
-    One(&'t Value),
-    Two(&'t Value, &'t Value),
-    Three(&'t Value, &'t Value, &'t Value),
-    Four(&'t Value, &'t Value, &'t Value, &'t Value),
-    Five(&'t Value, &'t Value, &'t Value, &'t Value, &'t Value),
-}
-
-pub fn make_matchable<'t>(value: &'t Value) -> MatchableValue<'t> {
-    use MatchableValue::*;
-    use Value::*;
-
-    match value {
-        #[rustfmt::skip]
-        Tuple(inner) => {
-            match (inner.get(0), inner.get(1), inner.get(2), inner.get(3), inner.get(4)) {
-                (Some(a), Some(b), Some(c), Some(d), Some(e), ..) => Five(a, b, c, d, e),
-                (Some(a), Some(b), Some(c), Some(d), ..) => Four(a, b, c, d),
-                (Some(a), Some(b), Some(c), ..) => Three(a, b, c),
-                (Some(a), Some(b), ..) => Two(a, b),
-                (Some(a), ..) => One(a),
-                _ => Empty,
-            }
-        },
-        x => One(x),
     }
 }

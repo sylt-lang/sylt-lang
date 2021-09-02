@@ -520,7 +520,7 @@ impl Compiler {
             Instance { blob, fields } => {
                 self.assignable(blob, ctx);
                 for (name, field) in fields.iter() {
-                    let name = self.constant(Value::Field(name.clone()));
+                    let name = self.constant(Value::String(Rc::new(name.clone())));
                     self.add_op(ctx, field.span, name);
                     self.expression(field, ctx);
                 }
@@ -1323,7 +1323,7 @@ impl Compiler {
                 use StatementKind::*;
                 match &statement.kind {
                     #[rustfmt::skip]
-                    Definition { ident: Identifier { name, .. }, kind, ty, .. } => {
+                    Definition { ident: Identifier { name, span }, kind, .. } => {
                         let var = self.define(name, *kind, statement.span);
                         self.activate(var);
 
@@ -1342,19 +1342,9 @@ impl Compiler {
                             }
                         }
 
-                        // Just fill in an empty slot since we have no idea.
-                        // Unknown is overwritten by the Op::Force in the type checker.
-                        let unknown = self.constant(Value::Unknown);
-                        self.add_op(ctx, Span::zero(), unknown);
-
-                        let ty = self.resolve_type(ty, ctx);
-                        let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
-                            Op::Force(ty)
-                        } else {
-                            error!(self, ctx, statement.span, "Failed to resolve the type");
-                            Op::Illegal
-                        };
-                        self.add_op(ctx, Span::zero(), op);
+                        // Uninitalized values have the value Nil
+                        let unknown = self.constant(Value::Nil);
+                        self.add_op(ctx, *span, unknown);
                     }
 
                     Use { ..  } => { }
