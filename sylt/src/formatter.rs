@@ -595,11 +595,11 @@ mod tests {
 
                         // Try to run the file again, this time with pretty "got/expected"-output.
                         let after = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
-                        eprintln!("If you can read this, the test output changed between before and after formatting");
+                        eprintln!("The test output changed between before and after formatting");
                         $crate::assert_errs!(after, $errs);
                     }
                     Err(errs) => {
-                        eprintln!("If you can read this, the formatter couldn't parse the file but the syntax errors");
+                        eprintln!("The formatter couldn't parse the file but the syntax errors");
                         eprintln!("changed between before and after formatting.");
                         let errs: Result<(), _> = Err(errs); //TODO(gu): Result<!, _> ;)
                         $crate::assert_errs!(errs, $errs);
