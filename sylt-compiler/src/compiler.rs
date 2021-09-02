@@ -12,6 +12,7 @@ use sylt_parser::{
 };
 
 mod typechecker;
+mod dependency;
 
 type VarSlot = usize;
 
@@ -1119,6 +1120,7 @@ impl Compiler {
             num_functions
         );
 
+        dependency::initialization_order(&tree, &self);
 
         for (path, module) in tree.modules.iter() {
             ctx.namespace = path_to_namespace_id[path];
