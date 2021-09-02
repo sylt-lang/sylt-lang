@@ -748,12 +748,6 @@ impl Machine for VM {
                 self.stack[slot] = self.pop();
             }
 
-            Op::Define(_) => {}
-
-            Op::Force(_) => {}
-
-            Op::Union => {}
-
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {

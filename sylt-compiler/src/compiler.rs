@@ -443,8 +443,6 @@ impl Compiler {
                 self.expression(fail, ctx);
                 let op = Op::Jmp(self.next_ip(ctx));
                 self.patch(ctx, out, op);
-
-                self.add_op(ctx, expression.span, Op::Union);
             }
 
             IfShort {
@@ -459,10 +457,6 @@ impl Compiler {
                 let skip = self.add_op(ctx, expression.span, Op::Illegal);
                 let out = self.add_op(ctx, expression.span, Op::Illegal);
 
-                // Only done during the typechecker - mitigates the pop-operation
-                // so the types can be compound.
-                self.add_op(ctx, expression.span, Op::Copy(1));
-
                 let op = Op::JmpFalse(self.next_ip(ctx));
                 self.patch(ctx, skip, op);
 
@@ -470,8 +464,6 @@ impl Compiler {
                 self.expression(fail, ctx);
                 let op = Op::Jmp(self.next_ip(ctx));
                 self.patch(ctx, out, op);
-
-                self.add_op(ctx, expression.span, Op::Union);
             }
 
 
@@ -872,7 +864,7 @@ impl Compiler {
             }
 
             #[rustfmt::skip]
-            Definition { ident, kind, ty, value } => {
+            Definition { ident, kind, value, .. } => {
                 // TODO(ed): Don't use type here - type check the tree first.
                 self.expression(value, ctx);
 
@@ -882,18 +874,6 @@ impl Compiler {
                 } else {
                     // Local variable
                     let slot = self.define(&ident.name, *kind, statement.span);
-                    let ty = self.resolve_type(ty, ctx);
-                    let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
-                        if kind.force() {
-                            Op::Force(ty)
-                        } else {
-                            Op::Define(ty)
-                        }
-                    } else {
-                        error!(self, ctx, statement.span, "Failed to add type declaration");
-                        Op::Illegal
-                    };
-                    self.add_op(ctx, statement.span, op);
                     self.activate(slot);
                 }
             }
