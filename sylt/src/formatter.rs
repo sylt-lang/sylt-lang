@@ -163,6 +163,24 @@ macro_rules! expr_binary_op {
     };
 }
 
+fn write_arrow_call_no_lhs<W: Write>(dest: &mut W, indent: u32, expr: &Expression) -> fmt::Result {
+    match &expr.kind {
+        ExpressionKind::Get(assignable) => match &assignable.kind {
+            AssignableKind::ArrowCall(lhs, callee, rest) => {
+                write_arrow_call_no_lhs(dest, indent, lhs)?;
+                write!(dest, " -> ")?;
+                write_assignable(dest, indent, callee)?;
+                write!(dest, "(")?;
+                write_comma_separated!(dest, indent, write_expression, rest);
+                write!(dest, ")")?;
+            }
+            _ => (),
+        }
+        _ => (),
+    }
+    Ok(())
+}
+
 fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression) -> fmt::Result {
     match &expression.kind {
         ExpressionKind::Get(assignable) => write_assignable(dest, indent, assignable)?,
@@ -248,10 +266,10 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
             lhs,
         } => {
             write_expression(dest, indent, lhs)?;
-            write!(dest, " if ")?;
+            write!(dest, " if")?;
             match &condition.kind {
                 ExpressionKind::Comparison(_lhs, cmp, rhs) => {
-                    write!(dest, "{} ", match cmp {
+                    write!(dest, " {} ", match cmp {
                         ComparisonKind::Equals => "==",
                         ComparisonKind::NotEquals => "!=",
                         ComparisonKind::Greater => ">",
@@ -264,8 +282,9 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
                     write_expression(dest, indent, rhs)?;
                 }
                 ExpressionKind::Get(assignable) => match &assignable.kind {
-                    AssignableKind::ArrowCall(_lhs, callee, rest) => {
-                        write!(dest, "-> ")?;
+                    AssignableKind::ArrowCall(lhs, callee, rest) => {
+                        write_arrow_call_no_lhs(dest, indent, lhs)?;
+                        write!(dest, " -> ")?;
                         write_assignable(dest, indent, callee)?;
                         write!(dest, "(")?;
                         write_comma_separated!(dest, indent, write_expression, rest);
