@@ -1,2 +1,2 @@
 
-// error: Error::CompileError { .. }
+// error: $UnresolvedName(..)
