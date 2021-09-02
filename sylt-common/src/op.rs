@@ -230,31 +230,6 @@ pub enum Op {
     /// {A} - AssignGlobal(0) - {}
     AssignGlobal(usize),
 
-    /// A helper instruction for the type checker.
-    /// *Makes sure* that the top value on the stack
-    /// is of the given type, and is meant to signal
-    /// that the "variable" is added.
-    /// (The type is looked up in the constants vector.)
-    ///
-    /// Does not affect the stack.
-    Define(usize),
-    /// A helper instruction for the typechecker,
-    /// *assumes* top value on the stack
-    /// is of the given type. Usefull for helping the
-    /// type system where it just can't do it.
-    /// (The type is looked up in the constants vector)
-    ///
-    /// Does not affect the stack.
-    Force(usize),
-    /// A helper instruction for the typechecker,
-    /// *combines* the two top value on the stack
-    /// into a union type.
-    ///
-    /// Skipped in the runtime.
-    /// In the typechecker:
-    /// {A, B} - Union - {A | B}
-    Union,
-
     /// Links the upvalues for the given constant
     /// function. This updates the constant stack.
     ///

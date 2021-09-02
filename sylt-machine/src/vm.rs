@@ -748,12 +748,6 @@ impl Machine for VM {
                 self.stack[slot] = self.pop();
             }
 
-            Op::Define(_) => {}
-
-            Op::Force(_) => {}
-
-            Op::Union => {}
-
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {
@@ -762,8 +756,8 @@ impl Machine for VM {
                         let mut values = self.stack[new_base + 1..]
                             .chunks_exact(2)
                             .map(|b| {
-                                if let Value::Field(name) = &b[0] {
-                                    (name.clone(), b[1].clone())
+                                if let Value::String(name) = &b[0] {
+                                    (String::clone(name), b[1].clone())
                                 } else {
                                     panic!("Expected Field but got {:?} for field names", b[0]);
                                 }
@@ -802,7 +796,6 @@ impl Machine for VM {
                     Value::ExternFunction(slot) => {
                         let extern_func = self.extern_functions[slot];
                         let ctx = RuntimeContext {
-                            typecheck: false,
                             stack_base: new_base + 1,
                             machine: self,
                         };
@@ -850,7 +843,6 @@ impl Machine for VM {
 mod op {
     use super::Rc;
     use super::Value;
-    use std::collections::HashSet;
 
     fn tuple_bin_op(
         a: &Rc<Vec<Value>>,
@@ -866,39 +858,11 @@ mod op {
         Value::Tuple(Rc::new(a.iter().map(f).collect()))
     }
 
-    fn union_un_op(a: &HashSet<Value>, f: fn(&Value) -> Value) -> Value {
-        a.iter()
-            .find_map(|x| {
-                let x = f(x);
-                if x.is_nil() {
-                    None
-                } else {
-                    Some(x)
-                }
-            })
-            .unwrap_or(Value::Nil)
-    }
-
-    fn union_bin_op(a: &HashSet<Value>, b: &Value, f: fn(&Value, &Value) -> Value) -> Value {
-        a.iter()
-            .find_map(|x| {
-                let x = f(x, b);
-                if x.is_nil() {
-                    None
-                } else {
-                    Some(x)
-                }
-            })
-            .unwrap_or(Value::Nil)
-    }
-
     pub fn neg(value: &Value) -> Value {
         match value {
             Value::Float(a) => Value::Float(-*a),
             Value::Int(a) => Value::Int(-*a),
             Value::Tuple(a) => tuple_un_op(a, neg),
-            Value::Union(v) => union_un_op(&v, neg),
-            Value::Unknown => Value::Unknown,
             _ => Value::Nil,
         }
     }
@@ -907,8 +871,6 @@ mod op {
         match value {
             Value::Bool(a) => Value::Bool(!*a),
             Value::Tuple(a) => tuple_un_op(a, not),
-            Value::Union(v) => union_un_op(&v, not),
-            Value::Unknown => Value::Bool(true),
             _ => Value::Nil,
         }
     }
@@ -919,9 +881,6 @@ mod op {
             (Value::Int(a), Value::Int(b)) => Value::Int(a + b),
             (Value::String(a), Value::String(b)) => Value::String(Rc::from(format!("{}{}", a, b))),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, add),
-            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => add(a, a),
-            (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, add),
             _ => Value::Nil,
         }
     }
@@ -935,9 +894,6 @@ mod op {
             (Value::Float(a), Value::Float(b)) => Value::Float(a * b),
             (Value::Int(a), Value::Int(b)) => Value::Int(a * b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, mul),
-            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => mul(a, a),
-            (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, mul),
             _ => Value::Nil,
         }
     }
@@ -947,9 +903,6 @@ mod op {
             (Value::Float(a), Value::Float(b)) => Value::Float(a / b),
             (Value::Int(a), Value::Int(b)) => Value::Int(a / b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, div),
-            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => div(a, a),
-            (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, div),
             _ => Value::Nil,
         }
     }
@@ -975,9 +928,6 @@ mod op {
                 }
                 Value::Bool(true)
             }
-            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => eq(a, a),
-            (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, eq),
             (Value::Nil, Value::Nil) => Value::Bool(true),
             (Value::List(a), Value::List(b)) => {
                 let a = a.borrow();
@@ -1019,9 +969,6 @@ mod op {
                     a => Some(a),
                 })
                 .unwrap_or(Value::Bool(true)),
-            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => less(a, a),
-            (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, less),
             _ => Value::Nil,
         }
     }
@@ -1034,9 +981,6 @@ mod op {
         match (a, b) {
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a && *b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, and),
-            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => and(a, a),
-            (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, and),
             _ => Value::Nil,
         }
     }
@@ -1045,9 +989,6 @@ mod op {
         match (a, b) {
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a || *b),
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, or),
-            (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => or(a, a),
-            (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, or),
             _ => Value::Nil,
         }
     }

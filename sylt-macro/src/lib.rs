@@ -91,17 +91,6 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
     let doc = parsed.doc;
     let signature = parsed.signature;
 
-    let typecheck_blocks: Vec<_> = parsed
-        .blocks
-        .iter()
-        .map(|block| {
-            let pat = block.pattern.clone();
-            quote! {
-                #pat => { Ok(sylt_common::Value::from(Type::Unknown)) }
-            }
-        })
-        .collect();
-
     let eval_blocks: Vec<_> = parsed
         .blocks
         .iter()
@@ -121,27 +110,15 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
             ctx: sylt_common::RuntimeContext
         ) -> ::std::result::Result<sylt_common::Value, sylt_common::error::RuntimeError>
         {
-            use sylt_common::MatchableValue::*;
             use sylt_common::RustFunction;
             use sylt_common::Value::*;
             let values = ctx.machine.stack_from_base(ctx.stack_base);
-            if ctx.typecheck {
-                #[allow(unused_variables)]
-                match &*values {
-                    #(#typecheck_blocks),*
-                    _ => Err(sylt_common::error::RuntimeError::ExternTypeMismatch(
-                        stringify!(#function).to_string(),
-                        values.iter().map(|v| sylt_common::Type::from(v)).collect()
-                    ))
-                }
-            } else {
-                match &*values {
-                    #(#eval_blocks),*
-                    _ => Err(sylt_common::error::RuntimeError::ExternTypeMismatch(
-                        stringify!(#function).to_string(),
-                        values.iter().map(|v| sylt_common::Type::from(v)).collect()
-                    ))
-                }
+            match &*values {
+                #(#eval_blocks),*
+                _ => Err(sylt_common::error::RuntimeError::ExternTypeMismatch(
+                    stringify!(#function).to_string(),
+                    values.iter().map(|v| sylt_common::Type::from(v)).collect()
+                ))
             }
         }
     };
