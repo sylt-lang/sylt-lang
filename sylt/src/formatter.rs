@@ -282,13 +282,8 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
                     write_expression(dest, indent, rhs)?;
                 }
                 ExpressionKind::Get(assignable) => match &assignable.kind {
-                    AssignableKind::ArrowCall(lhs, callee, rest) => {
-                        write_arrow_call_no_lhs(dest, indent, lhs)?;
-                        write!(dest, " -> ")?;
-                        write_assignable(dest, indent, callee)?;
-                        write!(dest, "(")?;
-                        write_comma_separated!(dest, indent, write_expression, rest);
-                        write!(dest, ")")?;
+                    AssignableKind::ArrowCall(..) => {
+                        write_arrow_call_no_lhs(dest, indent, condition)?;
                     }
                     kind => panic!("only arrow calls are supported in a short if expression: {:?}", kind),
                 }
