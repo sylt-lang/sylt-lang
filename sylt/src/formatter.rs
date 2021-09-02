@@ -82,18 +82,14 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: &Type) -> fmt::Result {
             write!(dest, "fn")?;
             if !params.is_empty() {
                 write!(dest, " ")?;
-                write_types(dest, indent, &params.iter().collect::<Vec<_>>())?;
+                write_comma_separated!(dest, indent, write_type, params);
             }
             write!(dest, " -> ")?;
             write_type(dest, indent, ret)
         }
         TypeKind::Tuple(types) => {
             write!(dest, "(")?;
-            if types.is_empty() {
-                write!(dest, ",")?;
-            } else {
-                write_types(dest, indent, &types.iter().collect::<Vec<_>>())?;
-            }
+            write_comma_separated!(dest, indent, write_type, types);
             write!(dest, ")")
         }
         TypeKind::List(ty) => {
@@ -115,11 +111,6 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: &Type) -> fmt::Result {
         }
         TypeKind::Generic(ident) => write_identifier(dest, ident),
     }
-}
-
-fn write_types<W: Write>(dest: &mut W, indent: u32, types: &[&Type]) -> fmt::Result {
-    write_comma_separated!(dest, indent, write_type, types);
-    Ok(())
 }
 
 fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: &Assignable) -> fmt::Result {
