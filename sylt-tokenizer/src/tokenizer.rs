@@ -1,5 +1,4 @@
 use logos::Logos;
-use std::{fs, path::Path};
 pub use token::Token;
 
 mod token;
@@ -86,10 +85,6 @@ pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
             placed_token
         })
         .collect()
-}
-
-pub fn file_to_tokens(file: &Path) -> Result<Vec<PlacedToken>, std::io::Error> {
-    Ok(string_to_tokens(&fs::read_to_string(file)?))
 }
 
 #[cfg(test)]

@@ -24,8 +24,12 @@ pub fn lib_bindings() -> ExternFuncionList {
     lib
 }
 
+fn read_file(path: &Path) -> Result<String, Error> {
+    std::fs::read_to_string(path).map_err(|_| Error::FileNotFound(path.to_path_buf()))
+}
+
 pub fn compile(args: &Args, functions: ExternFuncionList) -> Result<Prog, Vec<Error>> {
-    let tree = sylt_parser::tree(&PathBuf::from(args.args.first().expect("No file to run")))?;
+    let tree = sylt_parser::tree(&PathBuf::from(args.args.first().expect("No file to run")), read_file)?;
     if args.dump_tree {
         println!("Syntax tree: {:#?}", tree);
     }
