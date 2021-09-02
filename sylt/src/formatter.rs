@@ -295,10 +295,9 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
         }
         ExpressionKind::Tuple(exprs) => {
             write!(dest, "(")?;
-            if exprs.is_empty() {
+            write_comma_separated!(dest, indent, write_expression, exprs);
+            if exprs.len() == 1 {
                 write!(dest, ",")?;
-            } else {
-                write_comma_separated!(dest, indent, write_expression, exprs);
             }
             write!(dest, ")")?;
         }
