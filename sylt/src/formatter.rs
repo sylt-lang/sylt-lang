@@ -247,8 +247,22 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
             fail,
             lhs: _,
         } => {
-            write!(dest, "if ")?;
-            write_expression(dest, indent, condition)?;
+            if let ExpressionKind::Comparison(lhs, cmp, rhs) = &condition.kind {
+                write_expression(dest, indent, lhs)?;
+                write!(dest, " if {} ", match cmp {
+                    ComparisonKind::Equals => "==",
+                    ComparisonKind::NotEquals => "!=",
+                    ComparisonKind::Greater => ">",
+                    ComparisonKind::GreaterEqual => ">=",
+                    ComparisonKind::Less => "<",
+                    ComparisonKind::LessEqual => "<=",
+                    ComparisonKind::Is => "is",
+                    ComparisonKind::In => "in",
+                })?;
+                write_expression(dest, indent, rhs)?;
+            } else {
+                panic!("only comparisons are supported as the condition in an if expression");
+            }
             write!(dest, " else ")?;
             write_expression(dest, indent, fail)?;
         }
