@@ -1073,21 +1073,41 @@ impl<'c> TypeChecker<'c> {
             }
         }
 
-        self.assignable(&Assignable {
-            span: Span::zero(),
+        let span = tree.modules[0].1.statements
+            .iter()
+            .find_map(|stmt| {
+                if let StatementKind::Definition{ ident, .. } = &stmt.kind {
+                    if ident.name == "start" {
+                        return Some(ident.span);
+                    }
+                }
+                None
+            })
+            .unwrap_or_else(|| tree.modules[0].1.statements[0].span);
+
+        let call_start = &Assignable {
+            span,
             kind: AssignableKind::Call(
                 Box::new(Assignable {
-                    span: Span::zero(),
+                    span,
                     kind: AssignableKind::Read(Identifier {
                         span: Span::zero(),
                         name: "start".to_string()
                     }),
                 }),
                 Vec::new(),
-            )},
-            0
-        )?;
+            )
+        };
+        if let Err(mut errs) = self.assignable(call_start, 0) {
+            for mut err in errs.iter_mut() {
+                if let Error::TypeError { message, .. } = &mut err {
+                    message.insert("the program entry point".to_string());
+                }
+            }
+            errors.append(&mut errs);
+        }
 
+        // Typecheck the implied syntax of calling start.
         if !errors.is_empty() {
             Err(errors)
         } else {
