@@ -1019,17 +1019,6 @@ impl Compiler {
 
             Continue {} => match self.loops.last().cloned() {
                 Some(LoopFrame { stack_size, continue_addr, .. }) => {
-                    // TODO(ed): Remove this crutch when the typechecker is fixed.
-                    // We emit dummy values that are popped in the typechecker.
-                    let type_checker_skip = self.add_op(ctx, statement.span, Op::Illegal);
-                    let current_stack_size = self.frames[ctx.frame].variables.len();
-                    let nil = self.constant(Value::Nil);
-                    for _ in 0..(current_stack_size - stack_size) {
-                        self.add_op(ctx, statement.span, nil);
-                    }
-                    let end = self.next_ip(ctx);
-                    self.patch(ctx, type_checker_skip, Op::Jmp(end));
-
                     self.emit_pop_until_size(ctx, statement.span, stack_size);
                     self.add_op(ctx, statement.span, Op::Jmp(continue_addr));
                 }
@@ -1040,17 +1029,6 @@ impl Compiler {
 
             Break {} => match self.loops.last().cloned() {
                 Some(LoopFrame { stack_size, break_addr, .. }) => {
-                    // TODO(ed): Remove this crutch when the typechecker is fixed.
-                    // We emit dummy values that are popped in the typechecker.
-                    let type_checker_skip = self.add_op(ctx, statement.span, Op::Illegal);
-                    let current_stack_size = self.frames[ctx.frame].variables.len();
-                    let nil = self.constant(Value::Nil);
-                    for _ in 0..(current_stack_size - stack_size) {
-                        self.add_op(ctx, statement.span, nil);
-                    }
-                    let end = self.next_ip(ctx);
-                    self.patch(ctx, type_checker_skip, Op::Jmp(end));
-
                     self.emit_pop_until_size(ctx, statement.span, stack_size);
                     self.add_op(ctx, statement.span, Op::Jmp(break_addr));
                 }
