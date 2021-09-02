@@ -76,10 +76,6 @@ fn rpc_handle_stream(
 #[sylt_macro::sylt_doc(n_rpc_start_server, "Starts an RPC server on the specified port, returning success status.", "fn int -> bool")]
 #[sylt_macro::sylt_link(n_rpc_start_server, "sylt_std::network", "fn int -> bool")]
 pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    if ctx.typecheck {
-        return Ok(Value::Bool(true));
-    }
-
     // Get the port from the arguments.
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     let port = match values.as_ref() {
@@ -110,10 +106,6 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
 
 #[sylt_macro::sylt_link(n_rpc_stop_server, "sylt_std::network", "fn -> bool")]
 pub fn n_rpc_stop_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    if ctx.typecheck {
-        return Ok(Value::Bool(true));
-    }
-
     if n_rpc_is_server(ctx)? == Value::Bool(false) {
         return Ok(Value::Bool(false));
     }
@@ -135,10 +127,6 @@ pub fn n_rpc_stop_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError>
 #[sylt_macro::sylt_doc(n_rpc_connect, "Connects to an RPC server on the specified IP and port.", "fn str, int -> bool")]
 #[sylt_macro::sylt_link(n_rpc_connect, "sylt_std::network", "fn str, int -> bool")]
 pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    if ctx.typecheck {
-        return Ok(Value::Bool(true));
-    }
-
     // Get the ip and port from the arguments.
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     let socket_addr = match values.as_ref() {
@@ -228,10 +216,6 @@ fn get_rpc_args(ctx: RuntimeContext<'_>, arg_offset: usize, func_name: &str) -> 
 #[sylt_macro::sylt_doc(n_rpc_clients, "Performs an RPC on all connected clients.", "fn #X, [#Y] -> void")]
 #[sylt_macro::sylt_link(n_rpc_clients, "sylt_std::network", "fn #X, [#Y] -> void")]
 pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    if ctx.typecheck {
-        return Ok(Value::Nil);
-    }
-
     // Serialize the RPC.
     let serialized = match bincode::serialize(&get_rpc_args(ctx, 0, "n_rpc_clients")?) {
         Ok(serialized) => serialized,
@@ -263,10 +247,6 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 #[sylt_macro::sylt_doc(n_rpc_client_ip, "Performs an RPC on a specific connected clients.", "fn #X, [#Y] -> bool")]
 #[sylt_macro::sylt_link(n_rpc_client_ip, "sylt_std::network", "fn #X, [#Y] -> bool")]
 pub fn n_rpc_client_ip(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    if ctx.typecheck {
-        return Ok(Value::Bool(true));
-    }
-
     let ip = match ctx.machine.stack_from_base(ctx.stack_base).get(0) {
         Some(Value::String(s)) => SocketAddr::from_str(s.as_ref()).unwrap(),
         _ => {
@@ -306,10 +286,6 @@ pub fn n_rpc_client_ip(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 #[sylt_macro::sylt_doc(n_rpc_server, "Performs an RPC on the connected server, returning success status.", "fn #X, #Y -> bool")]
 #[sylt_macro::sylt_link(n_rpc_server, "sylt_std::network", "fn #X, #Y -> bool")]
 pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    if ctx.typecheck {
-        return Ok(Value::Bool(true));
-    }
-
     // Serialize the RPC.
     let serialized = match bincode::serialize(&get_rpc_args(ctx, 0, "n_rpc_server")?) {
         Ok(serialized) => serialized,
@@ -337,11 +313,7 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 
 #[sylt_macro::sylt_doc(n_rpc_disconnect, "Disconnect from the currently connected server.", "fn -> void")]
 #[sylt_macro::sylt_link(n_rpc_disconnect, "sylt_std::network", "fn -> void")]
-pub fn n_rpc_disconnect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    if ctx.typecheck {
-        return Ok(Value::Nil);
-    }
-
+pub fn n_rpc_disconnect(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     SERVER_HANDLE.with(|server_handle| {
         if let Some(handle) = server_handle.borrow_mut().take() {
             if let Err(e) = handle.shutdown(Shutdown::Both) {
@@ -384,10 +356,6 @@ sylt_macro::extern_function!(
 #[sylt_macro::sylt_doc(n_rpc_resolve, "Resolves the queued RPCs that has been received since the last resolve.", "fn -> void")]
 #[sylt_macro::sylt_link(n_rpc_resolve, "sylt_std::network", "fn -> void")]
 pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    if ctx.typecheck {
-        return Ok(Value::Nil);
-    }
-
     // Take the current queue.
     let queue = RPC_QUEUE.with(|queue| {
         std::mem::replace(

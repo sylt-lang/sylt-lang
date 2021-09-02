@@ -796,7 +796,6 @@ impl Machine for VM {
                     Value::ExternFunction(slot) => {
                         let extern_func = self.extern_functions[slot];
                         let ctx = RuntimeContext {
-                            typecheck: false,
                             stack_base: new_base + 1,
                             machine: self,
                         };

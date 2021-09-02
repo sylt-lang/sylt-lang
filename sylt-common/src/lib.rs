@@ -42,7 +42,6 @@ pub trait Machine {
 }
 
 pub struct RuntimeContext<'m> {
-    pub typecheck: bool,
     pub stack_base: usize,
     pub machine: &'m mut dyn Machine,
 }
