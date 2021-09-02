@@ -958,7 +958,7 @@ impl<'c> TypeChecker<'c> {
                         Ok(None) => {}
                         Err(mut errs) => {
                             errors.append(&mut errs);
-                       }
+                        }
                     }
                 }
 
