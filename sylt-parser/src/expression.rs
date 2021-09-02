@@ -823,7 +823,7 @@ mod test {
     test!(expression, index_ident: "a[a]" => Get(Assignable { kind: Index(_, _), .. }));
     test!(expression, index_expr: "a[1 + 2 + 3]" => Get(Assignable { kind: Index(_, _), .. }));
     test!(expression, grouping: "(0 * 0) + 1" => Add(_, _));
-    test!(expression, grouping_one: "(0)" => Int(0));
+    test!(expression, grouping_one: "(0)" => Parenthesis(_));
     test!(expression, tuple: "(0, 0)" => Tuple(_));
     test!(expression, tuple_one: "(0,)" => Tuple(_));
     test!(expression, tuple_empty: "()" => Tuple(_));
