@@ -4,6 +4,18 @@ use crate::statement::block;
 
 use super::*;
 
+#[derive(Debug, Clone)]
+pub enum ComparisonKind {
+    Equals,
+    NotEquals,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
+    Is,
+    In,
+}
+
 /// The different kinds of [Expression]s.
 ///
 /// Expressions are recursive and evaluate to some kind of value.
@@ -27,26 +39,10 @@ pub enum ExpressionKind {
     /// `-a`
     Neg(Box<Expression>),
 
-    /// `a is b`
-    Is(Box<Expression>, Box<Expression>),
+    Comparison(Box<Expression>, ComparisonKind, Box<Expression>),
 
-    /// `a == b`
-    Eq(Box<Expression>, Box<Expression>),
-    /// `a != b`
-    Neq(Box<Expression>, Box<Expression>),
-    /// `a > b`
-    Gt(Box<Expression>, Box<Expression>),
-    /// `a >= b`
-    Gteq(Box<Expression>, Box<Expression>),
-    /// `a < b`
-    Lt(Box<Expression>, Box<Expression>),
-    /// `a <= b`
-    Lteq(Box<Expression>, Box<Expression>),
     /// `a <=> b`
     AssertEq(Box<Expression>, Box<Expression>),
-
-    /// `a in b`
-    In(Box<Expression>, Box<Expression>),
 
     /// `a && b`
     And(Box<Expression>, Box<Expression>),
@@ -54,6 +50,8 @@ pub enum ExpressionKind {
     Or(Box<Expression>, Box<Expression>),
     /// `!a`
     Not(Box<Expression>),
+
+    Parenthesis(Box<Expression>),
 
     /// Inline If-statements
     IfExpression {
@@ -460,9 +458,10 @@ fn arrow_call<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Express
 
 /// Parse an expression starting from an infix operator. Called by `parse_precedence`.
 fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
+    use ComparisonKind::*;
     use ExpressionKind::*;
 
-    // If there is no precedence - it's the start of an expression.
+    // If there is no precedence it's the start of an expression.
     // All valid operators have a precedence value that is differnt
     // from `Prec::no`.
     match (ctx.token(), precedence(ctx.skip(1).token())) {
@@ -532,28 +531,29 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
     let lhs = Box::new(lhs.clone());
     let rhs = Box::new(rhs);
 
-    // Which expression kind to omit depends on the token.
+    // Which expression kind to emit depends on the token.
     let kind = match op {
         // Simple arithmetic.
         T::Plus => Add(lhs, rhs),
         T::Minus => Sub(lhs, rhs),
         T::Star => Mul(lhs, rhs),
         T::Slash => Div(lhs, rhs),
-        T::EqualEqual => Eq(lhs, rhs),
-        T::NotEqual => Neq(lhs, rhs),
-        T::Greater => Gt(lhs, rhs),
-        T::GreaterEqual => Gteq(lhs, rhs),
-        T::Less => Lt(lhs, rhs),
-        T::LessEqual => Lteq(lhs, rhs),
-        T::Is => Is(lhs, rhs),
+
+        // Comparisons
+        T::EqualEqual => Comparison(lhs, Equals, rhs),
+        T::NotEqual => Comparison(lhs, NotEquals, rhs),
+        T::Greater => Comparison(lhs, Greater, rhs),
+        T::GreaterEqual => Comparison(lhs, GreaterEqual, rhs),
+        T::Less => Comparison(lhs, Less, rhs),
+        T::LessEqual => Comparison(lhs, LessEqual, rhs),
+        T::Is => Comparison(lhs, Is, rhs),
+        T::In => Comparison(lhs, In, rhs),
 
         // Boolean operators.
         T::And => And(lhs, rhs),
         T::Or => Or(lhs, rhs),
 
         T::AssertEqual => AssertEq(lhs, rhs),
-
-        T::In => In(lhs, rhs),
 
         // Unknown infix operator.
         _ => {
@@ -604,14 +604,17 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let ctx = ctx.pop_skip_newlines(skip_newlines);
     let ctx = expect!(ctx, T::RightParen, "Expected ')'");
 
-    use ExpressionKind::Tuple;
+    use ExpressionKind::{Parenthesis, Tuple};
     let result = if is_tuple {
         Expression {
             span,
             kind: Tuple(exprs),
         }
     } else {
-        exprs.remove(0)
+        Expression {
+            span,
+            kind: Parenthesis(Box::new(exprs.remove(0))),
+        }
     };
     Ok((ctx, result))
 }
@@ -807,6 +810,7 @@ pub fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 mod test {
     use super::ExpressionKind::*;
     use crate::expression;
+    use crate::expression::ComparisonKind;
     use crate::test;
     use crate::Assignable;
     use crate::AssignableKind::*;
@@ -829,10 +833,10 @@ mod test {
     test!(expression, zero_set: "{}" => Set(_));
     test!(expression, zero_dict: "{:}" => Dict(_));
 
-    test!(expression, in_list: "a in [1, 2, 3]" => In(_, _));
-    test!(expression, in_set: "2 in {1, 1, 2}" => In(_, _));
+    test!(expression, in_list: "a in [1, 2, 3]" => Comparison(_, ComparisonKind::In, _));
+    test!(expression, in_set: "2 in {1, 1, 2}" => Comparison(_, ComparisonKind::In, _));
     test!(expression, in_grouping: "1 + 2 in b" => Add(_, _));
-    test!(expression, in_grouping_paren: "(1 + 2) in b" => In(_, _));
+    test!(expression, in_grouping_paren: "(1 + 2) in b" => Comparison(_, ComparisonKind::In, _));
 
     test!(expression, call_simple_paren: "a()" => Get(_));
     test!(expression, call_call: "a()()" => Get(_));

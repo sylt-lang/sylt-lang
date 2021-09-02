@@ -1,6 +1,7 @@
 use std::fmt::{self, Write};
 use std::path::PathBuf;
 use sylt_common::{Error, Type as RuntimeType};
+use sylt_parser::expression::ComparisonKind;
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op, Statement,
@@ -185,32 +186,34 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
             write!(dest, "-")?;
             write_expression(dest, indent, expr)?;
         }
-        ExpressionKind::Is(lhs, rhs) => {
-            expr_binary_op!(dest, indent, lhs, " is ", rhs);
-        }
-        ExpressionKind::Eq(lhs, rhs) => {
-            expr_binary_op!(dest, indent, lhs, " == ", rhs);
-        }
-        ExpressionKind::Neq(lhs, rhs) => {
-            expr_binary_op!(dest, indent, lhs, " != ", rhs);
-        }
-        ExpressionKind::Gt(lhs, rhs) => {
-            expr_binary_op!(dest, indent, lhs, " > ", rhs);
-        }
-        ExpressionKind::Gteq(lhs, rhs) => {
-            expr_binary_op!(dest, indent, lhs, " >= ", rhs);
-        }
-        ExpressionKind::Lt(lhs, rhs) => {
-            expr_binary_op!(dest, indent, lhs, " < ", rhs);
-        }
-        ExpressionKind::Lteq(lhs, rhs) => {
-            expr_binary_op!(dest, indent, lhs, " <= ", rhs);
+        ExpressionKind::Comparison(lhs, cmp, rhs) => match cmp {
+            ComparisonKind::Equals => {
+                expr_binary_op!(dest, indent, lhs, " == ", rhs);
+            }
+            ComparisonKind::NotEquals => {
+                expr_binary_op!(dest, indent, lhs, " != ", rhs);
+            }
+            ComparisonKind::Greater => {
+                expr_binary_op!(dest, indent, lhs, " > ", rhs);
+            }
+            ComparisonKind::GreaterEqual => {
+                expr_binary_op!(dest, indent, lhs, " >= ", rhs);
+            }
+            ComparisonKind::Less => {
+                expr_binary_op!(dest, indent, lhs, " < ", rhs);
+            }
+            ComparisonKind::LessEqual => {
+                expr_binary_op!(dest, indent, lhs, " <= ", rhs);
+            }
+            ComparisonKind::Is => {
+                expr_binary_op!(dest, indent, lhs, " is ", rhs);
+            }
+            ComparisonKind::In => {
+                expr_binary_op!(dest, indent, lhs, " in ", rhs);
+            }
         }
         ExpressionKind::AssertEq(lhs, rhs) => {
             expr_binary_op!(dest, indent, lhs, " <=> ", rhs);
-        }
-        ExpressionKind::In(lhs, rhs) => {
-            expr_binary_op!(dest, indent, lhs, " in ", rhs);
         }
         ExpressionKind::And(lhs, rhs) => {
             expr_binary_op!(dest, indent, lhs, " && ", rhs);
@@ -221,6 +224,11 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
         ExpressionKind::Not(expr) => {
             write!(dest, "!")?;
             write_expression(dest, indent, expr)?;
+        }
+        ExpressionKind::Parenthesis(expr) => {
+            write!(dest, "(")?;
+            write_expression(dest, indent, expr)?;
+            write!(dest, ")")?;
         }
         ExpressionKind::IfExpression {
             condition,

@@ -5,6 +5,7 @@ use std::rc::Rc;
 use sylt_common::error::Error;
 use sylt_common::prog::Prog;
 use sylt_common::{Blob, Block, Op, RustFunction, Type, Value};
+use sylt_parser::expression::ComparisonKind;
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     Context as ParserContext,
@@ -363,6 +364,7 @@ impl Compiler {
     }
 
     fn expression(&mut self, expression: &Expression, ctx: Context) {
+        use ComparisonKind::*;
         use ExpressionKind::*;
 
         match &expression.kind {
@@ -381,20 +383,20 @@ impl Compiler {
             Mul(a, b) => self.bin_op(a, b, &[Op::Mul], expression.span, ctx),
             Div(a, b) => self.bin_op(a, b, &[Op::Div], expression.span, ctx),
 
-            Eq(a, b) => self.bin_op(a, b, &[Op::Equal], expression.span, ctx),
-            Neq(a, b) => self.bin_op(a, b, &[Op::Equal, Op::Not], expression.span, ctx),
-            Gt(a, b) => self.bin_op(a, b, &[Op::Greater], expression.span, ctx),
-            Gteq(a, b) => self.bin_op(a, b, &[Op::Less, Op::Not], expression.span, ctx),
-            Lt(a, b) => self.bin_op(a, b, &[Op::Less], expression.span, ctx),
-            Lteq(a, b) => self.bin_op(a, b, &[Op::Greater, Op::Not], expression.span, ctx),
-
-            Is(a, b) => self.bin_op(a, b, &[Op::Is], expression.span, ctx),
+            Comparison(a, cmp, b) => match cmp {
+                Equals => self.bin_op(a, b, &[Op::Equal], expression.span, ctx),
+                NotEquals => self.bin_op(a, b, &[Op::Equal, Op::Not], expression.span, ctx),
+                Greater => self.bin_op(a, b, &[Op::Greater], expression.span, ctx),
+                GreaterEqual => self.bin_op(a, b, &[Op::Less, Op::Not], expression.span, ctx),
+                Less => self.bin_op(a, b, &[Op::Less], expression.span, ctx),
+                LessEqual => self.bin_op(a, b, &[Op::Greater, Op::Not], expression.span, ctx),
+                Is => self.bin_op(a, b, &[Op::Is], expression.span, ctx),
+                In => self.bin_op(a, b, &[Op::Contains], expression.span, ctx),
+            }
 
             AssertEq(a, b) => self.bin_op(a, b, &[Op::Equal, Op::Assert], expression.span, ctx),
 
             Neg(a) => self.un_op(a, &[Op::Neg], expression.span, ctx),
-
-            In(a, b) => self.bin_op(a, b, &[Op::Contains], expression.span, ctx),
 
             And(a, b) => {
                 self.expression(a, ctx);
@@ -426,6 +428,8 @@ impl Compiler {
             Not(a) => self.un_op(a, &[Op::Not], expression.span, ctx),
 
             Duplicate(a) => self.un_op(a, &[Op::Copy(1)], expression.span, ctx),
+
+            Parenthesis(expr) => self.expression(expr, ctx),
 
             IfExpression {
                 condition,
