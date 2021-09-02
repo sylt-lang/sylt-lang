@@ -146,14 +146,6 @@ fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: &Assignable
     }
 }
 
-macro_rules! expr_binary_op {
-    ($dest:expr, $indent:expr, $lhs:expr, $op:literal, $rhs:expr) => {
-        write_expression($dest, $indent, $lhs)?;
-        write!($dest, $op)?;
-        write_expression($dest, $indent, $rhs)?;
-    };
-}
-
 fn write_arrow_call_no_lhs<W: Write>(dest: &mut W, indent: u32, expr: &Expression) -> fmt::Result {
     match &expr.kind {
         ExpressionKind::Get(assignable) => match &assignable.kind {
@@ -170,6 +162,14 @@ fn write_arrow_call_no_lhs<W: Write>(dest: &mut W, indent: u32, expr: &Expressio
         _ => (),
     }
     Ok(())
+}
+
+macro_rules! expr_binary_op {
+    ($dest:expr, $indent:expr, $lhs:expr, $op:literal, $rhs:expr) => {
+        write_expression($dest, $indent, $lhs)?;
+        write!($dest, $op)?;
+        write_expression($dest, $indent, $rhs)?;
+    };
 }
 
 fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression) -> fmt::Result {
