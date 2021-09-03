@@ -30,10 +30,18 @@ pub fn read_file(path: &Path) -> Result<String, Error> {
     std::fs::read_to_string(path).map_err(|_| Error::FileNotFound(path.to_path_buf()))
 }
 
-pub fn compile_with_reader<R>(args: &Args, functions: ExternFunctionList, reader: R) -> Result<Prog, Vec<Error>>
-where R: Fn(&Path) -> Result<String, Error>
+pub fn compile_with_reader<R>(
+    args: &Args,
+    functions: ExternFunctionList,
+    reader: R,
+) -> Result<Prog, Vec<Error>>
+where
+    R: Fn(&Path) -> Result<String, Error>,
 {
-    let tree = sylt_parser::tree(&PathBuf::from(args.args.first().expect("No file to run")), reader)?;
+    let tree = sylt_parser::tree(
+        &PathBuf::from(args.args.first().expect("No file to run")),
+        reader,
+    )?;
     if args.dump_tree {
         println!("Syntax tree: {:#?}", tree);
     }
@@ -41,8 +49,13 @@ where R: Fn(&Path) -> Result<String, Error>
     Ok(prog)
 }
 
-pub fn run_file_with_reader<R>(args: &Args, functions: ExternFunctionList, reader: R) -> Result<(), Vec<Error>>
-where R: Fn(&Path) -> Result<String, Error>
+pub fn run_file_with_reader<R>(
+    args: &Args,
+    functions: ExternFunctionList,
+    reader: R,
+) -> Result<(), Vec<Error>>
+where
+    R: Fn(&Path) -> Result<String, Error>,
 {
     let prog = compile_with_reader(args, functions, reader)?;
     run(&prog, &args)
@@ -71,7 +84,11 @@ pub struct Args {
     #[options(short = "r", long = "run", help = "Runs a precompiled sylt binary")]
     pub is_binary: bool,
 
-    #[options(long = "skip-typecheck", no_short, help = "Does no type checking what so ever")]
+    #[options(
+        long = "skip-typecheck",
+        no_short,
+        help = "Does no type checking what so ever"
+    )]
     pub skip_typecheck: bool,
 
     #[options(long = "dump-tree", no_short, help = "Writes the tree to stdout")]
@@ -83,7 +100,10 @@ pub struct Args {
     #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
     pub verbosity: u32,
 
-    #[options(long = "format", help = "Run an auto formatter on the supplied file and print the result to stdout.")]
+    #[options(
+        long = "format",
+        help = "Run an auto formatter on the supplied file and print the result to stdout."
+    )]
     pub format: bool,
 
     #[options(help = "Print this help")]
@@ -115,9 +135,9 @@ mod tests {
             let errs = $result.err().unwrap_or(Vec::new());
 
             #[allow(unused_imports)]
-            use ::sylt_common::error::Error;
+            use sylt_common::error::Error;
             #[allow(unused_imports)]
-            use ::sylt_tokenizer::Span;
+            use sylt_tokenizer::Span;
             if !matches!(errs.as_slice(), $expect) {
                 eprintln!("===== Got =====");
                 for err in errs {
@@ -136,11 +156,11 @@ mod tests {
             #[test]
             fn $fn() {
                 #[allow(unused_imports)]
-                use ::sylt_common::error::RuntimeError;
+                use sylt_common::error::RuntimeError;
                 #[allow(unused_imports)]
-                use ::sylt_common::error::TypeError;
+                use sylt_common::error::TypeError;
                 #[allow(unused_imports)]
-                use ::sylt_common::Type;
+                use sylt_common::Type;
 
                 let mut args = $crate::Args::default();
                 args.args = vec![format!("../{}", $path)];

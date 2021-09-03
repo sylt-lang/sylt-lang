@@ -158,7 +158,7 @@ fn write_arrow_call_no_lhs<W: Write>(dest: &mut W, indent: u32, expr: &Expressio
                 write!(dest, ")")?;
             }
             _ => (),
-        }
+        },
         _ => (),
     }
     Ok(())
@@ -220,7 +220,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
             ComparisonKind::In => {
                 expr_binary_op!(dest, indent, lhs, " in ", rhs);
             }
-        }
+        },
         ExpressionKind::AssertEq(lhs, rhs) => {
             expr_binary_op!(dest, indent, lhs, " <=> ", rhs);
         }
@@ -260,24 +260,31 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
             write!(dest, " if")?;
             match &condition.kind {
                 ExpressionKind::Comparison(_lhs, cmp, rhs) => {
-                    write!(dest, " {} ", match cmp {
-                        ComparisonKind::Equals => "==",
-                        ComparisonKind::NotEquals => "!=",
-                        ComparisonKind::Greater => ">",
-                        ComparisonKind::GreaterEqual => ">=",
-                        ComparisonKind::Less => "<",
-                        ComparisonKind::LessEqual => "<=",
-                        ComparisonKind::Is => "is",
-                        ComparisonKind::In => "in",
-                    })?;
+                    write!(
+                        dest,
+                        " {} ",
+                        match cmp {
+                            ComparisonKind::Equals => "==",
+                            ComparisonKind::NotEquals => "!=",
+                            ComparisonKind::Greater => ">",
+                            ComparisonKind::GreaterEqual => ">=",
+                            ComparisonKind::Less => "<",
+                            ComparisonKind::LessEqual => "<=",
+                            ComparisonKind::Is => "is",
+                            ComparisonKind::In => "in",
+                        }
+                    )?;
                     write_expression(dest, indent, rhs)?;
                 }
                 ExpressionKind::Get(assignable) => match &assignable.kind {
                     AssignableKind::ArrowCall(..) => {
                         write_arrow_call_no_lhs(dest, indent, condition)?;
                     }
-                    kind => panic!("only arrow calls are supported in a short if expression: {:?}", kind),
-                }
+                    kind => panic!(
+                        "only arrow calls are supported in a short if expression: {:?}",
+                        kind
+                    ),
+                },
                 kind => {
                     panic!("unsupported condition in a short if expression: {:?}", kind);
                 }
@@ -542,7 +549,7 @@ fn format_module(module: &Module) -> Result<String, fmt::Error> {
 pub fn format(args: &Args) -> Result<String, Vec<Error>> {
     let tree = sylt_parser::tree(
         &PathBuf::from(args.args.first().expect("No file to run")),
-        crate::read_file
+        crate::read_file,
     )?;
     Ok(format_module(&tree.modules[0].1).unwrap())
 }
@@ -553,11 +560,14 @@ mod tests {
         ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
             #[test]
             fn $fn() {
-                use ::std::path::{Path, PathBuf};
+                use std::path::{Path, PathBuf};
                 #[allow(unused_imports)]
-                use ::sylt_common::{error::{Error, RuntimeError, TypeError}, Type};
+                use sylt_common::{
+                    error::{Error, RuntimeError, TypeError},
+                    Type,
+                };
                 #[allow(unused_imports)]
-                use ::sylt_tokenizer::Span;
+                use sylt_tokenizer::Span;
 
                 let path = format!("../{}", $path);
 
@@ -586,7 +596,11 @@ mod tests {
                         };
 
                         // Try to run the file again, this time with pretty "got/expected"-output.
-                        let after = $crate::run_file_with_reader(&args, ::sylt_std::sylt::_sylt_link(), read_formatted_or_file);
+                        let after = $crate::run_file_with_reader(
+                            &args,
+                            ::sylt_std::sylt::_sylt_link(),
+                            read_formatted_or_file,
+                        );
                         eprintln!("The test output changed between before and after formatting");
                         $crate::assert_errs!(after, $errs);
                     }
@@ -598,7 +612,7 @@ mod tests {
                     }
                 }
             }
-        }
+        };
     }
 
     sylt_macro::find_tests!(test_formatter_on_file);
