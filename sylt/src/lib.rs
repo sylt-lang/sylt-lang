@@ -26,11 +26,11 @@ pub fn lib_bindings() -> ExternFunctionList {
     lib
 }
 
-pub(crate) fn read_file(path: &Path) -> Result<String, Error> {
+pub fn read_file(path: &Path) -> Result<String, Error> {
     std::fs::read_to_string(path).map_err(|_| Error::FileNotFound(path.to_path_buf()))
 }
 
-pub(crate) fn compile_with_reader<R>(args: &Args, functions: ExternFunctionList, reader: R) -> Result<Prog, Vec<Error>>
+pub fn compile_with_reader<R>(args: &Args, functions: ExternFunctionList, reader: R) -> Result<Prog, Vec<Error>>
 where R: Fn(&Path) -> Result<String, Error>
 {
     let tree = sylt_parser::tree(&PathBuf::from(args.args.first().expect("No file to run")), reader)?;
@@ -41,7 +41,7 @@ where R: Fn(&Path) -> Result<String, Error>
     Ok(prog)
 }
 
-pub(crate) fn run_file_with_reader<R>(args: &Args, functions: ExternFunctionList, reader: R) -> Result<(), Vec<Error>>
+pub fn run_file_with_reader<R>(args: &Args, functions: ExternFunctionList, reader: R) -> Result<(), Vec<Error>>
 where R: Fn(&Path) -> Result<String, Error>
 {
     let prog = compile_with_reader(args, functions, reader)?;
