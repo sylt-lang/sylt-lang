@@ -73,7 +73,35 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
     }
 }
 
-pub(crate) fn initialization_order<'a>(tree: &'a mut AST, compiler: &Compiler) -> Vec<&'a Statement> {
+fn order(to_order: HashMap<Name, (HashSet<Name>, &Statement)>) -> Vec<&Statement> {
+
+    fn recurse<'a>(
+        name: Name,
+        to_order: &HashMap<Name, (HashSet<Name>, &'a Statement)>,
+        inserted: &mut HashSet<Name>,
+        ordered: &mut Vec<&'a Statement>
+    ) {
+        if !inserted.insert(name) {
+            return;
+        }
+        let (deps, statement) = to_order.get(&name).unwrap();
+        for dep in deps {
+            recurse(*dep, to_order, inserted, ordered);
+        }
+
+        ordered.push(statement);
+    }
+
+    // TODO: detect cycles
+    let mut ordered = Vec::new();
+    for (name, _) in to_order.iter() {
+        recurse(*name, &to_order, &mut HashSet::new(), &mut ordered);
+    }
+
+    ordered
+}
+
+pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Vec<&'a Statement> {
     let path_to_namespace_id: HashMap<_, _> = compiler.namespace_id_to_path
         .iter()
         .map(|(a, b)| (b.clone(), *a))
@@ -82,7 +110,7 @@ pub(crate) fn initialization_order<'a>(tree: &'a mut AST, compiler: &Compiler) -
         .map(|ns| ns.values())
         .flatten()
         .collect();
-    for (path, module) in tree.modules.iter_mut() {
+    for (path, module) in tree.modules.iter() {
         let namespace = *path_to_namespace_id.get(path).unwrap();
         let globals: Vec<_> = compiler.namespaces[namespace]
             .iter()
@@ -90,28 +118,26 @@ pub(crate) fn initialization_order<'a>(tree: &'a mut AST, compiler: &Compiler) -
             .cloned()
             .collect();
         dbg!(globals);
-        let mut ordered_statements = Vec::new();
-        for statement in module.statements.drain(..) {
+        let mut to_order = HashMap::new();
+        for statement in module.statements.iter() {
             use StatementKind::*;
             match &statement.kind {
+                // TODO: Don't forget blob
                 Definition { ident, value, .. } => {
                     let deps = dependencies(&Context{compiler, namespace}, value);
                     dbg!(
                         &ident.name,
                         &deps
                     );
-                    ordered_statements.push((
+                    to_order.insert(
                         *compiler.namespaces[namespace].get(&ident.name).unwrap(),
-                        deps,
-                        statement
-                    ));
+                        (deps, statement)
+                    );
                 }
                 _ => {}
             }
         }
-        module.statements = ordered_statements.into_iter()
-            .map(|(_, _, statement)| statement)
-            .collect();
+        return order(to_order);
     }
-    Vec::new()
+    unreachable!();
 }

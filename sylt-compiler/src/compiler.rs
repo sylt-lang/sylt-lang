@@ -1120,16 +1120,15 @@ impl Compiler {
             num_functions
         );
 
-        dependency::initialization_order(&mut tree, &self);
-
-        for (path, module) in tree.modules.iter() {
+        // HACK
+        // TODO: several files...
+        for (path, _module) in tree.modules.iter() {
             ctx.namespace = path_to_namespace_id[path];
-            self.module_functions(module, ctx);
+            break;
         }
 
-        for (path, module) in tree.modules.iter() {
-            ctx.namespace = path_to_namespace_id[path];
-            self.module_not_functions(module, ctx);
+        for statement in dependency::initialization_order(&tree, &self) {
+            self.statement(statement, ctx);
         }
 
         if !self.errors.is_empty() {
