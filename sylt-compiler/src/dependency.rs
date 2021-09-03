@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::Entry::{Occupied, Vacant};
 use crate::{Compiler, Name};
 use sylt_parser::{
     AST, Expression, Statement, StatementKind,
@@ -75,27 +76,38 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
 
 fn order(to_order: HashMap<Name, (HashSet<Name>, &Statement)>) -> Vec<&Statement> {
 
+    enum State {
+        Inserting,
+        Inserted,
+    }
+
     fn recurse<'a>(
         name: Name,
         to_order: &HashMap<Name, (HashSet<Name>, &'a Statement)>,
-        inserted: &mut HashSet<Name>,
+        inserted: &mut HashMap<Name, State>,
         ordered: &mut Vec<&'a Statement>
     ) {
-        if !inserted.insert(name) {
-            return;
-        }
+        match inserted.entry(name) {
+            Vacant(entry) => entry.insert(State::Inserting),
+            Occupied(entry) => match entry.get() {
+                State::Inserting => panic!("Cycle"),
+                State::Inserted => return,
+            },
+        };
         let (deps, statement) = to_order.get(&name).unwrap();
         for dep in deps {
             recurse(*dep, to_order, inserted, ordered);
         }
 
+        inserted.insert(name, State::Inserted);
         ordered.push(statement);
     }
 
     // TODO: detect cycles
     let mut ordered = Vec::new();
+    let mut inserted = HashMap::new();
     for (name, _) in to_order.iter() {
-        recurse(*name, &to_order, &mut HashSet::new(), &mut ordered);
+        recurse(*name, &to_order, &mut inserted, &mut ordered);
     }
 
     ordered
