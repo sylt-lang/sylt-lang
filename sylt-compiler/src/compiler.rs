@@ -108,7 +108,7 @@ type ConstantID = usize;
 type NamespaceID = usize;
 type BlobID = usize;
 type BlockID = usize;
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 enum Name {
     Global(ConstantID),
     Blob(BlobID),
