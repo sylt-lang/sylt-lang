@@ -185,12 +185,17 @@ type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>, Vec<Error>)>;
 #[derive(Debug, Copy, Clone)]
 pub struct Context<'a> {
     pub skip_newlines: bool,
+    /// The index of the end token of the last statement parsed.
+    last_statement: usize,
     /// All tokens to be parsed.
+    ///
+    /// If you want to look ahead, you should probably use
+    /// [Context::tokens_forward] since it filters comments.
     pub tokens: &'a [Token],
     /// The corresponding span for each token. Matches 1:1 with the tokens.
     pub spans: &'a [Span],
     /// The index of the curren token in the token slice.
-    pub curr: usize,
+    curr: usize,
     /// The file we're currently parsing.
     pub file: &'a Path,
     /// The source root - the top most folder.
@@ -201,6 +206,7 @@ impl<'a> Context<'a> {
     pub fn new(tokens: &'a [Token], spans: &'a [Span], file: &'a Path, root: &'a Path) -> Self {
         Self {
             skip_newlines: false,
+            last_statement: 0,
             tokens,
             spans,
             curr: 0,
@@ -214,12 +220,36 @@ impl<'a> Context<'a> {
         *self.peek().1
     }
 
+    fn comments_since_last_statement(&self) -> Vec<String> {
+        self.tokens
+            .iter()
+            .skip(self.last_statement)
+            .take(self.curr - self.last_statement)
+            .filter_map(|t| match t {
+                Token::Comment(c) => Some(c.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Move to the next nth token.
     fn skip(&self, n: usize) -> Self {
         let mut new = *self;
-        new.curr += n;
-        while self.skip_newlines && matches!(new.token(), T::Newline) {
+        let mut skipped = 0;
+        // Skip n non comment tokens.
+        while skipped < n {
+            if !matches!(new.token(), T::Comment(_)) {
+                skipped += 1;
+            }
             new.curr += 1;
+        }
+        // Skip trailing comments and (maybe) newlines.
+        loop {
+            match new.token() {
+                T::Comment(_) => new.curr += 1,
+                T::Newline if self.skip_newlines => new.curr += 1,
+                _ => break,
+            }
         }
         new
     }
@@ -228,6 +258,10 @@ impl<'a> Context<'a> {
     fn prev(&self) -> Self {
         let mut new = *self;
         new.curr = new.curr.saturating_sub(1);
+        // Continue going backwards if we're at a comment.
+        while matches!(new.token(), T::Comment(_)) {
+            new.curr = new.curr.saturating_sub(1);
+        }
         new
     }
 
@@ -244,6 +278,13 @@ impl<'a> Context<'a> {
         let mut new = *self;
         new.skip_newlines = skip_newlines;
         new
+    }
+
+    fn push_last_statement_location(&self) -> Self {
+        Self {
+            last_statement: self.curr,
+            ..*self
+        }
     }
 
     fn skip_if(&self, token: T) -> Self {
@@ -272,6 +313,17 @@ impl<'a> Context<'a> {
     /// Return the current [Token].
     fn token(&self) -> &T {
         &self.peek().0
+    }
+
+    fn tokens_lookahead<const N: usize>(&self) -> [Token; N] {
+        const ERROR: Token = Token::Error;
+        let mut res = [ERROR; N];
+        let mut ctx = *self;
+        for i in 0..N {
+            res[i] = ctx.token().clone();
+            ctx = ctx.skip(1);
+        }
+        res
     }
 
     /// Eat a [Token] and move to the next.
@@ -359,6 +411,20 @@ macro_rules! expect {
     };
 }
 
+/// Eat any number of occurences of the specified tokens.
+#[macro_export]
+macro_rules! skip_while {
+    ($ctx:expr, $( $token: pat )|+ ) => {
+        {
+            let mut ctx = $ctx;
+            while matches!(ctx.token(), $( $token )|*) {
+                ctx = ctx.skip(1);
+            }
+            ctx
+        }
+    };
+}
+
 /// Eat until any one of the specified tokens or EOF.
 #[macro_export]
 macro_rules! skip_until {
@@ -372,7 +438,6 @@ macro_rules! skip_until {
         }
     };
 }
-
 
 /// Parse a [Type] definition, e.g. `fn int, int, bool -> bool`.
 pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
@@ -717,10 +782,7 @@ fn module(path: &Path, root: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBu
                 if let Use { file, .. } = &statement.kind {
                     use_files.push(file.clone());
                 }
-                // Only push non-empty statements.
-                if !matches!(statement.kind, EmptyStatement) {
-                    statements.push(statement);
-                }
+                statements.push(statement);
                 ctx
             }
             Err((ctx, mut errs)) => {
@@ -730,6 +792,15 @@ fn module(path: &Path, root: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBu
                 skip_until!(ctx, T::Newline)
             }
         }
+    }
+
+    let trailing_comments = ctx.comments_since_last_statement();
+    if !trailing_comments.is_empty() {
+        statements.push(Statement {
+            span: ctx.span(),
+            kind: StatementKind::EmptyStatement,
+            comments: trailing_comments,
+        });
     }
 
     if errors.is_empty() {
@@ -785,8 +856,8 @@ pub fn find_conflict_markers(file: &Path, source: &str) -> Vec<Error> {
 /// Returns any errors that occured when parsing the file(s). Basic error
 /// continuation is performed as documented in [module].
 pub fn tree<F>(path: &Path, reader: F) -> Result<AST, Vec<Error>>
-    where
-        F: Fn(&Path) -> Result<String, Error>
+where
+    F: Fn(&Path) -> Result<String, Error>
 {
     // Files we've already parsed. This ensures circular includes don't parse infinitely.
     let mut visited = HashSet::new();

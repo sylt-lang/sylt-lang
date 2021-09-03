@@ -42,7 +42,7 @@ fn main() -> std::io::Result<()> {
 
     eprintln!("Compiling");
     let functions = sylt::lib_bindings();
-    let prog = match sylt::compile(&sylt_args, functions) {
+    let prog = match sylt::compile_with_reader(&sylt_args, functions, sylt::read_file) {
         Ok(prog) => prog,
         Err(errs) => {
             for err in errs {

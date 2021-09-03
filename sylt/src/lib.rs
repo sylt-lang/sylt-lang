@@ -7,10 +7,12 @@ use sylt_common::error::Error;
 use sylt_common::prog::Prog;
 use sylt_common::RustFunction;
 
-type ExternFuncionList = Vec<(String, RustFunction, String)>;
+pub mod formatter;
+
+type ExternFunctionList = Vec<(String, RustFunction, String)>;
 
 /// Generates the linking for the standard library, and lingon if it's active.
-pub fn lib_bindings() -> ExternFuncionList {
+pub fn lib_bindings() -> ExternFunctionList {
     let mut lib = Vec::new();
 
     lib.append(&mut sylt_std::sylt::_sylt_link());
@@ -24,12 +26,22 @@ pub fn lib_bindings() -> ExternFuncionList {
     lib
 }
 
-fn read_file(path: &Path) -> Result<String, Error> {
+pub fn read_file(path: &Path) -> Result<String, Error> {
     std::fs::read_to_string(path).map_err(|_| Error::FileNotFound(path.to_path_buf()))
 }
 
-pub fn compile(args: &Args, functions: ExternFuncionList) -> Result<Prog, Vec<Error>> {
-    let tree = sylt_parser::tree(&PathBuf::from(args.args.first().expect("No file to run")), read_file)?;
+pub fn compile_with_reader<R>(
+    args: &Args,
+    functions: ExternFunctionList,
+    reader: R,
+) -> Result<Prog, Vec<Error>>
+where
+    R: Fn(&Path) -> Result<String, Error>,
+{
+    let tree = sylt_parser::tree(
+        &PathBuf::from(args.args.first().expect("No file to run")),
+        reader,
+    )?;
     if args.dump_tree {
         println!("Syntax tree: {:#?}", tree);
     }
@@ -37,11 +49,22 @@ pub fn compile(args: &Args, functions: ExternFuncionList) -> Result<Prog, Vec<Er
     Ok(prog)
 }
 
+pub fn run_file_with_reader<R>(
+    args: &Args,
+    functions: ExternFunctionList,
+    reader: R,
+) -> Result<(), Vec<Error>>
+where
+    R: Fn(&Path) -> Result<String, Error>,
+{
+    let prog = compile_with_reader(args, functions, reader)?;
+    run(&prog, &args)
+}
+
 /// Compiles, links and runs the given file. The supplied functions are callable
 /// external functions.
-pub fn run_file(args: &Args, functions: ExternFuncionList) -> Result<(), Vec<Error>> {
-    let prog = compile(args, functions)?;
-    run(&prog, &args)
+pub fn run_file(args: &Args, functions: ExternFunctionList) -> Result<(), Vec<Error>> {
+    run_file_with_reader(args, functions, read_file)
 }
 
 pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
@@ -61,7 +84,11 @@ pub struct Args {
     #[options(short = "r", long = "run", help = "Runs a precompiled sylt binary")]
     pub is_binary: bool,
 
-    #[options(long = "skip-typecheck", no_short, help = "Does no type checking what so ever")]
+    #[options(
+        long = "skip-typecheck",
+        no_short,
+        help = "Does no type checking what so ever"
+    )]
     pub skip_typecheck: bool,
 
     #[options(long = "dump-tree", no_short, help = "Writes the tree to stdout")]
@@ -72,6 +99,12 @@ pub struct Args {
 
     #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
     pub verbosity: u32,
+
+    #[options(
+        long = "format",
+        help = "Run an auto formatter on the supplied file and print the result to stdout."
+    )]
+    pub format: bool,
 
     #[options(help = "Print this help")]
     pub help: bool,
@@ -102,9 +135,9 @@ mod tests {
             let errs = $result.err().unwrap_or(Vec::new());
 
             #[allow(unused_imports)]
-            use ::sylt_common::error::Error;
+            use sylt_common::error::Error;
             #[allow(unused_imports)]
-            use ::sylt_tokenizer::Span;
+            use sylt_tokenizer::Span;
             if !matches!(errs.as_slice(), $expect) {
                 eprintln!("===== Got =====");
                 for err in errs {
@@ -123,11 +156,11 @@ mod tests {
             #[test]
             fn $fn() {
                 #[allow(unused_imports)]
-                use ::sylt_common::error::RuntimeError;
+                use sylt_common::error::RuntimeError;
                 #[allow(unused_imports)]
-                use ::sylt_common::error::TypeError;
+                use sylt_common::error::TypeError;
                 #[allow(unused_imports)]
-                use ::sylt_common::Type;
+                use sylt_common::Type;
 
                 let mut args = $crate::Args::default();
                 args.args = vec![format!("../{}", $path)];
@@ -138,5 +171,5 @@ mod tests {
         };
     }
 
-    sylt_macro::find_tests!();
+    sylt_macro::find_tests!(test_file);
 }

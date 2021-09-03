@@ -1,5 +1,14 @@
 use super::*;
 
+/// The different ways a namespace is introduced by a use statement.
+#[derive(Debug, Clone)]
+pub enum NameIdentifier {
+    /// When the identifier is implicit from the path. For example, `use a/b` introduces `b`.
+    Implicit(Identifier),
+    /// When the identifier is an alias. For example, `use a/b as c` introduces `c`.
+    Alias(Identifier),
+}
+
 /// The different kinds of [Statement]s.
 ///
 /// There are both shorter statements like `a = b + 1` as well as longer
@@ -19,7 +28,8 @@ pub enum StatementKind {
     /// `use <file> as <alias>`.
     /// `use <folder>/ as <alias>`.
     Use {
-        ident: Identifier,
+        path: Identifier,
+        name: NameIdentifier,
         file: PathBuf,
     },
 
@@ -118,9 +128,11 @@ pub enum StatementKind {
 pub struct Statement {
     pub span: Span,
     pub kind: StatementKind,
+    pub comments: Vec<String>,
 }
 
-pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, String> {
+pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
+    let span = ctx.span();
     let mut ctx = ctx;
     let mut result = String::new();
     expect!(
@@ -141,7 +153,10 @@ pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, String> {
         }
     }
 
-    Ok(( ctx, result ))
+    Ok((ctx, Identifier {
+        span,
+        name: result,
+    }))
 }
 
 pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
@@ -180,8 +195,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     // Newlines have meaning in statements - thus they shouldn't be skipped.
     let (ctx, skip_newlines) = ctx.push_skip_newlines(false);
 
+    // Get all comments since the last statement.
+    let mut comments = ctx.comments_since_last_statement();
+    let ctx = ctx.push_last_statement_location();
+
     let span = ctx.span();
-    let (ctx, kind) = match &ctx.tokens[ctx.curr..] {
+    //NOTE(gu): Explicit lookahead.
+    let (ctx, kind) = match &ctx.tokens_lookahead::<3>() {
         [T::Newline, ..] => (ctx, EmptyStatement),
 
         // Block: `{ <statements> }`
@@ -202,10 +222,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         // `use path/to/file`
         // `use path/to/file as alias`
         [T::Use, ..] => {
-            let (ctx, path) = path(ctx.skip(1))?;
-            let bare_name = path
+            let ctx = ctx.skip(1);
+            let (ctx, path_ident) = path(ctx)?;
+            let path = &path_ident.name;
+            let name = path
                 .trim_start_matches("/")
-                .trim_end_matches("/");
+                .trim_end_matches("/")
+                .to_string();
             let file = {
                 let parent = if path.starts_with("/") {
                     ctx.root
@@ -216,19 +239,19 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 // in the folder.
                 parent.join(if path == "/" {
                     format!("exports.sy")
-                } else if path.ends_with("/") {
-                    format!("{}/exports.sy", bare_name)
+                } else if path_ident.name.ends_with("/") {
+                    format!("{}/exports.sy", name)
                 } else {
-                    format!("{}.sy", bare_name)
+                    format!("{}.sy", name)
                 })
             };
-            let (ctx, ident) = match &ctx.tokens[ctx.curr..] {
+            let (ctx, alias) = match &ctx.tokens_lookahead::<2>() {
                 [T::As, T::Identifier(alias), ..] => (
                     ctx.skip(2),
-                    Identifier {
+                    NameIdentifier::Alias(Identifier {
                         span: ctx.skip(1).span(),
                         name: alias.clone(),
-                    }
+                    })
                 ),
                 [T::As, ..] => raise_syntax_error!(
                     ctx.skip(1),
@@ -243,16 +266,16 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     } else {
                         ctx.prev().span()
                     };
-                    let name = PathBuf::from(bare_name)
+                    let name = PathBuf::from(&name)
                         .file_stem()
                         .unwrap()
                         .to_str()
                         .unwrap()
                         .to_string();
-                    (ctx, Identifier { span, name })
+                    (ctx, NameIdentifier::Implicit(Identifier { span, name }))
                 },
             };
-            (ctx, Use { ident, file })
+            (ctx, Use { path: path_ident, name: alias, file })
         },
 
         // `: A is : B`
@@ -325,6 +348,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     Statement {
                         span: ctx.span(),
                         kind: EmptyStatement,
+                        comments: Vec::new(),
                     },
                 )
             };
@@ -531,7 +555,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         expect!(ctx, T::Newline, "Expected newline to end statement")
     };
     let ctx = ctx.pop_skip_newlines(skip_newlines);
-    Ok((ctx, Statement { span, kind }))
+    comments.append(&mut ctx.comments_since_last_statement());
+    let ctx = ctx.push_last_statement_location();
+    Ok((ctx, Statement {
+        span,
+        kind,
+        comments,
+    }))
 }
 
 /// Parse an outer statement.
