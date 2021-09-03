@@ -1120,7 +1120,7 @@ impl Compiler {
             num_functions
         );
 
-        dependency::initialization_order(&tree, &self);
+        dependency::initialization_order(&mut tree, &self);
 
         for (path, module) in tree.modules.iter() {
             ctx.namespace = path_to_namespace_id[path];

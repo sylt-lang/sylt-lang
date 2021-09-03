@@ -73,7 +73,7 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
     }
 }
 
-pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Vec<&'a Statement> {
+pub(crate) fn initialization_order<'a>(tree: &'a mut AST, compiler: &Compiler) -> Vec<&'a Statement> {
     let path_to_namespace_id: HashMap<_, _> = compiler.namespace_id_to_path
         .iter()
         .map(|(a, b)| (b.clone(), *a))
@@ -82,7 +82,7 @@ pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Ve
         .map(|ns| ns.values())
         .flatten()
         .collect();
-    for (path, module) in tree.modules.iter() {
+    for (path, module) in tree.modules.iter_mut() {
         let namespace = *path_to_namespace_id.get(path).unwrap();
         let globals: Vec<_> = compiler.namespaces[namespace]
             .iter()
@@ -90,18 +90,28 @@ pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Ve
             .cloned()
             .collect();
         dbg!(globals);
-        for statement in module.statements.iter() {
+        let mut ordered_statements = Vec::new();
+        for statement in module.statements.drain(..) {
             use StatementKind::*;
             match &statement.kind {
                 Definition { ident, value, .. } => {
+                    let deps = dependencies(&Context{compiler, namespace}, value);
                     dbg!(
                         &ident.name,
-                        dependencies(&Context{compiler, namespace}, value)
+                        &deps
                     );
+                    ordered_statements.push((
+                        *compiler.namespaces[namespace].get(&ident.name).unwrap(),
+                        deps,
+                        statement
+                    ));
                 }
                 _ => {}
             }
         }
+        module.statements = ordered_statements.into_iter()
+            .map(|(_, _, statement)| statement)
+            .collect();
     }
     Vec::new()
 }
