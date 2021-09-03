@@ -856,8 +856,8 @@ pub fn find_conflict_markers(file: &Path, source: &str) -> Vec<Error> {
 /// Returns any errors that occured when parsing the file(s). Basic error
 /// continuation is performed as documented in [module].
 pub fn tree<F>(path: &Path, reader: F) -> Result<AST, Vec<Error>>
-    where
-        F: Fn(&Path) -> Result<String, Error>
+where
+    F: Fn(&Path) -> Result<String, Error>
 {
     // Files we've already parsed. This ensures circular includes don't parse infinitely.
     let mut visited = HashSet::new();

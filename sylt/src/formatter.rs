@@ -540,7 +540,10 @@ fn format_module(module: &Module) -> Result<String, fmt::Error> {
 }
 
 pub fn format(args: &Args) -> Result<String, Vec<Error>> {
-    let tree = sylt_parser::tree(&PathBuf::from(args.args.first().expect("No file to run")))?;
+    let tree = sylt_parser::tree(
+        &PathBuf::from(args.args.first().expect("No file to run")),
+        crate::read_file
+    )?;
     Ok(format_module(&tree.modules[0].1).unwrap())
 }
 
@@ -550,6 +553,7 @@ mod tests {
         ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
             #[test]
             fn $fn() {
+                use ::std::path::{Path, PathBuf};
                 #[allow(unused_imports)]
                 use ::sylt_common::{error::{Error, RuntimeError, TypeError}, Type};
                 #[allow(unused_imports)]
@@ -572,11 +576,17 @@ mod tests {
                 // Format the file.
                 match $crate::formatter::format(&args) {
                     Ok(formatted) => {
-                        // Overwrite with the formatted output.
-                        ::std::fs::write(&path, formatted).unwrap();
+                        let formatted_path = PathBuf::from(&path).canonicalize().unwrap();
+                        let read_formatted_or_file = |path: &Path| {
+                            if path.canonicalize().unwrap() == formatted_path {
+                                Ok(formatted.clone())
+                            } else {
+                                $crate::read_file(path)
+                            }
+                        };
 
                         // Try to run the file again, this time with pretty "got/expected"-output.
-                        let after = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
+                        let after = $crate::run_file_with_reader(&args, ::sylt_std::sylt::_sylt_link(), read_formatted_or_file);
                         eprintln!("The test output changed between before and after formatting");
                         $crate::assert_errs!(after, $errs);
                     }

@@ -14,7 +14,6 @@ pub trait Numbered {
 pub enum Type {
     Ty,
     Generic(String),
-    Field(String),
     Void,
     Unknown,
     Int,
@@ -45,7 +44,6 @@ impl Display for Type {
         match self {
             Type::Ty => write!(f, "Type"),
             Type::Generic(name) => write!(f, "#{}", name),
-            Type::Field(name) => write!(f, ".{}", name),
             Type::Void => write!(f, "void"),
             Type::Unknown => write!(f, "?"),
             Type::Int => write!(f, "int"),
@@ -97,8 +95,6 @@ impl Hash for Type {
         self.to_number().hash(h);
         match self {
             Type::Generic(name) => name.hash(h),
-
-            Type::Field(f) => f.hash(h),
 
             Type::List(t) | Type::Set(t)
                 => t.as_ref().hash(h),
@@ -171,7 +167,6 @@ fn maybe_union_from_type<'a>(v: impl Iterator<Item = &'a Value>) -> Type {
 impl From<&Value> for Type {
     fn from(value: &Value) -> Type {
         match value {
-            Value::Field(s) => Type::Field(s.clone()),
             Value::Instance(b, _) => Type::Instance(*b),
             Value::Blob(b) => Type::Blob(*b),
             Value::Tuple(v) => Type::Tuple(v.iter().map(Type::from).collect()),
@@ -189,13 +184,11 @@ impl From<&Value> for Type {
                 let v = maybe_union_from_type(v.values());
                 Type::Dict(Box::new(k), Box::new(v))
             }
-            Value::Union(v) => Type::Union(v.iter().map(Type::from).collect()),
             Value::Int(_) => Type::Int,
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
             Value::Function(_, ty, _) => ty.clone(),
-            Value::Unknown => Type::Unknown,
             Value::ExternFunction(n) => Type::ExternFunction(*n),
             Value::Nil => Type::Void,
             Value::Ty(_) => Type::Ty,

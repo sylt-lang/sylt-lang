@@ -12,7 +12,6 @@ pub type FlatValueID = usize;
 /// which point into an accompanying vector.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum FlatValue {
-    Field(String),
     Ty(Type),
     Blob(usize),
     Instance(usize, HashMap<String, FlatValueID>),
@@ -26,7 +25,6 @@ pub enum FlatValue {
     String(String),
     Function(Vec<FlatUpValue>, Type, usize),
     ExternFunction(usize),
-    Unknown,
     Nil,
 }
 
@@ -55,7 +53,6 @@ impl FlatValue {
         pack.push(FlatValue::Nil);
 
         let val = match value {
-            Value::Field(s) => FlatValue::Field(s.into()),
             Value::Ty(ty) => FlatValue::Ty(ty.clone()),
             Value::Blob(slot) => FlatValue::Blob(*slot),
             Value::Instance(ty_slot, values) => FlatValue::Instance(
@@ -95,11 +92,7 @@ impl FlatValue {
                 *slot,
             ),
             Value::ExternFunction(slot) => FlatValue::ExternFunction(*slot),
-            Value::Unknown => FlatValue::Unknown,
             Value::Nil => FlatValue::Nil,
-            Value::Union(_) => {
-                unreachable!("Cannot send union values over the network");
-            }
         };
         pack[id] = val;
         id
@@ -109,7 +102,6 @@ impl FlatValue {
     /// sub types are filled with placeholders.
     fn partial_unpack(value: FlatValue) -> Value {
         match value {
-            FlatValue::Field(s) => Value::Field(s),
             FlatValue::Ty(ty) => Value::Ty(ty),
             FlatValue::Blob(slot) => Value::Blob(slot),
             FlatValue::Instance(ty_slot, _) => Value::Instance(
@@ -132,7 +124,6 @@ impl FlatValue {
                 slot,
             ),
             FlatValue::ExternFunction(slot) => Value::ExternFunction(slot),
-            FlatValue::Unknown => Value::Unknown,
             FlatValue::Nil => Value::Nil,
         }
     }

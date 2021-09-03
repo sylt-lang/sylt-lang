@@ -26,12 +26,14 @@ pub fn lib_bindings() -> ExternFuncionList {
     lib
 }
 
-fn read_file(path: &Path) -> Result<String, Error> {
+pub(crate) fn read_file(path: &Path) -> Result<String, Error> {
     std::fs::read_to_string(path).map_err(|_| Error::FileNotFound(path.to_path_buf()))
 }
 
-pub fn compile(args: &Args, functions: ExternFuncionList) -> Result<Prog, Vec<Error>> {
-    let tree = sylt_parser::tree(&PathBuf::from(args.args.first().expect("No file to run")), read_file)?;
+pub(crate) fn compile_with_reader<R>(args: &Args, functions: ExternFuncionList, reader: R) -> Result<Prog, Vec<Error>>
+where R: Fn(&Path) -> Result<String, Error>
+{
+    let tree = sylt_parser::tree(&PathBuf::from(args.args.first().expect("No file to run")), reader)?;
     if args.dump_tree {
         println!("Syntax tree: {:#?}", tree);
     }
@@ -39,11 +41,17 @@ pub fn compile(args: &Args, functions: ExternFuncionList) -> Result<Prog, Vec<Er
     Ok(prog)
 }
 
+pub(crate) fn run_file_with_reader<R>(args: &Args, functions: ExternFuncionList, reader: R) -> Result<(), Vec<Error>>
+where R: Fn(&Path) -> Result<String, Error>
+{
+    let prog = compile_with_reader(args, functions, reader)?;
+    run(&prog, &args)
+}
+
 /// Compiles, links and runs the given file. The supplied functions are callable
 /// external functions.
 pub fn run_file(args: &Args, functions: ExternFuncionList) -> Result<(), Vec<Error>> {
-    let prog = compile(args, functions)?;
-    run(&prog, &args)
+    run_file_with_reader(args, functions, read_file)
 }
 
 pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {

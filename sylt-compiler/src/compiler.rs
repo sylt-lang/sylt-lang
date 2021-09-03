@@ -448,8 +448,6 @@ impl Compiler {
                 self.expression(fail, ctx);
                 let op = Op::Jmp(self.next_ip(ctx));
                 self.patch(ctx, out, op);
-
-                self.add_op(ctx, expression.span, Op::Union);
             }
 
             IfShort {
@@ -464,10 +462,6 @@ impl Compiler {
                 let skip = self.add_op(ctx, expression.span, Op::Illegal);
                 let out = self.add_op(ctx, expression.span, Op::Illegal);
 
-                // Only done during the typechecker - mitigates the pop-operation
-                // so the types can be compound.
-                self.add_op(ctx, expression.span, Op::Copy(1));
-
                 let op = Op::JmpFalse(self.next_ip(ctx));
                 self.patch(ctx, skip, op);
 
@@ -475,8 +469,6 @@ impl Compiler {
                 self.expression(fail, ctx);
                 let op = Op::Jmp(self.next_ip(ctx));
                 self.patch(ctx, out, op);
-
-                self.add_op(ctx, expression.span, Op::Union);
             }
 
 
@@ -525,7 +517,7 @@ impl Compiler {
             Instance { blob, fields } => {
                 self.assignable(blob, ctx);
                 for (name, field) in fields.iter() {
-                    let name = self.constant(Value::Field(name.clone()));
+                    let name = self.constant(Value::String(Rc::new(name.clone())));
                     self.add_op(ctx, field.span, name);
                     self.expression(field, ctx);
                 }
@@ -877,7 +869,7 @@ impl Compiler {
             }
 
             #[rustfmt::skip]
-            Definition { ident, kind, ty, value } => {
+            Definition { ident, kind, value, .. } => {
                 // TODO(ed): Don't use type here - type check the tree first.
                 self.expression(value, ctx);
 
@@ -887,18 +879,6 @@ impl Compiler {
                 } else {
                     // Local variable
                     let slot = self.define(&ident.name, *kind, statement.span);
-                    let ty = self.resolve_type(ty, ctx);
-                    let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
-                        if kind.force() {
-                            Op::Force(ty)
-                        } else {
-                            Op::Define(ty)
-                        }
-                    } else {
-                        error!(self, ctx, statement.span, "Failed to add type declaration");
-                        Op::Illegal
-                    };
-                    self.add_op(ctx, statement.span, op);
                     self.activate(slot);
                 }
             }
@@ -1044,17 +1024,6 @@ impl Compiler {
 
             Continue {} => match self.loops.last().cloned() {
                 Some(LoopFrame { stack_size, continue_addr, .. }) => {
-                    // TODO(ed): Remove this crutch when the typechecker is fixed.
-                    // We emit dummy values that are popped in the typechecker.
-                    let type_checker_skip = self.add_op(ctx, statement.span, Op::Illegal);
-                    let current_stack_size = self.frames[ctx.frame].variables.len();
-                    let nil = self.constant(Value::Nil);
-                    for _ in 0..(current_stack_size - stack_size) {
-                        self.add_op(ctx, statement.span, nil);
-                    }
-                    let end = self.next_ip(ctx);
-                    self.patch(ctx, type_checker_skip, Op::Jmp(end));
-
                     self.emit_pop_until_size(ctx, statement.span, stack_size);
                     self.add_op(ctx, statement.span, Op::Jmp(continue_addr));
                 }
@@ -1065,17 +1034,6 @@ impl Compiler {
 
             Break {} => match self.loops.last().cloned() {
                 Some(LoopFrame { stack_size, break_addr, .. }) => {
-                    // TODO(ed): Remove this crutch when the typechecker is fixed.
-                    // We emit dummy values that are popped in the typechecker.
-                    let type_checker_skip = self.add_op(ctx, statement.span, Op::Illegal);
-                    let current_stack_size = self.frames[ctx.frame].variables.len();
-                    let nil = self.constant(Value::Nil);
-                    for _ in 0..(current_stack_size - stack_size) {
-                        self.add_op(ctx, statement.span, nil);
-                    }
-                    let end = self.next_ip(ctx);
-                    self.patch(ctx, type_checker_skip, Op::Jmp(end));
-
                     self.emit_pop_until_size(ctx, statement.span, stack_size);
                     self.add_op(ctx, statement.span, Op::Jmp(break_addr));
                 }
@@ -1332,7 +1290,7 @@ impl Compiler {
                 use StatementKind::*;
                 match &statement.kind {
                     #[rustfmt::skip]
-                    Definition { ident: Identifier { name, .. }, kind, ty, .. } => {
+                    Definition { ident: Identifier { name, span }, kind, .. } => {
                         let var = self.define(name, *kind, statement.span);
                         self.activate(var);
 
@@ -1351,19 +1309,9 @@ impl Compiler {
                             }
                         }
 
-                        // Just fill in an empty slot since we have no idea.
-                        // Unknown is overwritten by the Op::Force in the type checker.
-                        let unknown = self.constant(Value::Unknown);
-                        self.add_op(ctx, Span::zero(), unknown);
-
-                        let ty = self.resolve_type(ty, ctx);
-                        let op = if let Op::Constant(ty) = self.constant(Value::Ty(ty)) {
-                            Op::Force(ty)
-                        } else {
-                            error!(self, ctx, statement.span, "Failed to resolve the type");
-                            Op::Illegal
-                        };
-                        self.add_op(ctx, Span::zero(), op);
+                        // Uninitalized values have the value Nil
+                        let unknown = self.constant(Value::Nil);
+                        self.add_op(ctx, *span, unknown);
                     }
 
                     Use { ..  } => { }
