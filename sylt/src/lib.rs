@@ -43,7 +43,7 @@ where
         reader,
     )?;
     if args.dump_tree {
-        println!("Syntax tree: {:#?}", tree);
+        println!("{}", tree);
     }
     let prog = sylt_compiler::compile(!args.skip_typecheck, tree, &functions)?;
     Ok(prog)
