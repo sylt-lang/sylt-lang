@@ -53,9 +53,16 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
             .cloned()
             .collect(),
 
-        IfExpression { condition, pass, fail } => todo!(),
         Duplicate(_) => todo!(),
-        IfShort { lhs, condition, fail } => todo!(),
+
+        | IfExpression { condition, pass, fail }
+        | IfShort { lhs: pass, condition, fail } => {
+            [pass, fail, condition].iter()
+                .map(|expr| dependencies(ctx, expr))
+                .flatten()
+                .collect()
+        },
+
         Function { name, params, ret, body } => HashSet::new(),
         Instance { blob, fields } => {
             //TODO: The fields too.
@@ -76,10 +83,15 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
             }
         },
 
-        Tuple(_) => todo!(),
-        List(_) => todo!(),
-        Set(_) => todo!(),
-        Dict(_) => todo!(),
+        | Tuple(exprs)
+        | List(exprs)
+        | Set(exprs)
+        | Dict(exprs) => {
+            exprs.iter()
+                .map(|expr| dependencies(ctx, expr))
+                .flatten()
+                .collect()
+        },
 
         // No dependencies
         | TypeConstant(_)
