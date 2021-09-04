@@ -57,7 +57,24 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
         Duplicate(_) => todo!(),
         IfShort { lhs, condition, fail } => todo!(),
         Function { name, params, ret, body } => HashSet::new(),
-        Instance { blob, fields } => todo!(),
+        Instance { blob, fields } => {
+            //TODO: The fields too.
+            match &blob.kind {
+                sylt_parser::AssignableKind::Read(ident) => {
+                    // Might be shadowed here
+                    dbg!(&ident.name);
+                    match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
+                        Some(&name) => [name].iter().cloned().collect(),
+                        None => HashSet::new(),
+                    }
+                },
+                sylt_parser::AssignableKind::Call(_, _) => todo!(),
+                sylt_parser::AssignableKind::ArrowCall(_, _, _) => todo!(),
+                sylt_parser::AssignableKind::Access(_, _) => todo!(),
+                sylt_parser::AssignableKind::Index(_, _) => todo!(),
+                sylt_parser::AssignableKind::Expression(_) => todo!(),
+            }
+        },
 
         Tuple(_) => todo!(),
         List(_) => todo!(),
@@ -135,6 +152,12 @@ pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Ve
             use StatementKind::*;
             match &statement.kind {
                 // TODO: Don't forget blob
+                Blob { name, .. } => {
+                    to_order.insert(
+                        *compiler.namespaces[namespace].get(name).unwrap(),
+                        (HashSet::new(), statement)
+                    );
+                }
                 Definition { ident, value, .. } => {
                     let deps = dependencies(&Context{compiler, namespace}, value);
                     dbg!(
