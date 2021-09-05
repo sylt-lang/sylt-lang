@@ -2,6 +2,7 @@ use std::collections::{hash_map::Entry, HashMap};
 use std::path::PathBuf;
 use sylt_common::error::{Error, TypeError};
 use sylt_common::Type;
+use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp,
     Span, Statement, StatementKind, VarKind, AST,
@@ -536,34 +537,37 @@ impl<'c> TypeChecker<'c> {
             EK::Sub(a, b) => self.bin_op(span, a, b, op::sub, "Subtraction")?,
             EK::Mul(a, b) => self.bin_op(span, a, b, op::mul, "Multiplication")?,
             EK::Div(a, b) => self.bin_op(span, a, b, op::div, "Division")?,
-            EK::AssertEq(a, b) | EK::Eq(a, b) | EK::Neq(a, b) => {
-                self.bin_op(span, a, b, op::eq, "Equality")?
-            }
-            EK::Gt(a, b) | EK::Gteq(a, b) | EK::Lt(a, b) | EK::Lteq(a, b) => {
-                self.bin_op(span, a, b, op::cmp, "Comparison")?
-            }
+            EK::AssertEq(a, b) => self.bin_op(span, a, b, op::eq, "Equality")?,
 
-            EK::Is(a, b) => self.bin_op(span, a, b, |_a, _b| Type::Bool, "Is")?,
-            EK::In(a, b) => {
-                let a = self.expression(a)?;
-                let b = self.expression(b)?;
-                // TODO(ed): Verify the order here
-                let ret = match (&a, &b) {
-                    (a, Type::List(b))
-                    | (a, Type::Set(b))
-                    | (a, Type::Dict(b, _)) => b.fits(a, self.compiler.blobs.as_slice()),
-                    _ => Err("".into()),
-                };
-                if let Err(msg) = ret {
-                    let err = Error::TypeError {
-                        kind: TypeError::BinOp { lhs: a, rhs: b, op: "Containment".into() },
-                        file: self.file(),
-                        span,
-                        message: if msg.is_empty() { None } else { Some(format!("because {}", msg)) },
-                    };
-                    return Err(vec![err]);
+            EK::Comparison(a, cmp, b) => match cmp {
+                ComparisonKind::Equals | ComparisonKind::NotEquals => {
+                    self.bin_op(span, a, b, op::eq, "Equality")?
                 }
-                Type::Bool
+                ComparisonKind::Greater | ComparisonKind::GreaterEqual | ComparisonKind::Less | ComparisonKind::LessEqual => {
+                    self.bin_op(span, a, b, op::cmp, "Comparison")?
+                }
+                ComparisonKind::Is => self.bin_op(span, a, b, |_ ,_| Type::Bool, "Is")?,
+                ComparisonKind::In => {
+                    let a = self.expression(a)?;
+                    let b = self.expression(b)?;
+                    // TODO(ed): Verify the order here
+                    let ret = match (&a, &b) {
+                        (a, Type::List(b))
+                        | (a, Type::Set(b))
+                        | (a, Type::Dict(b, _)) => b.fits(a, self.compiler.blobs.as_slice()),
+                        _ => Err("".into()),
+                    };
+                    if let Err(msg) = ret {
+                        let err = Error::TypeError {
+                            kind: TypeError::BinOp { lhs: a, rhs: b, op: "Containment".into() },
+                            file: self.file(),
+                            span,
+                            message: if msg.is_empty() { None } else { Some(format!("because {}", msg)) },
+                        };
+                        return Err(vec![err]);
+                    }
+                    Type::Bool
+                }
             }
 
             EK::Neg(a) => self.uni_op(span, a, op::neg, "Negation")?,
@@ -571,6 +575,8 @@ impl<'c> TypeChecker<'c> {
             EK::And(a, b) => self.bin_op(span, a, b, op::and, "Boolean and")?,
             EK::Or(a, b) => self.bin_op(span, a, b, op::or, "Boolean or")?,
             EK::Not(a) => self.uni_op(span, a, op::not, "Boolean not")?,
+
+            EK::Parenthesis(expr) => self.expression(expr)?,
 
             EK::Duplicate(expr) => self.expression(expr)?,
             EK::Tuple(values) => {

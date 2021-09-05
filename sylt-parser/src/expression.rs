@@ -4,6 +4,18 @@ use crate::statement::block;
 
 use super::*;
 
+#[derive(Debug, Clone)]
+pub enum ComparisonKind {
+    Equals,
+    NotEquals,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
+    Is,
+    In,
+}
+
 /// The different kinds of [Expression]s.
 ///
 /// Expressions are recursive and evaluate to some kind of value.
@@ -27,26 +39,10 @@ pub enum ExpressionKind {
     /// `-a`
     Neg(Box<Expression>),
 
-    /// `a is b`
-    Is(Box<Expression>, Box<Expression>),
+    Comparison(Box<Expression>, ComparisonKind, Box<Expression>),
 
-    /// `a == b`
-    Eq(Box<Expression>, Box<Expression>),
-    /// `a != b`
-    Neq(Box<Expression>, Box<Expression>),
-    /// `a > b`
-    Gt(Box<Expression>, Box<Expression>),
-    /// `a >= b`
-    Gteq(Box<Expression>, Box<Expression>),
-    /// `a < b`
-    Lt(Box<Expression>, Box<Expression>),
-    /// `a <= b`
-    Lteq(Box<Expression>, Box<Expression>),
     /// `a <=> b`
     AssertEq(Box<Expression>, Box<Expression>),
-
-    /// `a in b`
-    In(Box<Expression>, Box<Expression>),
 
     /// `a && b`
     And(Box<Expression>, Box<Expression>),
@@ -54,6 +50,8 @@ pub enum ExpressionKind {
     Or(Box<Expression>, Box<Expression>),
     /// `!a`
     Not(Box<Expression>),
+
+    Parenthesis(Box<Expression>),
 
     /// Inline If-statements
     IfExpression {
@@ -180,11 +178,13 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         if let Some(Statement {
             span,
             kind: StatementKind::StatementExpression { value },
+            comments,
         }) = last_statement
         {
             statements.push(Statement {
                 span,
                 kind: StatementKind::Ret { value },
+                comments
             });
         } else if let Some(statement) = last_statement {
             statements.push(statement);
@@ -198,7 +198,8 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         ret,
         body: Box::new(Statement {
             span: ctx.span(),
-            kind: StatementKind::Block { statements }
+            kind: StatementKind::Block { statements },
+            comments: Vec::new(),
         }),
     };
 
@@ -457,9 +458,10 @@ fn arrow_call<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Express
 
 /// Parse an expression starting from an infix operator. Called by `parse_precedence`.
 fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
+    use ComparisonKind::*;
     use ExpressionKind::*;
 
-    // If there is no precedence - it's the start of an expression.
+    // If there is no precedence it's the start of an expression.
     // All valid operators have a precedence value that is differnt
     // from `Prec::no`.
     match (ctx.token(), precedence(ctx.skip(1).token())) {
@@ -529,28 +531,29 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
     let lhs = Box::new(lhs.clone());
     let rhs = Box::new(rhs);
 
-    // Which expression kind to omit depends on the token.
+    // Which expression kind to emit depends on the token.
     let kind = match op {
         // Simple arithmetic.
         T::Plus => Add(lhs, rhs),
         T::Minus => Sub(lhs, rhs),
         T::Star => Mul(lhs, rhs),
         T::Slash => Div(lhs, rhs),
-        T::EqualEqual => Eq(lhs, rhs),
-        T::NotEqual => Neq(lhs, rhs),
-        T::Greater => Gt(lhs, rhs),
-        T::GreaterEqual => Gteq(lhs, rhs),
-        T::Less => Lt(lhs, rhs),
-        T::LessEqual => Lteq(lhs, rhs),
-        T::Is => Is(lhs, rhs),
+
+        // Comparisons
+        T::EqualEqual => Comparison(lhs, Equals, rhs),
+        T::NotEqual => Comparison(lhs, NotEquals, rhs),
+        T::Greater => Comparison(lhs, Greater, rhs),
+        T::GreaterEqual => Comparison(lhs, GreaterEqual, rhs),
+        T::Less => Comparison(lhs, Less, rhs),
+        T::LessEqual => Comparison(lhs, LessEqual, rhs),
+        T::Is => Comparison(lhs, Is, rhs),
+        T::In => Comparison(lhs, In, rhs),
 
         // Boolean operators.
         T::And => And(lhs, rhs),
         T::Or => Or(lhs, rhs),
 
         T::AssertEqual => AssertEq(lhs, rhs),
-
-        T::In => In(lhs, rhs),
 
         // Unknown infix operator.
         _ => {
@@ -601,14 +604,17 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let ctx = ctx.pop_skip_newlines(skip_newlines);
     let ctx = expect!(ctx, T::RightParen, "Expected ')'");
 
-    use ExpressionKind::Tuple;
+    use ExpressionKind::{Parenthesis, Tuple};
     let result = if is_tuple {
         Expression {
             span,
             kind: Tuple(exprs),
         }
     } else {
-        exprs.remove(0)
+        Expression {
+            span,
+            kind: Parenthesis(Box::new(exprs.remove(0))),
+        }
     };
     Ok((ctx, result))
 }
@@ -804,6 +810,7 @@ pub fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 mod test {
     use super::ExpressionKind::*;
     use crate::expression;
+    use crate::expression::ComparisonKind;
     use crate::test;
     use crate::Assignable;
     use crate::AssignableKind::*;
@@ -816,7 +823,7 @@ mod test {
     test!(expression, index_ident: "a[a]" => Get(Assignable { kind: Index(_, _), .. }));
     test!(expression, index_expr: "a[1 + 2 + 3]" => Get(Assignable { kind: Index(_, _), .. }));
     test!(expression, grouping: "(0 * 0) + 1" => Add(_, _));
-    test!(expression, grouping_one: "(0)" => Int(0));
+    test!(expression, grouping_one: "(0)" => Parenthesis(_));
     test!(expression, tuple: "(0, 0)" => Tuple(_));
     test!(expression, tuple_one: "(0,)" => Tuple(_));
     test!(expression, tuple_empty: "()" => Tuple(_));
@@ -826,10 +833,10 @@ mod test {
     test!(expression, zero_set: "{}" => Set(_));
     test!(expression, zero_dict: "{:}" => Dict(_));
 
-    test!(expression, in_list: "a in [1, 2, 3]" => In(_, _));
-    test!(expression, in_set: "2 in {1, 1, 2}" => In(_, _));
+    test!(expression, in_list: "a in [1, 2, 3]" => Comparison(_, ComparisonKind::In, _));
+    test!(expression, in_set: "2 in {1, 1, 2}" => Comparison(_, ComparisonKind::In, _));
     test!(expression, in_grouping: "1 + 2 in b" => Add(_, _));
-    test!(expression, in_grouping_paren: "(1 + 2) in b" => In(_, _));
+    test!(expression, in_grouping_paren: "(1 + 2) in b" => Comparison(_, ComparisonKind::In, _));
 
     test!(expression, call_simple_paren: "a()" => Get(_));
     test!(expression, call_call: "a()()" => Get(_));
@@ -895,3 +902,143 @@ mod test {
     test!(expression, if_expr: "a if b else c" => IfExpression { .. });
     test!(expression, if_expr_more: "1 + 1 + 1 if b else 2 + 2 + 2" => IfExpression { .. });
 }
+
+impl PrettyPrint for Expression {
+    fn pretty_print(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
+        use ExpressionKind as EK;
+        write_indent(f, indent)?;
+        match &self.kind {
+            EK::Get(e) => {
+                write!(f, "Get ")?;
+                e.pretty_print(f, indent)?;
+                write!(f, "\n")?;
+            }
+            EK::TypeConstant(ty) => {
+                write!(f, "Type {}\n", ty)?;
+            }
+            EK::Add(a, b) => {
+                write!(f, "Add\n")?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::Sub(a, b) => {
+                write!(f, "Sub\n")?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::Mul(a, b) => {
+                write!(f, "Mul\n")?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::Div(a, b) => {
+                write!(f, "Div\n")?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::Neg(a) => {
+                write!(f, "Neg\n")?;
+                a.pretty_print(f, indent + 1)?;
+            }
+            EK::Comparison(a, k, b) => {
+                write!(f, "Comparsion {:?}\n", k)?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::AssertEq(a, b) => {
+                write!(f, "AssertEq\n")?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::And(a, b) => {
+                write!(f, "And\n")?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::Or(a, b) => {
+                write!(f, "Or\n")?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::Not(a) => {
+                write!(f, "Not\n")?;
+                a.pretty_print(f, indent + 1)?;
+            }
+            EK::Parenthesis(expr) => {
+                write!(f, "Paren\n")?;
+                expr.pretty_print(f, indent + 1)?;
+            }
+            EK::Duplicate(expr) => {
+                write!(f, "Duplicate\n")?;
+                expr.pretty_print(f, indent + 1)?;
+            }
+            EK::IfExpression { condition, pass, fail } => {
+                write!(f, "IfExpression\n")?;
+                write_indent(f, indent)?;
+                write!(f, "condition:\n")?;
+                condition.pretty_print(f, indent + 1)?;
+                write_indent(f, indent)?;
+                write!(f, "pass:\n")?;
+                pass.pretty_print(f, indent + 1)?;
+                write_indent(f, indent)?;
+                write!(f, "fail:\n")?;
+                fail.pretty_print(f, indent + 1)?;
+            }
+            EK::IfShort { lhs, condition, fail } => {
+                write!(f, "IfShort\n")?;
+                write_indent(f, indent)?;
+                write!(f, "lhs:\n")?;
+                lhs.pretty_print(f, indent + 1)?;
+                write_indent(f, indent)?;
+                write!(f, "pass:\n")?;
+                condition.pretty_print(f, indent + 1)?;
+                write_indent(f, indent)?;
+                write!(f, "fail:\n")?;
+                fail.pretty_print(f, indent + 1)?;
+            }
+            EK::Function { name, params, ret, body } => {
+                write!(f, "Fn {} ", name)?;
+                for (i, (name, ty)) in params.iter().enumerate() {
+                    if i != 0 { write!(f, ", ")?; }
+                    write!(f, "{}: {}", name.name, ty)?;
+                }
+                write!(f, " -> {}", ret);
+                write!(f, "\n");
+                body.pretty_print(f, indent + 1)?;
+            }
+            EK::Instance { blob, fields } => {
+                write!(f, "Instance ")?;
+                blob.pretty_print(f, indent + 1);
+                write!(f, "\n")?;
+                for (field, value) in fields.iter() {
+                    write_indent(f, indent)?;
+                    write!(f, ".{}:\n", field)?;
+                    value.pretty_print(f, indent + 1);
+                }
+            }
+            EK::Tuple(values) => {
+                write!(f, "Tuple\n")?;
+                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
+            }
+            EK::List(values) => {
+                write!(f, "List\n")?;
+                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
+            }
+            EK::Set(values) => {
+                write!(f, "Set\n")?;
+                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
+            }
+            EK::Dict(values) => {
+                write!(f, "Dict\n")?;
+                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
+            }
+            EK::Float(_)
+            | EK::Int(_)
+            | EK::Str(_)
+            | EK::Bool(_)
+            | EK::Nil => { write!(f, "{:?}\n", self.kind)?; }
+        }
+        Ok(())
+    }
+}
+
