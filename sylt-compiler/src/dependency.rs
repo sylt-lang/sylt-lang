@@ -2,7 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use crate::{Compiler, Name};
 use sylt_parser::{
-    AST, Assignable, AssignableKind, Expression, Statement, StatementKind,
+    AST, Assignable, AssignableKind, Expression, ExpressionKind, Statement,
+    StatementKind,
 };
 
 struct Context<'a> {
@@ -83,7 +84,7 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
         }
     }
 
-    use sylt_parser::ExpressionKind::*;
+    use ExpressionKind::*;
     match &expression.kind {
         Get(assignable) => assignable_dependencies(ctx, assignable),
 
@@ -220,11 +221,16 @@ pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Ve
                     );
                 }
                 Definition { ident, value, .. } => {
-                    let deps = dependencies(&Context{compiler, namespace}, value);
-                    dbg!(
-                        &ident.name,
-                        &deps
-                    );
+                    // If it is a function definition it has no dependencies
+                    let deps = if let ExpressionKind::Function{..} = &value.kind {
+                        HashSet::new()
+                    } else {
+                        dependencies(&Context{compiler, namespace}, value)
+                    };
+                    //dbg!(
+                    //    &ident.name,
+                    //    &deps
+                    //);
                     to_order.insert(
                         *compiler.namespaces[namespace].get(&ident.name).unwrap(),
                         (deps, statement)
