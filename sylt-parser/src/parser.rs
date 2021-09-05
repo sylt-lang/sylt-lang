@@ -1020,7 +1020,7 @@ trait PrettyPrint {
 impl Display for AST {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (name, modu) in self.modules.iter() {
-            write!(f, "-- {:?}\n", name);
+            write!(f, "-- {:?}\n", name)?;
             modu.pretty_print(f, 0)?;
         }
         Ok(())
@@ -1051,8 +1051,7 @@ impl PrettyPrint for Statement {
         write!(f, "{} ", self.span.line)?;
         match &self.kind {
             SK::Use { path, name, file } => {
-                write!(f, "<Use> {} ", path.name)?;
-                name.pretty_print(f, indent)?;
+                write!(f, "<Use> {} {}", path.name, name)?;
                 write!(f, " {:?}", file)?;
             }
             SK::Blob { name, fields } => {
@@ -1125,10 +1124,10 @@ impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.kind {
             TypeKind::Implied => {
-                write!(f, "Implied");
+                write!(f, "Implied")?;
             }
             TypeKind::Resolved(ty) => {
-                write!(f, "{}", ty);
+                write!(f, "{}", ty)?;
             }
             TypeKind::UserDefined(name) => {
                 write!(f, "User(")?;
@@ -1142,7 +1141,7 @@ impl Display for Type {
                 write!(f, "Fn ")?;
                 for (i, arg) in args.iter().enumerate() {
                     if i != 0 { write!(f, ", ")?; }
-                    write!(f, "{}", arg);
+                    write!(f, "{}", arg)?;
                 }
                 write!(f, " -> {}", ret)?;
             }
