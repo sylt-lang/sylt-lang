@@ -1018,27 +1018,19 @@ impl PrettyPrint for Expression {
             }
             EK::Tuple(values) => {
                 write!(f, "Tuple\n")?;
-                for value in values.iter() {
-                    value.pretty_print(f, indent + 1);
-                }
+                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
             }
             EK::List(values) => {
                 write!(f, "List\n")?;
-                for value in values.iter() {
-                    value.pretty_print(f, indent + 1);
-                }
+                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
             }
             EK::Set(values) => {
                 write!(f, "Set\n")?;
-                for value in values.iter() {
-                    value.pretty_print(f, indent + 1);
-                }
+                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
             }
             EK::Dict(values) => {
                 write!(f, "Dict\n")?;
-                for value in values.iter() {
-                    value.pretty_print(f, indent + 1);
-                }
+                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
             }
             EK::Float(_)
             | EK::Int(_)

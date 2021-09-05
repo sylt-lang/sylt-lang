@@ -1103,9 +1103,7 @@ impl PrettyPrint for Statement {
             }
             SK::Block { statements } => {
                 write!(f, "<Block>\n")?;
-                for stmt in statements.iter() {
-                    stmt.pretty_print(f, indent + 1)?;
-                }
+                statements.iter().try_for_each(|stmt| stmt.pretty_print(f, indent + 1))?;
                 return Ok(());
             }
             SK::StatementExpression { value } => {
