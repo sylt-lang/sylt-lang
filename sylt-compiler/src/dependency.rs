@@ -31,7 +31,11 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
                 )
                 .cloned()
                 .collect(),
-            ArrowCall(_, _, _) => todo!(),
+            ArrowCall(expr, ass, exprs) => dependencies(ctx, expr).iter()
+                .chain(assignable_dependencies(ctx, ass).iter())
+                .cloned()
+                .chain(exprs.iter().map(|e| dependencies(ctx, e)).flatten())
+                .collect(),
             Access(ass, _) => assignable_dependencies(ctx, ass),
             Index(ass, expr) => assignable_dependencies(ctx, ass)
                 .union(&dependencies(ctx, expr))
@@ -48,8 +52,18 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
                 .union(&assignable_dependencies(ctx, target))
                 .cloned()
                 .collect(),
-            If { condition, pass, fail } => todo!(),
-            Loop { condition, body } => todo!(),
+            If { condition, pass, fail } => [
+                    dependencies(ctx, condition),
+                    statement_dependencies(ctx, pass),
+                    statement_dependencies(ctx, fail),
+                ].iter()
+                .flatten()
+                .cloned()
+                .collect(),
+            Loop { condition, body } => dependencies(ctx, condition)
+                .union(&statement_dependencies(ctx, body))
+                .cloned()
+                .collect(),
             Block { statements } => statements.iter()
                 .map(|stmt| statement_dependencies(ctx, stmt))
                 .flatten()
