@@ -906,7 +906,7 @@ mod test {
 impl PrettyPrint for Expression {
     fn pretty_print(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
         use ExpressionKind as EK;
-        write_indent(f, indent);
+        write_indent(f, indent)?;
         match &self.kind {
             EK::Get(e) => {
                 write!(f, "Get ")?;
@@ -974,25 +974,25 @@ impl PrettyPrint for Expression {
             }
             EK::IfExpression { condition, pass, fail } => {
                 write!(f, "IfExpression\n")?;
-                write_indent(f, indent);
+                write_indent(f, indent)?;
                 write!(f, "condition:\n")?;
                 condition.pretty_print(f, indent + 1)?;
-                write_indent(f, indent);
+                write_indent(f, indent)?;
                 write!(f, "pass:\n")?;
                 pass.pretty_print(f, indent + 1)?;
-                write_indent(f, indent);
+                write_indent(f, indent)?;
                 write!(f, "fail:\n")?;
                 fail.pretty_print(f, indent + 1)?;
             }
             EK::IfShort { lhs, condition, fail } => {
                 write!(f, "IfShort\n")?;
-                write_indent(f, indent);
+                write_indent(f, indent)?;
                 write!(f, "lhs:\n")?;
                 lhs.pretty_print(f, indent + 1)?;
-                write_indent(f, indent);
+                write_indent(f, indent)?;
                 write!(f, "pass:\n")?;
                 condition.pretty_print(f, indent + 1)?;
-                write_indent(f, indent);
+                write_indent(f, indent)?;
                 write!(f, "fail:\n")?;
                 fail.pretty_print(f, indent + 1)?;
             }
