@@ -1,7 +1,7 @@
 use self::expression::expression;
 use self::statement::outer_statement;
 use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
+use std::fmt::{Display, Debug};
 use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
 use sylt_common::Type as RuntimeType;
@@ -1012,3 +1012,204 @@ mod test {
         test!(parse_type, type_dict_complex: "{int | float? : int | int | int?}" => Dict(_, _));
     }
 }
+
+trait PrettyPrint {
+    fn pretty_print(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result;
+}
+
+impl Display for AST {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (name, modu) in self.modules.iter() {
+            write!(f, "-- {:?}\n", name);
+            modu.pretty_print(f, 0)?;
+        }
+        Ok(())
+    }
+}
+
+const INDENT_SPACING: &str = "  ";
+fn write_indent(f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
+    for _ in 0..indent {
+        write!(f, "{}", INDENT_SPACING)?;
+    }
+    Ok(())
+}
+
+impl PrettyPrint for Module {
+    fn pretty_print(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
+        for stmt in self.statements.iter() {
+            stmt.pretty_print(f, indent)?;
+        }
+        Ok(())
+    }
+}
+
+impl PrettyPrint for Statement {
+    fn pretty_print(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
+        use StatementKind as SK;
+        write_indent(f, indent)?;
+        write!(f, "{} ", self.span.line)?;
+        match &self.kind {
+            SK::Use { path, name, file } => {
+                write!(f, "<Use> {} ", path.name)?;
+                name.pretty_print(f, indent)?;
+                write!(f, " {:?}", file)?;
+            }
+            SK::Blob { name, fields } => {
+                write!(f, "<Blob> {} {{ ", name)?;
+                for (i, (name, ty)) in fields.iter().enumerate() {
+                    if i != 0 { write!(f, ", ")?; }
+                    write!(f, "{}: {}", name, ty)?;
+                }
+                write!(f, " }}")?;
+            }
+            SK::Definition { ident, kind, ty, value } => {
+                write!(f, "<Def> {} {:?} {}\n", ident.name, kind, ty)?;
+                value.pretty_print(f, indent + 1)?;
+                return Ok(());
+            }
+            SK::Assignment { kind, target, value } => {
+                write!(f, "<Ass> {:?}\n", kind)?;
+                target.pretty_print(f, indent + 1)?;
+                value.pretty_print(f, indent + 1)?;
+                return Ok(());
+            }
+            SK::If { condition, pass, fail } => {
+                write!(f, "<If>\n")?;
+                condition.pretty_print(f, indent + 1)?;
+                pass.pretty_print(f, indent + 1)?;
+                fail.pretty_print(f, indent + 1)?;
+                return Ok(());
+            }
+            SK::Loop { condition, body } => {
+                write!(f, "<Loop>\n")?;
+                condition.pretty_print(f, indent + 1)?;
+                body.pretty_print(f, indent + 1)?;
+                return Ok(());
+            }
+            SK::Break => {
+                write!(f, "<Break>")?;
+            }
+            SK::Continue => {
+                write!(f, "<Continue>")?;
+            }
+            SK::IsCheck { lhs, rhs } => {
+                write!(f, "<Is> {} {}", lhs, rhs)?;
+            }
+            SK::Ret { value } => {
+                write!(f, "<Ret>\n")?;
+                value.pretty_print(f, indent + 1)?;
+                return Ok(());
+            }
+            SK::Block { statements } => {
+                write!(f, "<Block>\n")?;
+                statements.iter().try_for_each(|stmt| stmt.pretty_print(f, indent + 1))?;
+                return Ok(());
+            }
+            SK::StatementExpression { value } => {
+                write!(f, "<Expr>\n")?;
+                value.pretty_print(f, indent + 1)?;
+            }
+            SK::Unreachable => {
+                write!(f, "<!>")?;
+            }
+            SK::EmptyStatement => {
+                write!(f, "<>")?;
+            }
+        }
+        write!(f, "\n")
+    }
+}
+
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.kind {
+            TypeKind::Implied => {
+                write!(f, "Implied");
+            }
+            TypeKind::Resolved(ty) => {
+                write!(f, "{}", ty);
+            }
+            TypeKind::UserDefined(name) => {
+                write!(f, "User(")?;
+                name.pretty_print(f, 0)?;
+                write!(f, ")")?;
+            }
+            TypeKind::Union(a, b) => {
+                write!(f, "{} | {}", a, b)?;
+            }
+            TypeKind::Fn(args, ret) => {
+                write!(f, "Fn ")?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i != 0 { write!(f, ", ")?; }
+                    write!(f, "{}", arg);
+                }
+                write!(f, " -> {}", ret)?;
+            }
+            TypeKind::Tuple(tys) => {
+                write!(f, "(")?;
+                for (i, ty) in tys.iter().enumerate() {
+                    if i != 0 { write!(f, ", ")?; }
+                    write!(f, "{}", ty)?;
+                }
+                write!(f, ")")?;
+            }
+            TypeKind::List(ty) => {
+                write!(f, "[{}]", ty)?;
+            }
+            TypeKind::Set(ty) => {
+                write!(f, "{{{}}}", ty)?;
+            }
+            TypeKind::Dict(k, v) => {
+                write!(f, "{{{}:{}}}", k, v)?;
+            }
+            TypeKind::Generic(name) => {
+                write!(f, "#{}", name.name)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl PrettyPrint for Assignable {
+    fn pretty_print(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
+        // Deliberately doesn't write out the indentation
+        match &self.kind {
+            AssignableKind::Read(ident) => {
+                write!(f, "[Read] {}", ident.name)?;
+            }
+            AssignableKind::Call(func, args) => {
+                write!(f, "[Call] ")?;
+                func.pretty_print(f, indent)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i != 0 { write!(f, ", ")?; }
+                    arg.pretty_print(f, indent + 1)?;
+                }
+            }
+            AssignableKind::ArrowCall(func, add, args) => {
+                write!(f, "[ArrowCall] ")?;
+                func.pretty_print(f, indent)?;
+                add.pretty_print(f, indent)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i != 0 { write!(f, ", ")?; }
+                    arg.pretty_print(f, indent + 1)?;
+                }
+            }
+            AssignableKind::Access(a, ident) => {
+                write!(f, "[Access] {}", ident.name)?;
+                a.pretty_print(f, indent)?;
+            }
+            AssignableKind::Index(a, expr) => {
+                write!(f, "[Index]")?;
+                a.pretty_print(f, indent)?;
+                expr.pretty_print(f, indent)?;
+            }
+            AssignableKind::Expression(expr) => {
+                write!(f, "[Expression]")?;
+                expr.pretty_print(f, indent)?;
+            }
+        }
+        Ok(())
+    }
+}
+

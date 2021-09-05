@@ -902,3 +902,143 @@ mod test {
     test!(expression, if_expr: "a if b else c" => IfExpression { .. });
     test!(expression, if_expr_more: "1 + 1 + 1 if b else 2 + 2 + 2" => IfExpression { .. });
 }
+
+impl PrettyPrint for Expression {
+    fn pretty_print(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
+        use ExpressionKind as EK;
+        write_indent(f, indent)?;
+        match &self.kind {
+            EK::Get(e) => {
+                write!(f, "Get ")?;
+                e.pretty_print(f, indent)?;
+                write!(f, "\n")?;
+            }
+            EK::TypeConstant(ty) => {
+                write!(f, "Type {}\n", ty)?;
+            }
+            EK::Add(a, b) => {
+                write!(f, "Add\n")?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::Sub(a, b) => {
+                write!(f, "Sub\n")?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::Mul(a, b) => {
+                write!(f, "Mul\n")?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::Div(a, b) => {
+                write!(f, "Div\n")?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::Neg(a) => {
+                write!(f, "Neg\n")?;
+                a.pretty_print(f, indent + 1)?;
+            }
+            EK::Comparison(a, k, b) => {
+                write!(f, "Comparsion {:?}\n", k)?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::AssertEq(a, b) => {
+                write!(f, "AssertEq\n")?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::And(a, b) => {
+                write!(f, "And\n")?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::Or(a, b) => {
+                write!(f, "Or\n")?;
+                a.pretty_print(f, indent + 1)?;
+                b.pretty_print(f, indent + 1)?;
+            }
+            EK::Not(a) => {
+                write!(f, "Not\n")?;
+                a.pretty_print(f, indent + 1)?;
+            }
+            EK::Parenthesis(expr) => {
+                write!(f, "Paren\n")?;
+                expr.pretty_print(f, indent + 1)?;
+            }
+            EK::Duplicate(expr) => {
+                write!(f, "Duplicate\n")?;
+                expr.pretty_print(f, indent + 1)?;
+            }
+            EK::IfExpression { condition, pass, fail } => {
+                write!(f, "IfExpression\n")?;
+                write_indent(f, indent)?;
+                write!(f, "condition:\n")?;
+                condition.pretty_print(f, indent + 1)?;
+                write_indent(f, indent)?;
+                write!(f, "pass:\n")?;
+                pass.pretty_print(f, indent + 1)?;
+                write_indent(f, indent)?;
+                write!(f, "fail:\n")?;
+                fail.pretty_print(f, indent + 1)?;
+            }
+            EK::IfShort { lhs, condition, fail } => {
+                write!(f, "IfShort\n")?;
+                write_indent(f, indent)?;
+                write!(f, "lhs:\n")?;
+                lhs.pretty_print(f, indent + 1)?;
+                write_indent(f, indent)?;
+                write!(f, "pass:\n")?;
+                condition.pretty_print(f, indent + 1)?;
+                write_indent(f, indent)?;
+                write!(f, "fail:\n")?;
+                fail.pretty_print(f, indent + 1)?;
+            }
+            EK::Function { name, params, ret, body } => {
+                write!(f, "Fn {} ", name)?;
+                for (i, (name, ty)) in params.iter().enumerate() {
+                    if i != 0 { write!(f, ", ")?; }
+                    write!(f, "{}: {}", name.name, ty)?;
+                }
+                write!(f, " -> {}", ret);
+                write!(f, "\n");
+                body.pretty_print(f, indent + 1)?;
+            }
+            EK::Instance { blob, fields } => {
+                write!(f, "Instance ")?;
+                blob.pretty_print(f, indent + 1);
+                write!(f, "\n")?;
+                for (field, value) in fields.iter() {
+                    write_indent(f, indent)?;
+                    write!(f, ".{}:\n", field)?;
+                    value.pretty_print(f, indent + 1);
+                }
+            }
+            EK::Tuple(values) => {
+                write!(f, "Tuple\n")?;
+                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
+            }
+            EK::List(values) => {
+                write!(f, "List\n")?;
+                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
+            }
+            EK::Set(values) => {
+                write!(f, "Set\n")?;
+                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
+            }
+            EK::Dict(values) => {
+                write!(f, "Dict\n")?;
+                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
+            }
+            EK::Float(_)
+            | EK::Int(_)
+            | EK::Str(_)
+            | EK::Bool(_)
+            | EK::Nil => { write!(f, "{:?}\n", self.kind)?; }
+        }
+        Ok(())
+    }
+}
+
