@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use crate::{Compiler, Name};
 use sylt_parser::{
-    AST, Expression, Statement, StatementKind,
+    AST, Assignable, AssignableKind, Expression, Statement, StatementKind,
 };
 
 struct Context<'a> {
@@ -11,25 +11,67 @@ struct Context<'a> {
 }
 
 fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
+
+    fn assignable_dependencies(ctx: &Context, assignable: &Assignable) -> HashSet<Name> {
+        use AssignableKind::*;
+        match &assignable.kind {
+            Read(ident) => {
+                // Might be shadowed here
+                dbg!(&ident.name);
+                match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
+                    Some(&name) => [name].iter().cloned().collect(),
+                    None => HashSet::new(),
+                }
+            },
+            Call(ass, exprs) => assignable_dependencies(ctx, ass)
+                .union(&exprs.iter()
+                    .map(|expr| dependencies(ctx, expr))
+                    .flatten()
+                    .collect()
+                )
+                .cloned()
+                .collect(),
+            ArrowCall(_, _, _) => todo!(),
+            Access(ass, _) => assignable_dependencies(ctx, ass),
+            Index(ass, expr) => assignable_dependencies(ctx, ass)
+                .union(&dependencies(ctx, expr))
+                .cloned()
+                .collect(),
+            Expression(expr) => dependencies(ctx, expr),
+        }
+    }
+
+    fn statement_dependencies(ctx: &Context, statement: &Statement) -> HashSet<Name> {
+        use StatementKind::*;
+        match &statement.kind {
+            Assignment { target, value, .. } => dependencies(ctx, value)
+                .union(&assignable_dependencies(ctx, target))
+                .cloned()
+                .collect(),
+            If { condition, pass, fail } => todo!(),
+            Loop { condition, body } => todo!(),
+            Block { statements } => statements.iter()
+                .map(|stmt| statement_dependencies(ctx, stmt))
+                .flatten()
+                .collect(),
+
+            | Ret { value }
+            | Definition { value, .. }
+            | StatementExpression { value } => dependencies(ctx, value),
+
+            | Use { .. }
+            | Blob { .. }
+            | IsCheck { .. }
+            | Break
+            | Continue
+            | Unreachable
+            | EmptyStatement => HashSet::new(),
+        }
+    }
+
     use sylt_parser::ExpressionKind::*;
     match &expression.kind {
-        Get(assignable) => {
-            match &assignable.kind {
-                sylt_parser::AssignableKind::Read(ident) => {
-                    // Might be shadowed here
-                    dbg!(&ident.name);
-                    match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
-                        Some(&name) => [name].iter().cloned().collect(),
-                        None => HashSet::new(),
-                    }
-                },
-                sylt_parser::AssignableKind::Call(_, _) => todo!(),
-                sylt_parser::AssignableKind::ArrowCall(_, _, _) => todo!(),
-                sylt_parser::AssignableKind::Access(_, _) => todo!(),
-                sylt_parser::AssignableKind::Index(_, _) => todo!(),
-                sylt_parser::AssignableKind::Expression(_) => todo!(),
-            }
-        },
+        Get(assignable) => assignable_dependencies(ctx, assignable),
 
         | Neg(expr)
         | Not(expr) => dependencies(ctx, expr),
@@ -63,24 +105,17 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
                 .collect()
         },
 
-        Function { name, params, ret, body } => HashSet::new(),
-        Instance { blob, fields } => {
+        // Functions are a bit special. They only create dependencies once
+        // called, which is a problem. It is currently impossible to know when
+        // a function is going to be called after being read, so for our
+        // purposes reading and calling is considered the same. Also, the start
+        // function is special since it is the first thing that is called.
+        Function { body, .. } => {
+            statement_dependencies(ctx, body)
+        },
+        Instance { blob, .. } => {
             //TODO: The fields too.
-            match &blob.kind {
-                sylt_parser::AssignableKind::Read(ident) => {
-                    // Might be shadowed here
-                    dbg!(&ident.name);
-                    match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
-                        Some(&name) => [name].iter().cloned().collect(),
-                        None => HashSet::new(),
-                    }
-                },
-                sylt_parser::AssignableKind::Call(_, _) => todo!(),
-                sylt_parser::AssignableKind::ArrowCall(_, _, _) => todo!(),
-                sylt_parser::AssignableKind::Access(_, _) => todo!(),
-                sylt_parser::AssignableKind::Index(_, _) => todo!(),
-                sylt_parser::AssignableKind::Expression(_) => todo!(),
-            }
+            assignable_dependencies(ctx, blob)
         },
 
         | Tuple(exprs)
@@ -147,10 +182,10 @@ pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Ve
         .iter()
         .map(|(a, b)| (b.clone(), *a))
         .collect();
-    let globals: Vec<_> = compiler.namespaces.iter()
-        .map(|ns| ns.values())
-        .flatten()
-        .collect();
+    //let globals: Vec<_> = compiler.namespaces.iter()
+    //    .map(|ns| ns.values())
+    //    .flatten()
+    //    .collect();
     for (path, module) in tree.modules.iter() {
         let namespace = *path_to_namespace_id.get(path).unwrap();
         let globals: Vec<_> = compiler.namespaces[namespace]
