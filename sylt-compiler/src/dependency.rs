@@ -86,25 +86,20 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
 
     use ExpressionKind::*;
     match &expression.kind {
+
         Get(assignable) => assignable_dependencies(ctx, assignable),
 
         | Neg(expr)
         | Not(expr)
-        | Duplicate(expr) => dependencies(ctx, expr),
+        | Duplicate(expr)
+        | Parenthesis(expr) => dependencies(ctx, expr),
 
+        | Comparison(lhs, _, rhs)
         | Add(lhs, rhs)
         | Sub(lhs, rhs)
         | Mul(lhs, rhs)
         | Div(lhs, rhs)
-        | Is(lhs, rhs)
-        | Eq(lhs, rhs)
-        | Neq(lhs, rhs)
-        | Gt(lhs, rhs)
-        | Gteq(lhs, rhs)
-        | Lt(lhs, rhs)
-        | Lteq(lhs, rhs)
         | AssertEq(lhs, rhs)
-        | In(lhs, rhs)
         | And(lhs, rhs)
         | Or(lhs, rhs) => dependencies(ctx, lhs)
             .union(&dependencies(ctx, rhs))

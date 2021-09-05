@@ -1055,29 +1055,44 @@ impl<'c> TypeChecker<'c> {
 
     fn solve(
         mut self,
-        tree: &mut AST,
+        statements: &Vec<&Statement>,
         to_namespace: &HashMap<PathBuf, usize>,
     ) -> Result<(), Vec<Error>> {
-        for (path, module) in &tree.modules {
-            let namespace = to_namespace[path];
-            for stmt in &module.statements {
-                // Ignore errors since they'll be caught later and
-                // there are false positives.
-                let _ = self.outer_definition(namespace, &stmt);
-            }
+        //for (path, module) in &tree.modules {
+        //    let namespace = to_namespace[path];
+        //    for stmt in &module.statements {
+        //        // Ignore errors since they'll be caught later and
+        //        // there are false positives.
+        //        let _ = self.outer_definition(namespace, &stmt);
+        //    }
+        //}
+
+        //let mut errors = Vec::new();
+        //for (path, module) in &tree.modules {
+        //    self.namespace = to_namespace[path];
+        //    for stmt in &module.statements {
+        //        if let Err(mut errs) = self.statement(&stmt) {
+        //            errors.append(&mut errs);
+        //        }
+        //    }
+        //}
+
+        // HACK
+        for stmt in statements.iter() {
+            // Ignore errors since they'll be caught later and
+            // there are false positives.
+            let _ = self.outer_definition(0, &stmt);
         }
 
+        // HACK
+        self.namespace = 0;
         let mut errors = Vec::new();
-        for (path, module) in &tree.modules {
-            self.namespace = to_namespace[path];
-            for stmt in &module.statements {
-                if let Err(mut errs) = self.statement(&stmt) {
-                    errors.append(&mut errs);
-                }
+        for stmt in statements.iter() {
+            if let Err(mut errs) = self.statement(&stmt) {
+                errors.append(&mut errs);
             }
         }
-
-        let span = tree.modules[0].1.statements
+        let span = statements
             .iter()
             .find_map(|stmt| {
                 if let StatementKind::Definition{ ident, .. } = &stmt.kind {
@@ -1087,7 +1102,7 @@ impl<'c> TypeChecker<'c> {
                 }
                 None
             })
-            .unwrap_or_else(|| tree.modules[0].1.statements[0].span);
+            .unwrap_or_else(|| statements[0].span);
 
         let call_start = &Assignable {
             span,
@@ -1128,10 +1143,10 @@ impl<'c> TypeChecker<'c> {
 
 pub(crate) fn solve(
     compiler: &mut Compiler,
-    tree: &mut AST,
+    statements: &Vec<&Statement>,
     to_namespace: &HashMap<PathBuf, usize>,
 ) -> Result<(), Vec<Error>> {
-    TypeChecker::new(compiler).solve(tree, to_namespace)
+    TypeChecker::new(compiler).solve(statements, to_namespace)
 }
 
 ///

@@ -1132,16 +1132,16 @@ impl Compiler {
             break;
         }
 
-        for statement in dependency::initialization_order(&tree, &self) {
-            self.statement(statement, ctx);
-        }
+        let statements = dependency::initialization_order(&tree, &self);
+
+        statements.iter().for_each(|statement| self.statement(statement, ctx));
 
         if !self.errors.is_empty() {
             return Err(self.errors);
         }
 
         if typecheck {
-            typechecker::solve(&mut self, &mut tree, &path_to_namespace_id)?;
+            typechecker::solve(&mut self, &statements, &path_to_namespace_id)?;
         }
 
         self.read_identifier("start", Span::zero(), ctx, 0);
