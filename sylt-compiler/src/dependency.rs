@@ -70,7 +70,7 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
                 .collect(),
 
             | Ret { value }
-            | Definition { value, .. }
+            | Definition { value, .. } // TODO: Shadowing
             | StatementExpression { value } => dependencies(ctx, value),
 
             | Use { .. }
@@ -88,7 +88,8 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
         Get(assignable) => assignable_dependencies(ctx, assignable),
 
         | Neg(expr)
-        | Not(expr) => dependencies(ctx, expr),
+        | Not(expr)
+        | Duplicate(expr) => dependencies(ctx, expr),
 
         | Add(lhs, rhs)
         | Sub(lhs, rhs)
@@ -109,8 +110,6 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
             .cloned()
             .collect(),
 
-        Duplicate(_) => todo!(),
-
         | IfExpression { condition, pass, fail }
         | IfShort { lhs: pass, condition, fail } => {
             [pass, fail, condition].iter()
@@ -125,6 +124,7 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
         // purposes reading and calling is considered the same. Also, the start
         // function is special since it is the first thing that is called.
         Function { body, .. } => {
+            //TODO: params shadow other variables
             statement_dependencies(ctx, body)
         },
         Instance { blob, .. } => {
