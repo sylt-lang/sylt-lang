@@ -1135,6 +1135,7 @@ impl Display for Type {
             TypeKind::UserDefined(name) => {
                 write!(f, "User(")?;
                 name.pretty_print(f, 0)?;
+                write!(f, ")")?;
             }
             TypeKind::Union(a, b) => {
                 write!(f, "{} | {}", a, b)?;
