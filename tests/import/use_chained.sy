@@ -1,0 +1,5 @@
+use subdir/
+
+start :: fn {
+    subdir.one <=> 1
+}
