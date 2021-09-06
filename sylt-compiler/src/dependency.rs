@@ -3,7 +3,7 @@ use std::collections::hash_map::Entry::{Occupied, Vacant};
 use crate::{Compiler, Name};
 use sylt_parser::{
     AST, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
-    Statement, StatementKind,
+    Statement, StatementKind, TypeKind,
 };
 use sylt_parser::statement::NameIdentifier;
 
@@ -12,95 +12,94 @@ struct Context<'a> {
     namespace: usize,
 }
 
+fn assignable_dependencies(ctx: &Context, assignable: &Assignable) -> HashSet<Name> {
+    use AssignableKind::*;
+    match &assignable.kind {
+        Read(ident) => {
+            // Might be shadowed here
+            dbg!(&ident.name);
+            match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
+                Some(&name) => [name].iter().cloned().collect(),
+                None => HashSet::new(),
+            }
+        },
+        Call(ass, exprs) => assignable_dependencies(ctx, ass)
+            .union(&exprs.iter()
+                .map(|expr| dependencies(ctx, expr))
+                .flatten()
+                .collect()
+            )
+            .cloned()
+            .collect(),
+        ArrowCall(expr, ass, exprs) => dependencies(ctx, expr).iter()
+            .chain(assignable_dependencies(ctx, ass).iter())
+            .cloned()
+            .chain(exprs.iter().map(|e| dependencies(ctx, e)).flatten())
+            .collect(),
+        Access(ass, field) => {
+            let mut deps = assignable_dependencies(ctx, ass);
+
+            // HACK: Find out which global is being accessed in another
+            // namespace. This will not work for more nested structures.
+            // It is possible to get uninitialized values by hiding a
+            // namespace in a list for example.
+            if let Read(ident) = &ass.kind {
+                if let Some(Name::Namespace(ns)) =
+                    ctx.compiler.namespaces[ctx.namespace].get(&ident.name)
+                {
+                    deps.insert(*ctx.compiler.namespaces[*ns].get(&field.name).unwrap());
+                    return deps;
+                }
+            }
+            return deps;
+        },
+        Index(ass, expr) => assignable_dependencies(ctx, ass)
+            .union(&dependencies(ctx, expr))
+            .cloned()
+            .collect(),
+        Expression(expr) => dependencies(ctx, expr),
+    }
+}
+
+fn statement_dependencies(ctx: &Context, statement: &Statement) -> HashSet<Name> {
+    use StatementKind::*;
+    match &statement.kind {
+        Assignment { target, value, .. } => dependencies(ctx, value)
+            .union(&assignable_dependencies(ctx, target))
+            .cloned()
+            .collect(),
+        If { condition, pass, fail } => [
+                dependencies(ctx, condition),
+                statement_dependencies(ctx, pass),
+                statement_dependencies(ctx, fail),
+            ].iter()
+            .flatten()
+            .cloned()
+            .collect(),
+        Loop { condition, body } => dependencies(ctx, condition)
+            .union(&statement_dependencies(ctx, body))
+            .cloned()
+            .collect(),
+        Block { statements } => statements.iter()
+            .map(|stmt| statement_dependencies(ctx, stmt))
+            .flatten()
+            .collect(),
+
+        | Ret { value }
+        | Definition { value, .. } // TODO: Shadowing
+        | StatementExpression { value } => dependencies(ctx, value),
+
+        | Use { .. }
+        | Blob { .. }
+        | IsCheck { .. }
+        | Break
+        | Continue
+        | Unreachable
+        | EmptyStatement => HashSet::new(),
+    }
+}
+
 fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
-
-    fn assignable_dependencies(ctx: &Context, assignable: &Assignable) -> HashSet<Name> {
-        use AssignableKind::*;
-        match &assignable.kind {
-            Read(ident) => {
-                // Might be shadowed here
-                dbg!(&ident.name);
-                match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
-                    Some(&name) => [name].iter().cloned().collect(),
-                    None => HashSet::new(),
-                }
-            },
-            Call(ass, exprs) => assignable_dependencies(ctx, ass)
-                .union(&exprs.iter()
-                    .map(|expr| dependencies(ctx, expr))
-                    .flatten()
-                    .collect()
-                )
-                .cloned()
-                .collect(),
-            ArrowCall(expr, ass, exprs) => dependencies(ctx, expr).iter()
-                .chain(assignable_dependencies(ctx, ass).iter())
-                .cloned()
-                .chain(exprs.iter().map(|e| dependencies(ctx, e)).flatten())
-                .collect(),
-            Access(ass, field) => {
-                let mut deps = assignable_dependencies(ctx, ass);
-
-                // HACK: Find out which global is being accessed in another
-                // namespace. This will not work for more nested structures.
-                // It is possible to get uninitialized values by hiding a
-                // namespace in a list for example.
-                if let Read(ident) = &ass.kind {
-                    if let Some(Name::Namespace(ns)) =
-                        ctx.compiler.namespaces[ctx.namespace].get(&ident.name)
-                    {
-                        deps.insert(*ctx.compiler.namespaces[*ns].get(&field.name).unwrap());
-                        return deps;
-                    }
-                }
-                return deps;
-            },
-            Index(ass, expr) => assignable_dependencies(ctx, ass)
-                .union(&dependencies(ctx, expr))
-                .cloned()
-                .collect(),
-            Expression(expr) => dependencies(ctx, expr),
-        }
-    }
-
-    fn statement_dependencies(ctx: &Context, statement: &Statement) -> HashSet<Name> {
-        use StatementKind::*;
-        match &statement.kind {
-            Assignment { target, value, .. } => dependencies(ctx, value)
-                .union(&assignable_dependencies(ctx, target))
-                .cloned()
-                .collect(),
-            If { condition, pass, fail } => [
-                    dependencies(ctx, condition),
-                    statement_dependencies(ctx, pass),
-                    statement_dependencies(ctx, fail),
-                ].iter()
-                .flatten()
-                .cloned()
-                .collect(),
-            Loop { condition, body } => dependencies(ctx, condition)
-                .union(&statement_dependencies(ctx, body))
-                .cloned()
-                .collect(),
-            Block { statements } => statements.iter()
-                .map(|stmt| statement_dependencies(ctx, stmt))
-                .flatten()
-                .collect(),
-
-            | Ret { value }
-            | Definition { value, .. } // TODO: Shadowing
-            | StatementExpression { value } => dependencies(ctx, value),
-
-            | Use { .. }
-            | Blob { .. }
-            | IsCheck { .. }
-            | Break
-            | Continue
-            | Unreachable
-            | EmptyStatement => HashSet::new(),
-        }
-    }
-
     use ExpressionKind::*;
     match &expression.kind {
 
@@ -210,6 +209,7 @@ pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Ve
         .map(|(a, b)| (b.clone(), *a))
         .collect();
     let mut to_order = HashMap::new();
+    let mut is_checks = Vec::new();
     for (path, module) in tree.modules.iter() {
         let namespace = *path_to_namespace_id.get(path).unwrap();
         //let globals: Vec<_> = compiler.namespaces[namespace]
@@ -245,9 +245,12 @@ pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Ve
                         (deps, (statement, namespace))
                     );
                 }
+                IsCheck { .. } => is_checks.push((statement, namespace)),
                 _ => {}
             }
         }
     }
-    return order(to_order);
+    let mut to_order = order(to_order);
+    to_order.extend(is_checks);
+    return to_order;
 }

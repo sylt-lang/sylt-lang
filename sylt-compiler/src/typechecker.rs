@@ -1082,7 +1082,7 @@ impl<'c> TypeChecker<'c> {
                 }
                 None
             })
-            .unwrap_or_else(|| statements[0].0.span);
+            .unwrap_or_else(|| Span { col_start: 0, col_end: 0, line: 0 });
 
         let call_start = &Assignable {
             span,
