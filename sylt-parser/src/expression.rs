@@ -1002,18 +1002,18 @@ impl PrettyPrint for Expression {
                     if i != 0 { write!(f, ", ")?; }
                     write!(f, "{}: {}", name.name, ty)?;
                 }
-                write!(f, " -> {}", ret);
-                write!(f, "\n");
+                write!(f, " -> {}", ret)?;
+                write!(f, "\n")?;
                 body.pretty_print(f, indent + 1)?;
             }
             EK::Instance { blob, fields } => {
                 write!(f, "Instance ")?;
-                blob.pretty_print(f, indent + 1);
+                blob.pretty_print(f, indent + 1)?;
                 write!(f, "\n")?;
                 for (field, value) in fields.iter() {
                     write_indent(f, indent)?;
                     write!(f, ".{}:\n", field)?;
-                    value.pretty_print(f, indent + 1);
+                    value.pretty_print(f, indent + 1)?;
                 }
             }
             EK::Tuple(values) => {

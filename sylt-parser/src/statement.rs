@@ -641,8 +641,8 @@ mod test {
     fail!(statement, statement_blob_newline: "A :: blob { a: int\n b: int }\n" => _);
 }
 
-impl PrettyPrint for NameIdentifier {
-    fn pretty_print(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
+impl Display for NameIdentifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let ident = match &self {
             NameIdentifier::Implicit(ident) => {
                 write!(f, "Implicit(")?;
