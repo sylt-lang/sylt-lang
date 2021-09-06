@@ -5,7 +5,7 @@ use sylt_common::Type;
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp,
-    Span, Statement, StatementKind, VarKind, AST,
+    Span, Statement, StatementKind, VarKind,
 };
 
 use crate::{self as compiler, first_ok_or_errs};

@@ -38,7 +38,23 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
                 .cloned()
                 .chain(exprs.iter().map(|e| dependencies(ctx, e)).flatten())
                 .collect(),
-            Access(ass, _) => assignable_dependencies(ctx, ass),
+            Access(ass, field) => {
+                let mut deps = assignable_dependencies(ctx, ass);
+
+                // HACK: Find out which global is being accessed in another
+                // namespace. This will not work for more nested structures.
+                // It is possible to get uninitialized values by hiding a
+                // namespace in a list for example.
+                if let Read(ident) = &ass.kind {
+                    if let Some(Name::Namespace(ns)) =
+                        ctx.compiler.namespaces[ctx.namespace].get(&ident.name)
+                    {
+                        deps.insert(*ctx.compiler.namespaces[*ns].get(&field.name).unwrap());
+                        return deps;
+                    }
+                }
+                return deps;
+            },
             Index(ass, expr) => assignable_dependencies(ctx, ass)
                 .union(&dependencies(ctx, expr))
                 .cloned()
