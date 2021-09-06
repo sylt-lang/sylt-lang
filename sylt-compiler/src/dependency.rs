@@ -3,7 +3,7 @@ use std::collections::hash_map::Entry::{Occupied, Vacant};
 use crate::{Compiler, Name};
 use sylt_parser::{
     AST, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
-    Statement, StatementKind, TypeKind,
+    Statement, StatementKind,
 };
 use sylt_parser::statement::NameIdentifier;
 

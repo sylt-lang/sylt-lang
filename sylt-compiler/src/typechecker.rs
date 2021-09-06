@@ -1056,7 +1056,6 @@ impl<'c> TypeChecker<'c> {
     fn solve(
         mut self,
         statements: &Vec<(&Statement, usize)>,
-        to_namespace: &HashMap<PathBuf, usize>,
     ) -> Result<(), Vec<Error>> {
 
         for (statement, namespace) in statements.iter() {
@@ -1124,9 +1123,8 @@ impl<'c> TypeChecker<'c> {
 pub(crate) fn solve(
     compiler: &mut Compiler,
     statements: &Vec<(&Statement, usize)>,
-    to_namespace: &HashMap<PathBuf, usize>,
 ) -> Result<(), Vec<Error>> {
-    TypeChecker::new(compiler).solve(statements, to_namespace)
+    TypeChecker::new(compiler).solve(statements)
 }
 
 ///

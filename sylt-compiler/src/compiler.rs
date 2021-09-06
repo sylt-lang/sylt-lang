@@ -9,7 +9,7 @@ use sylt_parser::expression::ComparisonKind;
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     Context as ParserContext,
-    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op as ParserOp,
+    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp,
     Span, Statement, StatementKind, Type as ParserType, TypeKind, VarKind, AST,
 };
 
@@ -1054,46 +1054,10 @@ impl Compiler {
         }
     }
 
-    fn module_functions(&mut self, module: &Module, ctx: Context) {
-        for statement in module.statements.iter() {
-            match statement.kind {
-                StatementKind::Definition {
-                    value:
-                        Expression {
-                            kind: ExpressionKind::Function { .. },
-                            ..
-                        },
-                    ..
-                } => {
-                    self.statement(statement, ctx);
-                }
-                _ => (),
-            }
-        }
-    }
-
-    fn module_not_functions(&mut self, module: &Module, ctx: Context) {
-        for statement in module.statements.iter() {
-            match statement.kind {
-                StatementKind::Definition {
-                    value:
-                        Expression {
-                            kind: ExpressionKind::Function { .. },
-                            ..
-                        },
-                    ..
-                } => (),
-                _ => {
-                    self.statement(statement, ctx);
-                }
-            }
-        }
-    }
-
     fn compile(
         mut self,
         typecheck: bool,
-        mut tree: AST,
+        tree: AST,
         functions: &[(String, RustFunction, String)],
     ) -> Result<Prog, Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
@@ -1108,7 +1072,7 @@ impl Compiler {
             ..Context::from_namespace(0)
         };
 
-        let path_to_namespace_id = self.extract_globals(&tree);
+        self.extract_globals(&tree);
 
         let num_functions = functions.len();
         self.functions = functions
@@ -1137,7 +1101,7 @@ impl Compiler {
         }
 
         if typecheck {
-            typechecker::solve(&mut self, &statements, &path_to_namespace_id)?;
+            typechecker::solve(&mut self, &statements)?;
         }
 
         self.read_identifier("start", Span::zero(), ctx, 0);
@@ -1168,7 +1132,7 @@ impl Compiler {
     }
 
     // TODO(ed): This should probably be cleaned up and moves out of the compiler?
-    fn extract_globals(&mut self, tree: &AST) -> HashMap<PathBuf, usize> {
+    fn extract_globals(&mut self, tree: &AST) {
         let mut path_to_namespace_id = HashMap::<PathBuf, usize>::new();
         for (path, _) in tree.modules.iter() {
             let slot = path_to_namespace_id.len();
@@ -1329,7 +1293,6 @@ impl Compiler {
             }
             self.namespaces[slot] = namespace;
         }
-        path_to_namespace_id
     }
 }
 
