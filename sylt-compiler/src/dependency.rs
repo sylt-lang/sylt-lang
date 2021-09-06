@@ -2,9 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use crate::{Compiler, Name};
 use sylt_parser::{
-    AST, Assignable, AssignableKind, Expression, ExpressionKind, Statement,
-    StatementKind,
+    AST, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
+    Statement, StatementKind,
 };
+use sylt_parser::statement::NameIdentifier;
 
 struct Context<'a> {
     compiler: &'a Compiler,
@@ -117,8 +118,8 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
         // Functions are a bit special. They only create dependencies once
         // called, which is a problem. It is currently impossible to know when
         // a function is going to be called after being read, so for our
-        // purposes reading and calling is considered the same. Also, the start
-        // function is special since it is the first thing that is called.
+        // purposes reading and calling is considered the same. Function
+        // definitions are handled separately since they have no dependencies.
         Function { body, .. } => {
             //TODO: params shadow other variables
             statement_dependencies(ctx, body)
@@ -192,24 +193,21 @@ pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Ve
         .iter()
         .map(|(a, b)| (b.clone(), *a))
         .collect();
-    //let globals: Vec<_> = compiler.namespaces.iter()
-    //    .map(|ns| ns.values())
-    //    .flatten()
-    //    .collect();
+    let mut to_order = HashMap::new();
     for (path, module) in tree.modules.iter() {
         let namespace = *path_to_namespace_id.get(path).unwrap();
-        let globals: Vec<_> = compiler.namespaces[namespace]
-            .iter()
-            .map(|(name, _global)| name)
-            .cloned()
-            .collect();
-        dbg!(globals);
-        let mut to_order = HashMap::new();
+        //let globals: Vec<_> = compiler.namespaces[namespace]
+        //    .iter()
+        //    .map(|(name, _global)| name)
+        //    .cloned()
+        //    .collect();
+        //dbg!(globals);
         for statement in module.statements.iter() {
             use StatementKind::*;
             match &statement.kind {
-                // TODO: Don't forget blob
-                Blob { name, .. } => {
+                | Use { name: NameIdentifier::Implicit(Identifier { name, .. }), .. }
+                | Use { name: NameIdentifier::Alias(Identifier { name, .. }), .. }
+                | Blob { name, .. } => {
                     to_order.insert(
                         *compiler.namespaces[namespace].get(name).unwrap(),
                         (HashSet::new(), statement)
@@ -234,7 +232,6 @@ pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Ve
                 _ => {}
             }
         }
-        return order(to_order);
     }
-    unreachable!();
+    return order(to_order);
 }
