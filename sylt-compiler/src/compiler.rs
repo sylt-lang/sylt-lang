@@ -1125,16 +1125,12 @@ impl Compiler {
             num_functions
         );
 
-        // HACK
-        // TODO: several files...
-        for (path, _module) in tree.modules.iter() {
-            ctx.namespace = path_to_namespace_id[path];
-            break;
-        }
-
         let statements = dependency::initialization_order(&tree, &self);
 
-        statements.iter().for_each(|statement| self.statement(statement, ctx));
+        for (statement, namespace) in statements.iter() {
+            ctx.namespace = *namespace;
+            self.statement(statement, ctx)
+        }
 
         if !self.errors.is_empty() {
             return Err(self.errors);

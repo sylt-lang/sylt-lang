@@ -165,7 +165,7 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
     }
 }
 
-fn order(to_order: HashMap<Name, (HashSet<Name>, &Statement)>) -> Vec<&Statement> {
+fn order(to_order: HashMap<Name, (HashSet<Name>, (&Statement, usize))>) -> Vec<(&Statement, usize)> {
 
     enum State {
         Inserting,
@@ -174,9 +174,9 @@ fn order(to_order: HashMap<Name, (HashSet<Name>, &Statement)>) -> Vec<&Statement
 
     fn recurse<'a>(
         name: Name,
-        to_order: &HashMap<Name, (HashSet<Name>, &'a Statement)>,
+        to_order: &HashMap<Name, (HashSet<Name>, (&'a Statement, usize))>,
         inserted: &mut HashMap<Name, State>,
-        ordered: &mut Vec<&'a Statement>
+        ordered: &mut Vec<(&'a Statement, usize)>
     ) {
         match inserted.entry(name) {
             Vacant(entry) => entry.insert(State::Inserting),
@@ -191,7 +191,7 @@ fn order(to_order: HashMap<Name, (HashSet<Name>, &Statement)>) -> Vec<&Statement
         }
 
         inserted.insert(name, State::Inserted);
-        ordered.push(statement);
+        ordered.push(*statement);
     }
 
     // TODO: detect cycles
@@ -204,7 +204,7 @@ fn order(to_order: HashMap<Name, (HashSet<Name>, &Statement)>) -> Vec<&Statement
     ordered
 }
 
-pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Vec<&'a Statement> {
+pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Vec<(&'a Statement, usize)> {
     let path_to_namespace_id: HashMap<_, _> = compiler.namespace_id_to_path
         .iter()
         .map(|(a, b)| (b.clone(), *a))
@@ -226,7 +226,7 @@ pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Ve
                 | Blob { name, .. } => {
                     to_order.insert(
                         *compiler.namespaces[namespace].get(name).unwrap(),
-                        (HashSet::new(), statement)
+                        (HashSet::new(), (statement, namespace))
                     );
                 }
                 Definition { ident, value, .. } => {
@@ -242,7 +242,7 @@ pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Ve
                     //);
                     to_order.insert(
                         *compiler.namespaces[namespace].get(&ident.name).unwrap(),
-                        (deps, statement)
+                        (deps, (statement, namespace))
                     );
                 }
                 _ => {}
