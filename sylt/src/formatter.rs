@@ -32,14 +32,14 @@ fn write_indents<W: Write>(dest: &mut W, indent: u32) -> fmt::Result {
     Ok(())
 }
 
-fn write_identifier<W: Write>(dest: &mut W, identifier: &Identifier) -> fmt::Result {
+fn write_identifier<W: Write>(dest: &mut W, identifier: Identifier) -> fmt::Result {
     write!(dest, "{}", identifier.name)
 }
 
 fn write_parameters<W: Write>(
     dest: &mut W,
     indent: u32,
-    parameters: &[(Identifier, Type)],
+    parameters: Vec<(Identifier, Type)>,
 ) -> fmt::Result {
     let mut first = true;
     for (identifier, ty) in parameters {
@@ -57,7 +57,7 @@ fn write_parameters<W: Write>(
 fn write_blob_instance_fields<W: Write>(
     dest: &mut W,
     indent: u32,
-    fields: &[(String, Expression)],
+    fields: Vec<(String, Expression)>,
 ) -> fmt::Result {
     for (field, expr) in fields {
         write_indents(dest, indent)?;
@@ -68,15 +68,15 @@ fn write_blob_instance_fields<W: Write>(
     Ok(())
 }
 
-fn write_type<W: Write>(dest: &mut W, indent: u32, ty: &Type) -> fmt::Result {
-    match &ty.kind {
+fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
+    match ty.kind {
         TypeKind::Implied => unreachable!(),
         TypeKind::Resolved(ty) => write!(dest, "{}", ty),
         TypeKind::UserDefined(assignable) => write_assignable(dest, indent, assignable),
         TypeKind::Union(ty, rest) => {
-            write_type(dest, indent, ty)?;
+            write_type(dest, indent, *ty)?;
             write!(dest, " | ")?;
-            write_type(dest, indent, rest)
+            write_type(dest, indent, *rest)
         }
         TypeKind::Fn(params, ret) => {
             write!(dest, "fn")?;
@@ -85,7 +85,7 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: &Type) -> fmt::Result {
                 write_comma_separated!(dest, indent, write_type, params);
             }
             write!(dest, " -> ")?;
-            write_type(dest, indent, ret)
+            write_type(dest, indent, *ret)
         }
         TypeKind::Tuple(types) => {
             write!(dest, "(")?;
@@ -94,65 +94,65 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: &Type) -> fmt::Result {
         }
         TypeKind::List(ty) => {
             write!(dest, "[")?;
-            write_type(dest, indent, ty)?;
+            write_type(dest, indent, *ty)?;
             write!(dest, "]")
         }
         TypeKind::Set(ty) => {
             write!(dest, "{{")?;
-            write_type(dest, indent, ty)?;
+            write_type(dest, indent, *ty)?;
             write!(dest, "}}")
         }
         TypeKind::Dict(key, val) => {
             write!(dest, "{{")?;
-            write_type(dest, indent, key)?;
+            write_type(dest, indent, *key)?;
             write!(dest, ": ")?;
-            write_type(dest, indent, val)?;
+            write_type(dest, indent, *val)?;
             write!(dest, "}}")
         }
         TypeKind::Generic(ident) => write_identifier(dest, ident),
     }
 }
 
-fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: &Assignable) -> fmt::Result {
-    match &assignable.kind {
+fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: Assignable) -> fmt::Result {
+    match assignable.kind {
         AssignableKind::Read(identifier) => write_identifier(dest, identifier),
         AssignableKind::Call(callable, args) => {
-            write_assignable(dest, indent, callable)?;
+            write_assignable(dest, indent, *callable)?;
             write!(dest, "(")?;
             write_comma_separated!(dest, indent, write_expression, args);
             write!(dest, ")")
         }
         AssignableKind::ArrowCall(first, callable, rest) => {
-            write_expression(dest, indent, first)?;
+            write_expression(dest, indent, *first)?;
             write!(dest, " -> ")?;
-            write_assignable(dest, indent, callable)?;
+            write_assignable(dest, indent, *callable)?;
             write!(dest, "(")?;
             write_comma_separated!(dest, indent, write_expression, rest);
             write!(dest, ")")?;
             Ok(())
         }
         AssignableKind::Access(accessable, ident) => {
-            write_assignable(dest, indent, accessable)?;
+            write_assignable(dest, indent, *accessable)?;
             write!(dest, ".")?;
             write_identifier(dest, ident)
         }
         AssignableKind::Index(indexable, index) => {
-            write_assignable(dest, indent, indexable)?;
+            write_assignable(dest, indent, *indexable)?;
             write!(dest, "[")?;
-            write_expression(dest, indent, index)?;
+            write_expression(dest, indent, *index)?;
             write!(dest, "]")
         }
-        AssignableKind::Expression(expr) => write_expression(dest, indent, expr),
+        AssignableKind::Expression(expr) => write_expression(dest, indent, *expr),
     }
 }
 
-fn write_arrow_call_no_lhs<W: Write>(dest: &mut W, indent: u32, expr: &Expression) -> fmt::Result {
-    match &expr.kind {
-        ExpressionKind::Get(assignable) => match &assignable.kind {
+fn write_arrow_call_no_lhs<W: Write>(dest: &mut W, indent: u32, expr: Expression) -> fmt::Result {
+    match expr.kind {
+        ExpressionKind::Get(assignable) => match assignable.kind {
             AssignableKind::ArrowCall(lhs, callee, rest) => {
-                write_arrow_call_no_lhs(dest, indent, lhs)?;
+                write_arrow_call_no_lhs(dest, indent, *lhs)?;
                 write!(dest, " -> ")?;
-                write_assignable(dest, indent, callee)?;
+                write_assignable(dest, indent, *callee)?;
                 write!(dest, "(")?;
                 write_comma_separated!(dest, indent, write_expression, rest);
                 write!(dest, ")")?;
@@ -172,71 +172,71 @@ macro_rules! expr_binary_op {
     };
 }
 
-fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression) -> fmt::Result {
-    match &expression.kind {
+fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression) -> fmt::Result {
+    match expression.kind {
         ExpressionKind::Get(assignable) => write_assignable(dest, indent, assignable)?,
         ExpressionKind::TypeConstant(ty) => {
             write!(dest, ":")?;
             write_type(dest, indent, ty)?;
         }
         ExpressionKind::Add(lhs, rhs) => {
-            expr_binary_op!(dest, indent, lhs, " + ", rhs);
+            expr_binary_op!(dest, indent, *lhs, " + ", *rhs);
         }
         ExpressionKind::Sub(lhs, rhs) => {
-            expr_binary_op!(dest, indent, lhs, " - ", rhs);
+            expr_binary_op!(dest, indent, *lhs, " - ", *rhs);
         }
         ExpressionKind::Mul(lhs, rhs) => {
-            expr_binary_op!(dest, indent, lhs, " * ", rhs);
+            expr_binary_op!(dest, indent, *lhs, " * ", *rhs);
         }
         ExpressionKind::Div(lhs, rhs) => {
-            expr_binary_op!(dest, indent, lhs, " / ", rhs);
+            expr_binary_op!(dest, indent, *lhs, " / ", *rhs);
         }
         ExpressionKind::Neg(expr) => {
             write!(dest, "-")?;
-            write_expression(dest, indent, expr)?;
+            write_expression(dest, indent, *expr)?;
         }
         ExpressionKind::Comparison(lhs, cmp, rhs) => match cmp {
             ComparisonKind::Equals => {
-                expr_binary_op!(dest, indent, lhs, " == ", rhs);
+                expr_binary_op!(dest, indent, *lhs, " == ", *rhs);
             }
             ComparisonKind::NotEquals => {
-                expr_binary_op!(dest, indent, lhs, " != ", rhs);
+                expr_binary_op!(dest, indent, *lhs, " != ", *rhs);
             }
             ComparisonKind::Greater => {
-                expr_binary_op!(dest, indent, lhs, " > ", rhs);
+                expr_binary_op!(dest, indent, *lhs, " > ", *rhs);
             }
             ComparisonKind::GreaterEqual => {
-                expr_binary_op!(dest, indent, lhs, " >= ", rhs);
+                expr_binary_op!(dest, indent, *lhs, " >= ", *rhs);
             }
             ComparisonKind::Less => {
-                expr_binary_op!(dest, indent, lhs, " < ", rhs);
+                expr_binary_op!(dest, indent, *lhs, " < ", *rhs);
             }
             ComparisonKind::LessEqual => {
-                expr_binary_op!(dest, indent, lhs, " <= ", rhs);
+                expr_binary_op!(dest, indent, *lhs, " <= ", *rhs);
             }
             ComparisonKind::Is => {
-                expr_binary_op!(dest, indent, lhs, " is ", rhs);
+                expr_binary_op!(dest, indent, *lhs, " is ", *rhs);
             }
             ComparisonKind::In => {
-                expr_binary_op!(dest, indent, lhs, " in ", rhs);
+                expr_binary_op!(dest, indent, *lhs, " in ", *rhs);
             }
         },
         ExpressionKind::AssertEq(lhs, rhs) => {
-            expr_binary_op!(dest, indent, lhs, " <=> ", rhs);
+            expr_binary_op!(dest, indent, *lhs, " <=> ", *rhs);
         }
         ExpressionKind::And(lhs, rhs) => {
-            expr_binary_op!(dest, indent, lhs, " && ", rhs);
+            expr_binary_op!(dest, indent, *lhs, " && ", *rhs);
         }
         ExpressionKind::Or(lhs, rhs) => {
-            expr_binary_op!(dest, indent, lhs, " || ", rhs);
+            expr_binary_op!(dest, indent, *lhs, " || ", *rhs);
         }
         ExpressionKind::Not(expr) => {
             write!(dest, "!")?;
-            write_expression(dest, indent, expr)?;
+            write_expression(dest, indent, *expr)?;
         }
         ExpressionKind::Parenthesis(expr) => {
             write!(dest, "(")?;
-            write_expression(dest, indent, expr)?;
+            write_expression(dest, indent, *expr)?;
             write!(dest, ")")?;
         }
         ExpressionKind::IfExpression {
@@ -244,21 +244,21 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
             pass,
             fail,
         } => {
-            write_expression(dest, indent, pass)?;
+            write_expression(dest, indent, *pass)?;
             write!(dest, " if ")?;
-            write_expression(dest, indent, condition)?;
+            write_expression(dest, indent, *condition)?;
             write!(dest, " else ")?;
-            write_expression(dest, indent, fail)?;
+            write_expression(dest, indent, *fail)?;
         }
-        ExpressionKind::Duplicate(expr) => write_expression(dest, indent, expr)?,
+        ExpressionKind::Duplicate(expr) => write_expression(dest, indent, *expr)?,
         ExpressionKind::IfShort {
             condition,
             fail,
             lhs,
         } => {
-            write_expression(dest, indent, lhs)?;
+            write_expression(dest, indent, *lhs)?;
             write!(dest, " if")?;
-            match &condition.kind {
+            match condition.kind {
                 ExpressionKind::Comparison(_lhs, cmp, rhs) => {
                     write!(
                         dest,
@@ -274,14 +274,12 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
                             ComparisonKind::In => "in",
                         }
                     )?;
-                    write_expression(dest, indent, rhs)?;
+                    write_expression(dest, indent, *rhs)?;
                 }
-                ExpressionKind::Get(assignable) => match &assignable.kind {
-                    AssignableKind::ArrowCall(..) => {
-                        write_arrow_call_no_lhs(dest, indent, condition)?;
-                    }
+                ExpressionKind::Get(ref assignable) => match &assignable.kind {
+                    AssignableKind::ArrowCall(..) => write_arrow_call_no_lhs(dest, indent, *condition)?,
                     kind => panic!(
-                        "only arrow calls are supported in a short if expression: {:?}",
+                        "only arrow calls are supported in a short if expression, not {:?}",
                         kind
                     ),
                 },
@@ -290,7 +288,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
                 }
             }
             write!(dest, " else ")?;
-            write_expression(dest, indent, fail)?;
+            write_expression(dest, indent, *fail)?;
         }
         ExpressionKind::Function {
             name: _,
@@ -310,7 +308,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
                 write_type(dest, indent, ret)?;
                 write!(dest, " ")?;
             }
-            write_statement(dest, indent, body)?;
+            write_statement(dest, indent, *body)?;
         }
         ExpressionKind::Instance { blob, fields } => {
             write_assignable(dest, indent, blob)?;
@@ -323,9 +321,10 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
             write!(dest, "}}")?;
         }
         ExpressionKind::Tuple(exprs) => {
+            let num_exprs = exprs.len();
             write!(dest, "(")?;
             write_comma_separated!(dest, indent, write_expression, exprs);
-            if exprs.len() == 1 {
+            if num_exprs == 1 {
                 write!(dest, ",")?;
             }
             write!(dest, ")")?;
@@ -346,7 +345,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
                 write!(dest, ":")?;
             } else {
                 let mut first = true;
-                let mut exprs = exprs.iter();
+                let mut exprs = exprs.into_iter();
                 while let Some(expr) = exprs.next() {
                     if !first {
                         write!(dest, ", ")?;
@@ -369,13 +368,13 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
     Ok(())
 }
 
-fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -> fmt::Result {
+fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) -> fmt::Result {
     for comment in &statement.comments {
         write!(dest, "// {}\n", comment)?;
         write_indents(dest, indent)?;
     }
 
-    match &statement.kind {
+    match statement.kind {
         StatementKind::Assignment {
             kind,
             target,
@@ -412,7 +411,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
         StatementKind::Block { statements } => {
             write!(dest, "{{\n")?;
 
-            for s in &merge_empty_statements(statements.clone()) {
+            for s in merge_empty_statements(statements) {
                 write_indents(dest, indent + 1)?;
                 write_statement(dest, indent + 1, s)?;
                 write!(dest, "\n")?;
@@ -471,10 +470,10 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             write!(dest, "if ")?;
             write_expression(dest, indent, condition)?;
             write!(dest, " ")?;
-            write_statement(dest, indent, pass)?;
+            write_statement(dest, indent, *pass)?;
             if !matches!(fail.kind, StatementKind::EmptyStatement) {
                 write!(dest, " else ")?;
-                write_statement(dest, indent, fail)?;
+                write_statement(dest, indent, *fail)?;
             }
         }
         StatementKind::IsCheck { lhs, rhs } => {
@@ -487,7 +486,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             write!(dest, "loop ")?;
             write_expression(dest, indent, condition)?;
             write!(dest, " ")?;
-            write_statement(dest, indent, body)?;
+            write_statement(dest, indent, *body)?;
         }
         StatementKind::Ret { value } => {
             write!(dest, "ret ")?;
@@ -539,10 +538,10 @@ fn merge_empty_statements(mut statements: Vec<Statement>) -> Vec<Statement> {
     ret
 }
 
-fn format_module(module: &Module) -> Result<String, fmt::Error> {
+fn format_module(module: Module) -> Result<String, fmt::Error> {
     let mut formatted = String::new();
-    merge_empty_statements(module.statements.clone())
-        .iter()
+    merge_empty_statements(module.statements)
+        .into_iter()
         // Side effects incoming!
         .map(|s| {
             write_statement(&mut formatted, 0, s)?;
@@ -553,11 +552,11 @@ fn format_module(module: &Module) -> Result<String, fmt::Error> {
 }
 
 pub fn format(args: &Args) -> Result<String, Vec<Error>> {
-    let tree = sylt_parser::tree(
+    let mut tree = sylt_parser::tree(
         &PathBuf::from(args.args.first().expect("No file to run")),
         crate::read_file,
     )?;
-    Ok(format_module(&tree.modules[0].1).unwrap())
+    Ok(format_module(tree.modules.remove(0).1).unwrap())
 }
 
 #[cfg(test)]
