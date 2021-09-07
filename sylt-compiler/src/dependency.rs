@@ -164,8 +164,9 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
     }
 }
 
-fn order(to_order: HashMap<Name, (HashSet<Name>, (&Statement, usize))>) -> Vec<(&Statement, usize)> {
-
+fn order(
+    to_order: HashMap<Name, (HashSet<Name>, (&Statement, usize))>
+) -> Result<Vec<(&Statement, usize)>, (&Statement, usize)> {
     enum State {
         Inserting,
         Inserted,
@@ -176,34 +177,37 @@ fn order(to_order: HashMap<Name, (HashSet<Name>, (&Statement, usize))>) -> Vec<(
         to_order: &HashMap<Name, (HashSet<Name>, (&'a Statement, usize))>,
         inserted: &mut HashMap<Name, State>,
         ordered: &mut Vec<(&'a Statement, usize)>
-    ) {
+    ) -> Result<(), (&'a Statement, usize)> {
         match inserted.entry(name) {
             Vacant(entry) => entry.insert(State::Inserting),
-            Occupied(entry) => match entry.get() {
-                State::Inserting => panic!("Cycle"),
-                State::Inserted => return,
+            Occupied(entry) => return match entry.get() {
+                State::Inserting => Err(to_order.get(&name).unwrap().1),
+                State::Inserted => Ok(()),
             },
         };
         let (deps, statement) = to_order.get(&name).unwrap();
         for dep in deps {
-            recurse(*dep, to_order, inserted, ordered);
+            recurse(*dep, to_order, inserted, ordered)?;
         }
 
         inserted.insert(name, State::Inserted);
         ordered.push(*statement);
+        Ok(())
     }
 
-    // TODO: detect cycles
     let mut ordered = Vec::new();
     let mut inserted = HashMap::new();
     for (name, _) in to_order.iter() {
-        recurse(*name, &to_order, &mut inserted, &mut ordered);
+        recurse(*name, &to_order, &mut inserted, &mut ordered)?;
     }
 
-    ordered
+    Ok(ordered)
 }
 
-pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Vec<(&'a Statement, usize)> {
+pub(crate) fn initialization_order<'a>(
+    tree: &'a AST,
+    compiler: &Compiler
+) -> Result<Vec<(&'a Statement, usize)>, (&'a Statement, usize)> {
     let path_to_namespace_id: HashMap<_, _> = compiler.namespace_id_to_path
         .iter()
         .map(|(a, b)| (b.clone(), *a))
@@ -230,12 +234,7 @@ pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Ve
                     );
                 }
                 Definition { ident, value, .. } => {
-                    // If it is a function definition it has no dependencies
-                    let deps = if let ExpressionKind::Function{..} = &value.kind {
-                        HashSet::new()
-                    } else {
-                        dependencies(&Context{compiler, namespace}, value)
-                    };
+                    let deps = dependencies(&Context{compiler, namespace}, value);
                     //dbg!(
                     //    &ident.name,
                     //    &deps
@@ -250,7 +249,5 @@ pub(crate) fn initialization_order<'a>(tree: &'a AST, compiler: &Compiler) -> Ve
             }
         }
     }
-    let mut to_order = order(to_order);
-    to_order.extend(is_checks);
-    return to_order;
+    return order(to_order).map(|mut o| { o.extend(is_checks); o });
 }

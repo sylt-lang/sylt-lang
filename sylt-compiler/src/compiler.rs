@@ -1089,11 +1089,22 @@ impl Compiler {
             num_functions
         );
 
-        let statements = dependency::initialization_order(&tree, &self);
+        let statements = match dependency::initialization_order(&tree, &self) {
+            Ok(statements) => statements,
+            Err((statement, namespace)) => {
+                error!(
+                    self,
+                    Context::from_namespace(namespace),
+                    statement.span,
+                    "Dependency cycle detected"
+                );
+                return Err(self.errors);
+            }
+        };
 
         for (statement, namespace) in statements.iter() {
             ctx.namespace = *namespace;
-            self.statement(statement, ctx)
+            self.statement(statement, ctx);
         }
 
         if !self.errors.is_empty() {
