@@ -10,17 +10,32 @@ use sylt_parser::statement::NameIdentifier;
 struct Context<'a> {
     compiler: &'a Compiler,
     namespace: usize,
+    variables: Vec<String>,
 }
 
-fn assignable_dependencies(ctx: &Context, assignable: &Assignable) -> HashSet<Name> {
+impl Context<'_> {
+    fn shadow(&mut self, variable: &String) {
+        if !self.shadowed(variable) {
+            self.variables.push(variable.clone());
+        }
+    }
+
+    fn shadowed(&self, variable: &String) -> bool {
+        return self.variables.iter().rfind(|&v| v == variable).is_some();
+    }
+}
+
+fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> HashSet<Name> {
     use AssignableKind::*;
     match &assignable.kind {
         Read(ident) => {
             // Might be shadowed here
             dbg!(&ident.name);
             match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
-                Some(&name) => [name].iter().cloned().collect(),
-                None => HashSet::new(),
+                Some(&name) if !ctx.shadowed(&ident.name) => {
+                    [name].iter().cloned().collect()
+                },
+                _ => HashSet::new(),
             }
         },
         Call(ass, exprs) => assignable_dependencies(ctx, ass)
@@ -47,11 +62,12 @@ fn assignable_dependencies(ctx: &Context, assignable: &Assignable) -> HashSet<Na
                 if let Some(Name::Namespace(ns)) =
                     ctx.compiler.namespaces[ctx.namespace].get(&ident.name)
                 {
-                    deps.insert(*ctx.compiler.namespaces[*ns].get(&field.name).unwrap());
-                    return deps;
+                    if !ctx.shadowed(&ident.name) {
+                        deps.insert(*ctx.compiler.namespaces[*ns].get(&field.name).unwrap());
+                    }
                 }
             }
-            return deps;
+            deps
         },
         Index(ass, expr) => assignable_dependencies(ctx, ass)
             .union(&dependencies(ctx, expr))
@@ -61,7 +77,7 @@ fn assignable_dependencies(ctx: &Context, assignable: &Assignable) -> HashSet<Na
     }
 }
 
-fn statement_dependencies(ctx: &Context, statement: &Statement) -> HashSet<Name> {
+fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> HashSet<Name> {
     use StatementKind::*;
     match &statement.kind {
         Assignment { target, value, .. } => dependencies(ctx, value)
@@ -80,13 +96,21 @@ fn statement_dependencies(ctx: &Context, statement: &Statement) -> HashSet<Name>
             .union(&statement_dependencies(ctx, body))
             .cloned()
             .collect(),
-        Block { statements } => statements.iter()
-            .map(|stmt| statement_dependencies(ctx, stmt))
-            .flatten()
-            .collect(),
+        Block { statements } => {
+            let vars_before = ctx.variables.len();
+            let deps = statements.iter()
+                .map(|stmt| statement_dependencies(ctx, stmt))
+                .flatten()
+                .collect();
+            ctx.variables.truncate(vars_before);
+            deps
+        },
+        Definition { ident, value, .. } => {
+            ctx.shadow(&ident.name);
+            dependencies(ctx, value)
+        },
 
         | Ret { value }
-        | Definition { value, .. } // TODO: Shadowing
         | StatementExpression { value } => dependencies(ctx, value),
 
         | Use { .. }
@@ -99,7 +123,7 @@ fn statement_dependencies(ctx: &Context, statement: &Statement) -> HashSet<Name>
     }
 }
 
-fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
+fn dependencies(ctx: &mut Context, expression: &Expression) -> HashSet<Name> {
     use ExpressionKind::*;
     match &expression.kind {
 
@@ -133,15 +157,22 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
         // Functions are a bit special. They only create dependencies once
         // called, which is a problem. It is currently impossible to know when
         // a function is going to be called after being read, so for our
-        // purposes reading and calling is considered the same. Function
-        // definitions are handled separately since they have no dependencies.
-        Function { body, .. } => {
-            //TODO: params shadow other variables
-            statement_dependencies(ctx, body)
+        // purposes defining the function requires all dependencies.
+        Function { body, params, .. } => {
+            let vars_before = ctx.variables.len();
+            params.iter().for_each(|(ident, _)| ctx.shadow(&ident.name));
+            let deps = statement_dependencies(ctx, body);
+            ctx.variables.truncate(vars_before);
+            deps
         },
-        Instance { blob, .. } => {
-            //TODO: The fields too.
-            assignable_dependencies(ctx, blob)
+        Instance { blob, fields } => {
+            assignable_dependencies(ctx, blob).union(&fields.iter()
+                .map(|(_, expr)| dependencies(ctx, expr))
+                .flatten()
+                .collect()
+            )
+            .cloned()
+            .collect()
         },
 
         | Tuple(exprs)
@@ -235,7 +266,13 @@ pub(crate) fn initialization_order<'a>(
                     );
                 }
                 Definition { ident, value, .. } => {
-                    let deps = dependencies(&Context{compiler, namespace}, value);
+                    let mut ctx = Context {
+                        compiler,
+                        namespace,
+                        variables: Vec::new(),
+                    };
+                    ctx.shadow(&ident.name);
+                    let deps = dependencies(&mut ctx, value);
                     //dbg!(
                     //    &ident.name,
                     //    &deps
