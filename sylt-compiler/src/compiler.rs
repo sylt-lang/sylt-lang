@@ -1091,14 +1091,14 @@ impl Compiler {
 
         let statements = match dependency::initialization_order(&tree, &self) {
             Ok(statements) => statements,
-            Err((statement, namespace)) => {
-                error!(
-                    self,
-                    Context::from_namespace(namespace),
-                    statement.span,
-                    "Dependency cycle detected"
-                );
-                return Err(self.errors);
+            Err(statements) => {
+                return Err(statements.iter().map(|(statement, namespace)| {
+                    Error::CompileError {
+                        file: self.file_from_namespace(*namespace).into(),
+                        span: statement.span,
+                        message: Some("Dependency cycle".to_string()),
+                    }
+                }).collect());
             }
         };
 

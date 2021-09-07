@@ -166,7 +166,7 @@ fn dependencies(ctx: &Context, expression: &Expression) -> HashSet<Name> {
 
 fn order(
     to_order: HashMap<Name, (HashSet<Name>, (&Statement, usize))>
-) -> Result<Vec<(&Statement, usize)>, (&Statement, usize)> {
+) -> Result<Vec<(&Statement, usize)>, Vec<(&Statement, usize)>> {
     enum State {
         Inserting,
         Inserted,
@@ -177,17 +177,18 @@ fn order(
         to_order: &HashMap<Name, (HashSet<Name>, (&'a Statement, usize))>,
         inserted: &mut HashMap<Name, State>,
         ordered: &mut Vec<(&'a Statement, usize)>
-    ) -> Result<(), (&'a Statement, usize)> {
+    ) -> Result<(), Vec<(&'a Statement, usize)>> {
         match inserted.entry(name) {
             Vacant(entry) => entry.insert(State::Inserting),
             Occupied(entry) => return match entry.get() {
-                State::Inserting => Err(to_order.get(&name).unwrap().1),
+                State::Inserting => Err(Vec::new()),
                 State::Inserted => Ok(()),
             },
         };
         let (deps, statement) = to_order.get(&name).unwrap();
         for dep in deps {
-            recurse(*dep, to_order, inserted, ordered)?;
+            recurse(*dep, to_order, inserted, ordered)
+                .map_err(|mut cycle| { cycle.push(*statement); cycle })?;
         }
 
         inserted.insert(name, State::Inserted);
@@ -207,7 +208,7 @@ fn order(
 pub(crate) fn initialization_order<'a>(
     tree: &'a AST,
     compiler: &Compiler
-) -> Result<Vec<(&'a Statement, usize)>, (&'a Statement, usize)> {
+) -> Result<Vec<(&'a Statement, usize)>, Vec<(&'a Statement, usize)>> {
     let path_to_namespace_id: HashMap<_, _> = compiler.namespace_id_to_path
         .iter()
         .map(|(a, b)| (b.clone(), *a))
