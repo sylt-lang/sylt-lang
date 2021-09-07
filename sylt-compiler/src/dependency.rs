@@ -25,20 +25,23 @@ impl Context<'_> {
     }
 }
 
-fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> HashSet<Name> {
+
+
+fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable, namespace: Option<usize>) -> HashSet<Name> {
     use AssignableKind::*;
     match &assignable.kind {
         Read(ident) => {
             // Might be shadowed here
-            dbg!(&ident.name);
-            match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
-                Some(&name) if !ctx.shadowed(&ident.name) => {
+            let shadowed = ctx.shadowed(&ident.name);
+            let in_namespace = namespace.is_some();
+            match ctx.compiler.namespaces[namespace.unwrap_or(ctx.namespace)].get(&ident.name) {
+                Some(&name) if !shadowed && !in_namespace => {
                     [name].iter().cloned().collect()
                 },
                 _ => HashSet::new(),
             }
         },
-        Call(ass, exprs) => assignable_dependencies(ctx, ass)
+        Call(ass, exprs) => assignable_dependencies(ctx, ass, namespace)
             .union(&exprs.iter()
                 .map(|expr| dependencies(ctx, expr))
                 .flatten()
@@ -47,29 +50,42 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> HashSe
             .cloned()
             .collect(),
         ArrowCall(expr, ass, exprs) => dependencies(ctx, expr).iter()
-            .chain(assignable_dependencies(ctx, ass).iter())
+            .chain(assignable_dependencies(ctx, ass, namespace).iter())
             .cloned()
             .chain(exprs.iter().map(|e| dependencies(ctx, e)).flatten())
             .collect(),
-        Access(ass, field) => {
-            let mut deps = assignable_dependencies(ctx, ass);
-
-            // HACK: Find out which global is being accessed in another
-            // namespace. This will not work for more nested structures.
-            // It is possible to get uninitialized values by hiding a
-            // namespace in a list for example.
-            if let Read(ident) = &ass.kind {
-                if let Some(Name::Namespace(ns)) =
-                    ctx.compiler.namespaces[ctx.namespace].get(&ident.name)
-                {
-                    if !ctx.shadowed(&ident.name) {
-                        deps.insert(*ctx.compiler.namespaces[*ns].get(&field.name).unwrap());
+        Access(_, _) => {
+            fn recursive_access(ctx: &mut Context, ass: &Assignable) -> (usize, HashSet<Name>) {
+                match &ass.kind {
+                    AssignableKind::Access(lhs, field) => {
+                        let (namespace, mut deps) = recursive_access(ctx, lhs);
+                        match ctx.compiler.namespaces[namespace].get(&field.name) {
+                            Some(&name) => {
+                                deps.insert(name);
+                                let ns = if let Name::Namespace(ns) = name { ns } else { ctx.namespace };
+                                (ns, deps)
+                            }
+                            None => (ctx.namespace, deps),
+                        }
                     }
+                    Read(ident) => {
+                        // Might be shadowed here
+                        let shadowed = ctx.shadowed(&ident.name);
+                        match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
+                            Some(&name) if !shadowed => {
+                                let ns = if let Name::Namespace(ns) = name { ns } else { ctx.namespace };
+                                (ns, [name].iter().cloned().collect())
+                            },
+                            _ => (ctx.namespace, HashSet::new()),
+                        }
+                    }
+                    _ => (ctx.namespace, assignable_dependencies(ctx, ass, None)),
                 }
             }
+            let (_, deps) = recursive_access(ctx, assignable);
             deps
         },
-        Index(ass, expr) => assignable_dependencies(ctx, ass)
+        Index(ass, expr) => assignable_dependencies(ctx, ass, namespace)
             .union(&dependencies(ctx, expr))
             .cloned()
             .collect(),
@@ -81,7 +97,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> HashSet<N
     use StatementKind::*;
     match &statement.kind {
         Assignment { target, value, .. } => dependencies(ctx, value)
-            .union(&assignable_dependencies(ctx, target))
+            .union(&assignable_dependencies(ctx, target, None))
             .cloned()
             .collect(),
         If { condition, pass, fail } => [
@@ -127,7 +143,7 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> HashSet<Name> {
     use ExpressionKind::*;
     match &expression.kind {
 
-        Get(assignable) => assignable_dependencies(ctx, assignable),
+        Get(assignable) => assignable_dependencies(ctx, assignable, None),
 
         | Neg(expr)
         | Not(expr)
@@ -166,7 +182,7 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> HashSet<Name> {
             deps
         },
         Instance { blob, fields } => {
-            assignable_dependencies(ctx, blob).union(&fields.iter()
+            assignable_dependencies(ctx, blob, None).union(&fields.iter()
                 .map(|(_, expr)| dependencies(ctx, expr))
                 .flatten()
                 .collect()
@@ -248,12 +264,6 @@ pub(crate) fn initialization_order<'a>(
     let mut is_checks = Vec::new();
     for (path, module) in tree.modules.iter() {
         let namespace = *path_to_namespace_id.get(path).unwrap();
-        //let globals: Vec<_> = compiler.namespaces[namespace]
-        //    .iter()
-        //    .map(|(name, _global)| name)
-        //    .cloned()
-        //    .collect();
-        //dbg!(globals);
         for statement in module.statements.iter() {
             use StatementKind::*;
             match &statement.kind {
@@ -273,10 +283,6 @@ pub(crate) fn initialization_order<'a>(
                     };
                     ctx.shadow(&ident.name);
                     let deps = dependencies(&mut ctx, value);
-                    //dbg!(
-                    //    &ident.name,
-                    //    &deps
-                    //);
                     to_order.insert(
                         *compiler.namespaces[namespace].get(&ident.name).unwrap(),
                         (deps, (statement, namespace))

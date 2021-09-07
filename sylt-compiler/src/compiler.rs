@@ -185,6 +185,14 @@ macro_rules! error {
     };
 }
 
+macro_rules! error_no_panic {
+    ($compiler:expr, $ctx:expr, $span:expr, $( $msg:expr ),+ ) => {
+        {
+            error!($compiler, $ctx, $span, $( $msg ),*);
+            $compiler.panic = false;
+        }
+    };
+}
 impl Compiler {
     fn new() -> Self {
         Self {
@@ -1092,15 +1100,15 @@ impl Compiler {
         let statements = match dependency::initialization_order(&tree, &self) {
             Ok(statements) => statements,
             Err(statements) => {
-                return Err(statements.iter().map(|(statement, namespace)| {
-                    Error::CompileError {
-                        file: self.file_from_namespace(*namespace).into(),
-                        span: statement.span,
-                        message: Some("Dependency cycle".to_string()),
-                    }
-                }).collect());
+                statements.iter().for_each(|(statement, namespace)|
+                    error_no_panic!(self, Context::from_namespace(*namespace), statement.span, "Dependency cycle")
+                );
+                statements
             }
         };
+        if !self.errors.is_empty() {
+            return Err(self.errors);
+        }
 
         for (statement, namespace) in statements.iter() {
             ctx.namespace = *namespace;

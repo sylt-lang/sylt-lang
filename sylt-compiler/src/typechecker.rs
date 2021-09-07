@@ -279,7 +279,7 @@ impl<'c> TypeChecker<'c> {
         let span = assignable.span;
         match &assignable.kind {
             AK::Read(ident) => {
-                if let Some(var) = self.stack.iter().rev().find(|var| var.ident.name == ident.name) {
+                if let Some(var) = self.stack.iter().rfind(|var| var.ident.name == ident.name) {
                     return Ok(Value(var.ty.clone(), var.kind));
                 }
                 match &self.namespaces[namespace].get(&ident.name) {
