@@ -314,9 +314,12 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: &Expression
         }
         ExpressionKind::Instance { blob, fields } => {
             write_assignable(dest, indent, blob)?;
-            write!(dest, " {{\n")?;
-            write_blob_instance_fields(dest, indent + 1, fields)?;
-            write_indents(dest, indent)?;
+            write!(dest, " {{")?;
+            if !fields.is_empty() {
+                write!(dest, "\n")?;
+                write_blob_instance_fields(dest, indent + 1, fields)?;
+                write_indents(dest, indent)?;
+            }
             write!(dest, "}}")?;
         }
         ExpressionKind::Tuple(exprs) => {
@@ -393,14 +396,17 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: &Statement) -
             write_expression(dest, indent, value)?;
         }
         StatementKind::Blob { name, fields } => {
-            write!(dest, "{} :: blob {{\n", name)?;
-            for (field, ty) in fields {
-                write_indents(dest, indent + 1)?;
-                write!(dest, "{}: ", field)?;
-                write_type(dest, indent, ty)?;
-                write!(dest, ",\n")?;
+            write!(dest, "{} :: blob {{", name)?;
+            if !fields.is_empty() {
+                write!(dest, "\n")?;
+                for (field, ty) in fields {
+                    write_indents(dest, indent + 1)?;
+                    write!(dest, "{}: ", field)?;
+                    write_type(dest, indent, ty)?;
+                    write!(dest, ",\n")?;
+                }
+                write_indents(dest, indent)?;
             }
-            write_indents(dest, indent)?;
             write!(dest, "}}")?;
         }
         StatementKind::Block { statements } => {
