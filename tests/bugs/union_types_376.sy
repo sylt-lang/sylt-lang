@@ -1,0 +1,5 @@
+start :: fn {
+    a: int | str | bool = 1
+    b: !int | str = a
+    b <=> 1
+}

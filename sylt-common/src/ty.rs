@@ -145,7 +145,7 @@ impl PartialEq for Type {
             (Type::Bool, Type::Bool) => true,
             (Type::String, Type::String) => true,
             (Type::Tuple(a), Type::Tuple(b)) => a.iter().zip(b.iter()).all(|(a, b)| a == b),
-            (Type::Union(a), b) | (b, Type::Union(a)) => a.iter().any(|x| x == b),
+            (Type::Union(a), Type::Union(b)) => a == b,
             (Type::List(a), Type::List(b)) => a == b,
             (Type::Set(a), Type::Set(b)) => a == b,
             (Type::Dict(ak, av), Type::Dict(bk, bv)) => ak == bk && av == bv,
@@ -277,8 +277,8 @@ impl Type {
                 a_ret.inner_fits(b_ret, blobs, same)
             }
             (Type::Union(_), Type::Union(b)) => {
-                if b.iter().any(|x| self.inner_fits(x, blobs, same).is_err()) {
-                    Err(format!("'{:?}' doesn't fit a '{:?}'", self, other))
+                if let Err(msg) = b.iter().map(|x| self.inner_fits(x, blobs, same)).collect::<Result<Vec<_>, _>>() {
+                    Err(format!("'{:?}' doesn't fit a '{:?}, because {}'", self, other, msg))
                 } else {
                     Ok(())
                 }
@@ -313,7 +313,7 @@ impl Type {
             }
             (a, Type::Union(b)) => {
                 if !b.iter().all(|x| x.inner_fits(a, blobs, same).is_ok()) {
-                    Err(format!("'{:?}' cannot fit a '{:?}'", self, other))
+                    Err(format!("'{:?}' cannot fit a union '{:?}'", self, other))
                 } else {
                     Ok(())
                 }
@@ -322,7 +322,7 @@ impl Type {
                 if a.iter().any(|x| x.inner_fits(b, blobs, same).is_ok()) {
                     Ok(())
                 } else {
-                    Err(format!("'{:?}' cannot fit a '{:?}'", self, other))
+                    Err(format!("Union '{:?}' cannot fit a '{:?}'", self, other))
                 }
             }
             (a, b) => {
