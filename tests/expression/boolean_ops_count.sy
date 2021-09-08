@@ -13,7 +13,7 @@ start :: fn do
         <!>
         ret false
     end
-    if f() && i() do
+    if f() and i() do
         <!>
     end
     if t() || i() do
@@ -21,7 +21,7 @@ start :: fn do
     end else do
         <!>
     end
-    if f() && i() && i() do
+    if f() and i() and i() do
         <!>
     end
     if t() || i() || i() do

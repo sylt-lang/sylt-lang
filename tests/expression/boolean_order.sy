@@ -13,12 +13,12 @@ start :: fn do
         <!>
         ret false
     end
-    if t() || i() && i() do
+    if t() || i() and i() do
         // This block is intentionally left blank
     end else do
         <!>
     end
-    if f() && i() || t() do
+    if f() and i() || t() do
         // This block is intentionally left blank
     end else do
         <!>
@@ -27,9 +27,9 @@ start :: fn do
     fs = 0
     ts <=> 2
     ts = 0
-    f() && i() || f() <=> t() && f() || f()
-    f() && i() || f() <=> (t() && f()) || f()
-    t() && t() && f() || t() <=> t() || i() && i() && i()
+    f() and i() || f() <=> t() and f() || f()
+    f() and i() || f() <=> (t() and f()) || f()
+    t() and t() and f() || t() <=> t() || i() and i() and i()
     fs <=> 9
     ts <=> 6
 end

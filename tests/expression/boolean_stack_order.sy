@@ -1,11 +1,11 @@
 start :: fn do
-    if false && false && false do
+    if false and false and false do
         <!>
     end
-    if true && false && false do
+    if true and false and false do
         <!>
     end
-    if true && true && false do
+    if true and true and false do
         <!>
     end
     if true || true do

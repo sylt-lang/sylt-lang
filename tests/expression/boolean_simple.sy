@@ -1,8 +1,8 @@
 start :: fn do
-    true && true <=> true
-    true && false <=> false
-    false && true <=> false
-    false && false <=> false
+    true and true <=> true
+    true and false <=> false
+    false and true <=> false
+    false and false <=> false
     true || true <=> true
     true || false <=> true
     false || true <=> true
