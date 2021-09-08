@@ -160,7 +160,7 @@ pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
 }
 
 pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
-    let mut ctx = expect!(ctx, T::LeftBrace | T::Do, "Expected 'do' at start of block");
+    let mut ctx = expect!(ctx, T::Do, "Expected 'do' at start of block");
 
     let mut errs = Vec::new();
     let mut statements = Vec::new();
@@ -180,7 +180,7 @@ pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
     }
 
     if errs.is_empty() {
-        let ctx = expect!(ctx, T::RightBrace | T::End, "Expected 'end' after block");
+        let ctx = expect!(ctx, T::End, "Expected 'end' after block");
         #[rustfmt::skip]
         return Ok(( ctx, statements ));
     } else {
@@ -205,7 +205,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Newline, ..] => (ctx, EmptyStatement),
 
         // Block: `{ <statements> }`
-        [T::LeftBrace | T::Do, ..] => match (block(ctx), expression(ctx)) {
+        [T::Do, ..] => match (block(ctx), expression(ctx)) {
             (Ok((ctx, statements)), _) => (ctx, Block { statements }),
             (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
             (Err((_, mut stmt_errs)), Err((_, mut expr_errs))) => {
@@ -312,7 +312,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         // `loop <expression> <statement>`, e.g. `loop a < 10 { a += 1 }`
         [T::Loop, ..] => {
             let ctx = ctx.skip(1);
-            let (ctx, condition) = if matches!(ctx.token(), T::LeftBrace) {
+            let (ctx, condition) = if matches!(ctx.token(), T::Do) {
                 (
                     ctx,
                     Expression { span: ctx.span(), kind: ExpressionKind::Bool(true), },
