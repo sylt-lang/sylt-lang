@@ -131,7 +131,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
                 params.push((ident, param));
 
-                ctx = if matches!(ctx.token(), T::Comma | T::Arrow | T::LeftBrace) {
+                ctx = if matches!(ctx.token(), T::Comma | T::Do | T::Arrow | T::LeftBrace) {
                     ctx.skip_if(T::Comma)
                 } else {
                     raise_syntax_error!(ctx, "Expected ',' '{{' or '->' after type parameter")
@@ -153,7 +153,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 };
             }
 
-            T::LeftBrace => {
+            T::LeftBrace | T::Do => {
                 // No return type so we assume `-> Void`.
                 break Type {
                     span: ctx.span(),

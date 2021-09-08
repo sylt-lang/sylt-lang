@@ -98,6 +98,11 @@ pub enum Token {
     #[token("}")]
     RightBrace,
 
+    #[token("do")]
+    Do,
+    #[token("end")]
+    End,
+
     #[token(">")]
     Greater,
     #[token(">=")]

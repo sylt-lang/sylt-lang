@@ -160,12 +160,12 @@ pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
 }
 
 pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
-    let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{' at start of block");
+    let mut ctx = expect!(ctx, T::LeftBrace | T::Do, "Expected 'do' at start of block");
 
     let mut errs = Vec::new();
     let mut statements = Vec::new();
     // Parse multiple inner statements until } or EOF
-    while !matches!(ctx.token(), T::RightBrace | T::EOF) {
+    while !matches!(ctx.token(), T::RightBrace | T::End | T::EOF) {
         match statement(ctx) {
             Ok((_ctx, stmt)) => {
                 ctx = _ctx; // assign to outer
@@ -180,7 +180,7 @@ pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
     }
 
     if errs.is_empty() {
-        let ctx = expect!(ctx, T::RightBrace, "Expected }} after block");
+        let ctx = expect!(ctx, T::RightBrace | T::End, "Expected 'end' after block");
         #[rustfmt::skip]
         return Ok(( ctx, statements ));
     } else {
@@ -205,7 +205,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Newline, ..] => (ctx, EmptyStatement),
 
         // Block: `{ <statements> }`
-        [T::LeftBrace, ..] => match (block(ctx), expression(ctx)) {
+        [T::LeftBrace | T::Do, ..] => match (block(ctx), expression(ctx)) {
             (Ok((ctx, statements)), _) => (ctx, Block { statements }),
             (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
             (Err((_, mut stmt_errs)), Err((_, mut expr_errs))) => {
@@ -214,7 +214,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     stmt_errs.remove(0),
                     expr_errs.remove(0),
                 ];
-                let ctx = skip_until!(ctx, T::RightBrace);
+                let ctx = skip_until!(ctx, T::RightBrace | T::End);
                 return Err((ctx, errs));
             }
         },
@@ -549,7 +549,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
     // Newline, RightBrace and Else can end a statment.
     // If a statement does not end, we only report it as a missing newline.
-    let ctx = if matches!(ctx.token(), T::RightBrace | T::Else) {
+    let ctx = if matches!(ctx.token(), T::RightBrace | T::End | T::Else) {
         ctx
     } else {
         expect!(ctx, T::Newline, "Expected newline to end statement")
