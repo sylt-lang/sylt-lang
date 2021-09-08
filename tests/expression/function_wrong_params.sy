@@ -1,4 +1,4 @@
-start :: fn {
+start :: fn do
     f : fn -> int = fn a: int -> int {}
-}
+end
 // error: $Mismatch{..}

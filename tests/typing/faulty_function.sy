@@ -1,11 +1,11 @@
-f :: fn a: int -> int {
+f :: fn a: int -> int do
     a + 1
-}
-start :: fn {
+end
+start :: fn do
     q := f' 1
     q := f' 1.0
     q := 1 -> f'
     q := 1.0 -> f'
-}
+end
 // error: $Mismatch { got: Type::Float, expected: Type::Int }
 // error: $Mismatch { got: Type::Float, expected: Type::Int }

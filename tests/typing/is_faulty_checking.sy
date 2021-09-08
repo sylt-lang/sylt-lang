@@ -1,15 +1,18 @@
 A :: blob {
     a: int,
 }
+
 B :: blob {
     a: int,
     b: str,
 }
+
 C :: blob {
     a: int,
     b: int,
     c: str,
 }
+
 :A is :A
 :A is :B
 :A is :C
@@ -17,6 +20,7 @@ C :: blob {
 :C is :C
 :B is :A
 :C is :A
-start :: fn { }
+
+start :: fn do end
 // error: Error::CompileError { .. }
 // error: Error::CompileError { .. }

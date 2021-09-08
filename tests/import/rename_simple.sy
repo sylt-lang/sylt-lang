@@ -1,4 +1,4 @@
 use _constants as consts
-start :: fn {
+start :: fn do
     consts.two() <=> 2.0
-}
+end

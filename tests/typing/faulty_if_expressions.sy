@@ -1,8 +1,8 @@
-start :: fn {
+start :: fn do
     1.0 + 1.0 if true else 2.0
     (1.0 if < 0.0 else 2.0) + 1.0
     1.0 + 1.0 if "potato" else 2.0
     (1.0 if < "abc" else 2.0) + 1.0
-}
+end
 // error: $Mismatch { expected: Type::Bool, .. }
 // error: $BinOp { lhs: Type::Float, .. }

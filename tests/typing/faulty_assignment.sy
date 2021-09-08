@@ -1,4 +1,4 @@
-start :: fn {
+start :: fn do
     a := 1
     a = 3
     a = "abc"
@@ -8,7 +8,7 @@ start :: fn {
     a += "abc"
     a: {str|int: int} = {"ab": 2, 2: 2}
     a: {int|float} = [2, 2, 2.0]
-}
+end
 // error: $MismatchAssign { got: Type::String, expected: Type::Int }
 // error: $Mutability
 // error: $BinOp { .. }

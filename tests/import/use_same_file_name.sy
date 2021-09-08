@@ -2,9 +2,10 @@ use subdir/_numbers as n1
 use subdir2/_numbers as n2
 use /subdir/_numbers as n1_from_root
 use /subdir2/_numbers as n2_from_root
-start :: fn {
+
+start :: fn do
     n1.one <=> 1
     n2.two <=> 2
     n1_from_root.one <=> 1
     n2_from_root.two <=> 2
-}
+end

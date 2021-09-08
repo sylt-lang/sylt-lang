@@ -1,5 +1,7 @@
 use / as root
+
 text :: "Bottom text"
-start :: fn {
+
+start :: fn do
     root.root.root.root.text <=> "Bottom text"
-}
+end

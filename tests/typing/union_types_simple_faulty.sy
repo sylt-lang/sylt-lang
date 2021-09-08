@@ -1,23 +1,25 @@
-f :: fn a:bool -> int | void {
-    if a {
+f :: fn a:bool -> int | void do
+    if a do
         ret 1
-    } else {
+    end else do
         ret "hello!"
-    }
-}
-g :: fn a:bool -> int | (bool, bool) {
-    if a {
+    end
+end
+
+g :: fn a:bool -> int | (bool, bool) do
+    if a do
         ret 1
-    } else {
+    end else do
         ret (true, 1.0)
-    }
-}
-start :: fn {
+    end
+end
+
+start :: fn do
     0 <=> f' true
     0.0 <=> f' false
     ("hello!", "there") <=> g' false
     1 <=> g' true
     f(true) <=> g(true)
-}
+end
 // error: $BinOp { .. }
 // error: $BinOp { .. }

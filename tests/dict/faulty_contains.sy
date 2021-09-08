@@ -1,8 +1,8 @@
-start :: fn {
+start :: fn do
     a :: {1:0, 2:0, 3:0}
     (0 in a) <=> false
     ("123" in a) <=> true
     (2 in a) <=> "123"
-}
+end
 // error: $BinOp { lhs: Type::String, .. }
 // error: $BinOp { lhs: Type::Bool, rhs: Type::String, .. }

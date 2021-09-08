@@ -1,6 +1,7 @@
 use _constants
 use _constants2
-start :: fn {
+
+start :: fn do
     _constants2.zero() <=> 0
     _constants.one() <=> 1
-}
+end

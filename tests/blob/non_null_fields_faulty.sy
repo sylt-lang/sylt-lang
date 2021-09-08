@@ -1,8 +1,9 @@
 A :: blob {
     a: int,
 }
-start :: fn {
+
+start :: fn do
     a := A {}
     print' a.a
-}
+end
 // error: $Mismatch { .. }
