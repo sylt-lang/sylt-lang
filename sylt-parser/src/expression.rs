@@ -305,7 +305,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         }
 
         T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
-        T::Minus | T::Not | T::Bang => unary(ctx),
+        T::Minus | T::Not => unary(ctx),
 
         T::Identifier(_) => {
             let span = ctx.span();
@@ -345,7 +345,7 @@ fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
     let kind = match op {
         T::Minus => Neg(expr),
-        T::Not | T::Bang => Not(expr),
+        T::Not => Not(expr),
 
         _ => {
             raise_syntax_error!(ctx, "Invalid unary operator");
@@ -872,12 +872,12 @@ mod test {
     test!(expression, simple: "fn -> do end" => _);
     test!(expression, argument: "fn a: int -> int do ret a + 1 end" => _);
 
-    test!(expression, booleans: "true && false || !false" => _);
-    test!(expression, bool_and: "true && a" => _);
-    test!(expression, bool_or: "a || false" => _);
-    test!(expression, bool_neg: "!a" => _);
-    test!(expression, bool_neg_multiple: "!a && b" => _);
-    test!(expression, bool_neg_multiple_rev: "a && !b" => _);
+    test!(expression, booleans: "true and false or not false" => _);
+    test!(expression, bool_and: "true and a" => _);
+    test!(expression, bool_or: "a or false" => _);
+    test!(expression, bool_neg: "not a" => _);
+    test!(expression, bool_neg_multiple: "not a and b" => _);
+    test!(expression, bool_neg_multiple_rev: "a and not b" => _);
 
     test!(expression, cmp_is: "a is B" => _);
     test!(expression, cmp_eq: "a == b" => _);
@@ -888,7 +888,7 @@ mod test {
     test!(expression, cmp_lt: "a < b" => _);
     test!(expression, neg: "-a" => _);
 
-    test!(expression, expr: "-a + b < 3 * true && false / 2" => _);
+    test!(expression, expr: "-a + b < 3 * true and false / 2" => _);
 
     test!(expression, type_expr_int: ":int" => _);
     test!(expression, type_expr_void: ":void" => _);

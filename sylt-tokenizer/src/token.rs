@@ -116,10 +116,8 @@ pub enum Token {
     Fn,
 
     #[token("and")]
-    #[token("&&")]
     And,
     #[token("or")]
-    #[token("||")]
     Or,
     #[token("not")]
     Not,

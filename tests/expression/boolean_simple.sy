@@ -7,7 +7,7 @@ start :: fn do
     true or false <=> true
     false or true <=> true
     false or false <=> false
-    !true <=> false
-    !false <=> true
+    not true <=> false
+    not false <=> true
 end
 

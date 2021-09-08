@@ -225,13 +225,13 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             expr_binary_op!(dest, indent, *lhs, " <=> ", *rhs);
         }
         ExpressionKind::And(lhs, rhs) => {
-            expr_binary_op!(dest, indent, *lhs, " && ", *rhs);
+            expr_binary_op!(dest, indent, *lhs, " and ", *rhs);
         }
         ExpressionKind::Or(lhs, rhs) => {
-            expr_binary_op!(dest, indent, *lhs, " || ", *rhs);
+            expr_binary_op!(dest, indent, *lhs, " or ", *rhs);
         }
         ExpressionKind::Not(expr) => {
-            write!(dest, "!")?;
+            write!(dest, "not ")?;
             write_expression(dest, indent, *expr)?;
         }
         ExpressionKind::Parenthesis(expr) => {

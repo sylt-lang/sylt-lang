@@ -1,6 +1,6 @@
 start :: fn do
     a := true
-    if !a do
+    if not a do
         <!>
     end
 end
