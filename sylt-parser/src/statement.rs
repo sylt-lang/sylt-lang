@@ -214,7 +214,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     stmt_errs.remove(0),
                     expr_errs.remove(0),
                 ];
-                let ctx = skip_until!(ctx, T::RightBrace | T::End);
+                let ctx = skip_until!(ctx, T::End);
                 return Err((ctx, errs));
             }
         },
