@@ -560,65 +560,64 @@ pub fn format(args: &Args) -> Result<String, Vec<Error>> {
 }
 
 #[cfg(test)]
-mod tests {
-    macro_rules! test_formatter_on_file {
-        ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
-            #[test]
-            fn $fn() {
-                use std::path::{Path, PathBuf};
-                #[allow(unused_imports)]
-                use sylt_common::{
-                    error::{Error, RuntimeError, TypeError},
-                    Type,
-                };
-                #[allow(unused_imports)]
-                use sylt_tokenizer::Span;
+macro_rules! test_formatter_on_file {
+    ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
+        #[test]
+        fn $fn() {
+            use std::path::{Path, PathBuf};
+            #[allow(unused_imports)]
+            use sylt_common::{
+                error::{Error, RuntimeError, TypeError},
+                Type,
+            };
+            #[allow(unused_imports)]
+            use sylt_tokenizer::Span;
 
-                let path = format!("../{}", $path);
+            let path = format!("../{}", $path);
 
-                // Run the file before the formatter.
-                let mut args = $crate::Args::default();
-                args.args = vec![path.clone()];
-                let before = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
-                // If the test fails here, we already have / will have prettified output.
-                assert!(
-                    matches!(before.err().unwrap_or(Vec::new()).as_slice(), $errs),
-                    "the test failed before the formatter was called"
-                );
+            // Run the file before the formatter.
+            let mut args = $crate::Args::default();
+            args.args = vec![path.clone()];
+            let before = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
+            // If the test fails here, we already have / will have prettified output.
+            assert!(
+                matches!(before.err().unwrap_or(Vec::new()).as_slice(), $errs),
+                "the test failed before the formatter was called"
+            );
 
-                // We now know that before contains $errs exactly.
+            // We now know that before contains $errs exactly.
 
-                // Format the file.
-                match $crate::formatter::format(&args) {
-                    Ok(formatted) => {
-                        let formatted_path = PathBuf::from(&path).canonicalize().unwrap();
-                        let read_formatted_or_file = |path: &Path| {
-                            if path.canonicalize().unwrap() == formatted_path {
-                                Ok(formatted.clone())
-                            } else {
-                                $crate::read_file(path)
-                            }
-                        };
+            // Format the file.
+            match $crate::formatter::format(&args) {
+                Ok(formatted) => {
+                    let formatted_path = PathBuf::from(&path).canonicalize().unwrap();
+                    let read_formatted_or_file = |path: &Path| {
+                        if path.canonicalize().unwrap() == formatted_path {
+                            Ok(formatted.clone())
+                        } else {
+                            $crate::read_file(path)
+                        }
+                    };
 
-                        // Try to run the file again, this time with pretty "got/expected"-output.
-                        let after = $crate::run_file_with_reader(
-                            &args,
-                            ::sylt_std::sylt::_sylt_link(),
-                            read_formatted_or_file,
-                        );
-                        eprintln!("The test output changed between before and after formatting");
-                        $crate::assert_errs!(after, $errs);
-                    }
-                    Err(errs) => {
-                        eprintln!("The formatter couldn't parse the file but the syntax errors");
-                        eprintln!("changed between before and after formatting.");
-                        let errs: Result<(), _> = Err(errs); //TODO(gu): Result<!, _> ;)
-                        $crate::assert_errs!(errs, $errs);
-                    }
+                    // Try to run the file again, this time with pretty "got/expected"-output.
+                    let after = $crate::run_file_with_reader(
+                        &args,
+                        ::sylt_std::sylt::_sylt_link(),
+                        read_formatted_or_file,
+                    );
+                    eprintln!("The test output changed between before and after formatting");
+                    $crate::assert_errs!(after, $errs);
+                }
+                Err(errs) => {
+                    eprintln!("The formatter couldn't parse the file but the syntax errors");
+                    eprintln!("changed between before and after formatting.");
+                    let errs: Result<(), _> = Err(errs); //TODO(gu): Result<!, _> ;)
+                    $crate::assert_errs!(errs, $errs);
                 }
             }
-        };
-    }
-
-    sylt_macro::find_tests!(test_formatter_on_file);
+        }
+    };
 }
+
+#[cfg(test)]
+sylt_macro::find_tests!(test_formatter_on_file);

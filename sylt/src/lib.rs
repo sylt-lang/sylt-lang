@@ -128,7 +128,7 @@ pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
 }
 
 #[cfg(test)]
-mod tests {
+mod running {
     #[macro_export]
     macro_rules! assert_errs {
         ($result:expr, $expect:pat) => {
