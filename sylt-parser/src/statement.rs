@@ -631,7 +631,7 @@ mod test {
     test!(outer_statement, outer_statement_blob: "B :: blob {}\n" => _);
     test!(outer_statement, outer_statement_blob_no_last_comma: "B :: blob { \na: A\n }\n" => _);
     test!(outer_statement, outer_statement_blob_yes_last_comma: "B :: blob { \na: A,\n }\n" => _);
-    test!(outer_statement, outer_statement_declaration: "B :: fn -> {}\n" => _);
+    test!(outer_statement, outer_statement_declaration: "B :: fn -> do end\n" => _);
     test!(outer_statement, outer_statement_use: "use ABC\n" => _);
     test!(outer_statement, outer_statement_use_rename: "use a as b\n" => _);
     test!(outer_statement, outer_statement_use_subdir: "use a/b/c/d/e\n" => _);

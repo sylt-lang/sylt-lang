@@ -1,4 +1,4 @@
 _zero := 0
-zero :: fn -> int {
+zero :: fn -> int do
     ret _zero
-}
+end

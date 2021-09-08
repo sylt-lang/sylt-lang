@@ -1,7 +1,7 @@
 start :: fn do
-    f := fn i: int {
+    f := fn i: int do
         i()
-    }
+    end
     f
 end
 // error: $Violating(Type::Int)

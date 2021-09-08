@@ -1,6 +1,7 @@
-a :: fn -> int {
+a :: fn -> int do
     ret 1
-}
-b :: fn a: int -> int {
+end
+
+b :: fn a: int -> int do
     ret a
-}
+end

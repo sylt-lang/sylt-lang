@@ -854,7 +854,8 @@ mod test {
     test!(expression, assignable_expression: "[0][0]" => Get(_));
     test!(expression, assignable_expression_many: "[0][0][0][0][0]" => Get(_));
     test!(expression, assignable_expression_blob: "A {}.a" => Get(_));
-    test!(expression, assignable_expression_fn: "(fn { 2 })()" => Get(_));
+    test!(expression, assignable_expression_fn: "(fn do 2 end)()" => Get(_));
+    test!(expression, assignable_expression_fn_no_paren: "fn do 2 end()" => Get(_));
     test!(expression, assignable_expression_dict: "{1:2}[1]" => Get(_));
 
     // TODO(ed): This is controverisal
@@ -868,8 +869,8 @@ mod test {
     test!(expression, instance_more: "A { a: 2, \n c: 2 }" => Instance { .. });
     test!(expression, instance_empty: "A {}" => Instance { .. });
 
-    test!(expression, simple: "fn -> {}" => _);
-    test!(expression, argument: "fn a: int -> int { ret a + 1 }" => _);
+    test!(expression, simple: "fn -> do end" => _);
+    test!(expression, argument: "fn a: int -> int do ret a + 1 end" => _);
 
     test!(expression, booleans: "true && false || !false" => _);
     test!(expression, bool_and: "true && a" => _);
@@ -896,8 +897,8 @@ mod test {
     test!(expression, type_expr_custom: ":A" => _);
     test!(expression, type_expr_custom_chaining: ":A.b.C" => _);
 
-    test!(expression, void_simple: "fn {}" => _);
-    test!(expression, void_argument: "fn a: int { ret a + 1 }" => _);
+    test!(expression, void_simple: "fn do end" => _);
+    test!(expression, void_argument: "fn a: int do ret a + 1 end" => _);
 
     test!(expression, if_expr: "a if b else c" => IfExpression { .. });
     test!(expression, if_expr_more: "1 + 1 + 1 if b else 2 + 2 + 2" => IfExpression { .. });

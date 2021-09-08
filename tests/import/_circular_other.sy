@@ -1,4 +1,4 @@
 use circular_main
-g :: fn a: int -> int {
+g :: fn a: int -> int do
     ret circular_main.f(a)
-}
+end
