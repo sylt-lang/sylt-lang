@@ -145,7 +145,7 @@ impl PartialEq for Type {
             (Type::Bool, Type::Bool) => true,
             (Type::String, Type::String) => true,
             (Type::Tuple(a), Type::Tuple(b)) => a.iter().zip(b.iter()).all(|(a, b)| a == b),
-            (Type::Union(a), b) | (b, Type::Union(a)) => a.iter().any(|x| x == b),
+            (Type::Union(a), Type::Union(b)) => a == b,
             (Type::List(a), Type::List(b)) => a == b,
             (Type::Set(a), Type::Set(b)) => a == b,
             (Type::Dict(ak, av), Type::Dict(bk, bv)) => ak == bk && av == bv,
