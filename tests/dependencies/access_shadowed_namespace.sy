@@ -1,0 +1,14 @@
+use _b
+
+A :: blob {
+    value: int
+}
+
+f :: fn _b: A {
+    _b.value <=> 1
+}
+
+start :: fn {
+    f(A { value: 1 })
+    _b.value <=> 200
+}
