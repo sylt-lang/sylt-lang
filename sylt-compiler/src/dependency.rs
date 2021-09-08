@@ -1,5 +1,5 @@
-use std::collections::{HashMap, HashSet};
-use std::collections::hash_map::Entry::{Occupied, Vacant};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::btree_map::Entry::{Occupied, Vacant};
 use crate::{Compiler, Name};
 use sylt_parser::{
     AST, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
@@ -27,7 +27,7 @@ impl Context<'_> {
 
 
 
-fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> HashSet<Name> {
+fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> BTreeSet<Name> {
     use AssignableKind::*;
     match &assignable.kind {
         Read(ident) => {
@@ -35,7 +35,7 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> HashSe
                 Some(&name) if !ctx.shadowed(&ident.name) => {
                     [name].iter().cloned().collect()
                 },
-                _ => HashSet::new(),
+                _ => BTreeSet::new(),
             }
         },
         Call(ass, exprs) => assignable_dependencies(ctx, ass)
@@ -81,7 +81,7 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> HashSe
                     Some(&name) => {
                         [name].iter().cloned().collect()
                     },
-                    _ => HashSet::new(),
+                    _ => BTreeSet::new(),
                 },
                 Err(_) => assignable_dependencies(ctx, ass),
             }
@@ -94,7 +94,7 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> HashSe
     }
 }
 
-fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> HashSet<Name> {
+fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<Name> {
     use StatementKind::*;
     match &statement.kind {
         Assignment { target, value, .. } => dependencies(ctx, value)
@@ -136,11 +136,11 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> HashSet<N
         | Break
         | Continue
         | Unreachable
-        | EmptyStatement => HashSet::new(),
+        | EmptyStatement => BTreeSet::new(),
     }
 }
 
-fn dependencies(ctx: &mut Context, expression: &Expression) -> HashSet<Name> {
+fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<Name> {
     use ExpressionKind::*;
     match &expression.kind {
 
@@ -208,12 +208,12 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> HashSet<Name> {
         | Int(_)
         | Str(_)
         | Bool(_)
-        | Nil => HashSet::new(),
+        | Nil => BTreeSet::new(),
     }
 }
 
 fn order(
-    to_order: HashMap<Name, (HashSet<Name>, (&Statement, usize))>
+    to_order: BTreeMap<Name, (BTreeSet<Name>, (&Statement, usize))>
 ) -> Result<Vec<(&Statement, usize)>, Vec<(&Statement, usize)>> {
     enum State {
         Inserting,
@@ -222,8 +222,8 @@ fn order(
 
     fn recurse<'a>(
         name: Name,
-        to_order: &HashMap<Name, (HashSet<Name>, (&'a Statement, usize))>,
-        inserted: &mut HashMap<Name, State>,
+        to_order: &BTreeMap<Name, (BTreeSet<Name>, (&'a Statement, usize))>,
+        inserted: &mut BTreeMap<Name, State>,
         ordered: &mut Vec<(&'a Statement, usize)>
     ) -> Result<(), Vec<(&'a Statement, usize)>> {
         match inserted.entry(name) {
@@ -245,7 +245,7 @@ fn order(
     }
 
     let mut ordered = Vec::new();
-    let mut inserted = HashMap::new();
+    let mut inserted = BTreeMap::new();
     for (name, _) in to_order.iter() {
         recurse(*name, &to_order, &mut inserted, &mut ordered)?;
     }
@@ -261,7 +261,7 @@ pub(crate) fn initialization_order<'a>(
         .iter()
         .map(|(a, b)| (b.clone(), *a))
         .collect();
-    let mut to_order = HashMap::new();
+    let mut to_order = BTreeMap::new();
     let mut is_checks = Vec::new();
     for (path, module) in tree.modules.iter() {
         let namespace = *path_to_namespace_id.get(path).unwrap();
@@ -273,7 +273,7 @@ pub(crate) fn initialization_order<'a>(
                 | Blob { name, .. } => {
                     to_order.insert(
                         *compiler.namespaces[namespace].get(name).unwrap(),
-                        (HashSet::new(), (statement, namespace))
+                        (BTreeSet::new(), (statement, namespace))
                     );
                 }
                 Definition { ident, value, .. } => {
