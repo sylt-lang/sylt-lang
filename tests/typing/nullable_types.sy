@@ -5,7 +5,7 @@ end
 test002 :: fn b: bool -> int | void do
     if b do
         ret nil
-    end else do
+    else do
         ret 0
     end
 end

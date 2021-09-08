@@ -1,7 +1,7 @@
 f :: fn a: bool -> int | str | void do
     if a do
         ret 1
-    end else do
+    else do
         ret nil
     end
 end
@@ -9,7 +9,7 @@ end
 g :: fn a: bool -> int | (bool, bool) do
     if a do
         ret 1
-    end else do
+    else do
         ret (true, true)
     end
 end
@@ -20,7 +20,7 @@ h :: fn a: bool -> int | fn -> int do
             ret 1
         end
         ret f
-    end else do
+    else do
         ret 1
     end
 end

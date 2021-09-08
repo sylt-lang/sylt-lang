@@ -1,7 +1,7 @@
 f :: fn a:bool -> int | void do
     if a do
         ret 1
-    end else do
+    else do
         ret "hello!"
     end
 end
@@ -9,7 +9,7 @@ end
 g :: fn a:bool -> int | (bool, bool) do
     if a do
         ret 1
-    end else do
+    else do
         ret (true, 1.0)
     end
 end

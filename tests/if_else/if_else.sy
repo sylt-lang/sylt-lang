@@ -3,7 +3,7 @@ start :: fn do
     res := 0
     if a == 0 do
         <!>
-    end else do
+    else do
         res = 1
     end
     res <=> 1

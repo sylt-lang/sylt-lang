@@ -2,7 +2,7 @@ start :: fn do
     f := fn a: int -> int do
         if a == 1 do
             ret 2
-        end else do
+        else do
             ret 3
         end
     end

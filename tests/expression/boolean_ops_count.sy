@@ -18,7 +18,7 @@ start :: fn do
     end
     if t() or i() do
         // This block is intentionally left blank
-    end else do
+    else do
         <!>
     end
     if f() and i() and i() do
@@ -26,7 +26,7 @@ start :: fn do
     end
     if t() or i() or i() do
         // This block is intentionally left blank
-    end else do
+    else do
         <!>
     end
     fs <=> 2

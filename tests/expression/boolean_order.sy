@@ -15,12 +15,12 @@ start :: fn do
     end
     if t() or i() and i() do
         // This block is intentionally left blank
-    end else do
+    else do
         <!>
     end
     if f() and i() or t() do
         // This block is intentionally left blank
-    end else do
+    else do
         <!>
     end
     fs <=> 1

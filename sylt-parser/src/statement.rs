@@ -165,7 +165,7 @@ pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
     let mut errs = Vec::new();
     let mut statements = Vec::new();
     // Parse multiple inner statements until } or EOF
-    while !matches!(ctx.token(), T::RightBrace | T::End | T::EOF) {
+    while !matches!(ctx.token(), T::RightBrace | T::Else | T::End | T::EOF) {
         match statement(ctx) {
             Ok((_ctx, stmt)) => {
                 ctx = _ctx; // assign to outer
@@ -180,7 +180,11 @@ pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
     }
 
     if errs.is_empty() {
-        let ctx = expect!(ctx, T::End, "Expected 'end' after block");
+        // Special case for chaining if-else-statements
+        if !matches!(ctx.token(), T::End | T::Else) {
+            syntax_error!(ctx, "Expected 'end' after block");
+        }
+        let ctx = ctx.skip_if(T::End);
         #[rustfmt::skip]
         return Ok(( ctx, statements ));
     } else {

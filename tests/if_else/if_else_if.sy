@@ -3,9 +3,9 @@ start :: fn do
     res := 0
     if a == 0 do
         <!>
-    end else if a == 1 do
+    else if a == 1 do
         res = 1
-    end else do
+    else do
         <!>
     end
     res <=> 1
