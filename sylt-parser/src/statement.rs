@@ -160,7 +160,8 @@ pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
 }
 
 pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
-    let mut ctx = expect!(ctx, T::Do, "Expected 'do' at start of block");
+    // To allow implicit block-openings, like "fn ->"
+    let mut ctx = ctx.skip_if(T::Do);
 
     let mut errs = Vec::new();
     let mut statements = Vec::new();
