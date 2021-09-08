@@ -1,14 +1,11 @@
 f :: fn a: int -> int {
     a + 1
 }
-
 start :: fn {
     q := f' 1
     q := f' 1.0
     q := 1 -> f'
     q := 1.0 -> f'
 }
-
 // error: $Mismatch { got: Type::Float, expected: Type::Int }
 // error: $Mismatch { got: Type::Float, expected: Type::Int }
-

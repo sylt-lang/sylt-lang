@@ -1,5 +1,4 @@
 use / as root
-
 test :: fn {
     root.text <=> "Bottom text"
 }

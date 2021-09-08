@@ -1,4 +1,4 @@
-start :: fn {
-    if false ret
-    else ret
-}
+start :: fn do
+    if false ret nil else ret nil
+end
+

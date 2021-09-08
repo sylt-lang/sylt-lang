@@ -1,3 +1,4 @@
-start :: fn {
+start :: fn do
     (1 + 2) * 3 <=> 9
-}
+end
+

@@ -1,5 +1,3 @@
 use conflict_markers
-
 start :: fn {}
-
 // error: Error::GitConflictError { span: Span { line: 3 , .. }, .. }

@@ -1,11 +1,8 @@
 A :: blob { a: int }
 B :: blob { a: int, b: int }
-
 f :: fn b: B -> int { ret b.b }
-
 start :: fn {
 	a :: A { a: 0 }
 	f(a) <=> 0
 }
-
 // error: $Mismatch { .. }

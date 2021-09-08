@@ -1,4 +1,3 @@
-
 _zero := 0
 zero :: fn -> int {
     ret _zero

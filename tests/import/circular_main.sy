@@ -1,9 +1,7 @@
 use _circular_other
-
 f :: fn a: int -> int {
     ret a
 }
-
 start :: fn {
     _circular_other.g(1) <=> 1
     2 <=> _circular_other.circular_main.f(2)

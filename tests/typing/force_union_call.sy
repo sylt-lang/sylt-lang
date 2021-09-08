@@ -1,14 +1,15 @@
-f :: fn a: int -> int | bool | str {
-    if a == 0 {
+f :: fn a: int -> int | bool | str do
+    if a == 0 do
         ret 1
-    }
+    end
     ret true
-}
+end
 
-start :: fn {
-    a: !int | bool = f' 0
-    if a != 1 {
+start :: fn do
+    a: !int | bool = f(0)
+    if a != 1 do
         <!>
-    }
+    end
     a <=> 1
-}
+end
+

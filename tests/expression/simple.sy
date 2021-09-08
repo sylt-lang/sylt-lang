@@ -1,5 +1,8 @@
-start :: fn {
-    1 + 1 // blargh 
-    2 // blargh 
-    // HARGH 
-}
+start :: fn do
+    // blargh
+    1 + 1
+    // blargh
+    // HARGH
+    2
+end
+

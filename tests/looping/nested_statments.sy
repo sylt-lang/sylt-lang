@@ -1,3 +1,4 @@
-start :: fn {
-    loop true ret
-}
+start :: fn do
+    loop true ret nil
+end
+

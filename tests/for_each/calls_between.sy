@@ -1,18 +1,18 @@
-nop :: fn a:int {
+nop :: fn a: int do
     print("nop")
-}
+end
 
-start :: fn {
+start :: fn do
     fs := 0
-    f :: fn {
+    f :: fn do
         fs += 1
-    }
-
-    for_each([1,2,3], nop)
-    f'
-    for_each([1,2,3], nop)
-    f'
-    for_each([1,2,3], nop)
-    f'
+    end
+    for_each([1, 2, 3], nop)
+    f()
+    for_each([1, 2, 3], nop)
+    f()
+    for_each([1, 2, 3], nop)
+    f()
     fs <=> 3
-}
+end
+

@@ -1,4 +1,4 @@
-start :: fn {
+start :: fn do
     1 is 2 <=> true
     a := 2
     a is 2 <=> true
@@ -6,7 +6,7 @@ start :: fn {
     a is :fn int -> int <=> false
     a is :int <=> true
     a is :float <=> false
-
     b := :int | str
     b is a
-}
+end
+

@@ -1,8 +1,8 @@
 A :: blob {
-    a: int?,
+    a: int | void,
 }
-
-start :: fn {
+start :: fn do
     a := A {}
     print(a.a)
-}
+end
+

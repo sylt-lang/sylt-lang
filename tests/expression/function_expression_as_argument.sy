@@ -1,6 +1,9 @@
-a :: fn f: fn -> {}
+a :: fn f: fn -> void do
+end
 
-start :: fn {
-    a' fn {}
+start :: fn do
+    a(fn do
+    end)
     1
-}
+end
+

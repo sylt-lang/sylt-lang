@@ -4,10 +4,8 @@ start :: fn {
     a.b = a.b + 1
     a.a = f' a.b
 }
-
 f :: fn a:int -> int {
     ret a
 }
-
 // error: $UnknownField {..}
 // error: $UnknownField {..}

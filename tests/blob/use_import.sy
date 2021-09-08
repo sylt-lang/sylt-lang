@@ -1,11 +1,9 @@
 use complex
-
 Q :: blob {
     a: complex.A,
     b: complex.B,
     c: complex.C,
 }
-
 start :: fn {
     c := complex.C {}
     q := Q {

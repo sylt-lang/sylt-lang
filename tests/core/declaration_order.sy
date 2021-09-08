@@ -1,6 +1,6 @@
 b :: 1
 a :: b + 1
-
-start :: fn {
+start :: fn do
     a <=> b + 1
-}
+end
+

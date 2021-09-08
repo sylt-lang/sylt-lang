@@ -1,4 +1,4 @@
-start :: fn {
+start :: fn do
     a := [1, 2]
     push(a, 3)
     push(a, 4)
@@ -7,15 +7,15 @@ start :: fn {
     a[1] <=> 2
     a[2] <=> 3
     a[3] <=> 4
-
-    b : [str] = []
-    q :: fn {
+    b: [str] = []
+    q :: fn do
         push(b, "a")
-    }
-    q'
-    q'
-    q'
+    end
+    q()
+    q()
+    q()
     len(b) <=> 3
-    q'
+    q()
     len(b) <=> 4
-}
+end
+

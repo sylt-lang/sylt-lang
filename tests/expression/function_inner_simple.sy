@@ -1,4 +1,6 @@
-start :: fn {
-    f := fn {}
+start :: fn do
+    f := fn do
+    end
     f()
-}
+end
+

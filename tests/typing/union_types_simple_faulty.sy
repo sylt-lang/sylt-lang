@@ -5,7 +5,6 @@ f :: fn a:bool -> int | void {
         ret "hello!"
     }
 }
-
 g :: fn a:bool -> int | (bool, bool) {
     if a {
         ret 1
@@ -13,7 +12,6 @@ g :: fn a:bool -> int | (bool, bool) {
         ret (true, 1.0)
     }
 }
-
 start :: fn {
     0 <=> f' true
     0.0 <=> f' false
@@ -21,6 +19,5 @@ start :: fn {
     1 <=> g' true
     f(true) <=> g(true)
 }
-
 // error: $BinOp { .. }
 // error: $BinOp { .. }

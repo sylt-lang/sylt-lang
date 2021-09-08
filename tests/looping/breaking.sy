@@ -1,14 +1,14 @@
-start :: fn {
-    loop {
+start :: fn do
+    loop true do
         break
         <!>
-    }
-
+    end
     a := 0
-    loop a < 3 {
-        if a > 2 {
+    loop a < 3 do
+        if a > 2 do
             break
-        }
+        end
         a += 1
-    }
-}
+    end
+end
+

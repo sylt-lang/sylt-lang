@@ -1,7 +1,5 @@
 start :: fn {
-
     f : fn -> int = fn {}
     f
 }
-
 // error: $Mismatch { .. }

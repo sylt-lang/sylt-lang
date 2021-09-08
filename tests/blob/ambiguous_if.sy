@@ -2,10 +2,10 @@ A :: blob {
     a: int,
     b: [int],
 }
-
-start :: fn {
+start :: fn do
     a := A {
         b: [1, 2],
         a: 0,
     }
-}
+end
+

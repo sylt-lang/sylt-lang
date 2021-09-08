@@ -1,22 +1,21 @@
-start :: fn {
+start :: fn do
     a := 0
-    loop a < 3 {
+    loop a < 3 do
         a += 1
         continue
         <!>
-    }
-
+    end
     b := 0
-    loop b < 3 {
+    loop b < 3 do
         b += 1
         c := 0
-        loop c < 3 {
+        loop c < 3 do
             c += 1
             continue
             <!>
-        }
+        end
         continue
         <!>
-    }
-}
+    end
+end
 

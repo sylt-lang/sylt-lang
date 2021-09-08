@@ -2,10 +2,8 @@ A :: blob {
     a: int,
     b: int,
 }
-
 start :: fn {
     a :: A { a: 1, b: 2, c: 3 }
     a
 }
-
 // error: $UnknownField { .. }

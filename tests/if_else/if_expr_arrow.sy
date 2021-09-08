@@ -1,22 +1,19 @@
+f :: fn a: int, b: int -> int do
+    ret a * b
+end
 
-f :: fn a: int, b: int -> int {
-    a * b
-}
+g :: fn a: int -> bool do
+    ret a < 10
+end
 
-g :: fn a: int -> bool {
-    a < 10
-}
-
-start :: fn {
-    a := 2 if -> f(2) -> g' else nil
+start :: fn do
+    a := 2 if -> f(2) -> g() else nil
     a <=> 2
-
-    b := 5 if -> f(3) -> g' else nil
+    b := 5 if -> f(3) -> g() else nil
     b <=> nil
-
-    c := 2 if -> f(2) -> f(2) -> g' else nil
+    c := 2 if -> f(2) -> f(2) -> g() else nil
     c <=> 2
-
-    d := 2 if -> f(3) -> f(2) -> g' else nil
+    d := 2 if -> f(3) -> f(2) -> g() else nil
     d <=> nil
-}
+end
+

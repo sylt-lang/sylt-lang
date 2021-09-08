@@ -3,5 +3,4 @@ start :: fn {
     a = 0.1
     a
 }
-
 // error: $MismatchAssign{ expected: Type::Int, got: Type::Float }

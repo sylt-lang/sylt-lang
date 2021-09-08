@@ -2,9 +2,7 @@ f :: fn a:int, b:int {
     print a
     print b
 }
-
 start :: fn {
     [1, 2] -> for_each(f)
 }
-
 // error: _

@@ -1,12 +1,13 @@
-start :: fn {
+start :: fn do
     s := ""
-    loop true {
+    loop true do
         next := s + "a"
         s = next
-        if s == "aaa" {
+        if s == "aaa" do
             break
-        }
+        end
         next := s + "a"
-    }
+    end
     s <=> "aaa"
-}
+end
+

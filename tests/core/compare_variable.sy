@@ -1,9 +1,10 @@
-start :: fn {
+start :: fn do
     a := 1
-    if a == 0 {
+    if a == 0 do
         <!>
-    }
-    if a != 1 {
+    end
+    if a != 1 do
         <!>
-    }
-}
+    end
+end
+

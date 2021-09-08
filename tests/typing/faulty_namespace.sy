@@ -1,12 +1,9 @@
 use _import
 a := 1
-
 start :: fn {
     _import.q + 1
     _import.q + 1.0
-
     a = "abc"
 }
-
 // error: $BinOp { .. }
 // error: $MismatchAssign { .. }

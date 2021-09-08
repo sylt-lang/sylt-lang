@@ -1,14 +1,11 @@
 Q :: blob {
     a : [int],
 }
-
 start :: fn {
     a :: [1]
     a[0] = "fail"
-
     q :: Q { a: [4] }
     q.a[0] = "fail"
 }
-
 // error: $MismatchAssign { got: Type::String, expected: Type::Int }
 // error: $MismatchAssign { got: Type::String, expected: Type::Int }

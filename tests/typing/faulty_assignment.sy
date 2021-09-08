@@ -2,17 +2,13 @@ start :: fn {
     a := 1
     a = 3
     a = "abc"
-
     b :: "abc"
     b = "abc"
-
     a = 2
     a += "abc"
-
     a: {str|int: int} = {"ab": 2, 2: 2}
     a: {int|float} = [2, 2, 2.0]
 }
-
 // error: $MismatchAssign { got: Type::String, expected: Type::Int }
 // error: $Mutability
 // error: $BinOp { .. }

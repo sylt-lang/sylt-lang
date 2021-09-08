@@ -1,6 +1,11 @@
-A :: blob { a: int }
-start :: fn {
-    a := A { a: 1 }
+A :: blob {
+    a: int,
+}
+start :: fn do
+    a := A {
+        a: 1,
+    }
     a.a <=> 1
     1 <=> a.a
-}
+end
+

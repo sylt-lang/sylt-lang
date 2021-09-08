@@ -1,6 +1,7 @@
-start :: fn {
+start :: fn do
     true <=> 1 < 1.1
     false <=> 1 > 1.1
     true <=> 1.1 > 1
     false <=> 1.1 < 1
-}
+end
+

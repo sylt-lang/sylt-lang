@@ -3,5 +3,4 @@ start :: fn {
     a.a
     a
 }
-
 // error: $Violating(Type::Int)

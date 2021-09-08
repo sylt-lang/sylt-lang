@@ -1,29 +1,30 @@
-a :: fn { }
+a :: fn do
+end
 
-start :: fn {
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-    a'
-}
+start :: fn do
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+    a()
+end
 

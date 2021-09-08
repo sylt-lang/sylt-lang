@@ -1,5 +1,4 @@
 use _other
-
 start :: fn {
     _other.a() <=> 1
     2 <=> _other.b(2)

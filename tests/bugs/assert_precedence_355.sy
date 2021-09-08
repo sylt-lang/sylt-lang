@@ -1,8 +1,14 @@
 A :: blob {
-    a: int
+    a: int,
 }
+start :: fn do
+    2 <=> fn -> int do
+        ret 2
+    end()
+    A {
+        a: 1,
+    }.a <=> A {
+        a: 1,
+    }.a
+end
 
-start :: fn {
-    2 <=> fn -> int { 2 }()
-    A { a: 1 }.a <=> A { a: 1 }.a
-}

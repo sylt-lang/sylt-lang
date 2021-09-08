@@ -1,8 +1,17 @@
-start :: fn {
-    a :: fn -> fn int -> int { fn a: int -> int { 1 + a } }()(1)
+start :: fn do
+    a :: fn -> fn int -> int do
+        ret fn a: int -> int do
+            ret 1 + a
+        end
+    end()(1)
     2 <=> a
-    a :: fn -> int { 2 }()
+    a :: fn -> int do
+        ret 2
+    end()
     2 <=> a
-    a :: fn -> int { 2 }'
+    a :: fn -> int do
+        ret 2
+    end()
     2 <=> a
-}
+end
+
