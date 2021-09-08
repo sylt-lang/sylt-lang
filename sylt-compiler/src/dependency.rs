@@ -27,21 +27,18 @@ impl Context<'_> {
 
 
 
-fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable, namespace: Option<usize>) -> HashSet<Name> {
+fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> HashSet<Name> {
     use AssignableKind::*;
     match &assignable.kind {
         Read(ident) => {
-            // Might be shadowed here
-            let shadowed = ctx.shadowed(&ident.name);
-            let in_namespace = namespace.is_some();
-            match ctx.compiler.namespaces[namespace.unwrap_or(ctx.namespace)].get(&ident.name) {
-                Some(&name) if !shadowed && !in_namespace => {
+            match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
+                Some(&name) if !ctx.shadowed(&ident.name) => {
                     [name].iter().cloned().collect()
                 },
                 _ => HashSet::new(),
             }
         },
-        Call(ass, exprs) => assignable_dependencies(ctx, ass, namespace)
+        Call(ass, exprs) => assignable_dependencies(ctx, ass)
             .union(&exprs.iter()
                 .map(|expr| dependencies(ctx, expr))
                 .flatten()
@@ -50,42 +47,46 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable, namespace
             .cloned()
             .collect(),
         ArrowCall(expr, ass, exprs) => dependencies(ctx, expr).iter()
-            .chain(assignable_dependencies(ctx, ass, namespace).iter())
+            .chain(assignable_dependencies(ctx, ass).iter())
             .cloned()
             .chain(exprs.iter().map(|e| dependencies(ctx, e)).flatten())
             .collect(),
-        Access(_, _) => {
-            fn recursive_access(ctx: &mut Context, ass: &Assignable) -> (usize, HashSet<Name>) {
+        Access(ass, field) => {
+            // Get namespace access recursively
+            // NOTE: This will ignore the actual namespace as a dependency, this
+            // is not a problem since the compiler already initializes namespaces
+            // before the dependency analysis.
+            fn recursive_namespace(ctx: &mut Context, ass: &Assignable) -> Result<usize, ()> {
                 match &ass.kind {
-                    AssignableKind::Access(lhs, field) => {
-                        let (namespace, mut deps) = recursive_access(ctx, lhs);
+                    Access(lhs, field) => {
+                        let namespace = recursive_namespace(ctx, lhs)?;
                         match ctx.compiler.namespaces[namespace].get(&field.name) {
-                            Some(&name) => {
-                                deps.insert(name);
-                                let ns = if let Name::Namespace(ns) = name { ns } else { ctx.namespace };
-                                (ns, deps)
-                            }
-                            None => (ctx.namespace, deps),
+                            Some(Name::Namespace(ns)) => Ok(*ns),
+                            _ => Err(()),
                         }
                     }
                     Read(ident) => {
                         // Might be shadowed here
                         let shadowed = ctx.shadowed(&ident.name);
                         match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
-                            Some(&name) if !shadowed => {
-                                let ns = if let Name::Namespace(ns) = name { ns } else { ctx.namespace };
-                                (ns, [name].iter().cloned().collect())
-                            },
-                            _ => (ctx.namespace, HashSet::new()),
+                            Some(Name::Namespace(ns)) if !shadowed => Ok(*ns),
+                            _ => Err(()),
                         }
                     }
-                    _ => (ctx.namespace, assignable_dependencies(ctx, ass, None)),
+                    _ => Err(())
                 }
             }
-            let (_, deps) = recursive_access(ctx, assignable);
-            deps
+            match recursive_namespace(ctx, ass) {
+                Ok(namespace) => match ctx.compiler.namespaces[namespace].get(&field.name) {
+                    Some(&name) => {
+                        [name].iter().cloned().collect()
+                    },
+                    _ => HashSet::new(),
+                },
+                Err(_) => assignable_dependencies(ctx, ass),
+            }
         },
-        Index(ass, expr) => assignable_dependencies(ctx, ass, namespace)
+        Index(ass, expr) => assignable_dependencies(ctx, ass)
             .union(&dependencies(ctx, expr))
             .cloned()
             .collect(),
@@ -97,7 +98,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> HashSet<N
     use StatementKind::*;
     match &statement.kind {
         Assignment { target, value, .. } => dependencies(ctx, value)
-            .union(&assignable_dependencies(ctx, target, None))
+            .union(&assignable_dependencies(ctx, target))
             .cloned()
             .collect(),
         If { condition, pass, fail } => [
@@ -143,7 +144,7 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> HashSet<Name> {
     use ExpressionKind::*;
     match &expression.kind {
 
-        Get(assignable) => assignable_dependencies(ctx, assignable, None),
+        Get(assignable) => assignable_dependencies(ctx, assignable),
 
         | Neg(expr)
         | Not(expr)
@@ -182,7 +183,7 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> HashSet<Name> {
             deps
         },
         Instance { blob, fields } => {
-            assignable_dependencies(ctx, blob, None).union(&fields.iter()
+            assignable_dependencies(ctx, blob).union(&fields.iter()
                 .map(|(_, expr)| dependencies(ctx, expr))
                 .flatten()
                 .collect()

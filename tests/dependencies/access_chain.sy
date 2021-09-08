@@ -1,0 +1,11 @@
+use _b
+use _c
+
+start :: fn {
+    _b._c.value <=> 100
+    _c.value <=> 100
+    _b.value <=> 200
+    print(_b._c.value)
+    print(_c.value)
+    print(_b.value)
+}
