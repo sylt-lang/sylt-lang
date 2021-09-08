@@ -13,12 +13,12 @@ start :: fn do
         <!>
         ret false
     end
-    if t() || i() and i() do
+    if t() or i() and i() do
         // This block is intentionally left blank
     end else do
         <!>
     end
-    if f() and i() || t() do
+    if f() and i() or t() do
         // This block is intentionally left blank
     end else do
         <!>
@@ -27,9 +27,9 @@ start :: fn do
     fs = 0
     ts <=> 2
     ts = 0
-    f() and i() || f() <=> t() and f() || f()
-    f() and i() || f() <=> (t() and f()) || f()
-    t() and t() and f() || t() <=> t() || i() and i() and i()
+    f() and i() or f() <=> t() and f() or f()
+    f() and i() or f() <=> (t() and f()) or f()
+    t() and t() and f() or t() <=> t() or i() and i() and i()
     fs <=> 9
     ts <=> 6
 end

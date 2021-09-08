@@ -8,9 +8,9 @@ start :: fn do
     if true and true and false do
         <!>
     end
-    if true || true do
+    if true or true do
     end
-    if false || true do
+    if false or true do
     end
     i := "HELLO!"
     i <=> "HELLO!"
