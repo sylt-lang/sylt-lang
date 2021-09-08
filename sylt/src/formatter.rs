@@ -409,7 +409,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write!(dest, "}}")?;
         }
         StatementKind::Block { statements } => {
-            write!(dest, "{{\n")?;
+            write!(dest, "do\n")?;
 
             for s in merge_empty_statements(statements) {
                 write_indents(dest, indent + 1)?;
@@ -418,7 +418,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             }
 
             write_indents(dest, indent)?;
-            write!(dest, "}}")?;
+            write!(dest, "end")?;
         }
         StatementKind::Break => write!(dest, "break")?,
         StatementKind::Continue => write!(dest, "continue")?,
