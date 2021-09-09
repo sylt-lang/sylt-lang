@@ -91,7 +91,7 @@ enum Name {
 
 #[derive(Debug, Clone)]
 enum Lookup {
-    Value(Type, VarKind),
+    Value { ty: Type, kind: VarKind, slot: Option<usize> },
     Namespace(usize),
 }
 
@@ -279,12 +279,12 @@ impl<'c> TypeChecker<'c> {
         let span = assignable.span;
         match &assignable.kind {
             AK::Read(ident) => {
-                if let Some(var) = self.stack.iter().rfind(|var| var.ident.name == ident.name) {
-                    return Ok(Value(var.ty.clone(), var.kind));
+                if let Some((slot, var)) = self.stack.iter().enumerate().rfind(|(_, var)| var.ident.name == ident.name) {
+                    return Ok(Value { ty: var.ty.clone(), kind: var.kind, slot: Some(slot) });
                 }
                 match &self.namespaces[namespace].get(&ident.name) {
                     Some(Name::Global(Some((ty, kind)))) => {
-                        return Ok(Value(ty.clone(), *kind));
+                        return Ok(Value { ty: ty.clone(), kind: *kind, slot: None });
                     }
                     Some(Name::Global(None)) => {
                         // TODO(ed): This error should be caught earlier in the compiler - no point
@@ -297,7 +297,7 @@ impl<'c> TypeChecker<'c> {
                         );
                     }
                     Some(Name::Blob(blob)) => {
-                        return Ok(Value(Type::Blob(*blob), VarKind::Const));
+                        return Ok(Value { ty: Type::Blob(*blob), kind: VarKind::Const, slot: None });
                     }
                     Some(Name::Namespace(id)) => {
                         return Ok(Namespace(*id))
@@ -305,7 +305,7 @@ impl<'c> TypeChecker<'c> {
                     None => {}
                 }
                 if let Some((_, _, ty)) = self.compiler.functions.get(&ident.name) {
-                    return Ok(Value(ty.clone(), VarKind::Const));
+                    return Ok(Value { ty: ty.clone(), kind: VarKind::Const, slot: None });
                 } else {
                     return err_type_error!(
                         self,
@@ -317,7 +317,7 @@ impl<'c> TypeChecker<'c> {
             AK::Call(fun, args) => {
                 // TODO(ed): External functions need a different lookup.
                 let ty = match self.assignable(fun, namespace)? {
-                    Value(ty, _) => ty,
+                    Value { ty, .. } => ty,
                     Namespace(_) => {
                         return err_type_error!(
                             self,
@@ -329,7 +329,7 @@ impl<'c> TypeChecker<'c> {
                 };
                 let args = args.iter().map(|e| self.expression(e)).collect::<Result<Vec<_>, Vec<_>>>()?;
                 let (_params, ret) = self.resolve_functions_from_args(span, args, ty.clone())?;
-                return Ok(Value(Type::clone(&ret), VarKind::Const));
+                return Ok(Value { ty: Type::clone(&ret), kind: VarKind::Const, slot: None });
             }
             AK::ArrowCall(extra, fun, args) => {
                 // DRY
@@ -342,17 +342,17 @@ impl<'c> TypeChecker<'c> {
             }
             AK::Access(thing, field) => {
                 match self.assignable(thing, namespace)? {
-                    Value(ty, _kind) => {
+                    Value { ty, .. } => {
                         match &ty {
-                            Type::Unknown => { Ok(Value(Type::Unknown, VarKind::Mutable)) }
+                            Type::Unknown => { Ok(Value { ty: Type::Unknown, kind: VarKind::Mutable, slot: None }) }
                             Type::Instance(blob) => {
                                 let blob = &self.compiler.blobs[*blob];
                                 match blob.fields.get(&field.name) {
-                                    Some(ty) => Ok(Value(ty.clone(), VarKind::Mutable)),
+                                    Some(ty) => Ok(Value { ty: ty.clone(), kind: VarKind::Mutable, slot: None }),
                                     None => match field.name.as_str() {
                                         // TODO(ed): These result in poor error messages
-                                        "_id" => Ok(Value(Type::Int, VarKind::Const)),
-                                        "_name" => Ok(Value(Type::String, VarKind::Const)),
+                                        "_id" => Ok(Value { ty: Type::Int, kind: VarKind::Const, slot: None }),
+                                        "_name" => Ok(Value { ty: Type::String, kind: VarKind::Const, slot: None }),
                                         _ => err_type_error!(
                                             self,
                                             field.span,
@@ -379,8 +379,8 @@ impl<'c> TypeChecker<'c> {
             }
             AK::Index(thing, index_expr) => {
                 // TODO(ed): We could disallow mutating via reference here - not sure we want to thought.
-                let thing = if let Value(val, _) = self.assignable(thing, namespace)? {
-                    val
+                let thing = if let Value { ty, .. } = self.assignable(thing, namespace)? {
+                    ty
                 } else {
                     return err_type_error!(
                         self,
@@ -404,7 +404,7 @@ impl<'c> TypeChecker<'c> {
                                 reason
                             )
                         }
-                        Value(Type::clone(&ret), VarKind::Mutable)
+                        Value { ty: Type::clone(&ret), kind: VarKind::Mutable, slot: None }
                     }
                     (Type::Tuple(kinds), index) => {
                         if let Err(reason) = index.fits(&Type::Int, self.compiler.blobs.as_slice()) {
@@ -437,7 +437,7 @@ impl<'c> TypeChecker<'c> {
                         } else {
                             Type::maybe_union(kinds.iter(), self.compiler.blobs.as_slice())
                         };
-                        Value(val, VarKind::Const)
+                        Value { ty: val, kind: VarKind::Const, slot: None }
                     }
                     (Type::Dict(key, val), index) => {
                         if let Err(reason) = key.fits(&index, self.compiler.blobs.as_slice()) {
@@ -453,7 +453,7 @@ impl<'c> TypeChecker<'c> {
                                 reason
                             )
                         }
-                        Value(Type::clone(&val), VarKind::Mutable)
+                        Value { ty: Type::clone(&val), kind: VarKind::Mutable, slot: None }
                     }
                     (ty, _) => {
                         return err_type_error!(
@@ -468,7 +468,7 @@ impl<'c> TypeChecker<'c> {
                 return Ok(ret);
             }
             AK::Expression(expr) => {
-                return Ok(Value(self.expression(&expr)?, VarKind::Const));
+                return Ok(Value { ty: self.expression(&expr)?, kind: VarKind::Const, slot: None });
             }
         }
     }
@@ -521,7 +521,7 @@ impl<'c> TypeChecker<'c> {
         let span = expression.span;
         let res = match &expression.kind {
             EK::Get(assignable) => match self.assignable(assignable, self.namespace)? {
-                Lookup::Value(value, _) => {
+                Lookup::Value{ ty: value, .. } => {
                     value
                 }
                 Lookup::Namespace(_) => {
@@ -692,10 +692,10 @@ impl<'c> TypeChecker<'c> {
 
             EK::Instance { blob, fields } => {
                 let blob = match self.assignable(blob, self.namespace)? {
-                    Lookup::Value(Type::Blob(blob), _) => {
+                    Lookup::Value{ ty: Type::Blob(blob), .. } => {
                         self.compiler.blobs[blob].clone()
                     }
-                    Lookup::Value(ty, _) => {
+                    Lookup::Value { ty, .. } => {
                         return err_type_error!(
                             self,
                             span,
@@ -794,7 +794,7 @@ impl<'c> TypeChecker<'c> {
             } => {
                 let value = self.expression(value)?;
                 let target_ty = match self.assignable(target, self.namespace)? {
-                    Lookup::Value(_, kind) if kind.immutable() => {
+                    Lookup::Value { kind, .. } if kind.immutable() => {
                         // TODO(ed): I want this to point to the equal-sign, the parser is
                         // probably a bit off.
                         // TODO(ed): This should not be a type error - prefereably a compile error?
@@ -811,7 +811,7 @@ impl<'c> TypeChecker<'c> {
                             TypeError::NamespaceNotExpression
                         );
                     }
-                    Lookup::Value(ty, _) => {
+                    Lookup::Value { ty, .. } => {
                         ty
                     }
                 };
@@ -923,7 +923,44 @@ impl<'c> TypeChecker<'c> {
                         "Only boolean expressions are valid if-statement conditions"
                     )
                 }
-                self.statement(pass)?;
+
+                fn null_check(ctx: &mut TypeChecker, condition: &Expression) -> Result<(Type, usize), ()> {
+                    match &condition.kind {
+                        ExpressionKind::Comparison(lhs, ComparisonKind::Is, rhs) => {
+                            let lhs_type = match &lhs.kind {
+                                ExpressionKind::TypeConstant(ty) =>
+                                    ctx.compiler.resolve_type(ty, ctx.compiler_context()),
+                                _ => return Err(()),
+                            };
+
+                            let rhs_name = match &rhs.kind {
+                                ExpressionKind::Get(ass) => {
+                                    ctx.assignable(ass, ctx.namespace).map_err(|_| ())?
+                                }
+                                _ => return Err(()),
+                            };
+
+                            if let Lookup::Value { slot: Some(slot), .. } = rhs_name {
+                                Ok((lhs_type, slot))
+                            } else {
+                                Err(())
+                            }
+                        }
+                        _ => Err(()),
+                    }
+                }
+
+                let check = null_check(self, condition);
+                if let Ok((ty, slot)) = check {
+                    let old_ty = self.stack[slot].ty.clone();
+                    self.stack[slot].ty = ty;
+                    // TODO(ed): Throw error if the code is unreachable.
+                    self.statement(pass)?;
+                    self.stack[slot].ty = old_ty;
+                } else {
+                    self.statement(pass)?;
+                }
+
                 self.statement(fail)?;
                 None
             }

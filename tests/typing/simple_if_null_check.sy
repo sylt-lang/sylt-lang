@@ -1,0 +1,22 @@
+f :: fn a: bool -> int?
+    if a do
+        ret 1
+    else
+        ret nil
+    end
+end
+
+start :: fn do
+    a := f(true)
+
+    if :int is a do
+        a = a + 1
+    end
+    a <=> 2
+
+    a := f(nil)
+    if :int is a do
+        a = a + 1
+    end
+    a <=> nil
+end
