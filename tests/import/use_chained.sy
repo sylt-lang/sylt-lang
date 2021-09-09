@@ -1,5 +1,5 @@
 use subdir/
 
-start :: fn {
+start :: fn ->
     subdir.one <=> 1
-}
+end

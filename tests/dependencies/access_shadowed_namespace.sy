@@ -4,11 +4,11 @@ A :: blob {
     value: int
 }
 
-f :: fn _b: A {
+f :: fn _b: A do
     _b.value <=> 1
-}
+end
 
-start :: fn {
+start :: fn do
     f(A { value: 1 })
     _b.value <=> 200
-}
+end

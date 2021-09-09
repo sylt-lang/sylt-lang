@@ -1,6 +1,6 @@
 use b
 use c
-start :: fn {
+start :: fn do
     b.a
     b.c.a
-}
+end
