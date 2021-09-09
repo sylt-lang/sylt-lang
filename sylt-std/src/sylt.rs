@@ -533,7 +533,7 @@ sylt_macro::extern_function!(
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     spy,
-    ? "Prints values to stdout",
+    ? "Prints a values to stdout and then returns it",
     -> "fn str, #X -> #X",
     [tag, x] => {
         println!("{}: {}", tag, x);
