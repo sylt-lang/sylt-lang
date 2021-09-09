@@ -204,6 +204,14 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     let span = ctx.span();
     //NOTE(gu): Explicit lookahead.
     let (ctx, kind) = match &ctx.tokens_lookahead::<3>() {
+        [T::End, ..] => {
+            raise_syntax_error!(ctx, "No valid statement starts with 'end'");
+        }
+
+        [T::Else, ..] => {
+            raise_syntax_error!(ctx, "No valid statement starts with 'else'");
+        }
+
         [T::Newline, ..] => (ctx, EmptyStatement),
 
         // Block: `{ <statements> }`
@@ -356,8 +364,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let (ctx, pass) = statement(ctx)?;
             // else?
             let (ctx, fail) = if matches!(ctx.token(), T::Else) {
-                let (ctx, fail) = statement(ctx.skip(1))?;
-                (ctx, fail)
+                (ctx, fail) = statement(ctx.skip(1))?
             } else {
                 // No else so we insert an empty statement instead.
                 (
