@@ -5,7 +5,7 @@ use sylt_common::Type;
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp,
-    Span, Statement, StatementKind, VarKind, AST,
+    Span, Statement, StatementKind, VarKind,
 };
 
 use crate::{self as compiler, first_ok_or_errs};
@@ -279,7 +279,7 @@ impl<'c> TypeChecker<'c> {
         let span = assignable.span;
         match &assignable.kind {
             AK::Read(ident) => {
-                if let Some(var) = self.stack.iter().rev().find(|var| var.ident.name == ident.name) {
+                if let Some(var) = self.stack.iter().rfind(|var| var.ident.name == ident.name) {
                     return Ok(Value(var.ty.clone(), var.kind));
                 }
                 match &self.namespaces[namespace].get(&ident.name) {
@@ -1055,31 +1055,25 @@ impl<'c> TypeChecker<'c> {
 
     fn solve(
         mut self,
-        tree: &mut AST,
-        to_namespace: &HashMap<PathBuf, usize>,
+        statements: &Vec<(&Statement, usize)>,
     ) -> Result<(), Vec<Error>> {
-        for (path, module) in &tree.modules {
-            let namespace = to_namespace[path];
-            for stmt in &module.statements {
-                // Ignore errors since they'll be caught later and
-                // there are false positives.
-                let _ = self.outer_definition(namespace, &stmt);
-            }
+
+        for (statement, namespace) in statements.iter() {
+            // Ignore errors since they'll be caught later and
+            // there are false positives.
+            let _ = self.outer_definition(*namespace, &statement);
         }
 
         let mut errors = Vec::new();
-        for (path, module) in &tree.modules {
-            self.namespace = to_namespace[path];
-            for stmt in &module.statements {
-                if let Err(mut errs) = self.statement(&stmt) {
-                    errors.append(&mut errs);
-                }
+        for (statement, namespace) in statements.iter() {
+            self.namespace = *namespace;
+            if let Err(mut errs) = self.statement(&statement) {
+                errors.append(&mut errs);
             }
         }
-
-        let span = tree.modules[0].1.statements
+        let span = statements
             .iter()
-            .find_map(|stmt| {
+            .find_map(|(stmt, _)| {
                 if let StatementKind::Definition{ ident, .. } = &stmt.kind {
                     if ident.name == "start" {
                         return Some(ident.span);
@@ -1087,7 +1081,7 @@ impl<'c> TypeChecker<'c> {
                 }
                 None
             })
-            .unwrap_or_else(|| tree.modules[0].1.statements[0].span);
+            .unwrap_or_else(|| Span { col_start: 0, col_end: 0, line: 0 });
 
         let call_start = &Assignable {
             span,
@@ -1128,10 +1122,9 @@ impl<'c> TypeChecker<'c> {
 
 pub(crate) fn solve(
     compiler: &mut Compiler,
-    tree: &mut AST,
-    to_namespace: &HashMap<PathBuf, usize>,
+    statements: &Vec<(&Statement, usize)>,
 ) -> Result<(), Vec<Error>> {
-    TypeChecker::new(compiler).solve(tree, to_namespace)
+    TypeChecker::new(compiler).solve(statements)
 }
 
 ///

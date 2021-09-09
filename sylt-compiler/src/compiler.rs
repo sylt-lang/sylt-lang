@@ -9,11 +9,12 @@ use sylt_parser::expression::ComparisonKind;
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     Context as ParserContext,
-    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op as ParserOp,
+    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp,
     Span, Statement, StatementKind, Type as ParserType, TypeKind, VarKind, AST,
 };
 
 mod typechecker;
+mod dependency;
 
 type VarSlot = usize;
 
@@ -109,7 +110,7 @@ type ConstantID = usize;
 type NamespaceID = usize;
 type BlobID = usize;
 type BlockID = usize;
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 enum Name {
     Global(ConstantID),
     Blob(BlobID),
@@ -184,6 +185,14 @@ macro_rules! error {
     };
 }
 
+macro_rules! error_no_panic {
+    ($compiler:expr, $ctx:expr, $span:expr, $( $msg:expr ),+ ) => {
+        {
+            error!($compiler, $ctx, $span, $( $msg ),*);
+            $compiler.panic = false;
+        }
+    };
+}
 impl Compiler {
     fn new() -> Self {
         Self {
@@ -1053,46 +1062,10 @@ impl Compiler {
         }
     }
 
-    fn module_functions(&mut self, module: &Module, ctx: Context) {
-        for statement in module.statements.iter() {
-            match statement.kind {
-                StatementKind::Definition {
-                    value:
-                        Expression {
-                            kind: ExpressionKind::Function { .. },
-                            ..
-                        },
-                    ..
-                } => {
-                    self.statement(statement, ctx);
-                }
-                _ => (),
-            }
-        }
-    }
-
-    fn module_not_functions(&mut self, module: &Module, ctx: Context) {
-        for statement in module.statements.iter() {
-            match statement.kind {
-                StatementKind::Definition {
-                    value:
-                        Expression {
-                            kind: ExpressionKind::Function { .. },
-                            ..
-                        },
-                    ..
-                } => (),
-                _ => {
-                    self.statement(statement, ctx);
-                }
-            }
-        }
-    }
-
     fn compile(
         mut self,
         typecheck: bool,
-        mut tree: AST,
+        tree: AST,
         functions: &[(String, RustFunction, String)],
     ) -> Result<Prog, Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
@@ -1107,7 +1080,7 @@ impl Compiler {
             ..Context::from_namespace(0)
         };
 
-        let path_to_namespace_id = self.extract_globals(&tree);
+        self.extract_globals(&tree);
 
         let num_functions = functions.len();
         self.functions = functions
@@ -1124,15 +1097,22 @@ impl Compiler {
             num_functions
         );
 
-
-        for (path, module) in tree.modules.iter() {
-            ctx.namespace = path_to_namespace_id[path];
-            self.module_functions(module, ctx);
+        let statements = match dependency::initialization_order(&tree, &self) {
+            Ok(statements) => statements,
+            Err(statements) => {
+                statements.iter().for_each(|(statement, namespace)|
+                    error_no_panic!(self, Context::from_namespace(*namespace), statement.span, "Dependency cycle")
+                );
+                statements
+            }
+        };
+        if !self.errors.is_empty() {
+            return Err(self.errors);
         }
 
-        for (path, module) in tree.modules.iter() {
-            ctx.namespace = path_to_namespace_id[path];
-            self.module_not_functions(module, ctx);
+        for (statement, namespace) in statements.iter() {
+            ctx.namespace = *namespace;
+            self.statement(statement, ctx);
         }
 
         if !self.errors.is_empty() {
@@ -1140,7 +1120,7 @@ impl Compiler {
         }
 
         if typecheck {
-            typechecker::solve(&mut self, &mut tree, &path_to_namespace_id)?;
+            typechecker::solve(&mut self, &statements)?;
         }
 
         self.read_identifier("start", Span::zero(), ctx, 0);
@@ -1171,7 +1151,7 @@ impl Compiler {
     }
 
     // TODO(ed): This should probably be cleaned up and moves out of the compiler?
-    fn extract_globals(&mut self, tree: &AST) -> HashMap<PathBuf, usize> {
+    fn extract_globals(&mut self, tree: &AST) {
         let mut path_to_namespace_id = HashMap::<PathBuf, usize>::new();
         for (path, _) in tree.modules.iter() {
             let slot = path_to_namespace_id.len();
@@ -1332,7 +1312,6 @@ impl Compiler {
             }
             self.namespaces[slot] = namespace;
         }
-        path_to_namespace_id
     }
 }
 

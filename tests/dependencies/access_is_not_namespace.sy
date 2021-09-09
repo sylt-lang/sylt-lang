@@ -1,0 +1,11 @@
+A :: blob {
+    a: int
+}
+
+a :: b
+b :: A { a: 1 }.a
+
+start :: fn {
+    print(a)
+    print(b)
+}

@@ -1,0 +1,9 @@
+a :: b
+b :: a
+
+start :: fn {
+    a
+}
+
+// error: Error::CompileError { .. }
+// error: Error::CompileError { .. }
