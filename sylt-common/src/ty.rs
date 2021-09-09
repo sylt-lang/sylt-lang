@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use std::hash::{Hash, Hasher};
+use std::collections::{BTreeSet, HashSet};
+use std::hash::Hash;
 use std::fmt::{Debug, Display};
 
 use crate::{Blob, Value};
@@ -9,7 +9,7 @@ pub trait Numbered {
     fn to_number(&self) -> usize;
 }
 
-#[derive(Clone, sylt_macro::Numbered)]
+#[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd, sylt_macro::Numbered)]
 #[derive(Deserialize, Serialize)]
 pub enum Type {
     Ty,
@@ -21,7 +21,7 @@ pub enum Type {
     Bool,
     String,
     Tuple(Vec<Type>),
-    Union(HashSet<Type>),
+    Union(BTreeSet<Type>),
     List(Box<Type>),
     Set(Box<Type>),
     Dict(Box<Type>, Box<Type>),
@@ -89,75 +89,6 @@ impl Display for Type {
         }
     }
 }
-
-impl Hash for Type {
-    fn hash<H: Hasher>(&self, h: &mut H) {
-        self.to_number().hash(h);
-        match self {
-            Type::Generic(name) => name.hash(h),
-
-            Type::List(t) | Type::Set(t)
-                => t.as_ref().hash(h),
-
-            Type::Tuple(ts) => {
-                for t in ts.iter() {
-                    t.hash(h);
-                }
-            }
-            Type::Dict(k, v) => {
-                k.as_ref().hash(h);
-                v.as_ref().hash(h);
-            }
-            Type::Union(ts) => {
-                for t in ts {
-                    t.hash(h);
-                }
-            }
-            Type::Function(args, ret) => {
-                ret.hash(h);
-                for t in args.iter() {
-                    t.hash(h);
-                }
-            }
-            Type::Blob(b) | Type::Instance(b) => b.hash(h),
-
-            Type::Ty
-            | Type::Void
-            | Type::Unknown
-            | Type::Int
-            | Type::Float
-            | Type::Bool
-            | Type::Invalid
-            | Type::ExternFunction(..)
-            | Type::String => {}
-        }
-    }
-}
-
-impl PartialEq for Type {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Type::Void, Type::Void) => true,
-            (Type::Instance(a), Type::Instance(b)) => *a == *b,
-            (Type::Blob(a), Type::Blob(b)) => *a == *b,
-            (Type::Int, Type::Int) => true,
-            (Type::Float, Type::Float) => true,
-            (Type::Bool, Type::Bool) => true,
-            (Type::String, Type::String) => true,
-            (Type::Tuple(a), Type::Tuple(b)) => a.iter().zip(b.iter()).all(|(a, b)| a == b),
-            (Type::Union(a), Type::Union(b)) => a == b,
-            (Type::List(a), Type::List(b)) => a == b,
-            (Type::Set(a), Type::Set(b)) => a == b,
-            (Type::Dict(ak, av), Type::Dict(bk, bv)) => ak == bk && av == bv,
-            (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
-                a_args == b_args && a_ret == b_ret
-            }
-            _ => false,
-        }
-    }
-}
-
-impl Eq for Type {}
 
 fn maybe_union_from_type<'a>(v: impl Iterator<Item = &'a Value>) -> Type {
     let types: Vec<_> = v.map(Type::from).collect();
@@ -345,7 +276,7 @@ impl Type {
 
     {
         let blobs: Option<_> = blobs.into();
-        let mut set = HashSet::new();
+        let mut set = BTreeSet::new();
         for ty in tys {
             // Invalid types cannot be unioned
             if matches!(ty, Type::Invalid) {
