@@ -1,7 +1,7 @@
 f :: fn a: bool -> int?
     if a do
         ret 1
-    else
+    else do
         ret nil
     end
 end
@@ -14,7 +14,7 @@ start :: fn do
     end
     a <=> 2
 
-    a := f(nil)
+    a := f(false)
     if :int is a do
         a = a + 1
     end
