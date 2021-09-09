@@ -25,8 +25,6 @@ impl Context<'_> {
     }
 }
 
-
-
 fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> BTreeSet<Name> {
     use AssignableKind::*;
     match &assignable.kind {
@@ -101,14 +99,17 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             .union(&assignable_dependencies(ctx, target))
             .cloned()
             .collect(),
-        If { condition, pass, fail } => [
+        If { condition, pass, fail } => {
+            [
                 dependencies(ctx, condition),
                 statement_dependencies(ctx, pass),
                 statement_dependencies(ctx, fail),
-            ].iter()
+            ]
+            .iter()
             .flatten()
             .cloned()
             .collect(),
+        }
         Loop { condition, body } => dependencies(ctx, condition)
             .union(&statement_dependencies(ctx, body))
             .cloned()
