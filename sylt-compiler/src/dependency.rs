@@ -14,13 +14,13 @@ struct Context<'a> {
 }
 
 impl Context<'_> {
-    fn shadow(&mut self, variable: &String) {
+    fn shadow(&mut self, variable: &str) {
         if !self.shadowed(variable) {
-            self.variables.push(variable.clone());
+            self.variables.push(variable.to_string());
         }
     }
 
-    fn shadowed(&self, variable: &String) -> bool {
+    fn shadowed(&self, variable: &str) -> bool {
         return self.variables.iter().rfind(|&v| v == variable).is_some();
     }
 }
@@ -53,7 +53,7 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> BTreeS
             .collect(),
         Access(ass, field) => {
             // Get namespace access recursively
-            // NOTE: This will ignore the actual namespace as a dependency, this
+            // NOTE: This will ignore the actual namespace as a dependency, which
             // is not a problem since the compiler already initializes namespaces
             // before the dependency analysis.
             fn recursive_namespace(ctx: &mut Context, ass: &Assignable) -> Result<usize, ()> {
