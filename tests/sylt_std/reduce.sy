@@ -1,0 +1,5 @@
+start :: fn ->
+    sum :: reduce' [1, 2, 3, 4], fn a: int, b:int -> int a + b end
+    print' sum
+    sum <=> 10
+end
