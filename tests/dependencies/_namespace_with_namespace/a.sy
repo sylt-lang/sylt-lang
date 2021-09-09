@@ -1,0 +1,6 @@
+use b
+use c
+start :: fn {
+    b.a
+    b.c.a
+}
