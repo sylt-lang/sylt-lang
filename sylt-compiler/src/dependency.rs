@@ -31,7 +31,7 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> BTreeS
         Read(ident) => {
             match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
                 Some(&name) if !ctx.shadowed(&ident.name) => {
-                    [name].iter().cloned().collect()
+                    [name].iter().cloned().collect::<BTreeSet<_>>()
                 },
                 _ => BTreeSet::new(),
             }
@@ -62,7 +62,7 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> BTreeS
                             Some(Name::Namespace(ns)) => Ok(*ns),
                             _ => Err(()),
                         }
-                    }
+                    },
                     Read(ident) => {
                         // Might be shadowed here
                         let shadowed = ctx.shadowed(&ident.name);
@@ -70,14 +70,14 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> BTreeS
                             Some(Name::Namespace(ns)) if !shadowed => Ok(*ns),
                             _ => Err(()),
                         }
-                    }
-                    _ => Err(())
+                    },
+                    _ => Err(()),
                 }
             }
             match recursive_namespace(ctx, ass) {
                 Ok(namespace) => match ctx.compiler.namespaces[namespace].get(&field.name) {
                     Some(&name) => {
-                        [name].iter().cloned().collect()
+                        [name].iter().cloned().collect::<BTreeSet<_>>()
                     },
                     _ => BTreeSet::new(),
                 },
@@ -108,8 +108,8 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             .iter()
             .flatten()
             .cloned()
-            .collect(),
-        }
+            .collect()
+        },
         Loop { condition, body } => dependencies(ctx, condition)
             .union(&statement_dependencies(ctx, body))
             .cloned()
@@ -276,7 +276,7 @@ pub(crate) fn initialization_order<'a>(
                         *compiler.namespaces[namespace].get(name).unwrap(),
                         (BTreeSet::new(), (statement, namespace))
                     );
-                }
+                },
                 Definition { ident, value, .. } => {
                     let mut ctx = Context {
                         compiler,
@@ -289,9 +289,9 @@ pub(crate) fn initialization_order<'a>(
                         *compiler.namespaces[namespace].get(&ident.name).unwrap(),
                         (deps, (statement, namespace))
                     );
-                }
+                },
                 IsCheck { .. } => is_checks.push((statement, namespace)),
-                _ => {}
+                _ => {},
             }
         }
     }
