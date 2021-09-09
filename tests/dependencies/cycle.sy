@@ -1,9 +1,9 @@
 a :: b
 b :: a
 
-start :: fn {
+start :: fn do
     a
-}
+end
 
 // error: Error::CompileError { .. }
 // error: Error::CompileError { .. }

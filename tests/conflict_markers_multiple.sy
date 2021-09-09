@@ -1,5 +1,5 @@
-start :: fn {
 
+start :: fn do
 <<<<<<< HEAD
     print extern_test(4.0)
 =======
@@ -11,7 +11,6 @@ start :: fn {
 =======
     print extern_test(5.0)
 >>>>>>> 2
-}
-
+end
 // error: Error::GitConflictError { span: Span { line: 3 , .. }, .. }
 // error: Error::GitConflictError { span: Span { line: 9 , .. }, .. }

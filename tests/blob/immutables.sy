@@ -2,11 +2,10 @@ A :: blob {
     a: int,
 }
 
-start :: fn {
+start :: fn do
     a :: A { a: 1 }
     a._id = 1
     a._name = "abc"
-}
-
+end
 // error: $Mutability
 // error: $Mutability

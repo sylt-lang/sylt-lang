@@ -1,9 +1,8 @@
-start :: fn {
+start :: fn do
     a :: {1, 2, 3}
     (0 in a) <=> false
     ("123" in a) <=> true
     (2 in a) <=> "123"
-}
-
+end
 // error: $BinOp { .. }
 // error: $BinOp { .. }

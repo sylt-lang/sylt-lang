@@ -1,5 +1,7 @@
-start :: fn {
-    f := fn a:int, b:int, c:int { c <=> 13 }
-    f' 1, 1 + 2, 1 + 4 * 3
+start :: fn do
+    f := fn a: int, b: int, c: int do
+        c <=> 13
+    end
+    f(1, 1 + 2, 1 + 4 * 3)
+end
 
-}

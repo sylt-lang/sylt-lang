@@ -18,11 +18,9 @@ C :: blob {
 :A is :C
 :B is :B
 :C is :C
-
 :B is :A
 :C is :A
 
-start :: fn { }
-
+start :: fn do end
 // error: Error::CompileError { .. }
 // error: Error::CompileError { .. }

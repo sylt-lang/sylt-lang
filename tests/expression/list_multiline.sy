@@ -1,7 +1,5 @@
-a := [
-    1
-]
-
-start :: fn {
+a := [1]
+start :: fn do
     a[0] <=> 1
-}
+end
+

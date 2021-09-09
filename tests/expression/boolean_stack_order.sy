@@ -1,17 +1,18 @@
-start :: fn {
-    if false && false && false {
+start :: fn do
+    if false and false and false do
         <!>
-    }
-    if true && false && false {
+    end
+    if true and false and false do
         <!>
-    }
-    if true && true && false {
+    end
+    if true and true and false do
         <!>
-    }
-    if true || true {
-    }
-    if false || true {
-    }
+    end
+    if true or true do
+    end
+    if false or true do
+    end
     i := "HELLO!"
     i <=> "HELLO!"
-}
+end
+

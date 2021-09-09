@@ -1,6 +1,7 @@
-a :: fn { }
+a :: fn do
+end
 
-start :: fn {
+start :: fn do
     a'
     a'
     a'
@@ -25,5 +26,5 @@ start :: fn {
     a'
     a'
     a'
-}
+end
 

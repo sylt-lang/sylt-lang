@@ -3,9 +3,8 @@ A :: blob {
     b: int,
 }
 
-start :: fn {
+start :: fn do
     a :: A { a: 1, b: 2, c: 3 }
     a
-}
-
+end
 // error: $UnknownField { .. }

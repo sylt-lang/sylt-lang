@@ -1,14 +1,13 @@
-start :: fn {
-    true and true   <=> true
-    true and false  <=> false
-    false and true  <=> false
+start :: fn do
+    true and true <=> true
+    true and false <=> false
+    false and true <=> false
     false and false <=> false
+    true or true <=> true
+    true or false <=> true
+    false or true <=> true
+    false or false <=> false
+    not true <=> false
+    not false <=> true
+end
 
-    true or true    <=> true
-    true or false   <=> true
-    false or true   <=> true
-    false or false  <=> false
-
-    not true        <=> false
-    not false       <=> true
-}

@@ -1,66 +1,61 @@
 A :: blob {
-    a: int,
     b: float,
+    a: int,
 }
-
 B :: blob {
     self: B,
 }
-
-start :: fn {
+start :: fn do
     // Basic types
     as_str(-1) <=> "-1"
     as_str(2.0) <=> "2.0"
     as_str(2.00000000000182) <=> "2.00000000000182"
     as_str("3.0") <=> "3.0"
     as_str(true) <=> "true"
-    as_str(false) <=> "false"
-
     // List
+    as_str(false) <=> "false"
     a := []
-    a -> push' a
-    a -> push' 1
-    as_str(a) <=> "[[...], 1]"
-
+    a -> push(a)
+    a -> push(1)
     // Tuple
+    as_str(a) <=> "[[...], 1]"
     as_str(()) <=> "()"
     as_str((1,)) <=> "(1,)"
-    as_str((1, 2)) <=> "(1, 2)"
-
     // Set
+    as_str((1, 2)) <=> "(1, 2)"
     as_str({}) <=> "{}"
     as_str({1}) <=> "{1}"
     s :: as_str({1, 2})
-    (s == "{1, 2}" || s == "{2, 1}") <=> true
+    (s == "{1, 2}" or s == "{2, 1}") <=> true
     c :: {}
-    c -> add' c
-    as_str(c) <=> "{{...}}"
-
-
+    c -> add(c)
     // Dict
+    as_str(c) <=> "{{...}}"
     as_str({:}) <=> "{:}"
     as_str({1: 2}) <=> "{1: 2}"
     d :: as_str({1: 2, 3: 4})
-    (d == "{1: 2, 3: 4}" || d == "{3: 4, 1: 2}") <=> true
-
     // Blobs
-    ab :: as_str(A { a: 100, b: 5.3 })
+    (d == "{1: 2, 3: 4}" or d == "{3: 4, 1: 2}") <=> true
+    ab :: as_str(A {
+        a: 100,
+        b: 5.3,
+    })
     print(ab)
-
-    b : !B = nil
-    b = B { self: b }
-    b.self = b
-    print(b)
-
-    // Functions
-    d :: fn x: int, y: int -> int {
-        x + y
+    b: !B = nil
+    b = B {
+        self: b,
     }
-    print(d)
-
+    b.self = b
+    // Functions
+    print(b)
+    d :: fn x: int, y: int -> int do
+        ret x + y
+    end
     // Other
-    print' A
-    print' pop
-    print' :str
+    print(d)
+    print(A)
+    print(pop)
+    print(:str)
     as_str(nil) <=> "nil"
-}
+end
+

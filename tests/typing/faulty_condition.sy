@@ -1,10 +1,8 @@
-start :: fn {
-    if 1 {
-    }
-
-    loop 1 + 1 * 2 {
-    }
-}
-
+start :: fn do
+    if 1 do
+    end
+    loop 1 + 1 * 2 do
+    end
+end
 // error: $Mismatch { expected: Type::Bool, .. }
 // error: $Mismatch { expected: Type::Bool, .. }

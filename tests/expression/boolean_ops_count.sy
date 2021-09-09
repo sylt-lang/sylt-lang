@@ -1,41 +1,35 @@
-start :: fn {
+start :: fn do
     ts := 0
-    t :: fn -> bool {
+    t :: fn -> bool do
         ts += 1
         ret true
-    }
-
+    end
     fs := 0
-    f :: fn -> bool {
+    f :: fn -> bool do
         fs += 1
         ret false
-    }
-
-    i :: fn -> bool {
+    end
+    i :: fn -> bool do
         <!>
         ret false
-    }
-
-    if f() && i() {
+    end
+    if f() and i() do
         <!>
-    }
-
-    if t() || i() {
+    end
+    if t() or i() do
         // This block is intentionally left blank
-    } else {
+    else do
         <!>
-    }
-
-    if f() && i() && i() {
+    end
+    if f() and i() and i() do
         <!>
-    }
-
-    if t() || i() || i() {
+    end
+    if t() or i() or i() do
         // This block is intentionally left blank
-    } else {
+    else do
         <!>
-    }
-
+    end
     fs <=> 2
     ts <=> 2
-}
+end
+

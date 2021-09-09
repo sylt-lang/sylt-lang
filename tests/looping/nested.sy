@@ -1,13 +1,14 @@
-start :: fn {
+start :: fn do
     n := 0
     a := 3
-    loop a > 0 {
+    loop a > 0 do
         b := a
-        loop b > 0 {
+        loop b > 0 do
             b -= 1
             n += 1
-        }
+        end
         a -= 1
-    }
+    end
     n <=> 6
-}
+end
+

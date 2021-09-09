@@ -1,4 +1,7 @@
-a :: fn {}
-start :: fn {
+a :: fn do
+end
+
+start :: fn do
     a()
-}
+end
+

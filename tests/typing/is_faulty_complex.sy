@@ -39,8 +39,7 @@ D :: blob {
 // :D | C is :D
 // :D is :D | D
 
-start :: fn {}
-
+start :: fn do end
 // error: Error::CompileError { .. }
 // error: Error::CompileError { .. }
 // error: Error::CompileError { .. }

@@ -1,11 +1,12 @@
-start :: fn {
-    one := fn -> int {
+start :: fn do
+    one := fn -> int do
         ret 1
-    }
-    add := fn a: int, b: int -> int {
+    end
+    add := fn a: int, b: int -> int do
         ret a + b
-    }
+    end
     add(one(), one()) <=> 2
     add(add(one(), one()), one()) <=> 3
     add(one(), add(one(), one())) <=> 3
-}
+end
+

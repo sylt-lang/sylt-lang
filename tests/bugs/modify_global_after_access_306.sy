@@ -1,8 +1,8 @@
 use _import_306
 
-start :: fn {
+start :: fn do
     _import_306.SET_ME = 3
     _import_306.SET_ME <=> 3
     _import_306.SET_ME += 3
     _import_306.SET_ME <=> 6
-}
+end

@@ -1,17 +1,19 @@
 // TODO(ed): Pure functions
-fac :: fn n: int -> int {
-    if n < 1 { ret 1 }
-    ret n * fac' n - 1
-}
+fac :: fn n: int -> int do
+    if n < 1 do
+        ret 1
+    end
+    ret n * fac(n - 1)
+end
 
-a :: fac' 4
-b :: a + fac' 2
+a :: fac(4)
+b :: a + fac(2)
 c := b + 1
-
-start :: fn {
+start :: fn do
     a <=> 24
     b <=> 24 + 2
     c <=> 24 + 2 + 1
     c += 1
     c <=> 24 + 2 + 2
-}
+end
+

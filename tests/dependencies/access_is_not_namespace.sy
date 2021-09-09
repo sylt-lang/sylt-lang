@@ -5,7 +5,7 @@ A :: blob {
 a :: b
 b :: A { a: 1 }.a
 
-start :: fn {
+start :: fn do
     print(a)
     print(b)
-}
+end

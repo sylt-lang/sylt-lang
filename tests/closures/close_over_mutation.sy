@@ -1,17 +1,18 @@
-c :: fn -> fn -> int {
+c :: fn -> fn -> int do
     b := 2
-    a :: fn -> int {
+    a :: fn -> int do
         b += 1
         ret b
-    }
+    end
     ret a
-}
+end
 
-start :: fn {
-    a :: c'
-    3 <=> a'
-    4 <=> a'
-    a :: c'
-    3 <=>  a'
-    4 <=>  a'
-}
+start :: fn do
+    a :: c()
+    3 <=> a()
+    4 <=> a()
+    a :: c()
+    3 <=> a()
+    4 <=> a()
+end
+

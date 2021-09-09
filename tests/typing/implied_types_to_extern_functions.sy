@@ -1,11 +1,13 @@
-A :: blob { }
+A :: blob {}
 B :: blob {
     a: int,
 }
+a :: fn a: A do
+end
 
-a :: fn a:A -> void {
-}
+start :: fn do
+    a(B {
+        a: 0,
+    })
+end
 
-start :: fn {
-    a' B { a: 0 }
-}

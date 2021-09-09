@@ -1,36 +1,38 @@
-f :: fn a:bool -> int | str | void {
-    if a {
+f :: fn a: bool -> int | str | void do
+    if a do
         ret 1
-    } else {
-        ret
-    }
-}
+    else do
+        ret nil
+    end
+end
 
-g :: fn a:bool -> int | (bool, bool) {
-    if a {
+g :: fn a: bool -> int | (bool, bool) do
+    if a do
         ret 1
-    } else {
+    else do
         ret (true, true)
-    }
-}
+    end
+end
 
-h :: fn a:bool -> int | fn -> int {
-    if a {
-        f :: fn -> int { ret 1 }
+h :: fn a: bool -> int | fn -> int do
+    if a do
+        f :: fn -> int do
+            ret 1
+        end
         ret f
-    } else {
+    else do
         ret 1
-    }
-}
+    end
+end
 
-start :: fn {
-    1 <=> f' true
-    nil <=> f' false
-    (true, true) <=> g' false
-    1 <=> g' true
+start :: fn do
+    1 <=> f(true)
+    nil <=> f(false)
+    (true, true) <=> g(false)
+    1 <=> g(true)
     f(true) <=> g(true)
-
-    1 <=> h' false
-    q : !fn -> int : h' true
+    1 <=> h(false)
+    q: !fn -> int : h(true)
     1 <=> q()
-}
+end
+

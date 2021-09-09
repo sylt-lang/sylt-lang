@@ -1,7 +1,9 @@
-f :: fn -> fn -> {
-    g :: fn {}
+f :: fn -> fn -> void do
+    g :: fn do
+    end
     ret g
-}
+end
 
-start :: fn {
-}
+start :: fn do
+end
+

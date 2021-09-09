@@ -1,20 +1,20 @@
-q :: fn -> {int:bool} {
-    g :: {0:true}
+q :: fn -> {int: bool} do
+    g :: {0: true}
     ret g
-}
+end
 
-h :: fn -> {int|str:int|str} {
-    g :: {0:0, "a":"a"}
+h :: fn -> {int | str: int | str} do
+    g :: {0: 0, "a": "a"}
     ret g
-}
+end
 
-start :: fn {
+start :: fn do
     g :: q()
     g[0] <=> true
-    res: bool? = g[1]
+    res: bool | void = g[1]
     nil <=> res
-
     h :: h()
     h[0] <=> 0
     "a" <=> h["a"]
-}
+end
+

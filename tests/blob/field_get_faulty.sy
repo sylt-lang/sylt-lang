@@ -1,13 +1,13 @@
 A :: blob { a: int }
 a := A { a: 1 }
-start :: fn {
+
+start :: fn do
     a.b = a.b + 1
     a.a = f' a.b
-}
+end
 
-f :: fn a:int -> int {
+f :: fn a:int -> int do
     ret a
-}
-
+end
 // error: $UnknownField {..}
 // error: $UnknownField {..}

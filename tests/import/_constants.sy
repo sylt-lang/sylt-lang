@@ -1,14 +1,13 @@
-
 _one :: 1
-one :: fn -> int {
+one :: fn -> int do
     ret _one
-}
+end
 
 _two := 2.0
-two :: fn -> float {
+two :: fn -> float do
     ret _two
-}
+end
 
-three :: fn -> int {
+three :: fn -> int do
     ret _one + _one + _one
-}
+end

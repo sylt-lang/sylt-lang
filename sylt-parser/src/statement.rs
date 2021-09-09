@@ -153,26 +153,24 @@ pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
         }
     }
 
-    Ok((ctx, Identifier {
-        span,
-        name: result,
-    }))
+    Ok((ctx, Identifier { span, name: result }))
 }
 
 pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
-    let mut ctx = expect!(ctx, T::LeftBrace, "Expected '{{' at start of block");
+    // To allow implicit block-openings, like "fn ->"
+    let mut ctx = ctx.skip_if(T::Do);
 
     let mut errs = Vec::new();
     let mut statements = Vec::new();
     // Parse multiple inner statements until } or EOF
-    while !matches!(ctx.token(), T::RightBrace | T::EOF) {
+    while !matches!(ctx.token(), T::Else | T::End | T::EOF) {
         match statement(ctx) {
             Ok((_ctx, stmt)) => {
                 ctx = _ctx; // assign to outer
                 statements.push(stmt);
             }
             Err((_ctx, mut err)) => {
-                ctx = _ctx.pop_skip_newlines(false);  // assign to outer
+                ctx = _ctx.pop_skip_newlines(false); // assign to outer
                 ctx = skip_until!(ctx, T::Newline).skip_if(T::Newline);
                 errs.append(&mut err);
             }
@@ -180,11 +178,15 @@ pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
     }
 
     if errs.is_empty() {
-        let ctx = expect!(ctx, T::RightBrace, "Expected }} after block");
+        // Special case for chaining if-else-statements
+        if !matches!(ctx.token(), T::End | T::Else) {
+            syntax_error!(ctx, "Expected 'end' after block");
+        }
+        let ctx = ctx.skip_if(T::End);
         #[rustfmt::skip]
         return Ok(( ctx, statements ));
     } else {
-        Err(( ctx, errs ))
+        Err((ctx, errs))
     }
 }
 
@@ -205,7 +207,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Newline, ..] => (ctx, EmptyStatement),
 
         // Block: `{ <statements> }`
-        [T::LeftBrace, ..] => match (block(ctx), expression(ctx)) {
+        [T::Do, ..] => match (block(ctx), expression(ctx)) {
             (Ok((ctx, statements)), _) => (ctx, Block { statements }),
             (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
             (Err((_, mut stmt_errs)), Err((_, mut expr_errs))) => {
@@ -214,7 +216,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     stmt_errs.remove(0),
                     expr_errs.remove(0),
                 ];
-                let ctx = skip_until!(ctx, T::RightBrace);
+                let ctx = skip_until!(ctx, T::End);
                 return Err((ctx, errs));
             }
         },
@@ -251,12 +253,9 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     NameIdentifier::Alias(Identifier {
                         span: ctx.skip(1).span(),
                         name: alias.clone(),
-                    })
+                    }),
                 ),
-                [T::As, ..] => raise_syntax_error!(
-                    ctx.skip(1),
-                    "Expected alias"
-                ),
+                [T::As, ..] => raise_syntax_error!(ctx.skip(1), "Expected alias"),
                 [..] => {
                     if path == "/" {
                         raise_syntax_error!(ctx, "Using root requires alias");
@@ -273,17 +272,32 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         .unwrap()
                         .to_string();
                     (ctx, NameIdentifier::Implicit(Identifier { span, name }))
-                },
+                }
             };
-            (ctx, Use { path: path_ident, name: alias, file })
-        },
+            (
+                ctx,
+                Use {
+                    path: path_ident,
+                    name: alias,
+                    file,
+                },
+            )
+        }
 
         // `: A is : B`
         [T::Colon, ..] => {
             let ctx = ctx.skip(1);
             let (ctx, lhs) = parse_type(ctx)?;
-            let ctx = expect!(ctx, T::Is, "Expected 'is' after first type in 'is-check' statement");
-            let ctx = expect!(ctx, T::Colon, "Expected ':' - only type constant are allowed in 'is-check' statements");
+            let ctx = expect!(
+                ctx,
+                T::Is,
+                "Expected 'is' after first type in 'is-check' statement"
+            );
+            let ctx = expect!(
+                ctx,
+                T::Colon,
+                "Expected ':' - only type constant are allowed in 'is-check' statements"
+            );
             let (ctx, rhs) = parse_type(ctx)?;
             (ctx, IsCheck { lhs, rhs })
         }
@@ -312,10 +326,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         // `loop <expression> <statement>`, e.g. `loop a < 10 { a += 1 }`
         [T::Loop, ..] => {
             let ctx = ctx.skip(1);
-            let (ctx, condition) = if matches!(ctx.token(), T::LeftBrace) {
+            let (ctx, condition) = if matches!(ctx.token(), T::Do) {
                 (
                     ctx,
-                    Expression { span: ctx.span(), kind: ExpressionKind::Bool(true), },
+                    Expression {
+                        span: ctx.span(),
+                        kind: ExpressionKind::Bool(true),
+                    },
                 )
             } else {
                 expression(ctx)?
@@ -538,9 +555,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
                 (Err((_, mut ass_errs)), Err((_, mut expr_errs))) => {
                     ass_errs.append(&mut expr_errs);
-                    ass_errs.push(
-                        syntax_error!(ctx, "Neither an assignment or an expression")
-                    );
+                    ass_errs.push(syntax_error!(ctx, "Neither an assignment or an expression"));
                     return Err((ctx, ass_errs));
                 }
             }
@@ -549,7 +564,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
     // Newline, RightBrace and Else can end a statment.
     // If a statement does not end, we only report it as a missing newline.
-    let ctx = if matches!(ctx.token(), T::RightBrace | T::Else) {
+    let ctx = if matches!(ctx.token(), T::End | T::Else) {
         ctx
     } else {
         expect!(ctx, T::Newline, "Expected newline to end statement")
@@ -557,11 +572,14 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     let ctx = ctx.pop_skip_newlines(skip_newlines);
     comments.append(&mut ctx.comments_since_last_statement());
     let ctx = ctx.push_last_statement_location();
-    Ok((ctx, Statement {
-        span,
-        kind,
-        comments,
-    }))
+    Ok((
+        ctx,
+        Statement {
+            span,
+            kind,
+            comments,
+        },
+    ))
 }
 
 /// Parse an outer statement.
@@ -585,8 +603,8 @@ pub fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use super::StatementKind::*;
+    use super::*;
 
     // NOTE(ed): Expressions are valid statements! :D
     test!(statement, statement_expression: "1 + 1\n" => _);
@@ -631,7 +649,7 @@ mod test {
     test!(outer_statement, outer_statement_blob: "B :: blob {}\n" => _);
     test!(outer_statement, outer_statement_blob_no_last_comma: "B :: blob { \na: A\n }\n" => _);
     test!(outer_statement, outer_statement_blob_yes_last_comma: "B :: blob { \na: A,\n }\n" => _);
-    test!(outer_statement, outer_statement_declaration: "B :: fn -> {}\n" => _);
+    test!(outer_statement, outer_statement_declaration: "B :: fn -> do end\n" => _);
     test!(outer_statement, outer_statement_use: "use ABC\n" => _);
     test!(outer_statement, outer_statement_use_rename: "use a as b\n" => _);
     test!(outer_statement, outer_statement_use_subdir: "use a/b/c/d/e\n" => _);
@@ -656,4 +674,3 @@ impl Display for NameIdentifier {
         write!(f, "{})", ident.name)
     }
 }
-

@@ -1,7 +1,5 @@
-start :: fn {
-
-    f : fn -> int = fn {}
+start :: fn do
+    f : fn -> int = fn do end
     f
-}
-
+end
 // error: $Mismatch { .. }

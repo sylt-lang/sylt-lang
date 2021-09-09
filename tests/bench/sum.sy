@@ -1,12 +1,12 @@
 // Adds the numbers 0 to 100000
-start :: fn {
+// flags: no_print
+start :: fn do
     sum := 0
     i := 0
-    loop i <= 100000 {
+    loop i <= 100000 do
         sum += i
         i += 1
-    }
+    end
     sum <=> 5000050000
-}
+end
 
-// flags: no_print

@@ -131,7 +131,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
                 params.push((ident, param));
 
-                ctx = if matches!(ctx.token(), T::Comma | T::Arrow | T::LeftBrace) {
+                ctx = if matches!(ctx.token(), T::Comma | T::Do | T::Arrow | T::LeftBrace) {
                     ctx.skip_if(T::Comma)
                 } else {
                     raise_syntax_error!(ctx, "Expected ',' '{{' or '->' after type parameter")
@@ -153,7 +153,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 };
             }
 
-            T::LeftBrace => {
+            T::LeftBrace | T::Do => {
                 // No return type so we assume `-> Void`.
                 break Type {
                     span: ctx.span(),
@@ -305,7 +305,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         }
 
         T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
-        T::Minus | T::Not | T::Bang => unary(ctx),
+        T::Minus | T::Not => unary(ctx),
 
         T::Identifier(_) => {
             let span = ctx.span();
@@ -345,7 +345,7 @@ fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
     let kind = match op {
         T::Minus => Neg(expr),
-        T::Not | T::Bang => Not(expr),
+        T::Not => Not(expr),
 
         _ => {
             raise_syntax_error!(ctx, "Invalid unary operator");
@@ -854,7 +854,8 @@ mod test {
     test!(expression, assignable_expression: "[0][0]" => Get(_));
     test!(expression, assignable_expression_many: "[0][0][0][0][0]" => Get(_));
     test!(expression, assignable_expression_blob: "A {}.a" => Get(_));
-    test!(expression, assignable_expression_fn: "(fn { 2 })()" => Get(_));
+    test!(expression, assignable_expression_fn: "(fn do 2 end)()" => Get(_));
+    test!(expression, assignable_expression_fn_no_paren: "fn do 2 end()" => Get(_));
     test!(expression, assignable_expression_dict: "{1:2}[1]" => Get(_));
 
     // TODO(ed): This is controverisal
@@ -868,15 +869,15 @@ mod test {
     test!(expression, instance_more: "A { a: 2, \n c: 2 }" => Instance { .. });
     test!(expression, instance_empty: "A {}" => Instance { .. });
 
-    test!(expression, simple: "fn -> {}" => _);
-    test!(expression, argument: "fn a: int -> int { ret a + 1 }" => _);
+    test!(expression, simple: "fn -> do end" => _);
+    test!(expression, argument: "fn a: int -> int do ret a + 1 end" => _);
 
-    test!(expression, booleans: "true && false || !false" => _);
-    test!(expression, bool_and: "true && a" => _);
-    test!(expression, bool_or: "a || false" => _);
-    test!(expression, bool_neg: "!a" => _);
-    test!(expression, bool_neg_multiple: "!a && b" => _);
-    test!(expression, bool_neg_multiple_rev: "a && !b" => _);
+    test!(expression, booleans: "true and false or not false" => _);
+    test!(expression, bool_and: "true and a" => _);
+    test!(expression, bool_or: "a or false" => _);
+    test!(expression, bool_neg: "not a" => _);
+    test!(expression, bool_neg_multiple: "not a and b" => _);
+    test!(expression, bool_neg_multiple_rev: "a and not b" => _);
 
     test!(expression, cmp_is: "a is B" => _);
     test!(expression, cmp_eq: "a == b" => _);
@@ -887,7 +888,7 @@ mod test {
     test!(expression, cmp_lt: "a < b" => _);
     test!(expression, neg: "-a" => _);
 
-    test!(expression, expr: "-a + b < 3 * true && false / 2" => _);
+    test!(expression, expr: "-a + b < 3 * true and false / 2" => _);
 
     test!(expression, type_expr_int: ":int" => _);
     test!(expression, type_expr_void: ":void" => _);
@@ -896,8 +897,8 @@ mod test {
     test!(expression, type_expr_custom: ":A" => _);
     test!(expression, type_expr_custom_chaining: ":A.b.C" => _);
 
-    test!(expression, void_simple: "fn {}" => _);
-    test!(expression, void_argument: "fn a: int { ret a + 1 }" => _);
+    test!(expression, void_simple: "fn do end" => _);
+    test!(expression, void_argument: "fn a: int do ret a + 1 end" => _);
 
     test!(expression, if_expr: "a if b else c" => IfExpression { .. });
     test!(expression, if_expr_more: "1 + 1 + 1 if b else 2 + 2 + 2" => IfExpression { .. });

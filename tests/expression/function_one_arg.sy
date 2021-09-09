@@ -1,5 +1,7 @@
-start :: fn {
-    f := fn a:int { a <=> 1 }
-    f' 1
+start :: fn do
+    f := fn a: int do
+        a <=> 1
+    end
+    f(1)
+end
 
-}

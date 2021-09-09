@@ -1,13 +1,14 @@
 // Works
-c :: fn -> fn -> int {
+c :: fn -> fn -> int do
     b := 2
-    a :: fn -> int {
+    a :: fn -> int do
         ret b
-    }
+    end
     ret a
-}
+end
 
-start :: fn {
-    a :: c'
-    2 <=> a'
-}
+start :: fn do
+    a :: c()
+    2 <=> a()
+end
+

@@ -98,6 +98,11 @@ pub enum Token {
     #[token("}")]
     RightBrace,
 
+    #[token("do")]
+    Do,
+    #[token("end")]
+    End,
+
     #[token(">")]
     Greater,
     #[token(">=")]
@@ -111,10 +116,8 @@ pub enum Token {
     Fn,
 
     #[token("and")]
-    #[token("&&")]
     And,
     #[token("or")]
-    #[token("||")]
     Or,
     #[token("not")]
     Not,

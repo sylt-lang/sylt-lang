@@ -2,8 +2,7 @@ use _constants as 1
 use _constants as {}
 use _constants as +
 
-start :: fn {}
-
+start :: fn do end
 // error: @1
 // error: @2
 // error: @3

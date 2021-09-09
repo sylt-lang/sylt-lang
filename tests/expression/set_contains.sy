@@ -1,4 +1,4 @@
-start :: fn {
+start :: fn do
     a :: {1, 2, 3}
     (0 in a) <=> false
     (1 in a) <=> true
@@ -6,4 +6,5 @@ start :: fn {
     (3 in a) <=> true
     (4 in a) <=> false
     (1231 in a) <=> false
-}
+end
+

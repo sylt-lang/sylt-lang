@@ -2,22 +2,21 @@
 // this is because the compiler hasn't resolved the type
 // and cannot write a define for that type. We could solve
 // this by resolving all Op::Defines later.
-C :: blob { }
-
+C :: blob {}
 A :: blob {
-    c: C
+    c: C,
 }
-
-B :: blob { }
-
-start :: fn {
+B :: blob {}
+start :: fn do
     c := C {}
-    a := A { c: c }
+    a := A {
+        c: c,
+    }
     b := B {}
     b2 := B {}
-
     a
     b
     c
     b2
-}
+end
+

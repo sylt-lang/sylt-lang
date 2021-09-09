@@ -1,6 +1,7 @@
-start :: fn {
+start :: fn do
     a := true
-    if !a {
+    if not a do
         <!>
-    }
-}
+    end
+end
+

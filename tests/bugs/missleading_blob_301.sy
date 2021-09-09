@@ -3,14 +3,13 @@ A :: blob {
     b: str,
 }
 
-start :: fn {
+start :: fn do
     a := A {
         a: "a"
         b: "b",
     }
-}
-
+end
 // error: @7
 // error: @8
 // error: @9
-// error: @11
+// error: @10

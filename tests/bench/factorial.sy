@@ -1,12 +1,13 @@
-factorial :: fn n: int -> int {
-    if n <= 1 {
+factorial :: fn n: int -> int do
+    if n <= 1 do
         ret 1
-    }
+    end
     ret n * factorial(n - 1)
-}
+end
 
-start :: fn {
+start :: fn do
     factorial(5) <=> 120
     factorial(6) <=> 720
     factorial(12) <=> 479001600
-}
+end
+

@@ -1,10 +1,11 @@
-start :: fn {
+start :: fn do
     a := 1
     res := 0
-    if a == 0 {
+    if a == 0 do
         <!>
-    } else {
+    else do
         res = 1
-    }
+    end
     res <=> 1
-}
+end
+

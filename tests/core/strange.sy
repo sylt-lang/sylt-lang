@@ -1,15 +1,14 @@
-start :: fn {
-
+start :: fn do
     a := 0
-    {
+    do
         b := 99999
-        {
+        do
             a := 99999
             a
-        }
+        end
         b
         a -= 1
-    }
+    end
     a <=> -1
+end
 
-}

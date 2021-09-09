@@ -1,6 +1,5 @@
-start :: fn {
+start :: fn do
     a := (1, 2)
     a[2]
-}
-
+end
 // error: $TupleIndexOutOfRange { .. }

@@ -1,4 +1,4 @@
-grouping :: fn {
+grouping :: fn do
     a := 1 + 2 + 3 if true else -1 * 10 if false else 2 + 2
     a <=> 6
     b := 1 + 2 + 3 if true else -1 * 10 if true else 2 + 2
@@ -7,18 +7,19 @@ grouping :: fn {
     c <=> -10
     d := 1 + 2 + 3 if false else -1 * 10 if false else 2 + 2
     d <=> 4
-}
+end
 
-simple :: fn {
+simple :: fn do
     (1 if true else 3) <=> 1
-}
+end
 
-expr :: fn {
+expr :: fn do
     (1 + (1 if true else 3)) <=> 2
-}
+end
 
-start :: fn {
-    grouping'
-    simple'
-    expr'
-}
+start :: fn do
+    grouping()
+    simple()
+    expr()
+end
+

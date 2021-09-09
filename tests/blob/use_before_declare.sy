@@ -1,6 +1,5 @@
-start :: fn {
+start :: fn do
     a := A {}
-}
+end
 
 A :: blob {}
-

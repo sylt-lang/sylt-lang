@@ -1,10 +1,9 @@
-start :: fn {
+start :: fn do
     len([1, 2]) <=> 2
     len({1: 2}) <=> 1
-
-    a : {int: int} | [int] : [1, 2]
+    a: {int: int} | [int] : [1, 2]
     len(a) <=> 2
-
-    b : [int] | {int: int} : [1, 2]
+    b: [int] | {int: int} : [1, 2]
     len(b) <=> 2
-}
+end
+

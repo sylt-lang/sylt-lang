@@ -1,4 +1,6 @@
-start :: fn {
-    f := fn a: int {}
+start :: fn do
+    f := fn a: int do
+    end
     f(1)
-}
+end
+

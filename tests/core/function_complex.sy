@@ -1,19 +1,20 @@
-h :: fn -> int {
+h :: fn -> int do
     ret 3
-}
+end
 
-k :: fn -> int {
+k :: fn -> int do
     ret h()
-}
+end
 
-a :: fn -> int {
+a :: fn -> int do
     ret q()
-}
+end
 
-q :: fn -> int {
+q :: fn -> int do
     ret k()
-}
+end
 
-start :: fn {
+start :: fn do
     a() <=> 3
-}
+end
+

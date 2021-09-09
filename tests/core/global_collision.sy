@@ -1,10 +1,12 @@
-fac :: fn a: int -> int {
-    if a < 1 { ret 1 }
-    ret a * fac' a - 1
-}
+fac :: fn a: int -> int do
+    if a < 1 do
+        ret 1
+    end
+    ret a * fac(a - 1)
+end
 
-a :: fac' 4
-
-start :: fn {
+a :: fac(4)
+start :: fn do
     a <=> 24
-}
+end
+

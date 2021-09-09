@@ -1,31 +1,30 @@
-test001 :: fn -> int {
+test001 :: fn -> int do
     ret 2
-}
+end
 
-test002 :: fn b:bool -> int? {
-    if b {
+test002 :: fn b: bool -> int | void do
+    if b do
         ret nil
-    } else {
+    else do
         ret 0
-    }
-}
+    end
+end
 
 // TODO(ed): Introduce type type!
-test003 :: fn {
-    a := test002' false
+test003 :: fn do
+    a := test002(false)
     a += 1
     a <=> 1
-}
+end
 
-
-start :: fn {
-    test001'
-    nil <=> test002' true
-    0 <=> test002' false
-    q : bool? = true
+start :: fn do
+    test001()
+    nil <=> test002(true)
+    0 <=> test002(false)
+    q: bool | void = true
     q <=> true
     q = nil
     q <=> nil
-    test003'
-}
+    test003()
+end
 
