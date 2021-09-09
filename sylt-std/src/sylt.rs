@@ -530,4 +530,15 @@ sylt_macro::extern_function!(
     }
 );
 
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    spy,
+    ? "Prints values to stdout",
+    -> "fn str, #X -> #X",
+    [tag, x] => {
+        println!("{}: {}", tag, x);
+        Ok(x.clone())
+    }
+);
+
 sylt_macro::sylt_link_gen!("sylt_std::sylt");
