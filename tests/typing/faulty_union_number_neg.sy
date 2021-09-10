@@ -1,0 +1,6 @@
+start :: fn do
+    a : int|float|str = 1
+    -a
+end
+
+// error: $UniOp { .. }
