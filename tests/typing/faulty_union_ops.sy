@@ -1,0 +1,6 @@
+start :: fn do
+    a : int? = 1
+    a + 1
+end
+
+// error: $BinOp { .. }
