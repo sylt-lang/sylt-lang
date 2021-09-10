@@ -1,0 +1,14 @@
+start :: fn do
+    a : int? = 1
+    a + 1
+
+    b : int|str = 1
+    -b
+
+    c : str|int = 1
+    -c
+end
+
+// error: $BinOp { .. }
+// error: $UniOp { .. }
+// error: $UniOp { .. }
