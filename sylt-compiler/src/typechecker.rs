@@ -1157,19 +1157,6 @@ mod op {
             .unwrap_or(Type::Invalid)
     }
 
-    fn union_bin_op(a: &BTreeSet<Type>, b: &Type, f: fn(&Type, &Type) -> Type) -> Type {
-        a.iter()
-            .find_map(|x| {
-                let x = f(x, b);
-                if x.is_nil() {
-                    None
-                } else {
-                    Some(x)
-                }
-            })
-            .unwrap_or(Type::Invalid)
-    }
-
     pub fn neg(value: &Type) -> Type {
         match value {
             Type::Float => Type::Float,
@@ -1199,7 +1186,6 @@ mod op {
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, add),
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => add(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
-            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, add),
             _ => Type::Invalid,
         }
     }
@@ -1215,7 +1201,6 @@ mod op {
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, mul),
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => mul(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
-            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, mul),
             _ => Type::Invalid,
         }
     }
@@ -1227,7 +1212,6 @@ mod op {
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, div),
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => div(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
-            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, div),
             _ => Type::Invalid,
         }
     }
@@ -1248,7 +1232,6 @@ mod op {
                 .unwrap_or(Type::Bool),
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => eq(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
-            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, eq),
             (Type::Void, Type::Void) => Type::Bool,
             (Type::List(a), Type::List(b)) => eq(a, b),
             _ => Type::Invalid,
@@ -1273,7 +1256,6 @@ mod op {
                 .unwrap_or(Type::Bool),
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => cmp(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
-            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, cmp),
             _ => Type::Invalid,
         }
     }
@@ -1284,7 +1266,6 @@ mod op {
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, and),
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => and(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
-            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, and),
             _ => Type::Invalid,
         }
     }
@@ -1295,7 +1276,6 @@ mod op {
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, or),
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => or(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
-            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, or),
             _ => Type::Invalid,
         }
     }
