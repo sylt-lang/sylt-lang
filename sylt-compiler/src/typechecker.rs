@@ -1127,7 +1127,6 @@ pub(crate) fn solve(
     TypeChecker::new(compiler).solve(statements)
 }
 
-///
 /// Module with all the operators that can be applied
 /// to values.
 ///
