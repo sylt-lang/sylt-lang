@@ -100,8 +100,8 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     fold,
     ? "Applies a function to all elements pairwise in order, starts with the accumulator",
-    -> "fn #ITEM, [#ITEM], fn #ITEM, #ITEM -> #OUT -> #OUT",
-    [start, List(list), callable] => {
+    -> "fn [#ITEM], #ITEM, fn #ITEM, #ITEM -> #OUT -> #OUT",
+    [List(list), start, callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
         let folded = list
