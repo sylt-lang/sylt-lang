@@ -364,7 +364,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let (ctx, pass) = statement(ctx)?;
             // else?
             let (ctx, fail) = if matches!(ctx.token(), T::Else) {
-                (ctx, fail) = statement(ctx.skip(1))?
+                statement(ctx.skip(1))?
             } else {
                 // No else so we insert an empty statement instead.
                 (
