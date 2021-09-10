@@ -93,7 +93,7 @@ pub fn n_rpc_start_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError
 
     // Initialize the thread local with our list of client handles.
     CLIENT_HANDLES.with(|global_handles| {
-        global_handles.lock().unwrap().insert(HashMap::new());
+        let _ = global_handles.lock().unwrap().insert(HashMap::new());
     });
 
     // Start listening for new clients.
@@ -151,7 +151,7 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     match stream.try_clone() {
         Ok(stream) => {
             SERVER_HANDLE.with(|server_handle| {
-                server_handle
+                let _ = server_handle
                     .borrow_mut()
                     .insert(stream);
             });

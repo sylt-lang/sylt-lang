@@ -1099,7 +1099,7 @@ impl<'c> TypeChecker<'c> {
         if let Err(mut errs) = self.assignable(call_start, 0) {
             for mut err in errs.iter_mut() {
                 if let Error::TypeError { message, kind, .. } = &mut err {
-                    message.insert("the program entry point".to_string());
+                    let _ = message.insert("the program entry point".to_string());
                     match kind {
                         TypeError::WrongArity { got, expected } => {
                             std::mem::swap(got, expected);
