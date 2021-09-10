@@ -13,8 +13,7 @@ end
 // TODO(ed): Introduce type type!
 test003 :: fn do
     a := test002(false)
-    a += 1
-    a <=> 1
+    a <=> 0
 end
 
 start :: fn do
@@ -27,4 +26,3 @@ start :: fn do
     q <=> nil
     test003()
 end
-

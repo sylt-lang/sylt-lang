@@ -1133,6 +1133,7 @@ pub(crate) fn solve(
 /// Broken out because they need to be recursive.
 mod op {
     use super::Type;
+    use std::collections::BTreeSet;
 
     fn tuple_bin_op(a: &Vec<Type>, b: &Vec<Type>, f: fn(&Type, &Type) -> Type) -> Type {
         Type::Tuple(a.iter().zip(b.iter()).map(|(a, b)| f(a, b)).collect())
@@ -1140,6 +1141,19 @@ mod op {
 
     fn tuple_un_op(a: &Vec<Type>, f: fn(&Type) -> Type) -> Type {
         Type::Tuple(a.iter().map(f).collect())
+    }
+
+    fn union_bin_op(a: &BTreeSet<Type>, b: &Type, f: fn(&Type, &Type) -> Type) -> Type {
+        a.iter()
+            .find_map(|x| {
+                let x = f(x, b);
+                if x.is_nil() {
+                    None
+                } else {
+                    Some(x)
+                }
+            })
+            .unwrap_or(Type::Invalid)
     }
 
     pub fn neg(value: &Type) -> Type {
@@ -1215,6 +1229,7 @@ mod op {
                 .unwrap_or(Type::Bool),
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => eq(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
+            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, eq),
             (Type::Void, Type::Void) => Type::Bool,
             (Type::List(a), Type::List(b)) => eq(a, b),
             _ => Type::Invalid,
