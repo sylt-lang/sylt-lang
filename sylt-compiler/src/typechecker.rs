@@ -1161,6 +1161,13 @@ mod op {
             Type::Float => Type::Float,
             Type::Int => Type::Int,
             Type::Tuple(a) => tuple_un_op(a, neg),
+            Type::Union(a) => {
+                if a.iter().all(|ty| ty.is_number()) {
+                    value.clone()
+                } else {
+                    Type::Invalid
+                }
+            }
             Type::Unknown => Type::Unknown,
             _ => Type::Invalid,
         }

@@ -270,6 +270,10 @@ impl Type {
         matches!(self, Type::Void | Type::Invalid)
     }
 
+    pub fn is_number(&self) -> bool {
+        matches!(self, Type::Int | Type::Float)
+    }
+
     pub fn maybe_union<'a, B>(tys: impl Iterator<Item = &'a Type>, blobs: B) -> Type
         where
             B: Into<Option<&'a [Blob]>>,
