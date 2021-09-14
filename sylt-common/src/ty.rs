@@ -92,7 +92,7 @@ impl Display for Type {
 
 fn maybe_union_from_type<'a>(v: impl Iterator<Item = &'a Value>) -> Type {
     let types: Vec<_> = v.map(Type::from).collect();
-    Type::maybe_union(types.iter(), None)
+    Type::maybe_union(types.iter(), &[])
 }
 
 impl From<&Value> for Type {
@@ -274,26 +274,15 @@ impl Type {
         matches!(self, Type::Int | Type::Float)
     }
 
-    pub fn maybe_union<'a, B>(tys: impl Iterator<Item = &'a Type>, blobs: B) -> Type
-        where
-            B: Into<Option<&'a [Blob]>>,
-
-    {
-        let blobs: Option<_> = blobs.into();
-        let mut set = BTreeSet::new();
+    pub fn maybe_union<'a>(tys: impl Iterator<Item = &'a Type>, blobs: &[Blob]) -> Type {
+        let mut set = BTreeSet::<Type>::new();
         for ty in tys {
             // Invalid types cannot be unioned
             if matches!(ty, Type::Invalid) {
                 return Type::Invalid;
             }
-            match blobs {
-                None => {
-                    set.insert(ty.clone());
-                }
-                Some(blobs) if !set.iter().any(|x| x.fits(ty, blobs).is_ok()) => {
-                    set.insert(ty.clone());
-                }
-                _ => {}
+            if !set.iter().any(|x| x.fits(ty, blobs).is_ok()) {
+                set.insert(ty.clone());
             }
         }
         match set.len() {
