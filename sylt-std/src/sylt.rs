@@ -81,6 +81,40 @@ sylt_macro::extern_function!(
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",
+    reduce,
+    ? "Reduce the list to a single element, returns 'nil' if the input list is empty",
+    -> "fn [#ITEM], fn #ITEM, #ITEM -> #OUT -> #OUT",
+    [List(list), callable] => {
+        let list = Rc::clone(list);
+        let callable = callable.clone();
+        let reduced = list
+            .borrow()
+            .iter()
+            .cloned()
+            .reduce(|a, b| ctx.machine.eval_call(callable.clone(), &[&a, &b]).unwrap());
+        Ok(reduced.unwrap_or(Value::Nil))
+    }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    fold,
+    ? "Applies a function to all elements pairwise in order, starts with the accumulator",
+    -> "fn [#ITEM], #ITEM, fn #ITEM, #ITEM -> #OUT -> #OUT",
+    [List(list), start, callable] => {
+        let list = Rc::clone(list);
+        let callable = callable.clone();
+        let folded = list
+            .borrow()
+            .iter()
+            .fold(start.clone(), |a, b| ctx.machine.eval_call(callable.clone(), &[&a, &b]).unwrap());
+        Ok(folded)
+    }
+);
+
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
     filter,
     ? "Creates a new list with the elements that pass the test function",
     -> "fn [#ITEM], fn #ITEM -> bool -> [#ITEM]",
@@ -493,6 +527,17 @@ sylt_macro::extern_function!(
             .collect::<Vec<_>>()
             .join(" "));
         Ok(Nil)
+    }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    spy,
+    ? "Prints a values to stdout and then returns it",
+    -> "fn str, #X -> #X",
+    [tag, x] => {
+        println!("{}: {}", tag, x);
+        Ok(x.clone())
     }
 );
 
