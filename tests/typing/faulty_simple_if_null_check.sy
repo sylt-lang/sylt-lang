@@ -1,0 +1,16 @@
+f :: fn a: bool -> int?
+    if a do
+        ret 1
+    else do
+        ret nil
+    end
+end
+
+start :: fn do
+    a := f(true)
+
+    a = a + 1
+    a <=> 2
+end
+
+// error: $BinOp { .. }
