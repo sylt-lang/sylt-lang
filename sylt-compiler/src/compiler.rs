@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{hash_map::Entry, BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use sylt_common::error::Error;
@@ -153,7 +153,6 @@ struct Compiler {
     namespace_id_to_path: HashMap<NamespaceID, PathBuf>,
 
     namespaces: Vec<Namespace>,
-    blobs: Vec<Blob>,
 
     loops: Vec<LoopFrame>,
     frames: Vec<Frame>,
@@ -200,7 +199,6 @@ impl Compiler {
 
             namespace_id_to_path: HashMap::new(),
             namespaces: Vec::new(),
-            blobs: Vec::new(),
 
             loops: Vec::new(),
             frames: Vec::new(),
@@ -746,7 +744,10 @@ impl Compiler {
             Read(ident) => self.namespaces[namespace]
                 .get(&ident.name)
                 .and_then(|name| match name {
-                    Name::Blob(blob) => Some(Type::Instance(*blob)),
+                    Name::Blob(blob) => match &self.constants[*blob] {
+                        Value::Blob(ty) => Some(ty.clone()),
+                        _ => None,
+                    }
                     _ => None,
                 })
                 .unwrap_or_else(|| {
@@ -760,7 +761,10 @@ impl Compiler {
                 .resolve_type_namespace(&inner, namespace, ctx)
                 .and_then(|namespace| self.namespaces[namespace].get(&ident.name))
                 .and_then(|name| match name {
-                    Name::Blob(blob) => Some(Type::Instance(*blob)),
+                    Name::Blob(blob) => match &self.constants[*blob] {
+                        Value::Blob(ty) => Some(ty.clone()),
+                        _ => None,
+                    }
                     _ => None,
                 })
                 .unwrap_or_else(|| {
@@ -845,13 +849,16 @@ impl Compiler {
             Use { .. } | EmptyStatement => {}
 
             Blob { name, fields } => {
+                let fields = fields.iter()
+                    .map(|(k, v)| (k.clone(), self.resolve_type(&v, ctx)))
+                    .collect();
                 if let Some(Name::Blob(slot)) = self.namespaces[ctx.namespace].get(name) {
-                    let slot = *slot;
-                    self.blobs[slot].fields = fields
-                        .clone()
-                        .into_iter()
-                        .map(|(k, v)| (k, self.resolve_type(&v, ctx)))
-                        .collect();
+                    match &mut self.constants[*slot] {
+                        Value::Blob(Type::Blob(_, b_fields)) => {
+                            *b_fields = fields;
+                        }
+                        _ => unreachable!(),
+                    }
                 } else {
                     error!(
                         self,
@@ -867,7 +874,7 @@ impl Compiler {
             IsCheck { lhs, rhs } => {
                 let lhs = self.resolve_type(lhs, ctx);
                 let rhs = self.resolve_type(rhs, ctx);
-                if let Err(msg) = rhs.fits(&lhs, &self.blobs) {
+                if let Err(msg) = rhs.fits(&lhs) {
                     error!(
                         self,
                         ctx, statement.span,
@@ -1141,7 +1148,6 @@ impl Compiler {
                     .map(|x| Rc::new(RefCell::new(x)))
                     .collect(),
                 functions: functions.iter().map(|(_, f, _)| *f).collect(),
-                blobs: self.blobs,
                 constants: self.constants,
                 strings: self.strings,
             })
@@ -1188,9 +1194,9 @@ impl Compiler {
                 match &statement.kind {
                     Blob { name, .. } => match namespace.entry(name.to_owned()) {
                         Entry::Vacant(_) => {
-                            let id = self.blobs.len();
-                            self.blobs.push(crate::Blob::new(id, slot, name));
-                            let blob = self.constant(Value::Blob(id));
+                            //let id = self.blobs.len();
+                            //self.blobs.push(crate::Blob::new(id, slot, name));
+                            let blob = self.constant(Value::Blob(Type::Blob(name.clone(), Default::default())));
                             if let Op::Constant(slot) = blob {
                                 namespace.insert(name.to_owned(), Name::Blob(slot));
                             } else {

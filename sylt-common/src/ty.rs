@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::hash::Hash;
 use std::fmt::{Debug, Display};
 
@@ -26,8 +26,8 @@ pub enum Type {
     Set(Box<Type>),
     Dict(Box<Type>, Box<Type>),
     Function(Vec<Type>, Box<Type>),
-    Blob(usize),
-    Instance(usize),
+    Blob(String, BTreeMap<String, Type>),
+    Instance(String, BTreeMap<String, Type>),
     ExternFunction(usize),
 
     Invalid,
@@ -82,8 +82,8 @@ impl Display for Type {
                 }
                 write!(f, " -> {}", ret)
             }
-            Type::Blob(id) => write!(f, "Blob({})", id),
-            Type::Instance(id) => write!(f, "Instance({})", id),
+            Type::Blob(..) => write!(f, "TODO"),
+            Type::Instance(..) => write!(f, "TODO"),
             Type::ExternFunction(id) => write!(f, "ExternFunction({})", id),
             Type::Invalid => write!(f, "Invalid"),
         }
@@ -92,14 +92,17 @@ impl Display for Type {
 
 fn maybe_union_from_type<'a>(v: impl Iterator<Item = &'a Value>) -> Type {
     let types: Vec<_> = v.map(Type::from).collect();
-    Type::maybe_union(types.iter(), &[])
+    Type::maybe_union(types.iter())
 }
 
 impl From<&Value> for Type {
     fn from(value: &Value) -> Type {
         match value {
-            Value::Instance(b, _) => Type::Instance(*b),
-            Value::Blob(b) => Type::Blob(*b),
+            Value::Instance(f) => Type::Blob("anonymous".to_string(), f.borrow()
+                .iter()
+                .map(|(n, v)| (n.clone(), v.into()))
+                .collect()),
+            Value::Blob(b) => b.clone(),
             Value::Tuple(v) => Type::Tuple(v.iter().map(Type::from).collect()),
             Value::List(v) => {
                 let t = maybe_union_from_type(v.borrow().iter());
@@ -137,9 +140,9 @@ impl Type {
     // TODO(ed): Swap order of arguments
     /// Checks if the other type is valid in a place where the self type is. It's an asymmetrical
     /// comparison for types useful when checking assignment.
-    pub fn fits(&self, other: &Self, blobs: &[Blob]) -> Result<(), String> {
+    pub fn fits(&self, other: &Self) -> Result<(), String> {
         let mut same = HashSet::new();
-        self.inner_fits(other, blobs, &mut same)
+        self.inner_fits(other, &mut same)
     }
 
     /// The type-comparison heavy-weight champion.
@@ -147,7 +150,6 @@ impl Type {
     fn inner_fits<'t>(
         &'t self,
         other: &'t Self,
-        blobs: &'t [Blob],
         same: &mut HashSet<(&'t Type, &'t Type)>
     ) -> Result<(), String> {
 
@@ -161,15 +163,15 @@ impl Type {
 
         match (self, other) {
             (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
-            (Type::List(a), Type::List(b)) => a.inner_fits(b, blobs, same),
-            (Type::Set(a), Type::Set(b)) => a.inner_fits(b, blobs, same),
+            (Type::List(a), Type::List(b)) => a.inner_fits(b, same),
+            (Type::Set(a), Type::Set(b)) => a.inner_fits(b, same),
             (Type::Dict(ak, av), Type::Dict(bk, bv)) => {
-                ak.inner_fits(bk, blobs, same)?;
-                av.inner_fits(bv, blobs, same)
+                ak.inner_fits(bk, same)?;
+                av.inner_fits(bv, same)
             }
             (Type::Tuple(a), Type::Tuple(b)) => {
                 for (i, (x, y)) in a.iter().zip(b).enumerate() {
-                    if x.inner_fits(y, blobs, same).is_err() {
+                    if x.inner_fits(y, same).is_err() {
                         return Err(
                             format!(
                                 "'{:?}' is not a '{:?}', element #{} has type '{:?}' but expected '{:?}'",
@@ -185,7 +187,7 @@ impl Type {
             }
             (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
                 for (i, (x, y)) in a_args.iter().zip(b_args).enumerate() {
-                    if x.inner_fits(y, blobs, same).is_err() {
+                    if x.inner_fits(y, same).is_err() {
                         return Err(
                             format!(
                                 "'{:?}' is not a '{:?}', argument #{} has type '{:?}' but expected '{:?}'",
@@ -205,29 +207,29 @@ impl Type {
                             b_args.len()
                         ));
                 }
-                a_ret.inner_fits(b_ret, blobs, same)
+                a_ret.inner_fits(b_ret, same)
             }
             (Type::Union(_), Type::Union(b)) => {
-                if let Err(msg) = b.iter().map(|x| self.inner_fits(x, blobs, same)).collect::<Result<Vec<_>, _>>() {
+                if let Err(msg) = b.iter().map(|x| self.inner_fits(x, same)).collect::<Result<Vec<_>, _>>() {
                     Err(format!("'{:?}' doesn't fit a '{:?}, because {}'", self, other, msg))
                 } else {
                     Ok(())
                 }
             }
-            (Type::Instance(a), Type::Instance(b)) | (Type::Blob(a), Type::Blob(b)) => {
+
+            | (Type::Instance(an, a), Type::Instance(bn, b))
+            | (Type::Blob(an, a), Type::Blob(bn, b)) => {
                 if a == b {
                     return Ok(());
                 }
-                let a_fields = &blobs[*a].fields;
-                let b_fields = &blobs[*b].fields;
-                for (f, t) in a_fields.iter() {
-                    if let Some(y) = b_fields.get(f) {
-                        if t.inner_fits(y, blobs, same).is_err() {
+                for (f, t) in a.iter() {
+                    if let Some(y) = b.get(f) {
+                        if t.inner_fits(y, same).is_err() {
                             return Err(
                                 format!(
                                     "'{}' is not a '{}', field '{:?}' has type '{:?}' but expected '{:?}'",
-                                    blobs[*a].name,
-                                    blobs[*b].name,
+                                    an,
+                                    bn,
                                     f,
                                     y,
                                     t
@@ -236,21 +238,21 @@ impl Type {
                     } else {
                         return Err(format!(
                             "'{:?}' is not a '{:?}', '{:?}' has no field '{:?}'",
-                            blobs[*a].name, blobs[*b].name, blobs[*b].name, f
+                            an, bn, bn, f
                         ));
                     }
                 }
                 Ok(())
             }
             (a, Type::Union(b)) => {
-                if !b.iter().all(|x| x.inner_fits(a, blobs, same).is_ok()) {
+                if !b.iter().all(|x| x.inner_fits(a, same).is_ok()) {
                     Err(format!("'{:?}' cannot fit a union '{:?}'", self, other))
                 } else {
                     Ok(())
                 }
             }
             (Type::Union(a), b) => {
-                if a.iter().any(|x| x.inner_fits(b, blobs, same).is_ok()) {
+                if a.iter().any(|x| x.inner_fits(b, same).is_ok()) {
                     Ok(())
                 } else {
                     Err(format!("Union '{:?}' cannot fit a '{:?}'", self, other))
@@ -274,14 +276,14 @@ impl Type {
         matches!(self, Type::Int | Type::Float)
     }
 
-    pub fn maybe_union<'a>(tys: impl Iterator<Item = &'a Type>, blobs: &[Blob]) -> Type {
+    pub fn maybe_union<'a>(tys: impl Iterator<Item = &'a Type>) -> Type {
         let mut set = BTreeSet::<Type>::new();
         for ty in tys {
             // Invalid types cannot be unioned
             if matches!(ty, Type::Invalid) {
                 return Type::Invalid;
             }
-            if !set.iter().any(|x| x.fits(ty, blobs).is_ok()) {
+            if !set.iter().any(|x| x.fits(ty).is_ok()) {
                 set.insert(ty.clone());
             }
         }

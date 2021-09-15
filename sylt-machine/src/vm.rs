@@ -208,7 +208,6 @@ impl VM {
         self.constants = prog.constants.clone();
         self.strings = prog.strings.clone();
         self.blocks = prog.blocks.clone();
-        self.blobs = prog.blobs.clone();
         self.args = Vec::from(args);
 
         self.extern_functions = prog.functions.clone();
@@ -580,20 +579,20 @@ impl Machine for VM {
             Op::GetField(field) => {
                 let inst = self.pop();
                 match inst {
-                    Value::Instance(ty, values) => {
-                        let ty = &self.blobs[ty];
+                    Value::Instance(values) => {
                         let field = self.string(field);
                         match values.borrow().get(field) {
                             Some(value) => {
                                 self.push(value.clone());
                             }
                             _ => {
-                                let err = Err(self.error(
-                                    RuntimeError::UnknownField(ty.name.clone(), field.clone()),
-                                    None,
-                                ));
-                                self.push(Value::Nil);
-                                return err;
+                                unreachable!();
+                                //let err = Err(self.error(
+                                //    RuntimeError::UnknownField(ty.name.clone(), field.clone()),
+                                //    None,
+                                //));
+                                //self.push(Value::Nil);
+                                //return err;
                             }
                         };
                     }
@@ -609,12 +608,12 @@ impl Machine for VM {
             Op::AssignField(field) => {
                 let (inst, value) = self.poppop();
                 match inst {
-                    Value::Instance(ty, values) => {
-                        let ty = &self.blobs[ty];
+                    Value::Instance(values) => {
                         let field = self.string(field).clone();
-                        if !ty.fields.contains_key(&field) {
-                            error!(self, RuntimeError::UnknownField(ty.name.to_string(), field));
-                        }
+                        //if !ty.fields.contains_key(&field) {
+                        //    unreachable!();
+                        //    error!(self, RuntimeError::UnknownField(ty.name.to_string(), field));
+                        //}
                         (*values).borrow_mut().insert(field, value);
                     }
                     inst => {
@@ -636,7 +635,7 @@ impl Machine for VM {
                     Value::Ty(ty) => ty,
                     val => Type::from(val),
                 };
-                let result = a.fits(&b, &self.blobs).is_ok();
+                let result = a.fits(&b).is_ok();
                 self.push(Value::Bool(result));
             }
 
@@ -751,8 +750,7 @@ impl Machine for VM {
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {
-                    Value::Blob(blob_slot) => {
-                        let blob = &self.blobs[blob_slot];
+                    Value::Blob(Type::Blob(name, fields)) => {
                         let mut values = self.stack[new_base + 1..]
                             .chunks_exact(2)
                             .map(|b| {
@@ -764,15 +762,14 @@ impl Machine for VM {
                             })
                             .collect::<HashMap<_, _>>();
                         self.stack.truncate(new_base);
-                        for name in blob.fields.keys() {
+                        for name in fields.keys() {
                             values.entry(name.clone()).or_insert(Value::Nil);
                         }
-                        values.insert("_id".to_string(), Value::Int(blob.id as i64));
                         values.insert(
                             "_name".to_string(),
-                            Value::String(Rc::new(blob.name.clone())),
+                            Value::String(Rc::new(name)),
                         );
-                        self.push(Value::Instance(blob_slot, Rc::new(RefCell::new(values))));
+                        self.push(Value::Instance(Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, _, block) => {
                         let inner = self.blocks[block].borrow();
