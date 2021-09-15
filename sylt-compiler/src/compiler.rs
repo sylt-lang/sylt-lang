@@ -1180,7 +1180,7 @@ impl Compiler {
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
 
-            let mut namespace = self.namespaces[slot].clone(); // Always empty
+            let mut namespace = Namespace::new();
             for statement in module.statements.iter() {
                 use StatementKind::*;
                 if let Some((name, ident_name, span)) = match &statement.kind {
