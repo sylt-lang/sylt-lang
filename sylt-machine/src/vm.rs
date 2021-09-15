@@ -5,7 +5,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::rc::Rc;
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::{
-    Blob, Block, BlockLinkState, Frame, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction,
+    Block, BlockLinkState, Frame, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction,
     Type, UpValue, Value,
 };
 
@@ -54,7 +54,6 @@ pub struct VM {
     stack: Vec<Value>,
     frames: Vec<Frame>,
     blocks: Vec<Rc<RefCell<Block>>>,
-    blobs: Vec<Blob>,
     args: Vec<String>,
 
     constants: Vec<Value>,
@@ -74,7 +73,6 @@ impl VM {
             stack: Vec::new(),
             frames: Vec::new(),
             blocks: Vec::new(),
-            blobs: Vec::new(),
             args: Vec::new(),
 
             constants: Vec::new(),
@@ -257,8 +255,8 @@ impl Machine for VM {
         Cow::Borrowed(&self.stack[base..])
     }
 
-    fn blobs(&self) -> &[Blob] {
-        &self.blobs
+    fn constants(&self) -> &[Value] {
+        &self.constants
     }
 
     fn args(&self) -> &[String] {

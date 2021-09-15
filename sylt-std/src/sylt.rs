@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use sungod::Ra;
 use sylt_common::error::RuntimeError;
-use sylt_common::{Blob, RuntimeContext, Type, Value};
+use sylt_common::{RuntimeContext, Type, Value};
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",
