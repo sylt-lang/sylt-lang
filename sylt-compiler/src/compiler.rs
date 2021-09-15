@@ -1183,11 +1183,11 @@ impl Compiler {
             let mut namespace = Namespace::new();
             for statement in module.statements.iter() {
                 use StatementKind::*;
-                if let Some((name, ident_name, span)) = match &statement.kind {
+                let (name, ident_name, span) = match &statement.kind {
                     Blob { name, .. } => {
                         let blob = self.constant(Value::Blob(Type::Blob(name.clone(), Default::default())));
                         if let Op::Constant(slot) = blob {
-                            Some((Name::Blob(slot), name.clone(), statement.span))
+                            (Name::Blob(slot), name.clone(), statement.span)
                         } else {
                             unreachable!()
                         }
@@ -1198,7 +1198,7 @@ impl Compiler {
                             NameIdentifier::Alias(ident) => ident,
                         };
                         let other = path_to_namespace_id[file];
-                        Some((Name::Namespace(other), ident.name.clone(), ident.span))
+                        (Name::Namespace(other), ident.name.clone(), ident.span)
                     }
                     Definition { ident: Identifier { name, span }, kind, .. } => {
                         let var = self.define(name, *kind, statement.span);
@@ -1208,29 +1208,29 @@ impl Compiler {
                         let unknown = self.constant(Value::Nil);
                         self.add_op(ctx, *span, unknown);
 
-                        Some((Name::Global(var), name.clone(), statement.span))
+                        (Name::Global(var), name.clone(), statement.span)
                     }
 
                     // Handled later since we need type information.
                     | IsCheck { .. }
-                    | EmptyStatement => None,
+                    | EmptyStatement => continue,
 
                     _ => {
                         error!(self, ctx, statement.span, "Invalid outer statement");
-                        None
+                        continue;
                     }
-                } {
-                    match namespace.entry(ident_name.to_owned()) {
-                        Entry::Vacant(vac) => { vac.insert(name); }
-                        Entry::Occupied(_) => {
-                            error!(
-                                self,
-                                ctx,
-                                span,
-                                "A global variable with the name '{}' already exists",
-                                ident_name
-                            );
-                        }
+                };
+
+                match namespace.entry(ident_name.to_owned()) {
+                    Entry::Vacant(vac) => { vac.insert(name); }
+                    Entry::Occupied(_) => {
+                        error!(
+                            self,
+                            ctx,
+                            span,
+                            "A global variable with the name '{}' already exists",
+                            ident_name
+                        );
                     }
                 }
             }
