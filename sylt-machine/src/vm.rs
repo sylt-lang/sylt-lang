@@ -586,13 +586,12 @@ impl Machine for VM {
                                 self.push(value.clone());
                             }
                             _ => {
-                                unreachable!();
-                                //let err = Err(self.error(
-                                //    RuntimeError::UnknownField(ty.name.clone(), field.clone()),
-                                //    None,
-                                //));
-                                //self.push(Value::Nil);
-                                //return err;
+                                let err = Err(self.error(
+                                    RuntimeError::UnknownField(field.clone()),
+                                    None,
+                                ));
+                                self.push(Value::Nil);
+                                return err;
                             }
                         };
                     }
@@ -610,10 +609,6 @@ impl Machine for VM {
                 match inst {
                     Value::Instance(values) => {
                         let field = self.string(field).clone();
-                        //if !ty.fields.contains_key(&field) {
-                        //    unreachable!();
-                        //    error!(self, RuntimeError::UnknownField(ty.name.to_string(), field));
-                        //}
                         (*values).borrow_mut().insert(field, value);
                     }
                     inst => {

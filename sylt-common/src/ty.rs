@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::hash::Hash;
 use std::fmt::{Debug, Display};
 
-use crate::{Blob, Value};
+use crate::Value;
 
 pub trait Numbered {
     fn to_number(&self) -> usize;
@@ -82,8 +82,8 @@ impl Display for Type {
                 }
                 write!(f, " -> {}", ret)
             }
-            Type::Blob(..) => write!(f, "TODO"),
-            Type::Instance(..) => write!(f, "TODO"),
+            Type::Blob(name, _) => write!(f, "{}", name),
+            Type::Instance(name, _) => write!(f, "{}", name),
             Type::ExternFunction(id) => write!(f, "ExternFunction({})", id),
             Type::Invalid => write!(f, "Invalid"),
         }
@@ -217,8 +217,8 @@ impl Type {
                 }
             }
 
-            | (Type::Instance(an, a), Type::Instance(bn, b))
-            | (Type::Blob(an, a), Type::Blob(bn, b)) => {
+            (Type::Instance(an, a) | Type::Blob(an, a),
+             Type::Instance(bn, b) | Type::Blob(bn, b)) => {
                 if a == b {
                     return Ok(());
                 }
