@@ -35,7 +35,7 @@ pub enum StatementKind {
 
     /// Defines a new Blob.
     ///
-    /// `A :: Blob { <field>.. }`.
+    /// `A :: blob { <field>.. }`.
     Blob {
         name: String,
         fields: HashMap<String, Type>,
