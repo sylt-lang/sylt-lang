@@ -521,7 +521,7 @@ impl Compiler {
                 self.add_op(ctx, expression.span, function);
             }
 
-            Instance { blob, fields } => {
+            Blob { blob, fields } => {
                 self.assignable(blob, ctx);
                 for (name, field) in fields.iter() {
                     let name = self.constant(Value::String(Rc::new(name.clone())));

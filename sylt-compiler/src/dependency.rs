@@ -183,7 +183,7 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<Name> {
             ctx.variables.truncate(vars_before);
             deps
         },
-        Instance { blob, fields } => {
+        Blob { blob, fields } => {
             assignable_dependencies(ctx, blob).union(&fields.iter()
                 .map(|(_, expr)| dependencies(ctx, expr))
                 .flatten()

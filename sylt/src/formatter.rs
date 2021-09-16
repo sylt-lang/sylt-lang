@@ -54,7 +54,7 @@ fn write_parameters<W: Write>(
     Ok(())
 }
 
-fn write_blob_instance_fields<W: Write>(
+fn write_blob_fields<W: Write>(
     dest: &mut W,
     indent: u32,
     fields: Vec<(String, Expression)>,
@@ -310,12 +310,12 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             }
             write_statement(dest, indent, *body)?;
         }
-        ExpressionKind::Instance { blob, fields } => {
+        ExpressionKind::Blob { blob, fields } => {
             write_assignable(dest, indent, blob)?;
             write!(dest, " {{")?;
             if !fields.is_empty() {
                 write!(dest, "\n")?;
-                write_blob_instance_fields(dest, indent + 1, fields)?;
+                write_blob_fields(dest, indent + 1, fields)?;
                 write_indents(dest, indent)?;
             }
             write!(dest, "}}")?;

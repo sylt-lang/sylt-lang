@@ -366,7 +366,7 @@ impl<'c> TypeChecker<'c> {
                                 self,
                                 span,
                                 TypeError::Violating(ty.clone()),
-                                "Only namespaces and blob instances support '.'-access"
+                                "Only namespaces and blobs support '.'-access"
                             ),
                         }
                     }
@@ -689,7 +689,7 @@ impl<'c> TypeChecker<'c> {
                 )
             }
 
-            EK::Instance { blob, fields } => {
+            EK::Blob { blob, fields } => {
                 let (blob_name, blob_fields) = match self.assignable(blob, self.namespace)? {
                     Lookup::Value(ty, _) => {
                         match ty {
