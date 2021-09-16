@@ -577,7 +577,7 @@ impl Machine for VM {
             Op::GetField(field) => {
                 let inst = self.pop();
                 match inst {
-                    Value::Instance(values) => {
+                    Value::Blob(values) => {
                         let field = self.string(field);
                         match values.borrow().get(field) {
                             Some(value) => {
@@ -605,7 +605,7 @@ impl Machine for VM {
             Op::AssignField(field) => {
                 let (inst, value) = self.poppop();
                 match inst {
-                    Value::Instance(values) => {
+                    Value::Blob(values) => {
                         let field = self.string(field).clone();
                         (*values).borrow_mut().insert(field, value);
                     }
@@ -762,7 +762,7 @@ impl Machine for VM {
                             "_name".to_string(),
                             Value::String(Rc::new(name)),
                         );
-                        self.push(Value::Instance(Rc::new(RefCell::new(values))));
+                        self.push(Value::Blob(Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, _, block) => {
                         let inner = self.blocks[block].borrow();

@@ -54,7 +54,7 @@ impl FlatValue {
 
         let val = match value {
             Value::Ty(ty) => FlatValue::Ty(ty.clone()),
-            Value::Instance(values) => FlatValue::Instance(
+            Value::Blob(values) => FlatValue::Instance(
                 values
                     .borrow()
                     .iter()
@@ -102,7 +102,7 @@ impl FlatValue {
         match value {
             FlatValue::Ty(ty) => Value::Ty(ty),
             FlatValue::Blob(slot) => Value::Ty(slot),
-            FlatValue::Instance(_) => Value::Instance(Default::default()),
+            FlatValue::Instance(_) => Value::Blob(Default::default()),
             // Tuple is specificly tricky - since it doesn't have a RefCell.
             FlatValue::Tuple(_) => Value::Tuple(Rc::new(Vec::new())),
             FlatValue::List(_) => Value::List(Rc::new(RefCell::new(Vec::new()))),
@@ -148,7 +148,7 @@ impl FlatValue {
                         values.push(Rc::new(RefCell::new(UpValue { slot: up.slot, value: mapping[up.value].clone() })));
                     }
                 }
-                (FlatValue::Instance(flat), Value::Instance(values)) => {
+                (FlatValue::Instance(flat), Value::Blob(values)) => {
                     let mut values = values.borrow_mut();
                     for (key, id) in flat {
                         values.insert(key.clone(), mapping[*id].clone());

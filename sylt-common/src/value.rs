@@ -11,7 +11,7 @@ use crate::{ty::Type, upvalue::UpValue};
 #[derive(Deserialize, Serialize)]
 pub enum Value {
     Ty(Type),
-    Instance(Rc<RefCell<HashMap<String, Value>>>),
+    Blob(Rc<RefCell<HashMap<String, Value>>>),
     Tuple(Rc<Vec<Value>>),
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
@@ -41,7 +41,7 @@ impl From<&Type> for Value {
             | Type::Union(_) => panic!("This type cannot be represented as a value!"),
             Type::Void => Value::Nil,
             Type::Blob(..) => Value::Ty(ty.clone()),
-            Type::Instance(_, f) => Value::Instance(Rc::new(RefCell::new(
+            Type::Instance(_, f) => Value::Blob(Rc::new(RefCell::new(
                 f.iter().map(|(n, t)| (n.clone(), t.into())).collect()
             ))),
             Type::Tuple(fields) => Value::Tuple(Rc::new(fields.iter().map(Value::from).collect())),
@@ -141,7 +141,7 @@ impl Value {
             Value::Float(f) => f as *const _ as usize,
             Value::Int(i) => i as *const _ as usize,
             Value::Bool(b) => b as *const _ as usize,
-            Value::Instance(v) => Rc::as_ptr(v) as usize,
+            Value::Blob(v) => Rc::as_ptr(v) as usize,
             Value::String(s) => Rc::as_ptr(s) as usize,
             Value::List(v) => Rc::as_ptr(v) as usize,
             Value::Set(v) => Rc::as_ptr(v) as usize,
@@ -162,7 +162,7 @@ impl Value {
     ) -> std::fmt::Result {
         match self {
             Value::Ty(ty) => write!(fmt, "<type \"{:?}\">", ty),
-            Value::Instance(v) => {
+            Value::Blob(v) => {
                 write!(fmt, "{} (0x{:x}) {{",
                     if let Some(Value::String(name)) = v.borrow().get("_name") {
                         name.as_str()
