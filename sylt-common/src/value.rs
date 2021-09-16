@@ -40,8 +40,7 @@ impl From<&Type> for Value {
             | Type::Generic(_)
             | Type::Union(_) => panic!("This type cannot be represented as a value!"),
             Type::Void => Value::Nil,
-            Type::Blob(..) => Value::Ty(ty.clone()),
-            Type::Instance(_, f) => Value::Blob(Rc::new(RefCell::new(
+            Type::Blob(_, f) => Value::Blob(Rc::new(RefCell::new(
                 f.iter().map(|(n, t)| (n.clone(), t.into())).collect()
             ))),
             Type::Tuple(fields) => Value::Tuple(Rc::new(fields.iter().map(Value::from).collect())),

@@ -347,7 +347,7 @@ impl<'c> TypeChecker<'c> {
                     Value(ty, _kind) => {
                         match &ty {
                             Type::Unknown => { Ok(Value(Type::Unknown, VarKind::Mutable)) }
-                            Type::Instance(_, fields) | Type::Blob(_, fields) => {
+                            Type::Blob(_, fields) => {
                                 match fields.get(&field.name) {
                                     Some(ty) => Ok(Value(ty.clone(), VarKind::Mutable)),
                                     None => match field.name.as_str() {
@@ -776,7 +776,7 @@ impl<'c> TypeChecker<'c> {
                 if !errors.is_empty() {
                     return Err(errors);
                 }
-                Type::Instance(blob_name, blob_fields)
+                Type::Blob(blob_name, blob_fields)
             }
         };
         Ok(res)
