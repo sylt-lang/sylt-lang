@@ -745,7 +745,7 @@ impl Compiler {
                 .get(&ident.name)
                 .and_then(|name| match name {
                     Name::Blob(blob) => match &self.constants[*blob] {
-                        Value::Blob(ty) => Some(ty.clone()),
+                        Value::Ty(ty) => Some(ty.clone()),
                         _ => None,
                     }
                     _ => None,
@@ -762,7 +762,7 @@ impl Compiler {
                 .and_then(|namespace| self.namespaces[namespace].get(&ident.name))
                 .and_then(|name| match name {
                     Name::Blob(blob) => match &self.constants[*blob] {
-                        Value::Blob(ty) => Some(ty.clone()),
+                        Value::Ty(ty) => Some(ty.clone()),
                         _ => None,
                     }
                     _ => None,
@@ -854,7 +854,7 @@ impl Compiler {
                     .collect();
                 if let Some(Name::Blob(slot)) = self.namespaces[ctx.namespace].get(name) {
                     match &mut self.constants[*slot] {
-                        Value::Blob(Type::Blob(_, b_fields)) => {
+                        Value::Ty(Type::Blob(_, b_fields)) => {
                             *b_fields = fields;
                         }
                         _ => unreachable!(),
@@ -1185,7 +1185,7 @@ impl Compiler {
                 use StatementKind::*;
                 let (name, ident_name, span) = match &statement.kind {
                     Blob { name, .. } => {
-                        let blob = self.constant(Value::Blob(Type::Blob(name.clone(), Default::default())));
+                        let blob = self.constant(Value::Ty(Type::Blob(name.clone(), Default::default())));
                         if let Op::Constant(slot) = blob {
                             (Name::Blob(slot), name.clone(), statement.span)
                         } else {

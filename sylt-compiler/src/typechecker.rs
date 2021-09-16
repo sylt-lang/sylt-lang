@@ -297,7 +297,7 @@ impl<'c> TypeChecker<'c> {
                         );
                     }
                     Some(Name::Blob(blob)) => {
-                        if let crate::Value::Blob(b) = &self.compiler.constants[*blob] {
+                        if let crate::Value::Ty(b) = &self.compiler.constants[*blob] {
                             return Ok(Value(b.clone(), VarKind::Const));
                         }
                     }

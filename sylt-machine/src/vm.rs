@@ -743,7 +743,7 @@ impl Machine for VM {
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {
-                    Value::Blob(Type::Blob(name, fields)) => {
+                    Value::Ty(Type::Blob(name, fields)) => {
                         let mut values = self.stack[new_base + 1..]
                             .chunks_exact(2)
                             .map(|b| {

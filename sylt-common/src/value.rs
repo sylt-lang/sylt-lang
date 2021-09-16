@@ -11,7 +11,6 @@ use crate::{ty::Type, upvalue::UpValue};
 #[derive(Deserialize, Serialize)]
 pub enum Value {
     Ty(Type),
-    Blob(Type),
     Instance(Rc<RefCell<HashMap<String, Value>>>),
     Tuple(Rc<Vec<Value>>),
     List(Rc<RefCell<Vec<Value>>>),
@@ -41,7 +40,7 @@ impl From<&Type> for Value {
             | Type::Generic(_)
             | Type::Union(_) => panic!("This type cannot be represented as a value!"),
             Type::Void => Value::Nil,
-            Type::Blob(..) => Value::Blob(ty.clone()),
+            Type::Blob(..) => Value::Ty(ty.clone()),
             Type::Instance(_, f) => Value::Instance(Rc::new(RefCell::new(
                 f.iter().map(|(n, t)| (n.clone(), t.into())).collect()
             ))),
@@ -139,7 +138,6 @@ impl Value {
     pub fn unique_id(&self) -> usize {
         match self {
             Value::Ty(ty) => ty as *const _ as usize,
-            Value::Blob(b) => b as *const _ as usize,
             Value::Float(f) => f as *const _ as usize,
             Value::Int(i) => i as *const _ as usize,
             Value::Bool(b) => b as *const _ as usize,
@@ -164,7 +162,6 @@ impl Value {
     ) -> std::fmt::Result {
         match self {
             Value::Ty(ty) => write!(fmt, "<type \"{:?}\">", ty),
-            Value::Blob(b) => write!(fmt, "<blob \"{}\">", b),
             Value::Instance(v) => {
                 write!(fmt, "{} (0x{:x}) {{",
                     if let Some(Value::String(name)) = v.borrow().get("_name") {

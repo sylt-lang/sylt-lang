@@ -54,7 +54,6 @@ impl FlatValue {
 
         let val = match value {
             Value::Ty(ty) => FlatValue::Ty(ty.clone()),
-            Value::Blob(ty) => FlatValue::Blob(ty.clone()),
             Value::Instance(values) => FlatValue::Instance(
                 values
                     .borrow()
@@ -102,7 +101,7 @@ impl FlatValue {
     fn partial_unpack(value: FlatValue) -> Value {
         match value {
             FlatValue::Ty(ty) => Value::Ty(ty),
-            FlatValue::Blob(slot) => Value::Blob(slot),
+            FlatValue::Blob(slot) => Value::Ty(slot),
             FlatValue::Instance(_) => Value::Instance(Default::default()),
             // Tuple is specificly tricky - since it doesn't have a RefCell.
             FlatValue::Tuple(_) => Value::Tuple(Rc::new(Vec::new())),

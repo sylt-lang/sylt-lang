@@ -102,7 +102,6 @@ impl From<&Value> for Type {
                 .iter()
                 .map(|(n, v)| (n.clone(), v.into()))
                 .collect()),
-            Value::Blob(b) => b.clone(),
             Value::Tuple(v) => Type::Tuple(v.iter().map(Type::from).collect()),
             Value::List(v) => {
                 let t = maybe_union_from_type(v.borrow().iter());
