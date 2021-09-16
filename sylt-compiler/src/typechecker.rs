@@ -347,7 +347,7 @@ impl<'c> TypeChecker<'c> {
                     Value(ty, _kind) => {
                         match &ty {
                             Type::Unknown => { Ok(Value(Type::Unknown, VarKind::Mutable)) }
-                            Type::Blob(_, fields) => {
+                            Type::Blob(name, fields) => {
                                 match fields.get(&field.name) {
                                     Some(ty) => Ok(Value(ty.clone(), VarKind::Mutable)),
                                     None => match field.name.as_str() {
@@ -357,7 +357,7 @@ impl<'c> TypeChecker<'c> {
                                         _ => err_type_error!(
                                             self,
                                             field.span,
-                                            TypeError::UnknownField { field: field.name.clone() }
+                                            TypeError::UnknownField { blob: name.clone(), field: field.name.clone() }
                                         ),
                                     }
                                 }
@@ -744,7 +744,7 @@ impl<'c> TypeChecker<'c> {
                             errors.push(type_error!(
                                 self,
                                 *span,
-                                TypeError::UnknownField { field: name.clone() },
+                                TypeError::UnknownField { blob: blob_name.clone(), field: name.clone() },
                                 "{}.{} does not exist on the original blob type",
                                 blob_name,
                                 name

@@ -585,7 +585,10 @@ impl Machine for VM {
                             }
                             _ => {
                                 let err = Err(self.error(
-                                    RuntimeError::UnknownField(field.clone()),
+                                    RuntimeError::UnknownField(
+                                        values.borrow()["_name"].to_string(),
+                                        field.clone()
+                                    ),
                                     None,
                                 ));
                                 self.push(Value::Nil);

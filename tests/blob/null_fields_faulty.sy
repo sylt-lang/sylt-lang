@@ -9,4 +9,4 @@ start :: fn do
     a : !B = A {}
     print(a.a)
 end
-// error: #UnknownField(_)
+// error: #UnknownField(_, _)

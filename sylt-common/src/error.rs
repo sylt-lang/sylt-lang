@@ -64,7 +64,7 @@ pub enum RuntimeError {
     ExternTypeMismatch(String, Vec<Type>),
     ExternError(String, String),
     ValueError(Op, Vec<Value>),
-    UnknownField(String),
+    UnknownField(String, String),
     ImmutableField(String),
     ArgumentCount(usize, usize),
 
@@ -132,6 +132,7 @@ pub enum TypeError {
     },
 
     UnknownField {
+        blob: String,
         field: String,
     },
 
@@ -321,8 +322,8 @@ impl fmt::Display for RuntimeError {
                     .fold(String::new(), |a, v| format!("{}{:?}, ", a, v));
                 write!(f, "Cannot apply {:?} to values {}", op, values)
             }
-            RuntimeError::UnknownField(field) => {
-                write!(f, "Cannot find field '{}'", field)
+            RuntimeError::UnknownField(obj, field) => {
+                write!(f, "Cannot find field '{}' on blob {:?}", field, obj)
             }
             RuntimeError::ImmutableField(field) => {
                 write!(f, "Cannot mutate field '{}' since it is immutable", field)
@@ -392,8 +393,8 @@ impl fmt::Display for TypeError {
             TypeError::WrongArity { got, expected } => {
                 write!(f, "Expected {} arguments but got {}", expected, got)
             }
-            TypeError::UnknownField { field } => {
-                write!(f, "Cannot find field '{}'", field)
+            TypeError::UnknownField { blob, field } => {
+                write!(f, "Cannot find field '{}.{}'", blob, field)
             }
             TypeError::TupleIndexOutOfRange { length, got } => {
                 write!(f, "A tuple of length {} has no element {}", length, got)
