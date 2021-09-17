@@ -96,7 +96,7 @@ fn maybe_union_from_type<'a>(v: impl Iterator<Item = &'a Value>) -> Type {
 impl From<&Value> for Type {
     fn from(value: &Value) -> Type {
         match value {
-            Value::Blob(f) => Type::Blob("anonymous".to_string(), f.borrow()
+            Value::Blob(f) => Type::Blob(f.borrow()["_name"].to_string(), f.borrow()
                 .iter()
                 .map(|(n, v)| (n.clone(), v.into()))
                 .collect()),
