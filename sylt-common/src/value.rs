@@ -11,8 +11,7 @@ use crate::{ty::Type, upvalue::UpValue};
 #[derive(Deserialize, Serialize)]
 pub enum Value {
     Ty(Type),
-    Blob(usize),
-    Instance(usize, Rc<RefCell<HashMap<String, Value>>>),
+    Blob(Rc<RefCell<HashMap<String, Value>>>),
     Tuple(Rc<Vec<Value>>),
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
@@ -41,8 +40,9 @@ impl From<&Type> for Value {
             | Type::Generic(_)
             | Type::Union(_) => panic!("This type cannot be represented as a value!"),
             Type::Void => Value::Nil,
-            Type::Blob(b) => Value::Blob(*b),
-            Type::Instance(b) => Value::Instance(*b, Rc::new(RefCell::new(HashMap::new()))),
+            Type::Blob(_, f) => Value::Blob(Rc::new(RefCell::new(
+                f.iter().map(|(n, t)| (n.clone(), t.into())).collect()
+            ))),
             Type::Tuple(fields) => Value::Tuple(Rc::new(fields.iter().map(Value::from).collect())),
             Type::List(v) => Value::List(Rc::new(RefCell::new(vec![Value::from(v.as_ref())]))),
             Type::Set(v) => {
@@ -137,11 +137,10 @@ impl Value {
     pub fn unique_id(&self) -> usize {
         match self {
             Value::Ty(ty) => ty as *const _ as usize,
-            Value::Blob(b) => b as *const _ as usize,
             Value::Float(f) => f as *const _ as usize,
             Value::Int(i) => i as *const _ as usize,
             Value::Bool(b) => b as *const _ as usize,
-            Value::Instance(_, v) => Rc::as_ptr(v) as usize,
+            Value::Blob(v) => Rc::as_ptr(v) as usize,
             Value::String(s) => Rc::as_ptr(s) as usize,
             Value::List(v) => Rc::as_ptr(v) as usize,
             Value::Set(v) => Rc::as_ptr(v) as usize,
@@ -162,8 +161,7 @@ impl Value {
     ) -> std::fmt::Result {
         match self {
             Value::Ty(ty) => write!(fmt, "<type \"{:?}\">", ty),
-            Value::Blob(b) => write!(fmt, "<blob \"{}\">", b),
-            Value::Instance(_, v) => {
+            Value::Blob(v) => {
                 write!(fmt, "{} (0x{:x}) {{",
                     if let Some(Value::String(name)) = v.borrow().get("_name") {
                         name.as_str()

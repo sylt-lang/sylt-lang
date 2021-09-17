@@ -78,8 +78,8 @@ pub enum ExpressionKind {
 
         body: Box<Statement>,
     },
-    /// A new instance of a blob.
-    Instance {
+    /// A blob instantiation.
+    Blob {
         blob: Assignable,
         fields: Vec<(String, Expression)>, // Keep calling order
     },
@@ -667,15 +667,15 @@ fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let ctx = expect!(ctx, T::RightBrace, "Expected '}}' after blob initalizer");
 
     if matches!(ctx.token(), T::Else) {
-        raise_syntax_error!(ctx, "Parsed a blob instance not an if-statement");
+        raise_syntax_error!(ctx, "Parsed a blob not an if-statement");
     }
 
-    use ExpressionKind::Instance;
+    use ExpressionKind::Blob;
     Ok((
         ctx,
         Expression {
             span,
-            kind: Instance { blob, fields },
+            kind: Blob { blob, fields },
         },
     ))
 }
@@ -865,9 +865,9 @@ mod test {
     test!(expression, call_arrow: "1 + 0 -> a' 2, 3" => Add(_, _));
     test!(expression, call_arrow_grouping: "(1 + 0) -> a' 2, 3" => Get(_));
 
-    test!(expression, instance: "A { a: 1 + 1, b: nil }" => Instance { .. });
-    test!(expression, instance_more: "A { a: 2, \n c: 2 }" => Instance { .. });
-    test!(expression, instance_empty: "A {}" => Instance { .. });
+    test!(expression, blob: "A { a: 1 + 1, b: nil }" => Blob { .. });
+    test!(expression, blob_more: "A { a: 2, \n c: 2 }" => Blob { .. });
+    test!(expression, blob_empty: "A {}" => Blob { .. });
 
     test!(expression, simple: "fn -> do end" => _);
     test!(expression, argument: "fn a: int -> int do ret a + 1 end" => _);
@@ -1007,8 +1007,8 @@ impl PrettyPrint for Expression {
                 write!(f, "\n")?;
                 body.pretty_print(f, indent + 1)?;
             }
-            EK::Instance { blob, fields } => {
-                write!(f, "Instance ")?;
+            EK::Blob { blob, fields } => {
+                write!(f, "Blob ")?;
                 blob.pretty_print(f, indent + 1)?;
                 write!(f, "\n")?;
                 for (field, value) in fields.iter() {

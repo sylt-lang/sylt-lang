@@ -1,4 +1,3 @@
-pub mod blob;
 pub mod block;
 pub mod error;
 pub mod op;
@@ -12,7 +11,6 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub use blob::Blob;
 pub use block::{Block, BlockLinkState};
 pub use error::Error;
 pub use op::{Op, OpResult};
@@ -35,7 +33,7 @@ pub struct Frame {
 
 pub trait Machine {
     fn stack_from_base(&self, base: usize) -> Cow<[Value]>;
-    fn blobs(&self) -> &[Blob];
+    fn constants(&self) -> &[Value];
     fn eval_op(&mut self, op: Op) -> Result<OpResult, Error>;
     fn eval_call(&mut self, callable: Value, args: &[&Value]) -> Result<Value, Error>;
     fn args(&self) -> &[String];

@@ -5,7 +5,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::rc::Rc;
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::{
-    Blob, Block, BlockLinkState, Frame, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction,
+    Block, BlockLinkState, Frame, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction,
     Type, UpValue, Value,
 };
 
@@ -54,7 +54,6 @@ pub struct VM {
     stack: Vec<Value>,
     frames: Vec<Frame>,
     blocks: Vec<Rc<RefCell<Block>>>,
-    blobs: Vec<Blob>,
     args: Vec<String>,
 
     constants: Vec<Value>,
@@ -74,7 +73,6 @@ impl VM {
             stack: Vec::new(),
             frames: Vec::new(),
             blocks: Vec::new(),
-            blobs: Vec::new(),
             args: Vec::new(),
 
             constants: Vec::new(),
@@ -208,7 +206,6 @@ impl VM {
         self.constants = prog.constants.clone();
         self.strings = prog.strings.clone();
         self.blocks = prog.blocks.clone();
-        self.blobs = prog.blobs.clone();
         self.args = Vec::from(args);
 
         self.extern_functions = prog.functions.clone();
@@ -258,8 +255,8 @@ impl Machine for VM {
         Cow::Borrowed(&self.stack[base..])
     }
 
-    fn blobs(&self) -> &[Blob] {
-        &self.blobs
+    fn constants(&self) -> &[Value] {
+        &self.constants
     }
 
     fn args(&self) -> &[String] {
@@ -580,8 +577,7 @@ impl Machine for VM {
             Op::GetField(field) => {
                 let inst = self.pop();
                 match inst {
-                    Value::Instance(ty, values) => {
-                        let ty = &self.blobs[ty];
+                    Value::Blob(values) => {
                         let field = self.string(field);
                         match values.borrow().get(field) {
                             Some(value) => {
@@ -589,7 +585,10 @@ impl Machine for VM {
                             }
                             _ => {
                                 let err = Err(self.error(
-                                    RuntimeError::UnknownField(ty.name.clone(), field.clone()),
+                                    RuntimeError::UnknownField(
+                                        values.borrow()["_name"].to_string(),
+                                        field.clone()
+                                    ),
                                     None,
                                 ));
                                 self.push(Value::Nil);
@@ -609,12 +608,8 @@ impl Machine for VM {
             Op::AssignField(field) => {
                 let (inst, value) = self.poppop();
                 match inst {
-                    Value::Instance(ty, values) => {
-                        let ty = &self.blobs[ty];
+                    Value::Blob(values) => {
                         let field = self.string(field).clone();
-                        if !ty.fields.contains_key(&field) {
-                            error!(self, RuntimeError::UnknownField(ty.name.to_string(), field));
-                        }
                         (*values).borrow_mut().insert(field, value);
                     }
                     inst => {
@@ -636,7 +631,7 @@ impl Machine for VM {
                     Value::Ty(ty) => ty,
                     val => Type::from(val),
                 };
-                let result = a.fits(&b, &self.blobs).is_ok();
+                let result = a.fits(&b).is_ok();
                 self.push(Value::Bool(result));
             }
 
@@ -751,8 +746,7 @@ impl Machine for VM {
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
                 match self.stack[new_base].clone() {
-                    Value::Blob(blob_slot) => {
-                        let blob = &self.blobs[blob_slot];
+                    Value::Ty(Type::Blob(name, fields)) => {
                         let mut values = self.stack[new_base + 1..]
                             .chunks_exact(2)
                             .map(|b| {
@@ -764,15 +758,14 @@ impl Machine for VM {
                             })
                             .collect::<HashMap<_, _>>();
                         self.stack.truncate(new_base);
-                        for name in blob.fields.keys() {
+                        for name in fields.keys() {
                             values.entry(name.clone()).or_insert(Value::Nil);
                         }
-                        values.insert("_id".to_string(), Value::Int(blob.id as i64));
                         values.insert(
                             "_name".to_string(),
-                            Value::String(Rc::new(blob.name.clone())),
+                            Value::String(Rc::new(name)),
                         );
-                        self.push(Value::Instance(blob_slot, Rc::new(RefCell::new(values))));
+                        self.push(Value::Blob(Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, _, block) => {
                         let inner = self.blocks[block].borrow();

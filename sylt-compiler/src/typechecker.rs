@@ -143,7 +143,7 @@ impl<'c> TypeChecker<'c> {
                 match generics.entry(name.clone()) {
                     Entry::Occupied(known) => {
                         let known = known.get();
-                        if let Err(reason) = known.fits(&arg, self.compiler.blobs.as_slice()) {
+                        if let Err(reason) = known.fits(&arg) {
                             // TODO(ed): Point to the argument maybe?
                             return err_type_error!(
                                 self,
@@ -160,7 +160,7 @@ impl<'c> TypeChecker<'c> {
                     }
                 }
             }
-            (x, y) if x.fits(&y, self.compiler.blobs.as_slice()).is_ok() => x.clone(),
+            (x, y) if x.fits(&y).is_ok() => x.clone(),
 
             (Type::Tuple(a), Type::Tuple(b)) => Type::Tuple(a.iter().zip(b.iter()).map(|(a, b)| self.solve_generics_recursively(span, generics, a, b)).collect::<Result<Vec<_>, _>>()?),
             (Type::List(a), Type::List(b)) => Type::List(Box::new(self.solve_generics_recursively(span, generics, a, b)?)),
@@ -297,7 +297,9 @@ impl<'c> TypeChecker<'c> {
                         );
                     }
                     Some(Name::Blob(blob)) => {
-                        return Ok(Value(Type::Blob(*blob), VarKind::Const));
+                        if let crate::Value::Ty(b) = &self.compiler.constants[*blob] {
+                            return Ok(Value(b.clone(), VarKind::Const));
+                        }
                     }
                     Some(Name::Namespace(id)) => {
                         return Ok(Namespace(*id))
@@ -345,9 +347,8 @@ impl<'c> TypeChecker<'c> {
                     Value(ty, _kind) => {
                         match &ty {
                             Type::Unknown => { Ok(Value(Type::Unknown, VarKind::Mutable)) }
-                            Type::Instance(blob) => {
-                                let blob = &self.compiler.blobs[*blob];
-                                match blob.fields.get(&field.name) {
+                            Type::Blob(name, fields) => {
+                                match fields.get(&field.name) {
                                     Some(ty) => Ok(Value(ty.clone(), VarKind::Mutable)),
                                     None => match field.name.as_str() {
                                         // TODO(ed): These result in poor error messages
@@ -356,7 +357,7 @@ impl<'c> TypeChecker<'c> {
                                         _ => err_type_error!(
                                             self,
                                             field.span,
-                                            TypeError::UnknownField { blob: blob.name.clone(), field: field.name.clone() }
+                                            TypeError::UnknownField { blob: name.clone(), field: field.name.clone() }
                                         ),
                                     }
                                 }
@@ -365,7 +366,7 @@ impl<'c> TypeChecker<'c> {
                                 self,
                                 span,
                                 TypeError::Violating(ty.clone()),
-                                "Only namespaces and blob instances support '.'-access"
+                                "Only namespaces and blobs support '.'-access"
                             ),
                         }
                     }
@@ -391,7 +392,7 @@ impl<'c> TypeChecker<'c> {
                 let index = self.expression(index_expr)?;
                 let ret = match (thing, index) {
                     (Type::List(ret), index) => {
-                        if let Err(reason) = index.fits(&Type::Int, self.compiler.blobs.as_slice()) {
+                        if let Err(reason) = index.fits(&Type::Int) {
                             return err_type_error!(
                                 self,
                                 span,
@@ -407,7 +408,7 @@ impl<'c> TypeChecker<'c> {
                         Value(Type::clone(&ret), VarKind::Mutable)
                     }
                     (Type::Tuple(kinds), index) => {
-                        if let Err(reason) = index.fits(&Type::Int, self.compiler.blobs.as_slice()) {
+                        if let Err(reason) = index.fits(&Type::Int) {
                             return err_type_error!(
                                 self,
                                 span,
@@ -435,12 +436,12 @@ impl<'c> TypeChecker<'c> {
                                 );
                             }
                         } else {
-                            Type::maybe_union(kinds.iter(), self.compiler.blobs.as_slice())
+                            Type::maybe_union(kinds.iter())
                         };
                         Value(val, VarKind::Const)
                     }
                     (Type::Dict(key, val), index) => {
-                        if let Err(reason) = key.fits(&index, self.compiler.blobs.as_slice()) {
+                        if let Err(reason) = key.fits(&index) {
                             return err_type_error!(
                                 self,
                                 span,
@@ -513,7 +514,7 @@ impl<'c> TypeChecker<'c> {
 
     fn expression_union_or_errors<'a>(&mut self, expressions: impl Iterator<Item = &'a Expression>) -> Result<Type, Vec<Error>> {
         let ty: Vec<Type> = expressions.map(|e| self.expression(e)).collect::<Result<Vec<Type>, Vec<Error>>>()?;
-        Ok(Type::maybe_union(ty.iter(), self.compiler.blobs.as_slice()))
+        Ok(Type::maybe_union(ty.iter()))
     }
 
     fn expression(&mut self, expression: &Expression) -> Result<Type, Vec<Error>> {
@@ -554,7 +555,7 @@ impl<'c> TypeChecker<'c> {
                     let ret = match (&a, &b) {
                         (a, Type::List(b))
                         | (a, Type::Set(b))
-                        | (a, Type::Dict(b, _)) => b.fits(a, self.compiler.blobs.as_slice()),
+                        | (a, Type::Dict(b, _)) => b.fits(a),
                         _ => Err("".into()),
                     };
                     if let Err(msg) = ret {
@@ -629,7 +630,7 @@ impl<'c> TypeChecker<'c> {
                     .expect("A function that doesn't return a value");
 
                 // TODO(ed): We can catch types being too lenient here
-                if let Err(reason) = ret.fits(&actual_ret, self.compiler.blobs.as_slice()) {
+                if let Err(reason) = ret.fits(&actual_ret) {
                     return err_type_error!(
                         self,
                         span,
@@ -665,7 +666,6 @@ impl<'c> TypeChecker<'c> {
                 // TODO(ed) check nullables and the actual condition
                 Type::maybe_union(
                     [self.expression(pass)?, self.expression(fail)?].iter(),
-                    self.compiler.blobs.as_slice(),
                 )
             }
 
@@ -686,22 +686,21 @@ impl<'c> TypeChecker<'c> {
                 // TODO(ed) check nullables and the actual condition
                 Type::maybe_union(
                     [self.expression(lhs)?, self.expression(fail)?].iter(),
-                    self.compiler.blobs.as_slice(),
                 )
             }
 
-            EK::Instance { blob, fields } => {
-                let blob = match self.assignable(blob, self.namespace)? {
-                    Lookup::Value(Type::Blob(blob), _) => {
-                        self.compiler.blobs[blob].clone()
-                    }
+            EK::Blob { blob, fields } => {
+                let (blob_name, blob_fields) = match self.assignable(blob, self.namespace)? {
                     Lookup::Value(ty, _) => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::Violating(ty),
-                            "A blob was expected when instancing"
-                        );
+                        match ty {
+                            Type::Blob(name, fields) => (name, fields),
+                            _ => return err_type_error!(
+                                self,
+                                span,
+                                TypeError::Violating(ty),
+                                "A blob was expected when instancing"
+                            ),
+                        }
                     }
                     Lookup::Namespace(_) => {
                         return err_type_error!(
@@ -724,8 +723,8 @@ impl<'c> TypeChecker<'c> {
                     initalizer.insert(name.clone(), ty);
                 }
                 for (name, (rhs, span)) in initalizer.iter() {
-                    match blob.fields.get(name) {
-                        Some(lhs) => match lhs.fits(rhs, self.compiler.blobs.as_slice()) {
+                    match blob_fields.get(name) {
+                        Some(lhs) => match lhs.fits(rhs) {
                             Ok(_) => {}
                             Err(reason) => {
                                 // TODO(ed): Not super sold on this error message - it can be better.
@@ -734,7 +733,7 @@ impl<'c> TypeChecker<'c> {
                                     *span,
                                     TypeError::Mismatch { expected: lhs.clone(), got: rhs.clone() },
                                     "because {}.{} is a '{:?}' and {}",
-                                    blob.name,
+                                    blob_name,
                                     name,
                                     lhs,
                                     reason
@@ -745,9 +744,9 @@ impl<'c> TypeChecker<'c> {
                             errors.push(type_error!(
                                 self,
                                 *span,
-                                TypeError::UnknownField { blob: blob.name.clone(), field: name.clone() },
+                                TypeError::UnknownField { blob: blob_name.clone(), field: name.clone() },
                                 "{}.{} does not exist on the original blob type",
-                                blob.name,
+                                blob_name,
                                 name
                             ));
                         }
@@ -758,18 +757,18 @@ impl<'c> TypeChecker<'c> {
                 if !errors.is_empty() {
                     return Err(errors);
                 }
-                for (name, ty) in blob.fields {
-                    if initalizer.contains_key(&name) {
+                for (name, ty) in blob_fields.iter() {
+                    if initalizer.contains_key(name) {
                         continue;
                     }
-                    if let Err(_) = ty.fits(&Type::Void, self.compiler.blobs.as_slice()) {
+                    if let Err(_) = ty.fits(&Type::Void) {
                         // TODO(ed): Not super sold on this error message - it can be better.
                         errors.push(type_error!(
                             self,
                             span,
-                            TypeError::Mismatch { got: Type::Void, expected: ty },
+                            TypeError::Mismatch { got: Type::Void, expected: ty.clone() },
                             "Only nullable fields can be omitted, {}.{} is not nullable",
-                            blob.name,
+                            blob_name,
                             name
                         ));
                     }
@@ -777,7 +776,7 @@ impl<'c> TypeChecker<'c> {
                 if !errors.is_empty() {
                     return Err(errors);
                 }
-                Type::Instance(blob.id)
+                Type::Blob(blob_name, blob_fields)
             }
         };
         Ok(res)
@@ -839,7 +838,7 @@ impl<'c> TypeChecker<'c> {
                     }
                 );
                 // TODO(ed): Is the fits-order correct?
-                if let Err(reason) = target_ty.fits(&result, self.compiler.blobs.as_slice()) {
+                if let Err(reason) = target_ty.fits(&result) {
                     // TODO(ed): I want this to point to the equal-sign, the parser is
                     // probably a bit off.
                     return err_type_error!(
@@ -877,7 +876,7 @@ impl<'c> TypeChecker<'c> {
                 self.stack.push(Variable::new(ident.clone(), ty.clone(), *kind));
                 let value = value?;
 
-                let fit = ty.fits(&value, self.compiler.blobs.as_slice());
+                let fit = ty.fits(&value);
                 let ty = match (kind.force(), fit) {
                     (true, Ok(_)) => {
                         return err_type_error!(
@@ -969,10 +968,7 @@ impl<'c> TypeChecker<'c> {
                 if !errors.is_empty() {
                     return Err(errors);
                 }
-                Some(Type::maybe_union(
-                    rets.iter(),
-                    self.compiler.blobs.as_slice(),
-                ))
+                Some(Type::maybe_union(rets.iter()))
             }
 
             SK::Ret { value } => Some(self.expression(value)?),
@@ -1013,7 +1009,7 @@ impl<'c> TypeChecker<'c> {
                         let name = Name::Global(Some((ty.clone(), *kind)));
                         self.namespaces[namespace].insert(ident.name.clone(), name);
                         let value = self.expression(value)?;
-                        let fit = ty.fits(&value, self.compiler.blobs.as_slice());
+                        let fit = ty.fits(&value);
                         let ty = match (kind.force(), fit) {
                             (true, Ok(_)) => {
                                 return err_type_error!(

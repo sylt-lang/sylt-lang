@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use sylt_common::error::Error;
 use sylt_common::prog::Prog;
-use sylt_common::{Blob, Block, Op, RustFunction, Type, Value};
+use sylt_common::{Block, Op, RustFunction, Type, Value};
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
@@ -153,7 +153,6 @@ struct Compiler {
     namespace_id_to_path: HashMap<NamespaceID, PathBuf>,
 
     namespaces: Vec<Namespace>,
-    blobs: Vec<Blob>,
 
     loops: Vec<LoopFrame>,
     frames: Vec<Frame>,
@@ -200,7 +199,6 @@ impl Compiler {
 
             namespace_id_to_path: HashMap::new(),
             namespaces: Vec::new(),
-            blobs: Vec::new(),
 
             loops: Vec::new(),
             frames: Vec::new(),
@@ -523,7 +521,7 @@ impl Compiler {
                 self.add_op(ctx, expression.span, function);
             }
 
-            Instance { blob, fields } => {
+            Blob { blob, fields } => {
                 self.assignable(blob, ctx);
                 for (name, field) in fields.iter() {
                     let name = self.constant(Value::String(Rc::new(name.clone())));
@@ -746,7 +744,10 @@ impl Compiler {
             Read(ident) => self.namespaces[namespace]
                 .get(&ident.name)
                 .and_then(|name| match name {
-                    Name::Blob(blob) => Some(Type::Instance(*blob)),
+                    Name::Blob(blob) => match &self.constants[*blob] {
+                        Value::Ty(ty) => Some(ty.clone()),
+                        _ => None,
+                    }
                     _ => None,
                 })
                 .unwrap_or_else(|| {
@@ -760,7 +761,10 @@ impl Compiler {
                 .resolve_type_namespace(&inner, namespace, ctx)
                 .and_then(|namespace| self.namespaces[namespace].get(&ident.name))
                 .and_then(|name| match name {
-                    Name::Blob(blob) => Some(Type::Instance(*blob)),
+                    Name::Blob(blob) => match &self.constants[*blob] {
+                        Value::Ty(ty) => Some(ty.clone()),
+                        _ => None,
+                    }
                     _ => None,
                 })
                 .unwrap_or_else(|| {
@@ -845,13 +849,16 @@ impl Compiler {
             Use { .. } | EmptyStatement => {}
 
             Blob { name, fields } => {
+                let fields = fields.iter()
+                    .map(|(k, v)| (k.clone(), self.resolve_type(&v, ctx)))
+                    .collect();
                 if let Some(Name::Blob(slot)) = self.namespaces[ctx.namespace].get(name) {
-                    let slot = *slot;
-                    self.blobs[slot].fields = fields
-                        .clone()
-                        .into_iter()
-                        .map(|(k, v)| (k, self.resolve_type(&v, ctx)))
-                        .collect();
+                    match &mut self.constants[*slot] {
+                        Value::Ty(Type::Blob(_, b_fields)) => {
+                            *b_fields = fields;
+                        }
+                        _ => unreachable!(),
+                    }
                 } else {
                     error!(
                         self,
@@ -867,7 +874,7 @@ impl Compiler {
             IsCheck { lhs, rhs } => {
                 let lhs = self.resolve_type(lhs, ctx);
                 let rhs = self.resolve_type(rhs, ctx);
-                if let Err(msg) = rhs.fits(&lhs, &self.blobs) {
+                if let Err(msg) = rhs.fits(&lhs) {
                     error!(
                         self,
                         ctx, statement.span,
@@ -1141,7 +1148,6 @@ impl Compiler {
                     .map(|x| Rc::new(RefCell::new(x)))
                     .collect(),
                 functions: functions.iter().map(|(_, f, _)| *f).collect(),
-                blobs: self.blobs,
                 constants: self.constants,
                 strings: self.strings,
             })
@@ -1150,163 +1156,81 @@ impl Compiler {
         }
     }
 
-    // TODO(ed): This should probably be cleaned up and moves out of the compiler?
     fn extract_globals(&mut self, tree: &AST) {
+        // Find all files and map them to their namespace
         let mut path_to_namespace_id = HashMap::<PathBuf, usize>::new();
         for (path, _) in tree.modules.iter() {
-            let slot = path_to_namespace_id.len();
-            match path_to_namespace_id.entry(path.into()) {
-                Entry::Vacant(vac) => {
-                    vac.insert(slot);
-                    self.namespaces.push(Namespace::new());
-                }
+            let slot = self.namespaces.len();
+            self.namespaces.push(Namespace::new());
 
-                Entry::Occupied(_) => {
-                    error!(
-                        self,
-                        Context::from_namespace(slot),
-                        Span::zero(),
-                        "Reading file '{}' twice! How?",
-                        path.display()
-                    );
-                }
+            if path_to_namespace_id.insert(path.into(), slot).is_some() {
+                unreachable!("File was read twice!?");
             }
         }
 
+        // Reversed map
         self.namespace_id_to_path = path_to_namespace_id
             .iter()
             .map(|(a, b)| (*b, (*a).clone()))
             .collect();
 
+        // Find all globals in all files and declare them. The globals are
+        // initialized at a later stage.
         for (path, module) in tree.modules.iter() {
             let slot = path_to_namespace_id[path];
             let ctx = Context::from_namespace(slot);
 
-            let mut namespace = self.namespaces[slot].clone();
+            let mut namespace = Namespace::new();
             for statement in module.statements.iter() {
                 use StatementKind::*;
-                match &statement.kind {
-                    Blob { name, .. } => match namespace.entry(name.to_owned()) {
-                        Entry::Vacant(_) => {
-                            let id = self.blobs.len();
-                            self.blobs.push(crate::Blob::new(id, slot, name));
-                            let blob = self.constant(Value::Blob(id));
-                            if let Op::Constant(slot) = blob {
-                                namespace.insert(name.to_owned(), Name::Blob(slot));
-                            } else {
-                                unreachable!();
-                            }
-                        }
-
-                        Entry::Occupied(_) => {
-                            error!(
-                                self,
-                                ctx,
-                                statement.span,
-                                "A global variable with the name '{}' already exists",
-                                name
-                            );
+                let (name, ident_name, span) = match &statement.kind {
+                    Blob { name, .. } => {
+                        let blob = self.constant(Value::Ty(Type::Blob(name.clone(), Default::default())));
+                        if let Op::Constant(slot) = blob {
+                            (Name::Blob(slot), name.clone(), statement.span)
+                        } else {
+                            unreachable!()
                         }
                     },
-
-                    // Handled below.
-                    _ => (),
-                }
-            }
-            self.namespaces[slot] = namespace;
-        }
-
-        for (path, module) in tree.modules.iter() {
-            let slot = path_to_namespace_id[path];
-            let ctx = Context::from_namespace(slot);
-
-            let mut namespace = self.namespaces[slot].clone();
-            for statement in module.statements.iter() {
-                use StatementKind::*;
-                match &statement.kind {
                     Use { path: _, name, file } => {
                         let ident = match name {
                             NameIdentifier::Implicit(ident) => ident,
                             NameIdentifier::Alias(ident) => ident,
                         };
-                        match namespace.entry(ident.name.clone()) {
-                            Entry::Vacant(vac) => {
-                                let other = path_to_namespace_id[file];
-                                vac.insert(Name::Namespace(other));
-                            }
-                            Entry::Occupied(_) => {
-                                error!(
-                                    self,
-                                    ctx,
-                                    ident.span,
-                                    "A global variable with the name '{}' already exists",
-                                    ident.name
-                                );
-                            }
-                        }
+                        let other = path_to_namespace_id[file];
+                        (Name::Namespace(other), ident.name.clone(), ident.span)
                     }
-
-                    // Already handled in the loop before.
-                    Blob { .. } => (),
-
-                    // Handled in the loop after - so namespaces are structured correctly.
-                    Definition { .. } => {}
-
-                    // Handled later - since we need the type information.
-                    IsCheck { .. } => (),
-
-                    _ => (),
-                }
-            }
-            self.namespaces[slot] = namespace;
-        }
-
-        for (path, module) in tree.modules.iter() {
-            let slot = path_to_namespace_id[path];
-            let ctx = Context::from_namespace(slot);
-
-            let mut namespace = self.namespaces[slot].clone();
-            for statement in module.statements.iter() {
-                use StatementKind::*;
-                match &statement.kind {
-                    #[rustfmt::skip]
                     Definition { ident: Identifier { name, span }, kind, .. } => {
                         let var = self.define(name, *kind, statement.span);
                         self.activate(var);
 
-                        match namespace.entry(name.to_owned()) {
-                            Entry::Vacant(_) => {
-                                namespace.insert(name.to_owned(), Name::Global(var));
-                            }
-                            Entry::Occupied(_) => {
-                                error!(
-                                    self,
-                                    ctx,
-                                    statement.span,
-                                    "A global variable with the name '{}' already exists",
-                                    name
-                                );
-                            }
-                        }
-
                         // Uninitalized values have the value Nil
                         let unknown = self.constant(Value::Nil);
                         self.add_op(ctx, *span, unknown);
+
+                        (Name::Global(var), name.clone(), statement.span)
                     }
 
-                    Use { ..  } => { }
-
-                    // Already handled in the loop before.
-                    Blob { .. } => (),
-
-                    // Handled later - since we need the type information.
-                    IsCheck { .. } => (),
-
-                    // Valid here, just ignore it.
-                    EmptyStatement => (),
+                    // Handled later since we need type information.
+                    | IsCheck { .. }
+                    | EmptyStatement => continue,
 
                     _ => {
                         error!(self, ctx, statement.span, "Invalid outer statement");
+                        continue;
+                    }
+                };
+
+                match namespace.entry(ident_name.to_owned()) {
+                    Entry::Vacant(vac) => { vac.insert(name); }
+                    Entry::Occupied(_) => {
+                        error!(
+                            self,
+                            ctx,
+                            span,
+                            "A global variable with the name '{}' already exists",
+                            ident_name
+                        );
                     }
                 }
             }
