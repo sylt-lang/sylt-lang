@@ -394,7 +394,6 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
 }
 
 fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) -> fmt::Result {
-    dbg!(&statement.comments);
     for comment in &statement.comments {
         write_indents(dest, indent)?;
         write!(dest, "// {}\n", comment)?;
