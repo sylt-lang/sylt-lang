@@ -327,7 +327,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     sign,
     ? "Returns the sign of the value",
-    -> "fn #X -> #X", // TODO(ed): Figure out how we can limit x...
+    -> "(fn int -> int) | (fn float -> float)",
     [Float(x)] => { Ok(Float(x.signum())) },
     [Int(x)] => { Ok(Int(x.signum())) }
 );
@@ -336,7 +336,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     clamp,
     ? "Clamps the value 'a' between 'lo' and 'hi'",
-    -> "fn #X, #X, #X -> #X", // TODO(ed): Figure out how we can limit x...
+    -> "(fn int, int, int -> int) | (fn float, float, float -> float)",
     [Float(a), Float(lo), Float(hi)] => { Ok(Float(a.min(*hi).max(*lo))) },
     [Int(a), Int(lo), Int(hi)] => { Ok(Int(*a.min(hi).max(lo))) }
 );
