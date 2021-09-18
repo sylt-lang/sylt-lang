@@ -93,7 +93,7 @@ fn simplify_type(ty: Type) -> Type {
             let without_dupes = remove_duplicates(ty.clone(), Vec::new());
             without_dupes.into_iter().reduce(|a, b| {
                 // Swap order so we nest to the right
-                Type { kind: TK::Union(Box::new(b), Box::new(a)), span: ty.span }
+                Type { kind: TK::Union(Box::new(a), Box::new(b)), span: ty.span }
             }).unwrap() // We always get one type
         }
 
@@ -122,21 +122,9 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
         TypeKind::Resolved(ty) => write!(dest, "{}", ty),
         TypeKind::UserDefined(assignable) => write_assignable(dest, indent, assignable),
         TypeKind::Union(ty, rest) => {
-            match (&ty.kind, &rest.kind) {
-                (TypeKind::Resolved(RuntimeType::Void), _) => {
-                    write_type(dest, indent, *rest)?;
-                    write!(dest, "?")
-                }
-                (_, TypeKind::Resolved(RuntimeType::Void)) => {
-                    write_type(dest, indent, *ty)?;
-                    write!(dest, "?")
-                }
-                _ => {
-                    write_type(dest, indent, *ty)?;
-                    write!(dest, " | ")?;
-                    write_type(dest, indent, *rest)
-                }
-            }
+            write_type(dest, indent, *ty)?;
+            write!(dest, " | ")?;
+            write_type(dest, indent, *rest)
         }
         TypeKind::Fn(params, ret) => {
             write!(dest, "fn")?;
