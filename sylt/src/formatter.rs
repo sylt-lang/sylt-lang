@@ -54,10 +54,10 @@ fn write_parameters<W: Write>(
     Ok(())
 }
 
-fn write_blob_fields<T: Clone, W: Write>(
+fn write_blob_fields<T, W: Write>(
     dest: &mut W,
     indent: u32,
-    fields: Vec<(String, T)>,
+    mut fields: Vec<(String, T)>,
     sub_write: fn(&mut W, u32, T) -> fmt::Result,
 ) -> fmt::Result {
     write!(dest, " {{")?;
@@ -66,7 +66,7 @@ fn write_blob_fields<T: Clone, W: Write>(
             write!(dest, " }}")?;
         }
         1 => {
-            let (field, expr) = fields[0].clone();
+            let (field, expr) = fields.pop().unwrap();
             write!(dest, " {}: ", field)?;
             sub_write(dest, indent, expr)?;
             write!(dest, " }}")?;
