@@ -516,24 +516,16 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
 /// Replace consecutive empty statements with one empty statement with all comments of the previous statements.
 //TODO(gu): Rewrite the formatter to use moves instead of borrows. Then we wouldn't need to clone when passing
 //          into this function.
-fn merge_empty_statements(mut statements: Vec<Statement>) -> Vec<Statement> {
-    // Reverse since
-    // - we always want to remove and look at the first statement and
-    // - pop() is faster than remove(0).
-    statements.reverse();
-
+fn merge_empty_statements(statements: Vec<Statement>) -> Vec<Statement> {
+    use StatementKind::EmptyStatement;
+    let mut prev_statement: Option<&Statement> = None;
     let mut ret = Vec::new();
-    while let Some(mut statement) = statements.pop() {
-        // Begin eating empty statements
-        while matches!(
-            statements.last().map(|s| &s.kind),
-            Some(StatementKind::EmptyStatement)
-        ) {
-            statement
-                .comments
-                .append(&mut statements.pop().unwrap().comments);
+    for stmt in statements.iter() {
+        if prev_statement.map_or(true, |s| matches!(s.kind, EmptyStatement)) && matches!(stmt.kind, EmptyStatement) && stmt.comments.is_empty() {
+            continue;
         }
-        ret.push(statement);
+        prev_statement = Some(&stmt);
+        ret.push(stmt.clone());
     }
     ret
 }
