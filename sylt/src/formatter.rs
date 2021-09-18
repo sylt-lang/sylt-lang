@@ -308,7 +308,21 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
                 write_type(dest, indent, ret)?;
                 write!(dest, " ")?;
             }
-            write_statement(dest, indent, *body)?;
+
+            match body.kind {
+                StatementKind::Block { statements } => {
+                    write!(dest, "do\n")?;
+                    for s in merge_empty_statements(statements) {
+                        write_statement(dest, indent + 1, s)?;
+                    }
+                    write_indents(dest, indent)?;
+                    write!(dest, "end")?;
+                    // NOTE(ed): No newline here!
+                }
+                _ => {
+                    write_statement(dest, indent, *body)?;
+                }
+            }
         }
         ExpressionKind::Blob { blob, fields } => {
             write_assignable(dest, indent, blob)?;
@@ -369,9 +383,10 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
 }
 
 fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) -> fmt::Result {
+    dbg!(&statement.comments);
     for comment in &statement.comments {
-        write!(dest, "// {}\n", comment)?;
         write_indents(dest, indent)?;
+        write!(dest, "// {}\n", comment)?;
     }
 
     match statement.kind {
@@ -380,6 +395,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             target,
             value,
         } => {
+            write_indents(dest, indent)?;
             write_assignable(dest, indent, target)?;
             write!(
                 dest,
@@ -395,6 +411,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write_expression(dest, indent, value)?;
         }
         StatementKind::Blob { name, fields } => {
+            write_indents(dest, indent)?;
             write!(dest, "{} :: blob {{", name)?;
             if !fields.is_empty() {
                 write!(dest, "\n")?;
@@ -409,25 +426,31 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write!(dest, "}}")?;
         }
         StatementKind::Block { statements } => {
+            write_indents(dest, indent)?;
             write!(dest, "do\n")?;
 
             for s in merge_empty_statements(statements) {
-                write_indents(dest, indent + 1)?;
                 write_statement(dest, indent + 1, s)?;
-                write!(dest, "\n")?;
             }
 
             write_indents(dest, indent)?;
-            write!(dest, "end")?;
+            write!(dest, "end")?
         }
-        StatementKind::Break => write!(dest, "break")?,
-        StatementKind::Continue => write!(dest, "continue")?,
+        StatementKind::Break => {
+            write_indents(dest, indent)?;
+            write!(dest, "break")?
+        }
+        StatementKind::Continue => {
+            write_indents(dest, indent)?;
+            write!(dest, "continue")?
+        }
         StatementKind::Definition {
             ident,
             kind,
             ty,
             value,
         } => {
+            write_indents(dest, indent)?;
             write_identifier(dest, ident)?;
             if matches!(ty.kind, TypeKind::Implied) {
                 write!(
@@ -454,7 +477,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             }
             write_expression(dest, indent, value)?;
         }
-        StatementKind::EmptyStatement => (),
+        StatementKind::EmptyStatement => {},
         StatementKind::If {
             condition,
             pass,
@@ -462,11 +485,12 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
         } => {
             if matches!(fail.kind, StatementKind::EmptyStatement) {
                 for comment in &fail.comments {
-                    write!(dest, "// {}\n", comment)?;
                     write_indents(dest, indent)?;
+                    write!(dest, "// {}\n", comment)?;
                 }
             }
 
+            write_indents(dest, indent)?;
             write!(dest, "if ")?;
             write_expression(dest, indent, condition)?;
             write!(dest, " ")?;
@@ -477,23 +501,30 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             }
         }
         StatementKind::IsCheck { lhs, rhs } => {
+            write_indents(dest, indent)?;
             write!(dest, ":")?;
             write_type(dest, indent, lhs)?;
             write!(dest, " is :")?;
             write_type(dest, indent, rhs)?;
         }
         StatementKind::Loop { condition, body } => {
+            write_indents(dest, indent)?;
             write!(dest, "loop ")?;
             write_expression(dest, indent, condition)?;
             write!(dest, " ")?;
             write_statement(dest, indent, *body)?;
         }
         StatementKind::Ret { value } => {
+            write_indents(dest, indent)?;
             write!(dest, "ret ")?;
             write_expression(dest, indent, value)?;
         }
-        StatementKind::StatementExpression { value } => write_expression(dest, indent, value)?,
+        StatementKind::StatementExpression { value } => {
+            write_indents(dest, indent)?;
+            write_expression(dest, indent, value)?;
+        }
         StatementKind::Unreachable => {
+            write_indents(dest, indent)?;
             write!(dest, "<!>")?;
         }
         StatementKind::Use {
@@ -501,6 +532,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             name,
             file: _,
         } => {
+            write_indents(dest, indent)?;
             write!(dest, "use ")?;
             write_identifier(dest, path)?;
             if let NameIdentifier::Alias(alias) = name {
@@ -509,6 +541,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             }
         }
     }
+    write!(dest, "\n")?;
 
     Ok(())
 }
