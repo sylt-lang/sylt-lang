@@ -68,7 +68,56 @@ fn write_blob_fields<W: Write>(
     Ok(())
 }
 
+
+fn simplify_type(ty: Type) -> Type {
+    fn remove_duplicates(ty: Type, mut seen: Vec<Type>) -> Vec<Type> {
+        match ty.kind {
+            TK::Union(ty, rest) => {
+                if seen.iter().find(|a| **a == *ty).is_none() {
+                    seen.push(*ty);
+                }
+                remove_duplicates(*rest, seen)
+            }
+            _ => {
+                if seen.iter().find(|a| **a == ty).is_none() {
+                    seen.push(ty);
+                }
+                seen
+            }
+        }
+    }
+
+    use TypeKind as TK;
+    match ty.kind {
+        TK::Union(_, _) => {
+            let without_dupes = remove_duplicates(ty.clone(), Vec::new());
+            dbg!(&without_dupes);
+            without_dupes.into_iter().reduce(|a, b| {
+                // Swap order so we nest to the right
+                Type { kind: TK::Union(Box::new(b), Box::new(a)), span: ty.span }
+            }).unwrap() // We always get one type
+        }
+
+        TK::Fn(args, ret) =>
+            Type { kind: TK::Fn(args.into_iter().map(simplify_type).collect(), Box::new(simplify_type(*ret))), ..ty },
+        TK::Tuple(tys) =>
+            Type { kind: TK::Tuple(tys.into_iter().map(simplify_type).collect()), ..ty },
+        TK::List(a) =>
+            Type { kind: TK::List(Box::new(simplify_type(*a))), ..ty },
+        TK::Set(a) =>
+            Type { kind: TK::Set(Box::new(simplify_type(*a))), ..ty },
+        TK::Dict(a, b) =>
+            Type { kind: TK::Dict(Box::new(simplify_type(*a)), Box::new(simplify_type(*b))), ..ty },
+
+        TK::Implied
+        | TK::UserDefined(_)
+        | TK::Resolved(_)
+        | TK::Generic(_) => ty,
+    }
+}
+
 fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
+    let ty = simplify_type(ty);
     match ty.kind {
         TypeKind::Implied => unreachable!(),
         TypeKind::Resolved(ty) => write!(dest, "{}", ty),
