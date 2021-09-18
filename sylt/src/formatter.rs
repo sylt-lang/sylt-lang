@@ -91,7 +91,6 @@ fn simplify_type(ty: Type) -> Type {
     match ty.kind {
         TK::Union(_, _) => {
             let without_dupes = remove_duplicates(ty.clone(), Vec::new());
-            dbg!(&without_dupes);
             without_dupes.into_iter().reduce(|a, b| {
                 // Swap order so we nest to the right
                 Type { kind: TK::Union(Box::new(b), Box::new(a)), span: ty.span }
