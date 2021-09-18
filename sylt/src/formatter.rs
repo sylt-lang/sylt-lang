@@ -479,7 +479,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             }
             write_expression(dest, indent, value)?;
         }
-        StatementKind::EmptyStatement => {},
+        StatementKind::EmptyStatement => (),
         StatementKind::If {
             condition,
             pass,
