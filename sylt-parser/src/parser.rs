@@ -182,6 +182,8 @@ pub enum TypeKind {
     Dict(Box<Type>, Box<Type>),
     /// A generic type
     Generic(Identifier),
+    /// `(inner_type)` - usefull to correct the grouping
+    Grouping(Box<Type>),
 }
 
 /// A parsed type. Contains any [TypeKind].
@@ -1166,8 +1168,8 @@ impl Display for Type {
             TypeKind::Tuple(tys) => {
                 write!(f, "(")?;
                 for (i, ty) in tys.iter().enumerate() {
-                    if i != 0 { write!(f, ", ")?; }
-                    write!(f, "{}", ty)?;
+                    if i != 0 { write!(f, " ")?; }
+                    write!(f, "{},", ty)?;
                 }
                 write!(f, ")")?;
             }
@@ -1182,6 +1184,9 @@ impl Display for Type {
             }
             TypeKind::Generic(name) => {
                 write!(f, "#{}", name.name)?;
+            }
+            TypeKind::Grouping(ty) => {
+                write!(f, "({})", ty)?;
             }
         }
         Ok(())
