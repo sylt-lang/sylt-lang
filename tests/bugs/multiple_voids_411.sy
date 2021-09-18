@@ -1,0 +1,3 @@
+start :: fn do
+    a: void | void | int | float = 1
+end
