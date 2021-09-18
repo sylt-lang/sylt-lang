@@ -551,17 +551,15 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
 /// Replace consecutive empty statements with one empty statement with all comments of the previous statements.
 fn merge_empty_statements(statements: Vec<Statement>) -> Vec<Statement> {
     use StatementKind::EmptyStatement;
-    statements.iter().fold((Vec::new(), None),
-        |(mut ret, prev): (Vec<Statement>, Option<&Statement>), stmt| {
-            let last_is_empty = prev.map_or(true, |s| matches!(s.kind, EmptyStatement));
+    statements.into_iter().fold((Vec::new(), true),
+        |(mut ret, prev_is_empty), stmt| {
+            let last_is_empty = prev_is_empty;
             let is_empty = matches!(stmt.kind, EmptyStatement);
             let no_comments = stmt.comments.is_empty();
-            if last_is_empty && is_empty && no_comments {
-                (ret, prev)
-            } else {
-                ret.push(stmt.clone());
-                (ret, Some(stmt))
+            if !(last_is_empty && is_empty && no_comments) {
+                ret.push(stmt);
             }
+            (ret, is_empty)
         }
     ).0
 }
