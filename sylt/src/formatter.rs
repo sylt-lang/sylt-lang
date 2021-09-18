@@ -422,7 +422,6 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write_expression(dest, indent, value)?;
         }
         StatementKind::Blob { name, fields } => {
-            dbg!(&name);
             write_indents(dest, indent)?;
             write!(dest, "{} :: blob", name)?;
             let fields_as_tuples = fields.iter().map(|(f, t)| (f.clone(), t.clone())).collect();
