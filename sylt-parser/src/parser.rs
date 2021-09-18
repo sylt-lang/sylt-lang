@@ -63,7 +63,7 @@ pub enum Prec {
 ///
 /// Forced variable kinds are a signal to the type checker that the type is
 /// assumed and shouldn't be checked.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum VarKind {
     Const,
     Mutable,
@@ -82,7 +82,7 @@ impl VarKind {
 }
 
 /// The different kinds of assignment operators: `+=`, `-=`, `*=`, `/=` and `=`.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Op {
     Nop,
     Add,
@@ -95,6 +95,12 @@ pub enum Op {
 pub struct Identifier {
     pub span: Span,
     pub name: String,
+}
+
+impl PartialEq for Identifier {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
 }
 
 /// The different kinds of [Assignable]s.
@@ -119,7 +125,7 @@ pub struct Identifier {
 ///     )
 /// )
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AssignableKind {
     Read(Identifier),
     /// A function call.
@@ -148,7 +154,13 @@ pub struct Assignable {
     pub kind: AssignableKind,
 }
 
-#[derive(Debug, Clone)]
+impl PartialEq for Assignable {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum TypeKind {
     /// An unspecified type that is left to the type checker.
     Implied,
@@ -177,6 +189,12 @@ pub enum TypeKind {
 pub struct Type {
     pub span: Span,
     pub kind: TypeKind,
+}
+
+impl PartialEq for Type {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
 }
 
 type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>, Vec<Error>)>;
