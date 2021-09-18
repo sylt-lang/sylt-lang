@@ -59,11 +59,28 @@ fn write_blob_fields<W: Write>(
     indent: u32,
     fields: Vec<(String, Expression)>,
 ) -> fmt::Result {
-    for (field, expr) in fields {
-        write_indents(dest, indent)?;
-        write!(dest, "{}: ", field)?;
-        write_expression(dest, indent, expr)?;
-        write!(dest, ",\n")?;
+    write!(dest, " {{ ")?;
+    match fields.len() {
+        0 => {
+            write!(dest, " }}")?;
+        }
+        1 => {
+            let (field, expr) = fields[0].clone();
+            write!(dest, "{}: ", field)?;
+            write_expression(dest, indent, expr)?;
+            write!(dest, " }}")?;
+        }
+        _ => {
+            write!(dest, "\n")?;
+            for (field, expr) in fields {
+                write_indents(dest, indent)?;
+                write!(dest, "{}: ", field)?;
+                write_expression(dest, indent, expr)?;
+                write!(dest, ",\n")?;
+            }
+            write_indents(dest, indent - 1)?;
+            write!(dest, "}}")?;
+        }
     }
     Ok(())
 }
@@ -326,13 +343,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
         }
         ExpressionKind::Blob { blob, fields } => {
             write_assignable(dest, indent, blob)?;
-            write!(dest, " {{")?;
-            if !fields.is_empty() {
-                write!(dest, "\n")?;
-                write_blob_fields(dest, indent + 1, fields)?;
-                write_indents(dest, indent)?;
-            }
-            write!(dest, "}}")?;
+            write_blob_fields(dest, indent + 1, fields)?;
         }
         ExpressionKind::Tuple(exprs) => {
             let num_exprs = exprs.len();
