@@ -688,12 +688,12 @@ impl<'t> BytecodeCompiler<'t> {
     pub fn preamble(
         &mut self,
         span: Span,
+        num_constants: usize,
     ) {
         let name = "/preamble/";
         let mut block = Block::new(name, 0, &self.compiler.namespace_id_to_path[&0]);
         block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
         self.blocks.push(block);
-        self.compiler.frames.push(Frame::new(name, span));
 
         let nil = self.compiler.constant(Value::Nil);
         // TODO(ed): This context is completely bogus...
@@ -703,7 +703,6 @@ impl<'t> BytecodeCompiler<'t> {
             namespace: 0,
             scope: 0,
         };
-        let num_constants = self.compiler.constants.len();
         for _ in 0..num_constants {
             // Uninitalized values have the value Nil
             self.add_op(ctx, span, nil);
@@ -721,7 +720,11 @@ impl<'t> BytecodeCompiler<'t> {
             scope: 0,
         };
 
+        // TODO(ed): Real ugly hack until we can run the typechecker before the compiler.
+        self.compiler.panic = true;
         self.read_identifier("start", Span::zero(), ctx, 0);
+        self.compiler.panic = false;
+
         self.add_op(ctx, Span::zero(), Op::Call(0));
 
         let nil = self.compiler.constant(Value::Nil);

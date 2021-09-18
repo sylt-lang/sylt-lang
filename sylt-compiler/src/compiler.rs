@@ -459,7 +459,7 @@ impl Compiler {
             ..Context::from_namespace(0)
         };
 
-        self.extract_globals(&tree);
+        let num_constants = self.extract_globals(&tree);
 
         let num_functions = functions.len();
         self.functions = functions
@@ -489,15 +489,17 @@ impl Compiler {
             return Err(self.errors);
         }
 
-        let mut bytecode_compiler = bytecode::BytecodeCompiler::new(&mut self);
-        bytecode_compiler.preamble(start_span);
+        let blocks = {
+            let mut bytecode_compiler = bytecode::BytecodeCompiler::new(&mut self);
+            bytecode_compiler.preamble(start_span, num_constants);
 
-        for (statement, namespace) in statements.iter() {
-            bytecode_compiler.compile(statement, *namespace);
-        }
+            for (statement, namespace) in statements.iter() {
+                bytecode_compiler.compile(statement, *namespace);
+            }
 
-        bytecode_compiler.postamble(start_span);
-        let blocks = bytecode_compiler.blocks;
+            bytecode_compiler.postamble(start_span);
+            bytecode_compiler.blocks
+        };
 
         if !self.errors.is_empty() {
             return Err(self.errors);
@@ -506,7 +508,6 @@ impl Compiler {
         if typecheck {
             typechecker::solve(&mut self, &statements)?;
         }
-
 
         if self.errors.is_empty() {
             Ok(Prog {
@@ -523,7 +524,7 @@ impl Compiler {
         }
     }
 
-    fn extract_globals(&mut self, tree: &AST) {
+    fn extract_globals(&mut self, tree: &AST) -> usize {
         // Find all files and map them to their namespace
         let mut path_to_namespace_id = HashMap::<PathBuf, usize>::new();
         for (path, _) in tree.modules.iter() {
@@ -541,6 +542,7 @@ impl Compiler {
             .map(|(a, b)| (*b, (*a).clone()))
             .collect();
 
+        let mut num_constants = 0;
         // Find all globals in all files and declare them. The globals are
         // initialized at a later stage.
         for (path, module) in tree.modules.iter() {
@@ -570,7 +572,7 @@ impl Compiler {
                     Definition { ident: Identifier { name, .. }, kind, .. } => {
                         let var = self.define(name, *kind, statement.span);
                         self.activate(var);
-
+                        num_constants += 1;
                         (Name::Global(var), name.clone(), statement.span)
                     }
 
@@ -599,6 +601,7 @@ impl Compiler {
             }
             self.namespaces[slot] = namespace;
         }
+        num_constants
     }
 }
 
