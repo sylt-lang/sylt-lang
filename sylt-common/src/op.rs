@@ -252,17 +252,10 @@ pub enum Op {
     ///
     /// {F, A, B} - Return - {..., B}
     Return,
-
-    /// Temporarily stops execution and returns
-    /// to the call site.
-    ///
-    /// Does not affect the stack.
-    Yield,
 }
 
 #[derive(Eq, PartialEq)]
 pub enum OpResult {
-    Yield,
     Done,
 
     // Will never be returned.

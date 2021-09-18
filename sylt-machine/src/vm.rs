@@ -243,7 +243,7 @@ impl VM {
             }
 
             let op = self.eval_op(self.op())?;
-            if matches!(op, OpResult::Done | OpResult::Yield) {
+            if matches!(op, OpResult::Done) {
                 return Ok(op);
             }
         }
@@ -350,11 +350,6 @@ impl Machine for VM {
                 let (a, b) = self.poppop();
                 self.push(b);
                 self.push(a);
-            }
-
-            Op::Yield => {
-                self.frame_mut().ip += 1;
-                return Ok(OpResult::Yield);
             }
 
             Op::Constant(value) => {
