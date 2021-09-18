@@ -74,9 +74,21 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
         TypeKind::Resolved(ty) => write!(dest, "{}", ty),
         TypeKind::UserDefined(assignable) => write_assignable(dest, indent, assignable),
         TypeKind::Union(ty, rest) => {
-            write_type(dest, indent, *ty)?;
-            write!(dest, " | ")?;
-            write_type(dest, indent, *rest)
+            match (&ty.kind, &rest.kind) {
+                (TypeKind::Resolved(RuntimeType::Void), _) => {
+                    write_type(dest, indent, *rest)?;
+                    write!(dest, "?")
+                }
+                (_, TypeKind::Resolved(RuntimeType::Void)) => {
+                    write_type(dest, indent, *ty)?;
+                    write!(dest, "?")
+                }
+                _ => {
+                    write_type(dest, indent, *ty)?;
+                    write!(dest, " | ")?;
+                    write_type(dest, indent, *rest)
+                }
+            }
         }
         TypeKind::Fn(params, ret) => {
             write!(dest, "fn")?;
