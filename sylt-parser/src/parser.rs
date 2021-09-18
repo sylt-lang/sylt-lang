@@ -541,33 +541,33 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             let mut ctx = ctx.skip(1);
             let mut types = Vec::new();
             // Tuples may (and probably will) contain multiple types.
+            let mut is_tuple = matches!(ctx.token(), T::Comma | T::RightParen);
             loop {
+                // Any initial comma is skipped since we checked it before entering the loop.
+                ctx = ctx.skip_if(T::Comma);
                 match ctx.token() {
-                    // Done parsing this tuple.
-                    T::RightParen => {
-                        ctx = ctx.skip(1);
+                    // Done.
+                    T::EOF | T::RightParen => {
                         break;
                     }
 
-                    T::EOF => {
-                        raise_syntax_error!(ctx, "Didn't expect EOF in type definition");
-                    }
-
-                    // Parse a single contained type.
+                    // Another inner expression.
                     _ => {
-                        let (_ctx, param) = parse_type(ctx)?;
+                        let (_ctx, ty) = parse_type(ctx)?;
+                        types.push(ty);
                         ctx = _ctx; // assign to outer
-                        types.push(param);
 
-                        ctx = if matches!(ctx.token(), T::Comma | T::RightParen) {
-                            ctx.skip_if(T::Comma)
-                        } else {
-                            raise_syntax_error!(ctx, "Expected ',' or ')' after tuple field")
-                        };
+                        // Not a tuple, until it is.
+                        is_tuple |= matches!(ctx.token(), T::Comma);
                     }
                 }
             }
-            (ctx, Tuple(types))
+            let ctx = expect!(ctx, T::RightParen, "Expected ')' after tuple or grouping");
+            if is_tuple {
+                (ctx, Tuple(types))
+            } else {
+                (ctx, Grouping(Box::new(types.remove(0))))
+            }
         }
 
         // List
