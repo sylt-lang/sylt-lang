@@ -514,20 +514,23 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
 }
 
 /// Replace consecutive empty statements with one empty statement with all comments of the previous statements.
-//TODO(gu): Rewrite the formatter to use moves instead of borrows. Then we wouldn't need to clone when passing
-//          into this function.
+// TODO(gu): Rewrite the formatter to use moves instead of borrows. Then we wouldn't need to clone when passing
+//           into this function.
 fn merge_empty_statements(statements: Vec<Statement>) -> Vec<Statement> {
     use StatementKind::EmptyStatement;
-    let mut prev_statement: Option<&Statement> = None;
-    let mut ret = Vec::new();
-    for stmt in statements.iter() {
-        if prev_statement.map_or(true, |s| matches!(s.kind, EmptyStatement)) && matches!(stmt.kind, EmptyStatement) && stmt.comments.is_empty() {
-            continue;
+    statements.iter().fold((Vec::new(), None),
+        |(mut ret, prev): (Vec<Statement>, Option<&Statement>), stmt| {
+            let last_is_empty = prev.map_or(true, |s| matches!(s.kind, EmptyStatement));
+            let is_empty = matches!(stmt.kind, EmptyStatement);
+            let no_comments = stmt.comments.is_empty();
+            if last_is_empty && is_empty && no_comments {
+                (ret, prev)
+            } else {
+                ret.push(stmt.clone());
+                (ret, Some(stmt))
+            }
         }
-        prev_statement = Some(&stmt);
-        ret.push(stmt.clone());
-    }
-    ret
+    ).0
 }
 
 fn format_module(module: Module) -> Result<String, fmt::Error> {
