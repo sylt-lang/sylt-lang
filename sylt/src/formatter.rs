@@ -60,14 +60,14 @@ fn write_blob_fields<T: Clone, W: Write>(
     fields: Vec<(String, T)>,
     sub_write: fn(&mut W, u32, T) -> fmt::Result,
 ) -> fmt::Result {
-    write!(dest, " {{ ")?;
+    write!(dest, " {{")?;
     match fields.len() {
         0 => {
             write!(dest, " }}")?;
         }
         1 => {
             let (field, expr) = fields[0].clone();
-            write!(dest, "{}: ", field)?;
+            write!(dest, " {}: ", field)?;
             sub_write(dest, indent, expr)?;
             write!(dest, " }}")?;
         }
