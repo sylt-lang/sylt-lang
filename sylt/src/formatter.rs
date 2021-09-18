@@ -424,7 +424,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
         StatementKind::Blob { name, fields } => {
             write_indents(dest, indent)?;
             write!(dest, "{} :: blob", name)?;
-            let fields_as_tuples = fields.iter().map(|(f, t)| (f.clone(), t.clone())).collect();
+            let fields_as_tuples = fields.into_iter().collect();
             write_blob_fields(dest, indent + 1, fields_as_tuples, write_type)?;
         }
         StatementKind::Block { statements } => {
@@ -549,8 +549,6 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
 }
 
 /// Replace consecutive empty statements with one empty statement with all comments of the previous statements.
-// TODO(gu): Rewrite the formatter to use moves instead of borrows. Then we wouldn't need to clone when passing
-//           into this function.
 fn merge_empty_statements(statements: Vec<Statement>) -> Vec<Statement> {
     use StatementKind::EmptyStatement;
     statements.iter().fold((Vec::new(), None),
