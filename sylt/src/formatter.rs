@@ -54,10 +54,11 @@ fn write_parameters<W: Write>(
     Ok(())
 }
 
-fn write_blob_fields<W: Write>(
+fn write_blob_fields<T: Clone, W: Write>(
     dest: &mut W,
     indent: u32,
-    fields: Vec<(String, Expression)>,
+    fields: Vec<(String, T)>,
+    sub_write: fn(&mut W, u32, T) -> fmt::Result,
 ) -> fmt::Result {
     write!(dest, " {{ ")?;
     match fields.len() {
@@ -67,15 +68,15 @@ fn write_blob_fields<W: Write>(
         1 => {
             let (field, expr) = fields[0].clone();
             write!(dest, "{}: ", field)?;
-            write_expression(dest, indent, expr)?;
+            sub_write(dest, indent, expr)?;
             write!(dest, " }}")?;
         }
         _ => {
             write!(dest, "\n")?;
-            for (field, expr) in fields {
+            for (field, t) in fields {
                 write_indents(dest, indent)?;
                 write!(dest, "{}: ", field)?;
-                write_expression(dest, indent, expr)?;
+                sub_write(dest, indent, t)?;
                 write!(dest, ",\n")?;
             }
             write_indents(dest, indent - 1)?;
@@ -343,7 +344,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
         }
         ExpressionKind::Blob { blob, fields } => {
             write_assignable(dest, indent, blob)?;
-            write_blob_fields(dest, indent + 1, fields)?;
+            write_blob_fields(dest, indent + 1, fields, write_expression)?;
         }
         ExpressionKind::Tuple(exprs) => {
             let num_exprs = exprs.len();
@@ -421,19 +422,11 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write_expression(dest, indent, value)?;
         }
         StatementKind::Blob { name, fields } => {
+            dbg!(&name);
             write_indents(dest, indent)?;
-            write!(dest, "{} :: blob {{", name)?;
-            if !fields.is_empty() {
-                write!(dest, "\n")?;
-                for (field, ty) in fields {
-                    write_indents(dest, indent + 1)?;
-                    write!(dest, "{}: ", field)?;
-                    write_type(dest, indent, ty)?;
-                    write!(dest, ",\n")?;
-                }
-                write_indents(dest, indent)?;
-            }
-            write!(dest, "}}")?;
+            write!(dest, "{} :: blob", name)?;
+            let fields_as_tuples = fields.iter().map(|(f, t)| (f.clone(), t.clone())).collect();
+            write_blob_fields(dest, indent + 1, fields_as_tuples, write_type)?;
         }
         StatementKind::Block { statements } => {
             write_indents(dest, indent)?;
