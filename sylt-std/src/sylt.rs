@@ -261,13 +261,13 @@ sylt_macro::extern_function!(
         let mut chars = s.chars();
         let c = match chars.next() {
             Some(c) => c,
-            //TODO(gu): Actually what went wrong
+            // TODO(gu): Actually what went wrong
             None => return Err(RuntimeError::ExternTypeMismatch("as_char".to_string(), vec![Type::String])),
         };
         if chars.next().is_none() {
             Ok(Int(c as i64))
         } else {
-            //TODO(gu): Actually what went wrong
+            // TODO(gu): Actually what went wrong
             Err(RuntimeError::ExternTypeMismatch("as_char".to_string(), vec![Type::String]))
         }
     }

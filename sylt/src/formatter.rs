@@ -637,7 +637,7 @@ macro_rules! test_formatter_on_file {
                 Err(errs) => {
                     eprintln!("The formatter couldn't parse the file but the syntax errors");
                     eprintln!("changed between before and after formatting.");
-                    let errs: Result<(), _> = Err(errs); //TODO(gu): Result<!, _> ;)
+                    let errs: Result<(), _> = Err(errs); // TODO(gu): Result<!, _> ;)
                     $crate::assert_errs!(errs, $errs);
                 }
             }
