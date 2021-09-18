@@ -217,8 +217,25 @@ impl<'c> TypeChecker<'c> {
         })
     }
 
-    fn resolve_functions_from_args(&self, span: Span, args: Vec<Type>, ty: Type) -> Result<(Vec<Type>, Type), Vec<Error>> {
+    fn resolve_functions_from_args(&self, span: Span, args: &Vec<Type>, ty: &Type) -> Result<(Vec<Type>, Type), Vec<Error>> {
         let (params, ret) = match ty {
+            // Recursive case
+            Type::Union(tys) => {
+                let mut solutions = Vec::new();
+                let mut errors = Vec::new();
+                for ty in tys.iter() {
+                    match self.resolve_functions_from_args(span, args, ty) {
+                        Ok(res) => { solutions.push(res); }
+                        Err(mut err) => { errors.append(&mut err); }
+                    }
+                }
+                // We limit ourselves to one solution, anything else is ambiguous.
+                if solutions.len() == 1 {
+                    return Ok(solutions.remove(0));
+                } else {
+                    return Err(errors);
+                }
+            },
             Type::Function(params, ret) => (params, ret),
             Type::Unknown => {
                 return Ok((args.clone(), Type::Unknown));
@@ -254,8 +271,8 @@ impl<'c> TypeChecker<'c> {
             }
             self.solve_generics_recursively(span, &mut generics, par, arg)?;
         }
-        let ret = if let Type::Generic(ret) = *ret {
-            match generics.get(&ret) {
+        let ret = if let Type::Generic(ret) = ret.as_ref() {
+            match generics.get(ret) {
                 Some(ty) => ty.clone(),
                 None => {
                     return err_type_error!(
@@ -270,7 +287,7 @@ impl<'c> TypeChecker<'c> {
         } else {
             Type::clone(&ret)
         };
-        Ok((args, ret))
+        Ok((args.to_vec(), ret))
     }
 
     fn assignable(&mut self, assignable: &Assignable, namespace: usize) -> Result<Lookup, Vec<Error>> {
@@ -330,7 +347,7 @@ impl<'c> TypeChecker<'c> {
                     }
                 };
                 let args = args.iter().map(|e| self.expression(e)).collect::<Result<Vec<_>, Vec<_>>>()?;
-                let (_params, ret) = self.resolve_functions_from_args(span, args, ty.clone())?;
+                let (_params, ret) = self.resolve_functions_from_args(span, &args, &ty)?;
                 return Ok(Value(Type::clone(&ret), VarKind::Const));
             }
             AK::ArrowCall(extra, fun, args) => {
