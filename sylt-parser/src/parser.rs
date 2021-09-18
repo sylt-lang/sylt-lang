@@ -1019,7 +1019,9 @@ mod test {
         test!(parse_type, type_fn_two_params: "fn int | void, int? -> str?" => Fn(_, _));
         test!(parse_type, type_fn_only_ret: "fn -> bool?" => Fn(_, _));
 
-        test!(parse_type, type_tuple_one: "(int)" => Tuple(_));
+        test!(parse_type, type_tuple_zero: "()" => Tuple(_));
+        test!(parse_type, type_tuple_one: "(int,)" => Tuple(_));
+        test!(parse_type, type_grouping: "(int)" => Grouping(_));
         test!(parse_type, type_tuple_complex: "(int | float?, str, str,)" => Tuple(_));
 
         test!(parse_type, type_list_one: "[int]" => List(_));
