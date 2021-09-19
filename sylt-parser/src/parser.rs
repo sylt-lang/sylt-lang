@@ -182,7 +182,7 @@ pub enum TypeKind {
     Dict(Box<Type>, Box<Type>),
     /// A generic type
     Generic(Identifier),
-    /// `(inner_type)` - usefull to correct the grouping
+    /// `(inner_type)` - useful for correcting ambiguous types
     Grouping(Box<Type>),
 }
 
