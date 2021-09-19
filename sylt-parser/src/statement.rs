@@ -1,7 +1,7 @@
 use super::*;
 
 /// The different ways a namespace is introduced by a use statement.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum NameIdentifier {
     /// When the identifier is implicit from the path. For example, `use a/b` introduces `b`.
     Implicit(Identifier),
@@ -16,7 +16,7 @@ pub enum NameIdentifier {
 /// examples of how they look in the code.
 ///
 /// Note that this shouldn't be read as a formal language specification.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StatementKind {
     /// "Imports" another file.
     ///
@@ -129,6 +129,12 @@ pub struct Statement {
     pub span: Span,
     pub kind: StatementKind,
     pub comments: Vec<String>,
+}
+
+impl PartialEq for Statement {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
 }
 
 pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {

@@ -1,0 +1,8 @@
+start :: fn do
+    a: void | void | int | float = 1
+    b: int | int = 1
+    c: float | void | int? = 1
+    d: float | int? = 1
+    e: int = 1
+    f: {float | float: int | int | void | void?} = {:}
+end

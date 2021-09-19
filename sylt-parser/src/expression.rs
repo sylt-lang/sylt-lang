@@ -4,7 +4,7 @@ use crate::statement::block;
 
 use super::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ComparisonKind {
     Equals,
     NotEquals,
@@ -19,7 +19,7 @@ pub enum ComparisonKind {
 /// The different kinds of [Expression]s.
 ///
 /// Expressions are recursive and evaluate to some kind of value.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ExpressionKind {
     /// Read from an [Assignable]. Variables, function calls, module accesses,
     /// blob fields, list indexing, tuple indexing and dict indexing end up here.
@@ -105,6 +105,12 @@ pub enum ExpressionKind {
 pub struct Expression {
     pub span: Span,
     pub kind: ExpressionKind,
+}
+
+impl PartialEq for Expression {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
 }
 
 /// Parse an [ExpressionKind::Function]: `fn a: int, b: bool -> bool <statement>`
