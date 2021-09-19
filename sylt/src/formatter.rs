@@ -548,20 +548,27 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
     Ok(())
 }
 
-/// Remove consecutive empty statements without comments
-fn merge_empty_statements(statements: Vec<Statement>) -> Vec<Statement> {
-    use StatementKind::EmptyStatement;
-    statements.into_iter().fold((Vec::new(), true),
-        |(mut ret, prev_is_empty), stmt| {
-            let last_is_empty = prev_is_empty;
-            let is_empty = matches!(stmt.kind, EmptyStatement);
-            let no_comments = stmt.comments.is_empty();
-            if !(last_is_empty && is_empty && no_comments) {
-                ret.push(stmt);
-            }
-            (ret, is_empty)
+/// Replace consecutive empty statements with one empty statement with all comments of the previous statements.
+fn merge_empty_statements(mut statements: Vec<Statement>) -> Vec<Statement> {
+    // Reverse since
+    // - we always want to remove and look at the first statement and
+    // - pop() is faster than remove(0).
+    statements.reverse();
+
+    let mut ret = Vec::new();
+    while let Some(mut statement) = statements.pop() {
+        // Begin eating empty statements
+        while matches!(
+            statements.last().map(|s| &s.kind),
+            Some(StatementKind::EmptyStatement)
+        ) {
+            statement
+                .comments
+                .append(&mut statements.pop().unwrap().comments);
         }
-    ).0
+        ret.push(statement);
+    }
+    ret
 }
 
 fn format_module(module: Module) -> Result<String, fmt::Error> {
