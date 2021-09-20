@@ -54,16 +54,34 @@ fn write_parameters<W: Write>(
     Ok(())
 }
 
-fn write_blob_fields<W: Write>(
+fn write_blob_fields<T, W: Write>(
     dest: &mut W,
     indent: u32,
-    fields: Vec<(String, Expression)>,
+    mut fields: Vec<(String, T)>,
+    sub_write: fn(&mut W, u32, T) -> fmt::Result,
 ) -> fmt::Result {
-    for (field, expr) in fields {
-        write_indents(dest, indent)?;
-        write!(dest, "{}: ", field)?;
-        write_expression(dest, indent, expr)?;
-        write!(dest, ",\n")?;
+    write!(dest, " {{")?;
+    match fields.len() {
+        0 => {
+            write!(dest, " }}")?;
+        }
+        1 => {
+            let (field, expr) = fields.pop().unwrap();
+            write!(dest, " {}: ", field)?;
+            sub_write(dest, indent, expr)?;
+            write!(dest, " }}")?;
+        }
+        _ => {
+            write!(dest, "\n")?;
+            for (field, t) in fields {
+                write_indents(dest, indent)?;
+                write!(dest, "{}: ", field)?;
+                sub_write(dest, indent, t)?;
+                write!(dest, ",\n")?;
+            }
+            write_indents(dest, indent - 1)?;
+            write!(dest, "}}")?;
+        }
     }
     Ok(())
 }
@@ -353,17 +371,25 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
                 write_type(dest, indent, ret)?;
                 write!(dest, " ")?;
             }
-            write_statement(dest, indent, *body)?;
+
+            match body.kind {
+                StatementKind::Block { statements } => {
+                    write!(dest, "do\n")?;
+                    for s in merge_empty_statements(statements) {
+                        write_statement(dest, indent + 1, s)?;
+                    }
+                    write_indents(dest, indent)?;
+                    write!(dest, "end")?;
+                    // NOTE(ed): No newline here!
+                }
+                _ => {
+                    write_statement(dest, indent, *body)?;
+                }
+            }
         }
         ExpressionKind::Blob { blob, fields } => {
             write_assignable(dest, indent, blob)?;
-            write!(dest, " {{")?;
-            if !fields.is_empty() {
-                write!(dest, "\n")?;
-                write_blob_fields(dest, indent + 1, fields)?;
-                write_indents(dest, indent)?;
-            }
-            write!(dest, "}}")?;
+            write_blob_fields(dest, indent + 1, fields, write_expression)?;
         }
         ExpressionKind::Tuple(exprs) => {
             let num_exprs = exprs.len();
@@ -415,8 +441,8 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
 
 fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) -> fmt::Result {
     for comment in &statement.comments {
-        write!(dest, "// {}\n", comment)?;
         write_indents(dest, indent)?;
+        write!(dest, "// {}\n", comment)?;
     }
 
     match statement.kind {
@@ -425,6 +451,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             target,
             value,
         } => {
+            write_indents(dest, indent)?;
             write_assignable(dest, indent, target)?;
             write!(
                 dest,
@@ -440,39 +467,37 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write_expression(dest, indent, value)?;
         }
         StatementKind::Blob { name, fields } => {
-            write!(dest, "{} :: blob {{", name)?;
-            if !fields.is_empty() {
-                write!(dest, "\n")?;
-                for (field, ty) in fields {
-                    write_indents(dest, indent + 1)?;
-                    write!(dest, "{}: ", field)?;
-                    write_type(dest, indent, ty)?;
-                    write!(dest, ",\n")?;
-                }
-                write_indents(dest, indent)?;
-            }
-            write!(dest, "}}")?;
+            write_indents(dest, indent)?;
+            write!(dest, "{} :: blob", name)?;
+            let fields_as_tuples = fields.into_iter().collect();
+            write_blob_fields(dest, indent + 1, fields_as_tuples, write_type)?;
         }
         StatementKind::Block { statements } => {
+            write_indents(dest, indent)?;
             write!(dest, "do\n")?;
 
             for s in merge_empty_statements(statements) {
-                write_indents(dest, indent + 1)?;
                 write_statement(dest, indent + 1, s)?;
-                write!(dest, "\n")?;
             }
 
             write_indents(dest, indent)?;
-            write!(dest, "end")?;
+            write!(dest, "end")?
         }
-        StatementKind::Break => write!(dest, "break")?,
-        StatementKind::Continue => write!(dest, "continue")?,
+        StatementKind::Break => {
+            write_indents(dest, indent)?;
+            write!(dest, "break")?
+        }
+        StatementKind::Continue => {
+            write_indents(dest, indent)?;
+            write!(dest, "continue")?
+        }
         StatementKind::Definition {
             ident,
             kind,
             ty,
             value,
         } => {
+            write_indents(dest, indent)?;
             write_identifier(dest, ident)?;
             if matches!(ty.kind, TypeKind::Implied) {
                 write!(
@@ -507,11 +532,12 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
         } => {
             if matches!(fail.kind, StatementKind::EmptyStatement) {
                 for comment in &fail.comments {
-                    write!(dest, "// {}\n", comment)?;
                     write_indents(dest, indent)?;
+                    write!(dest, "// {}\n", comment)?;
                 }
             }
 
+            write_indents(dest, indent)?;
             write!(dest, "if ")?;
             write_expression(dest, indent, condition)?;
             write!(dest, " ")?;
@@ -522,23 +548,30 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             }
         }
         StatementKind::IsCheck { lhs, rhs } => {
+            write_indents(dest, indent)?;
             write!(dest, ":")?;
             write_type(dest, indent, lhs)?;
             write!(dest, " is :")?;
             write_type(dest, indent, rhs)?;
         }
         StatementKind::Loop { condition, body } => {
+            write_indents(dest, indent)?;
             write!(dest, "loop ")?;
             write_expression(dest, indent, condition)?;
             write!(dest, " ")?;
             write_statement(dest, indent, *body)?;
         }
         StatementKind::Ret { value } => {
+            write_indents(dest, indent)?;
             write!(dest, "ret ")?;
             write_expression(dest, indent, value)?;
         }
-        StatementKind::StatementExpression { value } => write_expression(dest, indent, value)?,
+        StatementKind::StatementExpression { value } => {
+            write_indents(dest, indent)?;
+            write_expression(dest, indent, value)?;
+        }
         StatementKind::Unreachable => {
+            write_indents(dest, indent)?;
             write!(dest, "<!>")?;
         }
         StatementKind::Use {
@@ -546,6 +579,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             name,
             file: _,
         } => {
+            write_indents(dest, indent)?;
             write!(dest, "use ")?;
             write_identifier(dest, path)?;
             if let NameIdentifier::Alias(alias) = name {
@@ -554,13 +588,12 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             }
         }
     }
+    write!(dest, "\n")?;
 
     Ok(())
 }
 
 /// Replace consecutive empty statements with one empty statement with all comments of the previous statements.
-//TODO(gu): Rewrite the formatter to use moves instead of borrows. Then we wouldn't need to clone when passing
-//          into this function.
 fn merge_empty_statements(mut statements: Vec<Statement>) -> Vec<Statement> {
     // Reverse since
     // - we always want to remove and look at the first statement and
@@ -656,7 +689,7 @@ macro_rules! test_formatter_on_file {
                 Err(errs) => {
                     eprintln!("The formatter couldn't parse the file but the syntax errors");
                     eprintln!("changed between before and after formatting.");
-                    let errs: Result<(), _> = Err(errs); //TODO(gu): Result<!, _> ;)
+                    let errs: Result<(), _> = Err(errs); // TODO(gu): Result<!, _> ;)
                     $crate::assert_errs!(errs, $errs);
                 }
             }

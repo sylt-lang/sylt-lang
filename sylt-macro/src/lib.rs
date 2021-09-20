@@ -534,7 +534,7 @@ impl DocFile {
         use std::fs::File;
         use std::io::prelude::*;
         match File::create(&Path::new("docs/docs.json")) {
-            Err(_msg) => (), //TODO(gu) report errors
+            Err(_msg) => (), // TODO(gu) report errors
             Ok(mut file) => {
                 write!(file, "[\n{}\n]", self.docs.join(",\n")).unwrap();
             }
