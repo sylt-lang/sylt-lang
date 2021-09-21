@@ -1,7 +1,5 @@
-use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use sylt_common::error::Error;
 use sylt_common::prog::Prog;
 use sylt_common::{Op, RustFunction, Type, Value};
@@ -15,6 +13,7 @@ use sylt_parser::{
 mod typechecker;
 mod dependency;
 mod bytecode;
+mod lua;
 
 type VarSlot = usize;
 
@@ -489,17 +488,27 @@ impl Compiler {
             return Err(self.errors);
         }
 
-        let blocks = {
-            let mut bytecode_compiler = bytecode::BytecodeCompiler::new(&mut self);
-            bytecode_compiler.preamble(start_span, num_constants);
+        // let blocks = {
+        //     let mut bytecode_compiler = bytecode::BytecodeCompiler::new(&mut self);
+        //     bytecode_compiler.preamble(start_span, num_constants);
+
+        //     for (statement, namespace) in statements.iter() {
+        //         bytecode_compiler.compile(statement, *namespace);
+        //     }
+
+        //     bytecode_compiler.postamble(start_span);
+        //     bytecode_compiler.blocks
+        // };
+
+        {
+            let mut lua_compiler = lua::LuaCompiler::new(&mut self);
 
             for (statement, namespace) in statements.iter() {
-                bytecode_compiler.compile(statement, *namespace);
+                lua_compiler.compile(statement, *namespace);
             }
 
-            bytecode_compiler.postamble(start_span);
-            bytecode_compiler.blocks
-        };
+            println!("{}", lua_compiler.blocks);
+        }
 
         if !self.errors.is_empty() {
             return Err(self.errors);
@@ -511,10 +520,7 @@ impl Compiler {
 
         if self.errors.is_empty() {
             Ok(Prog {
-                blocks: blocks
-                    .into_iter()
-                    .map(|x| Rc::new(RefCell::new(x)))
-                    .collect(),
+                blocks: Vec::new(),
                 functions: functions.iter().map(|(_, f, _)| *f).collect(),
                 constants: self.constants,
                 strings: self.strings,
