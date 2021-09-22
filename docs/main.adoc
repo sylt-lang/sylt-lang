@@ -16,3 +16,5 @@ end
 
 <1> Define the program entry point
 <2> Do the thing
+
+See link:short.html[Short] and link:long.html[Long]
