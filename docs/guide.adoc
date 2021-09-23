@@ -1,1 +1,73 @@
 = Guide
+
+[quote, The Restaurant at the End of the Universe]
+The Guide is definitive. Reality is frequently inaccurate.
+
+The guide is a longer walkthrough of the Sylt language. It aims to describe how
+to write Sylt and in some cases why you might want to do something in a certain
+way. It is mainly intended for new users of Sylt who want a guided walkthrough
+of the language. For a shorter reference with less text to read and more
+examples to copy, check out the link:quick-reference.html[Quick Reference].
+
+== About the guide
+
+The guide expects at least basic familiarity with programming. If you haven't
+done any programming at all, consider something like a beginner's tutorial to
+Python or Lua, other languages which Sylt takes some inspiration from.
+
+== Getting started
+
+== Values and variables
+
+There are 4 basic types which can be composed in lists, tuples, sets, dicts
+and blobs. Functions, which functions as values, are described in *REF*.
+Types can also function as values which is described in *REF*.
+
+=== Variables and constant variables
+
+Values can be assigned to variables, which works just the way you expect it to.
+
+Variables can be captured, which is described in *REF*.
+
+Variables can optionally be declared as _constant_. Constant variables will
+always point to the same value, but the value itself can still be modified (if
+it is a modifiable value, see below).
+
+[source, sylt]
+----
+pp := 1     // a variable declaration
+PI :: 3.14  // a constant declaration
+----
+
+//TODO this case has an actual name
+Constant variables should be written in `CAPITAL_CASE` (apart from functions).
+
+The type of the variable is inferred but can be supplied or even forced, which
+is described in *REF*.
+
+=== Basic values
+
+These are best described with some code. Basic values are immutable.
+
+[source, sylt]
+----
+// Strings
+"string"
+"contains spaces"
+"sometimes \"escaped quotes\" as well"
+
+// Integers
+1
+-2
+
+// Floats
+1.0
+-5.5
+1.    // trailing 0 optional
+
+// Bools
+true
+false
+----
+
+=== Composite values
