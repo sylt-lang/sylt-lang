@@ -1,1 +1,27 @@
 = Sylt Quick Reference
+
+Here you will find most things in Sylt in a concise format.
+
+== Variables
+
+[source, sylt]
+----
+constant :: 3.14
+variable := []
+two: int : 2
+text: str = "abc"
+----
+
+== Imports
+
+[source, sylt]
+----
+use file          // file.thing
+use folder/file   // file.thing
+use folder/       // folder.thing <1>
+use file as name  // name.thing
+use /res/         // res.thing    <2>
+----
+
+<1> Same as `use folder/exports.sy as folder`.
+<2> Leading `/` signifies the project root.
