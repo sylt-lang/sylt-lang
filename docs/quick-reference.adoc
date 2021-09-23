@@ -2,8 +2,7 @@
 
 Here you will find most things in Sylt in a concise format.
 
-== Variables
-
+.Variables
 [source, sylt]
 ----
 constant :: 3.14
@@ -12,8 +11,24 @@ two: int : 2
 text: str = "abc"
 ----
 
-== Imports
+.If-else statements
+[source, sylt]
+----
+if 1 < 0 do
+    // ...
+else if "hello" == "" do
+    // ...
+else do
+    // ...
+end
 
+one :: 1 if true else 2
+two :: one + 1 if == 2 else -1 // <1>
+----
+
+<1> The left hand side is inserted right after `if`
+
+.Imports
 [source, sylt]
 ----
 use file          // file.thing
