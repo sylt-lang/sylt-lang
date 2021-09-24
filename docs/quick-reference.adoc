@@ -119,6 +119,31 @@ empty_tuple: () = ()
 one_element_tuple: (int,) = (1,)
 ----
 
+.Blobs
+[source, sylt]
+----
+Player :: blob {
+    x: float,
+    update: fn float -> void,
+}
+
+// A Player "constructor"
+new_player :: fn -> Player do
+    player: !Player = nil
+    player = Player {
+        x: 0.0,
+        update: fn delta: float do
+            player.x += delta
+        end
+    }
+    ret player
+end
+
+player :: new_player()
+player.update(0.5)
+print(player.x)
+----
+
 .Imports
 [source, sylt]
 ----
