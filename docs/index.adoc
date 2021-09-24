@@ -1,9 +1,11 @@
 = Sylt
+:favicon: sylt.png
 // :source-highlighter: rouge
 
 Sylt is a statically checked and dynamically typed programming language made
 for game jams. Working in Sylt should be a pain- and fearless experience. If it
-isn't, please file an issue.
+isn't, please file an
+https://github.com/FredTheDino/sylt-lang/issues/new/choose[issue].
 
 Everyone likes example code, so here is some:
 

@@ -1,4 +1,5 @@
 = Guide
+:favicon: sylt.png
 
 [quote, The Restaurant at the End of the Universe]
 The Guide is definitive. Reality is frequently inaccurate.
