@@ -93,6 +93,7 @@ end
 [source, sylt]
 ----
 // Basic types
+
 integer: int = 100
 decimal: float = 1.5
 string: str = "hello"
