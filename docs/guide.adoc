@@ -19,8 +19,8 @@ Python or Lua, other languages which Sylt takes some inspiration from.
 
 == Values and variables
 
-There are 4 basic types which can be composed in lists, tuples, sets, dicts
-and blobs. Functions, which functions as values, are described in *REF*.
+There are 4 basic types of values which can be composed in lists, tuples, sets,
+dicts and blobs. Functions, which functions as values, are described in *REF*.
 Types can also function as values which is described in *REF*.
 
 === Variables and constant variables
@@ -63,7 +63,8 @@ These are best described with some code. Basic values are immutable.
 // Floats
 1.0
 -5.5
-1.    // trailing 0 optional
+1.  // trailing 0 optional
+.5  // leading 0 optional
 
 // Bools
 true
@@ -71,3 +72,103 @@ false
 ----
 
 === Composite values
+
+== If-statements and if-expressions
+
+These are your normal control flow statements.
+
+.Normal if-statements
+[source, sylt]
+----
+if a == 0 do
+    print("zero")
+end
+----
+
+There is also if-expressions, which evaluate depending on a condition.
+
+.If-expressions as seen in e.g. Python
+[source, sylt]
+----
+a := 5 if b == 0 else 1
+----
+
+A shortened form is available if the pass-branch is also the left hand side of
+the condition.
+
+.A motivating example for the short if-expression
+[source, sylt]
+----
+// These two are equivalent
+a := (b + 5.) / 10. if (b + 5.) / 10. > 1. else 0.
+//   ^^^^^^^^^^^^^^    ^^^^^^^^^^^^^^
+a := (b + 5.) / 10. if > 1. else 0.
+----
+
+== Operators
+
+The basic operators are all here. Normal mathematical grouping is applied.
+
+.Arithmetic operators
+[source, sylt]
+----
+1 + 1
+2 - 2
+3 * 3
+10 / 2
+-4
+----
+
+.Comparison operators
+[source, sylt]
+----
+1 < 2
+2 > 1
+1 <= 1
+1 >= 1
+"a" == "a"
+
+// Assert equal. Execution is halted if the values compare non-equal
+[1, 2] <=> [1, 2]
+----
+
+.Parenthesis for grouping
+[source, sylt]
+----
+(1 + 1) * 2
+----
+
+.Boolean operators
+[source, sylt]
+----
+true or false
+true and true
+not true
+----
+
+== Imports
+
+Code can be written in multiple files, to your liking. You don't have to
+consider include ordering and dependency cycles. Write your code anywhere you
+want!
+
+In these examples, the file name of each listing is written as a comment at the
+top.
+
+[source, sylt]
+----
+// a.sy
+use b  // import the file "b.sy"
+
+start :: fn do
+    print(b.HELLO)
+end
+----
+
+[source, sylt]
+----
+// b.sy
+use a  // cycles are OK
+
+HELLO :: "hello!"
+----
