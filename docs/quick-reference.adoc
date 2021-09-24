@@ -1,4 +1,5 @@
 = Sylt Quick Reference
+:favicon: sylt.png
 
 Here you will find most things in Sylt in a concise format.
 

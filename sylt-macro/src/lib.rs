@@ -19,7 +19,7 @@ struct ExternFunction {
     module: syn::LitStr,
     function: syn::Ident,
     name: Option<syn::Ident>,
-    doc: syn::LitStr,
+    _doc: syn::LitStr,
     signature: syn::LitStr,
     blocks: Vec<ExternBlock>,
 }
@@ -75,7 +75,7 @@ impl Parse for ExternFunction {
             module,
             function,
             name,
-            doc: doc.unwrap(),
+            _doc: doc.unwrap(),
             signature: ty.unwrap(),
             blocks,
         })
@@ -88,7 +88,6 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
     let module = parsed.module;
     let function = parsed.function;
     let link_name = parsed.name.unwrap_or_else(|| function.clone());
-    let doc = parsed.doc;
     let signature = parsed.signature;
 
     let eval_blocks: Vec<_> = parsed
@@ -104,7 +103,6 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
         .collect();
 
     let tokens = quote! {
-        #[sylt_macro::sylt_doc(#link_name, #doc, #signature)]
         #[sylt_macro::sylt_link(#link_name, #module, #signature)]
         pub fn #function (
             ctx: ::sylt_common::RuntimeContext
@@ -493,74 +491,6 @@ pub fn sylt_link_gen(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream
         }
     };
     proc_macro::TokenStream::from(tokens)
-}
-
-struct SyltDoc {
-    name: syn::Ident,
-    comment: syn::LitStr,
-    signature: syn::LitStr,
-}
-
-impl Parse for SyltDoc {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let name: syn::Ident = input.parse()?;
-        let _comma: Token![,] = input.parse()?;
-        let comment = input.parse()?;
-        let _comma: Token![,] = input.parse()?;
-        let signature = input.parse()?;
-
-        Ok(SyltDoc {
-            name,
-            comment,
-            signature,
-        })
-    }
-}
-
-struct DocFile {
-    docs: Vec<String>,
-}
-
-lazy_static! {
-    static ref DOC: Arc<Mutex<DocFile>> = doc_file();
-}
-
-fn doc_file() -> Arc<Mutex<DocFile>> {
-    Arc::new(Mutex::new(DocFile { docs: Vec::new() }))
-}
-
-impl DocFile {
-    fn dump(&mut self) {
-        use std::fs::File;
-        use std::io::prelude::*;
-        match File::create(&Path::new("docs/docs.json")) {
-            Err(_msg) => (), // TODO(gu) report errors
-            Ok(mut file) => {
-                write!(file, "[\n{}\n]", self.docs.join(",\n")).unwrap();
-            }
-        }
-    }
-}
-
-#[proc_macro_attribute]
-pub fn sylt_doc(
-    attrib: proc_macro::TokenStream,
-    tokens: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
-    let doc: SyltDoc = parse_macro_input!(attrib);
-
-    let doc = format!(
-        "{{ \"name\": \"{}\", \"comment\": \"{}\", \"signature\": {}}}",
-        doc.name.to_string(),
-        doc.comment.value().replace("\n", "\\n"),
-        doc.signature.value().split_whitespace().collect::<Vec<_>>().join(" "),
-    );
-    let mut doc_file = DOC.lock().unwrap();
-    doc_file.docs.push(doc);
-    doc_file.dump();
-    drop(doc_file);
-
-    tokens
 }
 
 struct SyltLink {
