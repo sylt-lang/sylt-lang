@@ -9,7 +9,11 @@ constant :: 3.14
 variable := []
 two: int : 2
 text: str = "abc"
+text = "A short sentence."  // <1>
 ----
+
+<1> A single `=` is used to set the value of a variable after declaration with
+`:=`.
 
 .If-else statements
 [source, sylt]
@@ -84,6 +88,18 @@ end
 ----
 
 <1> This creates a function which returns implicitly and calls it immediately.
+
+.Types
+[source, sylt]
+----
+integer: int = 100
+decimal: float = 1.5
+string: str = "hello"
+list: [int] = [1, 2, 3]
+dict: {str: int} = {"a": 1, "b": 2}
+set: {int} = {1, 2, 3}
+function: fn -> void = fn do end
+----
 
 .Imports
 [source, sylt]
