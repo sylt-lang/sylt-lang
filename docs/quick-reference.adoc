@@ -92,13 +92,31 @@ end
 .Types
 [source, sylt]
 ----
+// Basic types
 integer: int = 100
 decimal: float = 1.5
 string: str = "hello"
 list: [int] = [1, 2, 3]
+tuple: (str, float) = ("cookies", 1.5)
 dict: {str: int} = {"a": 1, "b": 2}
 set: {int} = {1, 2, 3}
 function: fn -> void = fn do end
+nothing: void = nil
+
+// Other types
+
+forced_int: !int = "str"
+union: int | str = 1
+union = "now a string"
+maybe_int: int? = nil
+maybe_int = 1
+
+// Special cases
+
+empty_dict := {:}
+empty_set := {}
+empty_tuple: () = ()
+one_element_tuple: (int,) = (1,)
 ----
 
 .Imports
