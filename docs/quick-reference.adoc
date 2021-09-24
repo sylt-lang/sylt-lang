@@ -52,6 +52,39 @@ true and true
 not true
 ----
 
+.Functions
+[source, sylt]
+----
+hello :: fn do
+    print("Hello world")
+end
+
+add :: fn x: int, y: int -> int do
+    ret x + y
+end
+
+two_squared :: fn n: int -> int do n * n end(2)  // <1>
+
+// Different ways of calling functions
+
+hello()
+print("Hello, world!")
+add(1, 2)
+
+hello'
+print' "Hello, world!"
+add' 1, 2
+
+"Hello, world!" -> print()
+1 -> add' 2
+
+[1, 2, 3] -> for_each' fn n: int do
+    print(n)
+end
+----
+
+<1> This creates a function which returns implicitly and calls it immediately.
+
 .Imports
 [source, sylt]
 ----
