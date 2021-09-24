@@ -149,7 +149,7 @@ not true
 == Imports
 
 Code can be written in multiple files, to your liking. You don't have to
-consider include ordering and dependency cycles. Write your code anywhere you
+consider include ordering or dependency cycles. Write your code anywhere you
 want!
 
 In these examples, the file name of each listing is written as a comment at the
