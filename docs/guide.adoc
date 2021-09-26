@@ -32,7 +32,7 @@ Variables can be captured, which is described in *REF*.
 
 Variables can optionally be declared as _constant_. Constant variables will
 always point to the same value, but the value itself can still be modified (if
-it is a modifiable value, see below).
+it is a modifiable value; see REF for details).
 
 [source, sylt]
 ----
@@ -76,7 +76,7 @@ false
 
 == If-statements and if-expressions
 
-These are your normal control flow statements.
+These are your standard control flow statements.
 
 .Normal if-statements
 [source, sylt]
@@ -86,9 +86,10 @@ if a == 0 do
 end
 ----
 
-There is also if-expressions, which evaluate depending on a condition.
+There is also if-expressions, which evaluate to different values depending on a
+condition.
 
-.If-expressions as seen in e.g. Python
+.If-expressions, as seen in e.g. Python
 [source, sylt]
 ----
 a := 5 if b == 0 else 1
@@ -104,6 +105,7 @@ the condition.
 a := (b + 5.) / 10. if (b + 5.) / 10. > 1. else 0.
 //   ^^^^^^^^^^^^^^    ^^^^^^^^^^^^^^
 a := (b + 5.) / 10. if > 1. else 0.
+//   ^^^^^^^^^^^^^^    ^^^^
 ----
 
 == Operators
@@ -113,21 +115,21 @@ The basic operators are all here. Normal mathematical grouping is applied.
 .Arithmetic operators
 [source, sylt]
 ----
-1 + 1
-2 - 2
-3 * 3
-10 / 2
--4
+1 + 1   // 2
+2 - 2   // 0
+3 * 3   // 9
+10 / 2  // 5.0
+-4      // -4
 ----
 
 .Comparison operators
 [source, sylt]
 ----
-1 < 2
-2 > 1
-1 <= 1
-1 >= 1
-"a" == "a"
+1 < 2   // true
+2 > 1   // true
+1 <= 1  // true
+1 >= 2  // false
+"a" == "a"   // true
 
 // Assert equal. Execution is halted if the values compare non-equal
 [1, 2] <=> [1, 2]
@@ -136,15 +138,15 @@ The basic operators are all here. Normal mathematical grouping is applied.
 .Parenthesis for grouping
 [source, sylt]
 ----
-(1 + 1) * 2
+(1 + 1) * 2  // 4
 ----
 
 .Boolean operators
 [source, sylt]
 ----
-true or false
-true and true
-not true
+true or false  // true
+true and true  // true
+not true       // false
 ----
 
 == Includes
@@ -159,7 +161,7 @@ top.
 [source, sylt]
 ----
 // a.sy
-use b  // import the file "b.sy"
+use b  // imports "b.sy"
 
 start :: fn do
     print(b.HELLO)
@@ -174,4 +176,41 @@ use a  // cycles are OK
 HELLO :: "hello!"
 ----
 
-=== Different ways of including files
+All variables declared outside of functions (as well as the functions
+themselves) will be reachable. Beware of global and mutable variables! Unless
+you know it's what you need. :)
+
+Files are included relative to the current file. With a leading "/" the path is
+started from the working directory of the game process, which might be useful
+if a file is located a few directories down.
+
+[source, sylt]
+----
+// a/b/c.sy
+use d.sy   // imports "a/b/d.sy"
+use /d.sy  // imports "d.sy"
+----
+
+A directory can also be used if it is supplied with a trailing "/", which will
+import the file "exports.sy" in that directory. This can be used to create
+modules containing related code and a central "exporting-file".
+
+[source, sylt]
+----
+// a.sy
+use d/  // imports "d/exports.sy"
+----
+
+Includes (both files and directories) can be aliased to other names.
+
+[source, sylt]
+----
+// a.sy
+use b as c   // imports "b.sy" under the namespace c
+// use c/    // invalid since the namespace c exists
+use c/ as d  // imports "c/exports.sy" under the namespace d
+----
+
+[source, sylt]
+----
+----
