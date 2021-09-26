@@ -13,8 +13,8 @@ text: str = "abc"
 text = "A short sentence."  // <1>
 ----
 
-<1> A single `=` is used to set the value of a variable after declaration with
-`:=`.
+<1> A single `=` is used to update the value of a variable. Variables are
+declarared with `:=`.
 
 .If-else statements
 [source, sylt]
@@ -31,7 +31,7 @@ one :: 1 if true else 2
 two :: one + 1 if == 2 else -1 // <1>
 ----
 
-<1> The left hand side is inserted right after `if`
+<1> The left hand side is inserted right after `if`.
 
 .Operators
 [source, sylt]
@@ -115,7 +115,7 @@ union = "now a string"
 maybe_int: int? = nil
 maybe_int = 1
 
-// Special cases
+// Disambiguation
 
 empty_dict := {:}
 empty_set := {}
@@ -146,6 +146,28 @@ end
 player :: new_player()
 player.update(0.5)
 print(player.x)
+
+// Duck typing
+
+Drawable :: blob {
+    draw: fn -> void,
+}
+
+HitpointDisplay :: blob {
+    pos: (int, int),
+    hp: int,
+    draw: fn -> void,
+}
+
+drawable: Drawable = HitpointDisplay {
+    pos: (0, 0),
+    hp: 100,
+    draw: fn do
+        // Drawing logic
+    end
+}
+
+drawable.draw()
 ----
 
 .Imports
