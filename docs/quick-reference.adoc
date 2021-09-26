@@ -1,7 +1,7 @@
 = Sylt Quick Reference
 :favicon: sylt.png
 
-Here you will find most things in Sylt in a concise format.
+Here you will find most things in the Sylt language in a concise format.
 
 .Variables
 [source, sylt]
@@ -88,7 +88,8 @@ add' 1, 2
 end
 ----
 
-<1> This creates a function which returns implicitly and calls it immediately.
+<1> This creates a function with an implicit return. The function is then
+called immediately.
 
 .Types
 [source, sylt]
