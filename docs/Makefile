@@ -6,7 +6,7 @@ TARGETS := $(patsubst %.adoc,$(BUILD)/%.html,$(FILES)) $(BUILD)/sylt.png
 
 all: $(TARGETS)
 
-$(BUILD)/%.html: %.adoc | $(BUILD)
+$(BUILD)/%.html: %.adoc stylesheet.css | $(BUILD)
 	asciidoctor --out-file $@ $<
 
 $(BUILD)/sylt.png: | $(BUILD)

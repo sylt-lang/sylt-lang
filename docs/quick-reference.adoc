@@ -1,5 +1,6 @@
 = Sylt Quick Reference
 :favicon: sylt.png
+:stylesheet: stylesheet.css
 
 Here you will find most things in the Sylt language in a concise format.
 

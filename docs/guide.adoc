@@ -1,2 +1,3 @@
 = Guide
 :favicon: sylt.png
+:stylesheet: stylesheet.css
