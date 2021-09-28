@@ -1,2 +1,238 @@
 = Sylt Quick Reference
 :favicon: sylt.png
+
+Here you will find most things in the Sylt language in a concise format.
+
+.Variables
+[source, sylt]
+----
+constant :: 3.14
+variable := []
+two: int : 2
+text: str = "abc"
+text = "A short sentence."  // <1>
+----
+
+<1> A single `=` is used to update the value of a variable. Variables are
+declarared with `:=`.
+
+.If-else statements
+[source, sylt]
+----
+if 1 < 0 do
+    // ...
+else if "hello" == "" do
+    // ...
+else do
+    // ...
+end
+
+one :: 1 if true else 2
+two :: one + 1 if == 2 else -1 // <1>
+----
+
+<1> The left hand side is inserted right after `if`.
+
+.Operators
+[source, sylt]
+----
+1 + 1
+2 - 2
+3 * 3
+10 / 2
+-4
+
+1 < 2
+2 > 1
+1 <= 1
+1 >= 1
+"a" == "a"
+
+[1, 2] <=> [1, 2]  // Assert equal
+
+(1 + 1) * 2
+
+true or false
+true and true
+not true
+----
+
+.Functions
+[source, sylt]
+----
+hello :: fn do
+    print("Hello world")
+end
+
+add :: fn x: int, y: int -> int do
+    ret x + y
+end
+
+two_squared :: fn n: int -> int do n * n end(2)  // <1>
+
+// Different ways of calling functions
+
+hello()
+print("Hello, world!")
+add(1, 2)
+
+hello'
+print' "Hello, world!"
+add' 1, 2
+
+"Hello, world!" -> print()
+1 -> add' 2
+
+[1, 2, 3] -> for_each' fn n: int do
+    print(n)
+end
+----
+
+<1> This creates a function with an implicit return. The function is then
+called immediately.
+
+.Types
+[source, sylt]
+----
+// Basic types
+
+integer: int = 100
+decimal: float = 1.5
+string: str = "hello"
+boolean: bool = true
+list: [int] = [1, 2, 3]
+tuple: (str, float) = ("cookies", 1.5)
+dict: {str: int} = {"a": 1, "b": 2}
+set: {int} = {1, 2, 3}
+function: fn -> void = fn do end
+nothing: void = nil
+
+// Other types
+
+forced_int: !int = "str"
+union: int | str = 1
+union = "now a string"
+maybe_int: int? = nil
+maybe_int = 1
+
+// Disambiguation
+
+empty_dict := {:}
+empty_set := {}
+empty_tuple: () = ()
+one_element_tuple: (int,) = (1,)
+----
+
+.Blobs
+[source, sylt]
+----
+Player :: blob {
+    x: float,
+    update: fn float -> void,
+}
+
+// A Player "constructor"
+new_player :: fn -> Player do
+    player: !Player = nil
+    player = Player {
+        x: 0.0,
+        update: fn delta: float do
+            player.x += delta
+        end
+    }
+    ret player
+end
+
+player :: new_player()
+player.update(0.5)
+print(player.x)
+
+// Duck typing
+
+Drawable :: blob {
+    draw: fn -> void,
+}
+
+HitpointDisplay :: blob {
+    pos: (int, int),
+    hp: int,
+    draw: fn -> void,
+}
+
+drawable: Drawable = HitpointDisplay {
+    pos: (0, 0),
+    hp: 100,
+    draw: fn do
+        // Drawing logic
+    end
+}
+
+drawable.draw()
+----
+
+.Imports
+[source, sylt]
+----
+use file          // file.thing
+use folder/file   // file.thing
+use folder/       // folder.thing <1>
+use file as name  // name.thing
+use /res/         // res.thing    <2>
+----
+
+<1> Same as `use folder/exports.sy as folder`.
+<2> Leading `/` signifies the project root.
+
+// TODO(Er): Look over these
+.Standard library
+[source, sylt]
+----
+// Math
+sin :: fn t: float -> float end
+cos :: fn t: float -> float end
+atan2 :: fn x: float, y: float -> float end
+sqrt :: fn x: float -> float end
+abs :: fn x: float -> float end
+sign :: fn x: #X -> #X end
+clamp :: fn a: #X, low: #X, high: #X -> #X end
+min :: fn a: float, b: float -> float end
+max :: fn a: float, b: float -> float end
+rem :: fn x: #X, y: #X -> #X end
+pow :: fn x: float, y: float -> float end
+angle :: fn coord: (float, float) -> float end
+magnitude :: fn coord: (float, float) -> float end
+magnitude_squared :: fn coord: (float, float) -> float end
+normalize :: fn coord: (float, float) -> (float, float) end
+reflect :: fn v: (float, float), n: (float, float) -> (float, float) end
+dot :: fn coord: (float, float) -> float end
+
+// Conversions
+as_float :: fn n: int -> float end
+as_int :: fn n: float -> int end
+as_str :: fn x: #X -> str end
+as_chars :: fn s: str -> [int] end
+as_char :: fn s: str -> int end
+
+// Iterators
+filter :: fn list: [#Item], f: fn #Item -> bool -> [#Item] end
+fold :: fn list: [#Item], init: #Item, f: fn #Item, #Item -> #Out -> #Out end
+for_each :: fn list: [#Item], f: fn #Item -> void -> void end
+map :: fn list: [#Item], f: fn #Item -> #Out -> [#Out] end
+reduce :: fn list: [#Item], f: fn #Item, #Item -> #Out -> #Out end
+
+// System
+print :: fn x: #X -> void end
+dbg :: fn x: #X -> #X end
+args :: fn -> {str: str} end
+debug_assertions :: fn -> bool end
+thread_sleep :: fn seconds: float -> void end
+
+// Lists, sets and dicts
+push :: fn list: [#Item], item: #Item -> void end
+add :: fn set: {#Item}, item: #Item -> void end
+clear :: fn list: [#Item] -> void end
+len :: fn x: [#Item] | {#Key: #Value} -> int end
+pop :: fn list: [#Item] -> #Item? end
+last :: fn list: [#Item] -> #Item? end
+random_choice :: fn list: [#Item] -> #Item end
+----
