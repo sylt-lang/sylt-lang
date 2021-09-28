@@ -92,7 +92,7 @@ fn simplify_type(ty: Type) -> Type {
         TK::Union(_, _) => {
             let without_dupes = remove_duplicates(ty.clone(), Vec::new());
             without_dupes.into_iter().reduce(|a, b| {
-                // Swap order so we nest to the right
+                // TODO(ed): Some types brake if we swap the order here - this is a problem
                 Type { kind: TK::Union(Box::new(a), Box::new(b)), span: ty.span }
             }).unwrap() // We always get one type
         }
