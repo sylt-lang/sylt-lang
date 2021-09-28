@@ -250,7 +250,7 @@ pub fn n_rpc_client_ip(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let ip = match ctx.machine.stack_from_base(ctx.stack_base).get(0) {
         Some(Value::String(s)) => SocketAddr::from_str(s.as_ref()).unwrap(),
         _ => {
-            return Ok(Value::Bool(false)); //TODO(gu): Type error here, probably.
+            return Ok(Value::Bool(false)); // TODO(gu): Type error here, probably.
         }
     };
 
@@ -282,7 +282,7 @@ pub fn n_rpc_client_ip(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     })
 }
 
-//TODO(gu): This doc is wrong since this takes variadic arguments.
+// TODO(gu): This doc is wrong since this takes variadic arguments.
 #[sylt_macro::sylt_doc(n_rpc_server, "Performs an RPC on the connected server, returning success status.", "fn #X, #Y -> bool")]
 #[sylt_macro::sylt_link(n_rpc_server, "sylt_std::network", "fn #X, #Y -> bool")]
 pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
