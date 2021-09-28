@@ -74,6 +74,10 @@ false
 
 === Composite values
 
+=== Functions as values
+
+=== Types as values
+
 == If-statements and if-expressions
 
 These are your standard control flow statements.
@@ -214,3 +218,11 @@ use c/ as d  // imports "c/exports.sy" under the namespace d
 [source, sylt]
 ----
 ----
+
+== Loops
+
+== Types and the type system
+
+== Blobs
+
+== Standard library
