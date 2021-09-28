@@ -51,7 +51,7 @@ impl<'t> LuaCompiler<'t> {
                 self.assignable(f, ctx);
                 write!(self, "(");
                 for (i, e) in expr.iter().enumerate() {
-                    if i == 0 {
+                    if i != 0 {
                         write!(self, ",");
                     }
                     self.expression(e, ctx);
@@ -96,8 +96,9 @@ impl<'t> LuaCompiler<'t> {
         use ExpressionKind::*;
 
         match &expression.kind {
-            // Get(a) => {
-            // }
+            Get(a) => {
+                self.assignable(a, ctx);
+            }
 
             // TypeConstant(ty) => {
             // }
@@ -161,12 +162,22 @@ impl<'t> LuaCompiler<'t> {
             // }
 
             Function {
-                name,
+                name: _,
                 params,
-                ret,
+                ret: _,
                 body,
             } => {
+                write!(self, "function (");
+                for (i, e) in params.iter().enumerate() {
+                    if i != 0 {
+                        write!(self, ",");
+                    }
+                    let slot = self.compiler.define(&e.0.name, VarKind::Const, expression.span);
+                    self.compiler.activate(slot);
+                }
+                write!(self, ")");
                 self.statement(body, ctx);
+                write!(self, "end;");
             }
 
             // Blob { blob, fields } => {
@@ -221,7 +232,7 @@ impl<'t> LuaCompiler<'t> {
             Str(a) => write!(self, "{}", a),
             Nil => write!(self, "nil"),
 
-            _ => todo!(),
+            x => todo!("{:?}", &x),
         }
     }
 
@@ -313,6 +324,7 @@ impl<'t> LuaCompiler<'t> {
                 let slot = self.compiler.define(&ident.name, *kind, statement.span);
                 write!(self, "local");
                 self.write_slot(slot);
+                write!(self, "=");
                 self.expression(value, ctx);
                 self.compiler.activate(slot);
             }
@@ -330,9 +342,12 @@ impl<'t> LuaCompiler<'t> {
             }
 
             Block { statements } => {
+                // TODO(ed): Some of these blocks are wrong - but it should still work.
+                write!(self, "do");
                 for stmt in statements.iter() {
                     self.statement(stmt, ctx);
                 }
+                write!(self, "end");
             }
 
             Loop { condition, body } => {
