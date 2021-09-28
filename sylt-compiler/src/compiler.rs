@@ -87,9 +87,7 @@ impl Upvalue {
 
 #[derive(Debug, Copy, Clone)]
 struct Context {
-    // block_slot: BlockID,
     namespace: NamespaceID,
-    scope: usize,
     frame: usize,
 }
 
@@ -97,8 +95,6 @@ impl Context {
     fn from_namespace(namespace: NamespaceID) -> Self {
         Self {
             namespace,
-            // block_slot: 0,
-            scope: 0,
             frame: 0,
         }
     }
@@ -458,7 +454,7 @@ impl Compiler {
             ..Context::from_namespace(0)
         };
 
-        let num_constants = self.extract_globals(&tree);
+        let _num_constants = self.extract_globals(&tree);
 
         let num_functions = functions.len();
         self.functions = functions

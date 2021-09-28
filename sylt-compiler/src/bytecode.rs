@@ -28,7 +28,6 @@ impl From<BytecodeContext> for Context {
     fn from(ctx: BytecodeContext) -> Self {
         Context {
             namespace: ctx.namespace,
-            scope: ctx.scope,
             frame: ctx.frame,
         }
     }
