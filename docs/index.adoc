@@ -1,5 +1,6 @@
 = Sylt
 :favicon: sylt.png
+:stylesheet: stylesheet.css
 // :source-highlighter: rouge
 
 Sylt is a statically checked and dynamically typed programming language made
