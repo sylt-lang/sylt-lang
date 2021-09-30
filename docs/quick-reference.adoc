@@ -62,7 +62,7 @@ true and true
 not true
 
 [1, 2] <=> [1, 2]  // Assert equal
-<!>                // Assert false, i.e. crash the program
+<!>                // Assert unreachable, i.e. crash the program
 ----
 
 .Functions
