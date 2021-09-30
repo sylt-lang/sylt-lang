@@ -236,15 +236,15 @@ fn order(
                 State::Inserted => Ok(()),
             },
         };
-        if let Some((deps, statement)) = to_order.get(&name) {
-            for dep in deps {
-                recurse(*dep, to_order, inserted, ordered)
-                    .map_err(|mut cycle| { cycle.push(*statement); cycle })?;
-            }
-            ordered.push(*statement);
-        }
 
+        (deps, statement) = to_order.get(&name).expect("Trying to find an identifier that does not exist");
+        for dep in deps {
+            recurse(*dep, to_order, inserted, ordered)
+                .map_err(|mut cycle| { cycle.push(*statement); cycle })?;
+        }
+        ordered.push(*statement);
         inserted.insert(name, State::Inserted);
+
         Ok(())
     }
 
