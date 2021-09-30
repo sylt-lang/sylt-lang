@@ -398,8 +398,14 @@ impl<'t> LuaCompiler<'t> {
                 self.compiler.frames.last_mut().unwrap().variables.truncate(s);
             }
 
-            Loop { .. } => {
-                todo!();
+            Loop { condition, body } => {
+                write!(self, "while");
+                self.expression(condition, ctx);
+                write!(self, "do");
+                write!(self, ";");
+                self.statement(body, ctx);
+                write!(self, "end");
+                write!(self, ";");
             }
 
             If { condition, pass, fail } => {
