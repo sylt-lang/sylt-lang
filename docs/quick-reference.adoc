@@ -14,12 +14,12 @@ variable := []
 two: int : 2
 text: str = "abc"
 
-num := .5         // Now 0.5
-num = 2.0         // Now 2.0, note the lack of ":"
-num += 1.0        // Now 3.0
-num -= 2.0        // Now 1.0
-num *= 10.        // Now 10.0
-num /= 2.         // Now 5.0
+num := .5     // => 0.5
+num = 2.0     // => 2.0, note the lack of ":"
+num += 1.0    // => 3.0
+num -= 2.0    // => 1.0
+num *= 10.    // => 10.0
+num /= 2.     // => 5.0
 ----
 
 .If-else statements
