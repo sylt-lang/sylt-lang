@@ -61,6 +61,18 @@ pub enum StatementKind {
         value: Expression,
     },
 
+    /// Defines a an external variable - here the type is required.
+    ///
+    /// Example: `a : int = external`.
+    ///
+    /// Valid definition operators are `: <type> :`, and `: <type> =`.
+    ExternalDefinition {
+        ident: Identifier,
+        kind: VarKind,
+        ty: Type,
+    },
+
+
     /// Makes your code go either here or there.
     ///
     /// `if <expression> <statement> [else <statement>]`.
@@ -447,21 +459,25 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             // Skip identifier and `::`.
             let ctx = ctx.skip(2);
 
-            // The value to assign.
-            let (ctx, value) = expression(ctx)?;
+            if matches!(ctx.token(), T::External) {
+                raise_syntax_error!(ctx, "External definitons have to have a type");
+            } else {
+                // The value to assign.
+                let (ctx, value) = expression(ctx)?;
 
-            (
-                ctx,
-                Definition {
-                    ident,
-                    kind: VarKind::Const,
-                    ty: Type {
-                        span: ctx.span(),
-                        kind: TypeKind::Implied,
+                (
+                    ctx,
+                    Definition {
+                        ident,
+                        kind: VarKind::Const,
+                        ty: Type {
+                            span: ctx.span(),
+                            kind: TypeKind::Implied,
+                        },
+                        value,
                     },
-                    value,
-                },
-            )
+                )
+            }
         }
 
         // Mutable declaration, e.g. `b := 2`.
@@ -473,21 +489,25 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             // Skip identifier and `:=`.
             let ctx = ctx.skip(2);
 
-            // The value to assign.
-            let (ctx, value) = expression(ctx)?;
+            if matches!(ctx.token(), T::External) {
+                raise_syntax_error!(ctx, "External definitons have to have a type");
+            } else {
+                // The value to assign.
+                let (ctx, value) = expression(ctx)?;
 
-            (
-                ctx,
-                Definition {
-                    ident,
-                    kind: VarKind::Mutable,
-                    ty: Type {
-                        span: ctx.span(),
-                        kind: TypeKind::Implied,
+                (
+                    ctx,
+                    Definition {
+                        ident,
+                        kind: VarKind::Mutable,
+                        ty: Type {
+                            span: ctx.span(),
+                            kind: TypeKind::Implied,
+                        },
+                        value,
                     },
-                    value,
-                },
-            )
+                )
+            }
         }
 
         // Variable declaration with specified type, e.g. `c : int = 3` or `b : int | bool : false`.
@@ -520,18 +540,17 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 (ctx.skip(1), kind, ty)
             };
 
-            // The value to define the variable to.
-            let (ctx, value) = expression(ctx)?;
+            if matches!(ctx.token(), T::External) {
+                if kind.force() {
+                    raise_syntax_error!(ctx, "Cannot force types on external definitions");
+                }
+                ( ctx.skip(1), ExternalDefinition { ident, kind, ty } )
+            } else {
+                // The value to define the variable to.
+                let (ctx, value) = expression(ctx)?;
 
-            (
-                ctx,
-                Definition {
-                    ident,
-                    kind,
-                    ty,
-                    value,
-                },
-            )
+                ( ctx, Definition { ident, kind, ty, value } )
+            }
         }
 
         // Expression or assignment. We try assignment first.
@@ -605,6 +624,7 @@ pub fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
         #[rustfmt::skip]
         Blob { .. }
         | Definition { .. }
+        | ExternalDefinition { .. }
         | Use { .. }
         | IsCheck { .. }
         | EmptyStatement
