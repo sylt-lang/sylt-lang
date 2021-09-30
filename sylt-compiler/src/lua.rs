@@ -156,12 +156,24 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ")");
             }
 
-            // IfExpression {
-            //     condition,
-            //     pass,
-            //     fail,
-            // } => {
-            // }
+            IfExpression {
+                condition,
+                pass,
+                fail,
+            } => {
+                write!(self, "(function ()");
+                write!(self, "if");
+                self.expression(condition, ctx);
+                write!(self, "then");
+                write!(self, "return");
+                self.expression(pass, ctx);
+                write!(self, "else");
+                write!(self, "return");
+                self.expression(fail, ctx);
+                write!(self, "end");
+                write!(self, "end)()");
+
+            }
 
             // IfShort {
             //     condition,
