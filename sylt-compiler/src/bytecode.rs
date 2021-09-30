@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::rc::Rc;
 use sylt_common::error::Error;
 use sylt_common::{Block, Op, Type, Value};

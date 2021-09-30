@@ -236,7 +236,7 @@ fn order(
             },
         };
 
-        (deps, statement) = to_order.get(&name).expect("Trying to find an identifier that does not exist");
+        let (deps, statement) = to_order.get(&name).expect("Trying to find an identifier that does not exist");
         for dep in deps {
             recurse(*dep, to_order, inserted, ordered)
                 .map_err(|mut cycle| { cycle.push(*statement); cycle })?;
