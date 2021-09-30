@@ -1009,7 +1009,6 @@ impl<'c> TypeChecker<'c> {
                     // so we don't have to care about the duplicates.
                     x => unreachable!("X: {:?}", x),
                 };
-                println!("----");
                 self.namespaces[namespace].insert(ident.name.clone(), Name::Global(Some(name)));
             }
 
