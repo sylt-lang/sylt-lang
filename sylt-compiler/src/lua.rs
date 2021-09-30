@@ -332,7 +332,6 @@ impl<'t> LuaCompiler<'t> {
                 todo!();
             }
 
-            #[rustfmt::skip]
             ExternalDefinition { .. } => {}
 
             #[rustfmt::skip]
@@ -379,7 +378,6 @@ impl<'t> LuaCompiler<'t> {
                 self.compiler.activate(slot);
             }
 
-            #[rustfmt::skip]
             ExternalDefinition { .. } => {
                 error!(self.compiler, ctx, statement.span, "External definitions must lie in the outmost scope");
             }

@@ -509,7 +509,6 @@ impl<'t> BytecodeCompiler<'t> {
                 }
             }
 
-            #[rustfmt::skip]
             ExternalDefinition { .. } => {
                 // TODO(ed): Should they be? Is this how we should type the standard library?
                 error!(
