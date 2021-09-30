@@ -13,11 +13,14 @@ constant :: 3.14
 variable := []
 two: int : 2
 text: str = "abc"
-text = "A short sentence."  // <1>
-----
 
-<1> A single `=` is used to update the value of a variable. Variables are
-declarared with `:=`.
+num := .5     // => 0.5
+num = 2.0     // => 2.0, note the lack of ":"
+num += 1.0    // => 3.0
+num -= 2.0    // => 1.0
+num *= 10.    // => 10.0
+num /= 2.     // => 5.0
+----
 
 .If-else statements
 [source, sylt]
@@ -52,13 +55,14 @@ two :: one + 1 if == 2 else -1 // <1>
 "a" == "a"
 "a" != "b"
 
-[1, 2] <=> [1, 2]  // Assert equal
-
 (1 + 1) * 2
 
 true or false
 true and true
 not true
+
+[1, 2] <=> [1, 2]  // Assert equal
+<!>                // Assert unreachable, i.e. crash the program
 ----
 
 .Functions
@@ -73,6 +77,7 @@ add :: fn x: int, y: int -> int do
 end
 
 two_squared :: fn n: int -> int do n * n end(2)  // <1>
+
 
 // Different ways of calling functions
 
@@ -94,6 +99,28 @@ end
 
 <1> This creates a function with an implicit return. The function is then
 called immediately.
+
+.Loops
+[source, sylt]
+----
+i := 0
+loop i < 10 do
+    print(i)
+    i += 1
+end
+
+j := 0
+loop do
+    print(j)
+    if j == 0 do
+        j += 2
+        continue
+    end
+    if j == 2 do
+        break
+    end
+end
+----
 
 .Types
 [source, sylt]
@@ -150,6 +177,7 @@ end
 player :: new_player()
 player.update(0.5)
 print(player.x)
+
 
 // Duck typing
 
