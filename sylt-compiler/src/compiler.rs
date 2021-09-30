@@ -421,6 +421,7 @@ impl Compiler {
                 Box::new(self.resolve_type(value, ctx)),
             ),
             Generic(name) => Type::Generic(name.name.clone()),
+            Grouping(ty) => self.resolve_type(ty, ctx),
         }
     }
 

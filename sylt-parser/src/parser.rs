@@ -182,6 +182,8 @@ pub enum TypeKind {
     Dict(Box<Type>, Box<Type>),
     /// A generic type
     Generic(Identifier),
+    /// `(inner_type)` - useful for correcting ambiguous types
+    Grouping(Box<Type>),
 }
 
 /// A parsed type. Contains any [TypeKind].
@@ -539,33 +541,33 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             let mut ctx = ctx.skip(1);
             let mut types = Vec::new();
             // Tuples may (and probably will) contain multiple types.
+            let mut is_tuple = matches!(ctx.token(), T::Comma | T::RightParen);
             loop {
+                // Any initial comma is skipped since we checked it before entering the loop.
+                ctx = ctx.skip_if(T::Comma);
                 match ctx.token() {
-                    // Done parsing this tuple.
-                    T::RightParen => {
-                        ctx = ctx.skip(1);
+                    // Done.
+                    T::EOF | T::RightParen => {
                         break;
                     }
 
-                    T::EOF => {
-                        raise_syntax_error!(ctx, "Didn't expect EOF in type definition");
-                    }
-
-                    // Parse a single contained type.
+                    // Another inner expression.
                     _ => {
-                        let (_ctx, param) = parse_type(ctx)?;
+                        let (_ctx, ty) = parse_type(ctx)?;
+                        types.push(ty);
                         ctx = _ctx; // assign to outer
-                        types.push(param);
 
-                        ctx = if matches!(ctx.token(), T::Comma | T::RightParen) {
-                            ctx.skip_if(T::Comma)
-                        } else {
-                            raise_syntax_error!(ctx, "Expected ',' or ')' after tuple field")
-                        };
+                        // Not a tuple, until it is.
+                        is_tuple |= matches!(ctx.token(), T::Comma);
                     }
                 }
             }
-            (ctx, Tuple(types))
+            let ctx = expect!(ctx, T::RightParen, "Expected ')' after tuple or grouping");
+            if is_tuple {
+                (ctx, Tuple(types))
+            } else {
+                (ctx, Grouping(Box::new(types.remove(0))))
+            }
         }
 
         // List
@@ -1017,7 +1019,9 @@ mod test {
         test!(parse_type, type_fn_two_params: "fn int | void, int? -> str?" => Fn(_, _));
         test!(parse_type, type_fn_only_ret: "fn -> bool?" => Fn(_, _));
 
-        test!(parse_type, type_tuple_one: "(int)" => Tuple(_));
+        test!(parse_type, type_tuple_zero: "()" => Tuple(_));
+        test!(parse_type, type_tuple_one: "(int,)" => Tuple(_));
+        test!(parse_type, type_grouping: "(int)" => Grouping(_));
         test!(parse_type, type_tuple_complex: "(int | float?, str, str,)" => Tuple(_));
 
         test!(parse_type, type_list_one: "[int]" => List(_));
@@ -1166,8 +1170,8 @@ impl Display for Type {
             TypeKind::Tuple(tys) => {
                 write!(f, "(")?;
                 for (i, ty) in tys.iter().enumerate() {
-                    if i != 0 { write!(f, ", ")?; }
-                    write!(f, "{}", ty)?;
+                    if i != 0 { write!(f, " ")?; }
+                    write!(f, "{},", ty)?;
                 }
                 write!(f, ")")?;
             }
@@ -1182,6 +1186,9 @@ impl Display for Type {
             }
             TypeKind::Generic(name) => {
                 write!(f, "#{}", name.name)?;
+            }
+            TypeKind::Grouping(ty) => {
+                write!(f, "({})", ty)?;
             }
         }
         Ok(())
