@@ -128,7 +128,6 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             dependencies(ctx, value)
         },
 
-
         | Ret { value }
         | StatementExpression { value } => dependencies(ctx, value),
 
