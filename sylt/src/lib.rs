@@ -38,14 +38,14 @@ pub fn compile_with_reader<R>(
 where
     R: Fn(&Path) -> Result<String, Error>,
 {
-    let tree = sylt_parser::tree(
-        &PathBuf::from(args.args.first().expect("No file to run")),
-        reader,
-    )?;
+    let mut file = PathBuf::from(args.args.first().expect("No file to run"));
+    let tree = sylt_parser::tree(&file, reader)?;
     if args.dump_tree {
         println!("{}", tree);
     }
-    let prog = sylt_compiler::compile(!args.skip_typecheck, tree, &functions)?;
+    assert!(file.set_extension("lua"));
+    let lua_file = if args.lua { Some(file) } else { None };
+    let prog = sylt_compiler::compile(!args.skip_typecheck, lua_file, tree, &functions)?;
     Ok(prog)
 }
 
@@ -58,7 +58,11 @@ where
     R: Fn(&Path) -> Result<String, Error>,
 {
     let prog = compile_with_reader(args, functions, reader)?;
-    run(&prog, &args)
+    if args.lua {
+        Ok(())
+    } else {
+        run(&prog, &args)
+    }
 }
 
 /// Compiles, links and runs the given file. The supplied functions are callable
@@ -94,8 +98,8 @@ pub struct Args {
     #[options(long = "dump-tree", no_short, help = "Writes the tree to stdout")]
     pub dump_tree: bool,
 
-    #[options(short = "c", long = "compile", help = "Compile a sylt binary")]
-    pub compile_target: Option<PathBuf>,
+    #[options(short = "l", long = "lua", help = "Compile to lua")]
+    pub lua: bool,
 
     #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
     pub verbosity: u32,
