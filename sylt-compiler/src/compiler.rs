@@ -442,6 +442,7 @@ impl Compiler {
     fn compile(
         mut self,
         typecheck: bool,
+        lua_file: Option<PathBuf>,
         tree: AST,
         functions: &[(String, RustFunction, String)],
     ) -> Result<Prog, Vec<Error>> {
@@ -454,7 +455,7 @@ impl Compiler {
             ..Context::from_namespace(0)
         };
 
-        let _num_constants = self.extract_globals(&tree);
+        let num_constants = self.extract_globals(&tree);
 
         let num_functions = functions.len();
         self.functions = functions
@@ -484,20 +485,8 @@ impl Compiler {
             return Err(self.errors);
         }
 
-        // let blocks = {
-        //     let mut bytecode_compiler = bytecode::BytecodeCompiler::new(&mut self);
-        //     bytecode_compiler.preamble(start_span, num_constants);
-
-        //     for (statement, namespace) in statements.iter() {
-        //         bytecode_compiler.compile(statement, *namespace);
-        //     }
-
-        //     bytecode_compiler.postamble(start_span);
-        //     bytecode_compiler.blocks
-        // };
-
-        {
-            let mut lua_compiler = lua::LuaCompiler::new(&mut self);
+        let blocks = if let Some(lua_file) = lua_file {
+            let mut lua_compiler = lua::LuaCompiler::new(&mut self, &lua_file);
 
             lua_compiler.preamble(Span::zero(), 0);
             for (statement, namespace) in statements.iter() {
@@ -505,8 +494,18 @@ impl Compiler {
             }
             lua_compiler.postamble(Span::zero());
 
-            println!("{}", lua_compiler.blocks);
-        }
+            Vec::new()
+        } else {
+            let mut bytecode_compiler = bytecode::BytecodeCompiler::new(&mut self);
+            bytecode_compiler.preamble(start_span, num_constants);
+
+            for (statement, namespace) in statements.iter() {
+                bytecode_compiler.compile(statement, *namespace);
+            }
+
+            bytecode_compiler.postamble(start_span);
+            bytecode_compiler.blocks
+        };
 
         if !self.errors.is_empty() {
             return Err(self.errors);
@@ -627,8 +626,8 @@ fn parse_signature(func_name: &str, sig: &str) -> ParserType {
     }
 }
 
-pub fn compile(typecheck: bool, prog: AST, functions: &[(String, RustFunction, String)]) -> Result<Prog, Vec<Error>> {
-    Compiler::new().compile(typecheck, prog, functions)
+pub fn compile(typecheck: bool, lua_file: Option<PathBuf>, prog: AST, functions: &[(String, RustFunction, String)]) -> Result<Prog, Vec<Error>> {
+    Compiler::new().compile(typecheck, lua_file, prog, functions)
 }
 
 pub(crate) fn first_ok_or_errs<I, T, E>(mut iter: I) -> Result<T, Vec<E>>

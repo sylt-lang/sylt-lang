@@ -34,7 +34,6 @@ fn main() -> std::io::Result<()> {
     let sylt_args = sylt::Args {
         args: vec![args.run_file],
         is_binary: false,
-        compile_target: None,
         verbosity: 0,
         help: false,
         ..Default::default()

@@ -3,6 +3,9 @@ use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind,
     Span, Statement, StatementKind, Op,
 };
+use std::path::Path;
+use std::fs::File;
+use std::io::prelude::*;
 
 use crate::*;
 
@@ -17,22 +20,24 @@ macro_rules! write {
 
 pub struct LuaCompiler<'t> {
     compiler: &'t mut Compiler,
-    pub blocks: String,
+    pub file: File,
 }
 
 impl<'t> LuaCompiler<'t> {
-    pub(crate) fn new(compiler: &'t mut Compiler) -> Self {
+    pub(crate) fn new(compiler: &'t mut Compiler, file: &Path) -> Self {
+        let file = File::create(&file).unwrap();
         Self {
             compiler,
-            blocks: String::new(),
+            file,
         }
     }
 
     fn write(&mut self, msg: String) {
+        self.file.write_all(msg.as_ref()).unwrap();
         if msg == ";" {
-            self.blocks = format!("{} {}\n", self.blocks, msg);
+            self.file.write_all(b"\n").unwrap();
         } else {
-            self.blocks = format!("{} {}", self.blocks, msg);
+            self.file.write_all(b" ").unwrap();
         }
     }
 
