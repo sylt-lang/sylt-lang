@@ -175,11 +175,17 @@ impl<'t> LuaCompiler<'t> {
 
             }
 
-            // IfShort {
-            //     condition,
-            //     fail,
-            //     ..
-            // } => {
+            // IfShort { lhs, condition, fail } => {
+            //     write!(self, "(function ()");
+            //     write!(self, "local condition =");
+            //     self.expression(condition, ctx);
+            //     write!(self, "if condition then");
+            //     write!(self, "return condition");
+            //     write!(self, "else");
+            //     write!(self, "return");
+            //     self.expression(fail, ctx);
+            //     write!(self, "end");
+            //     write!(self, "end)()");
             // }
 
             Function {
@@ -205,9 +211,6 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ";");
                 self.compiler.frames.last_mut().unwrap().variables.truncate(s);
             }
-
-            // Blob { blob, fields } => {
-            // }
 
             Tuple(xs) => {
                 write!(self, "setmetatable( { ");
@@ -314,7 +317,6 @@ impl<'t> LuaCompiler<'t> {
                     }
                 }
                 _ => {
-                    // SAD!
                     error!(
                         self.compiler,
                         ctx,
