@@ -105,9 +105,10 @@ impl<'c> TypeChecker<'c> {
                 .map(|(k, v)| (
                     k.clone(),
                     match v {
-                        compiler::Name::Global(_) => Name::Global(None),
                         compiler::Name::Blob(b) => Name::Blob(*b),
                         compiler::Name::Namespace(n) => Name::Namespace(*n),
+                        | compiler::Name::Global(_)
+                        | compiler::Name::External(_) => Name::Global(None),
                     }
                 )).collect()
             ).collect();
@@ -851,6 +852,9 @@ impl<'c> TypeChecker<'c> {
                 }
                 None
             }
+
+            SK::ExternalDefinition { .. } => { None }
+
             SK::Definition {
                 ident,
                 kind,
@@ -990,6 +994,25 @@ impl<'c> TypeChecker<'c> {
     fn outer_definition(&mut self, namespace: usize, stmt: &Statement) -> Result<(), Vec<Error>> {
         let span = stmt.span;
         match &stmt.kind {
+            StatementKind::ExternalDefinition {
+                ident,
+                kind,
+                ty
+            } => {
+                let name = match &self.namespaces[namespace][&ident.name] {
+                    Name::Global(None) => {
+                        let ty = self.compiler.resolve_type(ty, self.compiler_context());
+                        (ty, *kind)
+                    }
+
+                    // TODO(ed): Throw earlier errors before typechecking -
+                    // so we don't have to care about the duplicates.
+                    x => unreachable!("X: {:?}", x),
+                };
+                println!("----");
+                self.namespaces[namespace].insert(ident.name.clone(), Name::Global(Some(name)));
+            }
+
             StatementKind::Definition { ident, kind, ty, value } => {
                 let name = match &self.namespaces[namespace][&ident.name] {
                     Name::Global(None) => {

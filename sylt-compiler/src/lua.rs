@@ -268,16 +268,15 @@ impl<'t> LuaCompiler<'t> {
                 Some(Name::Blob(blob)) => {
                     self.write_global(blob);
                 }
+                Some(Name::External(_)) => {
+                    write!(self, "{}", name);
+                }
                 Some(Name::Namespace(new_namespace)) => {
                     return Some(new_namespace)
                 }
                 None => {
-                    if name == "print" {
-                        write!(self, "print");
-                    } else {
-                        error!(self.compiler, ctx, span, "No identifier found named: '{}'", name);
-                        dbg!(&self.compiler.frames);
-                    }
+                    error!(self.compiler, ctx, span, "No identifier found named: '{}'", name);
+                    dbg!(&self.compiler.frames);
                 }
             },
         }
@@ -334,6 +333,9 @@ impl<'t> LuaCompiler<'t> {
             }
 
             #[rustfmt::skip]
+            ExternalDefinition { .. } => {}
+
+            #[rustfmt::skip]
             Definition { ident, value, .. } => {
                 self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
                 write!(self, "=");
@@ -359,11 +361,11 @@ impl<'t> LuaCompiler<'t> {
         match &statement.kind {
             Use { .. } | EmptyStatement => {}
 
-            Blob { name, fields } => {
+            Blob { .. } => {
                 todo!();
             }
 
-            IsCheck { lhs, rhs } => {
+            IsCheck { .. } => {
                 todo!();
             }
 
@@ -375,6 +377,11 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, "=");
                 self.expression(value, ctx);
                 self.compiler.activate(slot);
+            }
+
+            #[rustfmt::skip]
+            ExternalDefinition { .. } => {
+                error!(self.compiler, ctx, statement.span, "External definitions must lie in the outmost scope");
             }
 
             #[rustfmt::skip]
@@ -400,12 +407,12 @@ impl<'t> LuaCompiler<'t> {
                 self.compiler.frames.last_mut().unwrap().variables.truncate(s);
             }
 
-            Loop { condition, body } => {
+            Loop { .. } => {
                 todo!();
             }
 
             #[rustfmt::skip]
-            If { condition, pass, fail } => {
+            If { .. } => {
                 todo!();
             }
 
@@ -443,8 +450,8 @@ impl<'t> LuaCompiler<'t> {
 
     pub fn preamble(
         &mut self,
-        span: Span,
-        num_constants: usize,
+        _span: Span,
+        _num_constants: usize,
     ) {
     }
 
