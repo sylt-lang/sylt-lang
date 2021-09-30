@@ -238,7 +238,7 @@ impl<'t> LuaCompiler<'t> {
                 }
             }
             Int(a) => write!(self, "{}", a),
-            Str(a) => write!(self, "{}", a),
+            Str(a) => write!(self, "\"{}\"", a),
             Nil => write!(self, "nil"),
 
             x => todo!("{:?}", &x),
