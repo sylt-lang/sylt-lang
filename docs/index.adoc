@@ -1,7 +1,8 @@
 = Sylt
+:icons: font
 :favicon: sylt.png
+:source-highlighter: rouge
 :stylesheet: stylesheet.css
-// :source-highlighter: rouge
 
 Sylt is a statically checked and dynamically typed programming language made
 for game jams. Working in Sylt should be a pain- and fearless experience. If it
