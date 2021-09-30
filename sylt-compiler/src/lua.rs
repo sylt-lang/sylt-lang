@@ -29,7 +29,11 @@ impl<'t> LuaCompiler<'t> {
     }
 
     fn write(&mut self, msg: String) {
-        self.blocks = format!("{} {}", self.blocks, msg);
+        if msg == ";" {
+            self.blocks = format!("{} {}\n", self.blocks, msg);
+        } else {
+            self.blocks = format!("{} {}", self.blocks, msg);
+        }
     }
 
     fn write_global(&mut self, slot: usize) {
@@ -167,6 +171,8 @@ impl<'t> LuaCompiler<'t> {
                 ret: _,
                 body,
             } => {
+                // TODO(ed): We don't use multiple frames here...
+                let s = self.compiler.frames.last().unwrap().variables.len();
                 write!(self, "function (");
                 for (i, e) in params.iter().enumerate() {
                     if i != 0 {
@@ -174,10 +180,13 @@ impl<'t> LuaCompiler<'t> {
                     }
                     let slot = self.compiler.define(&e.0.name, VarKind::Const, expression.span);
                     self.compiler.activate(slot);
+                    self.write_slot(slot);
                 }
                 write!(self, ")");
                 self.statement(body, ctx);
-                write!(self, "end;");
+                write!(self, "end");
+                write!(self, ";");
+                self.compiler.frames.last_mut().unwrap().variables.truncate(s);
             }
 
             // Blob { blob, fields } => {
@@ -263,7 +272,12 @@ impl<'t> LuaCompiler<'t> {
                     return Some(new_namespace)
                 }
                 None => {
-                    // SAD!
+                    if name == "print" {
+                        write!(self, "print");
+                    } else {
+                        error!(self.compiler, ctx, span, "No identifier found named: '{}'", name);
+                        dbg!(&self.compiler.frames);
+                    }
                 }
             },
         }
@@ -304,6 +318,40 @@ impl<'t> LuaCompiler<'t> {
         }
     }
 
+    fn outer_statement(&mut self, statement: &Statement, ctx: Context) {
+        use StatementKind::*;
+        self.compiler.panic = false;
+
+        match &statement.kind {
+            Use { .. } | EmptyStatement => {}
+
+            Blob { .. } => {
+                todo!();
+            }
+
+            IsCheck { .. } => {
+                todo!();
+            }
+
+            #[rustfmt::skip]
+            Definition { ident, value, .. } => {
+                self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
+                write!(self, "=");
+                self.compiler.frames.push(Frame::new("/expr/", statement.span));
+                // Only reachable form the outside so we know these frames
+                let ctx = Context { frame: self.compiler.frames.len() - 1, ..ctx };
+                self.expression(value, ctx);
+                self.compiler.frames.pop();
+            }
+
+            #[rustfmt::skip]
+            x => {
+                unreachable!("Not a valid outer statement {:?}", x)
+            }
+        }
+        write!(self, ";");
+    }
+
     fn statement(&mut self, statement: &Statement, ctx: Context) {
         use StatementKind::*;
         self.compiler.panic = false;
@@ -333,7 +381,7 @@ impl<'t> LuaCompiler<'t> {
             Assignment { target, value, kind } => {
                 self.assignable(target, ctx);
                 write!(self, "=");
-                assert!(matches!(kind, Op::Add), "Only support nop right now");
+                assert!(matches!(kind, Op::Nop), "Only support nop right now");
                 self.expression(value, ctx);
             }
 
@@ -343,11 +391,13 @@ impl<'t> LuaCompiler<'t> {
 
             Block { statements } => {
                 // TODO(ed): Some of these blocks are wrong - but it should still work.
+                let s = self.compiler.frames.last().unwrap().variables.len();
                 write!(self, "do");
                 for stmt in statements.iter() {
                     self.statement(stmt, ctx);
                 }
                 write!(self, "end");
+                self.compiler.frames.last_mut().unwrap().variables.truncate(s);
             }
 
             Loop { condition, body } => {
@@ -388,7 +438,7 @@ impl<'t> LuaCompiler<'t> {
             namespace,
             frame: 0,
         };
-        self.statement(&statement, ctx);
+        self.outer_statement(&statement, ctx);
     }
 
     pub fn preamble(
@@ -402,6 +452,13 @@ impl<'t> LuaCompiler<'t> {
         &mut self,
         span: Span,
     ) {
+        let ctx = Context {
+            frame: self.compiler.frames.len() - 1,
+            namespace: 0,
+        };
+        self.read_identifier("start", span, ctx, 0);
+        write!(self, "()");
+        write!(self, ";");
     }
 }
 

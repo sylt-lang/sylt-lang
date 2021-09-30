@@ -499,9 +499,11 @@ impl Compiler {
         {
             let mut lua_compiler = lua::LuaCompiler::new(&mut self);
 
+            lua_compiler.preamble(Span::zero(), 0);
             for (statement, namespace) in statements.iter() {
                 lua_compiler.compile(statement, *namespace);
             }
+            lua_compiler.postamble(Span::zero());
 
             println!("{}", lua_compiler.blocks);
         }
