@@ -100,6 +100,28 @@ end
 <1> This creates a function with an implicit return. The function is then
 called immediately.
 
+.Loops
+[source, sylt]
+----
+i := 0
+loop i < 10 do
+    print(i)
+    i += 1
+end
+
+j := 0
+loop do
+    print(j)
+    if j == 0 do
+        j += 2
+        continue
+    end
+    if j == 2 do
+        break
+    end
+end
+----
+
 .Types
 [source, sylt]
 ----
