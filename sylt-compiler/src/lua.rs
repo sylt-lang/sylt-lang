@@ -235,13 +235,7 @@ impl<'t> LuaCompiler<'t> {
             }
 
             Float(a) => write!(self, "{}", a),
-            Bool(a) => {
-                if *a {
-                    write!(self, "true")
-                } else {
-                    write!(self, "false")
-                }
-            }
+            Bool(a) => write!(self, "{}", a),
             Int(a) => write!(self, "{}", a),
             Str(a) => write!(self, "\"{}\"", a),
             Nil => write!(self, "nil"),
