@@ -323,9 +323,7 @@ impl<'t> LuaCompiler<'t> {
         match &statement.kind {
             Use { .. } | EmptyStatement => {}
 
-            Blob { .. } => {
-                todo!();
-            }
+            Blob { .. } => {}
 
             IsCheck { .. } => {
                 todo!();
@@ -357,11 +355,7 @@ impl<'t> LuaCompiler<'t> {
         self.compiler.panic = false;
 
         match &statement.kind {
-            Use { .. } | EmptyStatement => {}
-
-            Blob { .. } => {
-                todo!();
-            }
+            Use { .. } | Blob { .. } | EmptyStatement => {}
 
             IsCheck { .. } => {
                 todo!();
@@ -408,9 +402,17 @@ impl<'t> LuaCompiler<'t> {
                 todo!();
             }
 
-            #[rustfmt::skip]
-            If { .. } => {
-                todo!();
+            If { condition, pass, fail } => {
+                write!(self, "if");
+                self.expression(condition, ctx);
+                write!(self, "then");
+                write!(self, ";");
+                self.statement(pass, ctx);
+                write!(self, "else");
+                write!(self, ";");
+                self.statement(fail, ctx);
+                write!(self, "end");
+                write!(self, ";");
             }
 
             Continue {} => {
