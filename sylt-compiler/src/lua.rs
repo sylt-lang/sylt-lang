@@ -461,26 +461,3 @@ impl<'t> LuaCompiler<'t> {
         write!(self, ";");
     }
 }
-
-// TODO(ed): This should move to the typechecker - since we always want this check.
-fn all_paths_return(statement: &Statement) -> bool {
-    match &statement.kind {
-        StatementKind::Use { .. }
-        | StatementKind::Blob { .. }
-        | StatementKind::IsCheck { .. }
-        | StatementKind::Assignment { .. }
-        | StatementKind::Definition { .. }
-        | StatementKind::StatementExpression { .. }
-        | StatementKind::Unreachable
-        | StatementKind::Continue
-        | StatementKind::Break
-        | StatementKind::EmptyStatement => false,
-
-        StatementKind::If { pass, fail, .. } => all_paths_return(pass) && all_paths_return(fail),
-
-        StatementKind::Loop { body, .. } => all_paths_return(body),
-        StatementKind::Block { statements } => statements.iter().any(all_paths_return),
-
-        StatementKind::Ret { .. } => true,
-    }
-}
