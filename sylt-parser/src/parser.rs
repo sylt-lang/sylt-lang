@@ -63,7 +63,7 @@ pub enum Prec {
 ///
 /// Forced variable kinds are a signal to the type checker that the type is
 /// assumed and shouldn't be checked.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum VarKind {
     Const,
     Mutable,
@@ -1083,6 +1083,10 @@ impl PrettyPrint for Statement {
             SK::Definition { ident, kind, ty, value } => {
                 write!(f, "<Def> {} {:?} {}\n", ident.name, kind, ty)?;
                 value.pretty_print(f, indent + 1)?;
+                return Ok(());
+            }
+            SK::ExternalDefinition { ident, kind, ty } => {
+                write!(f, "<ExtDef> {} {:?} {}\n", ident.name, kind, ty)?;
                 return Ok(());
             }
             SK::Assignment { kind, target, value } => {

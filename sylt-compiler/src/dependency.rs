@@ -131,13 +131,14 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
         | Ret { value }
         | StatementExpression { value } => dependencies(ctx, value),
 
-        | Use { .. }
         | Blob { .. }
-        | IsCheck { .. }
         | Break
         | Continue
+        | EmptyStatement
+        | ExternalDefinition { .. }
+        | IsCheck { .. }
         | Unreachable
-        | EmptyStatement => BTreeSet::new(),
+        | Use { .. } => BTreeSet::new(),
     }
 }
 
@@ -234,14 +235,15 @@ fn order(
                 State::Inserted => Ok(()),
             },
         };
-        let (deps, statement) = to_order.get(&name).unwrap();
+
+        (deps, statement) = to_order.get(&name).expect("Trying to find an identifier that does not exist");
         for dep in deps {
             recurse(*dep, to_order, inserted, ordered)
                 .map_err(|mut cycle| { cycle.push(*statement); cycle })?;
         }
-
-        inserted.insert(name, State::Inserted);
         ordered.push(*statement);
+        inserted.insert(name, State::Inserted);
+
         Ok(())
     }
 
@@ -274,6 +276,12 @@ pub(crate) fn initialization_order<'a>(
                 | Blob { name, .. } => {
                     to_order.insert(
                         *compiler.namespaces[namespace].get(name).unwrap(),
+                        (BTreeSet::new(), (statement, namespace))
+                    );
+                },
+                ExternalDefinition { ident, .. } => {
+                    to_order.insert(
+                        *compiler.namespaces[namespace].get(&ident.name).unwrap(),
                         (BTreeSet::new(), (statement, namespace))
                     );
                 },

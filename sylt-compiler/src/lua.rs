@@ -273,16 +273,15 @@ impl<'t> LuaCompiler<'t> {
                 Some(Name::Blob(blob)) => {
                     self.write_global(blob);
                 }
+                Some(Name::External(_)) => {
+                    write!(self, "{}", name);
+                }
                 Some(Name::Namespace(new_namespace)) => {
                     return Some(new_namespace)
                 }
                 None => {
-                    if name == "print" {
-                        write!(self, "print");
-                    } else {
-                        error!(self.compiler, ctx, span, "No identifier found named: '{}'", name);
-                        dbg!(&self.compiler.frames);
-                    }
+                    error!(self.compiler, ctx, span, "No identifier found named: '{}'", name);
+                    dbg!(&self.compiler.frames);
                 }
             },
         }
@@ -338,6 +337,8 @@ impl<'t> LuaCompiler<'t> {
                 todo!();
             }
 
+            ExternalDefinition { .. } => {}
+
             #[rustfmt::skip]
             Definition { ident, value, .. } => {
                 self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
@@ -364,11 +365,11 @@ impl<'t> LuaCompiler<'t> {
         match &statement.kind {
             Use { .. } | EmptyStatement => {}
 
-            Blob { name, fields } => {
+            Blob { .. } => {
                 todo!();
             }
 
-            IsCheck { lhs, rhs } => {
+            IsCheck { .. } => {
                 todo!();
             }
 
@@ -380,6 +381,10 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, "=");
                 self.expression(value, ctx);
                 self.compiler.activate(slot);
+            }
+
+            ExternalDefinition { .. } => {
+                error!(self.compiler, ctx, statement.span, "External definitions must lie in the outmost scope");
             }
 
             #[rustfmt::skip]
@@ -405,12 +410,12 @@ impl<'t> LuaCompiler<'t> {
                 self.compiler.frames.last_mut().unwrap().variables.truncate(s);
             }
 
-            Loop { condition, body } => {
+            Loop { .. } => {
                 todo!();
             }
 
             #[rustfmt::skip]
-            If { condition, pass, fail } => {
+            If { .. } => {
                 todo!();
             }
 
@@ -448,8 +453,8 @@ impl<'t> LuaCompiler<'t> {
 
     pub fn preamble(
         &mut self,
-        span: Span,
-        num_constants: usize,
+        _span: Span,
+        _num_constants: usize,
     ) {
     }
 
@@ -464,28 +469,5 @@ impl<'t> LuaCompiler<'t> {
         self.read_identifier("start", span, ctx, 0);
         write!(self, "()");
         write!(self, ";");
-    }
-}
-
-// TODO(ed): This should move to the typechecker - since we always want this check.
-fn all_paths_return(statement: &Statement) -> bool {
-    match &statement.kind {
-        StatementKind::Use { .. }
-        | StatementKind::Blob { .. }
-        | StatementKind::IsCheck { .. }
-        | StatementKind::Assignment { .. }
-        | StatementKind::Definition { .. }
-        | StatementKind::StatementExpression { .. }
-        | StatementKind::Unreachable
-        | StatementKind::Continue
-        | StatementKind::Break
-        | StatementKind::EmptyStatement => false,
-
-        StatementKind::If { pass, fail, .. } => all_paths_return(pass) && all_paths_return(fail),
-
-        StatementKind::Loop { body, .. } => all_paths_return(body),
-        StatementKind::Block { statements } => statements.iter().any(all_paths_return),
-
-        StatementKind::Ret { .. } => true,
     }
 }

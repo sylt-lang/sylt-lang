@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::rc::Rc;
 use sylt_common::error::Error;
 use sylt_common::{Block, Op, Type, Value};
@@ -377,6 +379,13 @@ impl<'t> BytecodeCompiler<'t> {
                     let op = Op::ReadGlobal(*slot);
                     self.add_op(ctx, span, op);
                 }
+                Some(Name::External(_)) => {
+                    error!(
+                        self.compiler,
+                        ctx, span,
+                        "External values aren't allowed when compiling to byte-code "
+                    );
+                }
                 Some(Name::Blob(blob)) => {
                     let op = Op::Constant(*blob);
                     self.add_op(ctx, span, op);
@@ -498,6 +507,15 @@ impl<'t> BytecodeCompiler<'t> {
                     let slot = self.compiler.define(&ident.name, *kind, statement.span);
                     self.compiler.activate(slot);
                 }
+            }
+
+            ExternalDefinition { .. } => {
+                // TODO(ed): Should they be? Is this how we should type the standard library?
+                error!(
+                    self.compiler,
+                    ctx, statement.span,
+                    "External values aren't allowed when compiling to byte-code "
+                );
             }
 
             #[rustfmt::skip]
@@ -737,16 +755,17 @@ impl<'t> BytecodeCompiler<'t> {
 // TODO(ed): This should move to the typechecker - since we always want this check.
 fn all_paths_return(statement: &Statement) -> bool {
     match &statement.kind {
-        StatementKind::Use { .. }
-        | StatementKind::Blob { .. }
-        | StatementKind::IsCheck { .. }
         | StatementKind::Assignment { .. }
+        | StatementKind::Blob { .. }
+        | StatementKind::Break
+        | StatementKind::Continue
         | StatementKind::Definition { .. }
+        | StatementKind::EmptyStatement
+        | StatementKind::ExternalDefinition { .. }
+        | StatementKind::IsCheck { .. }
         | StatementKind::StatementExpression { .. }
         | StatementKind::Unreachable
-        | StatementKind::Continue
-        | StatementKind::Break
-        | StatementKind::EmptyStatement => false,
+        | StatementKind::Use { .. } => false,
 
         StatementKind::If { pass, fail, .. } => all_paths_return(pass) && all_paths_return(fail),
 

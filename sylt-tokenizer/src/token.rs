@@ -142,6 +142,8 @@ pub enum Token {
     From,
     #[token("as")]
     As,
+    #[token("external")]
+    External,
 
     #[token("<<<<<<<")]
     GitConflictBegin,

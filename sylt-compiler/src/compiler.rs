@@ -107,6 +107,7 @@ type BlobID = usize;
 type BlockID = usize;
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 enum Name {
+    External(VarKind),
     Global(ConstantID),
     Blob(BlobID),
     Namespace(NamespaceID),
@@ -577,6 +578,12 @@ impl Compiler {
                         self.activate(var);
                         num_constants += 1;
                         (Name::Global(var), name.clone(), statement.span)
+                    }
+                    ExternalDefinition { ident: Identifier { name, .. }, kind, .. } => {
+                        let var = self.define(name, *kind, statement.span);
+                        self.activate(var);
+                        num_constants += 1;
+                        (Name::External(*kind), name.clone(), statement.span)
                     }
 
                     // Handled later since we need type information.
