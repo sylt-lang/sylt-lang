@@ -1,5 +1,6 @@
 BUILD := build
 FILES := $(wildcard *.adoc)
+STYLESHEET := stylesheet.css
 TARGETS := $(patsubst %.adoc,$(BUILD)/%.html,$(FILES)) $(BUILD)/sylt.png
 SYNTAX := ./syntax-highlighter.rb
 
@@ -7,7 +8,7 @@ SYNTAX := ./syntax-highlighter.rb
 
 all: $(TARGETS)
 
-$(BUILD)/%.html: %.adoc $(SYNTAX) | $(BUILD)
+$(BUILD)/%.html: %.adoc $(STYLESHEET) $(SYNTAX) | $(BUILD)
 	asciidoctor --require $(SYNTAX) --out-file $@ $<
 
 $(BUILD)/sylt.png: | $(BUILD)
