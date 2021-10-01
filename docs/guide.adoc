@@ -1,3 +1,6 @@
 = Guide
 :favicon: sylt.png
 :stylesheet: stylesheet.css
+:source-highlighter: rouge
+:stylesheet: stylesheet.css
+:rouge-style: base16.dark

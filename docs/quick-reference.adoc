@@ -3,6 +3,7 @@
 :favicon: sylt.png
 :source-highlighter: rouge
 :stylesheet: stylesheet.css
+:rouge-style: base16.dark
 
 Here you will find most things in the Sylt language in a concise format.
 
