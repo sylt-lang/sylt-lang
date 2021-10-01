@@ -9,7 +9,15 @@ SYNTAX := ./syntax-highlighter.rb
 all: $(TARGETS)
 
 $(BUILD)/%.html: %.adoc $(STYLESHEET) $(SYNTAX) | $(BUILD)
-	asciidoctor --require $(SYNTAX) --out-file $@ $<
+	asciidoctor \
+		--out-file $@ $< \
+		--require $(SYNTAX) \
+		--attribute icons=font \
+		--attribute favicon=sylt.png \
+		--attribute source-highlighter=rouge \
+		--attribute stylesheet=$(STYLESHEET) \
+		--attribute rouge-style=base16.dark \
+	;
 
 $(BUILD)/sylt.png: | $(BUILD)
 	cp ../res/sylt.png $@
