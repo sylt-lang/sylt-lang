@@ -36,12 +36,12 @@ it is a modifiable value; see REF for details).
 
 [source, sylt]
 ----
-pp := 1     // a variable declaration
+num := 1     // a variable declaration
 PI :: 3.14  // a constant declaration
 ----
 
-//TODO this case has an actual name
-Constant variables should be written in `CAPITAL_CASE` (apart from functions).
+Constant variables should be written in `SCREAMING_SNAKE_CASE` (apart from
+functions).
 
 The type of the variable is inferred but can be supplied or even forced, which
 is described in *REF*.
@@ -154,7 +154,7 @@ true and true  // true
 not true       // false
 ----
 
-== Includes
+== Imports
 
 Code can be written in multiple files, to your liking. You don't have to
 consider include-ordering or dependency cycles. Write your code anywhere you
