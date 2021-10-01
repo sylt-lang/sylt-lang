@@ -235,7 +235,7 @@ normal loops
 ----
 l := [1, 2, 3]
 
-l -> for_each' fn a: int do print a end
+l -> for_each' fn a: int do print(a) end
 
 l -> for_each' fn a: int do
     // many statements
