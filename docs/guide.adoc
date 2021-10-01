@@ -251,7 +251,7 @@ Player :: blob {
 }
 
 update_player :: fn p: Player do
-    pos += vel
+    p.pos += p.vel
 end
 
 // ...
