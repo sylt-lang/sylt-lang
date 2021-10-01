@@ -5,7 +5,7 @@
 :stylesheet: stylesheet.css
 :rouge-style: base16.dark
 
-[quote, The Restaurant at the End of the Universe]
+[quote, Douglas Adams, The Restaurant at the End of the Universe]
 The Guide is definitive. Reality is frequently inaccurate.
 
 The guide is a longer walkthrough of the Sylt language. It aims to describe how
@@ -42,7 +42,7 @@ it is a modifiable value; see REF for details).
 
 [source, sylt]
 ----
-num := 1     // a variable declaration
+num := 1    // a variable declaration
 PI :: 3.14  // a constant declaration
 ----
 
@@ -84,6 +84,8 @@ false
 // Gustav
 
 === Types as values
+
+// ?
 
 == If-statements and if-expressions
 
@@ -222,8 +224,8 @@ Includes (both files and directories) can be aliased to other names.
 ----
 // a.sy
 use b as c   // imports "b.sy" under the namespace c
-// use c/    // invalid since the namespace c exists
-use c/ as d  // imports "c/exports.sy" under the namespace d
+use c/ as d  // imports "c/exports.sy" under the namespace d,
+             // since the namespace c is already used
 ----
 
 // [source, sylt]
@@ -267,6 +269,12 @@ end
 // ...
 players -> for_each' update_player
 ----
+
+=== map
+
+=== filter
+
+=== reduce and fold
 
 == Types and the type system
 
