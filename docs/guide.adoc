@@ -59,7 +59,6 @@ These are best described with some code. Basic values are immutable.
 // Strings
 "string"
 "contains spaces"
-"sometimes \"escaped quotes\" as well"
 
 // Integers
 1
