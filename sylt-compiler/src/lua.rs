@@ -20,6 +20,7 @@ macro_rules! write {
 
 pub struct LuaCompiler<'t> {
     compiler: &'t mut Compiler,
+    loops: Vec<usize>,
     pub file: File,
 }
 
@@ -28,6 +29,7 @@ impl<'t> LuaCompiler<'t> {
         let file = File::create(&file).unwrap();
         Self {
             compiler,
+            loops: Vec::new(),
             file,
         }
     }
@@ -337,10 +339,40 @@ impl<'t> LuaCompiler<'t> {
         match &statement.kind {
             Use { .. } | EmptyStatement => {}
 
-            Blob { .. } => {}
+            Blob { name, fields } => {
+                let fields = fields.iter()
+                    .map(|(k, v)| (k.clone(), self.compiler.resolve_type(&v, ctx.into())))
+                    .collect();
+                if let Some(Name::Blob(slot)) = self.compiler.namespaces[ctx.namespace].get(name) {
+                    match &mut self.compiler.constants[*slot] {
+                        Value::Ty(Type::Blob(_, b_fields)) => {
+                            *b_fields = fields;
+                        }
+                        _ => unreachable!(),
+                    }
+                } else {
+                    error!(
+                        self.compiler,
+                        ctx,
+                        statement.span,
+                        "No blob with the name '{}' in this namespace (#{})",
+                        name,
+                        ctx.namespace
+                    );
+                }
+            }
 
-            IsCheck { .. } => {
-                todo!();
+            IsCheck { lhs, rhs } => {
+                let lhs = self.compiler.resolve_type(lhs, ctx.into());
+                let rhs = self.compiler.resolve_type(rhs, ctx.into());
+                if let Err(msg) = rhs.fits(&lhs) {
+                    error!(
+                        self.compiler,
+                        ctx, statement.span,
+                        "Is-check failed - {}",
+                        msg
+                    );
+                }
             }
 
             ExternalDefinition { .. } => {}
@@ -416,8 +448,14 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, "while");
                 self.expression(condition, ctx);
                 write!(self, "do");
+                self.loops.push(0);
                 write!(self, ";");
                 self.statement(body, ctx);
+                let l = self.loops.len();
+                if self.loops.pop().unwrap() > 0 {
+                    write!(self, "::CONTINUE_{}::", l);
+                    write!(self, ";");
+                }
                 write!(self, "end");
                 write!(self, ";");
             }
@@ -435,12 +473,17 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ";");
             }
 
-            Continue {} => {
-                todo!();
+            Continue => {
+                write!(self, "goto");
+                let cont = self.loops.len();
+                *self.loops.last_mut().unwrap() += 1;
+                write!(self, "CONTINUE_{}", cont);
+                write!(self, ";");
             }
 
-            Break {} => {
-                todo!();
+            Break => {
+                write!(self, "break");
+                write!(self, ";");
             }
 
             Unreachable {} => {
