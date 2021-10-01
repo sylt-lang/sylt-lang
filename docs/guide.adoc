@@ -22,6 +22,8 @@ Python or Lua, other languages which Sylt takes some inspiration from.
 
 == Getting started
 
+// Gustav
+
 == Values and variables
 
 There are 4 basic types of values which can be composed in lists, tuples, sets,
@@ -79,6 +81,8 @@ false
 
 === Functions
 
+// Gustav
+
 === Types as values
 
 == If-statements and if-expressions
@@ -126,8 +130,11 @@ applies.
 1 + 1   // 2
 2 - 2   // 0
 3 * 3   // 9
-10 / 2  // 5.0
+10 / 2  // 5
+10 / 3  // 3 (integer division!)
 -4      // -4
+10.0 / 2.0   // 5.0 (float division)
+// 10 / 2.0  // type error, can't divide int and float
 ----
 
 .Comparison operators
@@ -189,7 +196,7 @@ themselves) will be reachable. Beware of global and mutable variables! Unless
 you know it's what you need. :)
 
 Files are included relative to the current file. With a leading "/" the path is
-started from the working directory of the game process, which might be useful
+started from the directory containing the file being run, which might be useful
 if a file is located a few directories down.
 
 [source, sylt]
@@ -219,17 +226,20 @@ use b as c   // imports "b.sy" under the namespace c
 use c/ as d  // imports "c/exports.sy" under the namespace d
 ----
 
-[source, sylt]
-----
-----
+// [source, sylt]
+// ----
+// ----
 
 == Loops
 
-There are no built-in loop constructs. Rather, the standard library supplies a
-couple of higher-order functions. Still, they are written almost like a the
-normal loops
+Apart from the simple loop-keyword, other loops are supplied by the standard library as higher-order functions.
+
+=== loop
 
 === for_each
+
+`for_each` applies a function on every element in a list. If the elements are
+mutable (e.g. another list, see *REF*) it can be mutated.
 
 [source, sylt]
 ----
