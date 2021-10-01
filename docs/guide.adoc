@@ -74,13 +74,14 @@ false
 
 === Composite values
 
+// ?
+
 === Functions
 
 // Gustav
 
+// Remove?
 === Types as values
-
-// ?
 
 == If-statements and if-expressions
 
@@ -233,6 +234,8 @@ Apart from the simple loop-keyword, other loops are supplied by the standard lib
 
 === loop
 
+// ?
+
 === for_each
 
 `for_each` applies a function on every element in a list. If the elements are
@@ -267,12 +270,24 @@ players -> for_each' update_player
 
 === map
 
+// Gustav
+
 === filter
+
+// Gustav
 
 === reduce and fold
 
+// Gustav
+
 == Types and the type system
+
+// ?
 
 == Blobs
 
+// ?
+
 == Standard library
+
+// ?
