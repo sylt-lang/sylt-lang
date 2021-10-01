@@ -114,7 +114,8 @@ a := (b + 5.) / 10. if > 1. else 0.
 
 == Operators
 
-The basic operators are all here. Normal mathematical grouping is applied.
+The basic operators are all here. Standard mathematical evaluation order
+applies.
 
 .Arithmetic operators
 [source, sylt]
