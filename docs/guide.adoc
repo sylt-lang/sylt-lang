@@ -222,6 +222,39 @@ use c/ as d  // imports "c/exports.sy" under the namespace d
 
 == Loops
 
+There are no built-in loop constructs. Rather, the standard library supplies a
+couple of higher-order functions. Still, they are written almost like a the
+normal loops
+
+=== for_each
+
+[source, sylt]
+----
+l := [1, 2, 3]
+
+l -> for_each' fn a: int do print a end
+
+l -> for_each' fn a: int do
+    // many statements
+end
+----
+
+.Functions don't have to be constructed in-place.
+[source, sylt]
+----
+Player :: blob {
+    pos: (int, int)
+    vel: (int, int)
+}
+
+update_player :: fn p: Player do
+    pos += vel
+end
+
+// ...
+players -> for_each' update_player
+----
+
 == Types and the type system
 
 == Blobs
