@@ -2,7 +2,7 @@
 
 Here you will find most things in the Sylt language in a concise format.
 
-.Variables
+== Variables
 [source, sylt]
 ----
 constant :: 3.14
@@ -18,7 +18,7 @@ num *= 10.    // => 10.0
 num /= 2.     // => 5.0
 ----
 
-.If-else statements
+== If-else statements
 [source, sylt]
 ----
 if 1 < 0 do
@@ -35,7 +35,7 @@ two :: one + 1 if == 2 else -1 // <1>
 
 <1> The left hand side is inserted right after `if`.
 
-.Operators
+== Operators
 [source, sylt]
 ----
 1 + 1
@@ -61,7 +61,7 @@ not true
 <!>                // Assert unreachable, i.e. crash the program
 ----
 
-.Functions
+== Functions
 [source, sylt]
 ----
 hello :: fn do
@@ -96,7 +96,7 @@ end
 <1> This creates a function with an implicit return. The function is then
 called immediately.
 
-.Loops
+== Loops
 [source, sylt]
 ----
 i := 0
@@ -118,7 +118,7 @@ loop do
 end
 ----
 
-.Types
+== Types
 [source, sylt]
 ----
 // Basic types
@@ -150,7 +150,7 @@ empty_tuple: () = ()
 one_element_tuple: (int,) = (1,)
 ----
 
-.Blobs
+== Blobs
 [source, sylt]
 ----
 Player :: blob {
@@ -198,7 +198,7 @@ drawable: Drawable = HitpointDisplay {
 drawable.draw()
 ----
 
-.Imports
+== Imports
 [source, sylt]
 ----
 use file          // file.thing
@@ -212,7 +212,7 @@ use /res/         // res.thing    <2>
 <2> Leading `/` signifies the project root.
 
 // TODO(Er): Look over these
-.Standard library
+== Standard library
 [source, sylt]
 ----
 // Math

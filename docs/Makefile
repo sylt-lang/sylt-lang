@@ -17,6 +17,7 @@ $(BUILD)/%.html: %.adoc $(STYLESHEET) $(SYNTAX) | $(BUILD)
 		--attribute source-highlighter=rouge \
 		--attribute stylesheet=$(STYLESHEET) \
 		--attribute rouge-style=base16.dark \
+		--attribute toc=left \
 	;
 
 $(BUILD)/sylt.png: | $(BUILD)
