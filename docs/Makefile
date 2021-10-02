@@ -9,7 +9,8 @@ SYNTAX := ./syntax-highlighter.rb
 all: $(TARGETS)
 
 $(BUILD)/%.html: %.adoc $(STYLESHEET) $(SYNTAX) | $(BUILD)
-	asciidoctor \
+	@echo Building $@
+	@asciidoctor \
 		--out-file $@ $< \
 		--require $(SYNTAX) \
 		--attribute icons=font \
