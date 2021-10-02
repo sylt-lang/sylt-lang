@@ -1,0 +1,31 @@
+name: Docs
+
+on:
+  push:
+    branches: docs
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install packages
+        run: |
+          sudo apt install asciidoctor
+          sudo gem install rouge
+      - name: Build
+        run: |
+          cd docs
+          make
+          cd ..
+      - name: Move files
+        run: |
+          cp -r docs/build/* docs
+      - name: Deploy to GitHub Pages
+        uses: crazy-max/ghaction-github-pages@v2
+        with:
+          target_branch: gh-pages
+          build_dir: ./docs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
