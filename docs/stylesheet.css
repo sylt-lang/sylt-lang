@@ -443,7 +443,7 @@ body.book #toc,body.book #preamble,body.book h1.sect0,body.book .sect1>h2{page-b
     --tertiarycolor: #FF4B4F;
 
     --linkcolor: #efca44;
-    --linkhover: #cc8888;
+    --linkhover: #a78d2f;
 }
 
 /* Text styles */
