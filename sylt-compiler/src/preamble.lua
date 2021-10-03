@@ -1,3 +1,4 @@
+__TEST = false
 __TUPLE_META = { _type = "tuple" }
 __TUPLE_META.__newindex = function()
     assert(false, "Tuples are immutable")
@@ -76,7 +77,7 @@ function __TUPLE(obj)
     return setmetatable(obj, __TUPLE_META)
 end
 
-do
+if __TEST then
     local a = __TUPLE { 1, 2, 3 }
     local b = __TUPLE { 3, 2, 1 }
     print(a)
@@ -127,7 +128,7 @@ function __LIST(obj)
     return setmetatable(obj, __LIST_META)
 end
 
-do
+if __TEST then
     local a = __LIST { 1, 2, 3 }
     print(a)
 end
@@ -163,7 +164,7 @@ function __DICT(obj)
     return setmetatable(obj, __DICT_META)
 end
 
-do
+if __TEST then
     local a = __DICT { [1] = 1, [2] = 3, [3] = 2 }
     print(a)
 end
@@ -200,7 +201,7 @@ function __SET(obj)
     return setmetatable(obj, __SET_META)
 end
 
-do
+if __TEST then
     local a = __SET { 1, 3, 2 }
     print(a)
 end
