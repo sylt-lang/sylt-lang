@@ -238,8 +238,10 @@ impl<'t> LuaCompiler<'t> {
             Set(xs) => {
                 write!(self, "__SET { ");
                 for x in xs {
+                    write!(self, "[");
                     self.expression(x, ctx);
-                    write!(self, " , ");
+                    write!(self, "]");
+                    write!(self, " = true , ");
                 }
                 write!(self, "}");
             }
@@ -250,7 +252,7 @@ impl<'t> LuaCompiler<'t> {
                     write!(self, "[");
                     self.expression(k, ctx);
                     write!(self, "]");
-                    write!(self, ":");
+                    write!(self, "=");
                     self.expression(v, ctx);
                     write!(self, ",");
                 }

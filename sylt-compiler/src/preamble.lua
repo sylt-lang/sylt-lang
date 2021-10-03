@@ -172,13 +172,13 @@ end
 __SET_META = { _type = "set" }
 -- TODO(ed): add - sub - mul?
 __SET_META.__eq = function(a, b)
-    for k, v in pairs(a) do
-        if not (v == b[k]) then
+    for k, _ in pairs(a) do
+        if not b[k] then
             return false
         end
     end
-    for k, v in pairs(b) do
-        if not (v == a[k]) then
+    for k, _ in pairs(b) do
+        if not a[k] then
             return false
         end
     end
@@ -187,12 +187,12 @@ end
 __SET_META.__tostring = function(a)
     local out = "{"
     local first = true
-    for _, v in pairs(a) do
+    for k, _ in pairs(a) do
         if not first then
             out = out .. ", "
         end
         first = false
-        out = out .. tostring(v)
+        out = out .. tostring(k)
     end
     out = out .. "}"
     return out
