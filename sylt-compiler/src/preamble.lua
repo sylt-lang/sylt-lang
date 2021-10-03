@@ -1,4 +1,6 @@
 -- Begin Sylt preamble
+
+-- Built in types
 __TEST = true
 __TUPLE_META = { _type = "tuple" }
 __TUPLE_META.__newindex = function()
@@ -242,6 +244,138 @@ end
 if __TEST then
     local a = __BLOB { a = 1, b = 3, c = 2 }
     print(a)
+end
+
+-- std-sylt
+
+function atan2(x, y) return math.atan2(y, x) end
+function dbg(x) print(x); return x end
+function random_choice(l) return l[math.random(1, #l)] end
+
+function for_each(l, f)
+    for _, v in pairs(l) do
+        f(v)
+    end
+end
+
+function map(l, f)
+    local o = {}
+    for k, v in pairs(l) do
+        o[k] = f(v)
+    end
+    return __LIST(o)
+end
+
+function reduce(l, f)
+    if #l == 0 then
+        return nil
+    end
+    local a = l[1]
+    for k, v in pairs(l) do
+        if k ~= 1 then
+            a = f(a, v)
+        end
+    end
+    return a
+end
+
+function fold(l, a, f)
+    for k, v in pairs(l) do
+        if k ~= 1 then
+            a = f(v, a)
+        end
+    end
+    return a
+end
+
+function filter(l, f)
+    local o = {}
+    for _, v in pairs(l) do
+        if f(v) then
+            table.insert(o, v)
+        end
+    end
+    return __LIST(o)
+end
+
+push = table.insert
+
+function prepend(l, v)
+    table.insert(l, 1, v)
+end
+
+function add(s, v)
+    s[v] = true
+end
+
+function len(c)
+    return #c
+end
+
+sin = math.sin
+cos = math.cos
+
+function as_float(x) return x end
+as_int = math.floor
+floor = math.floor
+as_char = string.byte
+function as_chars(s)
+    return __LIST(string.byte(s, 1, string.len(s)))
+end
+
+sqrt = math.sqrt
+abs = math.abs
+function sign(x)
+    if x > 0 then
+        return 1
+    elseif x < 0 then
+        return -1
+    else
+        return 0
+    end
+end
+function clamp(x, lo, hi)
+    return math.min(hi, math.max(x, lo))
+end
+min = math.min
+max = math.max
+function rem(x, y)
+    return x % y
+end
+pow = math.pow
+function angle(v)
+    return atan2(v[1], v[2])
+end
+
+function dot(a, b)
+    return a[1] * b[1] + a[2] * b[2]
+end
+
+function magnitude_squared(a)
+    return dot(a, a)
+end
+
+function magnitude(a)
+    return math.sqrt(dot(a, a))
+end
+
+function __crash(msg)
+    return function() assert(false, "crash" .. (msg or "")) end
+end
+
+normalize = __crash("normalize is not implemented")
+reflect = __crash("reflect is not implemented")
+debug_assertions = __crash("debug_assertions is not implemented")
+thread_sleep = __crash("thread_sleep is not implemented")
+
+pop = __crash("pop is not implemented")
+last = __crash("las is not implemented")
+
+as_str = tostring
+print = print
+function spy(tag, x)
+    print(tag, x)
+    return x
 end
 
 -- End Sylt preamble
