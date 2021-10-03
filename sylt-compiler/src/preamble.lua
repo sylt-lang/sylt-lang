@@ -1,7 +1,7 @@
 -- Begin Sylt preamble
+__TEST = false
 
 -- Built in types
-__TEST = true
 __TUPLE_META = { _type = "tuple" }
 __TUPLE_META.__newindex = function()
     assert(false, "Tuples are immutable")
