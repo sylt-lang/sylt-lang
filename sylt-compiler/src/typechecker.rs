@@ -1009,7 +1009,7 @@ impl<'c> TypeChecker<'c> {
                         _ => unreachable!(),
                     }
                 } else {
-                    unreachable!("No blob with the name '{}' in this namespace (#{})", name, ctx.namespace);
+                    // We've yet to fill it in, but that's why we have a prepass.
                 }
             }
 
