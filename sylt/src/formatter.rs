@@ -277,9 +277,6 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             ComparisonKind::LessEqual => {
                 expr_binary_op!(dest, indent, *lhs, " <= ", *rhs);
             }
-            ComparisonKind::Is => {
-                expr_binary_op!(dest, indent, *lhs, " is ", *rhs);
-            }
             ComparisonKind::In => {
                 expr_binary_op!(dest, indent, *lhs, " in ", *rhs);
             }
@@ -333,7 +330,6 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
                             ComparisonKind::GreaterEqual => ">=",
                             ComparisonKind::Less => "<",
                             ComparisonKind::LessEqual => "<=",
-                            ComparisonKind::Is => "is",
                             ComparisonKind::In => "in",
                         }
                     )?;

@@ -195,7 +195,6 @@ impl<'t> BytecodeCompiler<'t> {
                 GreaterEqual => self.bin_op(a, b, &[Op::Less, Op::Not], expression.span, ctx),
                 Less => self.bin_op(a, b, &[Op::Less], expression.span, ctx),
                 LessEqual => self.bin_op(a, b, &[Op::Greater, Op::Not], expression.span, ctx),
-                Is => self.bin_op(a, b, &[Op::Is], expression.span, ctx),
                 In => self.bin_op(a, b, &[Op::Contains], expression.span, ctx),
             }
 

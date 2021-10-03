@@ -147,8 +147,6 @@ impl<'t> LuaCompiler<'t> {
                     self.expression(b, ctx);
                     write!(self, ")");
                 }
-                _ => todo!(),
-                // Is => self.bin_op(a, b, &[Op::Is], expression.span, ctx),
             }
 
             AssertEq(a, b) => {

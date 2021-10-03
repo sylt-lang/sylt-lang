@@ -12,7 +12,6 @@ pub enum ComparisonKind {
     GreaterEqual,
     Less,
     LessEqual,
-    Is,
     In,
 }
 
@@ -259,7 +258,6 @@ fn precedence(token: &T) -> Prec {
         T::And => Prec::BoolAnd,
         T::Or => Prec::BoolOr,
 
-        T::Is => Prec::Index,
         T::In => Prec::Index,
 
         T::AssertEqual => Prec::Assert,
@@ -514,7 +512,6 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
         | T::GreaterEqual
         | T::Less
         | T::LessEqual
-        | T::Is
 
         | T::And
         | T::Or
@@ -552,7 +549,6 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
         T::GreaterEqual => Comparison(lhs, GreaterEqual, rhs),
         T::Less => Comparison(lhs, Less, rhs),
         T::LessEqual => Comparison(lhs, LessEqual, rhs),
-        T::Is => Comparison(lhs, Is, rhs),
         T::In => Comparison(lhs, In, rhs),
 
         // Boolean operators.

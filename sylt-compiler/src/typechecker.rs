@@ -548,7 +548,6 @@ impl<'c> TypeChecker<'c> {
                 ComparisonKind::Greater | ComparisonKind::GreaterEqual | ComparisonKind::Less | ComparisonKind::LessEqual => {
                     self.bin_op(span, a, b, op::cmp, "Comparison")?
                 }
-                ComparisonKind::Is => self.bin_op(span, a, b, |_ ,_| Type::Bool, "Is")?,
                 ComparisonKind::In => {
                     let a = self.expression(a)?;
                     let b = self.expression(b)?;
