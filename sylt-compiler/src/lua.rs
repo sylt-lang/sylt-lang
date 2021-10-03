@@ -84,6 +84,9 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ". {}", field.name);
             }
             Index(a, b) => {
+                // TODO(ed): This won't work for tuples and dicts at
+                // the same time. We need to handle them differently and only
+                // the typechecker knows what is what.
                 self.assignable(a, ctx);
                 write!(self, "[");
                 self.expression(b, ctx);
@@ -215,40 +218,43 @@ impl<'t> LuaCompiler<'t> {
             }
 
             Tuple(xs) => {
-                write!(self, "setmetatable( { ");
+                write!(self, "__TUPLE { ");
                 for x in xs {
                     self.expression(x, ctx);
                     write!(self, " , ");
                 }
-                write!(self, "} , __TUPLE_TABLE or {})");
+                write!(self, "}");
             }
 
             List(xs) => {
-                write!(self, "setmetatable( { ");
+                write!(self, "__LIST { ");
                 for x in xs {
                     self.expression(x, ctx);
                     write!(self, " , ");
                 }
-                write!(self, "} , __LIST_TABLE or {})");
+                write!(self, "}");
             }
 
             Set(xs) => {
-                write!(self, "setmetatable( { ");
+                write!(self, "__SET { ");
                 for x in xs {
                     self.expression(x, ctx);
                     write!(self, " , ");
                 }
-                write!(self, "} , __SET_TABLE or {})");
+                write!(self, "}");
             }
 
             Dict(xs) => {
-                write!(self, "setmetatable( { ");
+                write!(self, "__DICT { ");
                 for (k, v) in xs.iter().zip(xs.iter().skip(1)) {
+                    write!(self, "[");
                     self.expression(k, ctx);
-                    write!(self, "=");
+                    write!(self, "]");
+                    write!(self, ":");
                     self.expression(v, ctx);
+                    write!(self, ",");
                 }
-                write!(self, "} , __SET_TABLE or {})");
+                write!(self, "}");
             }
 
             Float(a) => write!(self, "{}", a),
