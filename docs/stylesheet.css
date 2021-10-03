@@ -188,7 +188,7 @@ body {
   color: var(--text);
   padding: 0;
   margin: 0;
-  font-family: "Noto Serif", "DejaVu Serif", serif;
+  font-family: "Noto Sans", sans-serif;
   line-height: 1;
   position: relative;
   cursor: auto;
@@ -1181,7 +1181,7 @@ table.tableblock > .title,
 .hdlist > .title {
   text-rendering: optimizeLegibility;
   text-align: left;
-  font-family: "Noto Serif", "DejaVu Serif", serif;
+  font-family: "Noto Sans", sans-serif;
   font-size: 1rem;
   font-style: italic;
 }
