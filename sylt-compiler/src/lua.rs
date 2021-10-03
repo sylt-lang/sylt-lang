@@ -318,8 +318,12 @@ impl<'t> LuaCompiler<'t> {
                     return Some(new_namespace)
                 }
                 None => {
-                    error!(self.compiler, ctx, span, "No identifier found named: '{}'", name);
-                    dbg!(&self.compiler.frames);
+                    if let Some((_, _, _)) = self.compiler.functions.get(name) {
+                        // Same as external - but defined from sylt-std
+                        write!(self, "{}", name);
+                    } else {
+                        error!(self.compiler, ctx, span, "No identifier found named: '{}'", name);
+                    }
                 }
             },
         }
