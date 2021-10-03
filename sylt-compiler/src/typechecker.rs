@@ -579,7 +579,6 @@ impl<'c> TypeChecker<'c> {
 
             EK::Parenthesis(expr) => self.expression(expr)?,
 
-            EK::Duplicate(expr) => self.expression(expr)?,
             EK::Tuple(values) => {
                 let mut types = Vec::new();
                 for v in values.iter() {
@@ -666,26 +665,6 @@ impl<'c> TypeChecker<'c> {
                 // TODO(ed) check nullables and the actual condition
                 Type::maybe_union(
                     [self.expression(pass)?, self.expression(fail)?].iter(),
-                )
-            }
-
-            EK::IfShort { lhs, condition, fail } => {
-                let condition_ty = self.expression(condition)?;
-                if !matches!(condition_ty, Type::Bool) {
-                    return err_type_error!(
-                        self,
-                        condition.span,
-                        TypeError::Mismatch {
-                            got: condition_ty,
-                            expected: Type::Bool,
-                        },
-                        "Only boolean expressions are valid if-expression conditions"
-                    )
-                }
-
-                // TODO(ed) check nullables and the actual condition
-                Type::maybe_union(
-                    [self.expression(lhs)?, self.expression(fail)?].iter(),
                 )
             }
 

@@ -169,13 +169,6 @@ impl<'t> LuaCompiler<'t> {
                 self.expression(a, ctx);
             }
 
-            Duplicate(expr)
-            | Parenthesis(expr) => {
-                write!(self, "(");
-                self.expression(expr, ctx);
-                write!(self, ")");
-            }
-
             IfExpression {
                 condition,
                 pass,

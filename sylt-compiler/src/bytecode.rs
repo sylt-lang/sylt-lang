@@ -231,8 +231,6 @@ impl<'t> BytecodeCompiler<'t> {
             }
             Not(a) => self.un_op(a, &[Op::Not], expression.span, ctx),
 
-            Duplicate(a) => self.un_op(a, &[Op::Copy(1)], expression.span, ctx),
-
             Parenthesis(expr) => self.expression(expr, ctx),
 
             IfExpression {
@@ -253,28 +251,6 @@ impl<'t> BytecodeCompiler<'t> {
                 let op = Op::Jmp(self.next_ip(ctx));
                 self.patch(ctx, out, op);
             }
-
-            IfShort {
-                condition,
-                fail,
-                ..
-            } => {
-                // Results in 2 values pushed on the stack - since there's a Duplicate in
-                // there!
-                self.expression(condition, ctx);
-
-                let skip = self.add_op(ctx, expression.span, Op::Illegal);
-                let out = self.add_op(ctx, expression.span, Op::Illegal);
-
-                let op = Op::JmpFalse(self.next_ip(ctx));
-                self.patch(ctx, skip, op);
-
-                self.add_op(ctx, expression.span, Op::Pop);
-                self.expression(fail, ctx);
-                let op = Op::Jmp(self.next_ip(ctx));
-                self.patch(ctx, out, op);
-            }
-
 
             Function {
                 name,
