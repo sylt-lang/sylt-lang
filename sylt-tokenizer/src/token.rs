@@ -41,12 +41,8 @@ pub enum Token {
 
     #[token("+")]
     Plus,
-    #[token("++")]
-    PlusPlus,
     #[token("-")]
     Minus,
-    #[token("--")]
-    MinusMinus,
     #[token("*")]
     Star,
     #[token("/")]
