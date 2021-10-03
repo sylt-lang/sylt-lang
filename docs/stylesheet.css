@@ -33,7 +33,7 @@ abbr {
 
 abbr[title] {
   cursor: help;
-  border-bottom: 1px dotted #dddddf;
+  border-bottom: 1px dotted var(--divider);
   text-decoration: none;
 }
 
@@ -184,8 +184,8 @@ body {
 }
 
 body {
-  background: #fff;
-  color: rgba(0, 0, 0, 0.8);
+  background: var(--background);
+  color: var(--text);
   padding: 0;
   margin: 0;
   font-family: "Noto Serif", "DejaVu Serif", serif;
@@ -314,14 +314,14 @@ td {
 }
 
 a {
-  color: #2156a5;
+  color: var(--linkcolor);
   text-decoration: underline;
   line-height: inherit;
 }
 
 a:hover,
 a:focus {
-  color: #1d4b8f;
+  color: var(--linkhover);
 }
 
 a img {
@@ -395,7 +395,7 @@ h6 {
 }
 
 hr {
-  border: solid #dddddf;
+  border: solid var(--divider);
   border-width: 1px 0 0;
   clear: both;
   margin: 1.25em 0 1.1875em;
@@ -421,7 +421,7 @@ small {
 code {
   font-family: "Droid Sans Mono", "DejaVu Sans Mono", monospace;
   font-weight: 400;
-  color: rgba(0, 0, 0, 0.9);
+  color: var(--codetext);
 }
 
 ul,
@@ -538,7 +538,7 @@ table tfoot tr th,
 table tfoot tr td {
   padding: 0.5em 0.625em 0.625em;
   font-size: inherit;
-  color: rgba(0, 0, 0, 0.8);
+  color: var(--text);
   text-align: left;
 }
 
@@ -546,7 +546,7 @@ table tr th,
 table tr td {
   padding: 0.5625em 0.625em;
   font-size: inherit;
-  color: rgba(0, 0, 0, 0.8);
+  color: var(--text);
 }
 
 table tr.even,
@@ -625,7 +625,7 @@ h6 strong {
   letter-spacing: 0;
   padding: 0.1em 0.5ex;
   word-spacing: -0.15em;
-  background: #f7f7f8;
+  background: var(--background2);
   border-radius: 4px;
   line-height: 1.45;
   text-rendering: optimizeSpeed;
@@ -670,7 +670,7 @@ strong strong {
 kbd {
   font-family: "Droid Sans Mono", "DejaVu Sans Mono", monospace;
   display: inline-block;
-  color: rgba(0, 0, 0, 0.8);
+  color: var(--text);
   font-size: 0.65em;
   line-height: 1.45;
   background: #f7f7f7;
@@ -787,17 +787,17 @@ p a > code:hover {
 
 #header > h1:first-child + #toc {
   margin-top: 8px;
-  border-top: 1px solid #dddddf;
+  border-top: 1px solid var(--divider);
 }
 
 #header > h1:only-child,
 body.toc2 #header > h1:nth-last-child(2) {
-  border-bottom: 1px solid #dddddf;
+  border-bottom: 1px solid var(--divider);
   padding-bottom: 8px;
 }
 
 #header .details {
-  border-bottom: 1px solid #dddddf;
+  border-bottom: 1px solid var(--divider);
   line-height: 1.45;
   padding-top: 0.25em;
   padding-bottom: 0.25em;
@@ -842,7 +842,7 @@ body.toc2 #header > h1:nth-last-child(2) {
 
 #content > h1:first-child:not([class]) {
   color: rgba(0, 0, 0, 0.85);
-  border-bottom: 1px solid #dddddf;
+  border-bottom: 1px solid var(--divider);
   padding-bottom: 8px;
   margin-top: 0;
   padding-top: 1rem;
@@ -1533,7 +1533,7 @@ pre.pygments span.linenos {
 .quoteblock.excerpt > blockquote,
 .quoteblock .quoteblock {
   padding: 0 0 0.25em 1em;
-  border-left: 0.25em solid #dddddf;
+  border-left: 0.25em solid var(--divider);
 }
 
 .quoteblock.excerpt,
@@ -1670,7 +1670,7 @@ tbody tr th,
 tbody tr th p,
 tfoot tr th,
 tfoot tr th p {
-  color: rgba(0, 0, 0, 0.8);
+  color: var(--text);
   font-weight: bold;
 }
 
@@ -2153,7 +2153,7 @@ a span.icon > .fa {
 .conum[data-value] {
   display: inline-block;
   color: #fff !important;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 1);
   border-radius: 50%;
   text-align: center;
   font-size: 0.75em;
@@ -2330,7 +2330,7 @@ p.tableblock {
   }
 
   #toc {
-    border-bottom: 1px solid #dddddf !important;
+    border-bottom: 1px solid var(--divider) !important;
     padding-bottom: 0 !important;
   }
 
