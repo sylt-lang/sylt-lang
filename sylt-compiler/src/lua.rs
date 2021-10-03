@@ -44,11 +44,11 @@ impl<'t> LuaCompiler<'t> {
     }
 
     fn write_global(&mut self, slot: usize) {
-        write!(self, "global_var_{}", slot);
+        write!(self, "GLOBAL_{}", slot);
     }
 
     fn write_slot(&mut self, slot: VarSlot) {
-        write!(self, "local_var_{}", slot);
+        write!(self, "local_{}", slot);
     }
 
     fn assignable(&mut self, ass: &Assignable, ctx: Context) -> Option<usize> {
