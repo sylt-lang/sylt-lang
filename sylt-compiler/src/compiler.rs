@@ -1,5 +1,7 @@
+use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use sylt_common::error::Error;
 use sylt_common::prog::Prog;
 use sylt_common::{Op, RustFunction, Type, Value};
@@ -518,7 +520,10 @@ impl Compiler {
 
         if self.errors.is_empty() {
             Ok(Prog {
-                blocks: Vec::new(),
+                blocks: blocks
+                    .into_iter()
+                    .map(|x| Rc::new(RefCell::new(x)))
+                    .collect(),
                 functions: functions.iter().map(|(_, f, _)| *f).collect(),
                 constants: self.constants,
                 strings: self.strings,
