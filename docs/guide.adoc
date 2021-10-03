@@ -224,13 +224,13 @@ use c/ as d  // imports "c/exports.sy" under the namespace d,
              // since the namespace c is already used
 ----
 
-// [source, sylt]
-// ----
-// ----
-
 == Loops
 
-Apart from the simple loop-keyword, other loops are supplied by the standard library as higher-order functions.
+Apart from the simple loop-keyword, other loops are supplied by the standard
+library as higher-order functions. `map`, `filter`, `reduce` and `fold` works
+like they usually do.
+
+NOTE: `->` and `'` can be used to ease the writing. See the examples below.
 
 === loop
 
@@ -270,11 +270,45 @@ players -> for_each' update_player
 
 === map
 
-// Gustav
+`map` applies a function on every element in a list and replaces each element
+with the return value.
+
+[source, sylt]
+----
+l = [1, 2, 3] -> map' fn a: int -> int do a * 2 end
+
+l <=> [2, 4, 6]
+----
+
+[source, sylt]
+----
+points := [1, 2, 3]
+
+sum := 0
+points -> for_each' fn p: int do sum += p end
+
+points_str := points -> map' fn p: int -> str do
+    as_str(p) + "/" as_str(sum)
+end
+
+points_str <=> ["1/6", "2/6", "3/6"]
+----
 
 === filter
 
+`filter` applies a function on every element in a list and keeps it iff the
+function returns true.
+
+[source, sylt]
+----
+l := [1, 2, 3, 4] -> filter' fn a: int -> bool do rem(a, 2) == 0 end
+
+l <=> [2, 4]
+----
+
 // Gustav
+
+//TODO(gu): motivating example
 
 === reduce and fold
 
