@@ -454,30 +454,7 @@ impl<'t> BytecodeCompiler<'t> {
         self.compiler.panic = false;
 
         match &statement.kind {
-            Use { .. } | EmptyStatement => {}
-
-            Blob { name, fields } => {
-                let fields = fields.iter()
-                    .map(|(k, v)| (k.clone(), self.compiler.resolve_type(&v, ctx.into())))
-                    .collect();
-                if let Some(Name::Blob(slot)) = self.compiler.namespaces[ctx.namespace].get(name) {
-                    match &mut self.compiler.constants[*slot] {
-                        Value::Ty(Type::Blob(_, b_fields)) => {
-                            *b_fields = fields;
-                        }
-                        _ => unreachable!(),
-                    }
-                } else {
-                    error!(
-                        self.compiler,
-                        ctx,
-                        statement.span,
-                        "No blob with the name '{}' in this namespace (#{})",
-                        name,
-                        ctx.namespace
-                    );
-                }
-            }
+            Use { .. } | Blob { .. } | EmptyStatement => {}
 
             IsCheck { lhs, rhs } => {
                 let lhs = self.compiler.resolve_type(lhs, ctx.into());
