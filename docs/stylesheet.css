@@ -2439,6 +2439,7 @@ p.tableblock {
   --background: #101010;
   --background2: #151515;
   --text: #CCC;
+  --light-text: #888;
   --codetext: #D28445;
   --divider: #333;
 
@@ -2477,6 +2478,10 @@ th {
 /* Responsiveness fixes */
 video {
   max-width: 100%;
+}
+
+.c1 {
+  color: var(--light-text) !important;
 }
 
 @media all and (max-width: 600px) {
