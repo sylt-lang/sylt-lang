@@ -227,7 +227,7 @@ use c/ as d  // imports "c/exports.sy" under the namespace d,
 == Loops
 
 Apart from the simple loop-keyword, other loops are supplied by the standard
-library as higher-order functions. `map`, `filter`, `reduce` and `fold` works
+library as higher-order functions. `map`, `filter`, `reduce` and `fold` work
 like they usually do.
 
 NOTE: `->` and `'` can be used to ease the writing. See the examples below.
