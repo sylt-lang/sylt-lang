@@ -454,10 +454,55 @@ impl<'t> LuaCompiler<'t> {
 
             #[rustfmt::skip]
             Assignment { target, value, kind } => {
-                self.assignable(target, ctx);
-                write!(self, "=");
-                assert!(matches!(kind, Op::Nop), "Only support nop right now");
-                self.expression(value, ctx);
+                if *kind == Op::Nop {
+                    self.assignable(target, ctx);
+                    write!(self, "=");
+                    self.expression(value, ctx);
+                } else {
+                    let op = match kind {
+                        Op::Nop => unreachable!(),
+                        Op::Add => "+",
+                        Op::Sub => "-",
+                        Op::Mul => "*",
+                        Op::Div => "/",
+                    };
+
+                    match &target.kind {
+                        // TODO(ed): Warn about calls?
+                        AssignableKind::Access(rest, field) => {
+                            write!(self, "do local tmp_ass =");
+                            self.assignable(rest, ctx);
+                            write!(self, ";");
+                            write!(self, "tmp_ass . {} = tmp_ass . {} {}", field.name, field.name, op);
+                            write!(self, "(");
+                            self.expression(value, ctx);
+                            write!(self, ")");
+                            write!(self, ";");
+                            write!(self, "end");
+                        }
+                        AssignableKind::Index(rest, index) => {
+                            write!(self, "do local tmp_ass =");
+                            self.assignable(rest, ctx);
+                            write!(self, ";");
+                            write!(self, "local tmp_expr =");
+                            self.expression(index, ctx);
+                            write!(self, ";");
+                            write!(self, "tmp_ass [ tmp_expr ] = tmp_ass [ tmp_expr ] {}", op);
+                            write!(self, "(");
+                            self.expression(value, ctx);
+                            write!(self, ")");
+                            write!(self, ";");
+                            write!(self, "end");
+                        }
+                        _ => {
+                            self.assignable(target, ctx);
+                            write!(self, "=");
+                            self.assignable(target, ctx);
+                            write!(self, op);
+                            self.expression(value, ctx);
+                        }
+                    }
+                }
             }
 
             StatementExpression { value } => {
