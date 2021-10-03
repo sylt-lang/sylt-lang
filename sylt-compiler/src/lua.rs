@@ -137,9 +137,15 @@ impl<'t> LuaCompiler<'t> {
                 GreaterEqual => self.bin_op(a, b, ">=", ctx),
                 Less => self.bin_op(a, b, "<", ctx),
                 LessEqual => self.bin_op(a, b, "<=", ctx),
+                In => {
+                    write!(self, "__contains(");
+                    self.expression(a, ctx);
+                    write!(self, ",");
+                    self.expression(b, ctx);
+                    write!(self, ")");
+                }
                 _ => todo!(),
                 // Is => self.bin_op(a, b, &[Op::Is], expression.span, ctx),
-                // In => self.bin_op(a, b, &[Op::Contains], expression.span, ctx),
             }
 
             AssertEq(a, b) => {

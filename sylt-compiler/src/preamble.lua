@@ -378,4 +378,23 @@ function spy(tag, x)
     return x
 end
 
+function __contains(a, b)
+    local ty = getmetatable(b)._type
+    if ty == "list" then
+        for _, v in pairs(b) do
+            if v == a then
+                return true
+            end
+        end
+        return false
+    end
+    if ty == "dict" then
+        return b[a] ~= nil
+    end
+    if ty == "set" then
+        return b[a] ~= nil
+    end
+    assert(false, "Invalid contains!")
+end
+
 -- End Sylt preamble
