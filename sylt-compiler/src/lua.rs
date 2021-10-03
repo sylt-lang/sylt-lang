@@ -404,7 +404,7 @@ impl<'t> LuaCompiler<'t> {
             Use { .. } | Blob { .. } | EmptyStatement => {}
 
             IsCheck { .. } => {
-                todo!();
+                error!(self.compiler, ctx, statement.span, "is-checks only valid in outer-scope");
             }
 
             #[rustfmt::skip]
