@@ -131,31 +131,31 @@ pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
     res
 }
 
-#[cfg(test)]
-mod running {
-    #[macro_export]
-    macro_rules! assert_errs {
-        ($result:expr, $expect:pat) => {
-            let errs = $result.err().unwrap_or(Vec::new());
+#[macro_export]
+macro_rules! assert_errs {
+    ($result:expr, $expect:pat) => {
+        let errs = $result.err().unwrap_or(Vec::new());
 
-            #[allow(unused_imports)]
-            use sylt_common::error::Error;
-            #[allow(unused_imports)]
-            use sylt_tokenizer::Span;
-            if !matches!(errs.as_slice(), $expect) {
-                eprintln!("===== Got =====");
-                for err in errs {
-                    eprint!("{}", err);
-                }
-                eprintln!("===== Expect =====");
-                eprint!("{}\n\n", stringify!($expect));
-                assert!(false);
+        #[allow(unused_imports)]
+        use sylt_common::error::Error;
+        #[allow(unused_imports)]
+        use sylt_tokenizer::Span;
+        if !matches!(errs.as_slice(), $expect) {
+            eprintln!("===== Got =====");
+            for err in errs {
+                eprint!("{}", err);
             }
-        };
-    }
+            eprintln!("===== Expect =====");
+            eprint!("{}\n\n", stringify!($expect));
+            assert!(false);
+        }
+    };
+}
 
+#[cfg(test)]
+mod bytecode {
     #[macro_export]
-    macro_rules! test_file {
+    macro_rules! test_file_run {
         ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
             #[test]
             fn $fn() {
@@ -175,5 +175,32 @@ mod running {
         };
     }
 
-    sylt_macro::find_tests!(test_file);
+    sylt_macro::find_tests!(test_file_run);
+}
+
+#[cfg(test)]
+mod lua {
+    #[macro_export]
+    macro_rules! test_file_lua {
+        ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
+            #[test]
+            fn $fn() {
+                #[allow(unused_imports)]
+                use sylt_common::error::RuntimeError;
+                #[allow(unused_imports)]
+                use sylt_common::error::TypeError;
+                #[allow(unused_imports)]
+                use sylt_common::Type;
+
+                let mut args = $crate::Args::default();
+                args.args = vec![format!("../{}", $path)];
+                args.verbosity = if $print { 1 } else { 0 };
+                args.lua = true;
+                let res = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
+                $crate::assert_errs!(res, $errs);
+            }
+        };
+    }
+
+    sylt_macro::find_tests!(test_file_lua);
 }

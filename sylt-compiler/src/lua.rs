@@ -1,8 +1,8 @@
 // TODO(ed)
-//  - Blob instantiating
+//  x Blob instantiating
+//  - Port the tests
 //  - Port more foreign functions
 //      - Figure out a way to include these foreign functions
-//  - Port the tests
 //  - Ripout the typesystem
 //  - The indexing problem
 

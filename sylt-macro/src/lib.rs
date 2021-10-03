@@ -262,6 +262,9 @@ fn find_test_paths(directory: &Path, macro_path: &syn::Path) -> proc_macro2::Tok
         if path.is_dir() {
             tests.extend(find_test_paths(&path, macro_path));
         } else {
+            if !file_name.ends_with(".sy") {
+                continue;
+            }
             assert!(
                 !path.to_str().unwrap().contains(","),
                 "You should be ashamed."
