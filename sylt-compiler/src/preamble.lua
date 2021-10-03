@@ -156,7 +156,7 @@ __DICT_META.__tostring = function(a)
             out = out .. ", "
         end
         first = false
-        out = out .. tostring(k) .. ":" .. tostring(v)
+        out = out .. tostring(k) .. ": " .. tostring(v)
     end
     out = out .. "}"
     return out
