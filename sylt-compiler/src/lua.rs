@@ -515,6 +515,8 @@ impl<'t> LuaCompiler<'t> {
         _span: Span,
         _num_constants: usize,
     ) {
+        write!(self, include_str!("preamble.lua"));
+        write!(self, "\n-- END OF PREAMBLE --\n");
     }
 
     pub fn postamble(
