@@ -3,6 +3,7 @@ use std::collections::btree_map::Entry::{Occupied, Vacant};
 use crate::{Compiler, Name};
 use sylt_parser::{
     AST, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
+    Type as ParserType, TypeKind,
     Statement, StatementKind,
 };
 use sylt_parser::statement::NameIdentifier;
@@ -89,6 +90,32 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> BTreeS
             .cloned()
             .collect(),
         Expression(expr) => dependencies(ctx, expr),
+    }
+}
+
+fn type_dependencies(ctx: &mut Context, ty: &ParserType) -> BTreeSet<Name> {
+    use TypeKind::*;
+    match &ty.kind {
+        | Implied
+        | Resolved(_)
+        | Generic(_) => BTreeSet::new(),
+
+        UserDefined(assignable) => assignable_dependencies(ctx, &assignable),
+
+        Fn(params, ret) =>
+            params.iter().chain([ret.as_ref()]).map(|t| type_dependencies(ctx, t)).flatten().collect(),
+
+        Tuple(fields) =>
+            fields.iter().map(|t| type_dependencies(ctx, t)).flatten().collect(),
+
+        | List(kind)
+        | Set(kind) => type_dependencies(ctx, kind),
+
+        | Dict(a, b)
+        | Union(a, b) => [
+            type_dependencies(ctx, a),
+            type_dependencies(ctx, b),
+        ].iter().flatten().cloned().collect(),
     }
 }
 
@@ -180,9 +207,10 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<Name> {
         Function { body, params, .. } => {
             let vars_before = ctx.variables.len();
             params.iter().for_each(|(ident, _)| ctx.shadow(&ident.name));
+            let type_deps = params.iter().map(|(_, ty)| type_dependencies(ctx, ty)).flatten().collect();
             let deps = statement_dependencies(ctx, body);
             ctx.variables.truncate(vars_before);
-            deps
+            [deps, type_deps].iter().flatten().cloned().collect()
         },
         Blob { blob, fields } => {
             assignable_dependencies(ctx, blob).union(&fields.iter()
