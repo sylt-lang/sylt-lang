@@ -885,7 +885,7 @@ body.toc2 #header > h1:nth-last-child(2) {
 }
 
 #toctitle {
-  color: #7a2518;
+  color: var(--primarycolor);
   font-size: 1.2em;
 }
 
@@ -901,7 +901,7 @@ body.toc2 #header > h1:nth-last-child(2) {
 
   #toc.toc2 {
     margin-top: 0 !important;
-    background: #f8f8f7;
+    background: var(--background2);
     position: fixed;
     width: 15em;
     left: 0;
