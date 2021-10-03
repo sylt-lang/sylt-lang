@@ -1,1 +1,293 @@
 = Guide
+
+[quote, Douglas Adams, The Restaurant at the End of the Universe]
+The Guide is definitive. Reality is frequently inaccurate.
+
+The guide is a longer walkthrough of the Sylt language. It aims to describe how
+to write Sylt and in some cases why you might want to do something in a certain
+way. It is mainly intended for new users of Sylt who want a guided walkthrough
+of the language. For a shorter reference with less text to read and more
+examples to copy, check out the link:quick-reference.html[Quick Reference].
+
+== About the guide
+
+The guide expects at least basic familiarity with programming. If you haven't
+done any programming at all, consider something like a beginner's tutorial to
+Python or Lua, other languages which Sylt takes some inspiration from.
+
+== Getting started
+
+// Gustav
+
+== Values and variables
+
+There are 4 basic types of values which can be composed in lists, tuples, sets,
+dicts and blobs. Functions, which functions as values, are described in *REF*.
+Types can also function as values which is described in *REF*.
+
+=== Variables and constant variables
+
+Values can be assigned to variables, which works just the way you expect it to.
+
+Variables can be captured, which is described in *REF*.
+
+Variables can optionally be declared as _constant_. Constant variables will
+always point to the same value, but the value itself can still be modified (if
+it is a modifiable value; see REF for details).
+
+[source, sylt]
+----
+num := 1    // a variable declaration
+PI :: 3.14  // a constant declaration
+----
+
+Constant variables should be written in `SCREAMING_SNAKE_CASE` (apart from
+functions).
+
+The type of the variable is inferred but can be supplied or even forced, which
+is described in *REF*.
+
+=== Basic values
+
+These are best described with some code. Basic values are immutable.
+
+[source, sylt]
+----
+// Strings
+"string"
+"contains spaces"
+
+// Integers
+1
+-2
+
+// Floats
+1.0
+-5.5
+1.  // trailing 0 optional
+.5  // leading 0 optional
+
+// Bools
+true
+false
+----
+
+=== Composite values
+
+// ?
+
+=== Functions
+
+// Gustav
+
+// Remove?
+=== Types as values
+
+== If-statements and if-expressions
+
+These are your standard control flow statements.
+
+.Normal if-statements
+[source, sylt]
+----
+if a == 0 do
+    print("zero")
+end
+----
+
+There is also if-expressions, which evaluate to different values depending on a
+condition.
+
+.If-expressions, as seen in e.g. Python
+[source, sylt]
+----
+a := 5 if b == 0 else 1
+----
+
+A shortened form is available if the pass-branch is also the left hand side of
+the condition.
+
+.A motivating example for the short if-expression
+[source, sylt]
+----
+// These two are equivalent
+a := (b + 5.) / 10. if (b + 5.) / 10. > 1. else 0.
+//   ^^^^^^^^^^^^^^    ^^^^^^^^^^^^^^
+a := (b + 5.) / 10. if > 1. else 0.
+//   ^^^^^^^^^^^^^^    ^^^^
+----
+
+== Operators
+
+The basic operators are all here. Standard mathematical evaluation order
+applies.
+
+.Arithmetic operators
+[source, sylt]
+----
+1 + 1   // 2
+2 - 2   // 0
+3 * 3   // 9
+10 / 2  // 5
+10 / 3  // 3 (integer division!)
+-4      // -4
+10.0 / 2.0   // 5.0 (float division)
+// 10 / 2.0  // type error, can't divide int and float
+----
+
+.Comparison operators
+[source, sylt]
+----
+1 < 2   // true
+2 > 1   // true
+1 <= 1  // true
+1 >= 2  // false
+"a" == "a"   // true
+
+// Assert equal. Execution is halted if the values compare non-equal
+[1, 2] <=> [1, 2]
+----
+
+.Parenthesis for grouping
+[source, sylt]
+----
+(1 + 1) * 2  // 4
+----
+
+.Boolean operators
+[source, sylt]
+----
+true or false  // true
+true and true  // true
+not true       // false
+----
+
+== Imports
+
+Code can be written in multiple files, to your liking. You don't have to
+consider include-ordering or dependency cycles. Write your code anywhere you
+want!
+
+In this example, the file name of each listing is written as a comment at the
+top.
+
+[source, sylt]
+----
+// a.sy
+use b  // imports "b.sy"
+
+start :: fn do
+    print(b.HELLO)
+end
+----
+
+[source, sylt]
+----
+// b.sy
+use a  // cycles are OK
+
+HELLO :: "hello!"
+----
+
+All variables declared outside of functions (as well as the functions
+themselves) will be reachable. Beware of global and mutable variables! Unless
+you know it's what you need. :)
+
+Files are included relative to the current file. With a leading "/" the path is
+started from the directory containing the file being run, which might be useful
+if a file is located a few directories down.
+
+[source, sylt]
+----
+// a/b/c.sy
+use d.sy   // imports "a/b/d.sy"
+use /d.sy  // imports "d.sy"
+----
+
+A directory can also be used if it is supplied with a trailing "/", which will
+import the file "exports.sy" in that directory. This can be used to create
+modules containing related code and a central "exporting-file".
+
+[source, sylt]
+----
+// a.sy
+use d/  // imports "d/exports.sy"
+----
+
+Includes (both files and directories) can be aliased to other names.
+
+[source, sylt]
+----
+// a.sy
+use b as c   // imports "b.sy" under the namespace c
+use c/ as d  // imports "c/exports.sy" under the namespace d,
+             // since the namespace c is already used
+----
+
+// [source, sylt]
+// ----
+// ----
+
+== Loops
+
+Apart from the simple loop-keyword, other loops are supplied by the standard library as higher-order functions.
+
+=== loop
+
+// ?
+
+=== for_each
+
+`for_each` applies a function on every element in a list. If the elements are
+mutable (e.g. another list, see *REF*) it can be mutated.
+
+[source, sylt]
+----
+l := [1, 2, 3]
+
+l -> for_each' fn a: int do print(a) end
+
+l -> for_each' fn a: int do
+    // many statements
+end
+----
+
+.Functions don't have to be constructed in-place.
+[source, sylt]
+----
+Player :: blob {
+    pos: (int, int)
+    vel: (int, int)
+}
+
+update_player :: fn p: Player do
+    p.pos += p.vel
+end
+
+// ...
+players -> for_each' update_player
+----
+
+=== map
+
+// Gustav
+
+=== filter
+
+// Gustav
+
+=== reduce and fold
+
+// Gustav
+
+== Types and the type system
+
+// ?
+
+== Blobs
+
+// ?
+
+== Standard library
+
+// ?
