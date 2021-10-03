@@ -1,4 +1,5 @@
-__TEST = false
+-- Begin Sylt preamble
+__TEST = true
 __TUPLE_META = { _type = "tuple" }
 __TUPLE_META.__newindex = function()
     assert(false, "Tuples are immutable")
@@ -206,3 +207,41 @@ if __TEST then
     print(a)
 end
 
+__BLOB_META = { _type = "blob" }
+__BLOB_META.__eq = function(a, b)
+    -- TODO(ed): The actual blob-instance
+    for k, _ in pairs(a) do
+        if not b[k] then
+            return false
+        end
+    end
+    for k, _ in pairs(b) do
+        if not a[k] then
+            return false
+        end
+    end
+    return true
+end
+__BLOB_META.__tostring = function(a)
+    local out = "blob {"
+    local first = true
+    for k, v in pairs(a) do
+        if not first then
+            out = out .. ", "
+        end
+        first = false
+        out = out .. tostring(k) .. " = " .. tostring(v)
+    end
+    out = out .. "}"
+    return out
+end
+function __BLOB(obj)
+    return setmetatable(obj, __BLOB_META)
+end
+
+if __TEST then
+    local a = __BLOB { a = 1, b = 3, c = 2 }
+    print(a)
+end
+
+-- End Sylt preamble

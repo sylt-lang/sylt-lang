@@ -1,3 +1,11 @@
+// TODO(ed)
+//  - Blob instantiating
+//  - Port more foreign functions
+//      - Figure out a way to include these foreign functions
+//  - Port the tests
+//  - Ripout the typesystem
+//  - The indexing problem
+
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind,
@@ -253,6 +261,17 @@ impl<'t> LuaCompiler<'t> {
                     self.expression(k, ctx);
                     write!(self, "]");
                     write!(self, "=");
+                    self.expression(v, ctx);
+                    write!(self, ",");
+                }
+                write!(self, "}");
+            }
+
+            Blob { blob: _, fields } => {
+                // TODO(ed): Know which blob something is?
+                write!(self, "__BLOB { ");
+                for (k, v) in fields.iter() {
+                    write!(self, "{} =", k);
                     self.expression(v, ctx);
                     write!(self, ",");
                 }
@@ -524,7 +543,6 @@ impl<'t> LuaCompiler<'t> {
         _num_constants: usize,
     ) {
         write!(self, include_str!("preamble.lua"));
-        write!(self, "\n-- END OF PREAMBLE --\n");
     }
 
     pub fn postamble(
