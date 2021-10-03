@@ -1195,7 +1195,7 @@ table.tableblock.fit-content > caption.title {
 #preamble > .sectionbody > [class=paragraph]:first-of-type p {
   font-size: 1.21875em;
   line-height: 1.6;
-  color: rgba(0, 0, 0, 0.85);
+  color: var(--text);
 }
 
 .admonitionblock > table {
@@ -1427,7 +1427,7 @@ pre.pygments span.linenos {
 
 .quoteblock blockquote,
 .quoteblock p {
-  color: rgba(0, 0, 0, 0.85);
+  color: var(--text);
   font-size: 1.15rem;
   line-height: 1.75;
   word-spacing: 0.1em;
@@ -1500,7 +1500,7 @@ pre.pygments span.linenos {
 .verseblock .attribution cite {
   display: block;
   letter-spacing: -0.025em;
-  color: rgba(0, 0, 0, 0.6);
+  color: var(--text);
 }
 
 .quoteblock.abstract blockquote::before,
