@@ -524,9 +524,9 @@ impl Compiler {
                 .into_iter()
                 .map(|x| Rc::new(RefCell::new(x)))
                 .collect(),
-                functions: functions.iter().map(|(_, f, _)| *f).collect(),
-                constants: self.constants,
-                strings: self.strings,
+            functions: functions.iter().map(|(_, f, _)| *f).collect(),
+            constants: self.constants,
+            strings: self.strings,
         })
     }
 
