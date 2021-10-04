@@ -97,10 +97,11 @@ impl<'t> LuaCompiler<'t> {
                 // TODO(ed): This won't work for tuples and dicts at
                 // the same time. We need to handle them differently and only
                 // the typechecker knows what is what.
+                write!(self, "__INDEX(");
                 self.assignable(a, ctx);
-                write!(self, "[");
+                write!(self, ",");
                 self.expression(b, ctx);
-                write!(self, "]");
+                write!(self, ")");
             }
             Expression(expr) => {
                 self.expression(expr, ctx);
@@ -271,6 +272,7 @@ impl<'t> LuaCompiler<'t> {
 
             Blob { blob: _, fields } => {
                 // TODO(ed): Know which blob something is?
+                // TODO(ed): Fill in empty fields with nil-value
                 write!(self, "__BLOB { ");
                 for (k, v) in fields.iter() {
                     write!(self, "{} =", k);
@@ -284,7 +286,7 @@ impl<'t> LuaCompiler<'t> {
             Bool(a) => write!(self, "{}", a),
             Int(a) => write!(self, "{}", a),
             Str(a) => write!(self, "\"{}\"", a),
-            Nil => write!(self, "nil"),
+            Nil => write!(self, "__NIL"),
         }
     }
 
@@ -472,7 +474,7 @@ impl<'t> LuaCompiler<'t> {
                             write!(self, "local tmp_expr =");
                             self.expression(index, ctx);
                             write!(self, ";");
-                            write!(self, "tmp_ass [ tmp_expr ] = tmp_ass [ tmp_expr ] {}", op);
+                            write!(self, "__INDEX( tmp_ass, tmp_expr ) = __INDEX( tmp_ass, tmp_expr ) {}", op);
                             write!(self, "(");
                             self.expression(value, ctx);
                             write!(self, ")");

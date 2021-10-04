@@ -1,5 +1,22 @@
 -- Begin Sylt preamble
 -- Built in types
+
+-- THE nil-table
+__NIL = setmetatable( { "nil" }, { __tostring = function() return "nil" end } )
+
+__INDEX = function(o, i)
+    local m = getmetatable(o)
+    if m._type == "tuple" or m._type == "list" then
+        local e = o[i + 1]
+        assert(e ~= nil, "Tuple/list index out of range \"" .. i .. "\"")
+        return e
+    end
+    if m._type == "blob" then
+        assert(false, "Accessing fields \"" .. i .. "\" - which doesn't exist")
+    end
+    return __NIL
+end
+
 __TUPLE_META = { _type = "tuple" }
 __TUPLE_META.__newindex = function()
     assert(false, "Tuples are immutable")
