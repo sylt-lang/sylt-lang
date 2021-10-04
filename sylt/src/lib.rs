@@ -204,6 +204,7 @@ mod lua {
                     assert_errs!(res, []);
                 } else {
                     assert_errs!(res, $errs);
+                    return;
                 }
 
                 let mut file = file.clone();
