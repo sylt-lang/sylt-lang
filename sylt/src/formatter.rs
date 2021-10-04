@@ -209,24 +209,6 @@ fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: Assignable)
     }
 }
 
-fn write_arrow_call_no_lhs<W: Write>(dest: &mut W, indent: u32, expr: Expression) -> fmt::Result {
-    match expr.kind {
-        ExpressionKind::Get(assignable) => match assignable.kind {
-            AssignableKind::ArrowCall(lhs, callee, rest) => {
-                write_arrow_call_no_lhs(dest, indent, *lhs)?;
-                write!(dest, " -> ")?;
-                write_assignable(dest, indent, *callee)?;
-                write!(dest, "(")?;
-                write_comma_separated!(dest, indent, write_expression, rest);
-                write!(dest, ")")?;
-            }
-            _ => (),
-        },
-        _ => (),
-    }
-    Ok(())
-}
-
 macro_rules! expr_binary_op {
     ($dest:expr, $indent:expr, $lhs:expr, $op:literal, $rhs:expr) => {
         write_expression($dest, $indent, $lhs)?;
@@ -277,9 +259,6 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             ComparisonKind::LessEqual => {
                 expr_binary_op!(dest, indent, *lhs, " <= ", *rhs);
             }
-            ComparisonKind::Is => {
-                expr_binary_op!(dest, indent, *lhs, " is ", *rhs);
-            }
             ComparisonKind::In => {
                 expr_binary_op!(dest, indent, *lhs, " in ", *rhs);
             }
@@ -310,46 +289,6 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             write_expression(dest, indent, *pass)?;
             write!(dest, " if ")?;
             write_expression(dest, indent, *condition)?;
-            write!(dest, " else ")?;
-            write_expression(dest, indent, *fail)?;
-        }
-        ExpressionKind::Duplicate(expr) => write_expression(dest, indent, *expr)?,
-        ExpressionKind::IfShort {
-            condition,
-            fail,
-            lhs,
-        } => {
-            write_expression(dest, indent, *lhs)?;
-            write!(dest, " if")?;
-            match condition.kind {
-                ExpressionKind::Comparison(_lhs, cmp, rhs) => {
-                    write!(
-                        dest,
-                        " {} ",
-                        match cmp {
-                            ComparisonKind::Equals => "==",
-                            ComparisonKind::NotEquals => "!=",
-                            ComparisonKind::Greater => ">",
-                            ComparisonKind::GreaterEqual => ">=",
-                            ComparisonKind::Less => "<",
-                            ComparisonKind::LessEqual => "<=",
-                            ComparisonKind::Is => "is",
-                            ComparisonKind::In => "in",
-                        }
-                    )?;
-                    write_expression(dest, indent, *rhs)?;
-                }
-                ExpressionKind::Get(ref assignable) => match &assignable.kind {
-                    AssignableKind::ArrowCall(..) => write_arrow_call_no_lhs(dest, indent, *condition)?,
-                    kind => panic!(
-                        "only arrow calls are supported in a short if expression, not {:?}",
-                        kind
-                    ),
-                },
-                kind => {
-                    panic!("unsupported condition in a short if expression: {:?}", kind);
-                }
-            }
             write!(dest, " else ")?;
             write_expression(dest, indent, *fail)?;
         }

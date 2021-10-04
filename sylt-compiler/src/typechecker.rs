@@ -1,14 +1,14 @@
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::PathBuf;
 use sylt_common::error::{Error, TypeError};
-use sylt_common::Type;
+use sylt_common::{Type, Value::Ty as ValueType};
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp,
     Span, Statement, StatementKind, VarKind,
 };
 
-use crate::{self as compiler, first_ok_or_errs};
+use crate::{self as compiler, first_ok_or_errs, Context, Name as CompilerName};
 use compiler::Compiler;
 
 macro_rules! type_error_if_invalid {
@@ -548,7 +548,6 @@ impl<'c> TypeChecker<'c> {
                 ComparisonKind::Greater | ComparisonKind::GreaterEqual | ComparisonKind::Less | ComparisonKind::LessEqual => {
                     self.bin_op(span, a, b, op::cmp, "Comparison")?
                 }
-                ComparisonKind::Is => self.bin_op(span, a, b, |_ ,_| Type::Bool, "Is")?,
                 ComparisonKind::In => {
                     let a = self.expression(a)?;
                     let b = self.expression(b)?;
@@ -580,7 +579,6 @@ impl<'c> TypeChecker<'c> {
 
             EK::Parenthesis(expr) => self.expression(expr)?,
 
-            EK::Duplicate(expr) => self.expression(expr)?,
             EK::Tuple(values) => {
                 let mut types = Vec::new();
                 for v in values.iter() {
@@ -667,26 +665,6 @@ impl<'c> TypeChecker<'c> {
                 // TODO(ed) check nullables and the actual condition
                 Type::maybe_union(
                     [self.expression(pass)?, self.expression(fail)?].iter(),
-                )
-            }
-
-            EK::IfShort { lhs, condition, fail } => {
-                let condition_ty = self.expression(condition)?;
-                if !matches!(condition_ty, Type::Bool) {
-                    return err_type_error!(
-                        self,
-                        condition.span,
-                        TypeError::Mismatch {
-                            got: condition_ty,
-                            expected: Type::Bool,
-                        },
-                        "Only boolean expressions are valid if-expression conditions"
-                    )
-                }
-
-                // TODO(ed) check nullables and the actual condition
-                Type::maybe_union(
-                    [self.expression(lhs)?, self.expression(fail)?].iter(),
                 )
             }
 
@@ -981,7 +959,7 @@ impl<'c> TypeChecker<'c> {
                 None
             }
 
-            SK::Use { .. }
+            | SK::Use { .. }
             | SK::Blob { .. }
             | SK::Continue
             | SK::Break
@@ -992,9 +970,28 @@ impl<'c> TypeChecker<'c> {
     }
 
     fn outer_definition(&mut self, namespace: usize, stmt: &Statement) -> Result<(), Vec<Error>> {
+        use StatementKind as SK;
+
         let span = stmt.span;
         match &stmt.kind {
-            StatementKind::ExternalDefinition {
+            SK::Blob { name, fields } => {
+                let ctx = Context::from_namespace(self.namespace);
+                let fields = fields.iter()
+                    .map(|(k, v)| (k.clone(), self.compiler.resolve_type(&v, ctx)))
+                    .collect();
+                if let Some(CompilerName::Blob(slot)) = self.compiler.namespaces[ctx.namespace].get(name) {
+                    match &mut self.compiler.constants[*slot] {
+                        ValueType(Type::Blob(_, b_fields)) => {
+                            *b_fields = fields;
+                        }
+                        _ => unreachable!(),
+                    }
+                } else {
+                    // We've yet to fill it in, but that's why we have a prepass.
+                }
+            }
+
+            SK::ExternalDefinition {
                 ident,
                 kind,
                 ty
@@ -1012,7 +1009,7 @@ impl<'c> TypeChecker<'c> {
                 self.namespaces[namespace].insert(ident.name.clone(), Name::Global(Some(name)));
             }
 
-            StatementKind::Definition { ident, kind, ty, value } => {
+            SK::Definition { ident, kind, ty, value } => {
                 let name = match &self.namespaces[namespace][&ident.name] {
                     Name::Global(None) => {
                         let ty = self.compiler.resolve_type(ty, self.compiler_context());

@@ -1,10 +1,13 @@
 // TODO(ed)
 //  x Blob instantiating
-//  - Port the tests
-//  - Port more foreign functions
-//      - Figure out a way to include these foreign functions
-//  - Ripout the typesystem
+//  x Port the tests
+//  x Port more foreign functions
+//      x Figure out a way to include these foreign functions
+//  x Typecheck before compiling - so we have all the information we need
+//  - Ripout the type-stuff
+//  - Annotate declarations with the resolved types
 //  - The indexing problem
+//  - Typechecker finds the wrong blob - use_import.sy testfile
 
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
@@ -144,8 +147,6 @@ impl<'t> LuaCompiler<'t> {
                     self.expression(b, ctx);
                     write!(self, ")");
                 }
-                _ => todo!(),
-                // Is => self.bin_op(a, b, &[Op::Is], expression.span, ctx),
             }
 
             AssertEq(a, b) => {
@@ -166,13 +167,6 @@ impl<'t> LuaCompiler<'t> {
             Not(a) => {
                 write!(self, "not");
                 self.expression(a, ctx);
-            }
-
-            Duplicate(expr)
-            | Parenthesis(expr) => {
-                write!(self, "(");
-                self.expression(expr, ctx);
-                write!(self, ")");
             }
 
             IfExpression {
@@ -374,30 +368,7 @@ impl<'t> LuaCompiler<'t> {
         self.compiler.panic = false;
 
         match &statement.kind {
-            Use { .. } | EmptyStatement => {}
-
-            Blob { name, fields } => {
-                let fields = fields.iter()
-                    .map(|(k, v)| (k.clone(), self.compiler.resolve_type(&v, ctx.into())))
-                    .collect();
-                if let Some(Name::Blob(slot)) = self.compiler.namespaces[ctx.namespace].get(name) {
-                    match &mut self.compiler.constants[*slot] {
-                        Value::Ty(Type::Blob(_, b_fields)) => {
-                            *b_fields = fields;
-                        }
-                        _ => unreachable!(),
-                    }
-                } else {
-                    error!(
-                        self.compiler,
-                        ctx,
-                        statement.span,
-                        "No blob with the name '{}' in this namespace (#{})",
-                        name,
-                        ctx.namespace
-                    );
-                }
-            }
+            Use { .. } | Blob { .. } | EmptyStatement => {}
 
             IsCheck { lhs, rhs } => {
                 let lhs = self.compiler.resolve_type(lhs, ctx.into());

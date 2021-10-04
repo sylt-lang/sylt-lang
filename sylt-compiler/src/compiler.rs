@@ -488,6 +488,11 @@ impl Compiler {
             return Err(self.errors);
         }
 
+        if typecheck {
+            typechecker::solve(&mut self, &statements)?;
+        }
+
+
         let blocks = if let Some(lua_file) = lua_file {
             let mut lua_compiler = lua::LuaCompiler::new(&mut self, &lua_file);
 
@@ -514,23 +519,15 @@ impl Compiler {
             return Err(self.errors);
         }
 
-        if typecheck {
-            typechecker::solve(&mut self, &statements)?;
-        }
-
-        if self.errors.is_empty() {
-            Ok(Prog {
-                blocks: blocks
-                    .into_iter()
-                    .map(|x| Rc::new(RefCell::new(x)))
-                    .collect(),
-                functions: functions.iter().map(|(_, f, _)| *f).collect(),
-                constants: self.constants,
-                strings: self.strings,
-            })
-        } else {
-            Err(self.errors)
-        }
+        Ok(Prog {
+            blocks: blocks
+                .into_iter()
+                .map(|x| Rc::new(RefCell::new(x)))
+                .collect(),
+            functions: functions.iter().map(|(_, f, _)| *f).collect(),
+            constants: self.constants,
+            strings: self.strings,
+        })
     }
 
     fn extract_globals(&mut self, tree: &AST) -> usize {
