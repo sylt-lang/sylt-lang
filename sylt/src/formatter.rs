@@ -597,7 +597,7 @@ pub fn format(args: &Args) -> Result<String, Vec<Error>> {
 
 #[cfg(test)]
 macro_rules! test_formatter_on_file {
-    ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
+    ($fn:ident, $path:literal, $print:expr, $errs:pat, $_:expr) => {
         #[test]
         fn $fn() {
             use std::path::{Path, PathBuf};

@@ -156,7 +156,7 @@ macro_rules! assert_errs {
 mod bytecode {
     #[macro_export]
     macro_rules! test_file_run {
-        ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
+        ($fn:ident, $path:literal, $print:expr, $errs:pat, $_:expr) => {
             #[test]
             fn $fn() {
                 #[allow(unused_imports)]
@@ -182,7 +182,7 @@ mod bytecode {
 mod lua {
     #[macro_export]
     macro_rules! test_file_lua {
-        ($fn:ident, $path:literal, $print:expr, $errs:pat) => {
+        ($fn:ident, $path:literal, $print:expr, $errs:pat, $any_runtime_errors:expr) => {
             #[test]
             fn $fn() {
                 #[allow(unused_imports)]
@@ -191,13 +191,36 @@ mod lua {
                 use sylt_common::error::TypeError;
                 #[allow(unused_imports)]
                 use sylt_common::Type;
+                use std::process::{Command, Stdio};
 
+                let file = format!("../{}", $path);
                 let mut args = $crate::Args::default();
-                args.args = vec![format!("../{}", $path)];
+                args.args = vec![file.clone()];
                 args.verbosity = if $print { 1 } else { 0 };
                 args.lua = true;
                 let res = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
-                $crate::assert_errs!(res, $errs);
+
+                if $any_runtime_errors {
+                    assert_errs!(res, []);
+                } else {
+                    assert_errs!(res, $errs);
+                }
+
+                let mut file = file.clone();
+                file.replace_range(file.rfind(".").unwrap().., ".lua");
+
+                let output = Command::new("lua")
+                    .arg(file)
+                    .stdin(Stdio::null())
+                    .stderr(Stdio::piped())
+                    .stdout(Stdio::null())
+                    .output()
+                    .expect(concat!("Failed to run ", $path));
+                if $any_runtime_errors {
+                    assert!(!output.status.success(), "Program ran to completion when it should fail");
+                } else {
+                    assert!(output.status.success(), "Failed when it should succeed\n:STDERR:\n{:?}\n", String::from_utf8(output.stderr).unwrap_or("Even I don't understand this stderr :(".to_string()));
+                }
             }
         };
     }
