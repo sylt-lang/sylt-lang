@@ -232,11 +232,11 @@ fn parse_test_settings(contents: String) -> TestSettings {
             if line.starts_with("@") {
                 line = format!("Error::SyntaxError {{ span: Span {{ line: {}, ..}}, .. }}", &line[1..]);
             }
+            settings.any_runtime_errors |= line.contains("RuntimeError");
             errors.push(line);
         } else if line.starts_with("// flags: ") {
             for flag in line.split(" ").skip(2) {
                 // This can give false positives - but they're pretty unlikely
-                settings.any_runtime_errors |= line.contains("Error::RuntimeError");
                 match flag {
                     "no_print" => {
                         settings.print = false;

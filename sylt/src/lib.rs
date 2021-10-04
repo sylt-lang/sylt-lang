@@ -200,6 +200,7 @@ mod lua {
                 args.lua = true;
                 let res = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
 
+                println!("Expect error: {}", $any_runtime_errors);
                 if $any_runtime_errors {
                     assert_errs!(res, []);
                 } else {
