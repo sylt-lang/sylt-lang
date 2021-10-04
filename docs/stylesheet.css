@@ -282,7 +282,7 @@ table.tableblock > .title,
 .qlist > .title,
 .hdlist > .title {
   line-height: 1.45;
-  color: #7a2518;
+  color: var(--primarycolor);
   font-weight: 400;
   margin-top: 0;
   margin-bottom: 0.25em;
@@ -351,7 +351,7 @@ h6 {
   font-family: "Open Sans", "DejaVu Sans", sans-serif;
   font-weight: 300;
   font-style: normal;
-  color: #ba3925;
+  color: var(--primarycolor);
   text-rendering: optimizeLegibility;
   margin-top: 1em;
   margin-bottom: 0.5em;
@@ -1091,7 +1091,7 @@ h3 > a.link,
 h4 > a.link,
 h5 > a.link,
 h6 > a.link {
-  color: #ba3925;
+  color: var(--primarycolor);
   text-decoration: none;
 }
 
@@ -1449,7 +1449,7 @@ pre.pygments span.linenos {
   font-weight: bold;
   line-height: 0.6em;
   margin-left: -0.6em;
-  color: #7a2518;
+  color: var(--primarycolor);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
