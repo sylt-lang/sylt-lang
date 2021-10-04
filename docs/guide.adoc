@@ -234,7 +234,21 @@ Apart from the simple loop-keyword, other loops are supplied by the standard lib
 
 === loop
 
-// ?
+The `loop` keyword can be used to create looping code similar to the `while`
+keyword in languages like C and Python. The main difference is that the
+condition may be omitted to create a infinite loop.
+
+[source, sylt]
+----
+loop do
+    print("y")
+end
+
+stack := [1, 2, 3]
+loop len(stack) > 0 do
+    print(pop(stack))
+end
+----
 
 === for_each
 
