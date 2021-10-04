@@ -90,8 +90,11 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ")");
             }
             Access(a, field) => {
+                write!(self, "__INDEX(");
                 self.assignable(a, ctx);
-                write!(self, ". {}", field.name);
+                write!(self, ",");
+                write!(self, "\"{}\"", field.name);
+                write!(self, ")");
             }
             Index(a, b) => {
                 // TODO(ed): This won't work for tuples and dicts at
@@ -460,7 +463,7 @@ impl<'t> LuaCompiler<'t> {
                             write!(self, "do local tmp_ass =");
                             self.assignable(rest, ctx);
                             write!(self, ";");
-                            write!(self, "tmp_ass . {} = tmp_ass . {} {}", field.name, field.name, op);
+                            write!(self, "__INDEX( tmp_ass, \"{}\" ) = __INDEX( tmp_ass, \"{}\" ) {}", field.name, field.name, op);
                             write!(self, "(");
                             self.expression(value, ctx);
                             write!(self, ")");
