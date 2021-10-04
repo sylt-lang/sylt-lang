@@ -832,7 +832,6 @@ mod test {
     test!(expression, bool_neg_multiple: "not a and b" => _);
     test!(expression, bool_neg_multiple_rev: "a and not b" => _);
 
-    test!(expression, cmp_is: "a is B" => _);
     test!(expression, cmp_eq: "a == b" => _);
     test!(expression, cmp_neq: "a != b" => _);
     test!(expression, cmp_leq: "a <= b" => _);
