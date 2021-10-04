@@ -121,12 +121,19 @@ impl<'t> LuaCompiler<'t> {
         use ExpressionKind::*;
 
         match &expression.kind {
+            Parenthesis(expr) => {
+                write!(self, "(");
+                self.expression(expr, ctx);
+                write!(self, ")");
+            }
+
             Get(a) => {
                 self.assignable(a, ctx);
             }
 
-            // TypeConstant(ty) => {
-            // }
+            TypeConstant(_) => {
+                error!(self.compiler, ctx, expression.span, "Type constants are not supported in the lua-compiler");
+            }
 
             Add(a, b) => self.bin_op(a, b, "+", ctx),
             Sub(a, b) => self.bin_op(a, b, "-", ctx),
@@ -187,19 +194,6 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, "end)()");
 
             }
-
-            // IfShort { lhs, condition, fail } => {
-            //     write!(self, "(function ()");
-            //     write!(self, "local condition =");
-            //     self.expression(condition, ctx);
-            //     write!(self, "if condition then");
-            //     write!(self, "return condition");
-            //     write!(self, "else");
-            //     write!(self, "return");
-            //     self.expression(fail, ctx);
-            //     write!(self, "end");
-            //     write!(self, "end)()");
-            // }
 
             Function {
                 name: _,
@@ -283,8 +277,6 @@ impl<'t> LuaCompiler<'t> {
             Int(a) => write!(self, "{}", a),
             Str(a) => write!(self, "\"{}\"", a),
             Nil => write!(self, "nil"),
-
-            x => todo!("{:?}", &x),
         }
     }
 
