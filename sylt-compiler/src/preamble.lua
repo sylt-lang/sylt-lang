@@ -255,7 +255,7 @@ end
 
 function reduce(l, f)
     if #l == 0 then
-        return nil
+        return NIL
     end
     local a = l[1]
     for k, v in pairs(l) do
