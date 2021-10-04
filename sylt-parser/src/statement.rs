@@ -63,7 +63,7 @@ pub enum StatementKind {
 
     /// Defines a an external variable - here the type is required.
     ///
-    /// Example: `a : int = external`.
+    /// Example: `a: int = external`.
     ///
     /// Valid definition operators are `: <type> :`, and `: <type> =`.
     ExternalDefinition {
