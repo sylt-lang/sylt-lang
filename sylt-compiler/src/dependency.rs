@@ -177,7 +177,6 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<Name> {
 
         | Neg(expr)
         | Not(expr)
-        | Duplicate(expr)
         | Parenthesis(expr) => dependencies(ctx, expr),
 
         | Comparison(lhs, _, rhs)
@@ -192,8 +191,7 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<Name> {
             .cloned()
             .collect(),
 
-        | IfExpression { condition, pass, fail }
-        | IfShort { lhs: pass, condition, fail } => {
+        IfExpression { condition, pass, fail } => {
             [pass, fail, condition].iter()
                 .map(|expr| dependencies(ctx, expr))
                 .flatten()

@@ -1,10 +1,13 @@
 // TODO(ed)
 //  x Blob instantiating
-//  - Port the tests
-//  - Port more foreign functions
-//      - Figure out a way to include these foreign functions
-//  - Ripout the typesystem
+//  x Port the tests
+//  x Port more foreign functions
+//      x Figure out a way to include these foreign functions
+//  x Typecheck before compiling - so we have all the information we need
+//  - Ripout the type-stuff
+//  - Annotate declarations with the resolved types
 //  - The indexing problem
+//  - Typechecker finds the wrong blob - use_import.sy testfile
 
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
@@ -144,8 +147,6 @@ impl<'t> LuaCompiler<'t> {
                     self.expression(b, ctx);
                     write!(self, ")");
                 }
-                _ => todo!(),
-                // Is => self.bin_op(a, b, &[Op::Is], expression.span, ctx),
             }
 
             AssertEq(a, b) => {
@@ -166,13 +167,6 @@ impl<'t> LuaCompiler<'t> {
             Not(a) => {
                 write!(self, "not");
                 self.expression(a, ctx);
-            }
-
-            Duplicate(expr)
-            | Parenthesis(expr) => {
-                write!(self, "(");
-                self.expression(expr, ctx);
-                write!(self, ")");
             }
 
             IfExpression {
