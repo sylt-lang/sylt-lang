@@ -64,11 +64,19 @@ where
             use std::process::{Command, Stdio};
             let mut child = Command::new("lua")
                 .stdin(Stdio::piped())
+                .stderr(Stdio::piped())
                 .spawn()
                 .expect("Failed to start lua - make sure it's installed correctly");
             let stdin = child.stdin.take().unwrap();
             match compile_with_reader_to_writer(args, functions, reader, Some(Box::new(stdin)))? {
-                Prog::Lua => child.wait().unwrap(),
+                Prog::Lua => {
+                    let output = child.wait_with_output().unwrap();
+                    // NOTE(ed): Status is always 0 - atleast on my version of lua - so we check
+                    // for stderr - which is kinda a bad idea.
+                    if !output.stderr.is_empty() {
+                        return Err(vec![Error::LuaError(String::from_utf8(output.stderr).unwrap())]);
+                    }
+                }
                 Prog::Bytecode(_) => unreachable!(),
             };
         }
@@ -253,6 +261,7 @@ mod lua {
                 );
 
                 println!("Expect error: {}", $any_runtime_errors);
+                println!("Got error: {:?}", res.is_err());
                 if $any_runtime_errors {
                     assert_errs!(res, []);
                 } else {
