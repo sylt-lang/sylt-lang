@@ -225,11 +225,12 @@ mod lua {
                 let mut child = Command::new("lua")
                     .stdin(Stdio::piped())
                     .stderr(Stdio::piped())
-                    .stdout(Stdio::null())
+                    .stdout(Stdio::piped())
                     .spawn()
                     .expect(concat!("Failed to run ", $path));
 
-                let res = $crate::compile_with_reader_to_stream(&args, ::sylt_std::sylt::_sylt_link(), $crate::read_file, Box::new(child.stdin.unwrap()));
+                let stdin = child.stdin.take().unwrap();
+                let res = $crate::compile_with_reader_to_stream(&args, ::sylt_std::sylt::_sylt_link(), $crate::read_file, Box::new(stdin));
 
                 println!("Expect error: {}", $any_runtime_errors);
                 if $any_runtime_errors {
@@ -242,11 +243,15 @@ mod lua {
                 let mut file = file;
                 file.replace_range(file.rfind(".").unwrap().., ".lua");
 
-                let status = child.wait().unwrap();
+                let output = child.wait_with_output().unwrap();
                 if $any_runtime_errors {
-                    assert!(!status.success(), "Program ran to completion when it should fail");
+                    assert!(!output.status.success(), "Program ran to completion when it should fail");
                 } else {
-                    assert!(status.success(), "Failed when it should succeed\n:STDERR:\nTODO\n"); // , String::from_utf8(child.stderr.unwrap()).unwrap_or("Even I don't understand this stderr :(".to_string()));
+                    let stdout = String::from_utf8(output.stdout)
+                        .unwrap_or("Even I don't understand this stdout :(".to_string());
+                    let stderr = String::from_utf8(output.stderr)
+                        .unwrap_or("Even I don't understand this stderr :(".to_string());
+                    assert!(output.status.success(), "Failed when it should succeed\n:STDOUT:\n{}\n\n:STDERR:\n{}\n", stdout, stderr);
                 }
             }
         };
