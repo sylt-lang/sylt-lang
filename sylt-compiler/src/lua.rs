@@ -9,14 +9,13 @@
 //  - The indexing problem
 //  - Typechecker finds the wrong blob - use_import.sy testfile
 
-use sylt_parser::expression::ComparisonKind;
-use sylt_parser::{
-    Assignable, AssignableKind, Expression, ExpressionKind,
-    Span, Statement, StatementKind, Op,
-};
-use std::path::Path;
 use std::fs::File;
 use std::io::prelude::*;
+use std::path::Path;
+use sylt_parser::expression::ComparisonKind;
+use sylt_parser::{
+    Assignable, AssignableKind, Expression, ExpressionKind, Op, Span, Statement, StatementKind,
+};
 
 use crate::*;
 
@@ -68,7 +67,7 @@ impl<'t> LuaCompiler<'t> {
         match &ass.kind {
             Read(ident) => {
                 self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
-            },
+            }
             Call(f, expr) => {
                 self.assignable(f, ctx);
                 write!(self, "(");
@@ -91,17 +90,21 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ")");
             }
             Access(a, field) => {
+                write!(self, "__INDEX(");
                 self.assignable(a, ctx);
-                write!(self, ". {}", field.name);
+                write!(self, ",");
+                write!(self, "\"{}\"", field.name);
+                write!(self, ")");
             }
             Index(a, b) => {
                 // TODO(ed): This won't work for tuples and dicts at
                 // the same time. We need to handle them differently and only
                 // the typechecker knows what is what.
+                write!(self, "__INDEX(");
                 self.assignable(a, ctx);
-                write!(self, "[");
+                write!(self, ",");
                 self.expression(b, ctx);
-                write!(self, "]");
+                write!(self, ")");
             }
             Expression(expr) => {
                 self.expression(expr, ctx);
@@ -121,12 +124,22 @@ impl<'t> LuaCompiler<'t> {
         use ExpressionKind::*;
 
         match &expression.kind {
+            Parenthesis(expr) => {
+                write!(self, "(");
+                self.expression(expr, ctx);
+                write!(self, ")");
+            }
+
             Get(a) => {
                 self.assignable(a, ctx);
             }
 
-            // TypeConstant(ty) => {
-            // }
+            TypeConstant(_) => {
+                error!(
+                    self.compiler,
+                    ctx, expression.span, "Type constants are not supported in the lua-compiler"
+                );
+            }
 
             Add(a, b) => self.bin_op(a, b, "+", ctx),
             Sub(a, b) => self.bin_op(a, b, "-", ctx),
@@ -147,7 +160,7 @@ impl<'t> LuaCompiler<'t> {
                     self.expression(b, ctx);
                     write!(self, ")");
                 }
-            }
+            },
 
             AssertEq(a, b) => {
                 write!(self, "assert(");
@@ -185,21 +198,7 @@ impl<'t> LuaCompiler<'t> {
                 self.expression(fail, ctx);
                 write!(self, "end");
                 write!(self, "end)()");
-
             }
-
-            // IfShort { lhs, condition, fail } => {
-            //     write!(self, "(function ()");
-            //     write!(self, "local condition =");
-            //     self.expression(condition, ctx);
-            //     write!(self, "if condition then");
-            //     write!(self, "return condition");
-            //     write!(self, "else");
-            //     write!(self, "return");
-            //     self.expression(fail, ctx);
-            //     write!(self, "end");
-            //     write!(self, "end)()");
-            // }
 
             Function {
                 name: _,
@@ -214,7 +213,9 @@ impl<'t> LuaCompiler<'t> {
                     if i != 0 {
                         write!(self, ",");
                     }
-                    let slot = self.compiler.define(&e.0.name, VarKind::Const, expression.span);
+                    let slot = self
+                        .compiler
+                        .define(&e.0.name, VarKind::Const, expression.span);
                     self.compiler.activate(slot);
                     self.write_slot(slot);
                 }
@@ -222,7 +223,12 @@ impl<'t> LuaCompiler<'t> {
                 self.statement(body, ctx);
                 write!(self, "end");
                 write!(self, ";");
-                self.compiler.frames.last_mut().unwrap().variables.truncate(s);
+                self.compiler
+                    .frames
+                    .last_mut()
+                    .unwrap()
+                    .variables
+                    .truncate(s);
             }
 
             Tuple(xs) => {
@@ -269,6 +275,7 @@ impl<'t> LuaCompiler<'t> {
 
             Blob { blob: _, fields } => {
                 // TODO(ed): Know which blob something is?
+                // TODO(ed): Fill in empty fields with nil-value
                 write!(self, "__BLOB { ");
                 for (k, v) in fields.iter() {
                     write!(self, "{} =", k);
@@ -282,9 +289,7 @@ impl<'t> LuaCompiler<'t> {
             Bool(a) => write!(self, "{}", a),
             Int(a) => write!(self, "{}", a),
             Str(a) => write!(self, "\"{}\"", a),
-            Nil => write!(self, "nil"),
-
-            x => todo!("{:?}", &x),
+            Nil => write!(self, "__NIL"),
         }
     }
 
@@ -314,15 +319,16 @@ impl<'t> LuaCompiler<'t> {
                 Some(Name::External(_)) => {
                     write!(self, "{}", name);
                 }
-                Some(Name::Namespace(new_namespace)) => {
-                    return Some(new_namespace)
-                }
+                Some(Name::Namespace(new_namespace)) => return Some(new_namespace),
                 None => {
                     if let Some((_, _, _)) = self.compiler.functions.get(name) {
                         // Same as external - but defined from sylt-std
                         write!(self, "{}", name);
                     } else {
-                        error!(self.compiler, ctx, span, "No identifier found named: '{}'", name);
+                        error!(
+                            self.compiler,
+                            ctx, span, "No identifier found named: '{}'", name
+                        );
                     }
                 }
             },
@@ -344,7 +350,10 @@ impl<'t> LuaCompiler<'t> {
                 Some(Name::Global(slot)) => {
                     let var = &self.compiler.frames[0].variables[slot];
                     if var.kind.immutable() && ctx.frame != 0 {
-                        error!(self.compiler, ctx, span, "Cannot mutate constant '{}'", name);
+                        error!(
+                            self.compiler,
+                            ctx, span, "Cannot mutate constant '{}'", name
+                        );
                     } else {
                         self.write_global(slot);
                     }
@@ -376,9 +385,7 @@ impl<'t> LuaCompiler<'t> {
                 if let Err(msg) = rhs.fits(&lhs) {
                     error!(
                         self.compiler,
-                        ctx, statement.span,
-                        "Is-check failed - {}",
-                        msg
+                        ctx, statement.span, "Is-check failed - {}", msg
                     );
                 }
             }
@@ -412,7 +419,10 @@ impl<'t> LuaCompiler<'t> {
             Use { .. } | Blob { .. } | EmptyStatement => {}
 
             IsCheck { .. } => {
-                error!(self.compiler, ctx, statement.span, "is-checks only valid in outer-scope");
+                error!(
+                    self.compiler,
+                    ctx, statement.span, "is-checks only valid in outer-scope"
+                );
             }
 
             #[rustfmt::skip]
@@ -426,7 +436,10 @@ impl<'t> LuaCompiler<'t> {
             }
 
             ExternalDefinition { .. } => {
-                error!(self.compiler, ctx, statement.span, "External definitions must lie in the outmost scope");
+                error!(
+                    self.compiler,
+                    ctx, statement.span, "External definitions must lie in the outmost scope"
+                );
             }
 
             #[rustfmt::skip]
@@ -450,7 +463,7 @@ impl<'t> LuaCompiler<'t> {
                             write!(self, "do local tmp_ass =");
                             self.assignable(rest, ctx);
                             write!(self, ";");
-                            write!(self, "tmp_ass . {} = tmp_ass . {} {}", field.name, field.name, op);
+                            write!(self, "__INDEX( tmp_ass, \"{}\" ) = __INDEX( tmp_ass, \"{}\" ) {}", field.name, field.name, op);
                             write!(self, "(");
                             self.expression(value, ctx);
                             write!(self, ")");
@@ -464,7 +477,7 @@ impl<'t> LuaCompiler<'t> {
                             write!(self, "local tmp_expr =");
                             self.expression(index, ctx);
                             write!(self, ";");
-                            write!(self, "tmp_ass [ tmp_expr ] = tmp_ass [ tmp_expr ] {}", op);
+                            write!(self, "__INDEX( tmp_ass, tmp_expr ) = __INDEX( tmp_ass, tmp_expr ) {}", op);
                             write!(self, "(");
                             self.expression(value, ctx);
                             write!(self, ")");
@@ -494,7 +507,12 @@ impl<'t> LuaCompiler<'t> {
                     self.statement(stmt, ctx);
                 }
                 write!(self, "end");
-                self.compiler.frames.last_mut().unwrap().variables.truncate(s);
+                self.compiler
+                    .frames
+                    .last_mut()
+                    .unwrap()
+                    .variables
+                    .truncate(s);
             }
 
             Loop { condition, body } => {
@@ -551,11 +569,7 @@ impl<'t> LuaCompiler<'t> {
         write!(self, ";");
     }
 
-    pub fn compile(
-        &mut self,
-        statement: &Statement,
-        namespace: usize,
-    ) {
+    pub fn compile(&mut self, statement: &Statement, namespace: usize) {
         let ctx = Context {
             namespace,
             frame: 0,
@@ -563,18 +577,11 @@ impl<'t> LuaCompiler<'t> {
         self.outer_statement(&statement, ctx);
     }
 
-    pub fn preamble(
-        &mut self,
-        _span: Span,
-        _num_constants: usize,
-    ) {
+    pub fn preamble(&mut self, _span: Span, _num_constants: usize) {
         write!(self, include_str!("preamble.lua"));
     }
 
-    pub fn postamble(
-        &mut self,
-        span: Span,
-    ) {
+    pub fn postamble(&mut self, span: Span) {
         let ctx = Context {
             frame: self.compiler.frames.len() - 1,
             namespace: 0,

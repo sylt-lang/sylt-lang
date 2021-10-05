@@ -1,7 +1,22 @@
 -- Begin Sylt preamble
-__TEST = false
-
 -- Built in types
+
+-- THE nil-table
+__NIL = setmetatable( { "nil" }, { __tostring = function() return "nil" end } )
+
+__INDEX = function(o, i)
+    local m = getmetatable(o)
+    if m._type == "tuple" or m._type == "list" then
+        local e = o[i + 1]
+        assert(e ~= nil, "Tuple/list index out of range \"" .. i .. "\"")
+        return e
+    end
+    if m._type == "blob" then
+        assert(false, "Accessing fields \"" .. i .. "\" - which doesn't exist")
+    end
+    return __NIL
+end
+
 __TUPLE_META = { _type = "tuple" }
 __TUPLE_META.__newindex = function()
     assert(false, "Tuples are immutable")
@@ -80,14 +95,6 @@ function __TUPLE(obj)
     return setmetatable(obj, __TUPLE_META)
 end
 
-if __TEST then
-    local a = __TUPLE { 1, 2, 3 }
-    local b = __TUPLE { 3, 2, 1 }
-    print(a)
-    print(b * a + a)
-    print(-a)
-end
-
 __LIST_META = { _type = "list" }
 __LIST_META.__eq = function(a, b)
     if not (#a == #b) then
@@ -131,11 +138,6 @@ function __LIST(obj)
     return setmetatable(obj, __LIST_META)
 end
 
-if __TEST then
-    local a = __LIST { 1, 2, 3 }
-    print(a)
-end
-
 __DICT_META = { _type = "dict" }
 __DICT_META.__eq = function(a, b)
     for k, v in pairs(a) do
@@ -165,11 +167,6 @@ __DICT_META.__tostring = function(a)
 end
 function __DICT(obj)
     return setmetatable(obj, __DICT_META)
-end
-
-if __TEST then
-    local a = __DICT { [1] = 1, [2] = 3, [3] = 2 }
-    print(a)
 end
 
 __SET_META = { _type = "set" }
@@ -204,11 +201,6 @@ function __SET(obj)
     return setmetatable(obj, __SET_META)
 end
 
-if __TEST then
-    local a = __SET { 1, 3, 2 }
-    print(a)
-end
-
 __BLOB_META = { _type = "blob" }
 __BLOB_META.__eq = function(a, b)
     -- TODO(ed): The actual blob-instance
@@ -241,11 +233,6 @@ function __BLOB(obj)
     return setmetatable(obj, __BLOB_META)
 end
 
-if __TEST then
-    local a = __BLOB { a = 1, b = 3, c = 2 }
-    print(a)
-end
-
 -- std-sylt
 
 function atan2(x, y) return math.atan2(y, x) end
@@ -268,7 +255,7 @@ end
 
 function reduce(l, f)
     if #l == 0 then
-        return nil
+        return NIL
     end
     local a = l[1]
     for k, v in pairs(l) do
