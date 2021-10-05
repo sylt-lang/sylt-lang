@@ -504,6 +504,10 @@ impl Compiler {
             }
             lua_compiler.postamble(Span::zero());
 
+            if !self.errors.is_empty() {
+                return Err(self.errors);
+            }
+
             Ok(Prog::Lua)
         } else {
             let blocks = {
