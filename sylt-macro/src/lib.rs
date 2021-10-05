@@ -236,7 +236,6 @@ fn parse_test_settings(contents: String) -> TestSettings {
             errors.push(line);
         } else if line.starts_with("// flags: ") {
             for flag in line.split(" ").skip(2) {
-                // This can give false positives - but they're pretty unlikely
                 match flag {
                     "no_print" => {
                         settings.print = false;
