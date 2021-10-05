@@ -4,7 +4,6 @@ pub use gumdrop::Options;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::io::Write;
-use std::fs::File;
 use sylt_common::error::Error;
 use sylt_common::prog::{Prog, BytecodeProg};
 use sylt_common::RustFunction;
@@ -32,31 +31,12 @@ pub fn read_file(path: &Path) -> Result<String, Error> {
     std::fs::read_to_string(path).map_err(|_| Error::FileNotFound(path.to_path_buf()))
 }
 
-pub fn compile_with_reader<R>(
-    args: &Args,
-    functions: ExternFunctionList,
-    reader: R,
-) -> Result<Prog, Vec<Error>>
-where
-    R: Fn(&Path) -> Result<String, Error>,
-{
-    let mut file = PathBuf::from(args.args.first().expect("No file to run"));
-    let tree = sylt_parser::tree(&file, reader)?;
-    if args.dump_tree {
-        println!("{}", tree);
-    }
-    assert!(file.set_extension("lua"));
-    let lua_file: Option<Box<dyn Write>> = if args.lua { Some(Box::new(File::open(file).unwrap())) } else { None };
-    let prog = sylt_compiler::compile(!args.skip_typecheck, lua_file, tree, &functions)?;
-    Ok(prog)
-}
-
 // TODO(ed): These functions should be combined.
 pub fn compile_with_reader_to_stream<R>(
     args: &Args,
     functions: ExternFunctionList,
     reader: R,
-    write_file: Box<dyn Write>,
+    write_file: Option<Box<dyn Write>>,
 ) -> Result<Prog, Vec<Error>>
 where
     R: Fn(&Path) -> Result<String, Error>,
@@ -66,8 +46,7 @@ where
     if args.dump_tree {
         println!("{}", tree);
     }
-    assert!(args.lua, "Only lua-compiler can write to a file");
-    let prog = sylt_compiler::compile(!args.skip_typecheck, Some(write_file), tree, &functions)?;
+    let prog = sylt_compiler::compile(!args.skip_typecheck, write_file, tree, &functions)?;
     Ok(prog)
 }
 
@@ -80,10 +59,24 @@ pub fn run_file_with_reader<R>(
 where
     R: Fn(&Path) -> Result<String, Error>,
 {
-    match compile_with_reader(args, functions, reader)? {
-        Prog::Bytecode(prog) => run(&prog, &args),
-        Prog::Lua => todo!("Cannot run lua-files!"),
-    }
+    if args.lua {
+        use std::process::{Command, Stdio};
+        let mut child = Command::new("lua")
+            .stdin(Stdio::piped())
+            .spawn()
+            .expect("Failed to start lua - make sure it's installed correctly");
+        let stdin = child.stdin.take().unwrap();
+        match compile_with_reader_to_stream(args, functions, reader, Some(Box::new(stdin)))? {
+            Prog::Lua => child.wait().unwrap(),
+            Prog::Bytecode(_) => unreachable!(),
+        };
+    } else {
+        match compile_with_reader_to_stream(args, functions, reader, None)? {
+            Prog::Bytecode(prog) => run(&prog, &args)?,
+            Prog::Lua => unreachable!(),
+        };
+    };
+    Ok(())
 }
 
 /// Compiles, links and runs the given file. The supplied functions are callable
@@ -220,12 +213,13 @@ mod lua {
                 args.verbosity = if $print { 1 } else { 0 };
                 args.lua = true;
 
+                // TODO(ed): This might deadlock - if the output bubbles up
                 let mut child = Command::new("lua")
                     .stdin(Stdio::piped())
                     .stderr(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn()
-                    .expect(concat!("Failed to run ", $path));
+                    .expect(concat!("Failed to start lua, testing:", $path));
 
                 let stdin = child.stdin.take().unwrap();
                 let res = $crate::compile_with_reader_to_stream(&args, ::sylt_std::sylt::_sylt_link(), $crate::read_file, Box::new(stdin));
