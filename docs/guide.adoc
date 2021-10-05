@@ -296,11 +296,36 @@ players -> for_each' update_player
 
 == Types and the type system
 
-// ?
+Sylt is statically typed, which means that every variable has an assigned type.
+This prevents common errors, such as passing the wrong argument to a function,
+without ever having to run the program.
 
-== Blobs
+[source, sylt]
+----
+greet :: fn message: str do
+    print("Hello " + message + "!")
+end
 
-// ?
+greet("world") // Ok
+greet(1)       // Type error
+----
+
+=== Blobs
+
+Blobs are a way of creating user-defined types similar to structs in C and
+objects in JavaScript.
+
+[source, sylt]
+----
+Creature :: blob {
+    hp: int,
+    position: (float, float),
+}
+
+spider := Creature { hp: 10, position: (0.0, 0.0) }
+spider.hp <=> 10
+spider.position <=> (0.0, 0.0)
+----
 
 == Standard library
 
