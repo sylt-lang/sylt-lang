@@ -100,6 +100,7 @@ fn type_dependencies(ctx: &mut Context, ty: &ParserType) -> BTreeSet<Name> {
         | Resolved(_)
         | Generic(_) => BTreeSet::new(),
 
+        Grouping(ty) => type_dependencies(ctx, ty),
         UserDefined(assignable) => assignable_dependencies(ctx, &assignable),
 
         Fn(params, ret) =>
