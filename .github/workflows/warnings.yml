@@ -11,7 +11,7 @@ env:
 
 jobs:
   build:
-    timeout-minutes: 4
+    timeout-minutes: 3
     runs-on: ubuntu-latest
 
     steps:
