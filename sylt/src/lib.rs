@@ -46,8 +46,7 @@ where
     if args.dump_tree {
         println!("{}", tree);
     }
-    let prog = sylt_compiler::compile(!args.skip_typecheck, write_file, tree, &functions)?;
-    Ok(prog)
+    sylt_compiler::compile(!args.skip_typecheck, write_file, tree, &functions)
 }
 
 // TODO(ed): This name isn't true anymore - since it can compile
@@ -273,9 +272,12 @@ mod lua {
                 file.replace_range(file.rfind(".").unwrap().., ".lua");
 
                 let output = child.wait_with_output().unwrap();
+                // NOTE(ed): Status is always 0 - atleast on my version of lua - so we check
+                // for stderr - which is kinda a bad idea.
+                let success = output.status.success() && output.stderr.is_empty();
                 if $any_runtime_errors {
                     assert!(
-                        !output.status.success(),
+                        success,
                         "Program ran to completion when it should fail"
                     );
                 } else {
@@ -284,7 +286,7 @@ mod lua {
                     let stderr = String::from_utf8(output.stderr)
                         .unwrap_or("Even I don't understand this stderr :(".to_string());
                     assert!(
-                        output.status.success(),
+                        success,
                         "Failed when it should succeed\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
                         stdout,
                         stderr
