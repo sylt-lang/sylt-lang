@@ -224,12 +224,12 @@ mod lua {
                 #[allow(unused_imports)]
                 use sylt_common::Type;
                 use std::process::{Command, Stdio};
+                use std::io::Write;
 
                 let file = format!("../{}", $path);
                 let mut args = $crate::Args::default();
                 args.args = vec![file.clone()];
                 args.verbosity = if $print { 1 } else { 0 };
-                args.lua = true;
 
                 // TODO(ed): This might deadlock - if the output bubbles up
                 let mut child = Command::new("lua")
@@ -240,7 +240,8 @@ mod lua {
                     .expect(concat!("Failed to start lua, testing:", $path));
 
                 let stdin = child.stdin.take().unwrap();
-                let res = $crate::compile_with_reader_to_stream(&args, ::sylt_std::sylt::_sylt_link(), $crate::read_file, Box::new(stdin));
+                let writer: Option<Box<dyn Write>> = Some(Box::new(stdin));
+                let res = $crate::compile_with_reader_to_stream(&args, ::sylt_std::sylt::_sylt_link(), $crate::read_file, writer);
 
                 println!("Expect error: {}", $any_runtime_errors);
                 if $any_runtime_errors {
