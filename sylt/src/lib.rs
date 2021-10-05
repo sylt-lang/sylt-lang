@@ -32,7 +32,7 @@ pub fn read_file(path: &Path) -> Result<String, Error> {
 }
 
 // TODO(ed): These functions should be combined.
-pub fn compile_with_reader_to_stream<R>(
+pub fn compile_with_reader_to_writer<R>(
     args: &Args,
     functions: ExternFunctionList,
     reader: R,
@@ -67,7 +67,7 @@ where
                 .spawn()
                 .expect("Failed to start lua - make sure it's installed correctly");
             let stdin = child.stdin.take().unwrap();
-            match compile_with_reader_to_stream(args, functions, reader, Some(Box::new(stdin)))? {
+            match compile_with_reader_to_writer(args, functions, reader, Some(Box::new(stdin)))? {
                 Prog::Lua => child.wait().unwrap(),
                 Prog::Bytecode(_) => unreachable!(),
             };
@@ -76,7 +76,7 @@ where
         (false, Some(s)) if s == "%" => {
             use std::io;
             // NOTE(ed): Lack of running
-            compile_with_reader_to_stream(args, functions, reader, Some(Box::new(io::stdout())))?;
+            compile_with_reader_to_writer(args, functions, reader, Some(Box::new(io::stdout())))?;
         }
 
         (false, Some(s)) => {
@@ -84,11 +84,11 @@ where
             let file = File::create(PathBuf::from(s)).unwrap(); //.expect(&format!("Failed to create file: {}", s));
             let writer: Option<Box<dyn Write>> = Some(Box::new(file));
             // NOTE(ed): Lack of running
-            compile_with_reader_to_stream(args, functions, reader, writer)?;
+            compile_with_reader_to_writer(args, functions, reader, writer)?;
         }
 
         (_, _) => {
-            match compile_with_reader_to_stream(args, functions, reader, None)? {
+            match compile_with_reader_to_writer(args, functions, reader, None)? {
                 Prog::Bytecode(prog) => run(&prog, &args)?,
                 Prog::Lua => unreachable!(),
             };
@@ -245,7 +245,7 @@ mod lua {
 
                 let stdin = child.stdin.take().unwrap();
                 let writer: Option<Box<dyn Write>> = Some(Box::new(stdin));
-                let res = $crate::compile_with_reader_to_stream(
+                let res = $crate::compile_with_reader_to_writer(
                     &args,
                     ::sylt_std::sylt::_sylt_link(),
                     $crate::read_file,
