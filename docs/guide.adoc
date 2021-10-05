@@ -315,6 +315,7 @@ greet(1)       // Type error
 Blobs are a way of creating user-defined types similar to structs in C and
 objects in JavaScript.
 
+.Blob creation and field access
 [source, sylt]
 ----
 Creature :: blob {
@@ -322,9 +323,51 @@ Creature :: blob {
     position: (float, float),
 }
 
-spider := Creature { hp: 10, position: (0.0, 0.0) }
-spider.hp <=> 10
+spider := Creature { hp: 5, position: (0.0, 0.0) }
+spider.hp <=> 5
 spider.position <=> (0.0, 0.0)
+----
+
+It is often desireable to have a function that can create blobs of a specific
+type. Such a function, usually called a _constructor_, can be implemented as
+follows.
+
+.A blob constructor
+[source, sylt]
+----
+Spider :: blob {
+    hp: int,
+    position: (float, float),
+    eat_bug: fn -> void,
+}
+
+new_spider :: fn x: float, y: float -> Spider do
+    self: !Spider = nil // Set up the variable
+    self = Spider {
+        hp: 5,
+        position: position,
+        eat_bug: fn do
+            self.hp += 1
+        end,
+    }
+    ret self
+end
+
+spider := new_spider(0.0, 0.0)
+----
+
+Notice that the `Spider` blob has many fields in common with the `Creature`
+blob from before. This fact can be used to do something called
+https://en.wikipedia.org/wiki/Duck_typing[duck typing], which effectively
+allows us to assign `Spider` blobs to `Creature` variables.
+
+.Duck typing
+[source, sylt]
+----
+creatures: [Creature] = []
+creatures -> push' new_spider' 0.0, 0.0
+creatures[0].hp -= 1   // Ok
+creatures[0].eat_bug() // Type error
 ----
 
 == Standard library
