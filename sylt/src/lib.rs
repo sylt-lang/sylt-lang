@@ -208,7 +208,7 @@ mod lua {
                     return;
                 }
 
-                let mut file = file.clone();
+                let mut file = file;
                 file.replace_range(file.rfind(".").unwrap().., ".lua");
 
                 let output = Command::new("lua")
