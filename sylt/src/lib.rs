@@ -59,7 +59,7 @@ pub fn run_file_with_reader<R>(
 where
     R: Fn(&Path) -> Result<String, Error>,
 {
-    if args.lua {
+    if args.lua_run {
         use std::process::{Command, Stdio};
         let mut child = Command::new("lua")
             .stdin(Stdio::piped())
@@ -99,9 +99,6 @@ pub fn run(prog: &BytecodeProg, args: &Args) -> Result<(), Vec<Error>> {
 
 #[derive(Default, Debug, Options)]
 pub struct Args {
-    #[options(short = "r", long = "run", help = "Runs a precompiled sylt binary")]
-    pub is_binary: bool,
-
     #[options(
         long = "skip-typecheck",
         no_short,
@@ -112,8 +109,11 @@ pub struct Args {
     #[options(long = "dump-tree", no_short, help = "Writes the tree to stdout")]
     pub dump_tree: bool,
 
-    #[options(short = "l", long = "lua", help = "Compile to lua")]
-    pub lua: bool,
+    #[options(short = "l", long = "lua", help = "Run using lua")]
+    pub lua_run: bool,
+
+    #[options(short="c", long="compile", help = "Compile to a lua file")]
+    pub lua_compile: Option<String>,
 
     #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
     pub verbosity: u32,
