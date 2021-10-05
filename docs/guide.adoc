@@ -328,7 +328,7 @@ spider.hp <=> 5
 spider.position <=> (0.0, 0.0)
 ----
 
-It is often desireable to have a function that can create blobs of a specific
+It is often desirable to have a function that can create blobs of a specific
 type. Such a function, usually called a _constructor_, can be implemented as
 follows.
 
