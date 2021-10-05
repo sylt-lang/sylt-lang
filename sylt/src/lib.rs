@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::io::Write;
 use std::fs::File;
 use sylt_common::error::Error;
-use sylt_common::prog::Prog;
+use sylt_common::prog::{Prog, BytecodeProg};
 use sylt_common::RustFunction;
 
 pub mod formatter;
@@ -80,11 +80,9 @@ pub fn run_file_with_reader<R>(
 where
     R: Fn(&Path) -> Result<String, Error>,
 {
-    let prog = compile_with_reader(args, functions, reader)?;
-    if args.lua {
-        Ok(())
-    } else {
-        run(&prog, &args)
+    match compile_with_reader(args, functions, reader)? {
+        Prog::Bytecode(prog) => run(&prog, &args),
+        Prog::Lua => todo!("Cannot run lua-files!"),
     }
 }
 
@@ -94,7 +92,7 @@ pub fn run_file(args: &Args, functions: ExternFunctionList) -> Result<(), Vec<Er
     run_file_with_reader(args, functions, read_file)
 }
 
-pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
+pub fn run(prog: &BytecodeProg, args: &Args) -> Result<(), Vec<Error>> {
     let mut vm = sylt_machine::VM::new();
     vm.print_bytecode = args.verbosity >= 1;
     vm.print_exec = args.verbosity >= 2;

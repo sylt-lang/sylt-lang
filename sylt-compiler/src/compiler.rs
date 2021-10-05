@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::io::Write;
 use sylt_common::error::Error;
-use sylt_common::prog::Prog;
+use sylt_common::prog::{Prog, BytecodeProg};
 use sylt_common::{Op, RustFunction, Type, Value};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
@@ -495,7 +495,7 @@ impl Compiler {
         }
 
 
-        let blocks = if let Some(lua_file) = lua_file {
+        if let Some(lua_file) = lua_file {
             let mut lua_compiler = lua::LuaCompiler::new(&mut self, Box::new(lua_file));
 
             lua_compiler.preamble(Span::zero(), 0);
@@ -504,32 +504,34 @@ impl Compiler {
             }
             lua_compiler.postamble(Span::zero());
 
-            Vec::new()
+            Ok(Prog::Lua)
         } else {
-            let mut bytecode_compiler = bytecode::BytecodeCompiler::new(&mut self);
-            bytecode_compiler.preamble(start_span, num_constants);
+            let blocks = {
+                let mut bytecode_compiler = bytecode::BytecodeCompiler::new(&mut self);
+                bytecode_compiler.preamble(start_span, num_constants);
 
-            for (statement, namespace) in statements.iter() {
-                bytecode_compiler.compile(statement, *namespace);
+                for (statement, namespace) in statements.iter() {
+                    bytecode_compiler.compile(statement, *namespace);
+                }
+
+                bytecode_compiler.postamble(start_span);
+                bytecode_compiler.blocks
+            };
+
+            if !self.errors.is_empty() {
+                return Err(self.errors);
             }
 
-            bytecode_compiler.postamble(start_span);
-            bytecode_compiler.blocks
-        };
-
-        if !self.errors.is_empty() {
-            return Err(self.errors);
+            Ok(Prog::Bytecode(BytecodeProg {
+                blocks: blocks
+                    .into_iter()
+                    .map(|x| Rc::new(RefCell::new(x)))
+                    .collect(),
+                functions: functions.iter().map(|(_, f, _)| *f).collect(),
+                constants: self.constants,
+                strings: self.strings,
+            }))
         }
-
-        Ok(Prog {
-            blocks: blocks
-                .into_iter()
-                .map(|x| Rc::new(RefCell::new(x)))
-                .collect(),
-            functions: functions.iter().map(|(_, f, _)| *f).collect(),
-            constants: self.constants,
-            strings: self.strings,
-        })
     }
 
     fn extract_globals(&mut self, tree: &AST) -> usize {
