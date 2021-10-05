@@ -50,7 +50,7 @@ where
     Ok(prog)
 }
 
-
+// TODO(ed): This name isn't true anymore - since it can compile
 pub fn run_file_with_reader<R>(
     args: &Args,
     functions: ExternFunctionList,
@@ -59,22 +59,40 @@ pub fn run_file_with_reader<R>(
 where
     R: Fn(&Path) -> Result<String, Error>,
 {
-    if args.lua_run {
-        use std::process::{Command, Stdio};
-        let mut child = Command::new("lua")
-            .stdin(Stdio::piped())
-            .spawn()
-            .expect("Failed to start lua - make sure it's installed correctly");
-        let stdin = child.stdin.take().unwrap();
-        match compile_with_reader_to_stream(args, functions, reader, Some(Box::new(stdin)))? {
-            Prog::Lua => child.wait().unwrap(),
-            Prog::Bytecode(_) => unreachable!(),
-        };
-    } else {
-        match compile_with_reader_to_stream(args, functions, reader, None)? {
-            Prog::Bytecode(prog) => run(&prog, &args)?,
-            Prog::Lua => unreachable!(),
-        };
+    match (&args.lua_run, &args.lua_compile) {
+        (true, _) => {
+            use std::process::{Command, Stdio};
+            let mut child = Command::new("lua")
+                .stdin(Stdio::piped())
+                .spawn()
+                .expect("Failed to start lua - make sure it's installed correctly");
+            let stdin = child.stdin.take().unwrap();
+            match compile_with_reader_to_stream(args, functions, reader, Some(Box::new(stdin)))? {
+                Prog::Lua => child.wait().unwrap(),
+                Prog::Bytecode(_) => unreachable!(),
+            };
+        }
+
+        (false, Some(s)) if s == "%" => {
+            use std::io;
+            // NOTE(ed): Lack of running
+            compile_with_reader_to_stream(args, functions, reader, Some(Box::new(io::stdout())))?;
+        }
+
+        (false, Some(s)) => {
+            use std::fs::File;
+            let file = File::create(PathBuf::from(s)).unwrap(); //.expect(&format!("Failed to create file: {}", s));
+            let writer: Option<Box<dyn Write>> = Some(Box::new(file));
+            // NOTE(ed): Lack of running
+            compile_with_reader_to_stream(args, functions, reader, writer)?;
+        }
+
+        (_, _) => {
+            match compile_with_reader_to_stream(args, functions, reader, None)? {
+                Prog::Bytecode(prog) => run(&prog, &args)?,
+                Prog::Lua => unreachable!(),
+            };
+        }
     };
     Ok(())
 }
@@ -112,7 +130,7 @@ pub struct Args {
     #[options(short = "l", long = "lua", help = "Run using lua")]
     pub lua_run: bool,
 
-    #[options(short="c", long="compile", help = "Compile to a lua file")]
+    #[options(short="c", long="compile", help = "Compile to a lua file - % means stdout")]
     pub lua_compile: Option<String>,
 
     #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
