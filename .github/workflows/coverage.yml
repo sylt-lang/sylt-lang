@@ -16,6 +16,14 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Install Lua
+        run: sudo apt update && sudo apt install -y lua
+
+      - name: Download and extract tarpaulin
+        run: |
+          wget https://github.com/xd009642/tarpaulin/releases/download/0.16.0/cargo-tarpaulin-0.16.0-travis.tar.gz
+          tar xvzf cargo-tarpaulin-0.16.0-travis.tar.gz
+
       - name: Download and extract tarpaulin
         run: |
           wget https://github.com/xd009642/tarpaulin/releases/download/0.16.0/cargo-tarpaulin-0.16.0-travis.tar.gz

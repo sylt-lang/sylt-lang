@@ -16,7 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Install SDL and Python
+    - name: Install SDL and Lua
       run: sudo apt update && sudo apt install -y libsdl2-dev lua
 
     - name: Build
