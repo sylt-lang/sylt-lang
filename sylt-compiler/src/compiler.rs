@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::io::Write;
 use sylt_common::error::Error;
 use sylt_common::prog::Prog;
 use sylt_common::{Op, RustFunction, Type, Value};
@@ -446,7 +447,7 @@ impl Compiler {
     fn compile(
         mut self,
         typecheck: bool,
-        lua_file: Option<PathBuf>,
+        lua_file: Option<Box<dyn Write>>,
         tree: AST,
         functions: &[(String, RustFunction, String)],
     ) -> Result<Prog, Vec<Error>> {
@@ -495,7 +496,7 @@ impl Compiler {
 
 
         let blocks = if let Some(lua_file) = lua_file {
-            let mut lua_compiler = lua::LuaCompiler::new(&mut self, &lua_file);
+            let mut lua_compiler = lua::LuaCompiler::new(&mut self, Box::new(lua_file));
 
             lua_compiler.preamble(Span::zero(), 0);
             for (statement, namespace) in statements.iter() {
@@ -636,7 +637,7 @@ fn parse_signature(func_name: &str, sig: &str) -> ParserType {
     }
 }
 
-pub fn compile(typecheck: bool, lua_file: Option<PathBuf>, prog: AST, functions: &[(String, RustFunction, String)]) -> Result<Prog, Vec<Error>> {
+pub fn compile(typecheck: bool, lua_file: Option<Box<dyn Write>>, prog: AST, functions: &[(String, RustFunction, String)]) -> Result<Prog, Vec<Error>> {
     Compiler::new().compile(typecheck, lua_file, prog, functions)
 }
 

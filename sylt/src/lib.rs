@@ -3,6 +3,8 @@ pub use gumdrop::Options;
 
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
+use std::io::Write;
+use std::fs::File;
 use sylt_common::error::Error;
 use sylt_common::prog::Prog;
 use sylt_common::RustFunction;
@@ -44,10 +46,31 @@ where
         println!("{}", tree);
     }
     assert!(file.set_extension("lua"));
-    let lua_file = if args.lua { Some(file) } else { None };
+    let lua_file: Option<Box<dyn Write>> = if args.lua { Some(Box::new(File::open(file).unwrap())) } else { None };
     let prog = sylt_compiler::compile(!args.skip_typecheck, lua_file, tree, &functions)?;
     Ok(prog)
 }
+
+// TODO(ed): These functions should be combined.
+pub fn compile_with_reader_to_stream<R>(
+    args: &Args,
+    functions: ExternFunctionList,
+    reader: R,
+    write_file: Box<dyn Write>,
+) -> Result<Prog, Vec<Error>>
+where
+    R: Fn(&Path) -> Result<String, Error>,
+{
+    let file = PathBuf::from(args.args.first().expect("No file to run"));
+    let tree = sylt_parser::tree(&file, reader)?;
+    if args.dump_tree {
+        println!("{}", tree);
+    }
+    assert!(args.lua, "Only lua-compiler can write to a file");
+    let prog = sylt_compiler::compile(!args.skip_typecheck, Some(write_file), tree, &functions)?;
+    Ok(prog)
+}
+
 
 pub fn run_file_with_reader<R>(
     args: &Args,
@@ -198,7 +221,15 @@ mod lua {
                 args.args = vec![file.clone()];
                 args.verbosity = if $print { 1 } else { 0 };
                 args.lua = true;
-                let res = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
+
+                let mut child = Command::new("lua")
+                    .stdin(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .stdout(Stdio::null())
+                    .spawn()
+                    .expect(concat!("Failed to run ", $path));
+
+                let res = $crate::compile_with_reader_to_stream(&args, ::sylt_std::sylt::_sylt_link(), $crate::read_file, Box::new(child.stdin.unwrap()));
 
                 println!("Expect error: {}", $any_runtime_errors);
                 if $any_runtime_errors {
@@ -211,17 +242,11 @@ mod lua {
                 let mut file = file;
                 file.replace_range(file.rfind(".").unwrap().., ".lua");
 
-                let output = Command::new("lua")
-                    .arg(file)
-                    .stdin(Stdio::null())
-                    .stderr(Stdio::piped())
-                    .stdout(Stdio::null())
-                    .output()
-                    .expect(concat!("Failed to run ", $path));
+                let status = child.wait().unwrap();
                 if $any_runtime_errors {
-                    assert!(!output.status.success(), "Program ran to completion when it should fail");
+                    assert!(!status.success(), "Program ran to completion when it should fail");
                 } else {
-                    assert!(output.status.success(), "Failed when it should succeed\n:STDERR:\n{:?}\n", String::from_utf8(output.stderr).unwrap_or("Even I don't understand this stderr :(".to_string()));
+                    assert!(status.success(), "Failed when it should succeed\n:STDERR:\nTODO\n"); // , String::from_utf8(child.stderr.unwrap()).unwrap_or("Even I don't understand this stderr :(".to_string()));
                 }
             }
         };

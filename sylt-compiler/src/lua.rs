@@ -9,9 +9,7 @@
 //  - The indexing problem
 //  - Typechecker finds the wrong blob - use_import.sy testfile
 
-use std::fs::File;
-use std::io::prelude::*;
-use std::path::Path;
+use std::io::Write;
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Op, Span, Statement, StatementKind,
@@ -31,16 +29,15 @@ macro_rules! write {
 pub struct LuaCompiler<'t> {
     compiler: &'t mut Compiler,
     loops: Vec<usize>,
-    pub file: File,
+    pub file: Box<dyn Write>,
 }
 
 impl<'t> LuaCompiler<'t> {
-    pub(crate) fn new(compiler: &'t mut Compiler, file: &Path) -> Self {
-        let file = File::create(&file).unwrap();
+    pub(crate) fn new(compiler: &'t mut Compiler, file: Box<dyn Write>) -> Self {
         Self {
             compiler,
             loops: Vec::new(),
-            file,
+            file: Box::new(file),
         }
     }
 
