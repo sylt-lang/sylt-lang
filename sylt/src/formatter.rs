@@ -123,6 +123,9 @@ fn simplify_type(ty: Type) -> Type {
         TypeKind::Dict(a, b) =>
             Type { kind: TypeKind::Dict(Box::new(simplify_type(*a)), Box::new(simplify_type(*b))), ..ty },
 
+        TypeKind::Grouping(a) =>
+            Type { kind: TypeKind::Grouping(Box::new(simplify_type(*a))), ..ty },
+
         TypeKind::Implied
         | TypeKind::UserDefined(_)
         | TypeKind::Resolved(_)
@@ -152,7 +155,11 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
         }
         TypeKind::Tuple(types) => {
             write!(dest, "(")?;
+            let len = types.len();
             write_comma_separated!(dest, indent, write_type, types);
+            if len == 1 {
+                write!(dest, ",")?;
+            }
             write!(dest, ")")
         }
         TypeKind::List(ty) => {
@@ -173,6 +180,11 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
             write!(dest, "}}")
         }
         TypeKind::Generic(ident) => write_identifier(dest, ident),
+        TypeKind::Grouping(ty) => {
+            write!(dest, "(")?;
+            write_type(dest, indent, *ty)?;
+            write!(dest, ")")
+        }
     }
 }
 
