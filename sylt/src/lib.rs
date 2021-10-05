@@ -275,16 +275,19 @@ mod lua {
                 // NOTE(ed): Status is always 0 - atleast on my version of lua - so we check
                 // for stderr - which is kinda a bad idea.
                 let success = output.status.success() && output.stderr.is_empty();
+                let stdout = String::from_utf8(output.stdout)
+                    .unwrap_or("Even I don't understand this stdout :(".to_string());
+                let stderr = String::from_utf8(output.stderr)
+                    .unwrap_or("Even I don't understand this stderr :(".to_string());
+                println!("Success: {}", success);
                 if $any_runtime_errors {
                     assert!(
-                        success,
-                        "Program ran to completion when it should fail"
+                        !success,
+                        "Program ran to completetion - when it should crash\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
+                        stdout,
+                        stderr
                     );
                 } else {
-                    let stdout = String::from_utf8(output.stdout)
-                        .unwrap_or("Even I don't understand this stdout :(".to_string());
-                    let stderr = String::from_utf8(output.stderr)
-                        .unwrap_or("Even I don't understand this stderr :(".to_string());
                     assert!(
                         success,
                         "Failed when it should succeed\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
