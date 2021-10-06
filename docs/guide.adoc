@@ -384,7 +384,7 @@ To call the `eat_bug` function anyway, forced types may be used.
 [source, sylt]
 ----
 spider: !Spider = creatures[0]
-spider.eat_bug() // Ok
+spider.eat_bug() // Ok, as long as creatures[0] is a Spider
 ----
 
 == Standard library
