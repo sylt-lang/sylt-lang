@@ -2,9 +2,10 @@
 pub use gumdrop::Options;
 
 use std::fmt::Debug;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
-use sylt_common::prog::Prog;
+use sylt_common::prog::{BytecodeProg, Prog};
 use sylt_common::RustFunction;
 
 pub mod formatter;
@@ -30,25 +31,24 @@ pub fn read_file(path: &Path) -> Result<String, Error> {
     std::fs::read_to_string(path).map_err(|_| Error::FileNotFound(path.to_path_buf()))
 }
 
-pub fn compile_with_reader<R>(
+pub fn compile_with_reader_to_writer<R>(
     args: &Args,
     functions: ExternFunctionList,
     reader: R,
+    write_file: Option<Box<dyn Write>>,
 ) -> Result<Prog, Vec<Error>>
 where
     R: Fn(&Path) -> Result<String, Error>,
 {
-    let mut file = PathBuf::from(args.args.first().expect("No file to run"));
+    let file = PathBuf::from(args.args.first().expect("No file to run"));
     let tree = sylt_parser::tree(&file, reader)?;
     if args.dump_tree {
         println!("{}", tree);
     }
-    assert!(file.set_extension("lua"));
-    let lua_file = if args.lua { Some(file) } else { None };
-    let prog = sylt_compiler::compile(!args.skip_typecheck, lua_file, tree, &functions)?;
-    Ok(prog)
+    sylt_compiler::compile(!args.skip_typecheck, write_file, tree, &functions)
 }
 
+// TODO(ed): This name isn't true anymore - since it can compile
 pub fn run_file_with_reader<R>(
     args: &Args,
     functions: ExternFunctionList,
@@ -57,12 +57,50 @@ pub fn run_file_with_reader<R>(
 where
     R: Fn(&Path) -> Result<String, Error>,
 {
-    let prog = compile_with_reader(args, functions, reader)?;
-    if args.lua {
-        Ok(())
-    } else {
-        run(&prog, &args)
-    }
+    match (&args.lua_run, &args.lua_compile) {
+        (true, _) => {
+            use std::process::{Command, Stdio};
+            let mut child = Command::new("lua")
+                .stdin(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .expect("Failed to start lua - make sure it's installed correctly");
+            let stdin = child.stdin.take().unwrap();
+            match compile_with_reader_to_writer(args, functions, reader, Some(Box::new(stdin)))? {
+                Prog::Lua => {
+                    let output = child.wait_with_output().unwrap();
+                    // NOTE(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
+                    // so we check stderr - which is a bad idea.
+                    if !output.stderr.is_empty() {
+                        return Err(vec![Error::LuaError(String::from_utf8(output.stderr).unwrap())]);
+                    }
+                }
+                Prog::Bytecode(_) => unreachable!(),
+            };
+        }
+
+        (false, Some(s)) if s == "%" => {
+            use std::io;
+            // NOTE(ed): Lack of running
+            compile_with_reader_to_writer(args, functions, reader, Some(Box::new(io::stdout())))?;
+        }
+
+        (false, Some(s)) => {
+            use std::fs::File;
+            let file = File::create(PathBuf::from(s)).expect(&format!("Failed to create file: {}", s));
+            let writer: Option<Box<dyn Write>> = Some(Box::new(file));
+            // NOTE(ed): Lack of running
+            compile_with_reader_to_writer(args, functions, reader, writer)?;
+        }
+
+        (_, _) => {
+            match compile_with_reader_to_writer(args, functions, reader, None)? {
+                Prog::Bytecode(prog) => run(&prog, &args)?,
+                Prog::Lua => unreachable!(),
+            };
+        }
+    };
+    Ok(())
 }
 
 /// Compiles, links and runs the given file. The supplied functions are callable
@@ -71,7 +109,7 @@ pub fn run_file(args: &Args, functions: ExternFunctionList) -> Result<(), Vec<Er
     run_file_with_reader(args, functions, read_file)
 }
 
-pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
+pub fn run(prog: &BytecodeProg, args: &Args) -> Result<(), Vec<Error>> {
     let mut vm = sylt_machine::VM::new();
     vm.print_bytecode = args.verbosity >= 1;
     vm.print_exec = args.verbosity >= 2;
@@ -85,9 +123,6 @@ pub fn run(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
 
 #[derive(Default, Debug, Options)]
 pub struct Args {
-    #[options(short = "r", long = "run", help = "Runs a precompiled sylt binary")]
-    pub is_binary: bool,
-
     #[options(
         long = "skip-typecheck",
         no_short,
@@ -98,8 +133,15 @@ pub struct Args {
     #[options(long = "dump-tree", no_short, help = "Writes the tree to stdout")]
     pub dump_tree: bool,
 
-    #[options(short = "l", long = "lua", help = "Compile to lua")]
-    pub lua: bool,
+    #[options(short = "l", long = "lua", help = "Run using lua")]
+    pub lua_run: bool,
+
+    #[options(
+        short = "c",
+        long = "compile",
+        help = "Compile to a lua file - % for stdout"
+    )]
+    pub lua_compile: Option<String>,
 
     #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
     pub verbosity: u32,
@@ -185,22 +227,39 @@ mod lua {
         ($fn:ident, $path:literal, $print:expr, $errs:pat, $any_runtime_errors:expr) => {
             #[test]
             fn $fn() {
+                use std::io::Write;
+                use std::process::{Command, Stdio};
                 #[allow(unused_imports)]
                 use sylt_common::error::RuntimeError;
                 #[allow(unused_imports)]
                 use sylt_common::error::TypeError;
                 #[allow(unused_imports)]
                 use sylt_common::Type;
-                use std::process::{Command, Stdio};
 
                 let file = format!("../{}", $path);
                 let mut args = $crate::Args::default();
                 args.args = vec![file.clone()];
                 args.verbosity = if $print { 1 } else { 0 };
-                args.lua = true;
-                let res = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
+
+                // TODO(ed): This might deadlock - if the output bubbles up
+                let mut child = Command::new("lua")
+                    .stdin(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .spawn()
+                    .expect(concat!("Failed to start lua, testing:", $path));
+
+                let stdin = child.stdin.take().unwrap();
+                let writer: Option<Box<dyn Write>> = Some(Box::new(stdin));
+                let res = $crate::compile_with_reader_to_writer(
+                    &args,
+                    ::sylt_std::sylt::_sylt_link(),
+                    $crate::read_file,
+                    writer,
+                );
 
                 println!("Expect error: {}", $any_runtime_errors);
+                println!("Got error: {:?}", res.is_err());
                 if $any_runtime_errors {
                     assert_errs!(res, []);
                 } else {
@@ -211,17 +270,29 @@ mod lua {
                 let mut file = file;
                 file.replace_range(file.rfind(".").unwrap().., ".lua");
 
-                let output = Command::new("lua")
-                    .arg(file)
-                    .stdin(Stdio::null())
-                    .stderr(Stdio::piped())
-                    .stdout(Stdio::null())
-                    .output()
-                    .expect(concat!("Failed to run ", $path));
+                let output = child.wait_with_output().unwrap();
+                // NOTE(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
+                // so we check stderr - which is a bad idea.
+                let success = output.status.success() && output.stderr.is_empty();
+                let stdout = String::from_utf8(output.stdout)
+                    .unwrap_or("Even I don't understand this stdout :(".to_string());
+                let stderr = String::from_utf8(output.stderr)
+                    .unwrap_or("Even I don't understand this stderr :(".to_string());
+                println!("Success: {}", success);
                 if $any_runtime_errors {
-                    assert!(!output.status.success(), "Program ran to completion when it should fail");
+                    assert!(
+                        !success,
+                        "Program ran to completetion - when it should crash\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
+                        stdout,
+                        stderr
+                    );
                 } else {
-                    assert!(output.status.success(), "Failed when it should succeed\n:STDERR:\n{:?}\n", String::from_utf8(output.stderr).unwrap_or("Even I don't understand this stderr :(".to_string()));
+                    assert!(
+                        success,
+                        "Failed when it should succeed\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
+                        stdout,
+                        stderr
+                    );
                 }
             }
         };

@@ -2,8 +2,9 @@ use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::io::Write;
 use sylt_common::error::Error;
-use sylt_common::prog::Prog;
+use sylt_common::prog::{Prog, BytecodeProg};
 use sylt_common::{Op, RustFunction, Type, Value};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
@@ -446,7 +447,7 @@ impl Compiler {
     fn compile(
         mut self,
         typecheck: bool,
-        lua_file: Option<PathBuf>,
+        lua_file: Option<Box<dyn Write>>,
         tree: AST,
         functions: &[(String, RustFunction, String)],
     ) -> Result<Prog, Vec<Error>> {
@@ -494,8 +495,8 @@ impl Compiler {
         }
 
 
-        let blocks = if let Some(lua_file) = lua_file {
-            let mut lua_compiler = lua::LuaCompiler::new(&mut self, &lua_file);
+        if let Some(lua_file) = lua_file {
+            let mut lua_compiler = lua::LuaCompiler::new(&mut self, Box::new(lua_file));
 
             lua_compiler.preamble(Span::zero(), 0);
             for (statement, namespace) in statements.iter() {
@@ -503,32 +504,38 @@ impl Compiler {
             }
             lua_compiler.postamble(Span::zero());
 
-            Vec::new()
-        } else {
-            let mut bytecode_compiler = bytecode::BytecodeCompiler::new(&mut self);
-            bytecode_compiler.preamble(start_span, num_constants);
-
-            for (statement, namespace) in statements.iter() {
-                bytecode_compiler.compile(statement, *namespace);
+            if !self.errors.is_empty() {
+                return Err(self.errors);
             }
 
-            bytecode_compiler.postamble(start_span);
-            bytecode_compiler.blocks
-        };
+            Ok(Prog::Lua)
+        } else {
+            let blocks = {
+                let mut bytecode_compiler = bytecode::BytecodeCompiler::new(&mut self);
+                bytecode_compiler.preamble(start_span, num_constants);
 
-        if !self.errors.is_empty() {
-            return Err(self.errors);
+                for (statement, namespace) in statements.iter() {
+                    bytecode_compiler.compile(statement, *namespace);
+                }
+
+                bytecode_compiler.postamble(start_span);
+                bytecode_compiler.blocks
+            };
+
+            if !self.errors.is_empty() {
+                return Err(self.errors);
+            }
+
+            Ok(Prog::Bytecode(BytecodeProg {
+                blocks: blocks
+                    .into_iter()
+                    .map(|x| Rc::new(RefCell::new(x)))
+                    .collect(),
+                functions: functions.iter().map(|(_, f, _)| *f).collect(),
+                constants: self.constants,
+                strings: self.strings,
+            }))
         }
-
-        Ok(Prog {
-            blocks: blocks
-                .into_iter()
-                .map(|x| Rc::new(RefCell::new(x)))
-                .collect(),
-            functions: functions.iter().map(|(_, f, _)| *f).collect(),
-            constants: self.constants,
-            strings: self.strings,
-        })
     }
 
     fn extract_globals(&mut self, tree: &AST) -> usize {
@@ -636,7 +643,7 @@ fn parse_signature(func_name: &str, sig: &str) -> ParserType {
     }
 }
 
-pub fn compile(typecheck: bool, lua_file: Option<PathBuf>, prog: AST, functions: &[(String, RustFunction, String)]) -> Result<Prog, Vec<Error>> {
+pub fn compile(typecheck: bool, lua_file: Option<Box<dyn Write>>, prog: AST, functions: &[(String, RustFunction, String)]) -> Result<Prog, Vec<Error>> {
     Compiler::new().compile(typecheck, lua_file, prog, functions)
 }
 

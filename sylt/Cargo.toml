@@ -11,10 +11,6 @@ edition = "2018"
 default-run = "sylt"
 
 [[bin]]
-name = "time"
-test = false
-
-[[bin]]
 name = "sylt"
 test = false
 

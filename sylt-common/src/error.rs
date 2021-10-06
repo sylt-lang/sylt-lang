@@ -182,6 +182,8 @@ pub enum Error {
         line: usize,
         message: Option<String>,
     },
+
+    LuaError(String),
 }
 
 impl fmt::Display for Error {
@@ -189,6 +191,9 @@ impl fmt::Display for Error {
         match self {
             Error::NoFileGiven => {
                 write!(f, "No file to run")
+            }
+            Error::LuaError(stderr) => {
+                write!(f, "Lua failed to run, \n:stderr:\n{}", stderr)
             }
             Error::FileNotFound(path) => {
                 write!(f, "File '{}' not found", path.display())

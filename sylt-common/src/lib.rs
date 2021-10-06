@@ -14,7 +14,7 @@ use std::rc::Rc;
 pub use block::{Block, BlockLinkState};
 pub use error::Error;
 pub use op::{Op, OpResult};
-pub use prog::Prog;
+pub use prog::BytecodeProg;
 pub use ty::Type;
 pub use upvalue::UpValue;
 pub use value::Value;
