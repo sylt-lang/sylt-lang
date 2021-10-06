@@ -499,7 +499,9 @@ impl<'t> LuaCompiler<'t> {
             }
 
             StatementExpression { value } => {
+                write!(self, "__IDENTITY(");
                 self.expression(value, ctx);
+                write!(self, ")");
             }
 
             Block { statements } => {

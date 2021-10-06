@@ -4,6 +4,8 @@
 -- THE nil-table
 __NIL = setmetatable( { "nil" }, { __tostring = function() return "nil" end } )
 
+__IDENTITY = function(x) return x end
+
 __INDEX = function(o, i)
     local m = getmetatable(o)
     if m._type == "tuple" or m._type == "list" then
