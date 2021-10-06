@@ -225,7 +225,6 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ")");
                 self.statement(body, ctx);
                 write!(self, "end");
-                write!(self, ";");
                 self.compiler
                     .frames
                     .last_mut()
