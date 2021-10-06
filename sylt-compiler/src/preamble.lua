@@ -12,7 +12,9 @@ __INDEX = function(o, i)
         return e
     end
     if m._type == "blob" then
-        assert(false, "Accessing fields \"" .. i .. "\" - which doesn't exist")
+        local e = o[i]
+        assert(e, "Accessing fields \"" .. i .. "\" - which doesn't exist")
+        return e
     end
     return __NIL
 end
