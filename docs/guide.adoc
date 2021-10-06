@@ -234,7 +234,21 @@ Apart from the simple loop-keyword, other loops are supplied by the standard lib
 
 === loop
 
-// ?
+The `loop` keyword can be used to create looping code similar to the `while`
+keyword in languages like C and Python. The main difference is that the
+condition may be omitted to create a infinite loop.
+
+[source, sylt]
+----
+loop do
+    print("y")
+end
+
+stack := [1, 2, 3]
+loop len(stack) > 0 do
+    print(pop(stack))
+end
+----
 
 === for_each
 
@@ -282,11 +296,96 @@ players -> for_each' update_player
 
 == Types and the type system
 
-// ?
+Sylt is statically typed, which means that every variable has an assigned type.
+This prevents common errors, such as passing the wrong argument to a function,
+without ever having to run the program.
 
-== Blobs
+[source, sylt]
+----
+greet :: fn message: str do
+    print("Hello " + message + "!")
+end
 
-// ?
+greet("world") // Ok
+greet(1)       // Type error
+----
+
+=== Blobs
+
+Blobs are a way of creating user-defined types similar to structs in C and
+objects in JavaScript.
+
+.Blob creation and field access
+[source, sylt]
+----
+Creature :: blob {
+    hp: int,
+    position: (float, float),
+}
+
+spider := Creature { hp: 5, position: (0.0, 0.0) }
+spider.hp <=> 5
+spider.position <=> (0.0, 0.0)
+----
+
+It is often desirable to have a function that can create blobs of a specific
+type. Such a function, usually called a _constructor_, can be implemented as
+follows.
+
+.A blob constructor
+[source, sylt]
+----
+Spider :: blob {
+    hp: int,
+    position: (float, float),
+    eat_bug: fn -> void,
+}
+
+new_spider :: fn x: float, y: float -> Spider do
+    self: !Spider = nil // Set up the variable
+    self = Spider {
+        hp: 5,
+        position: position,
+        eat_bug: fn do
+            self.hp += 1
+        end,
+    }
+    ret self
+end
+
+spider := new_spider(0.0, 0.0)
+----
+
+Notice that the `Spider` blob has many fields in common with the `Creature`
+blob from before. This fact can be used to do something called
+https://en.wikipedia.org/wiki/Duck_typing[duck typing], which effectively
+allows us to assign `Spider` blobs to `Creature` variables.
+
+.Duck typing
+[source, sylt]
+----
+creatures: [Creature] = []
+creatures -> push' new_spider' 0.0, 0.0
+creatures[0].hp -= 1   // Ok
+creatures[0].eat_bug() // Type error
+----
+
+This type error may seem counter-intuitive. We know that `creatures[0]` is a
+`Spider` which has the `eat_bug` function, yet we are not allowed to call it.
+What is really going on here? Once the `Spider` blob is put into the list of
+of type `[Creature]` some type information is lost, meaning, there is no
+reliable way of knowing the true type of something in the list. `creatures` is
+a list of `Creature` and other blobs containing the same fields as `Creature`,
+though every element is treated as if being of type `Creature`.
+
+To call the `eat_bug` function anyway, forced types may be used.
+
+.Force general blob into specific blob
+[source, sylt]
+----
+spider: !Spider = creatures[0]
+spider.eat_bug() // Ok, as long as creatures[0] is a Spider
+----
 
 == Standard library
 
