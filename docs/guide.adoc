@@ -370,6 +370,23 @@ creatures[0].hp -= 1   // Ok
 creatures[0].eat_bug() // Type error
 ----
 
+This type error may seem counter-intuitive. We know that `creatures[0]` is a
+`Spider` which has the `eat_bug` function, yet we are not allowed to call it.
+What is really going on here? Once the `Spider` blob is put into the list of
+of type `[Creature]` some type information is lost, meaning, there is no
+reliable way of knowing the true type of something in the list. `creatures` is
+a list of `Creature` and other blobs containing the same fields as `Creature`,
+though every element is treated as if being of type `Creature`.
+
+To call the `eat_bug` function anyway, forced types may be used.
+
+.Force general blob into specific blob
+[source, sylt]
+----
+spider: !Spider = creatures[0]
+spider.eat_bug() // Ok
+----
+
 == Standard library
 
 // ?
