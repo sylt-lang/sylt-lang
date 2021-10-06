@@ -63,7 +63,7 @@ impl<'t> LuaCompiler<'t> {
 
         match &ass.kind {
             Read(ident) => {
-                self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
+                return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
             }
             Call(f, expr) => {
                 self.assignable(f, ctx);
@@ -87,11 +87,21 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ")");
             }
             Access(a, field) => {
-                write!(self, "__INDEX(");
-                self.assignable(a, ctx);
-                write!(self, ",");
-                write!(self, "\"{}\"", field.name);
-                write!(self, ")");
+                // We have to write this, but we want it to degrade into a NOP
+                // if we have a namespace. We could build the namespaces as a table.
+                write!(self, "( __INDEX(");
+                if let Some(namespace) = self.assignable(a, ctx) {
+                    write!(self, "nil");
+                    write!(self, ")");
+                    write!(self, "or");
+                    let out = self.read_identifier(&field.name, field.span, ctx, namespace);
+                    write!(self, ")");
+                    return out;
+                } else {
+                    write!(self, ",");
+                    write!(self, "\"{}\"", field.name);
+                    write!(self, ") )");
+                }
             }
             Index(a, b) => {
                 // TODO(ed): This won't work for tuples and dicts at
@@ -321,8 +331,11 @@ impl<'t> LuaCompiler<'t> {
                 Some(Name::External(_)) => {
                     write!(self, "{}", name);
                 }
-                Some(Name::Namespace(new_namespace)) => return Some(new_namespace),
+                Some(Name::Namespace(new_namespace)) => {
+                    return Some(new_namespace);
+                }
                 None => {
+                    println!("Nothing found: {}", name);
                     if let Some((_, _, _)) = self.compiler.functions.get(name) {
                         // Same as external - but defined from sylt-std
                         write!(self, "{}", name);

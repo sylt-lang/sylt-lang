@@ -7,6 +7,7 @@ __NIL = setmetatable( { "nil" }, { __tostring = function() return "nil" end } )
 __IDENTITY = function(x) return x end
 
 __INDEX = function(o, i)
+    if o == nil then return nil end
     local m = getmetatable(o)
     if m._type == "tuple" or m._type == "list" then
         local e = o[i + 1]
