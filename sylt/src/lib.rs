@@ -31,7 +31,6 @@ pub fn read_file(path: &Path) -> Result<String, Error> {
     std::fs::read_to_string(path).map_err(|_| Error::FileNotFound(path.to_path_buf()))
 }
 
-// TODO(ed): These functions should be combined.
 pub fn compile_with_reader_to_writer<R>(
     args: &Args,
     functions: ExternFunctionList,
@@ -70,8 +69,8 @@ where
             match compile_with_reader_to_writer(args, functions, reader, Some(Box::new(stdin)))? {
                 Prog::Lua => {
                     let output = child.wait_with_output().unwrap();
-                    // NOTE(ed): Status is always 0 - atleast on my version of lua - so we check
-                    // for stderr - which is kinda a bad idea.
+                    // NOTE(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
+                    // so we check stderr - which is a bad idea.
                     if !output.stderr.is_empty() {
                         return Err(vec![Error::LuaError(String::from_utf8(output.stderr).unwrap())]);
                     }
@@ -88,7 +87,7 @@ where
 
         (false, Some(s)) => {
             use std::fs::File;
-            let file = File::create(PathBuf::from(s)).unwrap(); //.expect(&format!("Failed to create file: {}", s));
+            let file = File::create(PathBuf::from(s)).expect(&format!("Failed to create file: {}", s));
             let writer: Option<Box<dyn Write>> = Some(Box::new(file));
             // NOTE(ed): Lack of running
             compile_with_reader_to_writer(args, functions, reader, writer)?;
@@ -140,7 +139,7 @@ pub struct Args {
     #[options(
         short = "c",
         long = "compile",
-        help = "Compile to a lua file - % means stdout"
+        help = "Compile to a lua file - % for stdout"
     )]
     pub lua_compile: Option<String>,
 
@@ -272,8 +271,8 @@ mod lua {
                 file.replace_range(file.rfind(".").unwrap().., ".lua");
 
                 let output = child.wait_with_output().unwrap();
-                // NOTE(ed): Status is always 0 - atleast on my version of lua - so we check
-                // for stderr - which is kinda a bad idea.
+                // NOTE(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
+                // so we check stderr - which is a bad idea.
                 let success = output.status.success() && output.stderr.is_empty();
                 let stdout = String::from_utf8(output.stdout)
                     .unwrap_or("Even I don't understand this stdout :(".to_string());

@@ -29,7 +29,7 @@ macro_rules! write {
 pub struct LuaCompiler<'t> {
     compiler: &'t mut Compiler,
     loops: Vec<usize>,
-    pub file: Box<dyn Write>,
+    file: Box<dyn Write>,
 }
 
 impl<'t> LuaCompiler<'t> {
@@ -37,7 +37,7 @@ impl<'t> LuaCompiler<'t> {
         Self {
             compiler,
             loops: Vec::new(),
-            file: Box::new(file),
+            file,
         }
     }
 
