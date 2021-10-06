@@ -278,10 +278,8 @@ function reduce(l, f)
 end
 
 function fold(l, a, f)
-    for k, v in pairs(l) do
-        if k ~= 1 then
-            a = f(v, a)
-        end
+    for _, v in pairs(l) do
+        a = f(v, a)
     end
     return a
 end
