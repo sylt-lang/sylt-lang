@@ -17,6 +17,13 @@ __INDEX = function(o, i)
     return __NIL
 end
 
+__ADD = function(a, b)
+    if type(a) == "string" and type(b) == "string" then
+        return a .. b
+    end
+    return a + b
+end
+
 __TUPLE_META = { _type = "tuple" }
 __TUPLE_META.__newindex = function()
     assert(false, "Tuples are immutable")

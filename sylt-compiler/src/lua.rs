@@ -138,7 +138,13 @@ impl<'t> LuaCompiler<'t> {
                 );
             }
 
-            Add(a, b) => self.bin_op(a, b, "+", ctx),
+            Add(a, b) => {
+                write!(self, "__ADD(");
+                self.expression(a, ctx);
+                write!(self, ",");
+                self.expression(b, ctx);
+                write!(self, ")");
+            }
             Sub(a, b) => self.bin_op(a, b, "-", ctx),
             Mul(a, b) => self.bin_op(a, b, "*", ctx),
             Div(a, b) => self.bin_op(a, b, "/", ctx),

@@ -276,36 +276,34 @@ mod lua {
 
                 println!("Expect error: {}", $any_runtime_errors);
                 println!("Got error: {:?}", res.is_err());
-                if !$any_runtime_errors {
+                if $any_runtime_errors {
                     assert_errs!(res, []);
-
-                    let status = child.wait().unwrap();
-                    // NOTE(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
-                    // so we check stderr - which is a bad idea.
-                    let stderr = stderr.join().unwrap();
-                    let stdout = stdout.join().unwrap();
-                    let success = status.success() && stderr.is_empty();
-                    println!("Success: {}", success);
-                    if $any_runtime_errors {
-                        assert!(
-                            !success,
-                            "Program ran to completetion - when it should crash\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
-                            stdout,
-                            stderr
-                        );
-                    } else {
-                        assert!(
-                            success,
-                            "Failed when it should succeed\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
-                            stdout,
-                            stderr
-                        );
-                    }
-
                 } else {
                     assert_errs!(res, $errs);
                 }
 
+                let status = child.wait().unwrap();
+                // NOTE(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
+                // so we check stderr - which is a bad idea.
+                let stderr = stderr.join().unwrap();
+                let stdout = stdout.join().unwrap();
+                let success = status.success() && stderr.is_empty();
+                println!("Success: {}", success);
+                if $any_runtime_errors {
+                    assert!(
+                        !success,
+                        "Program ran to completetion - when it should crash\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
+                        stdout,
+                        stderr
+                    );
+                } else {
+                    assert!(
+                        success,
+                        "Failed when it should succeed\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
+                        stdout,
+                        stderr
+                    );
+                }
             }
         };
     }
