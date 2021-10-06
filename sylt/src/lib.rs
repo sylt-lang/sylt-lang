@@ -235,6 +235,8 @@ mod lua {
                 use sylt_common::error::TypeError;
                 #[allow(unused_imports)]
                 use sylt_common::Type;
+                use std::thread;
+                use std::io::Read;
 
                 let file = format!("../{}", $path);
                 let mut args = $crate::Args::default();
@@ -248,6 +250,20 @@ mod lua {
                     .stdout(Stdio::piped())
                     .spawn()
                     .expect(concat!("Failed to start lua, testing:", $path));
+
+                let mut stderr = child.stderr.take().unwrap();
+                let stderr = thread::spawn(move || {
+                    let mut out = String::new();
+                    stderr.read_to_string(&mut out).unwrap();
+                    out
+                });
+
+                let mut stdout = child.stdout.take().unwrap();
+                let stdout = thread::spawn(move || {
+                    let mut out = String::new();
+                    stdout.read_to_string(&mut out).unwrap();
+                    out
+                });
 
                 let stdin = child.stdin.take().unwrap();
                 let writer: Option<Box<dyn Write>> = Some(Box::new(stdin));
@@ -267,17 +283,12 @@ mod lua {
                     return;
                 }
 
-                let mut file = file;
-                file.replace_range(file.rfind(".").unwrap().., ".lua");
-
-                let output = child.wait_with_output().unwrap();
+                let status = child.wait().unwrap();
                 // NOTE(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
                 // so we check stderr - which is a bad idea.
-                let success = output.status.success() && output.stderr.is_empty();
-                let stdout = String::from_utf8(output.stdout)
-                    .unwrap_or("Even I don't understand this stdout :(".to_string());
-                let stderr = String::from_utf8(output.stderr)
-                    .unwrap_or("Even I don't understand this stderr :(".to_string());
+                let stderr = stderr.join().unwrap();
+                let stdout = stdout.join().unwrap();
+                let success = status.success() && stderr.is_empty();
                 println!("Success: {}", success);
                 if $any_runtime_errors {
                     assert!(

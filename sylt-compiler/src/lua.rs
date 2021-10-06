@@ -42,11 +42,11 @@ impl<'t> LuaCompiler<'t> {
     }
 
     fn write(&mut self, msg: String) {
-        self.file.write_all(msg.as_ref()).unwrap();
+        let _ = self.file.write_all(msg.as_ref());
         if msg == ";" {
-            self.file.write_all(b"\n").unwrap();
+            let _ = self.file.write_all(b"\n");
         } else {
-            self.file.write_all(b" ").unwrap();
+            let _ = self.file.write_all(b" ");
         }
     }
 
