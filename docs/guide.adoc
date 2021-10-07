@@ -329,7 +329,36 @@ entities = entities -> filter' keep_entity  // very expressive!
 
 === reduce and fold
 
-// Gustav
+`fold` traverses a list and applies a function to every element, carrying some
+state. An initial state is also supplied. For example, the following calculates
+the sum of all elements.
+
+.Calculate sum using fold
+[source, sylt]
+----
+add :: fn a: int, b: int -> int
+    ret a + b
+end
+
+sum := [1, 2, 3, 4] -> fold' 0, add
+sum <=> 1 + 2 + 3 + 4
+----
+
+`reduce` functions in much the same way, except the carry starts as the first
+element in the list. If the list is empty, `nil` is returned.
+
+.Calculate sum using reduce
+[source, sylt]
+----
+add :: fn a: int, b: int -> int
+    ret a + b
+end
+
+sum := [1, 2, 3, 4] -> reduce' add
+sum <=> 1 + 2 + 3 4
+----
+
+//TODO(gu): motivating example
 
 == Types and the type system
 
