@@ -99,7 +99,7 @@ impl<'t> LuaCompiler<'t> {
                 } else {
                     write!(self, ",");
                     write!(self, "\"{}\"", field.name);
-                    write!(self, ") )");
+                    write!(self, ")");
                 }
             }
             Index(a, b) => {
