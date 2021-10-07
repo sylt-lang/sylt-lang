@@ -14,9 +14,12 @@ __INDEX = function(o, i)
         assert(e ~= nil, "Tuple/list index out of range \"" .. i .. "\"")
         return e
     end
+    local e = o[i]
     if m._type == "blob" then
-        local e = o[i]
         assert(e, "Accessing fields \"" .. i .. "\" - which doesn't exist")
+        return e
+    end
+    if e ~= nil then
         return e
     end
     return __NIL
