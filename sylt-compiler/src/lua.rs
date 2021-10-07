@@ -462,13 +462,18 @@ impl<'t> LuaCompiler<'t> {
                         // TODO(ed): Warn about calls?
                         AssignableKind::Access(rest, field) => {
                             write!(self, "__ASSIGN_INDEX(");
-                            self.assignable(rest, ctx);
-                            write!(self, ",");
-                            write!(self, "\"{}\"", field.name);
-                            write!(self, ",");
-                            self.expression(value, ctx);
-                            write!(self, ")");
-                            write!(self, ";");
+                            if let Some(namespace) = self.assignable(rest, ctx) {
+                                write!(self, ");");
+                                self.read_identifier(&field.name, statement.span, ctx, namespace);
+                                write!(self, "=");
+                                self.expression(value, ctx);
+                            } else {
+                                write!(self, ",");
+                                write!(self, "\"{}\"", field.name);
+                                write!(self, ",");
+                                self.expression(value, ctx);
+                                write!(self, ")");
+                            }
                         }
                         AssignableKind::Index(rest, index) => {
                             write!(self, "__ASSIGN_INDEX(");
@@ -478,7 +483,6 @@ impl<'t> LuaCompiler<'t> {
                             write!(self, ",");
                             self.expression(value, ctx);
                             write!(self, ")");
-                            write!(self, ";");
                         }
                         _ => {
                             self.assignable(target, ctx);
@@ -499,15 +503,23 @@ impl<'t> LuaCompiler<'t> {
                         // TODO(ed): Warn about calls?
                         AssignableKind::Access(rest, field) => {
                             write!(self, "do local tmp_ass =");
-                            self.assignable(rest, ctx);
-                            write!(self, ";");
-                            write!(self, "__ASSIGN_INDEX( tmp_ass, \"{}\", __INDEX( tmp_ass, \"{}\" ) {}", field.name, field.name, op);
-                            write!(self, "(");
-                            self.expression(value, ctx);
-                            write!(self, ")");
-                            write!(self, ")");
-                            write!(self, ";");
-                            write!(self, "end");
+                            if let Some(namespace) = self.assignable(rest, ctx) {
+                                write!(self, "nil ; end ;");
+                                self.read_identifier(&field.name, statement.span, ctx, namespace);
+                                write!(self, "=");
+                                self.read_identifier(&field.name, statement.span, ctx, namespace);
+                                write!(self, "{}", op);
+                                self.expression(value, ctx);
+                            } else {
+                                write!(self, ";");
+                                write!(self, "__ASSIGN_INDEX( tmp_ass, \"{}\", __INDEX( tmp_ass, \"{}\" ) {}", field.name, field.name, op);
+                                write!(self, "(");
+                                self.expression(value, ctx);
+                                write!(self, ")");
+                                write!(self, ")");
+                                write!(self, ";");
+                                write!(self, "end");
+                            }
                         }
                         AssignableKind::Index(rest, index) => {
                             write!(self, "do local tmp_ass =");
