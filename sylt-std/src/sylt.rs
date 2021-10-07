@@ -189,7 +189,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     prepend,
     ? "Adds an element to the start of a list",
-    -> "fn [#ITEM] -> void",
+    -> "fn [#ITEM], #ITEM -> void",
     [List(ls), v] => {
         // NOTE(ed): Deliberately no type checking.
         ls.borrow_mut().insert(0, v.clone());
