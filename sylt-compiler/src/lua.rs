@@ -458,9 +458,34 @@ impl<'t> LuaCompiler<'t> {
             #[rustfmt::skip]
             Assignment { target, value, kind } => {
                 if *kind == Op::Nop {
-                    self.assignable(target, ctx);
-                    write!(self, "=");
-                    self.expression(value, ctx);
+                    match &target.kind {
+                        // TODO(ed): Warn about calls?
+                        AssignableKind::Access(rest, field) => {
+                            write!(self, "__ASSIGN_INDEX(");
+                            self.assignable(rest, ctx);
+                            write!(self, ",");
+                            write!(self, "\"{}\"", field.name);
+                            write!(self, ",");
+                            self.expression(value, ctx);
+                            write!(self, ")");
+                            write!(self, ";");
+                        }
+                        AssignableKind::Index(rest, index) => {
+                            write!(self, "__ASSIGN_INDEX(");
+                            self.assignable(rest, ctx);
+                            write!(self, ",");
+                            self.expression(index, ctx);
+                            write!(self, ",");
+                            self.expression(value, ctx);
+                            write!(self, ")");
+                            write!(self, ";");
+                        }
+                        _ => {
+                            self.assignable(target, ctx);
+                            write!(self, "=");
+                            self.expression(value, ctx);
+                        }
+                    }
                 } else {
                     let op = match kind {
                         Op::Nop => unreachable!(),
@@ -473,6 +498,7 @@ impl<'t> LuaCompiler<'t> {
                     match &target.kind {
                         // TODO(ed): Warn about calls?
                         AssignableKind::Access(rest, field) => {
+                            println!("????");
                             write!(self, "do local tmp_ass =");
                             self.assignable(rest, ctx);
                             write!(self, ";");
@@ -485,6 +511,7 @@ impl<'t> LuaCompiler<'t> {
                             write!(self, "end");
                         }
                         AssignableKind::Index(rest, index) => {
+                            println!("!!!");
                             write!(self, "do local tmp_ass =");
                             self.assignable(rest, ctx);
                             write!(self, ";");
@@ -500,6 +527,7 @@ impl<'t> LuaCompiler<'t> {
                             write!(self, "end");
                         }
                         _ => {
+                            println!("{:?}", target.kind);
                             self.assignable(target, ctx);
                             write!(self, "=");
                             self.assignable(target, ctx);
