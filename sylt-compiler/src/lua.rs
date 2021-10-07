@@ -89,13 +89,12 @@ impl<'t> LuaCompiler<'t> {
             Access(a, field) => {
                 // We have to write this, but we want it to degrade into a NOP
                 // if we have a namespace. We could build the namespaces as a table.
-                write!(self, "( __INDEX(");
+                write!(self, "__INDEX(");
                 if let Some(namespace) = self.assignable(a, ctx) {
                     write!(self, "nil");
                     write!(self, ")");
                     write!(self, "or");
                     let out = self.read_identifier(&field.name, field.span, ctx, namespace);
-                    write!(self, ")");
                     return out;
                 } else {
                     write!(self, ",");
@@ -478,9 +477,10 @@ impl<'t> LuaCompiler<'t> {
                             write!(self, "do local tmp_ass =");
                             self.assignable(rest, ctx);
                             write!(self, ";");
-                            write!(self, "__INDEX( tmp_ass, \"{}\" ) = __INDEX( tmp_ass, \"{}\" ) {}", field.name, field.name, op);
+                            write!(self, "__ASSIGN_INDEX( tmp_ass, \"{}\", __INDEX( tmp_ass, \"{}\" ) {}", field.name, field.name, op);
                             write!(self, "(");
                             self.expression(value, ctx);
+                            write!(self, ")");
                             write!(self, ")");
                             write!(self, ";");
                             write!(self, "end");
@@ -492,9 +492,10 @@ impl<'t> LuaCompiler<'t> {
                             write!(self, "local tmp_expr =");
                             self.expression(index, ctx);
                             write!(self, ";");
-                            write!(self, "__INDEX( tmp_ass, tmp_expr ) = __INDEX( tmp_ass, tmp_expr ) {}", op);
+                            write!(self, "__ASSIGN_INDEX( tmp_ass, tmp_expr, __INDEX( tmp_ass, tmp_expr ) {}", op);
                             write!(self, "(");
                             self.expression(value, ctx);
+                            write!(self, ")");
                             write!(self, ")");
                             write!(self, ";");
                             write!(self, "end");
