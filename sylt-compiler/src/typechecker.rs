@@ -740,17 +740,12 @@ impl<'c> TypeChecker<'c> {
                     if initalizer.contains_key(name) {
                         continue;
                     }
-                    if let Err(_) = ty.fits(&Type::Void) {
-                        // TODO(ed): Not super sold on this error message - it can be better.
-                        errors.push(type_error!(
-                            self,
-                            span,
-                            TypeError::Mismatch { got: Type::Void, expected: ty.clone() },
-                            "Only nullable fields can be omitted, {}.{} is not nullable",
-                            blob_name,
-                            name
-                        ));
-                    }
+                    // TODO(ed): Not super sold on this error message - it can be better.
+                    errors.push(type_error!(
+                        self,
+                        span,
+                        TypeError::MissingField { blob: blob_name.clone(), field: name.clone() }
+                    ));
                 }
                 if !errors.is_empty() {
                     return Err(errors);

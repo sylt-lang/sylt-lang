@@ -136,6 +136,11 @@ pub enum TypeError {
         field: String,
     },
 
+    MissingField {
+        blob: String,
+        field: String,
+    },
+
     TupleIndexOutOfRange {
         got: i64,
         length: usize,
@@ -400,6 +405,9 @@ impl fmt::Display for TypeError {
             }
             TypeError::UnknownField { blob, field } => {
                 write!(f, "Cannot find field '{}.{}'", blob, field)
+            }
+            TypeError::MissingField { blob, field } => {
+                write!(f, "Blob instance lacks field '{}.{}'", blob, field)
             }
             TypeError::TupleIndexOutOfRange { length, got } => {
                 write!(f, "A tuple of length {} has no element {}", length, got)
