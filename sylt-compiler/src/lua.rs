@@ -129,11 +129,10 @@ impl<'t> LuaCompiler<'t> {
         use ComparisonKind::*;
         use ExpressionKind::*;
 
+        write!(self, "(");
         match &expression.kind {
             Parenthesis(expr) => {
-                write!(self, "(");
                 self.expression(expr, ctx);
-                write!(self, ")");
             }
 
             Get(a) => {
@@ -302,6 +301,7 @@ impl<'t> LuaCompiler<'t> {
             Str(a) => write!(self, "\"{}\"", a),
             Nil => write!(self, "__NIL"),
         }
+        write!(self, ")");
     }
 
     fn read_identifier(
