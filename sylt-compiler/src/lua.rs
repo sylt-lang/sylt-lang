@@ -498,7 +498,6 @@ impl<'t> LuaCompiler<'t> {
                     match &target.kind {
                         // TODO(ed): Warn about calls?
                         AssignableKind::Access(rest, field) => {
-                            println!("????");
                             write!(self, "do local tmp_ass =");
                             self.assignable(rest, ctx);
                             write!(self, ";");
@@ -511,7 +510,6 @@ impl<'t> LuaCompiler<'t> {
                             write!(self, "end");
                         }
                         AssignableKind::Index(rest, index) => {
-                            println!("!!!");
                             write!(self, "do local tmp_ass =");
                             self.assignable(rest, ctx);
                             write!(self, ";");
