@@ -12,7 +12,7 @@ class Sylt < ::Rouge::RegexLexer
 
     rule %r(//.*?$), Comment::Single
 
-    rule %r((and|or|not|if|else|loop|break|continue|blob|in|is|do|end|fn|ret|use)\b), Keyword
+    rule %r((and|or|not|if|else|loop|break|continue|blob|in|is|do|end|fn|ret|use|as)\b), Keyword
     rule %r((bool|float|int|str|void)\b), Keyword::Type
     rule %r((false|true|nil)\b), Keyword::Constant
 
