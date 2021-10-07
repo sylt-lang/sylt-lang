@@ -87,7 +87,7 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ")");
             }
             Access(a, field) => {
-                // We have to write this, but we want it to degrade into a NOP
+                // NOTE(ed): We have to write this, but we want it to degrade into a NOP
                 // if we have a namespace. We could build the namespaces as a table.
                 write!(self, "__INDEX(");
                 if let Some(namespace) = self.assignable(a, ctx) {
@@ -459,8 +459,9 @@ impl<'t> LuaCompiler<'t> {
             Assignment { target, value, kind } => {
                 if *kind == Op::Nop {
                     match &target.kind {
-                        // TODO(ed): Warn about calls?
                         AssignableKind::Access(rest, field) => {
+                            // NOTE(ed): We have to write this, but we want it to degrade into a NOP
+                            // if we have a namespace. We could build the namespaces as a table.
                             write!(self, "__ASSIGN_INDEX(");
                             if let Some(namespace) = self.assignable(rest, ctx) {
                                 write!(self, ");");
@@ -500,8 +501,9 @@ impl<'t> LuaCompiler<'t> {
                     };
 
                     match &target.kind {
-                        // TODO(ed): Warn about calls?
                         AssignableKind::Access(rest, field) => {
+                            // NOTE(ed): We have to write this, but we want it to degrade into a NOP
+                            // if we have a namespace. We could build the namespaces as a table.
                             write!(self, "do local tmp_ass =");
                             if let Some(namespace) = self.assignable(rest, ctx) {
                                 write!(self, "nil ; end ;");
