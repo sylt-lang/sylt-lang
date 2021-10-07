@@ -306,9 +306,26 @@ l := [1, 2, 3, 4] -> filter' fn a: int -> bool do rem(a, 2) == 0 end
 l <=> [2, 4]
 ----
 
-// Gustav
+As a motivating example, it can be used to filter entities which should be
+removed.
 
-//TODO(gu): motivating example
+.Removing entities using `filter`
+[source, sylt]
+----
+Entity :: blob {
+    hp: int,
+    position: (float, float)
+}
+
+keep_entity :: fn entity: Entity -> bool
+    ret entity.hp > 0 and entity.position[0] > 0.0 and entity.position[1] > 0.0
+end
+
+entities : [Entity] = []
+
+// e.g. in a main-loop:
+entities = entities -> filter' keep_entity  // very expressive!
+----
 
 === reduce and fold
 
