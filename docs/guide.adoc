@@ -296,7 +296,7 @@ points_str <=> ["1/6", "2/6", "3/6"]
 
 === filter
 
-`filter` applies a function on every element in a list and keeps it iff the
+`filter` applies a function on every element in a list and keeps it if the
 function returns true.
 
 [source, sylt]
