@@ -334,7 +334,6 @@ impl<'t> LuaCompiler<'t> {
                     return Some(new_namespace);
                 }
                 None => {
-                    println!("Nothing found: {}", name);
                     if let Some((_, _, _)) = self.compiler.functions.get(name) {
                         // Same as external - but defined from sylt-std
                         write!(self, "{}", name);
