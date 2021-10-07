@@ -272,7 +272,7 @@ impl<'t> LuaCompiler<'t> {
 
             Dict(xs) => {
                 write!(self, "__DICT { ");
-                for (k, v) in xs.iter().zip(xs.iter().skip(1)) {
+                for (k, v) in xs.iter().step_by(2).zip(xs.iter().skip(1).step_by(2)) {
                     write!(self, "[");
                     self.expression(k, ctx);
                     write!(self, "]");
