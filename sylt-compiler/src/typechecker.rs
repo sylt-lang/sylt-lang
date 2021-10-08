@@ -736,7 +736,7 @@ impl<'c> TypeChecker<'c> {
                 if !errors.is_empty() {
                     return Err(errors);
                 }
-                for (name, ty) in blob_fields.iter() {
+                for name in blob_fields.keys() {
                     if initalizer.contains_key(name) {
                         continue;
                     }
