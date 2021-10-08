@@ -374,6 +374,34 @@ square :: fn x: int -> int do
 end
 ----
 
+=== Type manipulation
+
+There are even more things that can be done with types. For instance it is
+possible to completely ignore the type system.
+
+.Forcing types
+[source, sylt]
+----
+definitely_a_number: !int = "oh no"
+1 + definitely_a_number // Will compile, but is undefined behaviour.
+----
+
+Use forced types sparingly and only when you are 100% sure the program is
+correct.
+
+Sometimes a single variable may have values of different types. Such variables
+may be represented as unions.
+
+.Type unions
+[source, sylt]
+----
+number: int | float = 1
+number = 1.0 // Ok, number may be a float
+
+maybe_string: str? = nil // Shorthand for str | void
+maybe_string = "string"
+----
+
 === Blobs
 
 Blobs are a way of creating user-defined types similar to structs in C and
