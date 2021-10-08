@@ -42,11 +42,11 @@ impl<'t> LuaCompiler<'t> {
     }
 
     fn write(&mut self, msg: String) {
-        self.file.write_all(msg.as_ref()).unwrap();
+        let _ = self.file.write_all(msg.as_ref());
         if msg == ";" {
-            self.file.write_all(b"\n").unwrap();
+            let _ = self.file.write_all(b"\n");
         } else {
-            self.file.write_all(b" ").unwrap();
+            let _ = self.file.write_all(b" ");
         }
     }
 
@@ -63,7 +63,7 @@ impl<'t> LuaCompiler<'t> {
 
         match &ass.kind {
             Read(ident) => {
-                self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
+                return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
             }
             Call(f, expr) => {
                 self.assignable(f, ctx);
@@ -87,11 +87,20 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ")");
             }
             Access(a, field) => {
+                // NOTE(ed): We have to write this, but we want it to degrade into a NOP
+                // if we have a namespace. We could build the namespaces as a table.
                 write!(self, "__INDEX(");
-                self.assignable(a, ctx);
-                write!(self, ",");
-                write!(self, "\"{}\"", field.name);
-                write!(self, ")");
+                if let Some(namespace) = self.assignable(a, ctx) {
+                    write!(self, "nil");
+                    write!(self, ")");
+                    write!(self, "or");
+                    let out = self.read_identifier(&field.name, field.span, ctx, namespace);
+                    return out;
+                } else {
+                    write!(self, ",");
+                    write!(self, "\"{}\"", field.name);
+                    write!(self, ")");
+                }
             }
             Index(a, b) => {
                 // TODO(ed): This won't work for tuples and dicts at
@@ -120,11 +129,10 @@ impl<'t> LuaCompiler<'t> {
         use ComparisonKind::*;
         use ExpressionKind::*;
 
+        write!(self, "(");
         match &expression.kind {
             Parenthesis(expr) => {
-                write!(self, "(");
                 self.expression(expr, ctx);
-                write!(self, ")");
             }
 
             Get(a) => {
@@ -138,7 +146,13 @@ impl<'t> LuaCompiler<'t> {
                 );
             }
 
-            Add(a, b) => self.bin_op(a, b, "+", ctx),
+            Add(a, b) => {
+                write!(self, "__ADD(");
+                self.expression(a, ctx);
+                write!(self, ",");
+                self.expression(b, ctx);
+                write!(self, ")");
+            }
             Sub(a, b) => self.bin_op(a, b, "-", ctx),
             Mul(a, b) => self.bin_op(a, b, "*", ctx),
             Div(a, b) => self.bin_op(a, b, "/", ctx),
@@ -219,7 +233,6 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ")");
                 self.statement(body, ctx);
                 write!(self, "end");
-                write!(self, ";");
                 self.compiler
                     .frames
                     .last_mut()
@@ -259,7 +272,7 @@ impl<'t> LuaCompiler<'t> {
 
             Dict(xs) => {
                 write!(self, "__DICT { ");
-                for (k, v) in xs.iter().zip(xs.iter().skip(1)) {
+                for (k, v) in xs.iter().step_by(2).zip(xs.iter().skip(1).step_by(2)) {
                     write!(self, "[");
                     self.expression(k, ctx);
                     write!(self, "]");
@@ -288,6 +301,7 @@ impl<'t> LuaCompiler<'t> {
             Str(a) => write!(self, "\"{}\"", a),
             Nil => write!(self, "__NIL"),
         }
+        write!(self, ")");
     }
 
     fn read_identifier(
@@ -316,7 +330,9 @@ impl<'t> LuaCompiler<'t> {
                 Some(Name::External(_)) => {
                     write!(self, "{}", name);
                 }
-                Some(Name::Namespace(new_namespace)) => return Some(new_namespace),
+                Some(Name::Namespace(new_namespace)) => {
+                    return Some(new_namespace);
+                }
                 None => {
                     if let Some((_, _, _)) = self.compiler.functions.get(name) {
                         // Same as external - but defined from sylt-std
@@ -442,9 +458,39 @@ impl<'t> LuaCompiler<'t> {
             #[rustfmt::skip]
             Assignment { target, value, kind } => {
                 if *kind == Op::Nop {
-                    self.assignable(target, ctx);
-                    write!(self, "=");
-                    self.expression(value, ctx);
+                    match &target.kind {
+                        AssignableKind::Access(rest, field) => {
+                            // NOTE(ed): We have to write this, but we want it to degrade into a NOP
+                            // if we have a namespace. We could build the namespaces as a table.
+                            write!(self, "__ASSIGN_INDEX(");
+                            if let Some(namespace) = self.assignable(rest, ctx) {
+                                write!(self, ");");
+                                self.read_identifier(&field.name, statement.span, ctx, namespace);
+                                write!(self, "=");
+                                self.expression(value, ctx);
+                            } else {
+                                write!(self, ",");
+                                write!(self, "\"{}\"", field.name);
+                                write!(self, ",");
+                                self.expression(value, ctx);
+                                write!(self, ")");
+                            }
+                        }
+                        AssignableKind::Index(rest, index) => {
+                            write!(self, "__ASSIGN_INDEX(");
+                            self.assignable(rest, ctx);
+                            write!(self, ",");
+                            self.expression(index, ctx);
+                            write!(self, ",");
+                            self.expression(value, ctx);
+                            write!(self, ")");
+                        }
+                        _ => {
+                            self.assignable(target, ctx);
+                            write!(self, "=");
+                            self.expression(value, ctx);
+                        }
+                    }
                 } else {
                     let op = match kind {
                         Op::Nop => unreachable!(),
@@ -455,17 +501,27 @@ impl<'t> LuaCompiler<'t> {
                     };
 
                     match &target.kind {
-                        // TODO(ed): Warn about calls?
                         AssignableKind::Access(rest, field) => {
+                            // NOTE(ed): We have to write this, but we want it to degrade into a NOP
+                            // if we have a namespace. We could build the namespaces as a table.
                             write!(self, "do local tmp_ass =");
-                            self.assignable(rest, ctx);
-                            write!(self, ";");
-                            write!(self, "__INDEX( tmp_ass, \"{}\" ) = __INDEX( tmp_ass, \"{}\" ) {}", field.name, field.name, op);
-                            write!(self, "(");
-                            self.expression(value, ctx);
-                            write!(self, ")");
-                            write!(self, ";");
-                            write!(self, "end");
+                            if let Some(namespace) = self.assignable(rest, ctx) {
+                                write!(self, "nil ; end ;");
+                                self.read_identifier(&field.name, statement.span, ctx, namespace);
+                                write!(self, "=");
+                                self.read_identifier(&field.name, statement.span, ctx, namespace);
+                                write!(self, "{}", op);
+                                self.expression(value, ctx);
+                            } else {
+                                write!(self, ";");
+                                write!(self, "__ASSIGN_INDEX( tmp_ass, \"{}\", __INDEX( tmp_ass, \"{}\" ) {}", field.name, field.name, op);
+                                write!(self, "(");
+                                self.expression(value, ctx);
+                                write!(self, ")");
+                                write!(self, ")");
+                                write!(self, ";");
+                                write!(self, "end");
+                            }
                         }
                         AssignableKind::Index(rest, index) => {
                             write!(self, "do local tmp_ass =");
@@ -474,14 +530,16 @@ impl<'t> LuaCompiler<'t> {
                             write!(self, "local tmp_expr =");
                             self.expression(index, ctx);
                             write!(self, ";");
-                            write!(self, "__INDEX( tmp_ass, tmp_expr ) = __INDEX( tmp_ass, tmp_expr ) {}", op);
+                            write!(self, "__ASSIGN_INDEX( tmp_ass, tmp_expr, __INDEX( tmp_ass, tmp_expr ) {}", op);
                             write!(self, "(");
                             self.expression(value, ctx);
+                            write!(self, ")");
                             write!(self, ")");
                             write!(self, ";");
                             write!(self, "end");
                         }
                         _ => {
+                            println!("{:?}", target.kind);
                             self.assignable(target, ctx);
                             write!(self, "=");
                             self.assignable(target, ctx);
@@ -493,7 +551,9 @@ impl<'t> LuaCompiler<'t> {
             }
 
             StatementExpression { value } => {
+                write!(self, "__IDENTITY(");
                 self.expression(value, ctx);
+                write!(self, ")");
             }
 
             Block { statements } => {

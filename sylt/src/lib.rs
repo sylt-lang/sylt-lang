@@ -264,20 +264,14 @@ mod lua {
                     assert_errs!(res, []);
                 } else {
                     assert_errs!(res, $errs);
-                    return;
                 }
-
-                let mut file = file;
-                file.replace_range(file.rfind(".").unwrap().., ".lua");
 
                 let output = child.wait_with_output().unwrap();
                 // NOTE(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
                 // so we check stderr - which is a bad idea.
-                let success = output.status.success() && output.stderr.is_empty();
-                let stdout = String::from_utf8(output.stdout)
-                    .unwrap_or("Even I don't understand this stdout :(".to_string());
-                let stderr = String::from_utf8(output.stderr)
-                    .unwrap_or("Even I don't understand this stderr :(".to_string());
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let success = output.status.success() && stderr.is_empty();
                 println!("Success: {}", success);
                 if $any_runtime_errors {
                     assert!(

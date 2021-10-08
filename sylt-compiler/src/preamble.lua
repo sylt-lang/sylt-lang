@@ -4,17 +4,55 @@
 -- THE nil-table
 __NIL = setmetatable( { "nil" }, { __tostring = function() return "nil" end } )
 
+__IDENTITY = function(x) return x end
+
 __INDEX = function(o, i)
+    if o == nil then return nil end
     local m = getmetatable(o)
     if m._type == "tuple" or m._type == "list" then
         local e = o[i + 1]
         assert(e ~= nil, "Tuple/list index out of range \"" .. i .. "\"")
         return e
     end
+    local e = o[i]
     if m._type == "blob" then
-        assert(false, "Accessing fields \"" .. i .. "\" - which doesn't exist")
+        assert(e, "Accessing fields \"" .. i .. "\" - which doesn't exist")
+        return e
+    end
+    if e ~= nil then
+        return e
     end
     return __NIL
+end
+
+__ASSIGN_INDEX = function(o, i, v)
+    if o == nil then return nil end
+    local m = getmetatable(o)
+    if m._type == "tuple" then
+        assert(nil, "Cannot assign to tuple!")
+    end
+    if m._type == "list" then
+        local e = o[i + 1]
+        assert(e ~= nil, "Tuple/list index out of range \"" .. i .. "\"")
+        o[i + 1] = v
+        return
+    end
+    if m._type == "blob" then
+        local e = o[i]
+        assert(e, "Accessing fields \"" .. i .. "\" - which doesn't exist")
+        o[i] = v
+        return
+    end
+    o[i] = v
+    return
+end
+
+
+__ADD = function(a, b)
+    if type(a) == "string" and type(b) == "string" then
+        return a .. b
+    end
+    return a + b
 end
 
 __TUPLE_META = { _type = "tuple" }
@@ -267,10 +305,8 @@ function reduce(l, f)
 end
 
 function fold(l, a, f)
-    for k, v in pairs(l) do
-        if k ~= 1 then
-            a = f(v, a)
-        end
+    for _, v in pairs(l) do
+        a = f(v, a)
     end
     return a
 end
