@@ -47,41 +47,9 @@ functions).
 The type of the variable is inferred but can be supplied or even forced, which
 is described in *REF*.
 
-=== Basic values
-
-These are best described with some code. Basic values are immutable.
-
-[source, sylt]
-----
-// Strings
-"string"
-"contains spaces"
-
-// Integers
-1
--2
-
-// Floats
-1.0
--5.5
-1.  // trailing 0 optional
-.5  // leading 0 optional
-
-// Bools
-true
-false
-----
-
-=== Composite values
-
-// ?
-
 === Functions
 
 // Gustav
-
-// Remove?
-=== Types as values
 
 == If-statements and if-expressions
 
@@ -308,6 +276,48 @@ end
 
 greet("world") // Ok
 greet(1)       // Type error
+----
+
+=== Basic types
+
+These types are the building blocks of the type system.
+
+.Integers
+[source, sylt]
+----
+integer: int = 1
+1 + 1 <=> 2
+-69
+----
+
+.Floats
+[source, sylt]
+----
+decimal: float = 1.0
+0.1 + 0.2 != 0.3
+1.  // trailing 0 optional
+.5  // leading 0 optional
+----
+
+.Strings
+[source, sylt]
+----
+string: str = "string"
+print("Hello, World!")
+"non empty" + "" <=> "non empty"
+----
+
+.Booleans
+[source, sylt]
+----
+true
+false
+----
+
+.Void
+[source, sylt]
+----
+nothing: void = nil
 ----
 
 === Blobs
