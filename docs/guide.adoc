@@ -47,41 +47,9 @@ functions).
 The type of the variable is inferred but can be supplied or even forced, which
 is described in *REF*.
 
-=== Basic values
-
-These are best described with some code. Basic values are immutable.
-
-[source, sylt]
-----
-// Strings
-"string"
-"contains spaces"
-
-// Integers
-1
--2
-
-// Floats
-1.0
--5.5
-1.  // trailing 0 optional
-.5  // leading 0 optional
-
-// Bools
-true
-false
-----
-
-=== Composite values
-
-// ?
-
 === Functions
 
 // Gustav
-
-// Remove?
-=== Types as values
 
 == If-statements and if-expressions
 
@@ -308,6 +276,132 @@ end
 
 greet("world") // Ok
 greet(1)       // Type error
+----
+
+=== Basic types
+
+These types are the building blocks of the type system.
+
+.Integers
+[source, sylt]
+----
+integer: int = 1
+1 + 1 <=> 2
+-69
+----
+
+.Floats
+[source, sylt]
+----
+decimal: float = 1.0
+0.1 + 0.2 != 0.3
+1.  // trailing 0 optional
+.5  // leading 0 optional
+----
+
+.Strings
+[source, sylt]
+----
+string: str = "string"
+print("Hello, World!")
+"non empty" + "" <=> "non empty"
+----
+
+.Booleans
+[source, sylt]
+----
+true
+false
+----
+
+.Void
+[source, sylt]
+----
+nothing: void = nil
+----
+
+=== Composite types
+
+The basic types are very useful on their own, but sometimes more advanced types
+are required. The list, for example, is a composite type since it can contain
+other types.
+
+.Lists
+[source, sylt]
+----
+numbers: [int] = [1, 2, 3]
+numbers -> push' 4
+print(numbers[0]) // 1
+----
+
+.Tuples
+[source, sylt]
+----
+position: (float, float) = (5.0, 10.0)
+position + (1.0, 1.0) <=> (6.0, 11.0) // Vector addition
+position * 2 <=> (10.0, 20.0) // Scaling
+print(position[0]) // 5.0
+position[0] = 1.0 // Error, tuples are immutable
+unit: () = ()
+----
+
+.Dicts
+[source, sylt]
+----
+dict: {str: int} = {"one": 1, "two": 2}
+dict["one"] <=> 1
+dict["three"] = 3
+empty_dict := {:}
+----
+
+.Sets
+[source, sylt]
+----
+set: {int} = {1, 1, 2, 2}
+set <=> {1, 2}
+----
+
+.Functions
+[source, sylt]
+----
+square: fn int -> int : fn x: int -> int do
+    //  ^^^^^^^^^^^^^ This is the type.
+    x * x
+end
+// Usually the function type is not specified.
+square :: fn x: int -> int do
+    x * x
+end
+----
+
+=== Type manipulation
+
+There are even more things that can be done with types. For instance it is
+possible to completely ignore the type system.
+
+.Forcing types
+[source, sylt]
+----
+definitely_a_number: !int = "oh no"
+1 + definitely_a_number // Ok(?)
+----
+
+The above example will compile and run. It might run perfectly, crash or do a
+backflip. Because the errors are not caught by the typesystem, forced types
+should be used sparingly and only when you are 100% sure the program is
+correct.
+
+Sometimes a single variable may have values of different types. Such variables
+may be represented as unions.
+
+.Type unions
+[source, sylt]
+----
+number: int | float = 1
+number = 1.0 // Ok, number may be a float
+
+maybe_string: str? = nil // Shorthand for str | void
+maybe_string = "string"
 ----
 
 === Blobs
