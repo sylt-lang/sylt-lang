@@ -1,0 +1,13 @@
+DELTA := 0.00000000001
+PI := 3.141592653589793238462643383279
+
+start :: fn do
+    abs(angle((1.0, 0.0)) - 0.0) < DELTA
+    abs(angle((1.0, 1.0)) - PI / 4.0) < DELTA
+    abs(angle((0.0, 1.0)) - PI / 2.0) < DELTA
+    abs(angle((-1.0, 1.0)) - 3.0 * PI / 4.0) < DELTA
+    abs(angle((-1.0, 0.0)) - PI) < DELTA
+    abs(angle((-1.0, -1.0)) - 5.0 * PI / 4.0) < DELTA
+    abs(angle((0.0, -1.0)) - 3.0 * PI / 2.0) < DELTA
+    abs(angle((1.0, -1.0)) - 7.0 * PI / 4.0) < DELTA
+end
