@@ -1,6 +1,6 @@
 DELTA :: 0.00000000001
 
 start :: fn do
-    abs(sqrt(4.0) - 2.0) < DELTA
-    abs(sqrt(2.0) - 1.414213562373) < DELTA
+    abs(sqrt(4.0) - 2.0) < DELTA <=> true
+    abs(sqrt(2.0) - 1.414213562373) < DELTA <=> true
 end

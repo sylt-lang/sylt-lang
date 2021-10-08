@@ -2,8 +2,9 @@ DELTA :: 0.00000000001
 PI :: 3.141592653589793238462643383279
 
 start :: fn do
-    abs(cos(0.0) - 1.0) < DELTA
-    abs(cos(PI) - 0.0) < DELTA
-    abs(cos(2.0 * PI) - 1.0) < DELTA
-    abs(cos(3.0 * PI) - 0.0) < DELTA
+    abs(cos(0.0) - 1.0) < DELTA <=> true
+    abs(cos(PI) + 1.0) < DELTA <=> true
+    abs(cos(PI / 2.0) - 0.0) < DELTA <=> true
+    abs(cos(2.0 * PI) - 1.0) < DELTA <=> true
+    abs(cos(3.0 * PI) + 1.0) < DELTA <=> true
 end
