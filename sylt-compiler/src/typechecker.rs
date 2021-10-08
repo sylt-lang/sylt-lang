@@ -1057,12 +1057,14 @@ impl<'c> TypeChecker<'c> {
         for (statement, namespace) in statements.iter() {
             // Ignore errors since they'll be caught later and
             // there are false positives.
+            self.stack.clear();
             let _ = self.outer_definition(*namespace, &statement);
         }
 
         let mut errors = Vec::new();
         for (statement, namespace) in statements.iter() {
             self.namespace = *namespace;
+            self.stack.clear();
             if let Err(mut errs) = self.statement(&statement) {
                 errors.append(&mut errs);
             }
