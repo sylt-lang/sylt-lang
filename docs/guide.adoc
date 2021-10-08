@@ -320,6 +320,60 @@ false
 nothing: void = nil
 ----
 
+=== Composite types
+
+The basic types are very useful on their own, but sometimes more advanced types
+are required. The list, for example, is a composite type since it can contain
+other types.
+
+.Lists
+[source, sylt]
+----
+numbers: [int] = [1, 2, 3]
+numbers -> push' 4
+print(numbers[0]) // 1
+----
+
+.Tuples
+[source, sylt]
+----
+position: (float, float) = (5.0, 10.0)
+position + (1.0, 1.0) <=> (6.0, 11.0) // Vector addition
+position * 2 <=> (10.0, 20.0) // Scaling
+print(position[0]) // 5.0
+position[0] = 1.0 // Error, tuples are immutable
+unit: () = ()
+----
+
+.Dicts
+[source, sylt]
+----
+dict: {str: int} = {"one": 1, "two": 2}
+dict["one"] <=> 1
+dict["three"] = 3
+empty_dict := {:}
+----
+
+.Sets
+[source, sylt]
+----
+set: {int} = {1, 1, 2, 2}
+set <=> {1, 2}
+----
+
+.Functions
+[source, sylt]
+----
+square: fn int -> int : fn x: int -> int do
+    //  ^^^^^^^^^^^^^ This is the type.
+    x * x
+end
+// Usually the function type is not specified.
+square :: fn x: int -> int do
+    x * x
+end
+----
+
 === Blobs
 
 Blobs are a way of creating user-defined types similar to structs in C and
