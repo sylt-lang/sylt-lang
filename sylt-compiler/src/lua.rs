@@ -165,7 +165,7 @@ impl<'t> LuaCompiler<'t> {
                 Less => self.bin_op(a, b, "<", ctx),
                 LessEqual => self.bin_op(a, b, "<=", ctx),
                 In => {
-                    write!(self, "__contains(");
+                    write!(self, "__CONTAINS(");
                     self.expression(a, ctx);
                     write!(self, ",");
                     self.expression(b, ctx);

@@ -382,17 +382,17 @@ function magnitude(a)
     return math.sqrt(dot(a, a))
 end
 
-function __crash(msg)
+function __CRASH(msg)
     return function() assert(false, "crash" .. (msg or "")) end
 end
 
-normalize = __crash("normalize is not implemented")
-reflect = __crash("reflect is not implemented")
-debug_assertions = __crash("debug_assertions is not implemented")
-thread_sleep = __crash("thread_sleep is not implemented")
+normalize = __CRASH("normalize is not implemented")
+reflect = __CRASH("reflect is not implemented")
+debug_assertions = __CRASH("debug_assertions is not implemented")
+thread_sleep = __CRASH("thread_sleep is not implemented")
 
-pop = __crash("pop is not implemented")
-last = __crash("las is not implemented")
+pop = __CRASH("pop is not implemented")
+last = __CRASH("las is not implemented")
 
 as_str = tostring
 print = print
@@ -401,7 +401,7 @@ function spy(tag, x)
     return x
 end
 
-function __contains(a, b)
+function __CONTAINS(a, b)
     local ty = getmetatable(b)._type
     if ty == "list" then
         for _, v in pairs(b) do
