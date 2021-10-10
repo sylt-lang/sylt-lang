@@ -10,9 +10,9 @@ https://github.com/FredTheDino/sylt-lang/issues/new/choose[issue].
 The simplest way of getting the binary is to download a tagged release from
 https://github.com/FredTheDino/sylt-lang/releases/.
 
-If you can't download a pre-built (due to a different architecture or operating
-system) or don't want to use pre-built binaries, you will need a (recent) Rust
-installation and the source code.
+If you can't download a pre-built binary (due to a different architecture or
+operating system) or don't want to, you will need a (recent) Rust installation
+and the source code.
 
 If you don't have Rust installed, consider using https://rustup.rs/ and
 selecting the latest stable version.
