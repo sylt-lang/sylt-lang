@@ -72,7 +72,6 @@ pub enum StatementKind {
         ty: Type,
     },
 
-
     /// Makes your code go either here or there.
     ///
     /// `if <expression> <statement> [else <statement>]`.
