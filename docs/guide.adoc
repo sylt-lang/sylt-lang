@@ -15,9 +15,8 @@ The guide expects at least basic familiarity with programming. If you haven't
 done any programming at all, consider something like a beginner's tutorial to
 Python or Lua, other languages which Sylt takes some inspiration from.
 
-== Getting started
-
-// Gustav
+If you haven't already, install Sylt according to
+link:index.html[the instructions over at the homepage].
 
 == Values and variables
 

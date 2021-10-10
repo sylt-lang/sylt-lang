@@ -1,21 +1,75 @@
 = Sylt
 
-Sylt is a statically checked and dynamically typed programming language made
-for game jams. Working in Sylt should be a pain- and fearless experience. If it
+Sylt is a statically checked and dynamically typed programming language made for
+game jams. Working in Sylt should be a pain- and fearless experience. If it
 isn't, please file an
 https://github.com/FredTheDino/sylt-lang/issues/new/choose[issue].
 
-Everyone likes example code, so here is some:
+== Installing the compiler
+
+The simplest way of getting the binary is to download a tagged release from
+https://github.com/FredTheDino/sylt-lang/releases/.
+
+If you can't download a pre-built (due to a different architecture or operating
+system) or don't want to use pre-built binaries, you will need a (recent) Rust
+installation and the source code.
+
+If you don't have Rust installed, consider using https://rustup.rs/ and
+selecting the latest stable version.
+
+With Rust installed, run
+`cargo install sylt --git https://github.com/FredTheDino/sylt-lang.git` to
+install the latest and greatest from the main branch. If you want a tagged
+version you can add `--tag <tag-name>` to the command, as in
+`cargo install sylt --git https://github.com/FredTheDino/sylt-lang.git --tag v0.1.0`.
+
+You can also download the source code and build it locally with
+`cargo install --path sylt`.
+
+== Writing a simple program
+
+Put the following well known hello world into a file called `hello.sy`.
 
 [source, sylt]
 ----
-start :: fn do              // <1>
-    print("Hello, world!")  // <2>
+start :: fn do
+    print("Hello world!")
 end
 ----
 
-<1> Define the program entry point
-<2> Do the thing
+Try to run the program by running `sylt hello.sy` in a terminal!
 
-For more information, check out the link:quick-reference.html[Quick Reference]
-or the link:guide.html[Guide]
+[source, shell]
+----
+$ sylt hello.sy
+Hello world!
+----
+
+Let's walk through what happens in this program.
+
+[source, sylt]
+----
+start :: fn do           // <1>
+    print("Hello world") // <2>
+end
+----
+
+<1> Define the program entry point.
+<2> Greet the world.
+
+Much like `main` from some other languages, a Sylt program requires an entry
+point (`start`) to start in.
+
+// more here? probably
+
+== Writing a simple game
+
+With the world greeting out of the way, we can get a simple game going.
+
+// TODO: wait for löve
+
+== Where to go from here
+
+If you want a complete walkthrough of the language, check out the
+link:guide.html[Guide]. If you just want the abridged version there is also the
+link:quick-reference.html[Quick Reference].
