@@ -21,6 +21,7 @@ $(BUILD)/%.html: %.adoc $(STYLESHEET) $(SYNTAX) | $(BUILD)
 		--attribute toc=left \
 		--attribute sectlinks \
 		--attribute setanchors \
+		--attribute hide-uri-scheme \
 	;
 
 $(BUILD)/sylt.png: | $(BUILD)
