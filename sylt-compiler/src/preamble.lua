@@ -241,7 +241,6 @@ end
 
 __BLOB_META = { _type = "blob" }
 __BLOB_META.__eq = function(a, b)
-    -- TODO(ed): The actual blob-instance
     for k, _ in pairs(a) do
         if not b[k] then
             return false
