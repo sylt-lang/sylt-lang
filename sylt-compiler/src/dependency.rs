@@ -3,6 +3,7 @@ use std::collections::btree_map::Entry::{Occupied, Vacant};
 use crate::{Compiler, Name};
 use sylt_parser::{
     AST, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
+    Type as ParserType, TypeKind,
     Statement, StatementKind,
 };
 use sylt_parser::statement::NameIdentifier;
@@ -92,6 +93,33 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> BTreeS
     }
 }
 
+fn type_dependencies(ctx: &mut Context, ty: &ParserType) -> BTreeSet<Name> {
+    use TypeKind::*;
+    match &ty.kind {
+        | Implied
+        | Resolved(_)
+        | Generic(_) => BTreeSet::new(),
+
+        Grouping(ty) => type_dependencies(ctx, ty),
+        UserDefined(assignable) => assignable_dependencies(ctx, &assignable),
+
+        Fn(params, ret) =>
+            params.iter().chain([ret.as_ref()]).map(|t| type_dependencies(ctx, t)).flatten().collect(),
+
+        Tuple(fields) =>
+            fields.iter().map(|t| type_dependencies(ctx, t)).flatten().collect(),
+
+        | List(kind)
+        | Set(kind) => type_dependencies(ctx, kind),
+
+        | Dict(a, b)
+        | Union(a, b) => [
+            type_dependencies(ctx, a),
+            type_dependencies(ctx, b),
+        ].iter().flatten().cloned().collect(),
+    }
+}
+
 fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<Name> {
     use StatementKind::*;
     match &statement.kind {
@@ -131,13 +159,14 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
         | Ret { value }
         | StatementExpression { value } => dependencies(ctx, value),
 
-        | Use { .. }
         | Blob { .. }
-        | IsCheck { .. }
         | Break
         | Continue
+        | EmptyStatement
+        | ExternalDefinition { .. }
+        | IsCheck { .. }
         | Unreachable
-        | EmptyStatement => BTreeSet::new(),
+        | Use { .. } => BTreeSet::new(),
     }
 }
 
@@ -149,7 +178,6 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<Name> {
 
         | Neg(expr)
         | Not(expr)
-        | Duplicate(expr)
         | Parenthesis(expr) => dependencies(ctx, expr),
 
         | Comparison(lhs, _, rhs)
@@ -164,8 +192,7 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<Name> {
             .cloned()
             .collect(),
 
-        | IfExpression { condition, pass, fail }
-        | IfShort { lhs: pass, condition, fail } => {
+        IfExpression { condition, pass, fail } => {
             [pass, fail, condition].iter()
                 .map(|expr| dependencies(ctx, expr))
                 .flatten()
@@ -179,9 +206,10 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<Name> {
         Function { body, params, .. } => {
             let vars_before = ctx.variables.len();
             params.iter().for_each(|(ident, _)| ctx.shadow(&ident.name));
+            let type_deps = params.iter().map(|(_, ty)| type_dependencies(ctx, ty)).flatten().collect();
             let deps = statement_dependencies(ctx, body);
             ctx.variables.truncate(vars_before);
-            deps
+            [deps, type_deps].iter().flatten().cloned().collect()
         },
         Blob { blob, fields } => {
             assignable_dependencies(ctx, blob).union(&fields.iter()
@@ -234,14 +262,15 @@ fn order(
                 State::Inserted => Ok(()),
             },
         };
-        let (deps, statement) = to_order.get(&name).unwrap();
+
+        let (deps, statement) = to_order.get(&name).expect("Trying to find an identifier that does not exist");
         for dep in deps {
             recurse(*dep, to_order, inserted, ordered)
                 .map_err(|mut cycle| { cycle.push(*statement); cycle })?;
         }
-
-        inserted.insert(name, State::Inserted);
         ordered.push(*statement);
+        inserted.insert(name, State::Inserted);
+
         Ok(())
     }
 
@@ -274,6 +303,12 @@ pub(crate) fn initialization_order<'a>(
                 | Blob { name, .. } => {
                     to_order.insert(
                         *compiler.namespaces[namespace].get(name).unwrap(),
+                        (BTreeSet::new(), (statement, namespace))
+                    );
+                },
+                ExternalDefinition { ident, .. } => {
+                    to_order.insert(
+                        *compiler.namespaces[namespace].get(&ident.name).unwrap(),
                         (BTreeSet::new(), (statement, namespace))
                     );
                 },

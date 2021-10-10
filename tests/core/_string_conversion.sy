@@ -55,7 +55,6 @@ start :: fn do
     print(d)
     print(A)
     print(pop)
-    print(:str)
     as_str(nil) <=> "nil"
 end
 

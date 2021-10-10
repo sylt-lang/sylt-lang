@@ -28,7 +28,6 @@ impl From<BytecodeContext> for Context {
     fn from(ctx: BytecodeContext) -> Self {
         Context {
             namespace: ctx.namespace,
-            scope: ctx.scope,
             frame: ctx.frame,
         }
     }
@@ -196,7 +195,6 @@ impl<'t> BytecodeCompiler<'t> {
                 GreaterEqual => self.bin_op(a, b, &[Op::Less, Op::Not], expression.span, ctx),
                 Less => self.bin_op(a, b, &[Op::Less], expression.span, ctx),
                 LessEqual => self.bin_op(a, b, &[Op::Greater, Op::Not], expression.span, ctx),
-                Is => self.bin_op(a, b, &[Op::Is], expression.span, ctx),
                 In => self.bin_op(a, b, &[Op::Contains], expression.span, ctx),
             }
 
@@ -233,8 +231,6 @@ impl<'t> BytecodeCompiler<'t> {
             }
             Not(a) => self.un_op(a, &[Op::Not], expression.span, ctx),
 
-            Duplicate(a) => self.un_op(a, &[Op::Copy(1)], expression.span, ctx),
-
             Parenthesis(expr) => self.expression(expr, ctx),
 
             IfExpression {
@@ -255,28 +251,6 @@ impl<'t> BytecodeCompiler<'t> {
                 let op = Op::Jmp(self.next_ip(ctx));
                 self.patch(ctx, out, op);
             }
-
-            IfShort {
-                condition,
-                fail,
-                ..
-            } => {
-                // Results in 2 values pushed on the stack - since there's a Duplicate in
-                // there!
-                self.expression(condition, ctx);
-
-                let skip = self.add_op(ctx, expression.span, Op::Illegal);
-                let out = self.add_op(ctx, expression.span, Op::Illegal);
-
-                let op = Op::JmpFalse(self.next_ip(ctx));
-                self.patch(ctx, skip, op);
-
-                self.add_op(ctx, expression.span, Op::Pop);
-                self.expression(fail, ctx);
-                let op = Op::Jmp(self.next_ip(ctx));
-                self.patch(ctx, out, op);
-            }
-
 
             Function {
                 name,
@@ -378,6 +352,13 @@ impl<'t> BytecodeCompiler<'t> {
                     let op = Op::ReadGlobal(*slot);
                     self.add_op(ctx, span, op);
                 }
+                Some(Name::External(_)) => {
+                    error!(
+                        self.compiler,
+                        ctx, span,
+                        "External values aren't allowed when compiling to byte-code "
+                    );
+                }
                 Some(Name::Blob(blob)) => {
                     let op = Op::Constant(*blob);
                     self.add_op(ctx, span, op);
@@ -448,30 +429,7 @@ impl<'t> BytecodeCompiler<'t> {
         self.compiler.panic = false;
 
         match &statement.kind {
-            Use { .. } | EmptyStatement => {}
-
-            Blob { name, fields } => {
-                let fields = fields.iter()
-                    .map(|(k, v)| (k.clone(), self.compiler.resolve_type(&v, ctx.into())))
-                    .collect();
-                if let Some(Name::Blob(slot)) = self.compiler.namespaces[ctx.namespace].get(name) {
-                    match &mut self.compiler.constants[*slot] {
-                        Value::Ty(Type::Blob(_, b_fields)) => {
-                            *b_fields = fields;
-                        }
-                        _ => unreachable!(),
-                    }
-                } else {
-                    error!(
-                        self.compiler,
-                        ctx,
-                        statement.span,
-                        "No blob with the name '{}' in this namespace (#{})",
-                        name,
-                        ctx.namespace
-                    );
-                }
-            }
+            Use { .. } | Blob { .. } | EmptyStatement => {}
 
             IsCheck { lhs, rhs } => {
                 let lhs = self.compiler.resolve_type(lhs, ctx.into());
@@ -499,6 +457,15 @@ impl<'t> BytecodeCompiler<'t> {
                     let slot = self.compiler.define(&ident.name, *kind, statement.span);
                     self.compiler.activate(slot);
                 }
+            }
+
+            ExternalDefinition { .. } => {
+                // TODO(ed): Should they be? Is this how we should type the standard library?
+                error!(
+                    self.compiler,
+                    ctx, statement.span,
+                    "External values aren't allowed when compiling to byte-code "
+                );
             }
 
             #[rustfmt::skip]
@@ -738,16 +705,17 @@ impl<'t> BytecodeCompiler<'t> {
 // TODO(ed): This should move to the typechecker - since we always want this check.
 fn all_paths_return(statement: &Statement) -> bool {
     match &statement.kind {
-        StatementKind::Use { .. }
-        | StatementKind::Blob { .. }
-        | StatementKind::IsCheck { .. }
         | StatementKind::Assignment { .. }
+        | StatementKind::Blob { .. }
+        | StatementKind::Break
+        | StatementKind::Continue
         | StatementKind::Definition { .. }
+        | StatementKind::EmptyStatement
+        | StatementKind::ExternalDefinition { .. }
+        | StatementKind::IsCheck { .. }
         | StatementKind::StatementExpression { .. }
         | StatementKind::Unreachable
-        | StatementKind::Continue
-        | StatementKind::Break
-        | StatementKind::EmptyStatement => false,
+        | StatementKind::Use { .. } => false,
 
         StatementKind::If { pass, fail, .. } => all_paths_return(pass) && all_paths_return(fail),
 
