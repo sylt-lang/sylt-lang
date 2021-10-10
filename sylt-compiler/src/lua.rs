@@ -1,14 +1,3 @@
-// TODO(ed)
-//  x Blob instantiating
-//  x Port the tests
-//  x Port more foreign functions
-//      x Figure out a way to include these foreign functions
-//  x Typecheck before compiling - so we have all the information we need
-//  - Ripout the type-stuff
-//  - Annotate declarations with the resolved types
-//  - The indexing problem
-//  - Typechecker finds the wrong blob - use_import.sy testfile
-
 use std::io::Write;
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
