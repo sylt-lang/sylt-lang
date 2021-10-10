@@ -241,7 +241,6 @@ mod lua {
                 args.args = vec![file.clone()];
                 args.verbosity = if $print { 1 } else { 0 };
 
-                // TODO(ed): This might deadlock - if the output bubbles up
                 let mut child = Command::new("lua")
                     .stdin(Stdio::piped())
                     .stderr(Stdio::piped())
@@ -267,7 +266,7 @@ mod lua {
                 }
 
                 let output = child.wait_with_output().unwrap();
-                // NOTE(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
+                // HACK(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
                 // so we check stderr - which is a bad idea.
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 let stdout = String::from_utf8_lossy(&output.stdout);
