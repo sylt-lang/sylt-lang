@@ -28,7 +28,7 @@ You can also download the source code and build it locally with
 
 == Writing a simple program
 
-Put the following well known hello world into a file called `hello.sy`.
+Put the following hello world-program into a file called `hello.sy`.
 
 [source, sylt]
 ----
