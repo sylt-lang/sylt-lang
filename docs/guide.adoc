@@ -263,9 +263,10 @@ players -> for_each' update_player
 
 == Types and the type system
 
-Sylt is statically typed, which means that every variable has an assigned type.
-This prevents common errors, such as passing the wrong argument to a function,
-without ever having to run the program.
+Sylt is statically typed, which means that every variable and every expression
+has an assigned type. Types allow the Sylt compiler to catch common errors,
+such as passing the wrong argument to a function, without ever having to run
+the program.
 
 [source, sylt]
 ----
