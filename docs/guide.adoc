@@ -280,7 +280,8 @@ greet(1)       // Type error
 
 === Basic types
 
-These types are the building blocks of the type system.
+These types are the building blocks of the type system. These examples show off
+what the values and variables of a given type might look like.
 
 .Integers
 [source, sylt]
@@ -294,7 +295,7 @@ integer: int = 1
 [source, sylt]
 ----
 decimal: float = 1.0
-0.1 + 0.2 != 0.3
+(0.1 + 0.2) / 0.3
 1.  // trailing 0 optional
 .5  // leading 0 optional
 ----
@@ -310,8 +311,9 @@ print("Hello, World!")
 .Booleans
 [source, sylt]
 ----
-true
-false
+is_true: bool = true
+not false <=> true
+5 > 4 <=> true
 ----
 
 .Void
@@ -332,6 +334,7 @@ other types.
 numbers: [int] = [1, 2, 3]
 numbers -> push' 4
 print(numbers[0]) // 1
+print(numbers[3]) // 4
 ----
 
 .Tuples
@@ -339,7 +342,7 @@ print(numbers[0]) // 1
 ----
 position: (float, float) = (5.0, 10.0)
 position + (1.0, 1.0) <=> (6.0, 11.0) // Vector addition
-position * 2 <=> (10.0, 20.0) // Scaling
+position * 2. <=> (10.0, 20.0) // Scaling
 print(position[0]) // 5.0
 position[0] = 1.0 // Error, tuples are immutable
 unit: () = ()
