@@ -105,11 +105,12 @@ applies.
 .Comparison operators
 [source, sylt]
 ----
-1 < 2   // true
-2 > 1   // true
-1 <= 1  // true
-1 >= 2  // false
+1 < 2        // true
+2 > 1        // true
+1.0 <= 1.0   // true
+1.0 >= 2.0   // false
 "a" == "a"   // true
+"a" != "a"   // false
 
 // Assert equal. Execution is halted if the values compare non-equal
 [1, 2] <=> [1, 2]

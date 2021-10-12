@@ -1,6 +1,6 @@
 = Sylt Quick Reference
 
-Here you will find most things in the Sylt language in a concise format.
+Here you will find concise examples of most things in the Sylt language.
 
 == Variables
 [source, sylt]
@@ -18,7 +18,7 @@ num *= 10.    // => 10.0
 num /= 2.     // => 5.0
 ----
 
-== If-else statements
+== If and else
 [source, sylt]
 ----
 if 1 < 0 do
@@ -30,10 +30,7 @@ else do
 end
 
 one :: 1 if true else 2
-two :: one + 1 if == 2 else -1 // <1>
 ----
-
-<1> The left hand side is inserted right after `if`.
 
 == Operators
 [source, sylt]
@@ -46,8 +43,8 @@ two :: one + 1 if == 2 else -1 // <1>
 
 1 < 2
 2 > 1
-1 <= 1
-1 >= 1
+1.0 <= 1.0
+1.0 >= 1.0
 "a" == "a"
 "a" != "b"
 
@@ -73,7 +70,6 @@ add :: fn x: int, y: int -> int do
 end
 
 two_squared :: fn n: int -> int do n * n end(2)  // <1>
-
 
 // Different ways of calling functions
 
@@ -127,12 +123,15 @@ integer: int = 100
 decimal: float = 1.5
 string: str = "hello"
 boolean: bool = true
+nothing: void = nil
+
+// Composite types
+
 list: [int] = [1, 2, 3]
 tuple: (str, float) = ("cookies", 1.5)
 dict: {str: int} = {"a": 1, "b": 2}
 set: {int} = {1, 2, 3}
 function: fn -> void = fn do end
-nothing: void = nil
 
 // Other types
 
@@ -153,49 +152,35 @@ one_element_tuple: (int,) = (1,)
 == Blobs
 [source, sylt]
 ----
-Player :: blob {
-    x: float,
-    update: fn float -> void,
+Spider :: blob {
+    hp: int,
+    position: (float, float),
+    eat_bug: fn -> void,
 }
 
-// A Player "constructor"
-new_player :: fn -> Player do
-    player: !Player = nil
-    player = Player {
-        x: 0.0,
-        update: fn delta: float do
-            player.x += delta
-        end
+new_spider :: fn x: float, y: float -> Spider do
+    self: !Spider = nil // Set up the variable
+    self = Spider {
+        hp: 5,
+        position: position,
+        eat_bug: fn do
+            self.hp += 1
+        end,
     }
-    ret player
+    ret self
 end
 
-player :: new_player()
-player.update(0.5)
-print(player.x)
-
+spider := new_spider(0.0, 0.0)
 
 // Duck typing
 
-Drawable :: blob {
-    draw: fn -> void,
-}
+creatures: [Creature] = []
+creatures -> push' new_spider' 0.0, 0.0
+creatures[0].hp -= 1   // Ok
+creatures[0].eat_bug() // Type error
 
-HitpointDisplay :: blob {
-    pos: (int, int),
-    hp: int,
-    draw: fn -> void,
-}
-
-drawable: Drawable = HitpointDisplay {
-    pos: (0, 0),
-    hp: 100,
-    draw: fn do
-        // Drawing logic
-    end
-}
-
-drawable.draw()
+spider: !Spider = creatures[0]
+spider.eat_bug()
 ----
 
 == Imports
