@@ -188,6 +188,69 @@ a := (b + 5.) / 10. if > 1. else 0.
 //   ^^^^^^^^^^^^^^    ^^^^
 ----
 
+===== Closures and capturs
+
+Functions declared inside other functions can capture variables
+from the outer scope. This can be used to construct higher order
+functions and a lot more.
+
+.Example of a closure
+[source, sylt]
+----
+start :: fn do
+    i := 0
+    add_one :: fn do
+        i += 1
+        i
+    end
+
+    print' add_one() // 1
+    print' add_one() // 2
+end
+----
+
+The closed over variable can be carried between contexts - this can be used
+to create "method-like" behaviours when combined with `blob`-s.
+
+.Initalizer function with a closure
+[source, sylt]
+----
+Player :: blob {
+    pos: (int, int),
+    update: fn -> void,
+}
+
+new_player :: fn -> Player
+    self: !Player = nil
+    self = Player {
+        pos: (0, 0),
+        update: fn do
+            self.pos += (1, 1)
+        end
+    }
+    self
+end
+
+start :: fn do
+    player_a :: new_player'
+    player_a.update()
+
+    player_b :: new_player'
+    player_b.update()
+    player_b.update()
+
+    print(player_a.pos)  // (1, 1)
+    print(player_b.pos)  // (2, 2)
+end
+----
+Here we create a `Player`-blob, with a built in update-function that
+mutates only one specific `Player`-blob. The `Player`-blob is "baked"
+into the function and cannot be changed after creation.
+
+There are a lot of fun things you can do with closures, but this
+language feature can easily be abused to create unreadable code.
+Tread lightly, and carry a big git-history.
+
 == Operators
 
 The basic operators are all here. Standard mathematical evaluation order
