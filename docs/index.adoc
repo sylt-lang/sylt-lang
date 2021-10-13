@@ -5,26 +5,45 @@ game jams. Working in Sylt should be a pain- and fearless experience. If it
 isn't, please file an
 https://github.com/FredTheDino/sylt-lang/issues/new/choose[issue].
 
+This introduction talks about how to install Sylt and write your first program
+and game. You may also want to check out the link:guide.html[Guide] and
+link:quick-reference.html[Quick Reference].
+
+
 == Installing the compiler
 
 The simplest way of getting the binary is to download a tagged release from
 https://github.com/FredTheDino/sylt-lang/releases/.
 
 If you can't download a pre-built binary (due to a different architecture or
-operating system) or don't want to, you will need a (recent) Rust installation
-and the source code.
+operating system) or don't want to, you will need a Rust installation and the
+source code. We don't test older versions of Rust so try to get the latest
+stable version.
 
 If you don't have Rust installed, consider using https://rustup.rs/ and
 selecting the latest stable version.
 
 With Rust installed, run
-`cargo install sylt --git https://github.com/FredTheDino/sylt-lang.git` to
+
+[source, shell]
+----
+$ cargo install sylt --git https://github.com/FredTheDino/sylt-lang.git
+----
+to
 install the latest and greatest from the main branch. If you want a tagged
 version you can add `--tag <tag-name>` to the command, as in
-`cargo install sylt --git https://github.com/FredTheDino/sylt-lang.git --tag v0.1.0`.
+
+[source, shell]
+----
+$ cargo install sylt --git https://github.com/FredTheDino/sylt-lang.git --tag v0.1.0
+----
 
 You can also download the source code and build it locally with
-`cargo install --path sylt`.
+
+[source, shell]
+----
+$ cargo install --path sylt
+----
 
 == Writing a simple program
 
@@ -37,7 +56,7 @@ start :: fn do
 end
 ----
 
-Try to run the program by running `sylt hello.sy` in a terminal!
+Run the program by typing `sylt hello.sy` in a terminal!
 
 [source, shell]
 ----
@@ -50,14 +69,14 @@ Let's walk through what happens in this program.
 [source, sylt]
 ----
 start :: fn do           // <1>
-    print("Hello world") // <2>
+    print' "Hello world" // <2>
 end
 ----
 
 <1> Define the program entry point.
 <2> Greet the world.
 
-Much like `main` from some other languages, a Sylt program requires an entry
+Like `main` from languages like C and Java, a Sylt program requires an entry
 point (`start`) to start in.
 
 // more here? probably
@@ -68,7 +87,7 @@ With the world greeting out of the way, we can get a simple game going.
 
 // TODO: wait for löve
 
-== Where to go from here
+== Documentation and moving forward
 
 If you want a complete walkthrough of the language, check out the
 link:guide.html[Guide]. If you just want the abridged version there is also the
