@@ -15,9 +15,8 @@ The guide expects at least basic familiarity with programming. If you haven't
 done any programming at all, consider something like a beginner's tutorial to
 Python or Lua, other languages which Sylt takes some inspiration from.
 
-== Getting started
-
-// Gustav
+If you haven't already, install Sylt according to
+link:index.html[the instructions over at the homepage].
 
 == Values and variables
 
@@ -47,41 +46,9 @@ functions).
 The type of the variable is inferred but can be supplied or even forced, which
 is described in *REF*.
 
-=== Basic values
-
-These are best described with some code. Basic values are immutable.
-
-[source, sylt]
-----
-// Strings
-"string"
-"contains spaces"
-
-// Integers
-1
--2
-
-// Floats
-1.0
--5.5
-1.  // trailing 0 optional
-.5  // leading 0 optional
-
-// Bools
-true
-false
-----
-
-=== Composite values
-
-// ?
-
 === Functions
 
 // Gustav
-
-// Remove?
-=== Types as values
 
 == If-statements and if-expressions
 
@@ -140,11 +107,12 @@ applies.
 .Comparison operators
 [source, sylt]
 ----
-1 < 2       // true
-2 > 1       // true
-1 <= 1      // true
-1 >= 2      // false
-"a" == "a"  // true
+1 < 2        // true
+2 > 1        // true
+1.0 <= 1.0   // true
+1.0 >= 2.0   // false
+"a" == "a"   // true
+"a" != "a"   // false
 
 // Assert equal. Execution is halted if the values compare non-equal
 [1, 2] <=> [1, 2]
@@ -238,7 +206,7 @@ NOTE: `->` and `'` can be used to ease the writing. See the examples below.
 
 The `loop` keyword can be used to create looping code similar to the `while`
 keyword in languages like C and Python. The main difference is that the
-condition may be omitted to create a infinite loop.
+condition may be omitted to create an infinite loop.
 
 [source, sylt]
 ----
@@ -378,9 +346,10 @@ sum <=> 1 + 2 + 3 4
 
 == Types and the type system
 
-Sylt is statically typed, which means that every variable has an assigned type.
-This prevents common errors, such as passing the wrong argument to a function,
-without ever having to run the program.
+Sylt is statically typed, which means that every variable and every expression
+has an assigned type. Types allow the Sylt compiler to catch common errors,
+such as passing the wrong argument to a function, without ever having to run
+the program.
 
 [source, sylt]
 ----
@@ -390,6 +359,135 @@ end
 
 greet("world") // Ok
 greet(1)       // Type error
+----
+
+=== Basic types
+
+These types are the building blocks of the type system. These examples show off
+what the values and variables of a given type might look like.
+
+.Integers
+[source, sylt]
+----
+integer: int = 1
+1 + 1 <=> 2
+-69
+----
+
+.Floats
+[source, sylt]
+----
+decimal: float = 1.0
+(0.1 + 0.2) / 0.3
+1.  // trailing 0 optional
+.5  // leading 0 optional
+----
+
+.Strings
+[source, sylt]
+----
+string: str = "string"
+print("Hello, World!")
+"non empty" + "" <=> "non empty"
+----
+
+.Booleans
+[source, sylt]
+----
+is_true: bool = true
+not false <=> true
+5 > 4 <=> true
+----
+
+.Void
+[source, sylt]
+----
+nothing: void = nil
+----
+
+=== Composite types
+
+The basic types are very useful on their own, but sometimes more advanced types
+are required. The list, for example, is a composite type since it can contain
+other types.
+
+.Lists
+[source, sylt]
+----
+numbers: [int] = [1, 2, 3]
+numbers -> push' 4
+print(numbers[0]) // 1
+print(numbers[3]) // 4
+----
+
+.Tuples
+[source, sylt]
+----
+position: (float, float) = (5.0, 10.0)
+position + (1.0, 1.0) <=> (6.0, 11.0) // Vector addition
+position * 2. <=> (10.0, 20.0) // Scaling
+print(position[0]) // 5.0
+position[0] = 1.0 // Error, tuples are immutable
+unit: () = ()
+----
+
+.Dicts
+[source, sylt]
+----
+dict: {str: int} = {"one": 1, "two": 2}
+dict["one"] <=> 1
+dict["three"] = 3
+empty_dict := {:}
+----
+
+.Sets
+[source, sylt]
+----
+set: {int} = {1, 1, 2, 2}
+set <=> {1, 2}
+----
+
+.Functions
+[source, sylt]
+----
+square: fn int -> int : fn x: int -> int do
+    //  ^^^^^^^^^^^^^ This is the type.
+    x * x
+end
+// Usually the function type is omitted.
+square :: fn x: int -> int do
+    x * x
+end
+----
+
+=== Type manipulation
+
+There are even more things that can be done with types. For instance it is
+possible to completely ignore the type system.
+
+.Forcing types
+[source, sylt]
+----
+definitely_a_number: !int = "oh no"
+1 + definitely_a_number // Ok(?)
+----
+
+The above example will compile and run. It might run perfectly, crash or do a
+backflip. Because the errors are not caught by the typesystem, forced types
+should be used sparingly and only when you are 100% sure the program is
+correct.
+
+Sometimes a single variable may have values of different types. Such variables
+may be represented as union-types.
+
+.Type unions
+[source, sylt]
+----
+number: int | float = 1
+number = 1.0 // Ok, number may be a float
+
+maybe_string: str? = nil // Shorthand for str | void
+maybe_string = "string"
 ----
 
 === Blobs

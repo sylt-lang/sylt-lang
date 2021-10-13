@@ -6,7 +6,7 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use syn::{
     parse::{Parse, ParseStream, Result},
-    parse_macro_input, Expr, Pat, Token,
+    parse_macro_input, Expr, LitStr, Pat, Token,
 };
 
 struct ExternBlock {
@@ -19,7 +19,6 @@ struct ExternFunction {
     module: syn::LitStr,
     function: syn::Ident,
     name: Option<syn::Ident>,
-    _doc: syn::LitStr,
     signature: syn::LitStr,
     blocks: Vec<ExternBlock>,
 }
@@ -46,7 +45,7 @@ impl Parse for ExternFunction {
             None
         };
         let _: Token![,] = input.parse()?;
-        let mut doc = None;
+        let mut doc: Option<LitStr> = None;
         let mut ty = None;
         loop {
             if input.peek(Token![?]) {
@@ -75,7 +74,6 @@ impl Parse for ExternFunction {
             module,
             function,
             name,
-            _doc: doc.unwrap(),
             signature: ty.unwrap(),
             blocks,
         })
