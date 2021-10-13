@@ -63,14 +63,14 @@ In this example we see two functions. First, we define a new function and store
 it in the constant variable `greet`. We also use the print-function in the
 function body and print a string to the terminal.
 
-The function block starts with `begin` and ends with `end`.
+The function block starts with `do` and ends with `end`.
 
 Functions can take arguments by adding a parameter list (separated by commas) to
 the function declaration.
 
 [source, sylt]
 ----
-greet :: fn name: string do
+greet :: fn name: str do
     print' "Hello " + name + "!"
 end
 ----
@@ -96,7 +96,7 @@ arguments.
 
 If a function is succeeded by a `'`, arguments can be supplied as usual but a
 closing parenthesis isn't needed. Rather, a newline works as the end of the
-statement.
+expression.
 
 [source, sylt]
 ----
@@ -125,8 +125,7 @@ Player :: blob {
 }
 
 move_player :: fn player: Player, steps: int do
-    player.pos[0] += player.vel[0] * steps
-    player.pos[1] += player.vel[1] * steps
+    player.pos += player.vel * steps
 end
 
 start :: fn do
@@ -377,7 +376,7 @@ sum := 0
 points -> for_each' fn p: int do sum += p end
 
 points_str := points -> map' fn p: int -> str do
-    as_str(p) + "/" as_str(sum)
+    as_str(p) + "/" + as_str(sum)
 end
 
 points_str <=> ["1/6", "2/6", "3/6"]
@@ -406,14 +405,14 @@ Entity :: blob {
     position: (float, float)
 }
 
-keep_entity :: fn entity: Entity -> bool
+is_alive :: fn entity: Entity -> bool
     ret entity.hp > 0 and entity.position[0] > 0.0 and entity.position[1] > 0.0
 end
 
 entities : [Entity] = []
 
 // e.g. in a main-loop:
-entities = entities -> filter' keep_entity  // very expressive!
+entities = entities -> filter' is_alive  // very expressive!
 ----
 
 === reduce and fold
@@ -444,10 +443,8 @@ add :: fn a: int, b: int -> int
 end
 
 sum := [1, 2, 3, 4] -> reduce' add
-sum <=> 1 + 2 + 3 4
+sum <=> 1 + 2 + 3 + 4
 ----
-
-//TODO(gu): motivating example
 
 == Types and the type system
 
