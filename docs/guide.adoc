@@ -48,7 +48,112 @@ is described in *REF*.
 
 === Functions
 
-// Gustav
+==== Function declaration
+
+Functions are declared the same way as constants, like so:
+
+[source, sylt]
+----
+greet :: fn do
+    print' "Hello!"
+end
+----
+
+In this example we see two functions. First, we define a new function and store
+it in the constant variable `greet`. We also use the print-function in the
+function body and print a string to the terminal.
+
+The function block starts with `begin` and ends with `end`.
+
+Functions can take arguments by adding a parameter list (separated by commas) to
+the function declaration.
+
+[source, sylt]
+----
+greet :: fn name: string do
+    print' "Hello " + name + "!"
+end
+----
+
+Each parameter needs to specify a type
+
+==== Function calls
+
+Functions can be called the same way as in most imperative languages:
+
+[source, sylt]
+----
+f()            // no arguments
+f(1)           // one argument
+f("a", 2)      // two arguments
+f(g(1, 2), 3)  // functions as values
+----
+
+However, there are two additional ways of handling functions and their
+arguments.
+
+===== Calling functions with `'`
+
+If a function is succeeded by a `'`, arguments can be supplied as usual but a
+closing parenthesis isn't needed. Rather, a newline works as the end of the
+statement.
+
+[source, sylt]
+----
+f'             // <=> f()
+f' 1           // <=> f(1)
+f' 1, 2, 3     // <=> f(1, 2, 3)
+f' g' h' 1, 2  // <=> f(g(h(1, 2)))
+// sometimes you may need to mix calling styles
+f(g' h' 1), 2  // <=> f(g(h(1)), 2)
+----
+
+Of course, you could ignore the `'` and only call functions using `()`.
+
+===== Passing parameters with `->`
+
+The syntax `value -> function-call` can be used to pass the value as the first
+argument. This may look unnecessary at first glance, _but_ is very convenient
+for certain types of functions. See these two examples:
+
+.Using `->` for functions that work on blob instances
+[source, sylt]
+----
+Player :: blob {
+    pos: (int, int),
+    vel: (int, int),
+}
+
+move_player :: fn player: Player, steps: int do
+    player.pos[0] += player.vel[0] * steps
+    player.pos[1] += player.vel[1] * steps
+end
+
+start :: fn do
+    player := Player {
+        pos: (0, 0),
+        vel: (2, 1),
+    }
+    player -> move_player(2)
+    // or, combined with ':
+    player -> move_player' 3
+end
+----
+
+.Using `->` for filter, map etc
+[source, sylt]
+----
+double :: fn a: int -> int
+    ret a * 2
+end
+
+start :: fn do
+    numbers := [1, 2, 3, 4, 5]
+    double_numbers := numbers -> map' double
+end
+----
+
+These list-functions are explained in *REF*.
 
 == If-statements and if-expressions
 
