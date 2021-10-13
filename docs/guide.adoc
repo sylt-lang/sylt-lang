@@ -254,8 +254,8 @@ players -> for_each' update_player
 
 === map
 
-`map` applies a function on every element in a list and replaces each element
-with the return value.
+`map` applies a function on every element in a list and returns a list of the
+results.
 
 [source, sylt]
 ----
