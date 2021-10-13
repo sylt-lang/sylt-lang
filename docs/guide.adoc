@@ -210,7 +210,7 @@ end
 ----
 
 The closed over variable can be carried between contexts - this can be used
-to create "method-like" behaviours when combined with `blob`-s.
+to create "method-like" behaviors when combined with `blob`-s.
 
 .Initalizer function with a closure
 [source, sylt]
