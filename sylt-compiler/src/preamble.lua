@@ -365,7 +365,7 @@ end
 min = math.min
 max = math.max
 function rem(x, y)
-    return x % y
+    return math.abs(x % y)
 end
 pow = math.pow
 function angle(v)
