@@ -1,14 +1,14 @@
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::PathBuf;
 use sylt_common::error::{Error, TypeError};
-use sylt_common::Type;
+use sylt_common::{Type, Value::Ty as ValueType};
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp,
     Span, Statement, StatementKind, VarKind,
 };
 
-use crate::{self as compiler, first_ok_or_errs};
+use crate::{self as compiler, first_ok_or_errs, Context, Name as CompilerName};
 use compiler::Compiler;
 
 macro_rules! type_error_if_invalid {
@@ -105,9 +105,10 @@ impl<'c> TypeChecker<'c> {
                 .map(|(k, v)| (
                     k.clone(),
                     match v {
-                        compiler::Name::Global(_) => Name::Global(None),
                         compiler::Name::Blob(b) => Name::Blob(*b),
                         compiler::Name::Namespace(n) => Name::Namespace(*n),
+                        | compiler::Name::Global(_)
+                        | compiler::Name::External(_) => Name::Global(None),
                     }
                 )).collect()
             ).collect();
@@ -547,7 +548,6 @@ impl<'c> TypeChecker<'c> {
                 ComparisonKind::Greater | ComparisonKind::GreaterEqual | ComparisonKind::Less | ComparisonKind::LessEqual => {
                     self.bin_op(span, a, b, op::cmp, "Comparison")?
                 }
-                ComparisonKind::Is => self.bin_op(span, a, b, |_ ,_| Type::Bool, "Is")?,
                 ComparisonKind::In => {
                     let a = self.expression(a)?;
                     let b = self.expression(b)?;
@@ -579,7 +579,6 @@ impl<'c> TypeChecker<'c> {
 
             EK::Parenthesis(expr) => self.expression(expr)?,
 
-            EK::Duplicate(expr) => self.expression(expr)?,
             EK::Tuple(values) => {
                 let mut types = Vec::new();
                 for v in values.iter() {
@@ -669,26 +668,6 @@ impl<'c> TypeChecker<'c> {
                 )
             }
 
-            EK::IfShort { lhs, condition, fail } => {
-                let condition_ty = self.expression(condition)?;
-                if !matches!(condition_ty, Type::Bool) {
-                    return err_type_error!(
-                        self,
-                        condition.span,
-                        TypeError::Mismatch {
-                            got: condition_ty,
-                            expected: Type::Bool,
-                        },
-                        "Only boolean expressions are valid if-expression conditions"
-                    )
-                }
-
-                // TODO(ed) check nullables and the actual condition
-                Type::maybe_union(
-                    [self.expression(lhs)?, self.expression(fail)?].iter(),
-                )
-            }
-
             EK::Blob { blob, fields } => {
                 let (blob_name, blob_fields) = match self.assignable(blob, self.namespace)? {
                     Lookup::Value(ty, _) => {
@@ -757,21 +736,16 @@ impl<'c> TypeChecker<'c> {
                 if !errors.is_empty() {
                     return Err(errors);
                 }
-                for (name, ty) in blob_fields.iter() {
+                for name in blob_fields.keys() {
                     if initalizer.contains_key(name) {
                         continue;
                     }
-                    if let Err(_) = ty.fits(&Type::Void) {
-                        // TODO(ed): Not super sold on this error message - it can be better.
-                        errors.push(type_error!(
-                            self,
-                            span,
-                            TypeError::Mismatch { got: Type::Void, expected: ty.clone() },
-                            "Only nullable fields can be omitted, {}.{} is not nullable",
-                            blob_name,
-                            name
-                        ));
-                    }
+                    // TODO(ed): Not super sold on this error message - it can be better.
+                    errors.push(type_error!(
+                        self,
+                        span,
+                        TypeError::MissingField { blob: blob_name.clone(), field: name.clone() }
+                    ));
                 }
                 if !errors.is_empty() {
                     return Err(errors);
@@ -851,6 +825,9 @@ impl<'c> TypeChecker<'c> {
                 }
                 None
             }
+
+            SK::ExternalDefinition { .. } => { None }
+
             SK::Definition {
                 ident,
                 kind,
@@ -977,7 +954,7 @@ impl<'c> TypeChecker<'c> {
                 None
             }
 
-            SK::Use { .. }
+            | SK::Use { .. }
             | SK::Blob { .. }
             | SK::Continue
             | SK::Break
@@ -988,9 +965,46 @@ impl<'c> TypeChecker<'c> {
     }
 
     fn outer_definition(&mut self, namespace: usize, stmt: &Statement) -> Result<(), Vec<Error>> {
+        use StatementKind as SK;
+
         let span = stmt.span;
         match &stmt.kind {
-            StatementKind::Definition { ident, kind, ty, value } => {
+            SK::Blob { name, fields } => {
+                let ctx = Context::from_namespace(self.namespace);
+                let fields = fields.iter()
+                    .map(|(k, v)| (k.clone(), self.compiler.resolve_type(&v, ctx)))
+                    .collect();
+                if let Some(CompilerName::Blob(slot)) = self.compiler.namespaces[ctx.namespace].get(name) {
+                    match &mut self.compiler.constants[*slot] {
+                        ValueType(Type::Blob(_, b_fields)) => {
+                            *b_fields = fields;
+                        }
+                        _ => unreachable!(),
+                    }
+                } else {
+                    // We've yet to fill it in, but that's why we have a prepass.
+                }
+            }
+
+            SK::ExternalDefinition {
+                ident,
+                kind,
+                ty
+            } => {
+                let name = match &self.namespaces[namespace][&ident.name] {
+                    Name::Global(None) => {
+                        let ty = self.compiler.resolve_type(ty, self.compiler_context());
+                        (ty, *kind)
+                    }
+
+                    // TODO(ed): Throw earlier errors before typechecking -
+                    // so we don't have to care about the duplicates.
+                    x => unreachable!("X: {:?}", x),
+                };
+                self.namespaces[namespace].insert(ident.name.clone(), Name::Global(Some(name)));
+            }
+
+            SK::Definition { ident, kind, ty, value } => {
                 let name = match &self.namespaces[namespace][&ident.name] {
                     Name::Global(None) => {
                         let ty = self.compiler.resolve_type(ty, self.compiler_context());
@@ -1057,12 +1071,14 @@ impl<'c> TypeChecker<'c> {
         for (statement, namespace) in statements.iter() {
             // Ignore errors since they'll be caught later and
             // there are false positives.
+            self.stack.clear();
             let _ = self.outer_definition(*namespace, &statement);
         }
 
         let mut errors = Vec::new();
         for (statement, namespace) in statements.iter() {
             self.namespace = *namespace;
+            self.stack.clear();
             if let Err(mut errs) = self.statement(&statement) {
                 errors.append(&mut errs);
             }

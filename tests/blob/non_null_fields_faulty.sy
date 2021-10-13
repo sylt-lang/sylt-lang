@@ -6,4 +6,4 @@ start :: fn do
     a := A {}
     print' a.a
 end
-// error: $Mismatch { .. }
+// error: $MissingField { .. }

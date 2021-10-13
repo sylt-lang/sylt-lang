@@ -136,6 +136,11 @@ pub enum TypeError {
         field: String,
     },
 
+    MissingField {
+        blob: String,
+        field: String,
+    },
+
     TupleIndexOutOfRange {
         got: i64,
         length: usize,
@@ -182,6 +187,8 @@ pub enum Error {
         line: usize,
         message: Option<String>,
     },
+
+    LuaError(String),
 }
 
 impl fmt::Display for Error {
@@ -189,6 +196,9 @@ impl fmt::Display for Error {
         match self {
             Error::NoFileGiven => {
                 write!(f, "No file to run")
+            }
+            Error::LuaError(stderr) => {
+                write!(f, "Lua failed to run, \n:stderr:\n{}", stderr)
             }
             Error::FileNotFound(path) => {
                 write!(f, "File '{}' not found", path.display())
@@ -395,6 +405,9 @@ impl fmt::Display for TypeError {
             }
             TypeError::UnknownField { blob, field } => {
                 write!(f, "Cannot find field '{}.{}'", blob, field)
+            }
+            TypeError::MissingField { blob, field } => {
+                write!(f, "Blob instance lacks field '{}.{}'", blob, field)
             }
             TypeError::TupleIndexOutOfRange { length, got } => {
                 write!(f, "A tuple of length {} has no element {}", length, got)

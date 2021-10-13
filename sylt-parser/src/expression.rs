@@ -12,7 +12,6 @@ pub enum ComparisonKind {
     GreaterEqual,
     Less,
     LessEqual,
-    Is,
     In,
 }
 
@@ -57,16 +56,6 @@ pub enum ExpressionKind {
     IfExpression {
         condition: Box<Expression>,
         pass: Box<Expression>,
-        fail: Box<Expression>,
-    },
-
-    /// Copies a value - small hack to simplify shorthand implementation.
-    Duplicate(Box<Expression>),
-
-    /// Inline If-statements
-    IfShort {
-        lhs: Box<Expression>,
-        condition: Box<Expression>,
         fail: Box<Expression>,
     },
 
@@ -259,7 +248,6 @@ fn precedence(token: &T) -> Prec {
         T::And => Prec::BoolAnd,
         T::Or => Prec::BoolOr,
 
-        T::Is => Prec::Index,
         T::In => Prec::Index,
 
         T::AssertEqual => Prec::Assert,
@@ -360,42 +348,6 @@ fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     Ok((ctx, Expression { span, kind }))
 }
 
-fn if_short<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
-    use ExpressionKind::*;
-
-    let span = ctx.span();
-    let ctx = expect!(ctx, T::If, "Expected 'if' at start of if-expression");
-
-    let lhs = Expression {
-        span: lhs.span,
-        kind: Duplicate(Box::new(lhs.clone())),
-    };
-
-    let (ctx, condition) = infix(ctx, &lhs)?;
-    let ctx = expect!(
-        ctx,
-        T::Else,
-        "Expected 'else' after short if-expression condition"
-    );
-    let (ctx, rhs) = parse_precedence(ctx, Prec::No)?;
-
-    let lhs = Box::new(lhs);
-    let condition = Box::new(condition.clone());
-    let fail = Box::new(rhs);
-    Ok((
-        ctx,
-        Expression {
-            span,
-            kind: IfShort {
-                lhs,
-                condition,
-                fail,
-            },
-        },
-    ))
-}
-
-
 fn if_expression<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
     let span = ctx.span();
     let ctx = expect!(ctx, T::If, "Expected 'if' at start of if-expression");
@@ -474,9 +426,6 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
         (T::If, Prec::No) => {
             return if_expression(ctx, lhs);
         }
-        (T::If, _) => {
-            return if_short(ctx, lhs);
-        }
         // The cool arrow syntax. For example: `a->b(2)` compiles to `b(a, 2)`.
         // #NotLikeOtherOperators
         (T::Arrow, _) => {
@@ -514,7 +463,6 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
         | T::GreaterEqual
         | T::Less
         | T::LessEqual
-        | T::Is
 
         | T::And
         | T::Or
@@ -552,7 +500,6 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
         T::GreaterEqual => Comparison(lhs, GreaterEqual, rhs),
         T::Less => Comparison(lhs, Less, rhs),
         T::LessEqual => Comparison(lhs, LessEqual, rhs),
-        T::Is => Comparison(lhs, Is, rhs),
         T::In => Comparison(lhs, In, rhs),
 
         // Boolean operators.
@@ -885,7 +832,6 @@ mod test {
     test!(expression, bool_neg_multiple: "not a and b" => _);
     test!(expression, bool_neg_multiple_rev: "a and not b" => _);
 
-    test!(expression, cmp_is: "a is B" => _);
     test!(expression, cmp_eq: "a == b" => _);
     test!(expression, cmp_neq: "a != b" => _);
     test!(expression, cmp_leq: "a <= b" => _);
@@ -975,10 +921,6 @@ impl PrettyPrint for Expression {
                 write!(f, "Paren\n")?;
                 expr.pretty_print(f, indent + 1)?;
             }
-            EK::Duplicate(expr) => {
-                write!(f, "Duplicate\n")?;
-                expr.pretty_print(f, indent + 1)?;
-            }
             EK::IfExpression { condition, pass, fail } => {
                 write!(f, "IfExpression\n")?;
                 write_indent(f, indent)?;
@@ -987,18 +929,6 @@ impl PrettyPrint for Expression {
                 write_indent(f, indent)?;
                 write!(f, "pass:\n")?;
                 pass.pretty_print(f, indent + 1)?;
-                write_indent(f, indent)?;
-                write!(f, "fail:\n")?;
-                fail.pretty_print(f, indent + 1)?;
-            }
-            EK::IfShort { lhs, condition, fail } => {
-                write!(f, "IfShort\n")?;
-                write_indent(f, indent)?;
-                write!(f, "lhs:\n")?;
-                lhs.pretty_print(f, indent + 1)?;
-                write_indent(f, indent)?;
-                write!(f, "pass:\n")?;
-                condition.pretty_print(f, indent + 1)?;
                 write_indent(f, indent)?;
                 write!(f, "fail:\n")?;
                 fail.pretty_print(f, indent + 1)?;
