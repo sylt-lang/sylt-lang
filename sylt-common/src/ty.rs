@@ -72,14 +72,14 @@ impl Display for Type {
             Type::Set(name) => write!(f, "{{{}}}", name),
             Type::Dict(key, value) => write!(f, "{{{}: {}}}", key, value),
             Type::Function(args, ret) => {
-                write!(f, "fn ")?;
+                write!(f, "(fn ")?;
                 for (i, n) in args.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;
                     }
                     write!(f, "{}", n)?;
                 }
-                write!(f, " -> {}", ret)
+                write!(f, " -> {})", ret)
             }
             Type::Blob(name, _) => write!(f, "{}", name),
             Type::ExternFunction(id) => write!(f, "ExternFunction({})", id),
