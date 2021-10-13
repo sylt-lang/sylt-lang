@@ -970,7 +970,7 @@ impl<'c> TypeChecker<'c> {
         let span = stmt.span;
         match &stmt.kind {
             SK::Blob { name, fields } => {
-                let ctx = Context::from_namespace(self.namespace);
+                let ctx = Context::from_namespace(namespace);
                 let fields = fields.iter()
                     .map(|(k, v)| (k.clone(), self.compiler.resolve_type(&v, ctx)))
                     .collect();
