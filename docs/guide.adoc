@@ -300,9 +300,9 @@ use c/ as d  // imports "c/exports.sy" under the namespace d,
 
 == Loops
 
-Apart from the simple loop-keyword, other loops are supplied by the standard
-library as higher-order functions. `map`, `filter`, `reduce` and `fold` work
-like they usually do.
+Apart from the simple loop-keyword, additional loop constructs are supplied by
+the standard library as higher-order functions. `map`, `filter`, `reduce` and
+`fold` work like they usually do.
 
 NOTE: `->` and `'` can be used to ease the writing. See the examples below.
 
@@ -372,8 +372,7 @@ l <=> [2, 4, 6]
 ----
 points := [1, 2, 3]
 
-sum := 0
-points -> for_each' fn p: int do sum += p end
+sum := 6
 
 points_str := points -> map' fn p: int -> str do
     as_str(p) + "/" + as_str(sum)
