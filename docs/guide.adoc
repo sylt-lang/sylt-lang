@@ -227,18 +227,69 @@ else do
 end
 ----
 
-// A shortened form is available if the pass-branch is also the left hand side of
-// the condition.
-//
-// .A motivating example for the short if-expression
-// [source, sylt]
-// ----
-// // These two are equivalent
-// a := (b + 5.) / 10. if (b + 5.) / 10. > 1. else 0.
-// //   ^^^^^^^^^^^^^^    ^^^^^^^^^^^^^^
-// a := (b + 5.) / 10. if > 1. else 0.
-// //   ^^^^^^^^^^^^^^    ^^^^
-// ----
+===== Closures and captures
+
+Functions declared inside other functions can capture variables
+from the outer scope. This can be used to construct higher order
+functions and a lot more.
+
+.Example of a closure
+[source, sylt]
+----
+start :: fn do
+    i := 0
+    add_one :: fn do
+        i += 1
+        i
+    end
+
+    print' add_one() // 1
+    print' add_one() // 2
+end
+----
+
+The closed over variable can be carried between contexts. This can be used
+to create method-like behaviors when combined with a `blob`.
+
+.Initalizer function with a closure
+[source, sylt]
+----
+Player :: blob {
+    pos: (int, int),
+    update: fn -> void,
+}
+
+new_player :: fn -> Player
+    self: !Player = nil
+    self = Player {
+        pos: (0, 0),
+        update: fn do
+            self.pos += (1, 1)
+        end
+    }
+    self
+end
+
+start :: fn do
+    player_a :: new_player'
+    player_a.update()
+
+    player_b :: new_player'
+    player_b.update()
+    player_b.update()
+
+    print(player_a.pos)  // (1, 1)
+    print(player_b.pos)  // (2, 2)
+end
+----
+
+`new_player` creates a `Player` with a built in update-function that
+only mutates the created `Player` blob. The `Player` blob is baked
+into the update-function and cannot be changed after creation.
+
+There are a lot of fun things you can do with closures, but this
+language feature can easily be abused to create unreadable code.
+Tread lightly, and carry a big git history.
 
 == Operators
 
