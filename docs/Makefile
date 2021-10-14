@@ -1,12 +1,15 @@
 BUILD := build
 FILES := $(wildcard *.adoc)
 STYLESHEET := stylesheet.css
-TARGETS := $(patsubst %.adoc,$(BUILD)/%.html,$(FILES)) $(BUILD)/sylt.png
+TARGETS_HTML := $(patsubst %.adoc,$(BUILD)/%.html,$(FILES)) $(BUILD)/sylt.png
+TARGETS_PDF := $(patsubst %.adoc,$(BUILD)/%.pdf,$(FILES))
 SYNTAX := ./syntax-highlighter.rb
 
-.PHONY: all clean
+.PHONY: clean html pdf
 
-all: $(TARGETS)
+all:
+html: $(TARGETS_HTML)
+pdf: $(BUILD)/sylt.pdf
 
 $(BUILD)/%.html: %.adoc $(STYLESHEET) $(SYNTAX) | $(BUILD)
 	@echo Building $@
@@ -23,6 +26,21 @@ $(BUILD)/%.html: %.adoc $(STYLESHEET) $(SYNTAX) | $(BUILD)
 		--attribute setanchors \
 		--attribute hide-uri-scheme \
 	;
+
+$(BUILD)/sylt.pdf: $(TARGETS_PDF) | $(BUILD)
+	@echo Merging into $@
+	@pdfunite $^ $@ 2>/dev/null
+
+
+$(BUILD)/%.pdf: %.adoc $(SYNTAX) | $(BUILD)
+	@echo Building $@
+	@asciidoctor-pdf \
+		--out-file $@ $< \
+		--require $(SYNTAX) \
+		--attribute source-highlighter=rouge \
+		--attribute rouge-style=github \
+	;
+		
 
 $(BUILD)/sylt.png: | $(BUILD)
 	cp ../res/sylt.png $@
