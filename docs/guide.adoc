@@ -188,7 +188,7 @@ a := (b + 5.) / 10. if > 1. else 0.
 //   ^^^^^^^^^^^^^^    ^^^^
 ----
 
-===== Closures and capturs
+===== Closures and captures
 
 Functions declared inside other functions can capture variables
 from the outer scope. This can be used to construct higher order
@@ -209,8 +209,8 @@ start :: fn do
 end
 ----
 
-The closed over variable can be carried between contexts - this can be used
-to create "method-like" behaviors when combined with `blob`-s.
+The closed over variable can be carried between contexts. This can be used
+to create method-like behaviors when combined with a `blob`.
 
 .Initalizer function with a closure
 [source, sylt]
@@ -243,13 +243,14 @@ start :: fn do
     print(player_b.pos)  // (2, 2)
 end
 ----
-Here we create a `Player`-blob, with a built in update-function that
-mutates only one specific `Player`-blob. The `Player`-blob is "baked"
-into the function and cannot be changed after creation.
+
+`new_player` creates a `Player` with a built in update-function that
+only mutates the created `Player` blob. The `Player` blob is baked
+into the update-function and cannot be changed after creation.
 
 There are a lot of fun things you can do with closures, but this
 language feature can easily be abused to create unreadable code.
-Tread lightly, and carry a big git-history.
+Tread lightly, and carry a big git history.
 
 == Operators
 
