@@ -1103,7 +1103,7 @@ h3 > a.link:hover,
 h4 > a.link:hover,
 h5 > a.link:hover,
 h6 > a.link:hover {
-  color: #a53221;
+  color: var(--primaryhover);
 }
 
 details,
@@ -1201,7 +1201,8 @@ table.tableblock.fit-content > caption.title {
 .admonitionblock > table {
   border-collapse: separate;
   border: 0;
-  background: none;
+  background: var(--background2);
+  border-radius: 4px;
   width: 100%;
 }
 
@@ -1223,8 +1224,8 @@ table.tableblock.fit-content > caption.title {
 .admonitionblock > table td.content {
   padding-left: 1.125em;
   padding-right: 1.25em;
-  border-left: 1px solid #dddddf;
-  color: rgba(0, 0, 0, 0.6);
+  border-left: 1px solid var(--divider);
+  color: var(--text);
   word-wrap: anywhere;
 }
 
@@ -2131,8 +2132,7 @@ a span.icon > .fa {
 
 .admonitionblock td.icon .icon-tip::before {
   content: "\f0eb";
-  text-shadow: 1px 1px 2px rgba(155, 155, 0, 0.8);
-  color: #111;
+  color: rgba(56, 170, 15, 0.93);
 }
 
 .admonitionblock td.icon .icon-warning::before {
@@ -2446,6 +2446,8 @@ p.tableblock {
   --primarycolor: #FF4B4F;
   --secondarycolor: #FF4B4F;
   --tertiarycolor: #FF4B4F;
+
+  --primaryhover: #c5363a;
 
   --linkcolor: #efca44;
   --linkhover: #a78d2f;
