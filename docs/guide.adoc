@@ -156,8 +156,8 @@ These list-functions are explained in *REF*.
 
 ===== Implicit `ret`
 
-The `ret` keyword may be omitted if the last statement in the function is an
-expression. Then the result of the function is the result of the last
+The `ret` keyword may be omitted if the last statement in a function is an
+expression. Then the return value of the function is the value of the last
 expression.
 
 .Example of implicit `ret`
@@ -173,7 +173,10 @@ end
 ----
 The two functions `add_one` and `add_one_ret` are equivalent
 and do the exact same thing.
-This can be used for readable one-liners combined with the iterator functions.
+
+Implicit `ret` can create readable one-liners when combined with the
+iterator functions.
+
 .Map and implicit `ret`
 [source, sylt]
 ----
