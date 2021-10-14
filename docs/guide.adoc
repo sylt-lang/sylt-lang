@@ -21,30 +21,30 @@ link:index.html[the instructions over at the homepage].
 == Values and variables
 
 There are 4 basic types of values which can be composed in lists, tuples, sets,
-dicts and blobs. Functions, which functions as values, are described in *REF*.
-Types can also function as values which is described in *REF*.
+dicts and blobs. Functions, which are a kind of value, are described in *REF*.
 
 === Variables and constant variables
 
 Values can be assigned to variables, which works just the way you expect it to.
 
-Variables can be captured, which is described in *REF*.
-
 Variables can optionally be declared as _constant_. Constant variables will
 always point to the same value, but the value itself can still be modified (if
-it is a modifiable value; see REF for details).
+it is modifiable. The basic values (int, float, bool and string) and tuples
+aren't modifiable while lists, sets, dicts and blobs are. This means that you
+can add and remove elements from a constant list but not increment a constant
+integer.
 
 [source, sylt]
 ----
-num := 1    // a variable declaration
-PI :: 3.14  // a constant declaration
+num := 1       // a variable declaration
+PI :: 3.14     // a constant declaration
+NUMBERS :: []  // a constant declaration
 ----
 
-Constant variables should be written in `SCREAMING_SNAKE_CASE` (apart from
-functions).
+Constant variables (apart from functions) should be written in
+`SCREAMING_SNAKE_CASE`.
 
-The type of the variable is inferred but can be supplied or even forced, which
-is described in *REF*.
+The type of the variable is inferred but can be supplied or even forced; see *REF*.
 
 === Functions
 
@@ -183,44 +183,67 @@ iterator functions.
 squares :: [1, 2, 3] -> map' fn a: int -> int a * a end
 ----
 
-== If-statements and if-expressions
+
+== If statements and if expressions
 
 These are your standard control flow statements.
 
-.Normal if-statements
+.Regular if statements
 [source, sylt]
 ----
-if a == 0 do
-    print("zero")
+if 1 == 2 do
+    print' "impossible. perhaps the archives are incomplete."
+end
+
+if 12345679 * 81 == 999999999 do
+    print' "math is fun!"
 end
 ----
 
-There is also if-expressions, which evaluate to different values depending on a
-condition.
+If expressions evaluate to different values depending on a condition.
 
-.If-expressions, as seen in e.g. Python
+.If expressions, as seen in e.g. Python
 [source, sylt]
 ----
 a := 5 if b == 0 else 1
 ----
 
-A shortened form is available if the pass-branch is also the left hand side of
-the condition.
+If expressions can usually be written as a normal if statement but they might be
+shorter and easier to follow. Consider the following example where we draw the
+color of a player red if their team is set to 0 or blue otherwise.
 
-.A motivating example for the short if-expression
+.If expression example
 [source, sylt]
 ----
-// These two are equivalent
-a := (b + 5.) / 10. if (b + 5.) / 10. > 1. else 0.
-//   ^^^^^^^^^^^^^^    ^^^^^^^^^^^^^^
-a := (b + 5.) / 10. if > 1. else 0.
-//   ^^^^^^^^^^^^^^    ^^^^
+color := (1.0, 0.0, 0.0) if player.team == 0 else (0.0, 0.0, 1.0)
+draw_rectangle' player.position, player.size, player.rotation, color
+
+// the same code with an if statement instead
+
+if player.team == 0 do
+    draw_rectangle' player.position, player.size, player.rotation, (1.0, 0.0, 0.0)
+else do
+    draw_rectangle' player.position, player.size, player.rotation, (0.0, 0.0, 1.0)
+end
 ----
+
+// A shortened form is available if the pass-branch is also the left hand side of
+// the condition.
+//
+// .A motivating example for the short if-expression
+// [source, sylt]
+// ----
+// // These two are equivalent
+// a := (b + 5.) / 10. if (b + 5.) / 10. > 1. else 0.
+// //   ^^^^^^^^^^^^^^    ^^^^^^^^^^^^^^
+// a := (b + 5.) / 10. if > 1. else 0.
+// //   ^^^^^^^^^^^^^^    ^^^^
+// ----
 
 == Operators
 
-The basic operators are all here. Standard mathematical evaluation order
-applies.
+The basic arithmetic operators are all here. Standard mathematical evaluation
+order applies.
 
 .Arithmetic operators
 [source, sylt]
@@ -228,12 +251,13 @@ applies.
 1 + 1       // 2
 2 - 2       // 0
 3 * 3       // 9
-// integer division:
-10 / 2      // 5
-10 / 3      // 3 (note: the result was truncated)
 -4          // -4
-// float division:
-10.0 / 2.0  // 5.0
+// integer division when dividing integers:
+10 / 2      // 5
+10 / 3      // 3 (note the truncation)
+// float division when dividing floats
+10.0 / 2.0  // 5.0 (float division)
+// type error when mixing ints and floats, even for division
 10 / 2.0    // type error, can't divide int and float
 ----
 
@@ -247,7 +271,8 @@ applies.
 "a" == "a"   // true
 "a" != "a"   // false
 
-// Assert equal. Execution is halted if the values compare non-equal
+
+// assert equal. continue only if the values compare equal
 [1, 2] <=> [1, 2]
 ----
 
@@ -292,13 +317,14 @@ use a  // cycles are OK
 HELLO :: "hello!"
 ----
 
-All variables declared outside of functions (as well as the functions
-themselves) will be reachable. Beware of global and mutable variables! Unless
-you know it's what you need. :)
+All varialbes declared outside of functions will be reachable. Remember that
+functions are values too! Also, beware of global and mutable variables, unless
+you know they're what you need. :)
 
-Files are included relative to the current file. With a leading "/" the path is
-started from the directory containing the file being run, which might be useful
-if a file is located a few directories down.
+Files are imported relative to the current file. With a leading "/" the path is
+started from the directory containing the file being run rather than the file
+the import is written in. This is useful if a file is located a few directories
+down.
 
 [source, sylt]
 ----
@@ -309,7 +335,7 @@ use /d.sy  // imports "d.sy"
 
 A directory can also be used if it is supplied with a trailing "/", which will
 import the file "exports.sy" in that directory. This can be used to create
-modules containing related code and a central "exporting-file".
+modules encapuslating related code and a central "exporting-file".
 
 [source, sylt]
 ----
@@ -317,7 +343,7 @@ modules containing related code and a central "exporting-file".
 use d/  // imports "d/exports.sy"
 ----
 
-Includes (both files and directories) can be aliased to other names.
+All imports can be aliased to other names.
 
 [source, sylt]
 ----
@@ -329,9 +355,9 @@ use c/ as d  // imports "c/exports.sy" under the namespace d,
 
 == Loops
 
-Apart from the simple loop-keyword, other loops are supplied by the standard
-library as higher-order functions. `map`, `filter`, `reduce` and `fold` work
-like they usually do.
+Apart from the simple loop-keyword, additional loop constructs are supplied by
+the standard library as higher-order functions. `map`, `filter`, `reduce` and
+`fold` work like they usually do.
 
 NOTE: `->` and `'` can be used to ease the writing. See the examples below.
 
@@ -369,7 +395,7 @@ l -> for_each' fn a: int do
 end
 ----
 
-.Functions don't have to be constructed in-place.
+.Functions can be defined somewhere else.
 [source, sylt]
 ----
 Player :: blob {
@@ -401,8 +427,7 @@ l <=> [2, 4, 6]
 ----
 points := [1, 2, 3]
 
-sum := 0
-points -> for_each' fn p: int do sum += p end
+sum := 6
 
 points_str := points -> map' fn p: int -> str do
     as_str(p) + "/" + as_str(sum)
@@ -605,8 +630,8 @@ definitely_a_number: !int = "oh no"
 
 The above example will compile and run. It might run perfectly, crash or do a
 backflip. Because the errors are not caught by the typesystem, forced types
-should be used sparingly and only when you are 100% sure the program is
-correct.
+should be used sparingly. Only use them when you are 100% sure the program is
+correct and you have exhausted your other options.
 
 Sometimes a single variable may have values of different types. Such variables
 may be represented as union-types.
@@ -683,10 +708,10 @@ creatures[0].eat_bug() // Type error
 
 This type error may seem counter-intuitive. We know that `creatures[0]` is a
 `Spider` which has the `eat_bug` function, yet we are not allowed to call it.
-What is really going on here? Once the `Spider` blob is put into the list of
+What is really going on here? Once the `Spider` blob is put into the list
 of type `[Creature]` some type information is lost, meaning, there is no
 reliable way of knowing the true type of something in the list. `creatures` is
-a list of `Creature` and other blobs containing the same fields as `Creature`,
+a list of `Creature`s and other blobs containing the same fields as `Creature`,
 though every element is treated as if being of type `Creature`.
 
 To call the `eat_bug` function anyway, forced types may be used.
