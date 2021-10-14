@@ -199,6 +199,17 @@ sylt_macro::extern_function!(
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",
+    clear,
+    ? "Removes all elements in a list",
+    -> "fn [#ITEM] -> void",
+    [List(ls)] => {
+        ls.borrow_mut().clear();
+        Ok(Nil)
+    },
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
     sin,
     ? "The sine function you know and love from trigonometry class",
     -> "fn float -> float",

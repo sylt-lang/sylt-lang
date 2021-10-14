@@ -334,6 +334,12 @@ function len(c)
     return #c
 end
 
+function clear(l)
+    for i = 1, #l do
+        l[i] = nil
+    end
+end
+
 sin = math.sin
 cos = math.cos
 
