@@ -154,6 +154,36 @@ end
 
 These list-functions are explained in *REF*.
 
+===== Implicit `ret`
+
+The `ret` keyword may be omitted if the last statement in a function is an
+expression. Then the return value of the function is the value of the last
+expression.
+
+.Example of implicit `ret`
+[source, sylt]
+----
+add_one :: fn a: int -> int
+    a + 1
+end
+
+add_one_ret :: fn a: int -> int do
+    ret a + 1
+end
+----
+The two functions `add_one` and `add_one_ret` are equivalent
+and do the exact same thing.
+
+Implicit `ret` can create readable one-liners when combined with the
+iterator functions.
+
+.Map and implicit `ret`
+[source, sylt]
+----
+squares :: [1, 2, 3] -> map' fn a: int -> int a * a end
+----
+
+
 == If statements and if expressions
 
 These are your standard control flow statements.
