@@ -284,7 +284,7 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, "}");
             }
 
-            Float(a) => write!(self, "{}", a),
+            Float(a) => write!(self, "{:?}", a),
             Bool(a) => write!(self, "{}", a),
             Int(a) => write!(self, "{}", a),
             Str(a) => write!(self, "\"{}\"", a),

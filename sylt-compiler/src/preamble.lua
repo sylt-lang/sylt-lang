@@ -6,6 +6,10 @@ __NIL = setmetatable( { "nil" }, { __tostring = function() return "nil" end } )
 
 __IDENTITY = function(x) return x end
 
+-- Table used to avoid infinite recursion when calling tostring on our custom
+-- datatypes.
+__SEEN = {}
+
 __INDEX = function(o, i)
     if o == nil then return nil end
     local m = getmetatable(o)
@@ -126,6 +130,9 @@ __TUPLE_META.__tostring = function(a)
         end
         out = out .. tostring(a[x])
     end
+    if #a == 1 then
+        out = out .. ","
+    end
     out = out .. ")"
     return out
 end
@@ -162,6 +169,10 @@ __LIST_META.__le = function(a, b)
     return true
 end
 __LIST_META.__tostring = function(a)
+    if __SEEN[a] then
+        return "[...]"
+    end
+    __SEEN[a] = true
     local out = "["
     for x = 1, #a, 1 do
         if x ~= 1 then
@@ -170,6 +181,7 @@ __LIST_META.__tostring = function(a)
         out = out .. tostring(a[x])
     end
     out = out .. "]"
+    __SEEN[a] = nil
     return out
 end
 function __LIST(obj)
@@ -200,6 +212,9 @@ __DICT_META.__tostring = function(a)
         first = false
         out = out .. tostring(k) .. ": " .. tostring(v)
     end
+    if #a == 0 then
+        out = out .. ":"
+    end
     out = out .. "}"
     return out
 end
@@ -223,6 +238,10 @@ __SET_META.__eq = function(a, b)
     return true
 end
 __SET_META.__tostring = function(a)
+    if __SEEN[a] then
+        return "{...}"
+    end
+    __SEEN[a] = true
     local out = "{"
     local first = true
     for k, _ in pairs(a) do
@@ -233,6 +252,7 @@ __SET_META.__tostring = function(a)
         out = out .. tostring(k)
     end
     out = out .. "}"
+    __SEEN[a] = nil
     return out
 end
 function __SET(obj)
@@ -254,6 +274,10 @@ __BLOB_META.__eq = function(a, b)
     return true
 end
 __BLOB_META.__tostring = function(a)
+    if __SEEN[a] then
+        return "blob {...}"
+    end
+    __SEEN[a] = true
     local out = "blob {"
     local first = true
     for k, v in pairs(a) do
@@ -261,9 +285,10 @@ __BLOB_META.__tostring = function(a)
             out = out .. ", "
         end
         first = false
-        out = out .. tostring(k) .. " = " .. tostring(v)
+        out = out .. "." .. tostring(k) .. " = " .. tostring(v)
     end
     out = out .. "}"
+    __SEEN[a] = nil
     return out
 end
 function __BLOB(obj)
