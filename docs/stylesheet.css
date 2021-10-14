@@ -1103,7 +1103,7 @@ h3 > a.link:hover,
 h4 > a.link:hover,
 h5 > a.link:hover,
 h6 > a.link:hover {
-  color: #a53221;
+  color: var(--primaryhover);
 }
 
 details,
@@ -2446,6 +2446,8 @@ p.tableblock {
   --primarycolor: #FF4B4F;
   --secondarycolor: #FF4B4F;
   --tertiarycolor: #FF4B4F;
+
+  --primaryhover: #c5363a;
 
   --linkcolor: #efca44;
   --linkhover: #a78d2f;
