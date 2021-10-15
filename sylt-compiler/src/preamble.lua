@@ -334,9 +334,9 @@ function len(c)
     return #c
 end
 
-function clear(l)
-    for i = 1, #l do
-        l[i] = nil
+function clear(c)
+    for i, _ in pairs(c) do
+        c[i] = nil
     end
 end
 
