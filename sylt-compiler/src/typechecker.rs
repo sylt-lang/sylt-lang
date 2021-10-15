@@ -1268,6 +1268,8 @@ mod op {
             (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, eq),
             (Type::Void, Type::Void) => Type::Bool,
             (Type::List(a), Type::List(b)) => eq(a, b),
+            (Type::Set(a), Type::Set(b)) => eq(a, b),
+            (Type::Dict(a, b), Type::Dict(c, d)) if matches!(eq(a, c), Type::Bool) => eq(b, d),
             _ => Type::Invalid,
         }
     }
