@@ -2,7 +2,7 @@
 
 ![The Sylt mascot](res/sylt.png)
 
-[![codecov](https://codecov.io/gh/FredTheDino/sylt-lang/branch/main/graph/badge.svg?token=8NDZVU9NPN)](https://codecov.io/gh/FredTheDino/sylt-lang)
+[![codecov](https://codecov.io/gh/sylt-lang/sylt-lang/branch/main/graph/badge.svg?token=3utRo8mH04)](https://codecov.io/gh/sylt-lang/sylt-lang)
 
 Sylt is a statically checked and dynamically typed reference counted programming
 language made for game jams.
