@@ -21,7 +21,7 @@ link:index.html[the instructions over at the homepage].
 == Values and variables
 
 There are 4 basic types of values which can be composed in lists, tuples, sets,
-dicts and blobs. Functions, which are a kind of value, are described in *REF*.
+dicts and blobs.
 
 === Variables and constant variables
 
@@ -44,7 +44,7 @@ NUMBERS :: []  // a constant declaration
 Constant variables (apart from functions) should be written in
 `SCREAMING_SNAKE_CASE`.
 
-The type of the variable is inferred but can be supplied or even forced; see *REF*.
+The type of the variable is inferred but can be supplied or even forced.
 
 === Functions
 
@@ -169,8 +169,6 @@ start :: fn do
     double_numbers := map(numbers, double)
 end
 ----
-
-These list-functions are explained in *REF*.
 
 ===== Implicit `ret`
 
@@ -452,7 +450,7 @@ end
 === for_each
 
 `for_each` applies a function on every element in a list. If the elements are
-mutable (e.g. another list, see *REF*) it can be mutated.
+mutable (e.g. another list) it can be mutated.
 
 [source, sylt]
 ----
