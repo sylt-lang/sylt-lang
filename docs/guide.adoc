@@ -48,7 +48,160 @@ The type of the variable is inferred but can be supplied or even forced; see *RE
 
 === Functions
 
-// Gustav
+==== Function definitions
+
+Functions are defined the same way as constants, like so:
+
+[source, sylt]
+----
+greet :: fn do
+    print' "Hello!"
+end
+----
+
+In this example we see two functions. First, we define a new function and store
+it in the constant variable `greet`. We also use the print-function in the
+function body and print a string to the terminal.
+
+The function block starts with `do` and ends with `end`. The `do` can optionally
+be omitted if the function has a return type. See the following examples.
+
+.Function that takes a single parameter.
+[source, sylt]
+----
+greet :: fn name: str do
+    print' "Hello " + name + "!"
+end
+----
+
+.Function that returns something.
+[source, sylt]
+----
+five :: fn -> int do
+    ret 5
+end
+----
+
+.Function that returns something, with omitted `do`.
+[source, sylt]
+----
+five :: fn -> int
+    ret 5
+end
+----
+
+==== Function calls
+
+Functions can be called the same way as in most languages:
+
+[source, sylt]
+----
+f()            // no arguments
+f(1)           // one argument
+f("a", 2)      // two arguments
+----
+
+However, there are two additional ways of handling functions and their
+arguments.
+
+===== Calling functions with `'`
+
+If a function is succeeded by a `'`, arguments can be supplied as usual but a
+closing parenthesis isn't needed. Rather, a newline works as the end of the
+expression.
+
+[source, sylt]
+----
+f'             // <=> f()
+f' 1           // <=> f(1)
+f' 1, 2, 3     // <=> f(1, 2, 3)
+f' g' h' 1, 2  // <=> f(g(h(1, 2)))
+// sometimes you may need to mix calling styles
+f' g(h(1), 2)  // <=> f(g(h(1), 2))
+----
+
+Of course, you could ignore the `'` and only call functions using `()`.
+
+===== Passing parameters with `->`
+
+The syntax `value -> function-call()` (or `value -> function_call'`) can be used
+to pass the value as the first argument. This may look unnecessary at first
+glance, _but_ is sometimes easier to read. See these two examples:
+
+.Using `->` for functions that work on blob instances
+[source, sylt]
+----
+Player :: blob {
+    pos: (int, int),
+    vel: (int, int),
+}
+
+move_player :: fn player: Player, steps: int do
+    player.pos += player.vel * steps
+end
+
+start :: fn do
+    player := Player {
+        pos: (0, 0),
+        vel: (2, 1),
+    }
+    player -> move_player(2)
+    // or, combined with ':
+    player -> move_player' 3
+
+    // compare to no ->
+    move_player(player, 3)
+end
+----
+
+.Using `->` for filter, map etc
+[source, sylt]
+----
+double :: fn a: int -> int
+    ret a * 2
+end
+
+start :: fn do
+    numbers := [1, 2, 3, 4, 5]
+    double_numbers := numbers -> map' double
+
+    // compare
+    double_numbers := map(numbers, double)
+end
+----
+
+These list-functions are explained in *REF*.
+
+===== Implicit `ret`
+
+The `ret` keyword may be omitted if the last statement in a function is an
+expression. Then the return value of the function is the value of the last
+expression.
+
+.Example of implicit `ret`
+[source, sylt]
+----
+add_one :: fn a: int -> int
+    a + 1
+end
+
+add_one_ret :: fn a: int -> int do
+    ret a + 1
+end
+----
+
+The two functions `add_one` and `add_one_ret` are equivalent
+and do the exact same thing.
+
+Implicit `ret` can create readable one-liners when combined with the
+iterator functions.
+
+.Map and implicit `ret`
+[source, sylt]
+----
+squares :: [1, 2, 3] -> map' fn a: int -> int a * a end
+----
+
 
 == If statements and if expressions
 
@@ -93,18 +246,69 @@ else do
 end
 ----
 
-// A shortened form is available if the pass-branch is also the left hand side of
-// the condition.
-//
-// .A motivating example for the short if-expression
-// [source, sylt]
-// ----
-// // These two are equivalent
-// a := (b + 5.) / 10. if (b + 5.) / 10. > 1. else 0.
-// //   ^^^^^^^^^^^^^^    ^^^^^^^^^^^^^^
-// a := (b + 5.) / 10. if > 1. else 0.
-// //   ^^^^^^^^^^^^^^    ^^^^
-// ----
+== Closures and captures
+
+Functions declared inside other functions can capture variables
+from the outer scope. This can be used to construct higher order
+functions and a lot more.
+
+.Example of a closure
+[source, sylt]
+----
+start :: fn do
+    i := 0
+    add_one :: fn do
+        i += 1
+        i
+    end
+
+    print' add_one() // 1
+    print' add_one() // 2
+end
+----
+
+The closed over variable can be carried between contexts. This can be used
+to create method-like behaviors when combined with a `blob`.
+
+.Initalizer function with a closure
+[source, sylt]
+----
+Player :: blob {
+    pos: (int, int),
+    update: fn -> void,
+}
+
+new_player :: fn -> Player
+    self: !Player = nil
+    self = Player {
+        pos: (0, 0),
+        update: fn do
+            self.pos += (1, 1)
+        end
+    }
+    self
+end
+
+start :: fn do
+    player_a :: new_player'
+    player_a.update()
+
+    player_b :: new_player'
+    player_b.update()
+    player_b.update()
+
+    print(player_a.pos)  // (1, 1)
+    print(player_b.pos)  // (2, 2)
+end
+----
+
+`new_player` creates a `Player` with a built in update-function that
+only mutates the created `Player` blob. The `Player` blob is baked
+into the update-function and cannot be changed after creation.
+
+There are a lot of fun things you can do with closures, but this
+language feature can easily be abused to create unreadable code.
+Tread lightly, and carry a big git history.
 
 == Operators
 
@@ -221,8 +425,11 @@ use c/ as d  // imports "c/exports.sy" under the namespace d,
 
 == Loops
 
-Apart from the simple `loop`, other kinds of loops are supplied by the
-standard library as higher-order functions.
+Apart from the simple loop-keyword, additional loop constructs are supplied by
+the standard library as higher-order functions. `map`, `filter`, `reduce` and
+`fold` work like they usually do.
+
+NOTE: `->` and `'` can be used to ease the writing. See the examples below.
 
 === loop
 
@@ -276,15 +483,92 @@ players -> for_each' update_player
 
 === map
 
-// Gustav
+`map` applies a function on every element in a list and returns a list of the
+results.
+
+[source, sylt]
+----
+l = [1, 2, 3] -> map' fn a: int -> int a * 2 end
+
+l <=> [2, 4, 6]
+----
+
+[source, sylt]
+----
+points := [1, 2, 3]
+
+sum := 6
+
+points_str := points -> map' fn p: int -> str do
+    as_str(p) + "/" + as_str(sum)
+end
+
+points_str <=> ["1/6", "2/6", "3/6"]
+----
 
 === filter
 
-// Gustav
+`filter` applies a function on every element in a list and keeps it in a new
+list if the function returns true.
+
+[source, sylt]
+----
+l := [1, 2, 3, 4] -> filter' fn a: int -> bool do rem(a, 2) == 0 end
+
+l <=> [2, 4]
+----
+
+As a motivating example, it can be used to filter entities which should be
+removed.
+
+.Removing entities using `filter`
+[source, sylt]
+----
+Entity :: blob {
+    hp: int,
+    position: (float, float)
+}
+
+is_alive :: fn entity: Entity -> bool
+    ret entity.hp > 0 and entity.position[0] > 0.0 and entity.position[1] > 0.0
+end
+
+entities : [Entity] = []
+
+// e.g. in a main-loop:
+entities = entities -> filter' is_alive  // very expressive!
+----
 
 === reduce and fold
 
-// Gustav
+`fold` traverses a list and applies a function to every element, carrying some
+state. An initial state is also supplied. For example, the following calculates
+the sum of all elements.
+
+.Calculate sum using fold
+[source, sylt]
+----
+add :: fn a: int, b: int -> int
+    ret a + b
+end
+
+sum := [1, 2, 3, 4] -> fold' 0, add
+sum <=> 1 + 2 + 3 + 4
+----
+
+`reduce` functions in much the same way, except the carry starts as the first
+element in the list. If the list is empty, `nil` is returned.
+
+.Calculate sum using reduce
+[source, sylt]
+----
+add :: fn a: int, b: int -> int
+    ret a + b
+end
+
+sum := [1, 2, 3, 4] -> reduce' add
+sum <=> 1 + 2 + 3 + 4
+----
 
 == Types and the type system
 
