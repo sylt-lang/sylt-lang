@@ -2,8 +2,9 @@ use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::io::Write;
 use sylt_common::error::Error;
-use sylt_common::prog::Prog;
+use sylt_common::prog::{Prog, BytecodeProg};
 use sylt_common::{Op, RustFunction, Type, Value};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
@@ -15,6 +16,7 @@ use sylt_parser::{
 mod typechecker;
 mod dependency;
 mod bytecode;
+mod lua;
 
 type VarSlot = usize;
 
@@ -88,9 +90,7 @@ impl Upvalue {
 
 #[derive(Debug, Copy, Clone)]
 struct Context {
-    // block_slot: BlockID,
     namespace: NamespaceID,
-    scope: usize,
     frame: usize,
 }
 
@@ -98,8 +98,6 @@ impl Context {
     fn from_namespace(namespace: NamespaceID) -> Self {
         Self {
             namespace,
-            // block_slot: 0,
-            scope: 0,
             frame: 0,
         }
     }
@@ -112,6 +110,7 @@ type BlobID = usize;
 type BlockID = usize;
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 enum Name {
+    External(VarKind),
     Global(ConstantID),
     Blob(BlobID),
     Namespace(NamespaceID),
@@ -448,6 +447,7 @@ impl Compiler {
     fn compile(
         mut self,
         typecheck: bool,
+        lua_file: Option<Box<dyn Write>>,
         tree: AST,
         functions: &[(String, RustFunction, String)],
     ) -> Result<Prog, Vec<Error>> {
@@ -490,28 +490,43 @@ impl Compiler {
             return Err(self.errors);
         }
 
-        let blocks = {
-            let mut bytecode_compiler = bytecode::BytecodeCompiler::new(&mut self);
-            bytecode_compiler.preamble(start_span, num_constants);
-
-            for (statement, namespace) in statements.iter() {
-                bytecode_compiler.compile(statement, *namespace);
-            }
-
-            bytecode_compiler.postamble(start_span);
-            bytecode_compiler.blocks
-        };
-
-        if !self.errors.is_empty() {
-            return Err(self.errors);
-        }
-
         if typecheck {
             typechecker::solve(&mut self, &statements)?;
         }
 
-        if self.errors.is_empty() {
-            Ok(Prog {
+
+        if let Some(lua_file) = lua_file {
+            let mut lua_compiler = lua::LuaCompiler::new(&mut self, Box::new(lua_file));
+
+            lua_compiler.preamble(Span::zero(), 0);
+            for (statement, namespace) in statements.iter() {
+                lua_compiler.compile(statement, *namespace);
+            }
+            lua_compiler.postamble(Span::zero());
+
+            if !self.errors.is_empty() {
+                return Err(self.errors);
+            }
+
+            Ok(Prog::Lua)
+        } else {
+            let blocks = {
+                let mut bytecode_compiler = bytecode::BytecodeCompiler::new(&mut self);
+                bytecode_compiler.preamble(start_span, num_constants);
+
+                for (statement, namespace) in statements.iter() {
+                    bytecode_compiler.compile(statement, *namespace);
+                }
+
+                bytecode_compiler.postamble(start_span);
+                bytecode_compiler.blocks
+            };
+
+            if !self.errors.is_empty() {
+                return Err(self.errors);
+            }
+
+            Ok(Prog::Bytecode(BytecodeProg {
                 blocks: blocks
                     .into_iter()
                     .map(|x| Rc::new(RefCell::new(x)))
@@ -519,9 +534,7 @@ impl Compiler {
                 functions: functions.iter().map(|(_, f, _)| *f).collect(),
                 constants: self.constants,
                 strings: self.strings,
-            })
-        } else {
-            Err(self.errors)
+            }))
         }
     }
 
@@ -576,6 +589,12 @@ impl Compiler {
                         num_constants += 1;
                         (Name::Global(var), name.clone(), statement.span)
                     }
+                    ExternalDefinition { ident: Identifier { name, .. }, kind, .. } => {
+                        let var = self.define(name, *kind, statement.span);
+                        self.activate(var);
+                        num_constants += 1;
+                        (Name::External(*kind), name.clone(), statement.span)
+                    }
 
                     // Handled later since we need type information.
                     | IsCheck { .. }
@@ -624,8 +643,8 @@ fn parse_signature(func_name: &str, sig: &str) -> ParserType {
     }
 }
 
-pub fn compile(typecheck: bool, prog: AST, functions: &[(String, RustFunction, String)]) -> Result<Prog, Vec<Error>> {
-    Compiler::new().compile(typecheck, prog, functions)
+pub fn compile(typecheck: bool, lua_file: Option<Box<dyn Write>>, prog: AST, functions: &[(String, RustFunction, String)]) -> Result<Prog, Vec<Error>> {
+    Compiler::new().compile(typecheck, lua_file, prog, functions)
 }
 
 pub(crate) fn first_ok_or_errs<I, T, E>(mut iter: I) -> Result<T, Vec<E>>

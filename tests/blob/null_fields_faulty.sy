@@ -1,5 +1,4 @@
-A :: blob {
-}
+A :: blob {}
 
 B :: blob {
     a: int?,

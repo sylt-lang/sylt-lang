@@ -7,13 +7,13 @@ g :: fn a: int -> bool do
 end
 
 start :: fn do
-    a := 2 if -> f(2) -> g() else nil
+    a := 2 if 2 -> f(2) -> g() else nil
     a <=> 2
-    b := 5 if -> f(3) -> g() else nil
+    b := 5 if 5 -> f(3) -> g() else nil
     b <=> nil
-    c := 2 if -> f(2) -> f(2) -> g() else nil
+    c := 2 if 2 -> f(2) -> f(2) -> g() else nil
     c <=> 2
-    d := 2 if -> f(3) -> f(2) -> g() else nil
+    d := 2 if 2 -> f(3) -> f(2) -> g() else nil
     d <=> nil
 end
 

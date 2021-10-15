@@ -100,7 +100,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     fold,
     ? "Applies a function to all elements pairwise in order, starts with the accumulator",
-    -> "fn [#ITEM], #ITEM, fn #ITEM, #ITEM -> #OUT -> #OUT",
+    -> "fn [#ITEM], #OUT, fn #ITEM, #OUT -> #OUT -> #OUT",
     [List(list), start, callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
@@ -161,32 +161,6 @@ sylt_macro::extern_function!(
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",
-    add,
-    ? "Inserts a value into a set",
-    -> "fn {#ITEM}, #ITEM -> void",
-    [Set(ls), v] => {
-        // NOTE(ed): Deliberately no type checking.
-        ls.borrow_mut().insert(v.clone());
-        Ok(Nil)
-    }
-);
-
-
-sylt_macro::extern_function!(
-    "sylt_std::sylt",
-    clear,
-    ? "Removes all elements from the list",
-    -> "fn [#ITEM] -> void",
-    [List(ls)] => {
-        // NOTE(ed): Deliberately no type checking.
-        ls.borrow_mut().clear();
-        Ok(Nil)
-    }
-);
-
-
-sylt_macro::extern_function!(
-    "sylt_std::sylt",
     prepend,
     ? "Adds an element to the start of a list",
     -> "fn [#ITEM], #ITEM -> void",
@@ -197,6 +171,17 @@ sylt_macro::extern_function!(
     }
 );
 
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    add,
+    ? "Inserts a value into a set",
+    -> "fn {#ITEM}, #ITEM -> void",
+    [Set(ls), v] => {
+        // NOTE(ed): Deliberately no type checking.
+        ls.borrow_mut().insert(v.clone());
+        Ok(Nil)
+    }
+);
 
 // TODO(er): Add length of string, set and tuple(?)
 sylt_macro::extern_function!(
@@ -254,6 +239,14 @@ sylt_macro::extern_function!(
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",
+    floor,
+    ? "Rounds a float down (towards -inf)",
+    -> "fn float -> int",
+    [Float(t)] => { Ok(Int(t.floor() as i64)) }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
     as_char,
     ? "Converts a string containing a single char to an int",
     -> "fn str -> int",
@@ -271,14 +264,6 @@ sylt_macro::extern_function!(
             Err(RuntimeError::ExternTypeMismatch("as_char".to_string(), vec![Type::String]))
         }
     }
-);
-
-sylt_macro::extern_function!(
-    "sylt_std::sylt",
-    floor,
-    ? "Rounds a float down (towards -inf)",
-    -> "fn float -> int",
-    [Float(t)] => { Ok(Int(t.floor() as i64)) }
 );
 
 sylt_macro::extern_function!(

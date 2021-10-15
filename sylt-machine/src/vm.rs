@@ -5,7 +5,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::rc::Rc;
 use sylt_common::error::{Error, RuntimeError, RuntimePhase};
 use sylt_common::{
-    Block, BlockLinkState, Frame, Machine, Op, OpResult, Prog, RuntimeContext, RustFunction,
+    Block, BlockLinkState, Frame, Machine, Op, OpResult, BytecodeProg, RuntimeContext, RustFunction,
     Type, UpValue, Value,
 };
 
@@ -201,7 +201,7 @@ impl VM {
     }
 
     #[doc(hidden)]
-    pub fn init(&mut self, prog: &Prog, args: &[String]) {
+    pub fn init(&mut self, prog: &BytecodeProg, args: &[String]) {
         let block = Rc::clone(&prog.blocks[0]);
         self.constants = prog.constants.clone();
         self.strings = prog.strings.clone();
