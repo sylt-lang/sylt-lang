@@ -18,7 +18,7 @@ jobs:
         run: (cd docs && make)
       - name: CNAME
         run: |
-          echo "sylt.rs" > CNAME
+          (cd docs && echo "sylt.rs" > CNAME)
       - name: Deploy to GitHub Pages
         uses: crazy-max/ghaction-github-pages@v2
         with:
