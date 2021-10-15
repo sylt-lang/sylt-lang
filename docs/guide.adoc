@@ -48,9 +48,9 @@ The type of the variable is inferred but can be supplied or even forced; see *RE
 
 === Functions
 
-==== Function declaration
+==== Function definitions
 
-Functions are declared the same way as constants, like so:
+Functions are defined the same way as constants, like so:
 
 [source, sylt]
 ----
@@ -63,11 +63,10 @@ In this example we see two functions. First, we define a new function and store
 it in the constant variable `greet`. We also use the print-function in the
 function body and print a string to the terminal.
 
-The function block starts with `do` and ends with `end`.
+The function block starts with `do` and ends with `end`. The `do` can optionally
+be omitted if the function has a return type. See the following examples.
 
-Functions can take arguments by adding a parameter list (separated by commas) to
-the function declaration.
-
+.Function that takes a single parameter.
 [source, sylt]
 ----
 greet :: fn name: str do
@@ -75,18 +74,31 @@ greet :: fn name: str do
 end
 ----
 
-Each parameter needs to specify a type
+.Function that returns something.
+[source, sylt]
+----
+five :: fn -> int do
+    ret 5
+end
+----
+
+.Function that returns something, with omitted `do`.
+[source, sylt]
+----
+five :: fn -> int
+    ret 5
+end
+----
 
 ==== Function calls
 
-Functions can be called the same way as in most imperative languages:
+Functions can be called the same way as in most languages:
 
 [source, sylt]
 ----
 f()            // no arguments
 f(1)           // one argument
 f("a", 2)      // two arguments
-f(g(1, 2), 3)  // functions as values
 ----
 
 However, there are two additional ways of handling functions and their
@@ -105,16 +117,16 @@ f' 1           // <=> f(1)
 f' 1, 2, 3     // <=> f(1, 2, 3)
 f' g' h' 1, 2  // <=> f(g(h(1, 2)))
 // sometimes you may need to mix calling styles
-f(g' h' 1), 2  // <=> f(g(h(1)), 2)
+f' g(h(1), 2)  // <=> f(g(h(1), 2))
 ----
 
 Of course, you could ignore the `'` and only call functions using `()`.
 
 ===== Passing parameters with `->`
 
-The syntax `value -> function-call` can be used to pass the value as the first
-argument. This may look unnecessary at first glance, _but_ is very convenient
-for certain types of functions. See these two examples:
+The syntax `value -> function-call()` (or `value -> function_call'`) can be used
+to pass the value as the first argument. This may look unnecessary at first
+glance, _but_ is sometimes easier to read. See these two examples:
 
 .Using `->` for functions that work on blob instances
 [source, sylt]
@@ -136,6 +148,9 @@ start :: fn do
     player -> move_player(2)
     // or, combined with ':
     player -> move_player' 3
+
+    // compare to no ->
+    move_player(player, 3)
 end
 ----
 
@@ -149,6 +164,9 @@ end
 start :: fn do
     numbers := [1, 2, 3, 4, 5]
     double_numbers := numbers -> map' double
+
+    // compare
+    double_numbers := map(numbers, double)
 end
 ----
 
@@ -171,6 +189,7 @@ add_one_ret :: fn a: int -> int do
     ret a + 1
 end
 ----
+
 The two functions `add_one` and `add_one_ret` are equivalent
 and do the exact same thing.
 
@@ -469,7 +488,7 @@ results.
 
 [source, sylt]
 ----
-l = [1, 2, 3] -> map' fn a: int -> int do a * 2 end
+l = [1, 2, 3] -> map' fn a: int -> int a * 2 end
 
 l <=> [2, 4, 6]
 ----
@@ -489,8 +508,8 @@ points_str <=> ["1/6", "2/6", "3/6"]
 
 === filter
 
-`filter` applies a function on every element in a list and keeps it if the
-function returns true.
+`filter` applies a function on every element in a list and keeps it in a new
+list if the function returns true.
 
 [source, sylt]
 ----
