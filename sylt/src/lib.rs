@@ -275,7 +275,7 @@ mod lua {
                 if $any_runtime_errors {
                     assert!(
                         !success,
-                        "Program ran to competition - when it should crash\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
+                        "Program ran to completion when it should crash\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
                         stdout,
                         stderr
                     );
