@@ -39,7 +39,6 @@ $(BUILD)/%.pdf: %.adoc $(SYNTAX) | $(BUILD)
 		--attribute source-highlighter=rouge \
 		--attribute rouge-style=github \
 	;
-		
 
 $(BUILD)/sylt.png: | $(BUILD)
 	cp ../res/sylt.png $@
