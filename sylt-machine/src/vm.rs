@@ -901,42 +901,11 @@ mod op {
             (Value::Int(a), Value::Int(b)) => Value::Bool(a == b),
             (Value::String(a), Value::String(b)) => Value::Bool(a == b),
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(a == b),
-            (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => {
-                for (a, b) in a.iter().zip(b.iter()) {
-                    match eq(a, b) {
-                        Value::Bool(true) => {}
-                        Value::Bool(false) => {
-                            return Value::Bool(false);
-                        }
-                        Value::Nil => {
-                            return Value::Nil;
-                        }
-                        _ => unreachable!("Equality should only return bool or nil."),
-                    }
-                }
-                Value::Bool(true)
-            }
+            (Value::Tuple(a), Value::Tuple(b)) => Value::Bool(a == b),
             (Value::Nil, Value::Nil) => Value::Bool(true),
-            (Value::List(a), Value::List(b)) => {
-                let a = a.borrow();
-                let b = b.borrow();
-                if a.len() != b.len() {
-                    return Value::Bool(false);
-                }
-                for (a, b) in a.iter().zip(b.iter()) {
-                    match eq(a, b) {
-                        Value::Bool(true) => {}
-                        Value::Bool(false) => {
-                            return Value::Bool(false);
-                        }
-                        Value::Nil => {
-                            return Value::Nil;
-                        }
-                        _ => unreachable!("Equality should only return bool or nil."),
-                    }
-                }
-                Value::Bool(true)
-            }
+            (Value::List(a), Value::List(b)) => Value::Bool(a == b),
+            (Value::Set(a), Value::Set(b)) => Value::Bool(a == b),
+            (Value::Dict(a), Value::Dict(b)) => Value::Bool(a == b),
             _ => Value::Nil,
         }
     }
