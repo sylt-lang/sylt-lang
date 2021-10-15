@@ -16,6 +16,9 @@ jobs:
           sudo gem install rouge
       - name: Build
         run: (cd docs && make)
+      - name: CNAME
+        run: |
+          echo "sylt.rs" > CNAME
       - name: Deploy to GitHub Pages
         uses: crazy-max/ghaction-github-pages@v2
         with:
