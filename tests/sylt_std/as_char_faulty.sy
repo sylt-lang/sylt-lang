@@ -1,0 +1,4 @@
+start :: fn do
+    as_char(0)
+end
+// error: $Mismatch { .. }

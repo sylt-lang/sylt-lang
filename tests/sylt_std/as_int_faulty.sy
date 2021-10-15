@@ -1,0 +1,4 @@
+start :: fn do
+    as_int("a")
+end
+// error: $Mismatch { .. }

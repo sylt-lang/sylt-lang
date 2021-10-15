@@ -1,0 +1,6 @@
+start :: fn ->
+    a := [1, 2, 3, 4]
+    prepend(a, 0)
+    print(a)
+    a <=> [0, 1, 2, 3, 4]
+end

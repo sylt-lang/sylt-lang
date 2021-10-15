@@ -344,7 +344,10 @@ sin = math.sin
 cos = math.cos
 
 function as_float(x) return x end
-as_int = math.floor
+function as_int(x)
+    local f, _ = math.modf(x)
+    return f
+end
 floor = math.floor
 as_char = string.byte
 function as_chars(s)
@@ -368,7 +371,7 @@ end
 min = math.min
 max = math.max
 function rem(x, y)
-    return x % y
+    return math.abs(x % y)
 end
 pow = math.pow
 function angle(v)
