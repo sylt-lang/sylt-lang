@@ -246,7 +246,7 @@ else do
 end
 ----
 
-===== Closures and captures
+== Closures and captures
 
 Functions declared inside other functions can capture variables
 from the outer scope. This can be used to construct higher order
