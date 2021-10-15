@@ -31,7 +31,6 @@ $(BUILD)/sylt.pdf: $(TARGETS_PDF) | $(BUILD)
 	@echo Merging into $@
 	@pdfunite $^ $@ 2>/dev/null
 
-
 $(BUILD)/%.pdf: %.adoc $(SYNTAX) | $(BUILD)
 	@echo Building $@
 	@asciidoctor-pdf \
