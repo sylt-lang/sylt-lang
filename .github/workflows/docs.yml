@@ -15,10 +15,9 @@ jobs:
           sudo apt install asciidoctor
           sudo gem install rouge
       - name: Build
-        run: (cd docs && make)
-      - name: CNAME
         run: |
-          (cd docs && echo "sylt.rs" > CNAME)
+          (make -C docs)
+          (echo "sylt.rs" > docs/build/CNAME)
       - name: Deploy to GitHub Pages
         uses: crazy-max/ghaction-github-pages@v2
         with:
