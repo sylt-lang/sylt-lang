@@ -1,0 +1,796 @@
+= Guide
+
+[quote, Douglas Adams, The Restaurant at the End of the Universe]
+The Guide is definitive. Reality is frequently inaccurate.
+
+The guide is a longer walkthrough of the Sylt language. It aims to describe how
+to write Sylt and in some cases why you might want to do something in a certain
+way. It is mainly intended for new users of Sylt who want a guided walkthrough
+of the language. For a shorter reference with less text to read and more
+examples to copy, check out the link:quick-reference.html[Quick Reference].
+
+== About the guide
+
+The guide expects at least basic familiarity with programming. If you haven't
+done any programming at all, consider something like a beginner's tutorial to
+Python or Lua, other languages which Sylt takes some inspiration from.
+
+If you haven't already, install Sylt according to
+link:index.html[the instructions over at the homepage].
+
+== Values and variables
+
+There are 4 basic types of values which can be composed in lists, tuples, sets,
+dicts and blobs.
+
+=== Variables and constant variables
+
+Values can be assigned to variables, which works just the way you expect it to.
+
+Variables can optionally be declared as _constant_. Constant variables will
+always point to the same value, but the value itself can still be modified (if
+it is modifiable. The basic values (int, float, bool and string) and tuples
+aren't modifiable while lists, sets, dicts and blobs are. This means that you
+can add and remove elements from a constant list but not increment a constant
+integer.
+
+[source, sylt]
+----
+num := 1       // a variable declaration
+PI :: 3.14     // a constant declaration
+NUMBERS :: []  // a constant declaration
+----
+
+Constant variables (apart from functions) should be written in
+`SCREAMING_SNAKE_CASE`.
+
+The type of the variable is inferred but can be supplied or even forced.
+
+=== Functions
+
+==== Function definitions
+
+Functions are defined the same way as constants, like so:
+
+[source, sylt]
+----
+greet :: fn do
+    print' "Hello!"
+end
+----
+
+In this example we see two functions. First, we define a new function and store
+it in the constant variable `greet`. We also use the print-function in the
+function body and print a string to the terminal.
+
+The function block starts with `do` and ends with `end`. The `do` can optionally
+be omitted if the function has a return type. See the following examples.
+
+.Function that takes a single parameter.
+[source, sylt]
+----
+greet :: fn name: str do
+    print' "Hello " + name + "!"
+end
+----
+
+.Function that returns something.
+[source, sylt]
+----
+five :: fn -> int do
+    ret 5
+end
+----
+
+.Function that returns something, with omitted `do`.
+[source, sylt]
+----
+five :: fn -> int
+    ret 5
+end
+----
+
+==== Function calls
+
+Functions can be called the same way as in most languages:
+
+[source, sylt]
+----
+f()            // no arguments
+f(1)           // one argument
+f("a", 2)      // two arguments
+----
+
+However, there are two additional ways of handling functions and their
+arguments.
+
+===== Calling functions with `'`
+
+If a function is succeeded by a `'`, arguments can be supplied as usual but a
+closing parenthesis isn't needed. Rather, a newline works as the end of the
+expression.
+
+[source, sylt]
+----
+f'             // <=> f()
+f' 1           // <=> f(1)
+f' 1, 2, 3     // <=> f(1, 2, 3)
+f' g' h' 1, 2  // <=> f(g(h(1, 2)))
+// sometimes you may need to mix calling styles
+f' g(h(1), 2)  // <=> f(g(h(1), 2))
+----
+
+Of course, you could ignore the `'` and only call functions using `()`.
+
+===== Passing parameters with `->`
+
+The syntax `value -> function-call()` (or `value -> function_call'`) can be used
+to pass the value as the first argument. This may look unnecessary at first
+glance, _but_ is sometimes easier to read. See these two examples:
+
+.Using `->` for functions that work on blob instances
+[source, sylt]
+----
+Player :: blob {
+    pos: (int, int),
+    vel: (int, int),
+}
+
+move_player :: fn player: Player, steps: int do
+    player.pos += player.vel * steps
+end
+
+start :: fn do
+    player := Player {
+        pos: (0, 0),
+        vel: (2, 1),
+    }
+    player -> move_player(2)
+    // or, combined with ':
+    player -> move_player' 3
+
+    // compare to no ->
+    move_player(player, 3)
+end
+----
+
+.Using `->` for filter, map etc
+[source, sylt]
+----
+double :: fn a: int -> int
+    ret a * 2
+end
+
+start :: fn do
+    numbers := [1, 2, 3, 4, 5]
+    double_numbers := numbers -> map' double
+
+    // compare
+    double_numbers := map(numbers, double)
+end
+----
+
+===== Implicit `ret`
+
+The `ret` keyword may be omitted if the last statement in a function is an
+expression. Then the return value of the function is the value of the last
+expression.
+
+.Example of implicit `ret`
+[source, sylt]
+----
+add_one :: fn a: int -> int
+    a + 1
+end
+
+add_one_ret :: fn a: int -> int do
+    ret a + 1
+end
+----
+
+The two functions `add_one` and `add_one_ret` are equivalent
+and do the exact same thing.
+
+Implicit `ret` can create readable one-liners when combined with the
+iterator functions.
+
+.Map and implicit `ret`
+[source, sylt]
+----
+squares :: [1, 2, 3] -> map' fn a: int -> int a * a end
+----
+
+
+== If statements and if expressions
+
+These are your standard control flow statements.
+
+.Regular if statements
+[source, sylt]
+----
+if 1 == 2 do
+    print' "impossible. perhaps the archives are incomplete."
+end
+
+if 12345679 * 81 == 999999999 do
+    print' "math is fun!"
+end
+----
+
+If expressions evaluate to different values depending on a condition.
+
+.If expressions, as seen in e.g. Python
+[source, sylt]
+----
+a := 5 if b == 0 else 1
+----
+
+If expressions can usually be written as a normal if statement but they might be
+shorter and easier to follow. Consider the following example where we draw the
+color of a player red if their team is set to 0 or blue otherwise.
+
+.If expression example
+[source, sylt]
+----
+color := (1.0, 0.0, 0.0) if player.team == 0 else (0.0, 0.0, 1.0)
+draw_rectangle' player.position, player.size, player.rotation, color
+
+// the same code with an if statement instead
+
+if player.team == 0 do
+    draw_rectangle' player.position, player.size, player.rotation, (1.0, 0.0, 0.0)
+else do
+    draw_rectangle' player.position, player.size, player.rotation, (0.0, 0.0, 1.0)
+end
+----
+
+== Closures and captures
+
+Functions declared inside other functions can capture variables
+from the outer scope. This can be used to construct higher order
+functions and a lot more.
+
+.Example of a closure
+[source, sylt]
+----
+start :: fn do
+    i := 0
+    add_one :: fn do
+        i += 1
+        i
+    end
+
+    print' add_one() // 1
+    print' add_one() // 2
+end
+----
+
+The closed over variable can be carried between contexts. This can be used
+to create method-like behaviors when combined with a `blob`.
+
+.Initalizer function with a closure
+[source, sylt]
+----
+Player :: blob {
+    pos: (int, int),
+    update: fn -> void,
+}
+
+new_player :: fn -> Player
+    self: !Player = nil
+    self = Player {
+        pos: (0, 0),
+        update: fn do
+            self.pos += (1, 1)
+        end
+    }
+    self
+end
+
+start :: fn do
+    player_a :: new_player'
+    player_a.update()
+
+    player_b :: new_player'
+    player_b.update()
+    player_b.update()
+
+    print(player_a.pos)  // (1, 1)
+    print(player_b.pos)  // (2, 2)
+end
+----
+
+`new_player` creates a `Player` with a built in update-function that
+only mutates the created `Player` blob. The `Player` blob is baked
+into the update-function and cannot be changed after creation.
+
+There are a lot of fun things you can do with closures, but this
+language feature can easily be abused to create unreadable code.
+Tread lightly, and carry a big git history.
+
+== Operators
+
+The basic arithmetic operators are all here. Standard mathematical evaluation
+order applies.
+
+.Arithmetic operators
+[source, sylt]
+----
+1 + 1       // 2
+2 - 2       // 0
+3 * 3       // 9
+-4          // -4
+// integer division when dividing integers:
+10 / 2      // 5
+10 / 3      // 3 (note the truncation)
+// float division when dividing floats
+10.0 / 2.0  // 5.0 (float division)
+// type error when mixing ints and floats, even for division
+10 / 2.0    // type error, can't divide int and float
+----
+
+.Comparison operators
+[source, sylt]
+----
+1 < 2        // true
+2 > 1        // true
+1.0 <= 1.0   // true
+1.0 >= 2.0   // false
+"a" == "a"   // true
+"a" != "a"   // false
+
+
+// assert equal. continue only if the values compare equal
+[1, 2] <=> [1, 2]
+----
+
+.Parenthesis for grouping
+[source, sylt]
+----
+(1 + 1) * 2  // 4
+----
+
+.Boolean operators
+[source, sylt]
+----
+true or false  // true
+true and true  // true
+not true       // false
+----
+
+== Imports
+
+Code can be written in multiple files, to your liking. You don't have to
+consider include-ordering or dependency cycles. Write your code anywhere you
+want!
+
+In this example, the file name of each listing is written as a comment at the
+top.
+
+[source, sylt]
+----
+// a.sy
+use b  // imports "b.sy"
+
+start :: fn do
+    print(b.HELLO)
+end
+----
+
+[source, sylt]
+----
+// b.sy
+use a  // cycles are OK
+
+HELLO :: "hello!"
+----
+
+All varialbes declared outside of functions will be reachable. Remember that
+functions are values too! Also, beware of global and mutable variables, unless
+you know they're what you need. :)
+
+Files are imported relative to the current file. With a leading "/" the path is
+started from the directory containing the file being run rather than the file
+the import is written in. This is useful if a file is located a few directories
+down.
+
+[source, sylt]
+----
+// a/b/c.sy
+use d.sy   // imports "a/b/d.sy"
+use /d.sy  // imports "d.sy"
+----
+
+A directory can also be used if it is supplied with a trailing "/", which will
+import the file "exports.sy" in that directory. This can be used to create
+modules encapuslating related code and a central "exporting-file".
+
+[source, sylt]
+----
+// a.sy
+use d/  // imports "d/exports.sy"
+----
+
+All imports can be aliased to other names.
+
+[source, sylt]
+----
+// a.sy
+use b as c   // imports "b.sy" under the namespace c
+use c/ as d  // imports "c/exports.sy" under the namespace d,
+             // since the namespace c is already used
+----
+
+== Loops
+
+Apart from the simple loop-keyword, additional loop constructs are supplied by
+the standard library as higher-order functions. `map`, `filter`, `reduce` and
+`fold` work like they usually do.
+
+NOTE: `->` and `'` can be used to ease the writing. See the examples below.
+
+=== loop
+
+The `loop` keyword can be used to create looping code similar to the `while`
+keyword in languages like C and Python. The main difference is that the
+condition may be omitted to create an infinite loop.
+
+[source, sylt]
+----
+loop do
+    print("y")
+end
+
+stack := [1, 2, 3]
+loop len(stack) > 0 do
+    print(pop(stack))
+end
+----
+
+=== for_each
+
+`for_each` applies a function on every element in a list. If the elements are
+mutable (e.g. another list) it can be mutated.
+
+[source, sylt]
+----
+l := [1, 2, 3]
+
+l -> for_each' fn a: int do print(a) end
+
+l -> for_each' fn a: int do
+    // many statements
+end
+----
+
+.Functions can be defined somewhere else.
+[source, sylt]
+----
+Player :: blob {
+    pos: (int, int)
+    vel: (int, int)
+}
+
+update_player :: fn p: Player do
+    p.pos += p.vel
+end
+
+// ...
+players -> for_each' update_player
+----
+
+=== map
+
+`map` applies a function on every element in a list and returns a list of the
+results.
+
+[source, sylt]
+----
+l = [1, 2, 3] -> map' fn a: int -> int a * 2 end
+
+l <=> [2, 4, 6]
+----
+
+[source, sylt]
+----
+points := [1, 2, 3]
+
+sum := 6
+
+points_str := points -> map' fn p: int -> str do
+    as_str(p) + "/" + as_str(sum)
+end
+
+points_str <=> ["1/6", "2/6", "3/6"]
+----
+
+=== filter
+
+`filter` applies a function on every element in a list and keeps it in a new
+list if the function returns true.
+
+[source, sylt]
+----
+l := [1, 2, 3, 4] -> filter' fn a: int -> bool do rem(a, 2) == 0 end
+
+l <=> [2, 4]
+----
+
+As a motivating example, it can be used to filter entities which should be
+removed.
+
+.Removing entities using `filter`
+[source, sylt]
+----
+Entity :: blob {
+    hp: int,
+    position: (float, float)
+}
+
+is_alive :: fn entity: Entity -> bool
+    ret entity.hp > 0 and entity.position[0] > 0.0 and entity.position[1] > 0.0
+end
+
+entities : [Entity] = []
+
+// e.g. in a main-loop:
+entities = entities -> filter' is_alive  // very expressive!
+----
+
+=== reduce and fold
+
+`fold` traverses a list and applies a function to every element, carrying some
+state. An initial state is also supplied. For example, the following calculates
+the sum of all elements.
+
+.Calculate sum using fold
+[source, sylt]
+----
+add :: fn a: int, b: int -> int
+    ret a + b
+end
+
+sum := [1, 2, 3, 4] -> fold' 0, add
+sum <=> 1 + 2 + 3 + 4
+----
+
+`reduce` functions in much the same way, except the carry starts as the first
+element in the list. If the list is empty, `nil` is returned.
+
+.Calculate sum using reduce
+[source, sylt]
+----
+add :: fn a: int, b: int -> int
+    ret a + b
+end
+
+sum := [1, 2, 3, 4] -> reduce' add
+sum <=> 1 + 2 + 3 + 4
+----
+
+== Types and the type system
+
+Sylt is statically typed, which means that every variable and every expression
+has an assigned type. Types allow the Sylt compiler to catch common errors,
+such as passing the wrong argument to a function, without ever having to run
+the program.
+
+[source, sylt]
+----
+greet :: fn message: str do
+    print("Hello " + message + "!")
+end
+
+greet("world") // Ok
+greet(1)       // Type error
+----
+
+=== Basic types
+
+These types are the building blocks of the type system. These examples show off
+what the values and variables of a given type might look like.
+
+.Integers
+[source, sylt]
+----
+integer: int = 1
+1 + 1 <=> 2
+-69
+----
+
+.Floats
+[source, sylt]
+----
+decimal: float = 1.0
+(0.1 + 0.2) / 0.3
+1.  // trailing 0 optional
+.5  // leading 0 optional
+----
+
+.Strings
+[source, sylt]
+----
+string: str = "string"
+print("Hello, World!")
+"non empty" + "" <=> "non empty"
+----
+
+.Booleans
+[source, sylt]
+----
+is_true: bool = true
+not false <=> true
+5 > 4 <=> true
+----
+
+.Void
+[source, sylt]
+----
+nothing: void = nil
+----
+
+=== Composite types
+
+The basic types are very useful on their own, but sometimes more advanced types
+are required. The list, for example, is a composite type since it can contain
+other types.
+
+.Lists
+[source, sylt]
+----
+numbers: [int] = [1, 2, 3]
+numbers -> push' 4
+print(numbers[0]) // 1
+print(numbers[3]) // 4
+----
+
+.Tuples
+[source, sylt]
+----
+position: (float, float) = (5.0, 10.0)
+position + (1.0, 1.0) <=> (6.0, 11.0) // Vector addition
+position * 2. <=> (10.0, 20.0) // Scaling
+print(position[0]) // 5.0
+position[0] = 1.0 // Error, tuples are immutable
+unit: () = ()
+----
+
+.Dicts
+[source, sylt]
+----
+dict: {str: int} = {"one": 1, "two": 2}
+dict["one"] <=> 1
+dict["three"] = 3
+empty_dict := {:}
+----
+
+.Sets
+[source, sylt]
+----
+set: {int} = {1, 1, 2, 2}
+set <=> {1, 2}
+----
+
+.Functions
+[source, sylt]
+----
+square: fn int -> int : fn x: int -> int do
+    //  ^^^^^^^^^^^^^ This is the type.
+    x * x
+end
+// Usually the function type is omitted.
+square :: fn x: int -> int do
+    x * x
+end
+----
+
+=== Type manipulation
+
+There are even more things that can be done with types. For instance it is
+possible to completely ignore the type system.
+
+.Forcing types
+[source, sylt]
+----
+definitely_a_number: !int = "oh no"
+1 + definitely_a_number // Ok(?)
+----
+
+The above example will compile and run. It might run perfectly, crash or do a
+backflip. Because the errors are not caught by the typesystem, forced types
+should be used sparingly. Only use them when you are 100% sure the program is
+correct and you have exhausted your other options.
+
+Sometimes a single variable may have values of different types. Such variables
+may be represented as union-types.
+
+.Type unions
+[source, sylt]
+----
+number: int | float = 1
+number = 1.0 // Ok, number may be a float
+
+maybe_string: str? = nil // Shorthand for str | void
+maybe_string = "string"
+----
+
+=== Blobs
+
+Blobs are a way of creating user-defined types similar to structs in C and
+objects in JavaScript.
+
+.Blob creation and field access
+[source, sylt]
+----
+Creature :: blob {
+    hp: int,
+    position: (float, float),
+}
+
+spider := Creature { hp: 5, position: (0.0, 0.0) }
+spider.hp <=> 5
+spider.position <=> (0.0, 0.0)
+----
+
+It is often desirable to have a function that can create blobs of a specific
+type. Such a function, usually called a _constructor_, can be implemented as
+follows.
+
+.A blob constructor
+[source, sylt]
+----
+Spider :: blob {
+    hp: int,
+    position: (float, float),
+    eat_bug: fn -> void,
+}
+
+new_spider :: fn x: float, y: float -> Spider do
+    self: !Spider = nil // Set up the variable
+    self = Spider {
+        hp: 5,
+        position: position,
+        eat_bug: fn do
+            self.hp += 1
+        end,
+    }
+    ret self
+end
+
+spider := new_spider(0.0, 0.0)
+----
+
+Notice that the `Spider` blob has many fields in common with the `Creature`
+blob from before. This fact can be used to do something called
+https://en.wikipedia.org/wiki/Duck_typing[duck typing], which effectively
+allows us to assign `Spider` blobs to `Creature` variables.
+
+.Duck typing
+[source, sylt]
+----
+creatures: [Creature] = []
+creatures -> push' new_spider' 0.0, 0.0
+creatures[0].hp -= 1   // Ok
+creatures[0].eat_bug() // Type error
+----
+
+This type error may seem counter-intuitive. We know that `creatures[0]` is a
+`Spider` which has the `eat_bug` function, yet we are not allowed to call it.
+What is really going on here? Once the `Spider` blob is put into the list
+of type `[Creature]` some type information is lost, meaning, there is no
+reliable way of knowing the true type of something in the list. `creatures` is
+a list of `Creature`s and other blobs containing the same fields as `Creature`,
+though every element is treated as if being of type `Creature`.
+
+To call the `eat_bug` function anyway, forced types may be used.
+
+.Force general blob into specific blob
+[source, sylt]
+----
+spider: !Spider = creatures[0]
+spider.eat_bug() // Ok, as long as creatures[0] is a Spider
+----
+
+== Standard library
+
+// ?
