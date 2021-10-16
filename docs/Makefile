@@ -11,7 +11,7 @@ all: $(TARGETS)
 $(BUILD)/%.html: %.adoc $(STYLESHEET) $(SYNTAX) | $(BUILD)
 	@echo Building $@
 	@asciidoctor \
-		--out-file $@ $< \
+		--out-file - $< \
 		--require $(SYNTAX) \
 		--attribute icons=font \
 		--attribute favicon=sylt.png \
@@ -21,7 +21,7 @@ $(BUILD)/%.html: %.adoc $(STYLESHEET) $(SYNTAX) | $(BUILD)
 		--attribute toc=left \
 		--attribute sectlinks \
 		--attribute setanchors \
-	;
+		| python3 navbar.py > $@
 
 $(BUILD)/sylt.png: | $(BUILD)
 	cp ../res/sylt.png $@
