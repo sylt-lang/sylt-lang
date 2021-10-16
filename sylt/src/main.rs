@@ -6,6 +6,10 @@ fn main() -> Result<(), String> {
         println!("{}", Args::usage());
         return Ok(());
     }
+    if args.args.len() == 0 {
+        println!("{}", Args::usage());
+        return Err("No file to run".into());
+    }
 
     let errs = if args.format {
         match sylt::formatter::format(&args) {
