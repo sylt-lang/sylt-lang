@@ -52,7 +52,11 @@ impl<'t> LuaCompiler<'t> {
 
         match &ass.kind {
             Read(ident) => {
-                return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
+                if ident.name == "self" {
+                    write!(self, "self");
+                } else {
+                    return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
+                }
             }
             Call(f, expr) => {
                 self.assignable(f, ctx);
@@ -275,13 +279,13 @@ impl<'t> LuaCompiler<'t> {
             Blob { blob: _, fields } => {
                 // TODO(ed): Know which blob something is?
                 // TODO(ed): Fill in empty fields with nil-value
-                write!(self, "__BLOB { ");
+                write!(self, "(function() local self = nil; self = __BLOB { ");
                 for (k, v) in fields.iter() {
                     write!(self, "{} =", k);
                     self.expression(v, ctx);
                     write!(self, ",");
                 }
-                write!(self, "}");
+                write!(self, "}; return self end)()");
             }
 
             Float(a) => write!(self, "{:?}", a),
