@@ -655,9 +655,11 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
         match (ctx.token(), primer) {
             // Done with arguments.
             (T::EOF, _)
-            | (T::Else, _)
-            | (T::RightParen, false)
+            | (T::RightParen, _)
+            | (T::Else, true)
             | (T::Dot, true)
+            | (T::Do, true)
+            | (T::End, true)
             | (T::Newline, true)
             | (T::Arrow, true) => {
                 break;
