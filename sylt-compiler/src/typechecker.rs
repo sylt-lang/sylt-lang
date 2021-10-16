@@ -916,17 +916,9 @@ impl<'c> TypeChecker<'c> {
                         "Only boolean expressions are valid if-statement conditions"
                     )
                 }
-                let mut rets = Vec::new();
-                if let Some(pass) = self.statement(pass)? {
-                    rets.push(pass);
-                }
-                if let Some(fail) = self.statement(fail)? {
-                    rets.push(fail);
-                }
-                if rets.is_empty() {
-                    None
-                } else {
-                    Some(Type::maybe_union(rets.iter()))
+                match (self.statement(pass)?, self.statement(fail)?) {
+                    (None, None) => None,
+                    (p, f) => Some(Type::maybe_union(p.iter().chain(&f))),
                 }
             }
             SK::Loop { condition, body } => {
