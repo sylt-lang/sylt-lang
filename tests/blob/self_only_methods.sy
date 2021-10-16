@@ -1,0 +1,18 @@
+A :: blob {
+    a: int,
+    f: fn -> int,
+}
+
+start :: fn ->
+    a := A {
+        a: self.f(),
+        f: fn -> int do
+            self.a
+        end
+    }
+    a.f() <=> 1
+    a.a = 2
+    a.f() <=> 2
+end
+
+// error: $UnresolvedName(_)
