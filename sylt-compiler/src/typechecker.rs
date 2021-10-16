@@ -314,7 +314,7 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         span,
-                        TypeError::Mutability, // TODO(ed): Wrong error
+                        TypeError::Exotic,
                         "Generics are only allowed if they can be deduced from the function signature, but '#{}' is not mentioned in the parameters",
                         ret
                     );
