@@ -388,7 +388,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     let err_ctx = skip_until!(ctx, T::End);
                     let err = syntax_error!(
                         ctx,
-                        "Expected a statement keyword, but found {:?}",
+                        "Expected \"do\" or a statement keyword, but found {:?}",
                         ctx.token()
                     );
                     Err((err_ctx, vec![err]))
