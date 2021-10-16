@@ -705,6 +705,14 @@ impl<'c> TypeChecker<'c> {
                         );
                     }
                 };
+                // HACK: look over before merging. Also, this variable should
+                // be different depending on which type of expression is in the
+                // fields. It should only be this inside "method" declarations.
+                self.stack.push(Variable::new(
+                    Identifier { span: Span::zero(), name: "self".to_string() },
+                    Type::Blob(blob_name.clone(), blob_fields.clone()),
+                    VarKind::Mutable
+                ));
                 let mut errors = Vec::new();
                 let mut initalizer = HashMap::new();
                 for (name, expr) in fields {
@@ -747,6 +755,8 @@ impl<'c> TypeChecker<'c> {
                         }
                     }
                 }
+                // HACK: This too.
+                self.stack.pop();
                 // No point checking that all fields are there if they're the wrong type,
                 // we'll get duplicate errors.
                 if !errors.is_empty() {
