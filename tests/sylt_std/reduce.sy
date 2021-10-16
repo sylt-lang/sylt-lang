@@ -1,5 +1,11 @@
 start :: fn ->
-    sum :: reduce' [1, 2, 3, 4], fn a: int, b:int -> int a + b end
+    add :: fn a: int, b:int -> int a + b end
+
+    sum: !int : reduce' [1, 2, 3, 4], add
     print' sum
     sum <=> 10
+
+    sum :: reduce' [], add
+    print' sum
+    sum <=> nil
 end
