@@ -83,7 +83,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     reduce,
     ? "Reduce the list to a single element, returns 'nil' if the input list is empty",
-    -> "fn [#ITEM], fn #ITEM, #ITEM -> #OUT -> #OUT",
+    -> "fn [#ITEM], fn #ITEM, #ITEM -> #OUT -> #OUT | nil",
     [List(list), callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
