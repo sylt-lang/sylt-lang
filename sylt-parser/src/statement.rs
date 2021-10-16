@@ -378,21 +378,27 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let (ctx, condition) = expression(ctx.skip(1))?;
             let ctx = ctx.pop_skip_newlines(skip_newlines);
 
-            let (ctx, pass) = statement(ctx)?;
-            // else?
-            let (ctx, fail) = if matches!(ctx.token(), T::Else) {
-                let ctx = ctx.skip(1);
-                if matches!(ctx.token(), T::Do | T::If | T::Loop | T::Break | T::Continue | T::Ret) {
-                    statement(ctx)?
+            fn statement_or_block<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
+                if matches!(
+                    ctx.token(),
+                    T::Do | T::If | T::Loop | T::Break | T::Continue | T::Ret
+                ) {
+                    Ok(statement(ctx)?)
                 } else {
                     let err_ctx = skip_until!(ctx, T::End);
-                    return Err((err_ctx,
-                                vec![syntax_error!(
-                                    ctx,
-                                    "Expected a statement keyword, but found {:?}",
-                                    ctx.token())]
-                    ));
+                    let err = syntax_error!(
+                        ctx,
+                        "Expected a statement keyword, but found {:?}",
+                        ctx.token()
+                    );
+                    Err((err_ctx, vec![err]))
                 }
+            }
+
+            let (ctx, pass) = statement_or_block(ctx)?;
+            // else?
+            let (ctx, fail) = if matches!(ctx.token(), T::Else) {
+                statement_or_block(ctx.skip(1))?
             } else {
                 // No else so we insert an empty statement instead.
                 (
@@ -554,12 +560,20 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 if kind.force() {
                     raise_syntax_error!(ctx, "Cannot force types on external definitions");
                 }
-                ( ctx.skip(1), ExternalDefinition { ident, kind, ty } )
+                (ctx.skip(1), ExternalDefinition { ident, kind, ty })
             } else {
                 // The value to define the variable to.
                 let (ctx, value) = expression(ctx)?;
 
-                ( ctx, Definition { ident, kind, ty, value } )
+                (
+                    ctx,
+                    Definition {
+                        ident,
+                        kind,
+                        ty,
+                        value,
+                    },
+                )
             }
         }
 
@@ -682,7 +696,7 @@ mod test {
     test!(statement, statement_is_check: ":A is :B\n" => IsCheck { .. });
     test!(statement, statement_is_check_nested: ":A.c.d is :B.d.d\n" => IsCheck { .. });
 
-    test!(statement, statement_if_newline: "if 1 \n\n+\n 1\n\n < 2 { }\n" => _);
+    test!(statement, statement_if_newline: "if 1 \n\n+\n 1\n\n < 2 do end\n" => _);
 
     test!(statement, statement_skip_newline: "(1 \n\n+\n 1\n\n)\n" => _);
     test!(statement, statement_skip_newline_list: "[\n\n 1 \n\n,\n 1\n\n,]\n" => _);
