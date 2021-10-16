@@ -2,6 +2,10 @@ use sylt::{lib_bindings, Args, Options};
 
 fn main() -> Result<(), String> {
     let args = Args::parse_args_default_or_exit();
+    if args.args.len() == 0 {
+        println!("{}", Args::usage());
+        return Err("No file to run".into());
+    }
     if args.help {
         println!("{}", Args::usage());
         return Ok(());
