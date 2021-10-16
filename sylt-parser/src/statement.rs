@@ -449,56 +449,29 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx, Blob { name, fields })
         }
 
-        // Constant declaration, e.g. `a :: 1`.
-        [T::Identifier(name), T::ColonColon, ..] => {
+        // Implied type declaration, e.g. `a :: 1` or `a := 1`.
+        [T::Identifier(name), T::ColonColon | T::ColonEqual, ..] => {
             let ident = Identifier {
                 name: name.clone(),
                 span: ctx.span(),
             };
-            // Skip identifier and `::`.
-            let ctx = ctx.skip(2);
-
-            if matches!(ctx.token(), T::External) {
-                raise_syntax_error!(ctx, "External definitons have to have a type");
-            } else {
-                // The value to assign.
-                let (ctx, value) = expression(ctx)?;
-
-                (
-                    ctx,
-                    Definition {
-                        ident,
-                        kind: VarKind::Const,
-                        ty: Type {
-                            span: ctx.span(),
-                            kind: TypeKind::Implied,
-                        },
-                        value,
-                    },
-                )
-            }
-        }
-
-        // Mutable declaration, e.g. `b := 2`.
-        [T::Identifier(name), T::ColonEqual, ..] => {
-            let ident = Identifier {
-                name: name.clone(),
-                span: ctx.span(),
+            let ctx = ctx.skip(1);
+            let kind = match ctx.token() {
+                T::ColonColon => VarKind::Const,
+                T::ColonEqual => VarKind::Mutable,
+                _ => unreachable!(),
             };
-            // Skip identifier and `:=`.
-            let ctx = ctx.skip(2);
+            let ctx = ctx.skip(1);
 
             if matches!(ctx.token(), T::External) {
                 raise_syntax_error!(ctx, "External definitons have to have a type");
             } else {
-                // The value to assign.
                 let (ctx, value) = expression(ctx)?;
-
                 (
                     ctx,
                     Definition {
                         ident,
-                        kind: VarKind::Mutable,
+                        kind,
                         ty: Type {
                             span: ctx.span(),
                             kind: TypeKind::Implied,
