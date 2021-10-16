@@ -645,7 +645,6 @@ impl<'c> TypeChecker<'c> {
                     .statement(body)?
                     .expect("A function that doesn't return a value");
 
-                // TODO(ed): We can catch types being too lenient here
                 if let Err(reason) = ret.fits(&actual_ret) {
                     return err_type_error!(
                         self,
@@ -899,6 +898,7 @@ impl<'c> TypeChecker<'c> {
                 self.stack[slot].ty = ty;
                 None
             }
+
             SK::If {
                 condition,
                 pass,
@@ -916,9 +916,10 @@ impl<'c> TypeChecker<'c> {
                         "Only boolean expressions are valid if-statement conditions"
                     )
                 }
-                self.statement(pass)?;
-                self.statement(fail)?;
-                None
+                match (self.statement(pass)?, self.statement(fail)?) {
+                    (None, None) => None,
+                    (p, f) => Some(Type::maybe_union(p.iter().chain(&f))),
+                }
             }
             SK::Loop { condition, body } => {
                 let ty = self.expression(condition)?;
@@ -933,13 +934,14 @@ impl<'c> TypeChecker<'c> {
                         "Only boolean expressions are valid if-statement conditions"
                     )
                 }
-                self.statement(body)?;
-                None
+                self.statement(body)?
             }
+
             SK::IsCheck { .. } => {
                 // Checked in the compiler
                 None
             }
+
             SK::Block { statements } => {
                 let stack_size = self.stack.len();
 
