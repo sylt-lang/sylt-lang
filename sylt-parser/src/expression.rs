@@ -119,6 +119,9 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                     span: ctx.span(),
                     name: name.clone(),
                 };
+                if name == "self" {
+                    raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
+                }
                 ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after parameter name");
                 // Parameter type
                 let (_ctx, param) = parse_type(ctx)?;
@@ -764,7 +767,7 @@ mod test {
     use super::ExpressionKind::*;
     use crate::expression;
     use crate::expression::ComparisonKind;
-    use crate::test;
+    use crate::{test, fail};
     use crate::Assignable;
     use crate::AssignableKind::*;
 
@@ -854,6 +857,8 @@ mod test {
 
     test!(expression, if_expr: "a if b else c" => IfExpression { .. });
     test!(expression, if_expr_more: "1 + 1 + 1 if b else 2 + 2 + 2" => IfExpression { .. });
+
+    fail!(expression, fn_self_arg: "fn self: int do 1 end" => _);
 }
 
 impl PrettyPrint for Expression {
