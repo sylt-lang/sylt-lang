@@ -381,7 +381,18 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let (ctx, pass) = statement(ctx)?;
             // else?
             let (ctx, fail) = if matches!(ctx.token(), T::Else) {
-                statement(ctx.skip(1))?
+                let ctx = ctx.skip(1);
+                if matches!(ctx.token(), T::Do | T::If | T::Loop | T::Break | T::Continue | T::Ret) {
+                    statement(ctx)?
+                } else {
+                    let err_ctx = skip_until!(ctx, T::End);
+                    return Err((err_ctx,
+                                vec![syntax_error!(
+                                    ctx,
+                                    "Expected a statement keyword, but found {:?}",
+                                    ctx.token())]
+                    ));
+                }
             } else {
                 // No else so we insert an empty statement instead.
                 (
@@ -648,10 +659,10 @@ mod test {
     test!(statement, statement_const_type_declaration: "a :int: 1 + 1\n" => _);
     test!(statement, statement_force_mut_type_declaration: "a :!int= 1 + 1\n" => _);
     test!(statement, statement_force_const_type_declaration: "a :!int: 1 + 1\n" => _);
-    test!(statement, statement_if: "if 1 { a }\n" => _);
-    test!(statement, statement_if_else: "if 1 { a } else { b }\n" => _);
+    test!(statement, statement_if: "if 1 do a end\n" => _);
+    test!(statement, statement_if_else: "if 1 do a else do b end\n" => _);
     test!(statement, statement_loop: "loop 1 { a }\n" => _);
-    test!(statement, statement_loop_no_condition: "loop { a }\n" => _);
+    test!(statement, statement_loop_no_condition: "loop do a end\n" => _);
     test!(statement, statement_ret: "ret 1 + 1\n" => _);
     test!(statement, statement_ret_newline: "ret \n" => _);
     test!(statement, statement_unreach: "<!>\n" => _);
