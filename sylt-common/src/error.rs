@@ -93,6 +93,10 @@ impl fmt::Display for RuntimePhase {
 
 #[derive(Debug, Clone)]
 pub enum TypeError {
+    // The message should be given afterwards,
+    // since some errors are quite exotic.
+    Exotic,
+
     Violating(Type),
 
     BinOp {
@@ -368,6 +372,10 @@ impl fmt::Display for RuntimeError {
 impl fmt::Display for TypeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            TypeError::Exotic => {
+                Ok(())
+            }
+
             TypeError::Mismatch { got, expected } => {
                 write!(f, "A '{:?}' cannot be a '{:?}'", got, expected)
             }
