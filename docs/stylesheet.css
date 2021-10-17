@@ -299,6 +299,7 @@ h1,
 h2,
 h3,
 #toctitle,
+#navtitle,
 .sidebarblock > .content > .title,
 h4,
 h5,
@@ -344,6 +345,7 @@ h1,
 h2,
 h3,
 #toctitle,
+#navtitle,
 .sidebarblock > .content > .title,
 h4,
 h5,
@@ -362,6 +364,7 @@ h1 small,
 h2 small,
 h3 small,
 #toctitle small,
+#navtitle small,
 .sidebarblock > .content > .title small,
 h4 small,
 h5 small,
@@ -381,6 +384,7 @@ h2 {
 
 h3,
 #toctitle,
+#navtitle,
 .sidebarblock > .content > .title {
   font-size: 1.375em;
 }
@@ -494,6 +498,7 @@ blockquote p {
   h2,
   h3,
   #toctitle,
+  #navtitle,
   .sidebarblock > .content > .title,
   h4,
   h5,
@@ -511,6 +516,7 @@ blockquote p {
 
   h3,
   #toctitle,
+  #navtitle,
   .sidebarblock > .content > .title {
     font-size: 1.6875em;
   }
@@ -566,6 +572,7 @@ h1,
 h2,
 h3,
 #toctitle,
+#navtitle,
 .sidebarblock > .content > .title,
 h4,
 h5,
@@ -578,6 +585,7 @@ h1 strong,
 h2 strong,
 h3 strong,
 #toctitle strong,
+#navtitle strong,
 .sidebarblock > .content > .title strong,
 h4 strong,
 h5 strong,
@@ -746,7 +754,7 @@ p a > code:hover {
   width: 100%;
   margin: 0 auto;
   max-width: 62.5em;
-  *zoom: 1;
+  zoom: 1;
   position: relative;
   padding-left: 0.9375em;
   padding-right: 0.9375em;
@@ -884,14 +892,15 @@ body.toc2 #header > h1:nth-last-child(2) {
   text-decoration: underline;
 }
 
-#toctitle {
+#toctitle, #navtitle {
   color: var(--primarycolor);
   font-size: 1.2em;
 }
 
 @media screen and (min-width: 768px) {
-  #toctitle {
+  #toctitle, #navtitle {
     font-size: 1.375em;
+    margin-top: 0;
   }
 
   body.toc2 {
@@ -1035,6 +1044,7 @@ body.toc2 #header > h1:nth-last-child(2) {
 h2 > a.anchor,
 h3 > a.anchor,
 #toctitle > a.anchor,
+#navtitle > a.anchor,
 .sidebarblock > .content > .title > a.anchor,
 h4 > a.anchor,
 h5 > a.anchor,
@@ -1054,6 +1064,7 @@ h6 > a.anchor {
 h2 > a.anchor::before,
 h3 > a.anchor::before,
 #toctitle > a.anchor::before,
+#navtitle > a.anchor::before,
 .sidebarblock > .content > .title > a.anchor::before,
 h4 > a.anchor::before,
 h5 > a.anchor::before,
@@ -1070,9 +1081,11 @@ h2:hover > a.anchor,
 h2 > a.anchor:hover,
 h3:hover > a.anchor,
 #toctitle:hover > a.anchor,
+#navtitle:hover > a.anchor,
 .sidebarblock > .content > .title:hover > a.anchor,
 h3 > a.anchor:hover,
 #toctitle > a.anchor:hover,
+#navtitle > a.anchor:hover,
 .sidebarblock > .content > .title > a.anchor:hover,
 h4:hover > a.anchor,
 h4 > a.anchor:hover,
@@ -1087,6 +1100,7 @@ h6 > a.anchor:hover {
 h2 > a.link,
 h3 > a.link,
 #toctitle > a.link,
+#navtitle > a.link,
 .sidebarblock > .content > .title > a.link,
 h4 > a.link,
 h5 > a.link,
@@ -1099,6 +1113,7 @@ h6 > a.link {
 h2 > a.link:hover,
 h3 > a.link:hover,
 #toctitle > a.link:hover,
+#navtitle > a.link:hover,
 .sidebarblock > .content > .title > a.link:hover,
 h4 > a.link:hover,
 h5 > a.link:hover,
@@ -2238,6 +2253,34 @@ p.tableblock {
   box-shadow: 0 1px 4px #e0e0dc;
 }
 
+.navbar + * {
+  margin-top: 1em !important;
+}
+
+.navbar-list {
+  height: 100%;
+  list-style: none;
+  margin: 0;
+}
+
+.navbar-item {
+  padding-right: 1em;
+}
+
+.navbar-item a,
+.navbar-item a:active {
+  text-decoration: none !important;
+}
+
+.navbar-item-active a {
+  text-decoration: underline !important;
+  text-decoration-color: var(--linkcolor);
+}
+
+.navbar-item-active a:hover {
+  text-decoration-color: var(--linkhover);
+}
+
 .print-only {
   display: none !important;
 }
@@ -2312,6 +2355,7 @@ p.tableblock {
   h2,
   h3,
   #toctitle,
+  #navtitle,
   .sidebarblock > .content > .title {
     page-break-after: avoid;
   }

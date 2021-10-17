@@ -22,6 +22,7 @@ $(BUILD)/%.html: %.adoc $(STYLESHEET) $(SYNTAX) | $(BUILD)
 		--attribute sectlinks \
 		--attribute setanchors \
 	;
+	@python3 insert_navbar.py $@
 
 $(BUILD)/sylt.png: | $(BUILD)
 	cp ../res/sylt.png $@
