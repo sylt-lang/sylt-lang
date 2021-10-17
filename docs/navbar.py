@@ -19,7 +19,7 @@ for text, href in LINKS:
     list_item = soup.new_tag("li")
     list_item["class"] = "navbar-item"
     if href == os.path.basename(filename):
-        list_item["class"] = "navbar-item navbar-item-active"
+        list_item["class"] += " navbar-item-active"
     link = soup.new_tag("a", href=href)
     link.string = text
     list_item.append(link)
