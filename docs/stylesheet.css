@@ -2267,8 +2267,9 @@ p.tableblock {
   padding-right: 1em;
 }
 
-.navbar-item a {
-  text-decoration: none;
+.navbar-item a,
+.navbar-item a:active {
+  text-decoration: none !important;
 }
 
 .navbar-item-active a {
