@@ -3,7 +3,6 @@ FILES := $(wildcard *.adoc)
 STYLESHEET := stylesheet.css
 TARGETS := $(patsubst %.adoc,$(BUILD)/%.html,$(FILES)) $(BUILD)/sylt.png
 SYNTAX := ./syntax-highlighter.rb
-TMPFILE := $(shell mktemp)
 
 .PHONY: all clean
 
@@ -23,8 +22,7 @@ $(BUILD)/%.html: %.adoc $(STYLESHEET) $(SYNTAX) | $(BUILD)
 		--attribute sectlinks \
 		--attribute setanchors \
 	;
-	@python3 navbar.py $@ > $(TMPFILE)
-	@mv $(TMPFILE) $@
+	python3 insert_navbar.py $@
 
 $(BUILD)/sylt.png: | $(BUILD)
 	cp ../res/sylt.png $@

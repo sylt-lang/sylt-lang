@@ -27,4 +27,5 @@ for text, href in LINKS:
 
 soup.html.body.insert(0, navbar)
 
-print(soup.prettify())
+with open(filename, "w") as f:
+    f.write(soup.prettify())
