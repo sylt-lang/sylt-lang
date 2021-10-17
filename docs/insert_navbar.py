@@ -11,8 +11,11 @@ with open(filename, "r") as f:
 
 navbar = soup.new_tag("nav")
 navbar["class"] = "navbar"
+navbar_title = soup.new_tag("div", id="navtitle")
+navbar_title.string = "Navigation"
 navbar_list = soup.new_tag("ul")
 navbar_list["class"] = "navbar-list"
+navbar.append(navbar_title)
 navbar.append(navbar_list)
 
 for text, href in LINKS:
@@ -25,7 +28,7 @@ for text, href in LINKS:
     list_item.append(link)
     navbar_list.append(list_item)
 
-soup.html.body.insert(0, navbar)
+soup.find("div", { "id": "toc" }).insert(0, navbar)
 
 with open(filename, "w") as f:
     f.write(soup.prettify())
