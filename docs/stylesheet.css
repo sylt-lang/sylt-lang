@@ -2272,7 +2272,7 @@ p.tableblock {
 }
 
 .navbar-item-active a {
-  text-decoration: underline;
+  text-decoration: underline !important;
   text-decoration-color: var(--linkcolor);
 }
 
