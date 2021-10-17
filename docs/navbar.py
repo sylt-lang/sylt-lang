@@ -3,7 +3,7 @@ import sys
 
 from bs4 import BeautifulSoup
 
-LINKS = [("home", "index.html"), ("guide", "guide.html"), ("quick reference", "quick-reference.html")]
+LINKS = [("Home", "index.html"), ("Guide", "guide.html"), ("Quick Reference", "quick-reference.html")]
 
 filename = sys.argv[1]
 with open(filename, "r") as f:
