@@ -2245,6 +2245,8 @@ p.tableblock {
   width: 100%;
   z-index: 1000;
   background-color: var(--background);
+  padding-left: 0.9375em;
+  padding-right: 0.9375em;
 }
 
 .navbar + * {
@@ -2253,9 +2255,10 @@ p.tableblock {
 
 .navbar-list {
   display: flex;
+  height: 100%;
+  align-items: center;
   list-style: none;
-  margin-top: 1em;
-  margin-bottom: 0;
+  margin: 0;
 }
 
 .navbar-item {
