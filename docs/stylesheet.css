@@ -746,7 +746,7 @@ p a > code:hover {
   width: 100%;
   margin: 0 auto;
   max-width: 62.5em;
-  *zoom: 1;
+  zoom: 1;
   position: relative;
   padding-left: 0.9375em;
   padding-right: 0.9375em;
@@ -2236,6 +2236,43 @@ p.tableblock {
   background: #fffef7;
   border-color: #e0e0dc;
   box-shadow: 0 1px 4px #e0e0dc;
+}
+
+.navbar {
+  position: fixed;
+  top: 0;
+  height: 4em;
+  width: 100%;
+  z-index: 1000;
+  background-color: var(--background);
+}
+
+.navbar + * {
+  margin-top: 2em !important;
+}
+
+.navbar-list {
+  display: flex;
+  list-style: none;
+  margin-top: 1em;
+  margin-bottom: 0;
+}
+
+.navbar-item {
+  padding-right: 1em;
+}
+
+.navbar-item a {
+  text-decoration: none;
+}
+
+.navbar-item-active a {
+  text-decoration: underline;
+  text-decoration-color: var(--linkcolor);
+}
+
+.navbar-item-active a:hover {
+  text-decoration-color: var(--linkhover);
 }
 
 .print-only {
