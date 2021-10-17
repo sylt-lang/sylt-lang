@@ -275,11 +275,21 @@ impl<'t> LuaCompiler<'t> {
             Blob { blob: _, fields } => {
                 // TODO(ed): Know which blob something is?
                 // TODO(ed): Fill in empty fields with nil-value
-                write!(self, "(function() local");
-                let self_slot = self.compiler.define("self", VarKind::Mutable, expression.span);
+                let self_slot = self.compiler.define(
+                    "self",
+                    VarKind::Mutable,
+                    expression.span
+                );
                 self.compiler.activate(self_slot);
+
+                // Set up closure for the self variable. The typechecker takes
+                // the closure and self variable into account when solving the
+                // types.
+                write!(self, "(function() local");
                 self.write_slot(self_slot);
                 write!(self, "= nil;");
+
+                // Initialize the blob. This may capture self.
                 self.write_slot(self_slot);
                 write!(self, "= __BLOB {");
                 for (k, v) in fields.iter() {
@@ -287,15 +297,13 @@ impl<'t> LuaCompiler<'t> {
                     self.expression(v, ctx);
                     write!(self, ",");
                 }
+
+                // Return self and call the closure.
                 write!(self, "}; return");
                 self.write_slot(self_slot);
                 write!(self, "end)()");
-                self.compiler
-                    .frames
-                    .last_mut()
-                    .unwrap()
-                    .variables
-                    .pop();
+
+                self.compiler.frames.last_mut().unwrap().variables.pop();
             }
 
             Float(a) => write!(self, "{:?}", a),

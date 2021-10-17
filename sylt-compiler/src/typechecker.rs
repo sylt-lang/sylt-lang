@@ -712,14 +712,13 @@ impl<'c> TypeChecker<'c> {
                     blob_ty,
                     VarKind::Mutable
                 );
+                let stack_size = self.stack.len();
                 for (name, expr) in fields {
                     if matches!(expr.kind, EK::Function{..}) {
                         self.stack.push(self_var.clone());
                     }
                     let value = self.expression(&expr);
-                    if matches!(expr.kind, EK::Function{..}) {
-                        self.stack.pop();
-                    }
+                    self.stack.truncate(stack_size);
                     let ty = match value {
                         Ok(ty) => (ty, expr.span),
                         Err(mut errs) => {
