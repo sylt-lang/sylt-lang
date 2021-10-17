@@ -7,7 +7,7 @@ LINKS = [("Home", "index.html"), ("Guide", "guide.html"), ("Quick Reference", "q
 
 filename = sys.argv[1]
 with open(filename, "r") as f:
-    soup = BeautifulSoup("".join(f.readlines()), "html.parser")
+    soup = BeautifulSoup(f.read(), "html.parser")
 
 navbar = soup.new_tag("nav")
 navbar["class"] = "navbar"
