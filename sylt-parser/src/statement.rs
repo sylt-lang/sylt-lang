@@ -424,6 +424,9 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
                     // Another one.
                     T::Identifier(field) => {
+                        if field == "self" {
+                            raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
+                        }
                         if fields.contains_key(&field) {
                             raise_syntax_error!(ctx, "Field '{}' is declared twice", field);
                         }
@@ -451,6 +454,9 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
         // Implied type declaration, e.g. `a :: 1` or `a := 1`.
         [T::Identifier(name), T::ColonColon | T::ColonEqual, ..] => {
+            if name == "self" {
+                raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
+            }
             let ident = Identifier {
                 name: name.clone(),
                 span: ctx.span(),
@@ -467,9 +473,6 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 raise_syntax_error!(ctx, "External definitons have to have a type");
             } else {
                 let (ctx, value) = expression(ctx)?;
-                if name == "self" {
-                    raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
-                }
                 (
                     ctx,
                     Definition {
@@ -487,6 +490,9 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
         // Variable declaration with specified type, e.g. `c : int = 3` or `b : int | bool : false`.
         [T::Identifier(name), T::Colon, ..] => {
+            if name == "self" {
+                raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
+            }
             let ident = Identifier {
                 name: name.clone(),
                 span: ctx.span(),
@@ -519,16 +525,10 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 if kind.force() {
                     raise_syntax_error!(ctx, "Cannot force types on external definitions");
                 }
-                if name == "self" {
-                    raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
-                }
                 ( ctx.skip(1), ExternalDefinition { ident, kind, ty } )
             } else {
                 // The value to define the variable to.
                 let (ctx, value) = expression(ctx)?;
-                if name == "self" {
-                    raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
-                }
                 ( ctx, Definition { ident, kind, ty, value } )
             }
         }
@@ -670,7 +670,8 @@ mod test {
     test!(outer_statement, outer_statement_empty: "\n" => _);
 
     fail!(statement, statement_blob_newline: "A :: blob { a: int\n b: int }\n" => _);
-    fail!(statement, statement_assign_self_cost: "self :: 1" => _);
+    fail!(statement, statement_blob_self: "A :: blob { self: int }" => _);
+    fail!(statement, statement_assign_self_const: "self :: 1" => _);
     fail!(statement, statement_assign_self_var: "self := 1" => _);
     fail!(statement, statement_assign_self_type: "self: int = 1" => _);
 }

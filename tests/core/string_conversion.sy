@@ -3,7 +3,7 @@ A :: blob {
     a: int,
 }
 B :: blob {
-    self: B,
+    _self: B,
 }
 start :: fn do
     // Basic types
@@ -43,9 +43,9 @@ start :: fn do
     print(ab)
     b: !B = nil
     b = B {
-        self: b,
+        _self: b,
     }
-    b.self = b
+    b._self = b
     // Functions
     print(b)
     d :: fn x: int, y: int -> int do
