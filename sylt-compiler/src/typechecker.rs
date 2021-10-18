@@ -745,11 +745,11 @@ impl<'c> TypeChecker<'c> {
             }
 
             EK::Blob { blob, fields } => {
-                let (blob_name, blob_fields) = match self.assignable(blob, self.namespace)? {
-                    Lookup::Value(ty, _) => match ty {
-                        Type::Blob(name, fields) => (name, fields),
-                        _ => {
-                            return err_type_error!(
+                let (blob_ty, blob_name, blob_fields) = match self.assignable(blob, self.namespace)? {
+                    Lookup::Value(ty, _) => {
+                        match ty.clone() {
+                            Type::Blob(name, fields) => (ty, name, fields),
+                            _ => return err_type_error!(
                                 self,
                                 span,
                                 TypeError::Violating(ty),
@@ -763,8 +763,19 @@ impl<'c> TypeChecker<'c> {
                 };
                 let mut errors = Vec::new();
                 let mut initalizer = HashMap::new();
+                let self_var = Variable::new(
+                    Identifier { span: expression.span, name: "self".to_string() },
+                    blob_ty,
+                    VarKind::Mutable
+                );
+                let stack_size = self.stack.len();
                 for (name, expr) in fields {
-                    let ty = match self.expression(&expr) {
+                    if matches!(expr.kind, EK::Function{..}) {
+                        self.stack.push(self_var.clone());
+                    }
+                    let value = self.expression(&expr);
+                    self.stack.truncate(stack_size);
+                    let ty = match value {
                         Ok(ty) => (ty, expr.span),
                         Err(mut errs) => {
                             errors.append(&mut errs);

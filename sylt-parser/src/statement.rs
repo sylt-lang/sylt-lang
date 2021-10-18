@@ -441,6 +441,9 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
                     // Another one.
                     T::Identifier(field) => {
+                        if field == "self" {
+                            raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
+                        }
                         if fields.contains_key(&field) {
                             raise_syntax_error!(ctx, "Field '{}' is declared twice", field);
                         }
@@ -466,56 +469,32 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx, Blob { name, fields })
         }
 
-        // Constant declaration, e.g. `a :: 1`.
-        [T::Identifier(name), T::ColonColon, ..] => {
-            let ident = Identifier {
-                name: name.clone(),
-                span: ctx.span(),
-            };
-            // Skip identifier and `::`.
-            let ctx = ctx.skip(2);
-
-            if matches!(ctx.token(), T::External) {
-                raise_syntax_error!(ctx, "External definitons have to have a type");
-            } else {
-                // The value to assign.
-                let (ctx, value) = expression(ctx)?;
-
-                (
-                    ctx,
-                    Definition {
-                        ident,
-                        kind: VarKind::Const,
-                        ty: Type {
-                            span: ctx.span(),
-                            kind: TypeKind::Implied,
-                        },
-                        value,
-                    },
-                )
+        // Implied type declaration, e.g. `a :: 1` or `a := 1`.
+        [T::Identifier(name), T::ColonColon | T::ColonEqual, ..] => {
+            if name == "self" {
+                raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
             }
-        }
-
-        // Mutable declaration, e.g. `b := 2`.
-        [T::Identifier(name), T::ColonEqual, ..] => {
             let ident = Identifier {
                 name: name.clone(),
                 span: ctx.span(),
             };
-            // Skip identifier and `:=`.
-            let ctx = ctx.skip(2);
+            let ctx = ctx.skip(1);
+            let kind = match ctx.token() {
+                T::ColonColon => VarKind::Const,
+                T::ColonEqual => VarKind::Mutable,
+                _ => unreachable!(),
+            };
+            let ctx = ctx.skip(1);
 
             if matches!(ctx.token(), T::External) {
                 raise_syntax_error!(ctx, "External definitons have to have a type");
             } else {
-                // The value to assign.
                 let (ctx, value) = expression(ctx)?;
-
                 (
                     ctx,
                     Definition {
                         ident,
-                        kind: VarKind::Mutable,
+                        kind,
                         ty: Type {
                             span: ctx.span(),
                             kind: TypeKind::Implied,
@@ -528,6 +507,9 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
         // Variable declaration with specified type, e.g. `c : int = 3` or `b : int | bool : false`.
         [T::Identifier(name), T::Colon, ..] => {
+            if name == "self" {
+                raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
+            }
             let ident = Identifier {
                 name: name.clone(),
                 span: ctx.span(),
@@ -714,6 +696,10 @@ mod test {
     test!(outer_statement, outer_statement_empty: "\n" => _);
 
     fail!(statement, statement_blob_newline: "A :: blob { a: int\n b: int }\n" => _);
+    fail!(statement, statement_blob_self: "A :: blob { self: int }" => _);
+    fail!(statement, statement_assign_self_const: "self :: 1" => _);
+    fail!(statement, statement_assign_self_var: "self := 1" => _);
+    fail!(statement, statement_assign_self_type: "self: int = 1" => _);
 }
 
 impl Display for NameIdentifier {

@@ -295,13 +295,52 @@ impl<'t> BytecodeCompiler<'t> {
             }
 
             Blob { blob, fields } => {
-                self.assignable(blob, ctx);
+                let name = format!("blob");
+
+                // Set up closure for the self variable. The typechecker takes
+                // the closure and self variable into account when solving the
+                // types.
+                let inner_ctx = self.push_frame_and_block(ctx, &name, expression.span);
+
+                let blob_ty = self.compiler.resolve_type_ident(blob, ctx.namespace, ctx.into());
+                let ty = Type::Function(Vec::new(), Box::new(blob_ty));
+                self.blocks[inner_ctx.block_slot].ty = ty.clone();
+
+                // Set self to nil so that we can capture it.
+                self.push(Value::Nil, expression.span, inner_ctx);
+                let slot = self.compiler.define("self", VarKind::Mutable, expression.span);
+                self.compiler.activate(slot);
+
+                // Initialize the blob. This may capture self.
+                self.assignable(blob, inner_ctx);
                 for (name, field) in fields.iter() {
                     let name = self.compiler.constant(Value::String(Rc::new(name.clone())));
-                    self.add_op(ctx, field.span, name);
-                    self.expression(field, ctx);
+                    self.add_op(inner_ctx, field.span, name);
+                    self.expression(field, inner_ctx);
                 }
-                self.add_op(ctx, expression.span, Op::Call(fields.len() * 2));
+
+                // Set self to the blob and return it.
+                self.add_op(inner_ctx, expression.span, Op::Call(fields.len() * 2));
+                self.set_identifier("self", expression.span, inner_ctx, inner_ctx.namespace);
+                self.read_identifier("self", expression.span, inner_ctx, inner_ctx.namespace);
+                self.add_op(inner_ctx, expression.span, Op::Return);
+
+                self.blocks[inner_ctx.block_slot].upvalues = self.compiler
+                    .pop_frame(inner_ctx.into())
+                    .upvalues
+                    .into_iter()
+                    .map(|u| (u.parent, u.upupvalue, u.ty))
+                    .collect();
+                let function = Value::Function(
+                    Rc::new(Vec::new()),
+                    Type::Function(Vec::new(), Box::new(ty)),
+                    inner_ctx.block_slot
+                );
+
+                // Call the closure.
+                let function = self.compiler.constant(function);
+                self.add_op(ctx, expression.span, function);
+                self.add_op(ctx, expression.span, Op::Call(0));
             }
 
             Tuple(x) | List(x) | Set(x) | Dict(x) => {
