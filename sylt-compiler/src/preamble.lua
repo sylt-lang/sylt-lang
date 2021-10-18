@@ -13,6 +13,9 @@ __SEEN = {}
 __INDEX = function(o, i)
     if o == nil then return nil end
     local m = getmetatable(o)
+    if m == nil then
+        return o[i]
+    end
     if m._type == "tuple" or m._type == "list" then
         local e = o[i + 1]
         assert(e ~= nil, "Tuple/list index out of range \"" .. i .. "\"")
@@ -32,6 +35,10 @@ end
 __ASSIGN_INDEX = function(o, i, v)
     if o == nil then return nil end
     local m = getmetatable(o)
+    if m == nil then
+        o[i] = v
+        return
+    end
     if m._type == "tuple" then
         assert(nil, "Cannot assign to tuple!")
     end
