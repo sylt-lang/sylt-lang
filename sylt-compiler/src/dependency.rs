@@ -306,15 +306,9 @@ pub(crate) fn initialization_order<'a>(
         for statement in module.statements.iter() {
             use StatementKind::*;
             match &statement.kind {
-                | Use { name: NameIdentifier::Implicit(Identifier { name, .. }), .. }
-                | Use { name: NameIdentifier::Alias(Identifier { name, .. }), .. } => {
-                    to_order.insert(
-                        *compiler.namespaces[namespace].get(name).unwrap(),
-                        (BTreeSet::new(), (statement, namespace))
-                    );
-                },
-
                 | Blob { name, .. }
+                | Use { name: NameIdentifier::Implicit(Identifier { name, .. }), .. }
+                | Use { name: NameIdentifier::Alias(Identifier { name, .. }), .. }
                 | ExternalDefinition { ident: Identifier { name, ..}, .. }
                 | Definition { ident: Identifier { name, ..}, .. } => {
                     let mut ctx = Context {
@@ -330,7 +324,9 @@ pub(crate) fn initialization_order<'a>(
                         )
                     );
                 },
+
                 IsCheck { .. } => is_checks.push((statement, namespace)),
+
                 _ => {},
             }
         }
