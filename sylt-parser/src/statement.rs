@@ -378,10 +378,27 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let (ctx, condition) = expression(ctx.skip(1))?;
             let ctx = ctx.pop_skip_newlines(skip_newlines);
 
-            let (ctx, pass) = statement(ctx)?;
+            fn statement_or_block<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
+                if matches!(
+                    ctx.token(),
+                    T::Do | T::If | T::Loop | T::Break | T::Continue | T::Ret
+                ) {
+                    Ok(statement(ctx)?)
+                } else {
+                    let err_ctx = skip_until!(ctx, T::End);
+                    let err = syntax_error!(
+                        ctx,
+                        "Expected \"do\" or a statement keyword, but found {:?}",
+                        ctx.token()
+                    );
+                    Err((err_ctx, vec![err]))
+                }
+            }
+
+            let (ctx, pass) = statement_or_block(ctx)?;
             // else?
             let (ctx, fail) = if matches!(ctx.token(), T::Else) {
-                statement(ctx.skip(1))?
+                statement_or_block(ctx.skip(1))?
             } else {
                 // No else so we insert an empty statement instead.
                 (
@@ -525,11 +542,20 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 if kind.force() {
                     raise_syntax_error!(ctx, "Cannot force types on external definitions");
                 }
-                ( ctx.skip(1), ExternalDefinition { ident, kind, ty } )
+                (ctx.skip(1), ExternalDefinition { ident, kind, ty })
             } else {
                 // The value to define the variable to.
                 let (ctx, value) = expression(ctx)?;
-                ( ctx, Definition { ident, kind, ty, value } )
+
+                (
+                    ctx,
+                    Definition {
+                        ident,
+                        kind,
+                        ty,
+                        value,
+                    },
+                )
             }
         }
 
@@ -629,10 +655,10 @@ mod test {
     test!(statement, statement_const_type_declaration: "a :int: 1 + 1\n" => _);
     test!(statement, statement_force_mut_type_declaration: "a :!int= 1 + 1\n" => _);
     test!(statement, statement_force_const_type_declaration: "a :!int: 1 + 1\n" => _);
-    test!(statement, statement_if: "if 1 { a }\n" => _);
-    test!(statement, statement_if_else: "if 1 { a } else { b }\n" => _);
+    test!(statement, statement_if: "if 1 do a end\n" => _);
+    test!(statement, statement_if_else: "if 1 do a else do b end\n" => _);
     test!(statement, statement_loop: "loop 1 { a }\n" => _);
-    test!(statement, statement_loop_no_condition: "loop { a }\n" => _);
+    test!(statement, statement_loop_no_condition: "loop do a end\n" => _);
     test!(statement, statement_ret: "ret 1 + 1\n" => _);
     test!(statement, statement_ret_newline: "ret \n" => _);
     test!(statement, statement_unreach: "<!>\n" => _);
@@ -652,7 +678,7 @@ mod test {
     test!(statement, statement_is_check: ":A is :B\n" => IsCheck { .. });
     test!(statement, statement_is_check_nested: ":A.c.d is :B.d.d\n" => IsCheck { .. });
 
-    test!(statement, statement_if_newline: "if 1 \n\n+\n 1\n\n < 2 { }\n" => _);
+    test!(statement, statement_if_newline: "if 1 \n\n+\n 1\n\n < 2 do end\n" => _);
 
     test!(statement, statement_skip_newline: "(1 \n\n+\n 1\n\n)\n" => _);
     test!(statement, statement_skip_newline_list: "[\n\n 1 \n\n,\n 1\n\n,]\n" => _);

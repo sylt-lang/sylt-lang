@@ -4,8 +4,8 @@ use sylt_common::error::{Error, TypeError};
 use sylt_common::{Type, Value::Ty as ValueType};
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
-    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp,
-    Span, Statement, StatementKind, VarKind,
+    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp, Span,
+    Statement, StatementKind, VarKind,
 };
 
 use crate::{self as compiler, first_ok_or_errs, Context, Name as CompilerName};
@@ -100,18 +100,23 @@ impl<'c> TypeChecker<'c> {
         let namespaces = compiler
             .namespaces
             .iter()
-            .map(|n| n
-                .iter()
-                .map(|(k, v)| (
-                    k.clone(),
-                    match v {
-                        compiler::Name::Blob(b) => Name::Blob(*b),
-                        compiler::Name::Namespace(n) => Name::Namespace(*n),
-                        | compiler::Name::Global(_)
-                        | compiler::Name::External(_) => Name::Global(None),
-                    }
-                )).collect()
-            ).collect();
+            .map(|n| {
+                n.iter()
+                    .map(|(k, v)| {
+                        (
+                            k.clone(),
+                            match v {
+                                compiler::Name::Blob(b) => Name::Blob(*b),
+                                compiler::Name::Namespace(n) => Name::Namespace(*n),
+                                compiler::Name::Global(_) | compiler::Name::External(_) => {
+                                    Name::Global(None)
+                                }
+                            },
+                        )
+                    })
+                    .collect()
+            })
+            .collect();
 
         Self {
             compiler,
@@ -121,7 +126,6 @@ impl<'c> TypeChecker<'c> {
         }
     }
 
-
     fn file(&self) -> PathBuf {
         self.compiler.file_from_namespace(self.namespace).into()
     }
@@ -130,7 +134,13 @@ impl<'c> TypeChecker<'c> {
         compiler::Context::from_namespace(self.namespace)
     }
 
-    fn solve_generics_recursively(&self, span: Span, generics: &mut HashMap<String, Type>, par: &Type, arg: &Type) -> Result<Type, Vec<Error>> {
+    fn solve_generics_recursively(
+        &self,
+        span: Span,
+        generics: &mut HashMap<String, Type>,
+        par: &Type,
+        arg: &Type,
+    ) -> Result<Type, Vec<Error>> {
         Ok(match (par, arg) {
             (_, Type::Generic(_)) => {
                 return err_type_error!(
@@ -149,29 +159,43 @@ impl<'c> TypeChecker<'c> {
                             return err_type_error!(
                                 self,
                                 span,
-                                TypeError::Mismatch { got: arg.clone(), expected: known.clone() },
+                                TypeError::Mismatch {
+                                    got: arg.clone(),
+                                    expected: known.clone()
+                                },
                                 "because {}. The type was inferred from previous arguments.",
                                 reason
-                            )
+                            );
                         }
                         known.clone()
                     }
-                    Entry::Vacant(unknown) => {
-                        unknown.insert(arg.clone()).clone()
-                    }
+                    Entry::Vacant(unknown) => unknown.insert(arg.clone()).clone(),
                 }
             }
             (x, y) if x.fits(&y).is_ok() => x.clone(),
 
-            (Type::Tuple(a), Type::Tuple(b)) => Type::Tuple(a.iter().zip(b.iter()).map(|(a, b)| self.solve_generics_recursively(span, generics, a, b)).collect::<Result<Vec<_>, _>>()?),
-            (Type::List(a), Type::List(b)) => Type::List(Box::new(self.solve_generics_recursively(span, generics, a, b)?)),
-            (Type::Set(a), Type::Set(b)) => Type::Set(Box::new(self.solve_generics_recursively(span, generics, a, b)?)),
+            (Type::Tuple(a), Type::Tuple(b)) => Type::Tuple(
+                a.iter()
+                    .zip(b.iter())
+                    .map(|(a, b)| self.solve_generics_recursively(span, generics, a, b))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+            (Type::List(a), Type::List(b)) => Type::List(Box::new(
+                self.solve_generics_recursively(span, generics, a, b)?,
+            )),
+            (Type::Set(a), Type::Set(b)) => Type::Set(Box::new(
+                self.solve_generics_recursively(span, generics, a, b)?,
+            )),
             (Type::Dict(ak, av), Type::Dict(bk, bv)) => Type::Dict(
                 Box::new(self.solve_generics_recursively(span, generics, ak, bk)?),
                 Box::new(self.solve_generics_recursively(span, generics, av, bv)?),
             ),
             (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
-                let args = a_args.iter().zip(b_args.iter()).map(|(a, b)| self.solve_generics_recursively(span, generics, a, b)).collect::<Result<Vec<_>, _>>()?;
+                let args = a_args
+                    .iter()
+                    .zip(b_args.iter())
+                    .map(|(a, b)| self.solve_generics_recursively(span, generics, a, b))
+                    .collect::<Result<Vec<_>, _>>()?;
                 let ret = Box::new(self.solve_generics_recursively(span, generics, a_ret, b_ret)?);
                 Type::Function(args, ret)
             }
@@ -194,31 +218,35 @@ impl<'c> TypeChecker<'c> {
                 }
                 a.clone()
             }
-            (Type::Union(a), b) => {
-                first_ok_or_errs(a.iter()
-                    .map(|ty| {
-                        let mut new_generics = generics.clone();
-                        let ret = self.solve_generics_recursively(span, &mut new_generics, ty, b);
-                        if ret.is_ok() {
-                            *generics = new_generics;
-                        }
-                        ret
-                    })
-                )
-                .map_err(|errs| errs.into_iter().flatten().collect::<Vec<_>>())?
-            }
+            (Type::Union(a), b) => first_ok_or_errs(a.iter().map(|ty| {
+                let mut new_generics = generics.clone();
+                let ret = self.solve_generics_recursively(span, &mut new_generics, ty, b);
+                if ret.is_ok() {
+                    *generics = new_generics;
+                }
+                ret
+            }))
+            .map_err(|errs| errs.into_iter().flatten().collect::<Vec<_>>())?,
             _ => {
                 // TODO(ed): Point to the argument maybe?
                 return err_type_error!(
                     self,
                     span,
-                    TypeError::Mismatch { got: arg.clone(), expected: par.clone() }
+                    TypeError::Mismatch {
+                        got: arg.clone(),
+                        expected: par.clone()
+                    }
                 );
             }
         })
     }
 
-    fn resolve_functions_from_args(&self, span: Span, args: &Vec<Type>, ty: &Type) -> Result<(Vec<Type>, Type), Vec<Error>> {
+    fn resolve_functions_from_args(
+        &self,
+        span: Span,
+        args: &Vec<Type>,
+        ty: &Type,
+    ) -> Result<(Vec<Type>, Type), Vec<Error>> {
         let (params, ret) = match ty {
             // Recursive case
             Type::Union(tys) => {
@@ -226,8 +254,12 @@ impl<'c> TypeChecker<'c> {
                 let mut errors = Vec::new();
                 for ty in tys.iter() {
                     match self.resolve_functions_from_args(span, args, ty) {
-                        Ok(res) => { solutions.push(res); }
-                        Err(mut err) => { errors.append(&mut err); }
+                        Ok(res) => {
+                            solutions.push(res);
+                        }
+                        Err(mut err) => {
+                            errors.append(&mut err);
+                        }
                     }
                 }
                 // We limit ourselves to one solution, anything else is ambiguous.
@@ -236,11 +268,11 @@ impl<'c> TypeChecker<'c> {
                 } else {
                     return Err(errors);
                 }
-            },
+            }
             Type::Function(params, ret) => (params, ret),
             Type::Unknown => {
                 return Ok((args.clone(), Type::Unknown));
-            },
+            }
             ty => {
                 return err_type_error!(
                     self,
@@ -256,8 +288,11 @@ impl<'c> TypeChecker<'c> {
             return err_type_error!(
                 self,
                 span,
-                TypeError::WrongArity { got: args.len(), expected: params.len() }
-            )
+                TypeError::WrongArity {
+                    got: args.len(),
+                    expected: params.len()
+                }
+            );
         }
 
         let mut generics: HashMap<_, Type> = HashMap::new();
@@ -279,10 +314,10 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         span,
-                        TypeError::Mutability, // TODO(ed): Wrong error
+                        TypeError::Exotic,
                         "Generics are only allowed if they can be deduced from the function signature, but '#{}' is not mentioned in the parameters",
                         ret
-                    )
+                    );
                 }
             }
         } else {
@@ -291,7 +326,11 @@ impl<'c> TypeChecker<'c> {
         Ok((args.to_vec(), ret))
     }
 
-    fn assignable(&mut self, assignable: &Assignable, namespace: usize) -> Result<Lookup, Vec<Error>> {
+    fn assignable(
+        &mut self,
+        assignable: &Assignable,
+        namespace: usize,
+    ) -> Result<Lookup, Vec<Error>> {
         use AssignableKind as AK;
         use Lookup::*;
         let span = assignable.span;
@@ -319,9 +358,7 @@ impl<'c> TypeChecker<'c> {
                             return Ok(Value(b.clone(), VarKind::Const));
                         }
                     }
-                    Some(Name::Namespace(id)) => {
-                        return Ok(Namespace(*id))
-                    }
+                    Some(Name::Namespace(id)) => return Ok(Namespace(*id)),
                     None => {}
                 }
                 if let Some((_, _, ty)) = self.compiler.functions.get(&ident.name) {
@@ -347,7 +384,10 @@ impl<'c> TypeChecker<'c> {
                         );
                     }
                 };
-                let args = args.iter().map(|e| self.expression(e)).collect::<Result<Vec<_>, Vec<_>>>()?;
+                let args = args
+                    .iter()
+                    .map(|e| self.expression(e))
+                    .collect::<Result<Vec<_>, Vec<_>>>()?;
                 let (_params, ret) = self.resolve_functions_from_args(span, &args, &ty)?;
                 return Ok(Value(Type::clone(&ret), VarKind::Const));
             }
@@ -355,16 +395,19 @@ impl<'c> TypeChecker<'c> {
                 // DRY
                 let mut args = args.clone();
                 args.insert(0, Expression::clone(extra));
-                return self.assignable(&Assignable {
-                    span,
-                    kind: AK::Call(Box::clone(fun), args),
-                }, namespace);
+                return self.assignable(
+                    &Assignable {
+                        span,
+                        kind: AK::Call(Box::clone(fun), args),
+                    },
+                    namespace,
+                );
             }
             AK::Access(thing, field) => {
                 match self.assignable(thing, namespace)? {
                     Value(ty, _kind) => {
                         match &ty {
-                            Type::Unknown => { Ok(Value(Type::Unknown, VarKind::Mutable)) }
+                            Type::Unknown => Ok(Value(Type::Unknown, VarKind::Mutable)),
                             Type::Blob(name, fields) => {
                                 match fields.get(&field.name) {
                                     Some(ty) => Ok(Value(ty.clone(), VarKind::Mutable)),
@@ -375,9 +418,12 @@ impl<'c> TypeChecker<'c> {
                                         _ => err_type_error!(
                                             self,
                                             field.span,
-                                            TypeError::UnknownField { blob: name.clone(), field: field.name.clone() }
+                                            TypeError::UnknownField {
+                                                blob: name.clone(),
+                                                field: field.name.clone()
+                                            }
                                         ),
-                                    }
+                                    },
                                 }
                             }
                             ty => err_type_error!(
@@ -389,10 +435,13 @@ impl<'c> TypeChecker<'c> {
                         }
                     }
                     Namespace(namespace) => {
-                        return self.assignable(&Assignable {
-                            span: field.span,
-                            kind: AK::Read(field.clone()),
-                        }, namespace);
+                        return self.assignable(
+                            &Assignable {
+                                span: field.span,
+                                kind: AK::Read(field.clone()),
+                            },
+                            namespace,
+                        );
                     }
                 }
             }
@@ -401,11 +450,7 @@ impl<'c> TypeChecker<'c> {
                 let thing = if let Value(val, _) = self.assignable(thing, namespace)? {
                     val
                 } else {
-                    return err_type_error!(
-                        self,
-                        span,
-                        TypeError::NamespaceNotExpression
-                    );
+                    return err_type_error!(self, span, TypeError::NamespaceNotExpression);
                 };
                 let index = self.expression(index_expr)?;
                 let ret = match (thing, index) {
@@ -421,7 +466,7 @@ impl<'c> TypeChecker<'c> {
                                 "List indexing requires '{:?}' and {}",
                                 Type::Int,
                                 reason
-                            )
+                            );
                         }
                         Value(Type::clone(&ret), VarKind::Mutable)
                     }
@@ -437,7 +482,7 @@ impl<'c> TypeChecker<'c> {
                                 "Tuple indexing requires '{:?}' and {}",
                                 Type::Int,
                                 reason
-                            )
+                            );
                         }
                         // TODO(ed): Clean this up a bit
                         let val = if let ExpressionKind::Int(index) = index_expr.kind {
@@ -470,7 +515,7 @@ impl<'c> TypeChecker<'c> {
                                 "Dict key-type is '{:?}' and {}",
                                 key,
                                 reason
-                            )
+                            );
                         }
                         Value(Type::clone(&val), VarKind::Mutable)
                     }
@@ -507,7 +552,11 @@ impl<'c> TypeChecker<'c> {
             self,
             res,
             span,
-            TypeError::BinOp { lhs, rhs, op: name.into() }
+            TypeError::BinOp {
+                lhs,
+                rhs,
+                op: name.into()
+            }
         );
         Ok(res)
     }
@@ -525,13 +574,21 @@ impl<'c> TypeChecker<'c> {
             self,
             res,
             span,
-            TypeError::UniOp { val, op: name.into() }
+            TypeError::UniOp {
+                val,
+                op: name.into()
+            }
         );
         Ok(res)
     }
 
-    fn expression_union_or_errors<'a>(&mut self, expressions: impl Iterator<Item = &'a Expression>) -> Result<Type, Vec<Error>> {
-        let ty: Vec<Type> = expressions.map(|e| self.expression(e)).collect::<Result<Vec<Type>, Vec<Error>>>()?;
+    fn expression_union_or_errors<'a>(
+        &mut self,
+        expressions: impl Iterator<Item = &'a Expression>,
+    ) -> Result<Type, Vec<Error>> {
+        let ty: Vec<Type> = expressions
+            .map(|e| self.expression(e))
+            .collect::<Result<Vec<Type>, Vec<Error>>>()?;
         Ok(Type::maybe_union(ty.iter()))
     }
 
@@ -540,15 +597,9 @@ impl<'c> TypeChecker<'c> {
         let span = expression.span;
         let res = match &expression.kind {
             EK::Get(assignable) => match self.assignable(assignable, self.namespace)? {
-                Lookup::Value(value, _) => {
-                    value
-                }
+                Lookup::Value(value, _) => value,
                 Lookup::Namespace(_) => {
-                    return err_type_error!(
-                        self,
-                        span,
-                        TypeError::NamespaceNotExpression
-                    );
+                    return err_type_error!(self, span, TypeError::NamespaceNotExpression);
                 }
             },
 
@@ -562,31 +613,38 @@ impl<'c> TypeChecker<'c> {
                 ComparisonKind::Equals | ComparisonKind::NotEquals => {
                     self.bin_op(span, a, b, op::eq, "Equality")?
                 }
-                ComparisonKind::Greater | ComparisonKind::GreaterEqual | ComparisonKind::Less | ComparisonKind::LessEqual => {
-                    self.bin_op(span, a, b, op::cmp, "Comparison")?
-                }
+                ComparisonKind::Greater
+                | ComparisonKind::GreaterEqual
+                | ComparisonKind::Less
+                | ComparisonKind::LessEqual => self.bin_op(span, a, b, op::cmp, "Comparison")?,
                 ComparisonKind::In => {
                     let a = self.expression(a)?;
                     let b = self.expression(b)?;
                     // TODO(ed): Verify the order here
                     let ret = match (&a, &b) {
-                        (a, Type::List(b))
-                        | (a, Type::Set(b))
-                        | (a, Type::Dict(b, _)) => b.fits(a),
+                        (a, Type::List(b)) | (a, Type::Set(b)) | (a, Type::Dict(b, _)) => b.fits(a),
                         _ => Err("".into()),
                     };
                     if let Err(msg) = ret {
                         let err = Error::TypeError {
-                            kind: TypeError::BinOp { lhs: a, rhs: b, op: "Containment".into() },
+                            kind: TypeError::BinOp {
+                                lhs: a,
+                                rhs: b,
+                                op: "Containment".into(),
+                            },
                             file: self.file(),
                             span,
-                            message: if msg.is_empty() { None } else { Some(format!("because {}", msg)) },
+                            message: if msg.is_empty() {
+                                None
+                            } else {
+                                Some(format!("because {}", msg))
+                            },
                         };
                         return Err(vec![err]);
                     }
                     Type::Bool
                 }
-            }
+            },
 
             EK::Neg(a) => self.uni_op(span, a, op::neg, "Negation")?,
 
@@ -637,7 +695,8 @@ impl<'c> TypeChecker<'c> {
                 for (ident, ty) in params {
                     let ty = self.compiler.resolve_type(ty, self.compiler_context());
                     param_types.push(ty.clone());
-                    self.stack.push(Variable::new(ident.clone(), ty, VarKind::Const));
+                    self.stack
+                        .push(Variable::new(ident.clone(), ty, VarKind::Const));
                 }
 
                 let ret = self.compiler.resolve_type(ret, self.compiler_context());
@@ -649,7 +708,10 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         span,
-                        TypeError::Mismatch { got: actual_ret, expected: ret },
+                        TypeError::Mismatch {
+                            got: actual_ret,
+                            expected: ret
+                        },
                         "Return type doesn't match, {}",
                         reason
                     );
@@ -675,13 +737,11 @@ impl<'c> TypeChecker<'c> {
                             expected: Type::Bool,
                         },
                         "Only boolean expressions are valid if-expression conditions"
-                    )
+                    );
                 }
 
                 // TODO(ed) check nullables and the actual condition
-                Type::maybe_union(
-                    [self.expression(pass)?, self.expression(fail)?].iter(),
-                )
+                Type::maybe_union([self.expression(pass)?, self.expression(fail)?].iter())
             }
 
             EK::Blob { blob, fields } => {
@@ -694,15 +754,11 @@ impl<'c> TypeChecker<'c> {
                                 span,
                                 TypeError::Violating(ty),
                                 "A blob was expected when instancing"
-                            ),
+                            )
                         }
-                    }
+                    },
                     Lookup::Namespace(_) => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::NamespaceNotExpression
-                        );
+                        return err_type_error!(self, span, TypeError::NamespaceNotExpression);
                     }
                 };
                 let mut errors = Vec::new();
@@ -737,7 +793,10 @@ impl<'c> TypeChecker<'c> {
                                 errors.push(type_error!(
                                     self,
                                     *span,
-                                    TypeError::Mismatch { expected: lhs.clone(), got: rhs.clone() },
+                                    TypeError::Mismatch {
+                                        expected: lhs.clone(),
+                                        got: rhs.clone()
+                                    },
                                     "because {}.{} is a '{:?}' and {}",
                                     blob_name,
                                     name,
@@ -745,12 +804,15 @@ impl<'c> TypeChecker<'c> {
                                     reason
                                 ));
                             }
-                        }
+                        },
                         None => {
                             errors.push(type_error!(
                                 self,
                                 *span,
-                                TypeError::UnknownField { blob: blob_name.clone(), field: name.clone() },
+                                TypeError::UnknownField {
+                                    blob: blob_name.clone(),
+                                    field: name.clone()
+                                },
                                 "{}.{} does not exist on the original blob type",
                                 blob_name,
                                 name
@@ -771,7 +833,10 @@ impl<'c> TypeChecker<'c> {
                     errors.push(type_error!(
                         self,
                         span,
-                        TypeError::MissingField { blob: blob_name.clone(), field: name.clone() }
+                        TypeError::MissingField {
+                            blob: blob_name.clone(),
+                            field: name.clone()
+                        }
                     ));
                 }
                 if !errors.is_empty() {
@@ -798,22 +863,12 @@ impl<'c> TypeChecker<'c> {
                         // TODO(ed): I want this to point to the equal-sign, the parser is
                         // probably a bit off.
                         // TODO(ed): This should not be a type error - prefereably a compile error?
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::Mutability
-                        );
+                        return err_type_error!(self, span, TypeError::Mutability);
                     }
                     Lookup::Namespace(_) => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::NamespaceNotExpression
-                        );
+                        return err_type_error!(self, span, TypeError::NamespaceNotExpression);
                     }
-                    Lookup::Value(ty, _) => {
-                        ty
-                    }
+                    Lookup::Value(ty, _) => ty,
                 };
                 let result = match kind {
                     ParserOp::Nop => value.clone(),
@@ -829,13 +884,14 @@ impl<'c> TypeChecker<'c> {
                     TypeError::BinOp {
                         lhs: target_ty.clone(),
                         rhs: value.clone(),
-                        op: match kind  {
+                        op: match kind {
                             ParserOp::Nop => unreachable!(),
                             ParserOp::Add => "Addition",
                             ParserOp::Sub => "Subtraction",
                             ParserOp::Mul => "Multiplication",
                             ParserOp::Div => "Division",
-                        }.to_string()
+                        }
+                        .to_string()
                     }
                 );
                 // TODO(ed): Is the fits-order correct?
@@ -845,7 +901,10 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         span,
-                        TypeError::MismatchAssign { got: result, expected: target_ty },
+                        TypeError::MismatchAssign {
+                            got: result,
+                            expected: target_ty
+                        },
                         "because {}",
                         reason
                     );
@@ -853,7 +912,7 @@ impl<'c> TypeChecker<'c> {
                 None
             }
 
-            SK::ExternalDefinition { .. } => { None }
+            SK::ExternalDefinition { .. } => None,
 
             SK::Definition {
                 ident,
@@ -866,7 +925,10 @@ impl<'c> TypeChecker<'c> {
                 let ty = if matches!(ty, Type::Unknown) {
                     // Special case if it's a function
                     if let ExpressionKind::Function { params, ret, .. } = &value.kind {
-                        let params = params.iter().map(|(_, ty)| self.compiler.resolve_type(ty, self.compiler_context())).collect();
+                        let params = params
+                            .iter()
+                            .map(|(_, ty)| self.compiler.resolve_type(ty, self.compiler_context()))
+                            .collect();
                         let ret = self.compiler.resolve_type(ret, self.compiler_context());
                         Type::Function(params, Box::new(ret))
                     } else {
@@ -877,7 +939,8 @@ impl<'c> TypeChecker<'c> {
                 };
 
                 let value = self.expression(value);
-                self.stack.push(Variable::new(ident.clone(), ty.clone(), *kind));
+                self.stack
+                    .push(Variable::new(ident.clone(), ty.clone(), *kind));
                 let value = value?;
 
                 let fit = ty.fits(&value);
@@ -893,7 +956,13 @@ impl<'c> TypeChecker<'c> {
                         )
                     }
                     (true, Err(_)) => ty,
-                    (false, Ok(_)) => if matches!(ty, Type::Unknown) { value } else { ty },
+                    (false, Ok(_)) => {
+                        if matches!(ty, Type::Unknown) {
+                            value
+                        } else {
+                            ty
+                        }
+                    }
                     (false, Err(reason)) => {
                         return err_type_error!(
                             self,
@@ -902,7 +971,8 @@ impl<'c> TypeChecker<'c> {
                                 got: ty,
                                 expected: value,
                             },
-                            "because {}", reason
+                            "because {}",
+                            reason
                         )
                     }
                 };
@@ -925,7 +995,7 @@ impl<'c> TypeChecker<'c> {
                             expected: Type::Bool,
                         },
                         "Only boolean expressions are valid if-statement conditions"
-                    )
+                    );
                 }
                 match (self.statement(pass)?, self.statement(fail)?) {
                     (None, None) => None,
@@ -943,7 +1013,7 @@ impl<'c> TypeChecker<'c> {
                             expected: Type::Bool,
                         },
                         "Only boolean expressions are valid if-statement conditions"
-                    )
+                    );
                 }
                 self.statement(body)?
             }
@@ -984,7 +1054,7 @@ impl<'c> TypeChecker<'c> {
                 None
             }
 
-            | SK::Use { .. }
+            SK::Use { .. }
             | SK::Blob { .. }
             | SK::Continue
             | SK::Break
@@ -1001,10 +1071,13 @@ impl<'c> TypeChecker<'c> {
         match &stmt.kind {
             SK::Blob { name, fields } => {
                 let ctx = Context::from_namespace(namespace);
-                let fields = fields.iter()
+                let fields = fields
+                    .iter()
                     .map(|(k, v)| (k.clone(), self.compiler.resolve_type(&v, ctx)))
                     .collect();
-                if let Some(CompilerName::Blob(slot)) = self.compiler.namespaces[ctx.namespace].get(name) {
+                if let Some(CompilerName::Blob(slot)) =
+                    self.compiler.namespaces[ctx.namespace].get(name)
+                {
                     match &mut self.compiler.constants[*slot] {
                         ValueType(Type::Blob(_, b_fields)) => {
                             *b_fields = fields;
@@ -1016,11 +1089,7 @@ impl<'c> TypeChecker<'c> {
                 }
             }
 
-            SK::ExternalDefinition {
-                ident,
-                kind,
-                ty
-            } => {
+            SK::ExternalDefinition { ident, kind, ty } => {
                 let name = match &self.namespaces[namespace][&ident.name] {
                     Name::Global(None) => {
                         let ty = self.compiler.resolve_type(ty, self.compiler_context());
@@ -1034,14 +1103,24 @@ impl<'c> TypeChecker<'c> {
                 self.namespaces[namespace].insert(ident.name.clone(), Name::Global(Some(name)));
             }
 
-            SK::Definition { ident, kind, ty, value } => {
+            SK::Definition {
+                ident,
+                kind,
+                ty,
+                value,
+            } => {
                 let name = match &self.namespaces[namespace][&ident.name] {
                     Name::Global(None) => {
                         let ty = self.compiler.resolve_type(ty, self.compiler_context());
                         let ty = if matches!(ty, Type::Unknown) {
                             // Special case if it's a function
                             if let ExpressionKind::Function { params, ret, .. } = &value.kind {
-                                let params = params.iter().map(|(_, ty)| self.compiler.resolve_type(ty, self.compiler_context())).collect();
+                                let params = params
+                                    .iter()
+                                    .map(|(_, ty)| {
+                                        self.compiler.resolve_type(ty, self.compiler_context())
+                                    })
+                                    .collect();
                                 let ret = self.compiler.resolve_type(ret, self.compiler_context());
                                 Type::Function(params, Box::new(ret))
                             } else {
@@ -1075,7 +1154,8 @@ impl<'c> TypeChecker<'c> {
                                         got: ty,
                                         expected: value,
                                     },
-                                    "because {}", reason
+                                    "because {}",
+                                    reason
                                 )
                             }
                         };
@@ -1087,17 +1167,12 @@ impl<'c> TypeChecker<'c> {
                 };
                 self.namespaces[namespace].insert(ident.name.clone(), Name::Global(Some(name)));
             }
-            _ => {},
+            _ => {}
         }
         Ok(())
-
     }
 
-    fn solve(
-        mut self,
-        statements: &Vec<(&Statement, usize)>,
-    ) -> Result<(), Vec<Error>> {
-
+    fn solve(mut self, statements: &Vec<(&Statement, usize)>) -> Result<(), Vec<Error>> {
         for (statement, namespace) in statements.iter() {
             // Ignore errors since they'll be caught later and
             // there are false positives.
@@ -1116,14 +1191,18 @@ impl<'c> TypeChecker<'c> {
         let span = statements
             .iter()
             .find_map(|(stmt, _)| {
-                if let StatementKind::Definition{ ident, .. } = &stmt.kind {
+                if let StatementKind::Definition { ident, .. } = &stmt.kind {
                     if ident.name == "start" {
                         return Some(ident.span);
                     }
                 }
                 None
             })
-            .unwrap_or_else(|| Span { col_start: 0, col_end: 0, line: 0 });
+            .unwrap_or_else(|| Span {
+                col_start: 0,
+                col_end: 0,
+                line: 0,
+            });
 
         let call_start = &Assignable {
             span,
@@ -1132,11 +1211,11 @@ impl<'c> TypeChecker<'c> {
                     span,
                     kind: AssignableKind::Read(Identifier {
                         span: Span::zero(),
-                        name: "start".to_string()
+                        name: "start".to_string(),
                     }),
                 }),
                 Vec::new(),
-            )
+            ),
         };
         if let Err(mut errs) = self.assignable(call_start, 0) {
             for mut err in errs.iter_mut() {
@@ -1146,7 +1225,7 @@ impl<'c> TypeChecker<'c> {
                         TypeError::WrongArity { got, expected } => {
                             std::mem::swap(got, expected);
                         }
-                        _ => { }
+                        _ => {}
                     }
                 }
             }
