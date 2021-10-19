@@ -151,9 +151,12 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             ctx.variables.truncate(vars_before);
             deps
         },
-        Definition { ident, value, .. } => {
+        Definition { ident, value, ty, .. } => {
             ctx.shadow(&ident.name);
             dependencies(ctx, value)
+                .union(&type_dependencies(ctx, ty))
+                .cloned()
+                .collect()
         },
 
         | Ret { value }
