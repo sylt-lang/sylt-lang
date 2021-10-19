@@ -167,9 +167,9 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
         Blob { name, fields } => {
             ctx.shadow(&name);
             fields.values()
-            .map(|t| type_dependencies(ctx, t))
-            .flatten()
-            .collect()
+                .map(|t| type_dependencies(ctx, t))
+                .flatten()
+                .collect()
         }
 
         | Break
