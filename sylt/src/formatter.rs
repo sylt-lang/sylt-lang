@@ -232,10 +232,6 @@ macro_rules! expr_binary_op {
 fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression) -> fmt::Result {
     match expression.kind {
         ExpressionKind::Get(assignable) => write_assignable(dest, indent, assignable)?,
-        ExpressionKind::TypeConstant(ty) => {
-            write!(dest, ":")?;
-            write_type(dest, indent, ty)?;
-        }
         ExpressionKind::Add(lhs, rhs) => {
             expr_binary_op!(dest, indent, *lhs, " + ", *rhs);
         }

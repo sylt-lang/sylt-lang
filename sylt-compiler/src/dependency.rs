@@ -243,7 +243,6 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<Name> {
         },
 
         // No dependencies
-        | TypeConstant(_)
         | Float(_)
         | Int(_)
         | Str(_)

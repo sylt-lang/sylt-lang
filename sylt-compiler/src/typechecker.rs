@@ -665,7 +665,6 @@ impl<'c> TypeChecker<'c> {
             EK::Int(_) => Type::Int,
             EK::Str(_) => Type::String,
             EK::Bool(_) => Type::Bool,
-            EK::TypeConstant(_) => Type::Ty,
             EK::Nil => Type::Void,
 
             EK::Set(values) => {

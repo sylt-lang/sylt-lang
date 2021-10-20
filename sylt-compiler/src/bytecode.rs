@@ -177,12 +177,6 @@ impl<'t> BytecodeCompiler<'t> {
                 self.assignable(a, ctx);
             }
 
-            TypeConstant(ty) => {
-                let resolved_ty = self.compiler.resolve_type(ty, ctx.into());
-                let ty_constant = self.compiler.constant(Value::Ty(resolved_ty));
-                self.add_op(ctx, expression.span, ty_constant);
-            }
-
             Add(a, b) => self.bin_op(a, b, &[Op::Add], expression.span, ctx),
             Sub(a, b) => self.bin_op(a, b, &[Op::Sub], expression.span, ctx),
             Mul(a, b) => self.bin_op(a, b, &[Op::Mul], expression.span, ctx),

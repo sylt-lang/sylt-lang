@@ -128,13 +128,6 @@ impl<'t> LuaCompiler<'t> {
                 self.assignable(a, ctx);
             }
 
-            TypeConstant(_) => {
-                error!(
-                    self.compiler,
-                    ctx, expression.span, "Type constants are not supported in the lua-compiler"
-                );
-            }
-
             Add(a, b) => {
                 write!(self, "__ADD(");
                 self.expression(a, ctx);

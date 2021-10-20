@@ -24,9 +24,6 @@ pub enum ExpressionKind {
     /// blob fields, list indexing, tuple indexing and dict indexing end up here.
     Get(Assignable),
 
-    /// A type as a value
-    TypeConstant(Type),
-
     /// `a + b`
     Add(Box<Expression>, Box<Expression>),
     /// `a - b`
@@ -280,7 +277,7 @@ fn value<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Expression), (Context<'t>
 
 /// Parse something that begins at the start of an expression.
 fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-    use ExpressionKind::{Get, TypeConstant};
+    use ExpressionKind::Get;
 
     match ctx.token() {
         T::Fn => function(ctx),
@@ -288,18 +285,6 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         T::LeftParen => grouping_or_tuple(ctx),
         T::LeftBracket => list(ctx),
         T::LeftBrace => set_or_dict(ctx),
-
-        T::Colon => {
-            let span = ctx.span();
-            let (ctx, ty) = parse_type(ctx.skip(1))?;
-            Ok((
-                ctx,
-                Expression {
-                    span,
-                    kind: TypeConstant(ty),
-                },
-            ))
-        }
 
         T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
         T::Minus | T::Not => unary(ctx),
@@ -845,13 +830,6 @@ mod test {
 
     test!(expression, expr: "-a + b < 3 * true and false / 2" => _);
 
-    test!(expression, type_expr_int: ":int" => _);
-    test!(expression, type_expr_void: ":void" => _);
-    test!(expression, type_expr_float: ":float" => _);
-    test!(expression, type_expr_str: ":str" => _);
-    test!(expression, type_expr_custom: ":A" => _);
-    test!(expression, type_expr_custom_chaining: ":A.b.C" => _);
-
     test!(expression, void_simple: "fn do end" => _);
     test!(expression, void_argument: "fn a: int do ret a + 1 end" => _);
 
@@ -870,9 +848,6 @@ impl PrettyPrint for Expression {
                 write!(f, "Get ")?;
                 e.pretty_print(f, indent)?;
                 write!(f, "\n")?;
-            }
-            EK::TypeConstant(ty) => {
-                write!(f, "Type {}\n", ty)?;
             }
             EK::Add(a, b) => {
                 write!(f, "Add\n")?;
