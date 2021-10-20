@@ -249,7 +249,7 @@ impl<'t> BytecodeCompiler<'t> {
             Function {
                 name,
                 params,
-                ret,
+                ret: _,
                 body,
             } => {
                 let file = self.compiler.file_from_namespace(ctx.namespace).display();
@@ -257,15 +257,10 @@ impl<'t> BytecodeCompiler<'t> {
 
                 // === Frame begin ===
                 let inner_ctx = self.push_frame_and_block(ctx, &name, expression.span);
-                let mut param_types = Vec::new();
-                for (ident, ty) in params.iter() {
-                    param_types.push(self.compiler.resolve_type(&ty, inner_ctx.into()));
+                for (ident, _) in params.iter() {
                     let param = self.compiler.define(&ident.name, VarKind::Const, ident.span);
                     self.compiler.activate(param);
                 }
-                let ret = self.compiler.resolve_type(&ret, inner_ctx.into());
-                let ty = Type::Function(param_types, Box::new(ret));
-                self.blocks[inner_ctx.block_slot].ty = ty.clone();
 
                 self.statement(&body, inner_ctx);
 
@@ -281,7 +276,7 @@ impl<'t> BytecodeCompiler<'t> {
                     .into_iter()
                     .map(|u| (u.parent, u.upupvalue, u.ty))
                     .collect();
-                let function = Value::Function(Rc::new(Vec::new()), ty, inner_ctx.block_slot);
+                let function = Value::Function(Rc::new(Vec::new()), Type::Void, inner_ctx.block_slot);
                 // === Frame end ===
 
                 let function = self.compiler.constant(function);
@@ -295,10 +290,6 @@ impl<'t> BytecodeCompiler<'t> {
                 // the closure and self variable into account when solving the
                 // types.
                 let inner_ctx = self.push_frame_and_block(ctx, &name, expression.span);
-
-                let blob_ty = self.compiler.resolve_type_ident(blob, ctx.namespace, ctx.into());
-                let ty = Type::Function(Vec::new(), Box::new(blob_ty));
-                self.blocks[inner_ctx.block_slot].ty = ty.clone();
 
                 // Set self to nil so that we can capture it.
                 self.push(Value::Nil, expression.span, inner_ctx);
@@ -327,7 +318,7 @@ impl<'t> BytecodeCompiler<'t> {
                     .collect();
                 let function = Value::Function(
                     Rc::new(Vec::new()),
-                    Type::Function(Vec::new(), Box::new(ty)),
+                    Type::Void,
                     inner_ctx.block_slot
                 );
 
@@ -691,8 +682,7 @@ impl<'t> BytecodeCompiler<'t> {
         num_constants: usize,
     ) {
         let name = "/preamble/";
-        let mut block = Block::new(name, 0, &self.compiler.namespace_id_to_path[&0]);
-        block.ty = Type::Function(Vec::new(), Box::new(Type::Void));
+        let block = Block::new(name, 0, &self.compiler.namespace_id_to_path[&0]);
         self.blocks.push(block);
 
         let nil = self.compiler.constant(Value::Nil);

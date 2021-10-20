@@ -764,10 +764,6 @@ impl Machine for VM {
                     }
                     Value::Function(_, _, block) => {
                         let inner = self.blocks[block].borrow();
-                        let args = inner.args();
-                        if args.len() != num_args {
-                            error!(self, RuntimeError::ArgumentCount(args.len(), num_args));
-                        }
 
                         #[cfg(debug_assertions)]
                         if self.print_bytecode {

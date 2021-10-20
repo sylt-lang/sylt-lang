@@ -12,7 +12,6 @@ pub enum BlockLinkState {
 
 #[derive(Debug)]
 pub struct Block {
-    pub ty: Type,
     pub upvalues: Vec<(usize, bool, Type)>,
     pub linking: BlockLinkState,
 
@@ -28,7 +27,6 @@ pub struct Block {
 impl Block {
     pub fn new(name: &str, namespace: usize, file: &Path) -> Self {
         Self {
-            ty: Type::Void,
             upvalues: Vec::new(),
             linking: BlockLinkState::Nothing,
 
@@ -39,22 +37,6 @@ impl Block {
             ops: Vec::new(),
             last_line_offset: 0,
             line_offsets: HashMap::new(),
-        }
-    }
-
-    pub fn args(&self) -> &Vec<Type> {
-        if let Type::Function(ref args, _) = self.ty {
-            args
-        } else {
-            unreachable!();
-        }
-    }
-
-    pub fn ret(&self) -> &Type {
-        if let Type::Function(_, ref ret) = self.ty {
-            ret
-        } else {
-            unreachable!()
         }
     }
 
