@@ -20,7 +20,7 @@ pub enum Value {
     Int(i64),
     Bool(bool),
     String(Rc<String>),
-    Function(Rc<Vec<Rc<RefCell<UpValue>>>>, Type, usize),
+    Function(Rc<Vec<Rc<RefCell<UpValue>>>>, usize),
     ExternFunction(usize),
     Nil,
 }
@@ -102,7 +102,7 @@ impl Value {
             Value::List(v) => Rc::as_ptr(v) as usize,
             Value::Set(v) => Rc::as_ptr(v) as usize,
             Value::Dict(v) => Rc::as_ptr(v) as usize,
-            Value::Function(v, _, _) => Rc::as_ptr(v) as usize,
+            Value::Function(v, _) => Rc::as_ptr(v) as usize,
             Value::Tuple(v) => Rc::as_ptr(v) as usize,
             Value::Nil => 0,  // TODO(ed): This is not a valid pointer - right?
             Value::ExternFunction(slot) => slot + 2,
@@ -209,8 +209,8 @@ impl Value {
                 }
                 write!(fmt, "}}")
             },
-            Value::Function(_, ty, block) => {
-                write!(fmt, "<fn #{} {:?}>", block, ty)
+            Value::Function(_, block) => {
+                write!(fmt, "<fn #{}>", block)
             },
             Value::ExternFunction(slot) => write!(fmt, "<extern fn {}>", slot),
             Value::Nil => write!(fmt, "nil"),

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 use sylt_common::error::Error;
-use sylt_common::{Block, Op, Type, Value};
+use sylt_common::{Block, Op, Value};
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Op as ParserOp,
@@ -276,7 +276,7 @@ impl<'t> BytecodeCompiler<'t> {
                     .into_iter()
                     .map(|u| (u.parent, u.upupvalue, u.ty))
                     .collect();
-                let function = Value::Function(Rc::new(Vec::new()), Type::Void, inner_ctx.block_slot);
+                let function = Value::Function(Rc::new(Vec::new()), inner_ctx.block_slot);
                 // === Frame end ===
 
                 let function = self.compiler.constant(function);
@@ -318,7 +318,6 @@ impl<'t> BytecodeCompiler<'t> {
                     .collect();
                 let function = Value::Function(
                     Rc::new(Vec::new()),
-                    Type::Void,
                     inner_ctx.block_slot
                 );
 
