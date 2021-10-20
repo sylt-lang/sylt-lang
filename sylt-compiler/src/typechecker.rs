@@ -78,7 +78,7 @@ impl Variable {
 struct TypeChecker<'c> {
     compiler: &'c mut Compiler,
     namespace: usize,
-    namespaces: Vec<HashMap<String, Name>>,
+    globals: HashMap<(usize, String), Name>,
     stack: Vec<Variable>,
 }
 
@@ -97,31 +97,32 @@ enum Lookup {
 
 impl<'c> TypeChecker<'c> {
     fn new(compiler: &'c mut Compiler) -> Self {
-        let namespaces = compiler
+        let globals = compiler
             .namespaces
             .iter()
-            .map(|n| {
+            .enumerate()
+            .map(|(i, n)| {
                 n.iter()
-                    .map(|(k, v)| {
-                        (
-                            k.clone(),
-                            match v {
-                                compiler::Name::Blob(b) => Name::Blob(*b),
-                                compiler::Name::Namespace(n) => Name::Namespace(*n),
-                                compiler::Name::Global(_) | compiler::Name::External(_) => {
-                                    Name::Global(None)
-                                }
-                            },
-                        )
-                    })
-                    .collect()
+                .map(move |(k, v)| {
+                    (
+                        (i, k.clone()),
+                        match v {
+                            compiler::Name::Blob(b) => Name::Blob(*b),
+                            compiler::Name::Namespace(n) => Name::Namespace(*n),
+                            compiler::Name::Global(_) | compiler::Name::External(_) => {
+                                Name::Global(None)
+                            }
+                        },
+                    )
+                })
             })
+            .flatten()
             .collect();
 
         Self {
             compiler,
             namespace: 0,
-            namespaces,
+            globals,
             stack: Vec::new(),
         }
     }
@@ -339,7 +340,7 @@ impl<'c> TypeChecker<'c> {
                 if let Some(var) = self.stack.iter().rfind(|var| var.ident.name == ident.name) {
                     return Ok(Value(var.ty.clone(), var.kind));
                 }
-                match &self.namespaces[namespace].get(&ident.name) {
+                match &self.globals.get(&(namespace, ident.name.clone())) {
                     Some(Name::Global(Some((ty, kind)))) => {
                         return Ok(Value(ty.clone(), *kind));
                     }
@@ -1102,8 +1103,8 @@ impl<'c> TypeChecker<'c> {
             }
 
             SK::ExternalDefinition { ident, kind, ty } => {
-                let name = match &self.namespaces[namespace][&ident.name] {
-                    Name::Global(None) => {
+                let name = match &self.globals.get(&(namespace, ident.name.clone())) {
+                    Some(Name::Global(None)) => {
                         let ty = self.compiler.resolve_type(ty, self.compiler_context());
                         (ty, *kind)
                     }
@@ -1112,7 +1113,10 @@ impl<'c> TypeChecker<'c> {
                     // so we don't have to care about the duplicates.
                     x => unreachable!("X: {:?}", x),
                 };
-                self.namespaces[namespace].insert(ident.name.clone(), Name::Global(Some(name)));
+                self.globals.insert(
+                    (namespace, ident.name.clone()),
+                    Name::Global(Some(name))
+                );
             }
 
             SK::Definition {
@@ -1121,8 +1125,8 @@ impl<'c> TypeChecker<'c> {
                 ty,
                 value,
             } => {
-                let name = match &self.namespaces[namespace][&ident.name] {
-                    Name::Global(None) => {
+                let name = match &self.globals.get(&(namespace, ident.name.clone())) {
+                    Some(Name::Global(None)) => {
                         let ty = self.compiler.resolve_type(ty, self.compiler_context());
                         let ty = if matches!(ty, Type::Unknown) {
                             // Special case if it's a function
@@ -1142,7 +1146,7 @@ impl<'c> TypeChecker<'c> {
                             ty
                         };
                         let name = Name::Global(Some((ty.clone(), *kind)));
-                        self.namespaces[namespace].insert(ident.name.clone(), name);
+                        self.globals.insert((namespace, ident.name.clone()), name);
                         let value = self.expression(value)?;
                         let fit = ty.fits(&value);
                         let ty = match (kind.force(), fit) {
@@ -1177,7 +1181,10 @@ impl<'c> TypeChecker<'c> {
                     // so we don't have to care about the duplicates.
                     x => unreachable!("X: {:?}", x),
                 };
-                self.namespaces[namespace].insert(ident.name.clone(), Name::Global(Some(name)));
+                self.globals.insert(
+                    (namespace, ident.name.clone()),
+                    Name::Global(Some(name))
+                );
             }
 
             _ => {}
