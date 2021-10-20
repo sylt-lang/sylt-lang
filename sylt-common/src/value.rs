@@ -31,49 +31,6 @@ impl From<&str> for Value {
     }
 }
 
-impl From<&Type> for Value {
-    fn from(ty: &Type) -> Self {
-        match ty {
-
-            Type::Unknown
-            | Type::Invalid
-            | Type::Generic(_)
-            | Type::Union(_) => panic!("This type cannot be represented as a value!"),
-            Type::Void => Value::Nil,
-            Type::Blob(_, f) => Value::Blob(Rc::new(RefCell::new(
-                f.iter().map(|(n, t)| (n.clone(), t.into())).collect()
-            ))),
-            Type::Tuple(fields) => Value::Tuple(Rc::new(fields.iter().map(Value::from).collect())),
-            Type::List(v) => Value::List(Rc::new(RefCell::new(vec![Value::from(v.as_ref())]))),
-            Type::Set(v) => {
-                let mut s = HashSet::new();
-                s.insert(Value::from(v.as_ref()));
-                Value::Set(Rc::new(RefCell::new(s)))
-            }
-            Type::Dict(k, v) => {
-                let mut s = HashMap::new();
-                s.insert(Value::from(k.as_ref()), Value::from(v.as_ref()));
-                Value::Dict(Rc::new(RefCell::new(s)))
-            }
-            Type::Int => Value::Int(1),
-            Type::Float => Value::Float(1.0),
-            Type::Bool => Value::Bool(true),
-            Type::String => Value::String(Rc::new("".to_string())),
-            Type::Function(a, r) => {
-                Value::Function(Rc::new(Vec::new()), Type::Function(a.clone(), r.clone()), 0)
-            }
-            Type::ExternFunction(x) => Value::ExternFunction(*x),
-            Type::Ty => Value::Ty(Type::Void),
-        }
-    }
-}
-
-impl From<Type> for Value {
-    fn from(ty: Type) -> Self {
-        Value::from(&ty)
-    }
-}
-
 impl Debug for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.safe_fmt(fmt, &mut HashSet::new())
