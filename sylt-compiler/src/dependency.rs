@@ -151,19 +151,30 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             ctx.variables.truncate(vars_before);
             deps
         },
-        Definition { ident, value, .. } => {
+        Definition { ident, value, ty, .. } => {
             ctx.shadow(&ident.name);
             dependencies(ctx, value)
+                .union(&type_dependencies(ctx, ty))
+                .cloned()
+                .collect()
         },
 
         | Ret { value }
         | StatementExpression { value } => dependencies(ctx, value),
 
-        | Blob { .. }
+        ExternalDefinition { ty, .. } => type_dependencies(ctx, ty),
+
+        Blob { name, fields } => {
+            ctx.shadow(&name);
+            fields.values()
+                .map(|t| type_dependencies(ctx, t))
+                .flatten()
+                .collect()
+        }
+
         | Break
         | Continue
         | EmptyStatement
-        | ExternalDefinition { .. }
         | IsCheck { .. }
         | Unreachable
         | Use { .. } => BTreeSet::new(),
@@ -298,34 +309,27 @@ pub(crate) fn initialization_order<'a>(
         for statement in module.statements.iter() {
             use StatementKind::*;
             match &statement.kind {
+                | Blob { name, .. }
                 | Use { name: NameIdentifier::Implicit(Identifier { name, .. }), .. }
                 | Use { name: NameIdentifier::Alias(Identifier { name, .. }), .. }
-                | Blob { name, .. } => {
-                    to_order.insert(
-                        *compiler.namespaces[namespace].get(name).unwrap(),
-                        (BTreeSet::new(), (statement, namespace))
-                    );
-                },
-                ExternalDefinition { ident, .. } => {
-                    to_order.insert(
-                        *compiler.namespaces[namespace].get(&ident.name).unwrap(),
-                        (BTreeSet::new(), (statement, namespace))
-                    );
-                },
-                Definition { ident, value, .. } => {
+                | ExternalDefinition { ident: Identifier { name, ..}, .. }
+                | Definition { ident: Identifier { name, ..}, .. } => {
                     let mut ctx = Context {
                         compiler,
                         namespace,
                         variables: Vec::new(),
                     };
-                    ctx.shadow(&ident.name);
-                    let deps = dependencies(&mut ctx, value);
                     to_order.insert(
-                        *compiler.namespaces[namespace].get(&ident.name).unwrap(),
-                        (deps, (statement, namespace))
+                        *compiler.namespaces[namespace].get(name).unwrap(),
+                        (
+                            statement_dependencies(&mut ctx, statement),
+                            (statement, namespace)
+                        )
                     );
                 },
+
                 IsCheck { .. } => is_checks.push((statement, namespace)),
+
                 _ => {},
             }
         }

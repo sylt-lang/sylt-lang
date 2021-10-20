@@ -1,0 +1,15 @@
+B :: blob {
+    b: int,
+}
+
+X :: blob {
+    b: B,
+}
+
+a: !X = 1
+
+start :: fn do
+    a.b.b = 1
+end
+
+// error: #TypeError(_, _)
