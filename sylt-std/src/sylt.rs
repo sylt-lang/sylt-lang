@@ -25,9 +25,8 @@ sylt_macro::extern_function!(
     ? "Prints values to stdout",
     -> "fn #X -> #X",
     [value] => {
-        println!(
-            "DBG: {:?}, {:?}",
-            Type::from(value),
+        eprintln!(
+            "DBG: {:?}",
             value
         );
         Ok(value.clone())
