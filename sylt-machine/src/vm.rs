@@ -27,7 +27,7 @@ macro_rules! one_op {
         let b = $fun(&a);
         if b.is_nil() {
             $self.push(b);
-            error!($self, RuntimeError::TypeError($op, vec![a.into()]));
+            error!($self, RuntimeError::ValueError($op, vec![a]));
         }
         $self.push(b);
     };
@@ -41,7 +41,7 @@ macro_rules! two_op {
             $self.push(c);
             error!(
                 $self,
-                RuntimeError::TypeError($op, vec![a.into(), b.into()])
+                RuntimeError::ValueError($op, vec![a, b])
             );
         }
         $self.push(c);
@@ -456,7 +456,7 @@ impl Machine for VM {
                     }
                     (val, slot) => {
                         self.stack.push(Value::Nil);
-                        error!(self, RuntimeError::IndexError(val, slot.into()));
+                        error!(self, RuntimeError::IndexError(val, slot));
                     }
                 }
             }
@@ -501,7 +501,7 @@ impl Machine for VM {
                     }
                     val => {
                         self.stack.push(Value::Nil);
-                        error!(self, RuntimeError::IndexError(val, Type::Int));
+                        error!(self, RuntimeError::IndexError(val, Value::Int(slot)));
                     }
                 }
             }
@@ -531,7 +531,7 @@ impl Machine for VM {
                     }
                     (indexable, slot, _) => {
                         self.push(Value::Nil);
-                        error!(self, RuntimeError::IndexError(indexable, slot.into()));
+                        error!(self, RuntimeError::IndexError(indexable, slot));
                     }
                 }
             }
@@ -563,7 +563,7 @@ impl Machine for VM {
                     }
                     (indexable, e) => {
                         self.push(Value::Nil);
-                        error!(self, RuntimeError::IndexError(indexable, e.into()));
+                        error!(self, RuntimeError::IndexError(indexable, e));
                     }
                 }
             }
@@ -593,7 +593,7 @@ impl Machine for VM {
                     inst => {
                         error!(
                             self,
-                            RuntimeError::TypeError(Op::GetField(field), vec![Type::from(inst)])
+                            RuntimeError::ValueError(Op::GetField(field), vec![inst])
                         );
                     }
                 }
@@ -609,7 +609,7 @@ impl Machine for VM {
                     inst => {
                         error!(
                             self,
-                            RuntimeError::TypeError(Op::AssignField(field), vec![Type::from(inst)])
+                            RuntimeError::ValueError(Op::AssignField(field), vec![inst])
                         );
                     }
                 }
