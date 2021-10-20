@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::rc::Rc;
-use sylt_common::error::{Error, RuntimeError, RuntimePhase};
+use sylt_common::error::{Error, RuntimeError};
 use sylt_common::{
     Block, BlockLinkState, Frame, Machine, Op, OpResult, BytecodeProg, RuntimeContext, RustFunction,
     Type, UpValue, Value,
@@ -174,7 +174,6 @@ impl VM {
         self.print_stacktrace();
         Error::RuntimeError {
             kind,
-            phase: RuntimePhase::Runtime,
             file: frame.block.borrow().file.clone(),
             line: frame.block.borrow().line(frame.ip),
             message,

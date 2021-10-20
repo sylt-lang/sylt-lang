@@ -76,21 +76,6 @@ pub enum RuntimeError {
     Unreachable,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum RuntimePhase {
-    Runtime,
-    Typecheck,
-}
-
-impl fmt::Display for RuntimePhase {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            RuntimePhase::Runtime => write!(f, "runtime"),
-            RuntimePhase::Typecheck => write!(f, "typecheck"),
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum TypeError {
     // The message should be given afterwards,
@@ -186,7 +171,6 @@ pub enum Error {
 
     RuntimeError {
         kind: RuntimeError,
-        phase: RuntimePhase,
         file: PathBuf,
         line: usize,
         message: Option<String>,
@@ -222,8 +206,8 @@ impl fmt::Display for Error {
                 write_source_span_at(f, file, *span)
             }
             #[rustfmt::skip]
-            Error::RuntimeError { kind, phase, file, line, message } => {
-                write!(f, "{} {}: ", phase.to_string().red(), "error".red())?;
+            Error::RuntimeError { kind, file, line, message } => {
+                write!(f, "{}: ", "Runtime error".red())?;
                 write!(f, "{}\n", file_line_display(file, *line))?;
                 write!(f, "{}{}\n", INDENT, kind)?;
                 if let Some(message) = message {
