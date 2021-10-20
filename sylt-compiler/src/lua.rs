@@ -394,18 +394,7 @@ impl<'t> LuaCompiler<'t> {
         self.compiler.panic = false;
 
         match &statement.kind {
-            Use { .. } | Blob { .. } | EmptyStatement => {}
-
-            IsCheck { lhs, rhs } => {
-                let lhs = self.compiler.resolve_type(lhs, ctx.into());
-                let rhs = self.compiler.resolve_type(rhs, ctx.into());
-                if let Err(msg) = rhs.fits(&lhs) {
-                    error!(
-                        self.compiler,
-                        ctx, statement.span, "Is-check failed - {}", msg
-                    );
-                }
-            }
+            Use { .. } | Blob { .. } | IsCheck { .. } | EmptyStatement => {}
 
             ExternalDefinition { .. } => {}
 

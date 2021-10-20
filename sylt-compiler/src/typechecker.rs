@@ -1017,8 +1017,21 @@ impl<'c> TypeChecker<'c> {
                 self.statement(body)?
             }
 
-            SK::IsCheck { .. } => {
-                // Checked in the compiler
+            SK::IsCheck { lhs, rhs } => {
+                let lhs = self.compiler.resolve_type(lhs, self.compiler_context());
+                let rhs = self.compiler.resolve_type(rhs, self.compiler_context());
+                if let Err(msg) = rhs.fits(&lhs) {
+                    return err_type_error!(
+                        self,
+                        span,
+                        TypeError::Mismatch {
+                            got: lhs,
+                            expected: rhs,
+                        },
+                        "Is-check failed - {}",
+                        msg
+                    );
+                }
                 None
             }
 
@@ -1166,6 +1179,7 @@ impl<'c> TypeChecker<'c> {
                 };
                 self.namespaces[namespace].insert(ident.name.clone(), Name::Global(Some(name)));
             }
+
             _ => {}
         }
         Ok(())

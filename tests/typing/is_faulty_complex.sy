@@ -40,8 +40,8 @@ D :: blob {
 // :D is :D | D
 
 start :: fn do end
-// error: Error::CompileError { .. }
-// error: Error::CompileError { .. }
-// error: Error::CompileError { .. }
-// error: Error::CompileError { .. }
-// error: Error::CompileError { .. }
+// error: $Mismatch { .. }
+// error: $Mismatch { .. }
+// error: $Mismatch { .. }
+// error: $Mismatch { .. }
+// error: $Mismatch { .. }
