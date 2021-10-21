@@ -25,9 +25,8 @@ sylt_macro::extern_function!(
     ? "Prints values to stdout",
     -> "fn #X -> #X",
     [value] => {
-        println!(
-            "DBG: {:?}, {:?}",
-            Type::from(value),
+        eprintln!(
+            "DBG: {:?}",
             value
         );
         Ok(value.clone())
@@ -274,13 +273,13 @@ sylt_macro::extern_function!(
         let c = match chars.next() {
             Some(c) => c,
             // TODO(gu): Actually what went wrong
-            None => return Err(RuntimeError::ExternTypeMismatch("as_char".to_string(), vec![Type::String])),
+            None => return Err(RuntimeError::ExternArgsMissmatch("as_char".to_string(), vec![Value::String(s.clone())])),
         };
         if chars.next().is_none() {
             Ok(Int(c as i64))
         } else {
             // TODO(gu): Actually what went wrong
-            Err(RuntimeError::ExternTypeMismatch("as_char".to_string(), vec![Type::String]))
+            Err(RuntimeError::ExternArgsMissmatch("as_char".to_string(), vec![Value::String(s.clone())]))
         }
     }
 );

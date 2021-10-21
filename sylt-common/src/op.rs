@@ -133,13 +133,6 @@ pub enum Op {
     ///
     /// {A} - Not - {!A}
     Not,
-
-    /// Checks if the type of the value on the left
-    /// is the type on the right.
-    ///
-    /// {A, B} - Is - {A is B}
-    Is,
-
     /// Sets the instruction pointer
     /// to the given value.
     ///

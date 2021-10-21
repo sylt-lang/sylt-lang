@@ -3,8 +3,6 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::hash::Hash;
 use std::fmt::{Debug, Display};
 
-use crate::Value;
-
 pub trait Numbered {
     fn to_number(&self) -> usize;
 }
@@ -85,51 +83,6 @@ impl Display for Type {
             Type::ExternFunction(id) => write!(f, "ExternFunction({})", id),
             Type::Invalid => write!(f, "Invalid"),
         }
-    }
-}
-
-fn maybe_union_from_type<'a>(v: impl Iterator<Item = &'a Value>) -> Type {
-    let types: Vec<_> = v.map(Type::from).collect();
-    Type::maybe_union(types.iter())
-}
-
-impl From<&Value> for Type {
-    fn from(value: &Value) -> Type {
-        match value {
-            Value::Blob(f) => Type::Blob(f.borrow()["_name"].to_string(), f.borrow()
-                .iter()
-                .map(|(n, v)| (n.clone(), v.into()))
-                .collect()),
-            Value::Tuple(v) => Type::Tuple(v.iter().map(Type::from).collect()),
-            Value::List(v) => {
-                let t = maybe_union_from_type(v.borrow().iter());
-                Type::List(Box::new(t))
-            }
-            Value::Set(v) => {
-                let t = maybe_union_from_type(v.borrow().iter());
-                Type::Set(Box::new(t))
-            }
-            Value::Dict(v) => {
-                let v = v.borrow();
-                let k = maybe_union_from_type(v.keys());
-                let v = maybe_union_from_type(v.values());
-                Type::Dict(Box::new(k), Box::new(v))
-            }
-            Value::Int(_) => Type::Int,
-            Value::Float(_) => Type::Float,
-            Value::Bool(_) => Type::Bool,
-            Value::String(_) => Type::String,
-            Value::Function(_, ty, _) => ty.clone(),
-            Value::ExternFunction(n) => Type::ExternFunction(*n),
-            Value::Nil => Type::Void,
-            Value::Ty(_) => Type::Ty,
-        }
-    }
-}
-
-impl From<Value> for Type {
-    fn from(value: Value) -> Type {
-        Type::from(&value)
     }
 }
 

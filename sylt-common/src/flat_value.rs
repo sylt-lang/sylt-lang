@@ -22,7 +22,7 @@ pub enum FlatValue {
     Int(i64),
     Bool(bool),
     String(String),
-    Function(Vec<FlatUpValue>, Type, usize),
+    Function(Vec<FlatUpValue>, usize),
     ExternFunction(usize),
     Nil,
 }
@@ -80,12 +80,11 @@ impl FlatValue {
             Value::Int(i) => FlatValue::Int(*i),
             Value::Bool(b) => FlatValue::Bool(*b),
             Value::String(s) => FlatValue::String(String::clone(s)),
-            Value::Function(captured, ty, slot) => FlatValue::Function(
+            Value::Function(captured, slot) => FlatValue::Function(
                 captured
                     .iter()
                     .map(|upvalue| FlatUpValue { slot: upvalue.borrow().slot, value: Self::pack_inner(&upvalue.borrow().value, pack, seen) })
                     .collect(),
-                ty.clone(),
                 *slot,
             ),
             Value::ExternFunction(slot) => FlatValue::ExternFunction(*slot),
@@ -111,9 +110,8 @@ impl FlatValue {
             FlatValue::Bool(b) => Value::Bool(b),
             FlatValue::String(s) => Value::String(Rc::new(s)),
             // Function is specificly tricky - since it doesn't have a RefCell.
-            FlatValue::Function(_, ty, slot) => Value::Function(
+            FlatValue::Function(_, slot) => Value::Function(
                 Rc::new(Vec::new()),
-                ty,
                 slot,
             ),
             FlatValue::ExternFunction(slot) => Value::ExternFunction(slot),
@@ -139,7 +137,7 @@ impl FlatValue {
                         values.push(mapping[*id].clone());
                     }
                 }
-                (FlatValue::Function(flat, _, _), Value::Function(values, _, _)) => {
+                (FlatValue::Function(flat, _), Value::Function(values, _)) => {
                     // See the tuple comment
                     let values = unsafe { (Rc::as_ptr(values) as *mut Vec<Rc<RefCell<UpValue>>>).as_mut() }.unwrap();
                     for up in flat {

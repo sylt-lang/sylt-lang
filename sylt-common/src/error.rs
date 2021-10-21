@@ -52,16 +52,10 @@ fn file_line_display(file: &Path, line: usize) -> String {
 
 #[derive(Debug, Clone)]
 pub enum RuntimeError {
-    FieldTypeMismatch(String, String, Type, Type, String),
-    TypeError(Op, Vec<Type>),
-    TypeCompare(String),
-    TypeMismatch(Type, Type),
-    CannotInfer(Type, Type),
-    ArgumentType(Vec<Type>, Vec<Type>, String),
-    IndexError(Value, Type),
+    IndexError(Value, Value),
 
     /// (External function, parameters)
-    ExternTypeMismatch(String, Vec<Type>),
+    ExternArgsMissmatch(String, Vec<Value>),
     ExternError(String, String),
     ValueError(Op, Vec<Value>),
     UnknownField(String, String),
@@ -74,21 +68,6 @@ pub enum RuntimeError {
     AssertFailed,
     InvalidProgram,
     Unreachable,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum RuntimePhase {
-    Runtime,
-    Typecheck,
-}
-
-impl fmt::Display for RuntimePhase {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            RuntimePhase::Runtime => write!(f, "runtime"),
-            RuntimePhase::Typecheck => write!(f, "typecheck"),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -186,7 +165,6 @@ pub enum Error {
 
     RuntimeError {
         kind: RuntimeError,
-        phase: RuntimePhase,
         file: PathBuf,
         line: usize,
         message: Option<String>,
@@ -222,8 +200,8 @@ impl fmt::Display for Error {
                 write_source_span_at(f, file, *span)
             }
             #[rustfmt::skip]
-            Error::RuntimeError { kind, phase, file, line, message } => {
-                write!(f, "{} {}: ", phase.to_string().red(), "error".red())?;
+            Error::RuntimeError { kind, file, line, message } => {
+                write!(f, "{}: ", "Runtime error".red())?;
                 write!(f, "{}\n", file_line_display(file, *line))?;
                 write!(f, "{}{}\n", INDENT, kind)?;
                 if let Some(message) = message {
@@ -282,49 +260,14 @@ impl fmt::Display for Error {
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RuntimeError::FieldTypeMismatch(obj, field, a, b, msg) => {
-                write!(
-                    f,
-                    "Field {}.{} expected {:?} but got {:?}. {}",
-                    obj, field, a, b, msg
-                )
-            }
-            RuntimeError::TypeError(op, types) => {
-                let types = types
-                    .iter()
-                    .fold(String::new(), |a, v| format!("{}{:?}, ", a, v));
-                write!(f, "Cannot apply {:?} to types {}", op, types)
-            }
-            RuntimeError::TypeCompare(msg) => {
-                write!(f, "{}", msg)
-            }
-            RuntimeError::TypeMismatch(a, b) => {
-                write!(f, "Expected '{:?}' and got '{:?}'", a, b)
-            }
-            RuntimeError::CannotInfer(a, b) => {
-                write!(f, "Failed to infer type '{:?}' from '{:?}'", a, b)
-            }
-            RuntimeError::ArgumentType(a, b, msg) => {
-                let expected = a
-                    .iter()
-                    .fold(String::new(), |a, v| format!("{}{:?}, ", a, v));
-                let given = b
-                    .iter()
-                    .fold(String::new(), |a, v| format!("{}{:?}, ", a, v));
-                write!(
-                    f,
-                    "Argument types do not match, expected [{:?}] but got [{:?}]. {}",
-                    expected, given, msg
-                )
-            }
             RuntimeError::IndexError(value, slot) => {
                 write!(f, "Cannot index value '{:?}' with type '{:?}'", value, slot)
             }
-            RuntimeError::ExternTypeMismatch(name, types) => {
+            RuntimeError::ExternArgsMissmatch(name, values) => {
                 write!(
                     f,
-                    "Extern function '{}' doesn't accept argument(s) with type(s) {:?}",
-                    name, types
+                    "Extern function '{}' doesn't accept argument(s) {:?}",
+                    name, values
                 )
             }
             RuntimeError::ExternError(fun, msg) => {

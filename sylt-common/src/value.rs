@@ -20,7 +20,7 @@ pub enum Value {
     Int(i64),
     Bool(bool),
     String(Rc<String>),
-    Function(Rc<Vec<Rc<RefCell<UpValue>>>>, Type, usize),
+    Function(Rc<Vec<Rc<RefCell<UpValue>>>>, usize),
     ExternFunction(usize),
     Nil,
 }
@@ -28,49 +28,6 @@ pub enum Value {
 impl From<&str> for Value {
     fn from(s: &str) -> Self {
         Value::String(Rc::new(s.to_string()))
-    }
-}
-
-impl From<&Type> for Value {
-    fn from(ty: &Type) -> Self {
-        match ty {
-
-            Type::Unknown
-            | Type::Invalid
-            | Type::Generic(_)
-            | Type::Union(_) => panic!("This type cannot be represented as a value!"),
-            Type::Void => Value::Nil,
-            Type::Blob(_, f) => Value::Blob(Rc::new(RefCell::new(
-                f.iter().map(|(n, t)| (n.clone(), t.into())).collect()
-            ))),
-            Type::Tuple(fields) => Value::Tuple(Rc::new(fields.iter().map(Value::from).collect())),
-            Type::List(v) => Value::List(Rc::new(RefCell::new(vec![Value::from(v.as_ref())]))),
-            Type::Set(v) => {
-                let mut s = HashSet::new();
-                s.insert(Value::from(v.as_ref()));
-                Value::Set(Rc::new(RefCell::new(s)))
-            }
-            Type::Dict(k, v) => {
-                let mut s = HashMap::new();
-                s.insert(Value::from(k.as_ref()), Value::from(v.as_ref()));
-                Value::Dict(Rc::new(RefCell::new(s)))
-            }
-            Type::Int => Value::Int(1),
-            Type::Float => Value::Float(1.0),
-            Type::Bool => Value::Bool(true),
-            Type::String => Value::String(Rc::new("".to_string())),
-            Type::Function(a, r) => {
-                Value::Function(Rc::new(Vec::new()), Type::Function(a.clone(), r.clone()), 0)
-            }
-            Type::ExternFunction(x) => Value::ExternFunction(*x),
-            Type::Ty => Value::Ty(Type::Void),
-        }
-    }
-}
-
-impl From<Type> for Value {
-    fn from(ty: Type) -> Self {
-        Value::from(&ty)
     }
 }
 
@@ -145,7 +102,7 @@ impl Value {
             Value::List(v) => Rc::as_ptr(v) as usize,
             Value::Set(v) => Rc::as_ptr(v) as usize,
             Value::Dict(v) => Rc::as_ptr(v) as usize,
-            Value::Function(v, _, _) => Rc::as_ptr(v) as usize,
+            Value::Function(v, _) => Rc::as_ptr(v) as usize,
             Value::Tuple(v) => Rc::as_ptr(v) as usize,
             Value::Nil => 0,  // TODO(ed): This is not a valid pointer - right?
             Value::ExternFunction(slot) => slot + 2,
@@ -252,8 +209,8 @@ impl Value {
                 }
                 write!(fmt, "}}")
             },
-            Value::Function(_, ty, block) => {
-                write!(fmt, "<fn #{} {:?}>", block, ty)
+            Value::Function(_, block) => {
+                write!(fmt, "<fn #{}>", block)
             },
             Value::ExternFunction(slot) => write!(fmt, "<extern fn {}>", slot),
             Value::Nil => write!(fmt, "nil"),

@@ -11,7 +11,7 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use sylt_common::flat_value::{FlatValue, FlatValuePack};
-use sylt_common::{error::RuntimeError, RuntimeContext, Type, Value};
+use sylt_common::{error::RuntimeError, RuntimeContext, Value};
 
 const DEFAULT_PORT: u16 = 8588;
 
@@ -131,9 +131,9 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         [Value::String(ip), Value::Int(port)] => (ip.as_str(), *port as u16),
         [Value::String(ip)] => (ip.as_str(), DEFAULT_PORT),
         _ => {
-            return Err(RuntimeError::ExternTypeMismatch(
+            return Err(RuntimeError::ExternArgsMissmatch(
                 "n_rpc_connect".to_string(),
-                values.iter().map(Type::from).collect(),
+                values.to_vec(),
             ));
         }
     };
@@ -201,9 +201,9 @@ fn get_rpc_args(ctx: RuntimeContext<'_>, arg_offset: usize, func_name: &str) -> 
     if flat_values.len() != 0 {
         Ok(flat_values)
     } else {
-        Err(RuntimeError::ExternTypeMismatch(
+        Err(RuntimeError::ExternArgsMissmatch(
             func_name.to_string(),
-            values.iter().map(Type::from).collect(),
+            values.to_vec(),
         ))
     }
 }

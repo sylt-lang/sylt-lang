@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::rc::Rc;
-use sylt_common::error::{Error, RuntimeError, RuntimePhase};
+use sylt_common::error::{Error, RuntimeError};
 use sylt_common::{
     Block, BlockLinkState, Frame, Machine, Op, OpResult, BytecodeProg, RuntimeContext, RustFunction,
     Type, UpValue, Value,
@@ -27,7 +27,7 @@ macro_rules! one_op {
         let b = $fun(&a);
         if b.is_nil() {
             $self.push(b);
-            error!($self, RuntimeError::TypeError($op, vec![a.into()]));
+            error!($self, RuntimeError::ValueError($op, vec![a]));
         }
         $self.push(b);
     };
@@ -41,7 +41,7 @@ macro_rules! two_op {
             $self.push(c);
             error!(
                 $self,
-                RuntimeError::TypeError($op, vec![a.into(), b.into()])
+                RuntimeError::ValueError($op, vec![a, b])
             );
         }
         $self.push(c);
@@ -174,7 +174,6 @@ impl VM {
         self.print_stacktrace();
         Error::RuntimeError {
             kind,
-            phase: RuntimePhase::Runtime,
             file: frame.block.borrow().file.clone(),
             line: frame.block.borrow().line(frame.ip),
             message,
@@ -212,11 +211,7 @@ impl VM {
         self.stack.clear();
         self.frames.clear();
 
-        self.push(Value::Function(
-            Rc::new(Vec::new()),
-            Type::Function(Vec::new(), Box::new(Type::Void)),
-            0,
-        ));
+        self.push(Value::Function(Rc::new(Vec::new()), 0));
 
         self.frames.push(Frame {
             stack_offset: 0,
@@ -356,16 +351,16 @@ impl Machine for VM {
                 let offset = self.frame().stack_offset;
                 let constant = self.constant(value).clone();
                 let value = match constant {
-                    Value::Function(ups, ty, block) => {
+                    Value::Function(ups, block) => {
                         let inner = Rc::clone(&self.blocks[block]);
                         if matches!(inner.borrow().linking, BlockLinkState::Linked) {
-                            Value::Function(ups, ty, block)
+                            Value::Function(ups, block)
                         } else {
                             let mut ups = Vec::new();
                             for (slot, is_up, _) in inner.borrow().upvalues.iter() {
                                 self.frame_mut().contains_upvalues = true;
                                 let up = if *is_up {
-                                    if let Value::Function(local_ups, _, _) = &self.stack[offset] {
+                                    if let Value::Function(local_ups, _) = &self.stack[offset] {
                                         Rc::clone(&local_ups[*slot])
                                     } else {
                                         unreachable!()
@@ -376,7 +371,7 @@ impl Machine for VM {
                                 };
                                 ups.push(up);
                             }
-                            Value::Function(Rc::new(ups), ty, block)
+                            Value::Function(Rc::new(ups), block)
                         }
                     }
                     value => value,
@@ -388,12 +383,12 @@ impl Machine for VM {
                 let offset = self.frame().stack_offset;
                 let constant = self.constant(slot).clone();
                 let constant = match constant {
-                    Value::Function(_, ty, block) => {
+                    Value::Function(_, block) => {
                         let inner = Rc::clone(&self.blocks[block]);
                         let mut ups = Vec::new();
                         for (slot, is_up, _) in inner.borrow().upvalues.iter() {
                             let up = if *is_up {
-                                if let Value::Function(local_ups, _, _) = &self.stack[offset] {
+                                if let Value::Function(local_ups, _) = &self.stack[offset] {
                                     Rc::clone(&local_ups[*slot])
                                 } else {
                                     unreachable!()
@@ -404,7 +399,7 @@ impl Machine for VM {
                             };
                             ups.push(up);
                         }
-                        Value::Function(Rc::new(ups), ty, block)
+                        Value::Function(Rc::new(ups), block)
                     }
                     value => error!(
                         self,
@@ -457,7 +452,7 @@ impl Machine for VM {
                     }
                     (val, slot) => {
                         self.stack.push(Value::Nil);
-                        error!(self, RuntimeError::IndexError(val, slot.into()));
+                        error!(self, RuntimeError::IndexError(val, slot));
                     }
                 }
             }
@@ -502,7 +497,7 @@ impl Machine for VM {
                     }
                     val => {
                         self.stack.push(Value::Nil);
-                        error!(self, RuntimeError::IndexError(val, Type::Int));
+                        error!(self, RuntimeError::IndexError(val, Value::Int(slot)));
                     }
                 }
             }
@@ -532,7 +527,7 @@ impl Machine for VM {
                     }
                     (indexable, slot, _) => {
                         self.push(Value::Nil);
-                        error!(self, RuntimeError::IndexError(indexable, slot.into()));
+                        error!(self, RuntimeError::IndexError(indexable, slot));
                     }
                 }
             }
@@ -564,7 +559,7 @@ impl Machine for VM {
                     }
                     (indexable, e) => {
                         self.push(Value::Nil);
-                        error!(self, RuntimeError::IndexError(indexable, e.into()));
+                        error!(self, RuntimeError::IndexError(indexable, e));
                     }
                 }
             }
@@ -594,7 +589,7 @@ impl Machine for VM {
                     inst => {
                         error!(
                             self,
-                            RuntimeError::TypeError(Op::GetField(field), vec![Type::from(inst)])
+                            RuntimeError::ValueError(Op::GetField(field), vec![inst])
                         );
                     }
                 }
@@ -610,28 +605,12 @@ impl Machine for VM {
                     inst => {
                         error!(
                             self,
-                            RuntimeError::TypeError(Op::AssignField(field), vec![Type::from(inst)])
+                            RuntimeError::ValueError(Op::AssignField(field), vec![inst])
                         );
                     }
                 }
             }
 
-            Op::Is => {
-                let (a, b) = self.poppop();
-                let a = match a {
-                    Value::Ty(ty) => ty,
-                    val => Type::from(val),
-                };
-                let b = match b {
-                    Value::Ty(ty) => ty,
-                    val => Type::from(val),
-                };
-                let result = a.fits(&b).is_ok();
-                self.push(Value::Bool(result));
-            }
-
-            // TODO(ed): These look the same as in typechecker.rs, since the macros and functions hide the
-            // rest, maybe merge them?
             Op::Neg => {
                 one_op!(self, Op::Neg, op::neg);
             }
@@ -712,7 +691,7 @@ impl Machine for VM {
             Op::ReadUpvalue(slot) => {
                 let offset = self.frame().stack_offset;
                 let value = match &self.stack[offset] {
-                    Value::Function(ups, _, _) => ups[slot].borrow().get(&self.stack),
+                    Value::Function(ups, _) => ups[slot].borrow().get(&self.stack),
                     _ => unreachable!(),
                 };
                 self.push(value);
@@ -722,7 +701,7 @@ impl Machine for VM {
                 let offset = self.frame().stack_offset;
                 let value = self.pop();
                 let slot = match &self.stack[offset] {
-                    Value::Function(ups, _, _) => Rc::clone(&ups[slot]),
+                    Value::Function(ups, _) => Rc::clone(&ups[slot]),
                     _ => unreachable!(),
                 };
                 slot.borrow_mut().set(&mut self.stack, value);
@@ -762,12 +741,8 @@ impl Machine for VM {
                         );
                         self.push(Value::Blob(Rc::new(RefCell::new(values))));
                     }
-                    Value::Function(_, _, block) => {
+                    Value::Function(_, block) => {
                         let inner = self.blocks[block].borrow();
-                        let args = inner.args();
-                        if args.len() != num_args {
-                            error!(self, RuntimeError::ArgumentCount(args.len(), num_args));
-                        }
 
                         #[cfg(debug_assertions)]
                         if self.print_bytecode {
