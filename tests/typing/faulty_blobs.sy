@@ -14,5 +14,5 @@ start :: fn do
         a: 1.0
     }
 end
-// error: $Mismatch { got: Type::Float, expected: Type::Int }
-// error: $Mismatch { got: Type::Float, expected: Type::Int }
+// error: $Missmatch { got: Type::Float, expected: Type::Int }
+// error: $Missmatch { got: Type::Float, expected: Type::Int }

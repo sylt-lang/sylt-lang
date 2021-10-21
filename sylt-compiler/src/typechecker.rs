@@ -160,7 +160,7 @@ impl<'c> TypeChecker<'c> {
                             return err_type_error!(
                                 self,
                                 span,
-                                TypeError::Mismatch {
+                                TypeError::Missmatch {
                                     got: arg.clone(),
                                     expected: known.clone()
                                 },
@@ -233,7 +233,7 @@ impl<'c> TypeChecker<'c> {
                 return err_type_error!(
                     self,
                     span,
-                    TypeError::Mismatch {
+                    TypeError::Missmatch {
                         got: arg.clone(),
                         expected: par.clone()
                     }
@@ -460,7 +460,7 @@ impl<'c> TypeChecker<'c> {
                             return err_type_error!(
                                 self,
                                 span,
-                                TypeError::Mismatch {
+                                TypeError::Missmatch {
                                     got: index,
                                     expected: Type::Int,
                                 },
@@ -476,7 +476,7 @@ impl<'c> TypeChecker<'c> {
                             return err_type_error!(
                                 self,
                                 span,
-                                TypeError::Mismatch {
+                                TypeError::Missmatch {
                                     got: index,
                                     expected: Type::Int,
                                 },
@@ -509,7 +509,7 @@ impl<'c> TypeChecker<'c> {
                             return err_type_error!(
                                 self,
                                 span,
-                                TypeError::Mismatch {
+                                TypeError::Missmatch {
                                     got: index,
                                     expected: Type::clone(&key),
                                 },
@@ -708,7 +708,7 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         span,
-                        TypeError::Mismatch {
+                        TypeError::Missmatch {
                             got: actual_ret,
                             expected: ret
                         },
@@ -732,7 +732,7 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         condition.span,
-                        TypeError::Mismatch {
+                        TypeError::Missmatch {
                             got: condition_ty,
                             expected: Type::Bool,
                         },
@@ -793,7 +793,7 @@ impl<'c> TypeChecker<'c> {
                                 errors.push(type_error!(
                                     self,
                                     *span,
-                                    TypeError::Mismatch {
+                                    TypeError::Missmatch {
                                         expected: lhs.clone(),
                                         got: rhs.clone()
                                     },
@@ -901,7 +901,7 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         span,
-                        TypeError::MismatchAssign {
+                        TypeError::MissmatchAssign {
                             got: result,
                             expected: target_ty
                         },
@@ -967,7 +967,7 @@ impl<'c> TypeChecker<'c> {
                         return err_type_error!(
                             self,
                             span,
-                            TypeError::Mismatch {
+                            TypeError::Missmatch {
                                 got: ty,
                                 expected: value,
                             },
@@ -990,7 +990,7 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         condition.span,
-                        TypeError::Mismatch {
+                        TypeError::Missmatch {
                             got: ty,
                             expected: Type::Bool,
                         },
@@ -1008,7 +1008,7 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         condition.span,
-                        TypeError::Mismatch {
+                        TypeError::Missmatch {
                             got: ty,
                             expected: Type::Bool,
                         },
@@ -1025,7 +1025,7 @@ impl<'c> TypeChecker<'c> {
                     return err_type_error!(
                         self,
                         span,
-                        TypeError::Mismatch {
+                        TypeError::Missmatch {
                             got: lhs,
                             expected: rhs,
                         },
@@ -1166,7 +1166,7 @@ impl<'c> TypeChecker<'c> {
                                 return err_type_error!(
                                     self,
                                     span,
-                                    TypeError::Mismatch {
+                                    TypeError::Missmatch {
                                         got: ty,
                                         expected: value,
                                     },

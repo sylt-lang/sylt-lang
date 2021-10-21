@@ -22,5 +22,5 @@ C :: blob {
 :C is :A
 
 start :: fn do end
-// error: $Mismatch { .. }
-// error: $Mismatch { .. }
+// error: $Missmatch { .. }
+// error: $Missmatch { .. }

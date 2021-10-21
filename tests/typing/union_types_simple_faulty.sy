@@ -22,7 +22,7 @@ start :: fn do
     f(true) <=> g(true)
 end
 
-// error: $Mismatch { .. }
-// error: $Mismatch { .. }
+// error: $Missmatch { .. }
+// error: $Missmatch { .. }
 // error: $BinOp { .. }
 // error: $BinOp { .. }

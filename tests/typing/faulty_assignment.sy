@@ -9,7 +9,7 @@ start :: fn do
     a: {str|int: int} = {"ab": 2, 2: 2}
     a: {int|float} = [2, 2, 2.0]
 end
-// error: $MismatchAssign { got: Type::String, expected: Type::Int }
+// error: $MissmatchAssign { got: Type::String, expected: Type::Int }
 // error: $Mutability
 // error: $BinOp { .. }
-// error: $Mismatch { .. }
+// error: $Missmatch { .. }

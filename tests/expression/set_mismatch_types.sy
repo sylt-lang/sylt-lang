@@ -2,4 +2,4 @@ start :: fn do
     a: {int} = {1, "abc", 1.0}
     a
 end
-// error: $Mismatch { .. }
+// error: $Missmatch { .. }

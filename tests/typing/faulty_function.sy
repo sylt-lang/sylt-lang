@@ -7,5 +7,5 @@ start :: fn do
     q := 1 -> f'
     q := 1.0 -> f'
 end
-// error: $Mismatch { got: Type::Float, expected: Type::Int }
-// error: $Mismatch { got: Type::Float, expected: Type::Int }
+// error: $Missmatch { got: Type::Float, expected: Type::Int }
+// error: $Missmatch { got: Type::Float, expected: Type::Int }

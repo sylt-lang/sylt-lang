@@ -3,4 +3,4 @@ start :: fn do
     a = 0.1
     a
 end
-// error: $MismatchAssign{ expected: Type::Int, got: Type::Float }
+// error: $MissmatchAssign{ expected: Type::Int, got: Type::Float }

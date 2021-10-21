@@ -6,4 +6,4 @@ start :: fn do
     a = "abc"
 end
 // error: $BinOp { .. }
-// error: $MismatchAssign { .. }
+// error: $MissmatchAssign { .. }

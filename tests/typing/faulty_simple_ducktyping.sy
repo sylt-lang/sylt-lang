@@ -7,4 +7,4 @@ start :: fn do
 	a :: A { a: 0 }
 	f(a) <=> 0
 end
-// error: $Mismatch { .. }
+// error: $Missmatch { .. }

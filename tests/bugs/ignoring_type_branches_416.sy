@@ -21,4 +21,4 @@ start :: fn do
     a.a
 end
 
-// error: $Mismatch { .. }
+// error: $Missmatch { .. }

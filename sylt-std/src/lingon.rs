@@ -895,7 +895,7 @@ pub fn l_load_image<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> 
             unpack_int_int_tuple(tilesize);
             Ok(Value::Tuple(Rc::new(vec![sylt_str("image"), Value::Int(0)])))
         }
-        (values, _) => Err(RuntimeError::ExternTypeMismatch(
+        (values, _) => Err(RuntimeError::ExternTypeMissmatch(
             "l_load_image".to_string(),
             values.iter().map(Type::from).collect(),
         )),
@@ -916,7 +916,7 @@ pub fn l_load_audio<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> 
         }
         ([Value::String(_)], true)
             => Ok(Value::Tuple(Rc::new(vec![sylt_str("audio"), Value::Int(0)]))),
-        (values, _) => Err(RuntimeError::ExternTypeMismatch(
+        (values, _) => Err(RuntimeError::ExternTypeMissmatch(
             "l_load_image".to_string(),
             values.iter().map(Type::from).collect(),
         )),

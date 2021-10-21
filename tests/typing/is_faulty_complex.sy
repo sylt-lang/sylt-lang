@@ -40,8 +40,8 @@ D :: blob {
 // :D is :D | D
 
 start :: fn do end
-// error: $Mismatch { .. }
-// error: $Mismatch { .. }
-// error: $Mismatch { .. }
-// error: $Mismatch { .. }
-// error: $Mismatch { .. }
+// error: $Missmatch { .. }
+// error: $Missmatch { .. }
+// error: $Missmatch { .. }
+// error: $Missmatch { .. }
+// error: $Missmatch { .. }

@@ -12,8 +12,8 @@ start :: fn do
     a["qqq"] + 123
     a[123] + 123
 end
-// error: $Mismatch { .. }
+// error: $Missmatch { .. }
 // error: $BinOp { .. }
-// error: $Mismatch { .. }
+// error: $Missmatch { .. }
 // error: $TupleIndexOutOfRange { .. }
-// error: $Mismatch { .. }
+// error: $Missmatch { .. }

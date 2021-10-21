@@ -89,12 +89,12 @@ pub enum TypeError {
         op: String,
     },
 
-    Mismatch {
+    Missmatch {
         got: Type,
         expected: Type,
     },
 
-    MismatchAssign {
+    MissmatchAssign {
         got: Type,
         expected: Type,
     },
@@ -319,11 +319,11 @@ impl fmt::Display for TypeError {
                 Ok(())
             }
 
-            TypeError::Mismatch { got, expected } => {
+            TypeError::Missmatch { got, expected } => {
                 write!(f, "A '{:?}' cannot be a '{:?}'", got, expected)
             }
 
-            TypeError::MismatchAssign { got, expected } => {
+            TypeError::MissmatchAssign { got, expected } => {
                 write!(f, "Cannot assign a '{:?}' to a '{:?}'", got, expected)
             }
 

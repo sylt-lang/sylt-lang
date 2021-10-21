@@ -4,5 +4,5 @@ start :: fn do
     loop 1 + 1 * 2 do
     end
 end
-// error: $Mismatch { expected: Type::Bool, .. }
-// error: $Mismatch { expected: Type::Bool, .. }
+// error: $Missmatch { expected: Type::Bool, .. }
+// error: $Missmatch { expected: Type::Bool, .. }

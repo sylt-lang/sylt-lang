@@ -2,4 +2,4 @@ start :: fn do
     f : fn -> int = fn do end
     f
 end
-// error: $Mismatch { .. }
+// error: $Missmatch { .. }

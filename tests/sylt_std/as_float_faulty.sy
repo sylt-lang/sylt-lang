@@ -1,4 +1,4 @@
 start :: fn do
     as_float("a")
 end
-// error: $Mismatch { .. }
+// error: $Missmatch { .. }
