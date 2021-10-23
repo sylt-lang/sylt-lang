@@ -111,7 +111,7 @@ pub fn extern_function(tokens: proc_macro::TokenStream) -> proc_macro::TokenStre
             let values = ctx.machine.stack_from_base(ctx.stack_base);
             match &*values {
                 #(#eval_blocks),*
-                _ => Err(::sylt_common::error::RuntimeError::ExternArgsMissmatch(
+                _ => Err(::sylt_common::error::RuntimeError::ExternArgsMismatch(
                     stringify!(#function).to_string(),
                     values.into()
                 ))

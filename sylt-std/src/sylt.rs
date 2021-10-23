@@ -273,13 +273,13 @@ sylt_macro::extern_function!(
         let c = match chars.next() {
             Some(c) => c,
             // TODO(gu): Actually what went wrong
-            None => return Err(RuntimeError::ExternArgsMissmatch("as_char".to_string(), vec![Value::String(s.clone())])),
+            None => return Err(RuntimeError::ExternArgsMismatch("as_char".to_string(), vec![Value::String(s.clone())])),
         };
         if chars.next().is_none() {
             Ok(Int(c as i64))
         } else {
             // TODO(gu): Actually what went wrong
-            Err(RuntimeError::ExternArgsMissmatch("as_char".to_string(), vec![Value::String(s.clone())]))
+            Err(RuntimeError::ExternArgsMismatch("as_char".to_string(), vec![Value::String(s.clone())]))
         }
     }
 );
