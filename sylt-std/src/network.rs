@@ -131,7 +131,7 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         [Value::String(ip), Value::Int(port)] => (ip.as_str(), *port as u16),
         [Value::String(ip)] => (ip.as_str(), DEFAULT_PORT),
         _ => {
-            return Err(RuntimeError::ExternArgsMissmatch(
+            return Err(RuntimeError::ExternArgsMismatch(
                 "n_rpc_connect".to_string(),
                 values.to_vec(),
             ));
@@ -201,7 +201,7 @@ fn get_rpc_args(ctx: RuntimeContext<'_>, arg_offset: usize, func_name: &str) -> 
     if flat_values.len() != 0 {
         Ok(flat_values)
     } else {
-        Err(RuntimeError::ExternArgsMissmatch(
+        Err(RuntimeError::ExternArgsMismatch(
             func_name.to_string(),
             values.to_vec(),
         ))

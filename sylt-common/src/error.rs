@@ -55,7 +55,7 @@ pub enum RuntimeError {
     IndexError(Value, Value),
 
     /// (External function, parameters)
-    ExternArgsMissmatch(String, Vec<Value>),
+    ExternArgsMismatch(String, Vec<Value>),
     ExternError(String, String),
     ValueError(Op, Vec<Value>),
     UnknownField(String, String),
@@ -263,7 +263,7 @@ impl fmt::Display for RuntimeError {
             RuntimeError::IndexError(value, slot) => {
                 write!(f, "Cannot index value '{:?}' with type '{:?}'", value, slot)
             }
-            RuntimeError::ExternArgsMissmatch(name, values) => {
+            RuntimeError::ExternArgsMismatch(name, values) => {
                 write!(
                     f,
                     "Extern function '{}' doesn't accept argument(s) {:?}",
