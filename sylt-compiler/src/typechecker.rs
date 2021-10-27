@@ -150,7 +150,13 @@ impl TypeChecker {
             StatementKind::Blob { name, fields } => todo!(),
             StatementKind::Assignment { kind, target, value } => todo!(),
             StatementKind::Definition { ident, kind, ty, value } => {
-                self.resolve_type(&ty, ctx);
+
+                let new_type = self.types.len();
+                self.types.push(TypeNode { self.resolve_type(&ty, ctx) });
+
+                let actual_ty = self.expression(value, ctx)?;
+                let var = Variable { ident: ident.clone(), ty: actual_ty, kind: *kind };
+                self.globals.insert((ctx.namespace, ident.name.clone()), Name::Global(var));
             }
             StatementKind::ExternalDefinition { ident, kind, ty } => todo!(),
             StatementKind::If { condition, pass, fail } => todo!(),
