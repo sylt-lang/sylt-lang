@@ -6,7 +6,7 @@ use sylt_common::error::{Error, TypeError};
 use sylt_common::Type;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp, Span,
-    Statement, StatementKind, VarKind, TypeKind, Type as ParserType,
+    Statement, StatementKind, Type as ParserType, TypeKind, VarKind,
 };
 
 use crate::{self as compiler, first_ok_or_errs, Context, Name as CompilerName};
@@ -111,7 +111,6 @@ impl TypeChecker {
     }
 
     fn resolve_type(&mut self, ty: &ParserType, ctx: TypeCtx) -> Type {
-
         use TypeKind::*;
         match &ty.kind {
             Implied => Type::Unknown,
@@ -144,22 +143,54 @@ impl TypeChecker {
         }
     }
 
-    fn outer_statement(&mut self, statement: &Statement, ctx: TypeCtx) -> Result<(), Vec<Error>>{
+    fn outer_statement(&mut self, statement: &Statement, ctx: TypeCtx) -> Result<(), Vec<Error>> {
+        let span = statement.span;
         match &statement.kind {
             StatementKind::Use { path, name, file } => todo!(),
             StatementKind::Blob { name, fields } => todo!(),
-            StatementKind::Assignment { kind, target, value } => todo!(),
-            StatementKind::Definition { ident, kind, ty, value } => {
+            StatementKind::Assignment {
+                kind,
+                target,
+                value,
+            } => todo!(),
 
-                let new_type = self.types.len();
-                self.types.push(TypeNode { self.resolve_type(&ty, ctx) });
+            StatementKind::Definition {
+                ident,
+                kind,
+                ty,
+                value,
+            } => {
+                let expression_ty = self.expression(value, ctx)?;
+                let ty = match self.resolve_type(&ty, ctx) {
+                    Type::Unknown => expression_ty,
+                    x => {
+                        let defined_ty = self.types.len();
+                        let ty = TypeNode {
+                            ty: x,
+                            parent: None,
+                            size: 1,
+                        };
+                        self.types.push(ty);
+                        self.widen(span, ctx, expression_ty, defined_ty)?;
+                        defined_ty
+                    }
+                };
 
-                let actual_ty = self.expression(value, ctx)?;
-                let var = Variable { ident: ident.clone(), ty: actual_ty, kind: *kind };
-                self.globals.insert((ctx.namespace, ident.name.clone()), Name::Global(var));
+                let var = Variable {
+                    ident: ident.clone(),
+                    ty,
+                    kind: *kind,
+                };
+                self.globals
+                    .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
             }
+
             StatementKind::ExternalDefinition { ident, kind, ty } => todo!(),
-            StatementKind::If { condition, pass, fail } => todo!(),
+            StatementKind::If {
+                condition,
+                pass,
+                fail,
+            } => todo!(),
             StatementKind::Loop { condition, body } => todo!(),
             StatementKind::Break => todo!(),
             StatementKind::Continue => todo!(),
@@ -176,13 +207,28 @@ impl TypeChecker {
     fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> Result<usize, Vec<Error>> {
         let span = expression.span;
         match &expression.kind {
-            ExpressionKind::Get(_) => todo!(),
+            ExpressionKind::Get(ass) => match &ass.kind {
+                AssignableKind::Read(ident) => {
+                    match self.globals.get(&(ctx.namespace, ident.name.clone())) {
+                        Some(Name::Global(var)) => Ok(var.ty),
+                        _ => todo!(),
+                    }
+                }
+
+                AssignableKind::Call(_, _) => todo!(),
+                AssignableKind::ArrowCall(_, _, _) => todo!(),
+                AssignableKind::Access(_, _) => todo!(),
+                AssignableKind::Index(_, _) => todo!(),
+                AssignableKind::Expression(_) => todo!(),
+            },
+
             ExpressionKind::Add(a, b) => {
                 let a = self.expression(&a, ctx)?;
                 let b = self.expression(&b, ctx)?;
                 self.unify(span, ctx, a, b)?;
                 Ok(a)
             }
+
             ExpressionKind::Sub(_, _) => todo!(),
             ExpressionKind::Mul(_, _) => todo!(),
             ExpressionKind::Div(_, _) => todo!(),
@@ -193,16 +239,44 @@ impl TypeChecker {
             ExpressionKind::Or(_, _) => todo!(),
             ExpressionKind::Not(_) => todo!(),
             ExpressionKind::Parenthesis(_) => todo!(),
-            ExpressionKind::IfExpression { condition, pass, fail } => todo!(),
-            ExpressionKind::Function { name, params, ret, body } => todo!(),
+            ExpressionKind::IfExpression {
+                condition,
+                pass,
+                fail,
+            } => todo!(),
+            ExpressionKind::Function {
+                name,
+                params,
+                ret,
+                body,
+            } => Ok(0),
             ExpressionKind::Blob { blob, fields } => todo!(),
             ExpressionKind::Tuple(_) => todo!(),
             ExpressionKind::List(_) => todo!(),
             ExpressionKind::Set(_) => todo!(),
             ExpressionKind::Dict(_) => todo!(),
             ExpressionKind::Float(_) => todo!(),
-            ExpressionKind::Int(_) => todo!(),
-            ExpressionKind::Str(_) => todo!(),
+
+            ExpressionKind::Int(_) => {
+                let ty = self.types.len();
+                self.types.push(TypeNode {
+                    ty: Type::Int,
+                    parent: None,
+                    size: 1,
+                });
+                Ok(ty)
+            }
+
+            ExpressionKind::Str(_) => {
+                let ty = self.types.len();
+                self.types.push(TypeNode {
+                    ty: Type::String,
+                    parent: None,
+                    size: 1,
+                });
+                Ok(ty)
+            }
+
             ExpressionKind::Bool(_) => todo!(),
             ExpressionKind::Nil => todo!(),
         }
@@ -241,7 +315,7 @@ impl TypeChecker {
         self.types[a].size += self.types[b].size;
     }
 
-    fn unify(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>>{
+    fn unify(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>> {
         let a = self.find(a);
         let b = self.find(b);
 
@@ -250,13 +324,35 @@ impl TypeChecker {
 
         // TODO
         match (ta.fits(tb), tb.fits(ta)) {
-            (Ok(_), Ok(_)) => {},
+            (Ok(_), Ok(_)) => {}
             (Ok(_), _) => self.types[b].ty = ta.clone(),
             (_, Ok(_)) => self.types[a].ty = tb.clone(),
-            (Err(a_err), Err(b_err)) => return Err(vec![
-                type_error!(self, span, ctx, TypeError::Mismatch { got: tb.clone(), expected: ta.clone() }, "{}", a_err),
-                type_error!(self, span, ctx, TypeError::Mismatch { got: ta.clone(), expected: tb.clone() }, "{}", b_err),
-            ]),
+            (Err(a_err), Err(b_err)) => {
+                return Err(vec![
+                    type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Mismatch {
+                            got: tb.clone(),
+                            expected: ta.clone()
+                        },
+                        "{}",
+                        a_err
+                    ),
+                    type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Mismatch {
+                            got: ta.clone(),
+                            expected: tb.clone()
+                        },
+                        "{}",
+                        b_err
+                    ),
+                ])
+            }
         }
 
         self.union(a, b);
@@ -264,9 +360,49 @@ impl TypeChecker {
         Ok(())
     }
 
+    fn widen(
+        &mut self,
+        span: Span,
+        ctx: TypeCtx,
+        thin: usize,
+        wide: usize,
+    ) -> Result<(), Vec<Error>> {
+        let t = self.find(thin);
+        let w = self.find(wide);
+
+        let tt = &self.types[t].ty;
+        let tw = &self.types[w].ty;
+
+        match tt.fits(tw) {
+            Ok(_) => self.types[t].ty = tw.clone(),
+            Err(err) => {
+                return Err(vec![type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::Mismatch {
+                        got: tt.clone(),
+                        expected: tw.clone()
+                    },
+                    "{}",
+                    err
+                )])
+            }
+        }
+
+        self.union(t, w);
+
+        Ok(())
+    }
+
     fn solve(&mut self, statements: &Vec<(&Statement, usize)>) -> Result<(), Vec<Error>> {
         for (statement, namespace) in statements.iter() {
-            self.outer_statement(statement, TypeCtx { namespace: *namespace })?;
+            self.outer_statement(
+                statement,
+                TypeCtx {
+                    namespace: *namespace,
+                },
+            )?;
         }
 
         Ok(())
