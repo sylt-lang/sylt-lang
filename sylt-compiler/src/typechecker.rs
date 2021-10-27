@@ -1,53 +1,53 @@
-use std::collections::{hash_map::Entry, HashMap};
+#![allow(unused_variables)]
+#![allow(unused_imports)]
+use std::collections::HashMap;
 use std::path::PathBuf;
 use sylt_common::error::{Error, TypeError};
-use sylt_common::{Type, Value::Ty as ValueType};
-use sylt_parser::expression::ComparisonKind;
+use sylt_common::Type;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp, Span,
     Statement, StatementKind, VarKind, TypeKind, Type as ParserType,
 };
 
 use crate::{self as compiler, first_ok_or_errs, Context, Name as CompilerName};
-use compiler::Compiler;
 
-macro_rules! type_error_if_invalid {
-    ($self:expr, $ty:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
-        if matches!($ty, Type::Invalid) {
-            return err_type_error!($self, $span, $kind, $( $msg ),*);
-        }
-    };
-    ($self:expr, $ty:expr, $span:expr, $kind:expr) => {
-        if matches!($ty, Type::Invalid) {
-            return err_type_error!($self, $span, $kind);
-        }
-    };
-}
-
-macro_rules! err_type_error {
-    ($self:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
-        Err(vec![Error::TypeError {
-            kind: $kind,
-            file: $self.file(),
-            span: $span,
-            message: Some(format!($( $msg ),*)),
-        }])
-    };
-    ($self:expr, $span:expr, $kind:expr) => {
-        Err(vec![Error::TypeError {
-            kind: $kind,
-            file: $self.file(),
-            span: $span,
-            message: None,
-        }])
-    };
-}
+//macro_rules! type_error_if_invalid {
+//    ($self:expr, $ty:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
+//        if matches!($ty, Type::Invalid) {
+//            return err_type_error!($self, $span, $kind, $( $msg ),*);
+//        }
+//    };
+//    ($self:expr, $ty:expr, $span:expr, $kind:expr) => {
+//        if matches!($ty, Type::Invalid) {
+//            return err_type_error!($self, $span, $kind);
+//        }
+//    };
+//}
+//
+//macro_rules! err_type_error {
+//    ($self:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
+//        Err(vec![Error::TypeError {
+//            kind: $kind,
+//            file: $self.file(),
+//            span: $span,
+//            message: Some(format!($( $msg ),*)),
+//        }])
+//    };
+//    ($self:expr, $span:expr, $kind:expr) => {
+//        Err(vec![Error::TypeError {
+//            kind: $kind,
+//            file: $self.file(),
+//            span: $span,
+//            message: None,
+//        }])
+//    };
+//}
 
 macro_rules! type_error {
-    ($self:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
+    ($self:expr, $span:expr, $ctx: expr, $kind:expr, $( $msg:expr ),+ ) => {
         Error::TypeError {
             kind: $kind,
-            file: $self.file(),
+            file: $self.namespace_to_file[&$ctx.namespace].clone(),
             span: $span,
             message: Some(format!($( $msg ),*)),
         }
@@ -55,7 +55,7 @@ macro_rules! type_error {
     ($self:expr, $span:expr, $kind:expr) => {
         Error::TypeError {
             kind: $kind,
-            file: $self.file(),
+            file: $self.namespace_to_file[&$ctx.namespace],
             span: $span,
             message: None,
         }
@@ -85,6 +85,7 @@ struct TypeChecker {
     globals: HashMap<(usize, String), Name>,
     stack: Vec<Variable>,
     types: Vec<TypeNode>,
+    namespace_to_file: HashMap<usize, PathBuf>,
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -100,11 +101,12 @@ enum Name {
 }
 
 impl TypeChecker {
-    fn new() -> Self {
+    fn new(namespace_to_file: &HashMap<usize, PathBuf>) -> Self {
         Self {
             globals: HashMap::new(),
             stack: Vec::new(),
             types: Vec::new(),
+            namespace_to_file: namespace_to_file.clone(),
         }
     }
 
@@ -143,7 +145,7 @@ impl TypeChecker {
     }
 
     fn outer_statement(&mut self, statement: &Statement, ctx: TypeCtx) -> Result<(), Vec<Error>>{
-        match statement.kind {
+        match &statement.kind {
             StatementKind::Use { path, name, file } => todo!(),
             StatementKind::Blob { name, fields } => todo!(),
             StatementKind::Assignment { kind, target, value } => todo!(),
@@ -166,12 +168,13 @@ impl TypeChecker {
     }
 
     fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> Result<usize, Vec<Error>> {
-        match expression.kind {
+        let span = expression.span;
+        match &expression.kind {
             ExpressionKind::Get(_) => todo!(),
             ExpressionKind::Add(a, b) => {
                 let a = self.expression(&a, ctx)?;
                 let b = self.expression(&b, ctx)?;
-                self.union(a, b);
+                self.unify(span, ctx, a, b)?;
                 Ok(a)
             }
             ExpressionKind::Sub(_, _) => todo!(),
@@ -232,6 +235,29 @@ impl TypeChecker {
         self.types[a].size += self.types[b].size;
     }
 
+    fn unify(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>>{
+        let a = self.find(a);
+        let b = self.find(b);
+
+        let ta = &self.types[a].ty;
+        let tb = &self.types[b].ty;
+
+        // TODO
+        match (ta.fits(tb), tb.fits(ta)) {
+            (Ok(_), Ok(_)) => {},
+            (Ok(_), _) => self.types[b].ty = ta.clone(),
+            (_, Ok(_)) => self.types[a].ty = tb.clone(),
+            (Err(a_err), Err(b_err)) => return Err(vec![
+                type_error!(self, span, ctx, TypeError::Mismatch { got: tb.clone(), expected: ta.clone() }, "{}", a_err),
+                type_error!(self, span, ctx, TypeError::Mismatch { got: ta.clone(), expected: tb.clone() }, "{}", b_err),
+            ]),
+        }
+
+        self.union(a, b);
+
+        Ok(())
+    }
+
     fn solve(&mut self, statements: &Vec<(&Statement, usize)>) -> Result<(), Vec<Error>> {
         for (statement, namespace) in statements.iter() {
             self.outer_statement(statement, TypeCtx { namespace: *namespace })?;
@@ -243,8 +269,9 @@ impl TypeChecker {
 
 pub(crate) fn solve(
     statements: &Vec<(&Statement, usize)>,
+    namespace_to_file: &HashMap<usize, PathBuf>,
 ) -> Result<(), Vec<Error>> {
-    TypeChecker::new().solve(statements)
+    TypeChecker::new(namespace_to_file).solve(statements)
 }
 
 /// Module with all the operators that can be applied

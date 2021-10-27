@@ -317,19 +317,20 @@ impl Compiler {
         let num_constants = self.extract_globals(&tree);
 
         let num_functions = functions.len();
-        self.functions = functions
-            .to_vec()
-            .into_iter()
-            .enumerate()
-            .map(|(i, (s, f, sig))| (s.clone(), (i, f, self.resolve_type(&parse_signature(&s, &sig), ctx))))
-            .collect();
-        assert_eq!(
-            num_functions,
-            self.functions.len(),
-            "There are {} names and {} extern functions - some extern functions share name",
-            self.functions.len(),
-            num_functions
-        );
+        // TODO
+        //self.functions = functions
+        //    .to_vec()
+        //    .into_iter()
+        //    .enumerate()
+        //    .map(|(i, (s, f, sig))| (s.clone(), (i, f, self.resolve_type(&parse_signature(&s, &sig), ctx))))
+        //    .collect();
+        //assert_eq!(
+        //    num_functions,
+        //    self.functions.len(),
+        //    "There are {} names and {} extern functions - some extern functions share name",
+        //    self.functions.len(),
+        //    num_functions
+        //);
 
         let statements = match dependency::initialization_order(&tree, &self) {
             Ok(statements) => statements,
@@ -345,7 +346,7 @@ impl Compiler {
         }
 
         if typecheck {
-            typechecker::solve(&mut self, &statements)?;
+            typechecker::solve(&statements, &self.namespace_id_to_path)?;
         }
 
 
