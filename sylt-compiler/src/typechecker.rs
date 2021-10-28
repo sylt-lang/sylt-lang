@@ -110,9 +110,23 @@ impl TypeChecker {
         }
     }
 
+    fn push_type(&mut self, ty: Type) -> usize {
+        let ty_id = self.types.len();
+        self.types.push(TypeNode {
+            ty,
+            parent: None,
+            size: 1,
+        });
+        ty_id
+    }
+
     fn type_assignable(&self, assignable: &Assignable, ctx: TypeCtx) -> Type {
         match &assignable.kind {
-            AssignableKind::Read(ident) => match self.globals.get(&(ctx.namespace, ident.name.clone())).unwrap() {
+            AssignableKind::Read(ident) => match self
+                .globals
+                .get(&(ctx.namespace, ident.name.clone()))
+                .unwrap()
+            {
                 Name::Blob(ty) => ty.clone(),
                 _ => panic!(),
             },
@@ -164,11 +178,13 @@ impl TypeChecker {
             StatementKind::Blob { name, fields } => {
                 let ty = Type::Blob(
                     name.clone(),
-                    fields.iter()
+                    fields
+                        .iter()
                         .map(|(k, v)| (k.clone(), self.resolve_type(v, ctx)))
-                        .collect()
+                        .collect(),
                 );
-                self.globals.insert((ctx.namespace, name.clone()), Name::Blob(ty));
+                self.globals
+                    .insert((ctx.namespace, name.clone()), Name::Blob(ty));
             }
             StatementKind::Assignment {
                 kind,
@@ -186,13 +202,7 @@ impl TypeChecker {
                 let ty = match self.resolve_type(&ty, ctx) {
                     Type::Unknown => expression_ty,
                     x => {
-                        let defined_ty = self.types.len();
-                        let ty = TypeNode {
-                            ty: x,
-                            parent: None,
-                            size: 1,
-                        };
-                        self.types.push(ty);
+                        let defined_ty = self.push_type(x);
                         self.check_wider(span, ctx, expression_ty, defined_ty)?;
                         defined_ty
                     }
@@ -266,50 +276,29 @@ impl TypeChecker {
                 pass,
                 fail,
             } => todo!(),
+
             ExpressionKind::Function {
                 name,
                 params,
                 ret,
                 body,
             } => Ok(0),
+
             ExpressionKind::Blob { blob, fields } => {
                 // TODO: check the fields
-                let ty = self.types.len();
-                self.types.push(TypeNode {
-                    ty: self.type_assignable(blob, ctx),
-                    parent: None,
-                    size: 1,
-                });
-                Ok(ty)
-            },
+                Ok(self.push_type(self.type_assignable(blob, ctx)))
+            }
+
             ExpressionKind::Tuple(_) => todo!(),
             ExpressionKind::List(_) => todo!(),
             ExpressionKind::Set(_) => todo!(),
             ExpressionKind::Dict(_) => todo!(),
-            ExpressionKind::Float(_) => todo!(),
 
-            ExpressionKind::Int(_) => {
-                let ty = self.types.len();
-                self.types.push(TypeNode {
-                    ty: Type::Int,
-                    parent: None,
-                    size: 1,
-                });
-                Ok(ty)
-            }
-
-            ExpressionKind::Str(_) => {
-                let ty = self.types.len();
-                self.types.push(TypeNode {
-                    ty: Type::String,
-                    parent: None,
-                    size: 1,
-                });
-                Ok(ty)
-            }
-
-            ExpressionKind::Bool(_) => todo!(),
-            ExpressionKind::Nil => todo!(),
+            ExpressionKind::Int(_) => Ok(self.push_type(Type::Int)),
+            ExpressionKind::Float(_) => Ok(self.push_type(Type::Float)),
+            ExpressionKind::Str(_) => Ok(self.push_type(Type::String)),
+            ExpressionKind::Bool(_) => Ok(self.push_type(Type::Bool)),
+            ExpressionKind::Nil => Ok(self.push_type(Type::Void)),
         }
     }
 
@@ -416,7 +405,7 @@ impl TypeChecker {
                 },
                 "{}",
                 err
-            )])
+            )]),
         }
     }
 
