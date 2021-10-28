@@ -1,15 +1,19 @@
+// TODO(ed, er): If you see these during code-review, remind us to remove it.
 #![allow(unused_variables)]
 #![allow(unused_imports)]
+#![allow(unused_macros)]
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use sylt_common::error::{Error, TypeError};
-use sylt_common::Type;
+use sylt_common::Type as RuntimeType;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp, Span,
     Statement, StatementKind, Type as ParserType, TypeKind, VarKind,
 };
 
-use crate::{self as compiler, first_ok_or_errs, Context, Name as CompilerName};
+use crate::{self as compiler, ty::Type, Context, Name as CompilerName};
+use std::collections::BTreeSet;
 
 macro_rules! type_error_if_invalid {
     ($self:expr, $ty:expr, $span:expr, $ctx: expr, $kind:expr, $( $msg:expr ),+ ) => {
@@ -59,12 +63,6 @@ struct Variable {
     kind: VarKind,
 }
 
-impl Variable {
-    fn new(ident: Identifier, ty: usize, kind: VarKind) -> Self {
-        Self { ident, ty, kind }
-    }
-}
-
 struct TypeNode {
     ty: Type,
     parent: Option<usize>,
@@ -110,14 +108,15 @@ impl TypeChecker {
         ty_id
     }
 
-    fn type_assignable(&self, assignable: &Assignable, ctx: TypeCtx) -> Type {
+    fn type_assignable(&mut self, assignable: &Assignable, ctx: TypeCtx) -> usize {
         match &assignable.kind {
             AssignableKind::Read(ident) => match self
                 .globals
                 .get(&(ctx.namespace, ident.name.clone()))
+                .cloned()
                 .unwrap()
             {
-                Name::Blob(ty) => ty.clone(),
+                Name::Blob(ty) => self.push_type(ty.clone()),
                 _ => panic!(),
             },
             AssignableKind::Access(_, _) => todo!(),
@@ -128,37 +127,54 @@ impl TypeChecker {
         }
     }
 
-    fn resolve_type(&self, ty: &ParserType, ctx: TypeCtx) -> Type {
+    fn resolve_type(&mut self, ty: &ParserType, ctx: TypeCtx) -> usize {
         use TypeKind::*;
-        match &ty.kind {
+        let ty = match &ty.kind {
             Implied => Type::Unknown,
-            Resolved(ty) => ty.clone(),
-            UserDefined(assignable) => self.type_assignable(assignable, ctx),
-            Union(a, b) => match (self.resolve_type(a, ctx), self.resolve_type(b, ctx)) {
-                (Type::Union(_), _) => panic!("Didn't expect union on RHS - check parser"),
-                (a, Type::Union(mut us)) => {
-                    us.insert(a);
-                    Type::Union(us)
-                }
-                (a, b) => Type::Union(vec![a, b].into_iter().collect()),
+
+            Resolved(ty) => match ty {
+                sylt_common::Type::Void => Type::Void,
+                sylt_common::Type::Unknown => Type::Unknown,
+                sylt_common::Type::Int => Type::Int,
+                sylt_common::Type::Float => Type::Float,
+                sylt_common::Type::Bool => Type::Bool,
+                sylt_common::Type::String => Type::String,
+                _ => todo!(),
             },
+
+            UserDefined(assignable) => {
+                return self.type_assignable(assignable, ctx);
+            }
+            // Union(a, b) => panic!(),
             Fn(params, ret) => {
                 let params = params.iter().map(|t| self.resolve_type(t, ctx)).collect();
-                let ret = Box::new(self.resolve_type(ret, ctx));
+                let ret = self.resolve_type(ret, ctx);
                 Type::Function(params, ret)
             }
             Tuple(fields) => {
                 Type::Tuple(fields.iter().map(|t| self.resolve_type(t, ctx)).collect())
             }
-            List(kind) => Type::List(Box::new(self.resolve_type(kind, ctx))),
-            Set(kind) => Type::Set(Box::new(self.resolve_type(kind, ctx))),
-            Dict(key, value) => Type::Dict(
-                Box::new(self.resolve_type(key, ctx)),
-                Box::new(self.resolve_type(value, ctx)),
-            ),
-            Generic(name) => Type::Generic(name.name.clone()),
-            Grouping(ty) => self.resolve_type(ty, ctx),
-        }
+            List(kind) => Type::List(self.resolve_type(kind, ctx)),
+            Set(kind) => Type::Set(self.resolve_type(kind, ctx)),
+            Dict(key, value) => {
+                Type::Dict(self.resolve_type(key, ctx), self.resolve_type(value, ctx))
+            }
+            Grouping(ty) => {
+                return self.resolve_type(ty, ctx);
+            }
+
+            Union(_, _) => todo!(),
+            Generic(_) => todo!(),
+        };
+        self.push_type(ty)
+    }
+
+    fn statement(
+        &mut self,
+        statement: &Statement,
+        ctx: TypeCtx,
+    ) -> Result<Option<usize>, Vec<Error>> {
+        Ok(Some(0))
     }
 
     fn outer_statement(&mut self, statement: &Statement, ctx: TypeCtx) -> Result<(), Vec<Error>> {
@@ -189,18 +205,12 @@ impl TypeChecker {
                 value,
             } => {
                 let expression_ty = self.expression(value, ctx)?;
-                let ty = match self.resolve_type(&ty, ctx) {
-                    Type::Unknown => expression_ty,
-                    x => {
-                        let defined_ty = self.push_type(x);
-                        self.check_wider(span, ctx, expression_ty, defined_ty)?;
-                        defined_ty
-                    }
-                };
+                let defined_ty = self.resolve_type(&ty, ctx);
+                self.check_wider(span, ctx, expression_ty, defined_ty)?;
 
                 let var = Variable {
                     ident: ident.clone(),
-                    ty,
+                    ty: defined_ty,
                     kind: *kind,
                 };
                 self.globals
@@ -221,7 +231,7 @@ impl TypeChecker {
             StatementKind::Block { statements } => todo!(),
             StatementKind::StatementExpression { value } => todo!(),
             StatementKind::Unreachable => todo!(),
-            StatementKind::EmptyStatement => todo!(),
+            StatementKind::EmptyStatement => {}
         }
         Ok(())
     }
@@ -233,7 +243,7 @@ impl TypeChecker {
                 AssignableKind::Read(ident) => {
                     match self.globals.get(&(ctx.namespace, ident.name.clone())) {
                         Some(Name::Global(var)) => Ok(var.ty),
-                        _ => todo!(),
+                        x => todo!("Failed with: {:?}", x),
                     }
                 }
 
@@ -247,40 +257,13 @@ impl TypeChecker {
             ExpressionKind::Add(a, b) => {
                 let a = self.expression(&a, ctx)?;
                 let b = self.expression(&b, ctx)?;
-                let res = constraints::add(&self.find_type(a), &self.find_type(b));
-                type_error_if_invalid!(
-                    self,
-                    res,
-                    span,
-                    ctx,
-                    TypeError::BinOp {
-                        lhs: self.find_type(a),
-                        rhs: self.find_type(b),
-                        op: "+".to_string(),
-                    }
-                );
-                self.unify(span, ctx, a, b)?;
-                Ok(self.push_type(res))
+                self.add(span, ctx, a, b)
             }
 
             ExpressionKind::Sub(_, _) => todo!(),
-            ExpressionKind::Mul(a, b) => {
-                let a = self.expression(&a, ctx)?;
-                let b = self.expression(&b, ctx)?;
-                let res = constraints::mul(&self.find_type(a), &self.find_type(b));
-                type_error_if_invalid!(
-                    self,
-                    res,
-                    span,
-                    ctx,
-                    TypeError::BinOp {
-                        lhs: self.find_type(a),
-                        rhs: self.find_type(b),
-                        op: "*".to_string(),
-                    }
-                );
-                Ok(self.push_type(res))
-            }
+
+            ExpressionKind::Mul(a, b) => todo!(),
+
             ExpressionKind::Div(_, _) => todo!(),
             ExpressionKind::Neg(_) => todo!(),
             ExpressionKind::Comparison(_, _, _) => todo!(),
@@ -296,25 +279,50 @@ impl TypeChecker {
             } => todo!(),
 
             ExpressionKind::Function {
-                name,
+                name: _,
                 params,
                 ret,
                 body,
-            } => Ok(0),
+            } => {
+                let ss = self.stack.len();
+                let mut args = Vec::new();
+                for (ident, ty) in params.iter() {
+                    let ty = self.resolve_type(ty, ctx);
+                    args.push(ty);
+
+                    let var = Variable {
+                        ident: ident.clone(),
+                        ty,
+                        kind: VarKind::Const,
+                    };
+                    self.stack.push(var);
+                }
+
+                let ret = self.resolve_type(ret, ctx);
+                /* TODO(ed): This doesn't work righht now!
+                if let Some(actual_ret) = self.statement(body, ctx)? {
+                    self.unify(span, ctx, ret, actual_ret)?;
+                } else {
+                    panic!();
+                }
+                */
+
+                Ok(self.push_type(Type::Function(args, ret)))
+            }
 
             ExpressionKind::Blob { blob, fields } => {
                 // TODO: check the fields
-                Ok(self.push_type(self.type_assignable(blob, ctx)))
+                Ok(self.type_assignable(blob, ctx))
             }
 
             ExpressionKind::Tuple(exprs) => {
                 let mut tys = Vec::new();
                 for expr in exprs.iter() {
-                    let ty = self.expression(expr, ctx)?;
-                    tys.push(self.find_type(ty));
+                    tys.push(self.expression(expr, ctx)?);
                 }
                 Ok(self.push_type(Type::Tuple(tys)))
             }
+
             ExpressionKind::List(_) => todo!(),
             ExpressionKind::Set(_) => todo!(),
             ExpressionKind::Dict(_) => todo!(),
@@ -342,6 +350,40 @@ impl TypeChecker {
         root
     }
 
+    fn bake_type(&mut self, a: usize) -> RuntimeType {
+        match self.find_type(a) {
+            Type::Unknown => RuntimeType::Unknown,
+            Type::Ty => RuntimeType::Ty,
+            Type::Void => RuntimeType::Ty,
+            Type::Int => RuntimeType::Int,
+            Type::Float => RuntimeType::Float,
+            Type::Bool => RuntimeType::Bool,
+            Type::String => RuntimeType::String,
+            Type::Tuple(tys) => {
+                RuntimeType::Tuple(tys.iter().map(|ty| self.bake_type(*ty)).collect())
+            }
+            Type::List(ty) => RuntimeType::List(Box::new(self.bake_type(ty))),
+            Type::Set(ty) => RuntimeType::Set(Box::new(self.bake_type(ty))),
+            Type::Dict(ty_k, ty_v) => RuntimeType::Dict(
+                Box::new(self.bake_type(ty_k)),
+                Box::new(self.bake_type(ty_v)),
+            ),
+            Type::Function(args, ret) => RuntimeType::Function(
+                args.iter().map(|ty| self.bake_type(*ty)).collect(),
+                Box::new(self.bake_type(ret)),
+            ),
+            Type::Blob(name, fields) => RuntimeType::Blob(
+                name.clone(),
+                fields
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.bake_type(*ty)))
+                    .collect(),
+            ),
+
+            Type::Invalid => RuntimeType::Invalid,
+        }
+    }
+
     fn find_type(&mut self, a: usize) -> Type {
         let ta = self.find(a);
         self.types[ta].ty.clone()
@@ -365,38 +407,145 @@ impl TypeChecker {
         self.types[a].size += self.types[b].size;
     }
 
-    fn unify(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>> {
-        let a = self.find(a);
-        let b = self.find(b);
+    fn inner_fits(
+        &mut self,
+        a: usize,
+        b: usize,
+        seen: &mut BTreeSet<(usize, usize)>,
+    ) -> Result<(), String> {
+        if seen.contains(&(a, b)) {
+            return Ok(());
+        }
 
-        let ta = self.find_type(a);
-        let tb = self.find_type(b);
+        // TODO(ed): We need a lot better error messages here!
+        // TODO(ed): Should this unify stuff?
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
+            (Type::Ty, Type::Ty) => Ok(()),
+            (Type::Void, Type::Void) => Ok(()),
+            (Type::Int, Type::Int) => Ok(()),
+            (Type::Float, Type::Float) => Ok(()),
+            (Type::Bool, Type::Bool) => Ok(()),
+            (Type::String, Type::String) => Ok(()),
 
+            (Type::List(a), Type::List(b)) => self.inner_fits(a, b, seen),
+            (Type::Set(a), Type::Set(b)) => self.inner_fits(a, b, seen),
+            (Type::Dict(a_k, a_v), Type::Dict(b_k, b_v)) => {
+                self.inner_fits(a_k, b_k, seen)?;
+                self.inner_fits(a_v, b_v, seen)
+            }
+
+            (Type::Tuple(a), Type::Tuple(b)) => {
+                for (a, b) in a.iter().zip(b.iter()) {
+                    self.inner_fits(*a, *b, seen)?;
+                }
+                Ok(())
+            }
+
+            (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
+                for (a, b) in a_args.iter().zip(b_args.iter()) {
+                    self.inner_fits(*a, *b, seen)?;
+                }
+                self.inner_fits(a_ret, b_ret, seen)
+            }
+
+            (Type::Blob(a_blob, a_field), Type::Blob(b_blob, b_field)) => {
+                for (a_name, a_ty) in a_field.iter() {
+                    if let Some(b_ty) = b_field.get(a_name) {
+                        if let Err(msg) = self.inner_fits(*a_ty, *b_ty, seen) {
+                            return Err(format!(
+                                "{} cannot hold {}, since the fields {} doesn't unify: {}",
+                                a_blob, b_blob, a_name, msg
+                            ));
+                        } else {
+                        }
+                    } else {
+                        return Err(format!(
+                            "{} cannot hold {}, since the field {} doesn't exist",
+                            a_blob, b_blob, a_name
+                        ));
+                    }
+                }
+                Ok(())
+            }
+
+            (a, b) => Err(format!("Types don't match: {:?} =/= {:?}", a, b)),
+        }
+    }
+
+    // Checks: a >= b - a is more general than b
+    fn fits(&mut self, a: usize, b: usize) -> Result<(), String> {
+        let mut seen = BTreeSet::new();
+        self.inner_fits(a, b, &mut seen)
+    }
+
+    fn unify(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<usize, Vec<Error>> {
         // TODO
-        match (ta.fits(&tb), tb.fits(&ta)) {
+        match (self.fits(a, b), self.fits(b, a)) {
             (Ok(_), Ok(_)) => {}
-            (Ok(_), _) => self.types[b].ty = ta,
-            (_, Ok(_)) => self.types[a].ty = tb,
+            // TODO(ed): This isn't right is it?
+            (Ok(_), _) => self.types[b].ty = self.find_type(a),
+            (_, Ok(_)) => self.types[a].ty = self.find_type(b),
             (Err(a_err), Err(_)) => {
-                return Err(vec![
-                    type_error!(
-                        self,
-                        span,
-                        ctx,
-                        TypeError::Mismatch {
-                            got: tb,
-                            expected: ta
-                        },
-                        "{}",
-                        a_err
-                    )
-                ])
+                return Err(vec![type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::Mismatch {
+                        got: self.bake_type(a),
+                        expected: self.bake_type(b),
+                    },
+                    "{}",
+                    a_err
+                )])
             }
         }
 
         self.union(a, b);
 
-        Ok(())
+        Ok(a)
+    }
+
+    pub fn add(
+        &mut self,
+        span: Span,
+        ctx: TypeCtx,
+        a: usize,
+        b: usize,
+    ) -> Result<usize, Vec<Error>> {
+        match (self.find_type(a), self.find_type(b)) {
+            // TODO(ed): We can't prove it's not possible, right?
+            // This needs to be reasoned about later some how...
+            (Type::Unknown, Type::Unknown) => self.unify(span, ctx, a, b),
+
+            (Type::Unknown, _) => self.add(span, ctx, b, b),
+            (_, Type::Unknown) => self.add(span, ctx, a, a),
+
+            (Type::Float, Type::Float) => self.unify(span, ctx, a, b),
+            (Type::Int, Type::Int) => self.unify(span, ctx, a, b),
+            (Type::String, Type::String) => self.unify(span, ctx, a, b),
+
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
+                let mut res = Vec::new();
+                for (a, b) in a.iter().zip(b.iter()) {
+                    res.push(self.add(span, ctx, *a, *b)?);
+                }
+                Ok(self.push_type(Type::Tuple(res)))
+            }
+
+            _ => {
+                return err_type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::BinOp {
+                        lhs: self.bake_type(a),
+                        rhs: self.bake_type(b),
+                        op: "+".to_string(),
+                    }
+                )
+            }
+        }
     }
 
     fn check_wider(
@@ -406,18 +555,16 @@ impl TypeChecker {
         thin: usize,
         wide: usize,
     ) -> Result<(), Vec<Error>> {
-        let t = self.find_type(thin);
-        let w = self.find_type(wide);
-
-        match w.fits(&t) {
+        eprintln!("{:?} >= {:?}", self.bake_type(thin), self.bake_type(wide));
+        match self.fits(thin, wide) {
             Ok(_) => Ok(()),
             Err(err) => Err(vec![type_error!(
                 self,
                 span,
                 ctx,
                 TypeError::Mismatch {
-                    got: t,
-                    expected: w
+                    got: self.bake_type(thin),
+                    expected: self.bake_type(wide)
                 },
                 "{}",
                 err
@@ -446,11 +593,13 @@ pub(crate) fn solve(
     TypeChecker::new(namespace_to_file).solve(statements)
 }
 
+/*
 /// Module with all the operators that can be applied
 /// to values.
 ///
 /// Broken out because they need to be recursive.
 mod constraints {
+    // TODO(ed): Fix this
     use super::Type;
     use std::collections::BTreeSet;
 
@@ -459,7 +608,8 @@ mod constraints {
     }
 
     fn tuple_un_op<T>(a: &Vec<Type>, f: T) -> Type
-        where T: FnMut(&Type) -> Type
+    where
+        T: FnMut(&Type) -> Type,
     {
         Type::Tuple(a.iter().map(f).collect())
     }
@@ -468,7 +618,7 @@ mod constraints {
         a.iter()
             .find_map(|x| {
                 let x = f(x, b);
-                if x.is_nil() {
+                if matches!(x, Type::Void) {
                     None
                 } else {
                     Some(x)
@@ -482,13 +632,6 @@ mod constraints {
             Type::Float => Type::Float,
             Type::Int => Type::Int,
             Type::Tuple(a) => tuple_un_op(a, neg),
-            Type::Union(a) => {
-                if a.iter().all(|ty| ty.is_number()) {
-                    value.clone()
-                } else {
-                    Type::Invalid
-                }
-            }
             Type::Unknown => Type::Unknown,
             _ => Type::Invalid,
         }
@@ -499,16 +642,6 @@ mod constraints {
             Type::Bool => Type::Bool,
             Type::Tuple(a) => tuple_un_op(a, not),
             Type::Unknown => Type::Bool,
-            _ => Type::Invalid,
-        }
-    }
-
-    pub fn add(a: &Type, b: &Type) -> Type {
-        match (a, b) {
-            (Type::Float, Type::Float) => Type::Float,
-            (Type::Int, Type::Int) => Type::Int,
-            (Type::String, Type::String) => Type::String,
-            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, add),
             _ => Type::Invalid,
         }
     }
@@ -554,7 +687,7 @@ mod constraints {
                 .unwrap_or(Type::Bool),
             (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => eq(a, a),
             (Type::Unknown, Type::Unknown) => Type::Unknown,
-            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, eq),
+            // (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, eq),
             (Type::Void, Type::Void) => Type::Bool,
             (Type::List(a), Type::List(b)) => eq(a, b),
             (Type::Set(a), Type::Set(b)) => eq(a, b),
@@ -605,3 +738,4 @@ mod constraints {
         }
     }
 }
+*/
