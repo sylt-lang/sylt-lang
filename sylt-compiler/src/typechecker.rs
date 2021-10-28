@@ -138,7 +138,7 @@ impl TypeChecker {
                 sylt_common::Type::Int => Type::Int,
                 sylt_common::Type::Float => Type::Float,
                 sylt_common::Type::Bool => Type::Bool,
-                sylt_common::Type::String => Type::String,
+                sylt_common::Type::Str => Type::Str,
                 _ => todo!(),
             },
 
@@ -329,7 +329,7 @@ impl TypeChecker {
 
             ExpressionKind::Int(_) => Ok(self.push_type(Type::Int)),
             ExpressionKind::Float(_) => Ok(self.push_type(Type::Float)),
-            ExpressionKind::Str(_) => Ok(self.push_type(Type::String)),
+            ExpressionKind::Str(_) => Ok(self.push_type(Type::Str)),
             ExpressionKind::Bool(_) => Ok(self.push_type(Type::Bool)),
             ExpressionKind::Nil => Ok(self.push_type(Type::Void)),
         }
@@ -358,7 +358,7 @@ impl TypeChecker {
             Type::Int => RuntimeType::Int,
             Type::Float => RuntimeType::Float,
             Type::Bool => RuntimeType::Bool,
-            Type::String => RuntimeType::String,
+            Type::Str => RuntimeType::String,
             Type::Tuple(tys) => {
                 RuntimeType::Tuple(tys.iter().map(|ty| self.bake_type(*ty)).collect())
             }
@@ -420,13 +420,14 @@ impl TypeChecker {
         // TODO(ed): We need a lot better error messages here!
         // TODO(ed): Should this unify stuff?
         match (self.find_type(a), self.find_type(b)) {
-            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
+            // FIXME(ed): I think this is wrong.
+            (_, Type::Unknown) => Ok(()),
             (Type::Ty, Type::Ty) => Ok(()),
             (Type::Void, Type::Void) => Ok(()),
             (Type::Int, Type::Int) => Ok(()),
             (Type::Float, Type::Float) => Ok(()),
             (Type::Bool, Type::Bool) => Ok(()),
-            (Type::String, Type::String) => Ok(()),
+            (Type::Str, Type::Str) => Ok(()),
 
             (Type::List(a), Type::List(b)) => self.inner_fits(a, b, seen),
             (Type::Set(a), Type::Set(b)) => self.inner_fits(a, b, seen),
@@ -480,7 +481,6 @@ impl TypeChecker {
     }
 
     fn unify(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<usize, Vec<Error>> {
-        // TODO
         match (self.fits(a, b), self.fits(b, a)) {
             (Ok(_), Ok(_)) => {}
             // TODO(ed): This isn't right is it?
@@ -523,7 +523,7 @@ impl TypeChecker {
 
             (Type::Float, Type::Float) => self.unify(span, ctx, a, b),
             (Type::Int, Type::Int) => self.unify(span, ctx, a, b),
-            (Type::String, Type::String) => self.unify(span, ctx, a, b),
+            (Type::Str, Type::Str) => self.unify(span, ctx, a, b),
 
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
                 let mut res = Vec::new();
@@ -555,7 +555,11 @@ impl TypeChecker {
         thin: usize,
         wide: usize,
     ) -> Result<(), Vec<Error>> {
-        eprintln!("{:?} >= {:?}", self.bake_type(thin), self.bake_type(wide));
+        // FIXME(ed): I don't like this.
+        if matches!(self.find_type(wide), Type::Unknown) {
+            self.unify(span, ctx, thin, wide)?;
+            return Ok(());
+        }
         match self.fits(thin, wide) {
             Ok(_) => Ok(()),
             Err(err) => Err(vec![type_error!(
@@ -675,7 +679,7 @@ mod constraints {
         match (a, b) {
             (Type::Float, Type::Float) => Type::Bool,
             (Type::Int, Type::Int) => Type::Bool,
-            (Type::String, Type::String) => Type::Bool,
+            (Type::Str, Type::Str) => Type::Bool,
             (Type::Bool, Type::Bool) => Type::Bool,
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => a
                 .iter()
@@ -702,7 +706,7 @@ mod constraints {
             | (Type::Int, Type::Int)
             | (Type::Float, Type::Int)
             | (Type::Int, Type::Float) => Type::Bool,
-            (Type::String, Type::String) => Type::Bool,
+            (Type::Str, Type::Str) => Type::Bool,
             (Type::Bool, Type::Bool) => Type::Bool,
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => a
                 .iter()
