@@ -477,6 +477,8 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             }
         },
 
+        T::Star => (ctx.skip(1), Resolved(Unknown)),
+
         T::Hash => {
             let ctx = ctx.skip(1);
             match ctx.token() {
