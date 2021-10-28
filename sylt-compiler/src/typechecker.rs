@@ -110,12 +110,26 @@ impl TypeChecker {
         }
     }
 
-    fn resolve_type(&mut self, ty: &ParserType, ctx: TypeCtx) -> Type {
+    fn type_assignable(&self, assignable: &Assignable, ctx: TypeCtx) -> Type {
+        match &assignable.kind {
+            AssignableKind::Read(ident) => match self.globals.get(&(ctx.namespace, ident.name.clone())).unwrap() {
+                Name::Blob(ty) => ty.clone(),
+                _ => panic!(),
+            },
+            AssignableKind::Access(_, _) => todo!(),
+            AssignableKind::Call(_, _) => todo!(),
+            AssignableKind::ArrowCall(_, _, _) => todo!(),
+            AssignableKind::Index(_, _) => todo!(),
+            AssignableKind::Expression(_) => todo!(),
+        }
+    }
+
+    fn resolve_type(&self, ty: &ParserType, ctx: TypeCtx) -> Type {
         use TypeKind::*;
         match &ty.kind {
             Implied => Type::Unknown,
             Resolved(ty) => ty.clone(),
-            UserDefined(assignable) => todo!(),
+            UserDefined(assignable) => self.type_assignable(assignable, ctx),
             Union(a, b) => match (self.resolve_type(a, ctx), self.resolve_type(b, ctx)) {
                 (Type::Union(_), _) => panic!("Didn't expect union on RHS - check parser"),
                 (a, Type::Union(mut us)) => {
@@ -147,7 +161,15 @@ impl TypeChecker {
         let span = statement.span;
         match &statement.kind {
             StatementKind::Use { path, name, file } => todo!(),
-            StatementKind::Blob { name, fields } => todo!(),
+            StatementKind::Blob { name, fields } => {
+                let ty = Type::Blob(
+                    name.clone(),
+                    fields.iter()
+                        .map(|(k, v)| (k.clone(), self.resolve_type(v, ctx)))
+                        .collect()
+                );
+                self.globals.insert((ctx.namespace, name.clone()), Name::Blob(ty));
+            }
             StatementKind::Assignment {
                 kind,
                 target,
@@ -171,7 +193,7 @@ impl TypeChecker {
                             size: 1,
                         };
                         self.types.push(ty);
-                        self.widen(span, ctx, expression_ty, defined_ty)?;
+                        self.check_wider(span, ctx, expression_ty, defined_ty)?;
                         defined_ty
                     }
                 };
@@ -250,7 +272,16 @@ impl TypeChecker {
                 ret,
                 body,
             } => Ok(0),
-            ExpressionKind::Blob { blob, fields } => todo!(),
+            ExpressionKind::Blob { blob, fields } => {
+                // TODO: check the fields
+                let ty = self.types.len();
+                self.types.push(TypeNode {
+                    ty: self.type_assignable(blob, ctx),
+                    parent: None,
+                    size: 1,
+                });
+                Ok(ty)
+            },
             ExpressionKind::Tuple(_) => todo!(),
             ExpressionKind::List(_) => todo!(),
             ExpressionKind::Set(_) => todo!(),
@@ -360,7 +391,7 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn widen(
+    fn check_wider(
         &mut self,
         span: Span,
         ctx: TypeCtx,
@@ -373,26 +404,20 @@ impl TypeChecker {
         let tt = &self.types[t].ty;
         let tw = &self.types[w].ty;
 
-        match tt.fits(tw) {
-            Ok(_) => self.types[t].ty = tw.clone(),
-            Err(err) => {
-                return Err(vec![type_error!(
-                    self,
-                    span,
-                    ctx,
-                    TypeError::Mismatch {
-                        got: tt.clone(),
-                        expected: tw.clone()
-                    },
-                    "{}",
-                    err
-                )])
-            }
+        match tw.fits(tt) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(vec![type_error!(
+                self,
+                span,
+                ctx,
+                TypeError::Mismatch {
+                    got: tt.clone(),
+                    expected: tw.clone()
+                },
+                "{}",
+                err
+            )])
         }
-
-        self.union(t, w);
-
-        Ok(())
     }
 
     fn solve(&mut self, statements: &Vec<(&Statement, usize)>) -> Result<(), Vec<Error>> {
