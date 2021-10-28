@@ -1,22 +1,19 @@
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::io::Write;
 use sylt_common::error::Error;
-use sylt_common::prog::{Prog, BytecodeProg};
+use sylt_common::prog::{BytecodeProg, Prog};
 use sylt_common::{Op, RustFunction, Type, Value};
 use sylt_parser::statement::NameIdentifier;
-use sylt_parser::{
-    Context as ParserContext,
-    Assignable, AssignableKind, Identifier, Span,
-    StatementKind, Type as ParserType, TypeKind, VarKind, AST,
-};
+use sylt_parser::{Identifier, Span, StatementKind, VarKind, AST};
 
-mod typechecker;
-mod dependency;
 mod bytecode;
+mod dependency;
 mod lua;
+mod ty;
+mod typechecker;
 
 type VarSlot = usize;
 
@@ -277,7 +274,6 @@ impl Compiler {
         Ok(Lookup::Upvalue(up))
     }
 
-
     fn define(&mut self, name: &str, kind: VarKind, span: Span) -> VarSlot {
         let frame = &mut self.frames.last_mut().unwrap().variables;
         let slot = frame.len();
@@ -309,15 +305,15 @@ impl Compiler {
         let name = "/preamble/";
         let start_span = tree.modules[0].1.span;
         self.frames.push(Frame::new(name, start_span));
-        let ctx = Context {
+        let _ctx = Context {
             frame: 0,
             ..Context::from_namespace(0)
         };
 
         let num_constants = self.extract_globals(&tree);
 
-        let num_functions = functions.len();
         // TODO
+        // let num_functions = functions.len();
         //self.functions = functions
         //    .to_vec()
         //    .into_iter()
@@ -335,9 +331,14 @@ impl Compiler {
         let statements = match dependency::initialization_order(&tree, &self) {
             Ok(statements) => statements,
             Err(statements) => {
-                statements.iter().for_each(|(statement, namespace)|
-                    error_no_panic!(self, Context::from_namespace(*namespace), statement.span, "Dependency cycle")
-                );
+                statements.iter().for_each(|(statement, namespace)| {
+                    error_no_panic!(
+                        self,
+                        Context::from_namespace(*namespace),
+                        statement.span,
+                        "Dependency cycle"
+                    )
+                });
                 statements
             }
         };
@@ -348,7 +349,6 @@ impl Compiler {
         if typecheck {
             typechecker::solve(&statements, &self.namespace_id_to_path)?;
         }
-
 
         if let Some(lua_file) = lua_file {
             let mut lua_compiler = lua::LuaCompiler::new(&mut self, Box::new(lua_file));
@@ -423,14 +423,19 @@ impl Compiler {
                 use StatementKind::*;
                 let (name, ident_name, span) = match &statement.kind {
                     Blob { name, .. } => {
-                        let blob = self.constant(Value::Ty(Type::Blob(name.clone(), Default::default())));
+                        let blob =
+                            self.constant(Value::Ty(Type::Blob(name.clone(), Default::default())));
                         if let Op::Constant(slot) = blob {
                             (Name::Blob(slot), name.clone(), statement.span)
                         } else {
                             unreachable!()
                         }
-                    },
-                    Use { path: _, name, file } => {
+                    }
+                    Use {
+                        path: _,
+                        name,
+                        file,
+                    } => {
                         let ident = match name {
                             NameIdentifier::Implicit(ident) => ident,
                             NameIdentifier::Alias(ident) => ident,
@@ -438,13 +443,21 @@ impl Compiler {
                         let other = path_to_namespace_id[file];
                         (Name::Namespace(other), ident.name.clone(), ident.span)
                     }
-                    Definition { ident: Identifier { name, .. }, kind, .. } => {
+                    Definition {
+                        ident: Identifier { name, .. },
+                        kind,
+                        ..
+                    } => {
                         let var = self.define(name, *kind, statement.span);
                         self.activate(var);
                         num_constants += 1;
                         (Name::Global(var), name.clone(), statement.span)
                     }
-                    ExternalDefinition { ident: Identifier { name, .. }, kind, .. } => {
+                    ExternalDefinition {
+                        ident: Identifier { name, .. },
+                        kind,
+                        ..
+                    } => {
                         let var = self.define(name, *kind, statement.span);
                         self.activate(var);
                         num_constants += 1;
@@ -452,8 +465,7 @@ impl Compiler {
                     }
 
                     // Handled later since we need type information.
-                    | IsCheck { .. }
-                    | EmptyStatement => continue,
+                    IsCheck { .. } | EmptyStatement => continue,
 
                     _ => {
                         error!(self, ctx, statement.span, "Invalid outer statement");
@@ -462,7 +474,9 @@ impl Compiler {
                 };
 
                 match namespace.entry(ident_name.to_owned()) {
-                    Entry::Vacant(vac) => { vac.insert(name); }
+                    Entry::Vacant(vac) => {
+                        vac.insert(name);
+                    }
                     Entry::Occupied(_) => {
                         error!(
                             self,
@@ -481,6 +495,7 @@ impl Compiler {
 }
 
 // TODO(ed): Move this up into sylt?
+/*
 fn parse_signature(func_name: &str, sig: &str) -> ParserType {
     let token_stream = sylt_tokenizer::string_to_tokens(sig);
     let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
@@ -498,12 +513,9 @@ fn parse_signature(func_name: &str, sig: &str) -> ParserType {
     }
 }
 
-pub fn compile(typecheck: bool, lua_file: Option<Box<dyn Write>>, prog: AST, functions: &[(String, RustFunction, String)]) -> Result<Prog, Vec<Error>> {
-    Compiler::new().compile(typecheck, lua_file, prog, functions)
-}
-
 pub(crate) fn first_ok_or_errs<I, T, E>(mut iter: I) -> Result<T, Vec<E>>
-where I: Iterator<Item = Result<T, E>>
+where
+    I: Iterator<Item = Result<T, E>>,
 {
     let mut errs = Vec::new();
     loop {
@@ -513,4 +525,14 @@ where I: Iterator<Item = Result<T, E>>
             None => return Err(errs),
         }
     }
+}
+*/
+
+pub fn compile(
+    typecheck: bool,
+    lua_file: Option<Box<dyn Write>>,
+    prog: AST,
+    functions: &[(String, RustFunction, String)],
+) -> Result<Prog, Vec<Error>> {
+    Compiler::new().compile(typecheck, lua_file, prog, functions)
 }
