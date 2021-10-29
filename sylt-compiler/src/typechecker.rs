@@ -138,7 +138,7 @@ impl TypeChecker {
                 sylt_common::Type::Int => Type::Int,
                 sylt_common::Type::Float => Type::Float,
                 sylt_common::Type::Bool => Type::Bool,
-                sylt_common::Type::Str => Type::Str,
+                sylt_common::Type::String => Type::Str,
                 _ => todo!(),
             },
 
@@ -174,7 +174,52 @@ impl TypeChecker {
         statement: &Statement,
         ctx: TypeCtx,
     ) -> Result<Option<usize>, Vec<Error>> {
-        Ok(Some(0))
+        let span = statement.span;
+        match &statement.kind {
+            StatementKind::Use { path, name, file } => todo!(),
+            StatementKind::Blob { name, fields } => todo!(),
+
+            StatementKind::Block { statements } => {
+                let rets = self.push_type(Type::Unknown);
+                for stmt in statements.iter() {
+                    if let Some(ret) = self.statement(stmt, ctx)? {
+                        self.unify(span, ctx, rets, ret)?;
+                    }
+                }
+                Ok(Some(rets))
+            }
+
+            StatementKind::Ret { value } => Ok(Some(self.expression(value, ctx)?)),
+
+            StatementKind::StatementExpression { value } => {
+                self.expression(value, ctx)?;
+                Ok(None)
+            }
+
+            StatementKind::Assignment {
+                kind,
+                target,
+                value,
+            } => todo!(),
+            StatementKind::Definition {
+                ident,
+                kind,
+                ty,
+                value,
+            } => todo!(),
+            StatementKind::ExternalDefinition { ident, kind, ty } => todo!(),
+            StatementKind::If {
+                condition,
+                pass,
+                fail,
+            } => todo!(),
+            StatementKind::Loop { condition, body } => todo!(),
+            StatementKind::Break => todo!(),
+            StatementKind::Continue => todo!(),
+            StatementKind::IsCheck { lhs, rhs } => todo!(),
+            StatementKind::Unreachable => todo!(),
+            StatementKind::EmptyStatement => Ok(None),
+        }
     }
 
     fn outer_statement(&mut self, statement: &Statement, ctx: TypeCtx) -> Result<(), Vec<Error>> {
@@ -192,6 +237,7 @@ impl TypeChecker {
                 self.globals
                     .insert((ctx.namespace, name.clone()), Name::Blob(ty));
             }
+
             StatementKind::Assignment {
                 kind,
                 target,
@@ -236,23 +282,53 @@ impl TypeChecker {
         Ok(())
     }
 
+    fn assignable(&mut self, assignable: &Assignable, ctx: TypeCtx) -> Result<usize, Vec<Error>> {
+        let span = assignable.span;
+        match &assignable.kind {
+            AssignableKind::Read(ident) => {
+                match self.globals.get(&(ctx.namespace, ident.name.clone())) {
+                    Some(Name::Global(var)) => Ok(var.ty),
+                    x => todo!("Failed with: {:?}", x),
+                }
+            }
+
+            AssignableKind::Call(f, args) => {
+                let f = self.assignable(f, ctx)?;
+
+                if let Type::Function(params, ret) = self.find_type(f) {
+                    if args.len() != params.len() {
+                        return err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::WrongArity {
+                                got: args.len(),
+                                expected: params.len()
+                            }
+                        );
+                    }
+                    // TODO(ed): Annotate the errors?
+                    for (a, p) in args.iter().zip(params.iter()) {
+                        let a = self.expression(a, ctx)?;
+                        self.unify(span, ctx, a, *p)?;
+                    }
+                    Ok(ret)
+                } else {
+                    panic!()
+                }
+            }
+
+            AssignableKind::ArrowCall(_, _, _) => todo!(),
+            AssignableKind::Access(_, _) => todo!(),
+            AssignableKind::Index(_, _) => todo!(),
+            AssignableKind::Expression(_) => todo!(),
+        }
+    }
+
     fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> Result<usize, Vec<Error>> {
         let span = expression.span;
         match &expression.kind {
-            ExpressionKind::Get(ass) => match &ass.kind {
-                AssignableKind::Read(ident) => {
-                    match self.globals.get(&(ctx.namespace, ident.name.clone())) {
-                        Some(Name::Global(var)) => Ok(var.ty),
-                        x => todo!("Failed with: {:?}", x),
-                    }
-                }
-
-                AssignableKind::Call(_, _) => todo!(),
-                AssignableKind::ArrowCall(_, _, _) => todo!(),
-                AssignableKind::Access(_, _) => todo!(),
-                AssignableKind::Index(_, _) => todo!(),
-                AssignableKind::Expression(_) => todo!(),
-            },
+            ExpressionKind::Get(ass) => self.assignable(ass, ctx),
 
             ExpressionKind::Add(a, b) => {
                 let a = self.expression(&a, ctx)?;
@@ -299,13 +375,11 @@ impl TypeChecker {
                 }
 
                 let ret = self.resolve_type(ret, ctx);
-                /* TODO(ed): This doesn't work righht now!
                 if let Some(actual_ret) = self.statement(body, ctx)? {
                     self.unify(span, ctx, ret, actual_ret)?;
                 } else {
                     panic!();
                 }
-                */
 
                 Ok(self.push_type(Type::Function(args, ret)))
             }
@@ -437,6 +511,9 @@ impl TypeChecker {
             }
 
             (Type::Tuple(a), Type::Tuple(b)) => {
+                if a.len() != b.len() {
+                    return Err("Different length tuples".to_string());
+                }
                 for (a, b) in a.iter().zip(b.iter()) {
                     self.inner_fits(*a, *b, seen)?;
                 }
@@ -560,7 +637,8 @@ impl TypeChecker {
             self.unify(span, ctx, thin, wide)?;
             return Ok(());
         }
-        match self.fits(thin, wide) {
+        // FIXME(ed): Check this
+        match self.fits(wide, thin) {
             Ok(_) => Ok(()),
             Err(err) => Err(vec![type_error!(
                 self,
