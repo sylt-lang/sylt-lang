@@ -1,11 +1,23 @@
-COMP := target/debug/sylt
+SYLT := target/debug/sylt
 
-.PHONY: clean
+.PHONY: all clean clean-lua $(SYLT) run-main
 
-%.lua: %.sy $(COMP)
-	@$(COMP) --lua $<
-	@echo "------ RUN ------"
-	@lua $@
+all: $(SYLT)
 
-clean:
-	rm -rf *.lua
+run-main: main.love
+	love .
+
+%.love: %.lua
+	cp $< $@
+
+%.lua: %.sy $(SYLT)
+	$(SYLT) --compile $@ $<
+
+$(SYLT):
+	cargo build
+
+clean: clean-lua
+	cargo clean
+
+clean-lua:
+	rm -rf *.lua *.love
