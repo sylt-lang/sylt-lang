@@ -252,7 +252,11 @@ impl TypeChecker {
             } => {
                 let expression_ty = self.expression(value, ctx)?;
                 let defined_ty = self.resolve_type(&ty, ctx);
-                self.check_wider(span, ctx, expression_ty, defined_ty)?;
+                if matches!(self.find_type(defined_ty), Type::Unknown) {
+                    self.unify(span, ctx, expression_ty, defined_ty)?;
+                } else {
+                    self.check_wider(span, ctx, expression_ty, defined_ty)?;
+                }
 
                 let var = Variable {
                     ident: ident.clone(),
@@ -286,16 +290,33 @@ impl TypeChecker {
         let span = assignable.span;
         match &assignable.kind {
             AssignableKind::Read(ident) => {
-                match self.globals.get(&(ctx.namespace, ident.name.clone())) {
-                    Some(Name::Global(var)) => Ok(var.ty),
-                    x => todo!("Failed with: {:?}", x),
+                if let Some(var) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
+                    Ok(var.ty)
+                } else {
+                    match self.globals.get(&(ctx.namespace, ident.name.clone())) {
+                        Some(Name::Global(var)) => Ok(var.ty),
+                        _ => todo!(),
+                    }
                 }
             }
 
             AssignableKind::Call(f, args) => {
-                let f = self.assignable(f, ctx)?;
+                // let dbg = if let AssignableKind::Read(name) = &f.kind {
+                //     name.name == "dbg"
+                // } else {
+                //     false
+                // };
 
-                if let Type::Function(params, ret) = self.find_type(f) {
+                let f = self.assignable(f, ctx)?;
+                let f_copy = self.copy(f);
+                // println!(
+                //     "Call: {} {:?} -> {} {:?}",
+                //     f,
+                //     self.bake_type(f),
+                //     f_copy,
+                //     self.bake_type(f_copy)
+                // );
+                if let Type::Function(params, ret) = self.find_type(f_copy) {
                     if args.len() != params.len() {
                         return err_type_error!(
                             self,
@@ -308,10 +329,21 @@ impl TypeChecker {
                         );
                     }
                     // TODO(ed): Annotate the errors?
-                    for (a, p) in args.iter().zip(params.iter()) {
+                    for (i, (a, p)) in args.iter().zip(params.iter()).enumerate() {
                         let a = self.expression(a, ctx)?;
-                        self.unify(span, ctx, a, *p)?;
+                        // if dbg {
+                        //     eprintln!(
+                        //         "{} -- a: {:?}, p: {:?}",
+                        //         i,
+                        //         self.bake_type(a),
+                        //         self.bake_type(*p)
+                        //     );
+                        // }
+                        self.unify(span, ctx, *p, a)?;
                     }
+                    // if dbg {
+                    //     eprintln!("ret {:?}", self.bake_type(ret));
+                    // }
                     Ok(ret)
                 } else {
                     panic!()
@@ -583,6 +615,81 @@ impl TypeChecker {
         Ok(a)
     }
 
+    fn inner_copy(&mut self, old_ty: usize, seen: &mut HashMap<usize, usize>) -> usize {
+        if let Some(res) = seen.get(&old_ty) {
+            return *res;
+        }
+        let new_ty = self.push_type(Type::Unknown);
+        seen.insert(old_ty, new_ty);
+
+        let ty = self.find_type(old_ty);
+        self.types[new_ty].ty = match ty {
+            Type::Invalid
+            | Type::Unknown
+            | Type::Ty
+            | Type::Void
+            | Type::Int
+            | Type::Float
+            | Type::Bool
+            | Type::Str => ty,
+
+            Type::Tuple(tys) => {
+                Type::Tuple(tys.iter().map(|ty| self.inner_copy(*ty, seen)).collect())
+            }
+
+            Type::List(ty) => Type::List(self.inner_copy(ty, seen)),
+            Type::Set(ty) => Type::Set(self.inner_copy(ty, seen)),
+
+            Type::Dict(ty_k, ty_v) => {
+                Type::Dict(self.inner_copy(ty_k, seen), self.inner_copy(ty_v, seen))
+            }
+
+            Type::Function(args, ret) => Type::Function(
+                args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
+                self.inner_copy(ret, seen),
+            ),
+
+            // TODO(ed): We can cheat here and just copy the table directly.
+            Type::Blob(name, fields) => Type::Blob(
+                name.clone(),
+                fields
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.inner_copy(*ty, seen)))
+                    .collect(),
+            ),
+        };
+        new_ty
+    }
+
+    fn copy(&mut self, ty: usize) -> usize {
+        let mut seen = HashMap::new();
+        self.inner_copy(ty, &mut seen)
+    }
+
+    fn check_wider(
+        &mut self,
+        span: Span,
+        ctx: TypeCtx,
+        thin: usize,
+        wide: usize,
+    ) -> Result<(), Vec<Error>> {
+        // FIXME(ed): Check this
+        match self.fits(wide, thin) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(vec![type_error!(
+                self,
+                span,
+                ctx,
+                TypeError::Mismatch {
+                    got: self.bake_type(thin),
+                    expected: self.bake_type(wide)
+                },
+                "{}",
+                err
+            )]),
+        }
+    }
+
     pub fn add(
         &mut self,
         span: Span,
@@ -622,35 +729,6 @@ impl TypeChecker {
                     }
                 )
             }
-        }
-    }
-
-    fn check_wider(
-        &mut self,
-        span: Span,
-        ctx: TypeCtx,
-        thin: usize,
-        wide: usize,
-    ) -> Result<(), Vec<Error>> {
-        // FIXME(ed): I don't like this.
-        if matches!(self.find_type(wide), Type::Unknown) {
-            self.unify(span, ctx, thin, wide)?;
-            return Ok(());
-        }
-        // FIXME(ed): Check this
-        match self.fits(wide, thin) {
-            Ok(_) => Ok(()),
-            Err(err) => Err(vec![type_error!(
-                self,
-                span,
-                ctx,
-                TypeError::Mismatch {
-                    got: self.bake_type(thin),
-                    expected: self.bake_type(wide)
-                },
-                "{}",
-                err
-            )]),
         }
     }
 
