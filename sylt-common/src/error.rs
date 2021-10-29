@@ -108,7 +108,6 @@ pub enum TypeError {
 
     NamespaceNotExpression,
 
-    // TODO(ed): Some of these are more like compile errors
     WrongArity {
         got: usize,
         expected: usize,
