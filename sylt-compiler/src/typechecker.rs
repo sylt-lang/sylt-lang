@@ -429,7 +429,15 @@ impl TypeChecker {
                 Ok(self.push_type(Type::Tuple(tys)))
             }
 
-            ExpressionKind::List(_) => todo!(),
+            ExpressionKind::List(exprs) => {
+                let inner_ty = self.push_type(Type::Unknown);
+                for expr in exprs.iter() {
+                    let e = self.expression(expr, ctx)?;
+                    self.unify(span, ctx, inner_ty, e)?;
+                }
+                Ok(self.push_type(Type::List(inner_ty)))
+            }
+
             ExpressionKind::Set(_) => todo!(),
             ExpressionKind::Dict(_) => todo!(),
 
