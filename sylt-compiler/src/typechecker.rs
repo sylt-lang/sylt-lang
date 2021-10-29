@@ -63,10 +63,17 @@ struct Variable {
     kind: VarKind,
 }
 
+#[derive(Clone, Debug)]
 struct TypeNode {
     ty: Type,
     parent: Option<usize>,
     size: usize,
+    constraints: BTreeSet<Constraint>,
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialOrd, Ord, PartialEq, Eq)]
+enum Constraint {
+    Add,
 }
 
 struct TypeChecker {
@@ -104,6 +111,7 @@ impl TypeChecker {
             ty,
             parent: None,
             size: 1,
+            constraints: BTreeSet::new(),
         });
         ty_id
     }
@@ -340,6 +348,7 @@ impl TypeChecker {
                         //     );
                         // }
                         self.unify(span, ctx, *p, a)?;
+                        let a = self.find(a);
                     }
                     // if dbg {
                     //     eprintln!("ret {:?}", self.bake_type(ret));
@@ -365,7 +374,9 @@ impl TypeChecker {
             ExpressionKind::Add(a, b) => {
                 let a = self.expression(&a, ctx)?;
                 let b = self.expression(&b, ctx)?;
-                self.add(span, ctx, a, b)
+                self.annotate(a, Constraint::Add);
+                self.unify(span, ctx, a, b)?;
+                Ok(a)
             }
 
             ExpressionKind::Sub(_, _) => todo!(),
@@ -498,6 +509,20 @@ impl TypeChecker {
         }
     }
 
+    // This span is wierd - is it weird?
+    fn check_constraints(&mut self, span: Span, ctx: TypeCtx, a: usize) -> Result<(), Vec<Error>> {
+        let a = self.find(a);
+        for constraint in self.types[a].constraints.clone().iter() {
+            match constraint {
+                // It would be nice to know from where this came from
+                Constraint::Add => {
+                    self.add(span, ctx, a, a)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn find_type(&mut self, a: usize) -> Type {
         let ta = self.find(a);
         self.types[ta].ty.clone()
@@ -519,6 +544,11 @@ impl TypeChecker {
 
         self.types[b].parent = Some(a);
         self.types[a].size += self.types[b].size;
+        self.types[a].constraints = self.types[a]
+            .constraints
+            .union(&self.types[b].constraints)
+            .cloned()
+            .collect();
     }
 
     fn inner_fits(
@@ -619,6 +649,7 @@ impl TypeChecker {
         }
 
         self.union(a, b);
+        self.check_constraints(span, ctx, a)?;
 
         Ok(a)
     }
@@ -628,6 +659,7 @@ impl TypeChecker {
             return *res;
         }
         let new_ty = self.push_type(Type::Unknown);
+        self.types[new_ty].constraints = self.types[old_ty].constraints.clone();
         seen.insert(old_ty, new_ty);
 
         let ty = self.find_type(old_ty);
@@ -698,31 +730,30 @@ impl TypeChecker {
         }
     }
 
-    pub fn add(
-        &mut self,
-        span: Span,
-        ctx: TypeCtx,
-        a: usize,
-        b: usize,
-    ) -> Result<usize, Vec<Error>> {
+    fn annotate(&mut self, a: usize, constraint: Constraint) {
+        let a = self.find(a);
+        self.types[a].constraints.insert(constraint);
+    }
+
+    fn add(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>> {
         match (self.find_type(a), self.find_type(b)) {
             // TODO(ed): We can't prove it's not possible, right?
             // This needs to be reasoned about later some how...
-            (Type::Unknown, Type::Unknown) => self.unify(span, ctx, a, b),
+            (Type::Unknown, Type::Unknown) => Ok(()),
 
-            (Type::Unknown, _) => self.add(span, ctx, b, b),
-            (_, Type::Unknown) => self.add(span, ctx, a, a),
+            // Make a guess at the type
+            (Type::Unknown, _) => Ok(()),
+            (_, Type::Unknown) => Ok(()),
 
-            (Type::Float, Type::Float) => self.unify(span, ctx, a, b),
-            (Type::Int, Type::Int) => self.unify(span, ctx, a, b),
-            (Type::Str, Type::Str) => self.unify(span, ctx, a, b),
+            (Type::Float, Type::Float) => Ok(()),
+            (Type::Int, Type::Int) => Ok(()),
+            (Type::Str, Type::Str) => Ok(()),
 
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
-                let mut res = Vec::new();
                 for (a, b) in a.iter().zip(b.iter()) {
-                    res.push(self.add(span, ctx, *a, *b)?);
+                    self.add(span, ctx, *a, *b)?;
                 }
-                Ok(self.push_type(Type::Tuple(res)))
+                Ok(())
             }
 
             _ => {
