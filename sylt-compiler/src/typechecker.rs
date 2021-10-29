@@ -73,7 +73,7 @@ struct TypeNode {
 
 #[derive(Clone, Copy, Debug, Hash, PartialOrd, Ord, PartialEq, Eq)]
 enum Constraint {
-    Add,
+    Add(usize),
 }
 
 struct TypeChecker {
@@ -309,21 +309,14 @@ impl TypeChecker {
             }
 
             AssignableKind::Call(f, args) => {
-                // let dbg = if let AssignableKind::Read(name) = &f.kind {
-                //     name.name == "dbg"
-                // } else {
-                //     false
-                // };
+                let dbg = if let AssignableKind::Read(name) = &f.kind {
+                    name.name == "dbg"
+                } else {
+                    false
+                };
 
                 let f = self.assignable(f, ctx)?;
                 let f_copy = self.copy(f);
-                // println!(
-                //     "Call: {} {:?} -> {} {:?}",
-                //     f,
-                //     self.bake_type(f),
-                //     f_copy,
-                //     self.bake_type(f_copy)
-                // );
                 if let Type::Function(params, ret) = self.find_type(f_copy) {
                     if args.len() != params.len() {
                         return err_type_error!(
@@ -337,22 +330,14 @@ impl TypeChecker {
                         );
                     }
                     // TODO(ed): Annotate the errors?
-                    for (i, (a, p)) in args.iter().zip(params.iter()).enumerate() {
+                    for (a, p) in args.iter().zip(params.iter()) {
                         let a = self.expression(a, ctx)?;
-                        // if dbg {
-                        //     eprintln!(
-                        //         "{} -- a: {:?}, p: {:?}",
-                        //         i,
-                        //         self.bake_type(a),
-                        //         self.bake_type(*p)
-                        //     );
-                        // }
+                        if dbg {
+                            eprintln!(">> {:?} {:?}", span.line, self.bake_type(a),);
+                        }
                         self.unify(span, ctx, *p, a)?;
                         let a = self.find(a);
                     }
-                    // if dbg {
-                    //     eprintln!("ret {:?}", self.bake_type(ret));
-                    // }
                     Ok(ret)
                 } else {
                     panic!()
@@ -374,7 +359,8 @@ impl TypeChecker {
             ExpressionKind::Add(a, b) => {
                 let a = self.expression(&a, ctx)?;
                 let b = self.expression(&b, ctx)?;
-                self.annotate(a, Constraint::Add);
+                self.annotate(a, Constraint::Add(b));
+                self.annotate(b, Constraint::Add(b));
                 self.unify(span, ctx, a, b)?;
                 Ok(a)
             }
@@ -515,8 +501,8 @@ impl TypeChecker {
         for constraint in self.types[a].constraints.clone().iter() {
             match constraint {
                 // It would be nice to know from where this came from
-                Constraint::Add => {
-                    self.add(span, ctx, a, a)?;
+                Constraint::Add(b) => {
+                    self.add(span, ctx, a, *b)?;
                 }
             }
         }
@@ -628,6 +614,9 @@ impl TypeChecker {
     }
 
     fn unify(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<usize, Vec<Error>> {
+        self.check_constraints(span, ctx, a)?;
+        self.check_constraints(span, ctx, b)?;
+
         match (self.fits(a, b), self.fits(b, a)) {
             (Ok(_), Ok(_)) => {}
             // TODO(ed): This isn't right is it?
@@ -648,8 +637,46 @@ impl TypeChecker {
             }
         }
 
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::List(a), Type::List(b)) => {
+                self.unify(span, ctx, a, b)?;
+            }
+            (Type::Set(a), Type::Set(b)) => {
+                self.unify(span, ctx, a, b)?;
+            }
+            (Type::Dict(a_k, a_v), Type::Dict(b_k, b_v)) => {
+                self.unify(span, ctx, a_k, b_k)?;
+                self.unify(span, ctx, a_v, b_v)?;
+            }
+
+            (Type::Tuple(a), Type::Tuple(b)) => {
+                for (a, b) in a.iter().zip(b.iter()) {
+                    self.unify(span, ctx, *a, *b)?;
+                }
+            }
+
+            (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
+                // TODO(ed): Something is wrong - the types (fn int -> str) and (fn ? -> ?) unify
+                eprintln!("A: {:?}", self.bake_type(a));
+                eprintln!("B: {:?}", self.bake_type(b));
+                eprintln!("{:?} -> {:?}, {:?} -> {:?}", a_args, a_ret, b_args, b_ret);
+                for (a, b) in a_args.iter().zip(b_args.iter()) {
+                    self.unify(span, ctx, *a, *b)?;
+                }
+                self.unify(span, ctx, a_ret, b_ret)?;
+            }
+
+            (Type::Blob(a_blob, a_field), Type::Blob(b_blob, b_field)) => {
+                for (a_name, a_ty) in a_field.iter() {
+                    let b_ty = b_field[a_name];
+                    self.unify(span, ctx, *a_ty, b_ty)?;
+                }
+            }
+
+            _ => {}
+        }
+
         self.union(a, b);
-        self.check_constraints(span, ctx, a)?;
 
         Ok(a)
     }
