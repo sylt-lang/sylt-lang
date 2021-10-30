@@ -260,11 +260,13 @@ impl TypeChecker {
             } => {
                 let expression_ty = self.expression(value, ctx)?;
                 let defined_ty = self.resolve_type(&ty, ctx);
-                if matches!(self.find_type(defined_ty), Type::Unknown) {
-                    self.unify(span, ctx, expression_ty, defined_ty)?;
+                let expression_ty = if matches!(self.find_type(defined_ty), Type::Unknown) {
+                    // TODO(ed): Not sure this is needed
+                    self.copy(expression_ty)
                 } else {
-                    self.check_wider(span, ctx, expression_ty, defined_ty)?;
-                }
+                    expression_ty
+                };
+                self.unify(span, ctx, expression_ty, defined_ty)?;
 
                 let var = Variable {
                     ident: ident.clone(),
@@ -543,82 +545,6 @@ impl TypeChecker {
             .collect();
     }
 
-    fn inner_fits(
-        &mut self,
-        a: usize,
-        b: usize,
-        seen: &mut BTreeSet<(usize, usize)>,
-    ) -> Result<(), String> {
-        if seen.contains(&(a, b)) {
-            return Ok(());
-        }
-
-        // TODO(ed): We need a lot better error messages here!
-        // TODO(ed): Should this unify stuff?
-        match (self.find_type(a), self.find_type(b)) {
-            // FIXME(ed): I think this is wrong.
-            (_, Type::Unknown) => Ok(()),
-            (Type::Ty, Type::Ty) => Ok(()),
-            (Type::Void, Type::Void) => Ok(()),
-            (Type::Int, Type::Int) => Ok(()),
-            (Type::Float, Type::Float) => Ok(()),
-            (Type::Bool, Type::Bool) => Ok(()),
-            (Type::Str, Type::Str) => Ok(()),
-
-            (Type::List(a), Type::List(b)) => self.inner_fits(a, b, seen),
-            (Type::Set(a), Type::Set(b)) => self.inner_fits(a, b, seen),
-            (Type::Dict(a_k, a_v), Type::Dict(b_k, b_v)) => {
-                self.inner_fits(a_k, b_k, seen)?;
-                self.inner_fits(a_v, b_v, seen)
-            }
-
-            (Type::Tuple(a), Type::Tuple(b)) => {
-                if a.len() != b.len() {
-                    return Err("Different length tuples".to_string());
-                }
-                for (a, b) in a.iter().zip(b.iter()) {
-                    self.inner_fits(*a, *b, seen)?;
-                }
-                Ok(())
-            }
-
-            (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
-                for (a, b) in a_args.iter().zip(b_args.iter()) {
-                    self.inner_fits(*a, *b, seen)?;
-                }
-                self.inner_fits(a_ret, b_ret, seen)
-            }
-
-            (Type::Blob(a_blob, a_field), Type::Blob(b_blob, b_field)) => {
-                for (a_name, a_ty) in a_field.iter() {
-                    if let Some(b_ty) = b_field.get(a_name) {
-                        if let Err(msg) = self.inner_fits(*a_ty, *b_ty, seen) {
-                            return Err(format!(
-                                "{} cannot hold {}, since the fields {} doesn't unify: {}",
-                                a_blob, b_blob, a_name, msg
-                            ));
-                        } else {
-                        }
-                    } else {
-                        return Err(format!(
-                            "{} cannot hold {}, since the field {} doesn't exist",
-                            a_blob, b_blob, a_name
-                        ));
-                    }
-                }
-                Ok(())
-            }
-
-            (a, b) => Err(format!("Types don't match: {:?} =/= {:?}", a, b)),
-        }
-    }
-
-    // Checks: a >= b - a is more general than b
-    fn fits(&mut self, a: usize, b: usize) -> Result<(), String> {
-        let mut seen = BTreeSet::new();
-        self.inner_fits(a, b, &mut seen)
-    }
-
     fn unify(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<usize, Vec<Error>> {
         let a = self.find(a);
         let b = self.find(b);
@@ -760,30 +686,6 @@ impl TypeChecker {
     fn copy(&mut self, ty: usize) -> usize {
         let mut seen = HashMap::new();
         self.inner_copy(ty, &mut seen)
-    }
-
-    fn check_wider(
-        &mut self,
-        span: Span,
-        ctx: TypeCtx,
-        thin: usize,
-        wide: usize,
-    ) -> Result<(), Vec<Error>> {
-        // FIXME(ed): Check this
-        match self.fits(wide, thin) {
-            Ok(_) => Ok(()),
-            Err(err) => Err(vec![type_error!(
-                self,
-                span,
-                ctx,
-                TypeError::Mismatch {
-                    got: self.bake_type(thin),
-                    expected: self.bake_type(wide)
-                },
-                "{}",
-                err
-            )]),
-        }
     }
 
     fn add_constraint(&mut self, a: usize, constraint: Constraint) {
