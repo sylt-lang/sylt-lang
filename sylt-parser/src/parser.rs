@@ -181,7 +181,7 @@ pub enum TypeKind {
     /// `(key, value)`.
     Dict(Box<Type>, Box<Type>),
     /// A generic type
-    Generic(Identifier),
+    Generic(String),
     /// `(inner_type)` - useful for correcting ambiguous types
     Grouping(Box<Type>),
 }
@@ -477,21 +477,11 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             }
         },
 
-        T::Star => (ctx.skip(1), Resolved(Unknown)),
-
-        T::Hash => {
+        T::Star => {
             let ctx = ctx.skip(1);
             match ctx.token() {
-                T::Identifier(name) => {
-                    let ident = Identifier {
-                        name: name.to_string(),
-                        span: ctx.span(),
-                    };
-                    (ctx.skip(1), Generic(ident))
-                }
-                _ => {
-                    raise_syntax_error!(ctx, "Expected identifier when parsing generic type");
-                }
+                T::Identifier(name) => (ctx.skip(1), Generic(name.clone())),
+                _ => (ctx, Resolved(Unknown)),
             }
         }
 
