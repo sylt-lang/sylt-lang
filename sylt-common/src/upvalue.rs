@@ -2,8 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::value::Value;
 
-#[derive(Debug)]
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct UpValue {
     pub slot: usize,
     pub value: Value,

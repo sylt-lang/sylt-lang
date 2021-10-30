@@ -89,7 +89,7 @@ pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Token, string_to_tokens};
+    use crate::{string_to_tokens, Token};
     use logos::Logos;
 
     fn lex(s: &str) -> Vec<Token> {
@@ -132,21 +132,18 @@ mod tests {
 
     #[test]
     fn simple_span() {
-        assert_placed_eq!(
-            string_to_tokens("1"),
-            (Token::Int(1), 1, 1..2),
-        );
+        assert_placed_eq!(string_to_tokens("1"), (Token::Int(1), 1, 1..2),);
         assert_placed_eq!(
             string_to_tokens("1\n"),
-            (Token::Int(1),  1, 1..2),
+            (Token::Int(1), 1, 1..2),
             (Token::Newline, 1, 2..3),
         );
         assert_placed_eq!(
             string_to_tokens("1\n23\n456"),
-            (Token::Int(1),   1, 1..2),
-            (Token::Newline,  1, 2..3),
-            (Token::Int(23),  2, 1..3),
-            (Token::Newline,  2, 3..4),
+            (Token::Int(1), 1, 1..2),
+            (Token::Newline, 1, 2..3),
+            (Token::Int(23), 2, 1..3),
+            (Token::Newline, 2, 3..4),
             (Token::Int(456), 3, 1..4),
         );
     }
@@ -157,12 +154,11 @@ mod tests {
         assert_placed_eq!(
             string_to_tokens("wow\nwöw\n"),
             (Token::Identifier(String::from("wow")), 1, 1..4),
-            (Token::Newline,                         1, 4..5),
-
-            (Token::Identifier(String::from("w")),   2, 1..2),
-            (Token::Error,                           2, 2..3),
-            (Token::Identifier(String::from("w")),   2, 3..4),
-            (Token::Newline,                         2, 4..5),
+            (Token::Newline, 1, 4..5),
+            (Token::Identifier(String::from("w")), 2, 1..2),
+            (Token::Error, 2, 2..3),
+            (Token::Identifier(String::from("w")), 2, 3..4),
+            (Token::Newline, 2, 4..5),
         );
     }
 

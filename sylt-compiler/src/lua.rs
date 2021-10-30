@@ -268,11 +268,9 @@ impl<'t> LuaCompiler<'t> {
             Blob { blob: _, fields } => {
                 // TODO(ed): Know which blob something is?
                 // TODO(ed): Fill in empty fields with nil-value
-                let self_slot = self.compiler.define(
-                    "self",
-                    VarKind::Mutable,
-                    expression.span
-                );
+                let self_slot = self
+                    .compiler
+                    .define("self", VarKind::Mutable, expression.span);
                 self.compiler.activate(self_slot);
 
                 // Set up closure for the self variable. The typechecker takes
@@ -581,7 +579,11 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ";");
             }
 
-            If { condition, pass, fail } => {
+            If {
+                condition,
+                pass,
+                fail,
+            } => {
                 write!(self, "if");
                 self.expression(condition, ctx);
                 write!(self, "then");

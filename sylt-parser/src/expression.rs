@@ -179,7 +179,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             statements.push(Statement {
                 span,
                 kind: StatementKind::Ret { value },
-                comments
+                comments,
             });
         } else if let Some(statement) = last_statement {
             statements.push(statement);
@@ -369,10 +369,14 @@ fn arrow_call<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Express
     let ctx = expect!(ctx, T::Arrow, "Expected '->' in arrow function call");
     let (ctx, rhs) = expression(ctx)?;
 
+    use AssignableKind::{ArrowCall, Call};
     use ExpressionKind::*;
-    use AssignableKind::{Call, ArrowCall};
 
-    fn prepend_expresion<'t>(ctx: Context<'t>, lhs: Expression, rhs: Expression) -> ParseResult<'t, Expression> {
+    fn prepend_expresion<'t>(
+        ctx: Context<'t>,
+        lhs: Expression,
+        rhs: Expression,
+    ) -> ParseResult<'t, Expression> {
         let span = ctx.span();
         let kind = match rhs.kind {
             Get(Assignable {
@@ -394,7 +398,9 @@ fn arrow_call<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Express
                 })
             }
 
-            _ => { raise_syntax_error!(ctx, "Expected a call-expression after '->'"); }
+            _ => {
+                raise_syntax_error!(ctx, "Expected a call-expression after '->'");
+            }
         };
         Ok((ctx, Expression { span, kind }))
     }
@@ -421,14 +427,20 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
         }
 
         (T::Prime | T::LeftParen | T::LeftBracket | T::Dot, _) => {
-            let (ctx, ass) = sub_assignable(ctx, Assignable {
-                span: ctx.span(),
-                kind: AssignableKind::Expression(Box::new(lhs.clone()))
-            })?;
-            return Ok((ctx, Expression {
-                span: ctx.span(),
-                kind: Get(ass),
-            }));
+            let (ctx, ass) = sub_assignable(
+                ctx,
+                Assignable {
+                    span: ctx.span(),
+                    kind: AssignableKind::Expression(Box::new(lhs.clone())),
+                },
+            )?;
+            return Ok((
+                ctx,
+                Expression {
+                    span: ctx.span(),
+                    kind: Get(ass),
+                },
+            ));
         }
         _ => {}
     }
@@ -451,21 +463,16 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
         | T::GreaterEqual
         | T::Less
         | T::LessEqual
-
         | T::And
         | T::Or
-
         | T::AssertEqual
-
-        | T::In
-        => {}
+        | T::In => {}
 
         // Unknown infix operator.
         _ => {
             return Err((ctx, Vec::new()));
         }
     };
-
 
     let (ctx, rhs) = parse_precedence(ctx, precedence(op).next())?;
 
@@ -694,7 +701,8 @@ fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             // Something that's part of an inner expression.
             _ => {
                 // Parse the expression.
-                let (_ctx, expr) = detail_if_error!(expression(ctx), "failed to parse dict or set")?;
+                let (_ctx, expr) =
+                    detail_if_error!(expression(ctx), "failed to parse dict or set")?;
                 ctx = _ctx; // assign to outer
                 exprs.push(expr);
 
@@ -752,9 +760,9 @@ mod test {
     use super::ExpressionKind::*;
     use crate::expression;
     use crate::expression::ComparisonKind;
-    use crate::{test, fail};
     use crate::Assignable;
     use crate::AssignableKind::*;
+    use crate::{fail, test};
 
     test!(expression, value: "0" => Int(0));
     test!(expression, add: "0 + 1.0" => Add(_, _));
@@ -901,7 +909,11 @@ impl PrettyPrint for Expression {
                 write!(f, "Paren\n")?;
                 expr.pretty_print(f, indent + 1)?;
             }
-            EK::IfExpression { condition, pass, fail } => {
+            EK::IfExpression {
+                condition,
+                pass,
+                fail,
+            } => {
                 write!(f, "IfExpression\n")?;
                 write_indent(f, indent)?;
                 write!(f, "condition:\n")?;
@@ -913,10 +925,17 @@ impl PrettyPrint for Expression {
                 write!(f, "fail:\n")?;
                 fail.pretty_print(f, indent + 1)?;
             }
-            EK::Function { name, params, ret, body } => {
+            EK::Function {
+                name,
+                params,
+                ret,
+                body,
+            } => {
                 write!(f, "Fn {} ", name)?;
                 for (i, (name, ty)) in params.iter().enumerate() {
-                    if i != 0 { write!(f, ", ")?; }
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}: {}", name.name, ty)?;
                 }
                 write!(f, " -> {}", ret)?;
@@ -935,27 +954,32 @@ impl PrettyPrint for Expression {
             }
             EK::Tuple(values) => {
                 write!(f, "Tuple\n")?;
-                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
+                values
+                    .iter()
+                    .try_for_each(|v| v.pretty_print(f, indent + 1))?;
             }
             EK::List(values) => {
                 write!(f, "List\n")?;
-                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
+                values
+                    .iter()
+                    .try_for_each(|v| v.pretty_print(f, indent + 1))?;
             }
             EK::Set(values) => {
                 write!(f, "Set\n")?;
-                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
+                values
+                    .iter()
+                    .try_for_each(|v| v.pretty_print(f, indent + 1))?;
             }
             EK::Dict(values) => {
                 write!(f, "Dict\n")?;
-                values.iter().try_for_each(|v| v.pretty_print(f, indent + 1))?;
+                values
+                    .iter()
+                    .try_for_each(|v| v.pretty_print(f, indent + 1))?;
             }
-            EK::Float(_)
-            | EK::Int(_)
-            | EK::Str(_)
-            | EK::Bool(_)
-            | EK::Nil => { write!(f, "{:?}\n", self.kind)?; }
+            EK::Float(_) | EK::Int(_) | EK::Str(_) | EK::Bool(_) | EK::Nil => {
+                write!(f, "{:?}\n", self.kind)?;
+            }
         }
         Ok(())
     }
 }
-

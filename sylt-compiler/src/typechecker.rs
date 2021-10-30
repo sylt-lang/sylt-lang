@@ -102,8 +102,7 @@ impl<'c> TypeChecker<'c> {
             .iter()
             .enumerate()
             .map(|(i, n)| {
-                n.iter()
-                .map(move |(k, v)| {
+                n.iter().map(move |(k, v)| {
                     (
                         (i, k.clone()),
                         match v {
@@ -745,32 +744,36 @@ impl<'c> TypeChecker<'c> {
             }
 
             EK::Blob { blob, fields } => {
-                let (blob_ty, blob_name, blob_fields) = match self.assignable(blob, self.namespace)? {
-                    Lookup::Value(ty, _) => {
-                        match ty.clone() {
+                let (blob_ty, blob_name, blob_fields) =
+                    match self.assignable(blob, self.namespace)? {
+                        Lookup::Value(ty, _) => match ty.clone() {
                             Type::Blob(name, fields) => (ty, name, fields),
-                            _ => return err_type_error!(
-                                self,
-                                span,
-                                TypeError::Violating(ty),
-                                "A blob was expected when instancing"
-                            )
+                            _ => {
+                                return err_type_error!(
+                                    self,
+                                    span,
+                                    TypeError::Violating(ty),
+                                    "A blob was expected when instancing"
+                                )
+                            }
+                        },
+                        Lookup::Namespace(_) => {
+                            return err_type_error!(self, span, TypeError::NamespaceNotExpression);
                         }
-                    },
-                    Lookup::Namespace(_) => {
-                        return err_type_error!(self, span, TypeError::NamespaceNotExpression);
-                    }
-                };
+                    };
                 let mut errors = Vec::new();
                 let mut initalizer = HashMap::new();
                 let self_var = Variable::new(
-                    Identifier { span: expression.span, name: "self".to_string() },
+                    Identifier {
+                        span: expression.span,
+                        name: "self".to_string(),
+                    },
                     blob_ty,
-                    VarKind::Mutable
+                    VarKind::Mutable,
                 );
                 let stack_size = self.stack.len();
                 for (name, expr) in fields {
-                    if matches!(expr.kind, EK::Function{..}) {
+                    if matches!(expr.kind, EK::Function { .. }) {
                         self.stack.push(self_var.clone());
                     }
                     let value = self.expression(&expr);
@@ -1113,10 +1116,8 @@ impl<'c> TypeChecker<'c> {
                     // so we don't have to care about the duplicates.
                     x => unreachable!("X: {:?}", x),
                 };
-                self.globals.insert(
-                    (namespace, ident.name.clone()),
-                    Name::Global(Some(name))
-                );
+                self.globals
+                    .insert((namespace, ident.name.clone()), Name::Global(Some(name)));
             }
 
             SK::Definition {
@@ -1181,10 +1182,8 @@ impl<'c> TypeChecker<'c> {
                     // so we don't have to care about the duplicates.
                     x => unreachable!("X: {:?}", x),
                 };
-                self.globals.insert(
-                    (namespace, ident.name.clone()),
-                    Name::Global(Some(name))
-                );
+                self.globals
+                    .insert((namespace, ident.name.clone()), Name::Global(Some(name)));
             }
 
             _ => {}

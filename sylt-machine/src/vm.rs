@@ -5,8 +5,8 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::rc::Rc;
 use sylt_common::error::{Error, RuntimeError};
 use sylt_common::{
-    Block, BlockLinkState, Frame, Machine, Op, OpResult, BytecodeProg, RuntimeContext, RustFunction,
-    Type, UpValue, Value,
+    Block, BlockLinkState, BytecodeProg, Frame, Machine, Op, OpResult, RuntimeContext,
+    RustFunction, Type, UpValue, Value,
 };
 
 macro_rules! error {
@@ -39,10 +39,7 @@ macro_rules! two_op {
         let c = $fun(&a, &b);
         if c.is_nil() {
             $self.push(c);
-            error!(
-                $self,
-                RuntimeError::ValueError($op, vec![a, b])
-            );
+            error!($self, RuntimeError::ValueError($op, vec![a, b]));
         }
         $self.push(c);
     };
@@ -164,7 +161,12 @@ impl VM {
         println!(
             "    ip: {}, line: {}\n",
             self.frame().ip.to_string().blue(),
-            self.frame().block.borrow().line(self.frame().ip).to_string().blue()
+            self.frame()
+                .block
+                .borrow()
+                .line(self.frame().ip)
+                .to_string()
+                .blue()
         );
         unreachable!();
     }
@@ -193,7 +195,12 @@ impl VM {
 
         println!(
             "{:5} {:05} {:?}",
-            self.frame().block.borrow().line(self.frame().ip).to_string().blue(),
+            self.frame()
+                .block
+                .borrow()
+                .line(self.frame().ip)
+                .to_string()
+                .blue(),
             self.frame().ip.to_string().red(),
             self.frame().block.borrow().ops[self.frame().ip]
         );
@@ -577,7 +584,7 @@ impl Machine for VM {
                                 let err = Err(self.error(
                                     RuntimeError::UnknownField(
                                         values.borrow()["_name"].to_string(),
-                                        field.clone()
+                                        field.clone(),
                                     ),
                                     None,
                                 ));
@@ -735,10 +742,7 @@ impl Machine for VM {
                         for name in fields.keys() {
                             values.entry(name.clone()).or_insert(Value::Nil);
                         }
-                        values.insert(
-                            "_name".to_string(),
-                            Value::String(Rc::new(name)),
-                        );
+                        values.insert("_name".to_string(), Value::String(Rc::new(name)));
                         self.push(Value::Blob(Rc::new(RefCell::new(values))));
                     }
                     Value::Function(_, block) => {

@@ -26,7 +26,12 @@ fn write_source_line_at(f: &mut fmt::Formatter<'_>, file: &Path, line: usize) ->
         .skip(start_line - 1)
         .take(lines)
     {
-        writeln!(f, " {:>3} | {}", (line_num + 1).to_string().blue(), line.unwrap())?;
+        writeln!(
+            f,
+            " {:>3} | {}",
+            (line_num + 1).to_string().blue(),
+            line.unwrap()
+        )?;
     }
     Ok(())
 }
@@ -78,60 +83,31 @@ pub enum TypeError {
 
     Violating(Type),
 
-    BinOp {
-        lhs: Type,
-        rhs: Type,
-        op: String,
-    },
+    BinOp { lhs: Type, rhs: Type, op: String },
 
-    UniOp {
-        val: Type,
-        op: String,
-    },
+    UniOp { val: Type, op: String },
 
-    Mismatch {
-        got: Type,
-        expected: Type,
-    },
+    Mismatch { got: Type, expected: Type },
 
-    MismatchAssign {
-        got: Type,
-        expected: Type,
-    },
+    MismatchAssign { got: Type, expected: Type },
 
     Mutability,
 
-    ExcessiveForce {
-        got: Type,
-        expected: Type,
-    },
+    ExcessiveForce { got: Type, expected: Type },
 
     NamespaceNotExpression,
 
     // TODO(ed): Some of these are more like compile errors
-    WrongArity {
-        got: usize,
-        expected: usize,
-    },
+    WrongArity { got: usize, expected: usize },
 
-    UnknownField {
-        blob: String,
-        field: String,
-    },
+    UnknownField { blob: String, field: String },
 
-    MissingField {
-        blob: String,
-        field: String,
-    },
+    MissingField { blob: String, field: String },
 
-    TupleIndexOutOfRange {
-        got: i64,
-        length: usize,
-    },
+    TupleIndexOutOfRange { got: i64, length: usize },
 
     UnresolvedName(String),
 }
-
 
 // TODO(ed): Switch to spans for the whole compiler?
 #[derive(Clone, Debug)]
@@ -229,7 +205,12 @@ impl fmt::Display for Error {
                 span,
                 message,
             } => {
-                write!(f, "{}: {}\n", "typecheck error".red(), file_line_display(file, span.line))?;
+                write!(
+                    f,
+                    "{}: {}\n",
+                    "typecheck error".red(),
+                    file_line_display(file, span.line)
+                )?;
                 write!(f, "{}{}\n", INDENT, kind)?;
 
                 if let Some(message) = message {
@@ -315,9 +296,7 @@ impl fmt::Display for RuntimeError {
 impl fmt::Display for TypeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TypeError::Exotic => {
-                Ok(())
-            }
+            TypeError::Exotic => Ok(()),
 
             TypeError::Mismatch { got, expected } => {
                 write!(f, "A '{:?}' cannot be a '{:?}'", got, expected)
@@ -344,7 +323,11 @@ impl fmt::Display for TypeError {
             }
 
             TypeError::ExcessiveForce { got, expected } => {
-                write!(f, "This type force is unnessecary, '{:?}' is a '{:?}'", got, expected)
+                write!(
+                    f,
+                    "This type force is unnessecary, '{:?}' is a '{:?}'",
+                    got, expected
+                )
             }
 
             TypeError::NamespaceNotExpression => {

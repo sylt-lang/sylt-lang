@@ -107,24 +107,43 @@ fn simplify_type(ty: Type) -> Type {
     match ty.kind {
         TypeKind::Union(_, _) => {
             let without_dupes = remove_duplicates(ty.clone(), Vec::new());
-            without_dupes.into_iter().reduce(|a, b| {
-                Type { kind: TypeKind::Union(Box::new(a), Box::new(b)), span: ty.span }
-            }).unwrap() // We always get one type
+            without_dupes
+                .into_iter()
+                .reduce(|a, b| Type {
+                    kind: TypeKind::Union(Box::new(a), Box::new(b)),
+                    span: ty.span,
+                })
+                .unwrap() // We always get one type
         }
 
-        TypeKind::Fn(args, ret) =>
-            Type { kind: TypeKind::Fn(args.into_iter().map(simplify_type).collect(), Box::new(simplify_type(*ret))), ..ty },
-        TypeKind::Tuple(tys) =>
-            Type { kind: TypeKind::Tuple(tys.into_iter().map(simplify_type).collect()), ..ty },
-        TypeKind::List(a) =>
-            Type { kind: TypeKind::List(Box::new(simplify_type(*a))), ..ty },
-        TypeKind::Set(a) =>
-            Type { kind: TypeKind::Set(Box::new(simplify_type(*a))), ..ty },
-        TypeKind::Dict(a, b) =>
-            Type { kind: TypeKind::Dict(Box::new(simplify_type(*a)), Box::new(simplify_type(*b))), ..ty },
+        TypeKind::Fn(args, ret) => Type {
+            kind: TypeKind::Fn(
+                args.into_iter().map(simplify_type).collect(),
+                Box::new(simplify_type(*ret)),
+            ),
+            ..ty
+        },
+        TypeKind::Tuple(tys) => Type {
+            kind: TypeKind::Tuple(tys.into_iter().map(simplify_type).collect()),
+            ..ty
+        },
+        TypeKind::List(a) => Type {
+            kind: TypeKind::List(Box::new(simplify_type(*a))),
+            ..ty
+        },
+        TypeKind::Set(a) => Type {
+            kind: TypeKind::Set(Box::new(simplify_type(*a))),
+            ..ty
+        },
+        TypeKind::Dict(a, b) => Type {
+            kind: TypeKind::Dict(Box::new(simplify_type(*a)), Box::new(simplify_type(*b))),
+            ..ty
+        },
 
-        TypeKind::Grouping(a) =>
-            Type { kind: TypeKind::Grouping(Box::new(simplify_type(*a))), ..ty },
+        TypeKind::Grouping(a) => Type {
+            kind: TypeKind::Grouping(Box::new(simplify_type(*a))),
+            ..ty
+        },
 
         TypeKind::Implied
         | TypeKind::UserDefined(_)
@@ -438,11 +457,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write_indents(dest, indent)?;
             write!(dest, "continue")?
         }
-        StatementKind::ExternalDefinition {
-            ident,
-            kind,
-            ty,
-        } => {
+        StatementKind::ExternalDefinition { ident, kind, ty } => {
             assert!(!matches!(ty.kind, TypeKind::Implied), "Should not parse");
             assert!(!kind.force(), "Should not parse");
 

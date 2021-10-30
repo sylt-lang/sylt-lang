@@ -55,7 +55,7 @@ impl Parse for ExternFunction {
                 let _: Token![->] = input.parse()?;
                 ty = Some(input.parse()?);
             } else {
-                break
+                break;
             }
             let _: Token![,] = input.parse()?;
         }
@@ -214,10 +214,7 @@ fn parse_test_settings(contents: String) -> TestSettings {
         if line.starts_with("// error: ") {
             let mut line = line.strip_prefix("// error: ").unwrap().to_string();
             if line.starts_with("$") {
-                line = format!(
-                    "Error::TypeError {{ kind: TypeError::{}, .. }}",
-                    &line[1..]
-                );
+                line = format!("Error::TypeError {{ kind: TypeError::{}, .. }}", &line[1..]);
             }
             if line.starts_with("#") {
                 line = format!(
@@ -226,7 +223,10 @@ fn parse_test_settings(contents: String) -> TestSettings {
                 );
             }
             if line.starts_with("@") {
-                line = format!("Error::SyntaxError {{ span: Span {{ line: {}, ..}}, .. }}", &line[1..]);
+                line = format!(
+                    "Error::SyntaxError {{ span: Span {{ line: {}, ..}}, .. }}",
+                    &line[1..]
+                );
             }
             settings.any_runtime_errors |= line.contains("RuntimeError");
             errors.push(line);
@@ -402,26 +402,31 @@ pub fn derive_numbered(item: proc_macro::TokenStream) -> proc_macro::TokenStream
 
     let ident = parsed.ident.clone();
 
-    let match_arms: Vec<_> = parsed.variants.iter().enumerate().map(|(i, v)| {
-        let name = v.ident.clone();
-        match v.fields {
-            syn::Fields::Named(_) => {
-                quote! {
-                    #ident::#name { .. } => #i,
+    let match_arms: Vec<_> = parsed
+        .variants
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            let name = v.ident.clone();
+            match v.fields {
+                syn::Fields::Named(_) => {
+                    quote! {
+                        #ident::#name { .. } => #i,
+                    }
+                }
+                syn::Fields::Unnamed(_) => {
+                    quote! {
+                        #ident::#name ( .. ) => #i,
+                    }
+                }
+                syn::Fields::Unit => {
+                    quote! {
+                        #ident::#name => #i,
+                    }
                 }
             }
-            syn::Fields::Unnamed(_) => {
-                quote! {
-                    #ident::#name ( .. ) => #i,
-                }
-            }
-            syn::Fields::Unit => {
-                quote! {
-                    #ident::#name => #i,
-                }
-            }
-        }
-    }).collect();
+        })
+        .collect();
 
     let item = quote! {
         impl Numbered for #ident {

@@ -1,11 +1,11 @@
 use self::expression::expression;
 use self::statement::outer_statement;
 use std::collections::{HashMap, HashSet};
-use std::fmt::{Display, Debug};
+use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
 use sylt_common::Type as RuntimeType;
-use sylt_tokenizer::{PlacedToken, Token, ZERO_SPAN, string_to_tokens};
+use sylt_tokenizer::{string_to_tokens, PlacedToken, Token, ZERO_SPAN};
 
 pub mod expression;
 pub mod statement;
@@ -231,7 +231,7 @@ impl<'a> Context<'a> {
             spans,
             curr: 0,
             file,
-            root
+            root,
         }
     }
 
@@ -352,7 +352,6 @@ impl<'a> Context<'a> {
     }
 }
 
-
 /// Add more text to an error message after it has been created.
 #[macro_export]
 macro_rules! detail_if_error {
@@ -389,7 +388,6 @@ macro_rules! detail_if_error {
         }
     };
 }
-
 
 /// Construct a syntax error at the current token with a message.
 #[macro_export]
@@ -783,7 +781,11 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
 /// Returns any errors that occured when parsing the file. Basic error
 /// continuation is performed, so errored statements are skipped until a newline
 /// or EOF.
-fn module(path: &Path, root: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
+fn module(
+    path: &Path,
+    root: &Path,
+    token_stream: &[PlacedToken],
+) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
     let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
     let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
     let mut ctx = Context::new(&tokens, &spans, path, root);
@@ -861,7 +863,7 @@ pub fn find_conflict_markers(file: &Path, source: &str) -> Vec<Error> {
                     line: i + 1,
                     col_start: 1,
                     col_end: conflict_marker.len() + 1,
-                }
+                },
             });
         }
     }
@@ -879,7 +881,7 @@ pub fn find_conflict_markers(file: &Path, source: &str) -> Vec<Error> {
 /// continuation is performed as documented in [module].
 pub fn tree<F>(path: &Path, reader: F) -> Result<AST, Vec<Error>>
 where
-    F: Fn(&Path) -> Result<String, Error>
+    F: Fn(&Path) -> Result<String, Error>,
 {
     // Files we've already parsed. This ensures circular includes don't parse infinitely.
     let mut visited = HashSet::new();
@@ -926,13 +928,14 @@ where
     } else {
         // Filter out errors for already seen spans
         let mut seen = HashSet::new();
-        let errors = errors.into_iter().filter(|err| match err {
-            Error::SyntaxError { span, file, .. } => {
-                seen.insert((span.clone(), file.clone()))
-            }
+        let errors = errors
+            .into_iter()
+            .filter(|err| match err {
+                Error::SyntaxError { span, file, .. } => seen.insert((span.clone(), file.clone())),
 
-            _ => true
-        }).collect();
+                _ => true,
+            })
+            .collect();
         Err(errors)
     }
 }
@@ -1081,12 +1084,19 @@ impl PrettyPrint for Statement {
             SK::Blob { name, fields } => {
                 write!(f, "<Blob> {} {{ ", name)?;
                 for (i, (name, ty)) in fields.iter().enumerate() {
-                    if i != 0 { write!(f, ", ")?; }
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}: {}", name, ty)?;
                 }
                 write!(f, " }}")?;
             }
-            SK::Definition { ident, kind, ty, value } => {
+            SK::Definition {
+                ident,
+                kind,
+                ty,
+                value,
+            } => {
                 write!(f, "<Def> {} {:?} {}\n", ident.name, kind, ty)?;
                 value.pretty_print(f, indent + 1)?;
                 return Ok(());
@@ -1095,13 +1105,21 @@ impl PrettyPrint for Statement {
                 write!(f, "<ExtDef> {} {:?} {}\n", ident.name, kind, ty)?;
                 return Ok(());
             }
-            SK::Assignment { kind, target, value } => {
+            SK::Assignment {
+                kind,
+                target,
+                value,
+            } => {
                 write!(f, "<Ass> {:?}\n", kind)?;
                 target.pretty_print(f, indent + 1)?;
                 value.pretty_print(f, indent + 1)?;
                 return Ok(());
             }
-            SK::If { condition, pass, fail } => {
+            SK::If {
+                condition,
+                pass,
+                fail,
+            } => {
                 write!(f, "<If>\n")?;
                 condition.pretty_print(f, indent + 1)?;
                 pass.pretty_print(f, indent + 1)?;
@@ -1130,7 +1148,9 @@ impl PrettyPrint for Statement {
             }
             SK::Block { statements } => {
                 write!(f, "<Block>\n")?;
-                statements.iter().try_for_each(|stmt| stmt.pretty_print(f, indent + 1))?;
+                statements
+                    .iter()
+                    .try_for_each(|stmt| stmt.pretty_print(f, indent + 1))?;
                 return Ok(());
             }
             SK::StatementExpression { value } => {
@@ -1168,7 +1188,9 @@ impl Display for Type {
             TypeKind::Fn(args, ret) => {
                 write!(f, "Fn ")?;
                 for (i, arg) in args.iter().enumerate() {
-                    if i != 0 { write!(f, ", ")?; }
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}", arg)?;
                 }
                 write!(f, " -> {}", ret)?;
@@ -1176,7 +1198,9 @@ impl Display for Type {
             TypeKind::Tuple(tys) => {
                 write!(f, "(")?;
                 for (i, ty) in tys.iter().enumerate() {
-                    if i != 0 { write!(f, " ")?; }
+                    if i != 0 {
+                        write!(f, " ")?;
+                    }
                     write!(f, "{},", ty)?;
                 }
                 write!(f, ")")?;
@@ -1212,7 +1236,9 @@ impl PrettyPrint for Assignable {
                 write!(f, "[Call] ")?;
                 func.pretty_print(f, indent)?;
                 for (i, arg) in args.iter().enumerate() {
-                    if i != 0 { write!(f, ", ")?; }
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
                     arg.pretty_print(f, indent + 1)?;
                 }
             }
@@ -1221,7 +1247,9 @@ impl PrettyPrint for Assignable {
                 func.pretty_print(f, indent)?;
                 add.pretty_print(f, indent)?;
                 for (i, arg) in args.iter().enumerate() {
-                    if i != 0 { write!(f, ", ")?; }
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
                     arg.pretty_print(f, indent + 1)?;
                 }
             }
@@ -1242,4 +1270,3 @@ impl PrettyPrint for Assignable {
         Ok(())
     }
 }
-

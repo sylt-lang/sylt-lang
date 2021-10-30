@@ -1,22 +1,21 @@
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::io::Write;
 use sylt_common::error::Error;
-use sylt_common::prog::{Prog, BytecodeProg};
+use sylt_common::prog::{BytecodeProg, Prog};
 use sylt_common::{Op, RustFunction, Type, Value};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
-    Context as ParserContext,
-    Assignable, AssignableKind, Identifier, Span,
-    StatementKind, Type as ParserType, TypeKind, VarKind, AST,
+    Assignable, AssignableKind, Context as ParserContext, Identifier, Span, StatementKind,
+    Type as ParserType, TypeKind, VarKind, AST,
 };
 
-mod typechecker;
-mod dependency;
 mod bytecode;
+mod dependency;
 mod lua;
+mod typechecker;
 
 type VarSlot = usize;
 
@@ -302,9 +301,8 @@ impl Compiler {
                     );
                     None
                 }),
-            Read(ident) => {
-                self
-                .namespaces[namespace].get(&ident.name)
+            Read(ident) => self.namespaces[namespace]
+                .get(&ident.name)
                 .and_then(|o| match o {
                     Name::Namespace(namespace) => Some(*namespace),
                     _ => None,
@@ -317,9 +315,8 @@ impl Compiler {
                         "While parsing namespace '{}' is not a namespace",
                         ident.name
                     );
-                None
-                })
-            }
+                    None
+                }),
             ArrowCall(..) | Call(..) => {
                 error!(self, ctx, assignable.span, "Cannot have calls in types");
                 None
@@ -329,7 +326,10 @@ impl Compiler {
                 None
             }
             Expression(_) => {
-                error!(self, ctx, assignable.span, "Cannot have expressions in types");
+                error!(
+                    self,
+                    ctx, assignable.span, "Cannot have expressions in types"
+                );
                 None
             }
         }
@@ -349,7 +349,7 @@ impl Compiler {
                     Name::Blob(blob) => match &self.constants[*blob] {
                         Value::Ty(ty) => Some(ty.clone()),
                         _ => None,
-                    }
+                    },
                     _ => None,
                 })
                 .unwrap_or_else(|| {
@@ -366,7 +366,7 @@ impl Compiler {
                     Name::Blob(blob) => match &self.constants[*blob] {
                         Value::Ty(ty) => Some(ty.clone()),
                         _ => None,
-                    }
+                    },
                     _ => None,
                 })
                 .unwrap_or_else(|| {
@@ -385,7 +385,10 @@ impl Compiler {
                 Type::Void
             }
             Expression(_) => {
-                error!(self, ctx, assignable.span, "Cannot have expressions in types");
+                error!(
+                    self,
+                    ctx, assignable.span, "Cannot have expressions in types"
+                );
                 Type::Void
             }
         }
@@ -467,7 +470,12 @@ impl Compiler {
             .to_vec()
             .into_iter()
             .enumerate()
-            .map(|(i, (s, f, sig))| (s.clone(), (i, f, self.resolve_type(&parse_signature(&s, &sig), ctx))))
+            .map(|(i, (s, f, sig))| {
+                (
+                    s.clone(),
+                    (i, f, self.resolve_type(&parse_signature(&s, &sig), ctx)),
+                )
+            })
             .collect();
         assert_eq!(
             num_functions,
@@ -480,9 +488,14 @@ impl Compiler {
         let statements = match dependency::initialization_order(&tree, &self) {
             Ok(statements) => statements,
             Err(statements) => {
-                statements.iter().for_each(|(statement, namespace)|
-                    error_no_panic!(self, Context::from_namespace(*namespace), statement.span, "Dependency cycle")
-                );
+                statements.iter().for_each(|(statement, namespace)| {
+                    error_no_panic!(
+                        self,
+                        Context::from_namespace(*namespace),
+                        statement.span,
+                        "Dependency cycle"
+                    )
+                });
                 statements
             }
         };
@@ -493,7 +506,6 @@ impl Compiler {
         if typecheck {
             typechecker::solve(&mut self, &statements)?;
         }
-
 
         if let Some(lua_file) = lua_file {
             let mut lua_compiler = lua::LuaCompiler::new(&mut self, Box::new(lua_file));
@@ -568,14 +580,19 @@ impl Compiler {
                 use StatementKind::*;
                 let (name, ident_name, span) = match &statement.kind {
                     Blob { name, .. } => {
-                        let blob = self.constant(Value::Ty(Type::Blob(name.clone(), Default::default())));
+                        let blob =
+                            self.constant(Value::Ty(Type::Blob(name.clone(), Default::default())));
                         if let Op::Constant(slot) = blob {
                             (Name::Blob(slot), name.clone(), statement.span)
                         } else {
                             unreachable!()
                         }
-                    },
-                    Use { path: _, name, file } => {
+                    }
+                    Use {
+                        path: _,
+                        name,
+                        file,
+                    } => {
                         let ident = match name {
                             NameIdentifier::Implicit(ident) => ident,
                             NameIdentifier::Alias(ident) => ident,
@@ -583,13 +600,21 @@ impl Compiler {
                         let other = path_to_namespace_id[file];
                         (Name::Namespace(other), ident.name.clone(), ident.span)
                     }
-                    Definition { ident: Identifier { name, .. }, kind, .. } => {
+                    Definition {
+                        ident: Identifier { name, .. },
+                        kind,
+                        ..
+                    } => {
                         let var = self.define(name, *kind, statement.span);
                         self.activate(var);
                         num_constants += 1;
                         (Name::Global(var), name.clone(), statement.span)
                     }
-                    ExternalDefinition { ident: Identifier { name, .. }, kind, .. } => {
+                    ExternalDefinition {
+                        ident: Identifier { name, .. },
+                        kind,
+                        ..
+                    } => {
                         let var = self.define(name, *kind, statement.span);
                         self.activate(var);
                         num_constants += 1;
@@ -597,8 +622,7 @@ impl Compiler {
                     }
 
                     // Handled later since we need type information.
-                    | IsCheck { .. }
-                    | EmptyStatement => continue,
+                    IsCheck { .. } | EmptyStatement => continue,
 
                     _ => {
                         error!(self, ctx, statement.span, "Invalid outer statement");
@@ -607,7 +631,9 @@ impl Compiler {
                 };
 
                 match namespace.entry(ident_name.to_owned()) {
-                    Entry::Vacant(vac) => { vac.insert(name); }
+                    Entry::Vacant(vac) => {
+                        vac.insert(name);
+                    }
                     Entry::Occupied(_) => {
                         error!(
                             self,
@@ -643,12 +669,18 @@ fn parse_signature(func_name: &str, sig: &str) -> ParserType {
     }
 }
 
-pub fn compile(typecheck: bool, lua_file: Option<Box<dyn Write>>, prog: AST, functions: &[(String, RustFunction, String)]) -> Result<Prog, Vec<Error>> {
+pub fn compile(
+    typecheck: bool,
+    lua_file: Option<Box<dyn Write>>,
+    prog: AST,
+    functions: &[(String, RustFunction, String)],
+) -> Result<Prog, Vec<Error>> {
     Compiler::new().compile(typecheck, lua_file, prog, functions)
 }
 
 pub(crate) fn first_ok_or_errs<I, T, E>(mut iter: I) -> Result<T, Vec<E>>
-where I: Iterator<Item = Result<T, E>>
+where
+    I: Iterator<Item = Result<T, E>>,
 {
     let mut errs = Vec::new();
     loop {
