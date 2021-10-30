@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use sylt_common::error::{Error, TypeError};
-use sylt_common::Type as RuntimeType;
+use sylt_common::{RustFunction, Type as RuntimeType};
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp, Span,
     Statement, StatementKind, Type as ParserType, TypeKind, VarKind,
@@ -81,6 +81,7 @@ struct TypeChecker {
     stack: Vec<Variable>,
     types: Vec<TypeNode>,
     namespace_to_file: HashMap<usize, PathBuf>,
+    functions: HashMap<String, usize>,
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -96,13 +97,24 @@ enum Name {
 }
 
 impl TypeChecker {
-    fn new(namespace_to_file: &HashMap<usize, PathBuf>) -> Self {
-        Self {
+    fn new(
+        namespace_to_file: &HashMap<usize, PathBuf>,
+        functions: &HashMap<String, (usize, RustFunction, ParserType)>,
+    ) -> Self {
+        let mut res = Self {
             globals: HashMap::new(),
             stack: Vec::new(),
             types: Vec::new(),
             namespace_to_file: namespace_to_file.clone(),
-        }
+            functions: HashMap::new(),
+        };
+        res.functions = functions
+            .iter()
+            .map(|(name, (_, _, ty))| {
+                (name.clone(), res.resolve_type(ty, TypeCtx { namespace: 0 }))
+            })
+            .collect();
+        res
     }
 
     fn push_type(&mut self, ty: Type) -> usize {
@@ -198,7 +210,8 @@ impl TypeChecker {
                     .or_insert_with(|| self.push_type(Type::Unknown))
             }
 
-            Union(_, _) => todo!(),
+            // TODO(ed): This is very wrong - but works for now.
+            Union(_, _) => Type::Void,
         };
         self.push_type(ty)
     }
@@ -351,7 +364,11 @@ impl TypeChecker {
                 } else {
                     match self.globals.get(&(ctx.namespace, ident.name.clone())) {
                         Some(Name::Global(var)) => Ok(var.ty),
-                        _ => todo!(),
+                        None => match self.functions.get(&ident.name) {
+                            Some(f) => Ok(*f),
+                            None => panic!("Cannot read variable: {:?}", ident.name),
+                        },
+                        _ => panic!(),
                     }
                 }
             }
@@ -832,8 +849,9 @@ impl TypeChecker {
 pub(crate) fn solve(
     statements: &Vec<(&Statement, usize)>,
     namespace_to_file: &HashMap<usize, PathBuf>,
+    functions: &HashMap<String, (usize, RustFunction, ParserType)>,
 ) -> Result<(), Vec<Error>> {
-    TypeChecker::new(namespace_to_file).solve(statements)
+    TypeChecker::new(namespace_to_file, functions).solve(statements)
 }
 
 /*

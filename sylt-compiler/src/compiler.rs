@@ -7,7 +7,7 @@ use sylt_common::error::Error;
 use sylt_common::prog::{BytecodeProg, Prog};
 use sylt_common::{Op, RustFunction, Type, Value};
 use sylt_parser::statement::NameIdentifier;
-use sylt_parser::{Identifier, Span, StatementKind, VarKind, AST};
+use sylt_parser::{Identifier, Span, StatementKind, Type as ParserType, VarKind, AST};
 
 mod bytecode;
 mod dependency;
@@ -150,7 +150,7 @@ struct Compiler {
     namespaces: Vec<Namespace>,
 
     frames: Vec<Frame>,
-    functions: HashMap<String, (usize, RustFunction, Type)>,
+    functions: HashMap<String, (usize, RustFunction, ParserType)>,
 
     panic: bool,
     errors: Vec<Error>,
@@ -313,20 +313,20 @@ impl Compiler {
         let num_constants = self.extract_globals(&tree);
 
         // TODO
-        // let num_functions = functions.len();
-        //self.functions = functions
-        //    .to_vec()
-        //    .into_iter()
-        //    .enumerate()
-        //    .map(|(i, (s, f, sig))| (s.clone(), (i, f, self.resolve_type(&parse_signature(&s, &sig), ctx))))
-        //    .collect();
-        //assert_eq!(
-        //    num_functions,
-        //    self.functions.len(),
-        //    "There are {} names and {} extern functions - some extern functions share name",
-        //    self.functions.len(),
-        //    num_functions
-        //);
+        let num_functions = functions.len();
+        self.functions = functions
+            .to_vec()
+            .into_iter()
+            .enumerate()
+            .map(|(i, (s, f, sig))| (s.clone(), (i, f, parse_signature(&s, &sig))))
+            .collect();
+        assert_eq!(
+            num_functions,
+            self.functions.len(),
+            "There are {} names and {} extern functions - some extern functions share name",
+            self.functions.len(),
+            num_functions
+        );
 
         let statements = match dependency::initialization_order(&tree, &self) {
             Ok(statements) => statements,
@@ -347,7 +347,7 @@ impl Compiler {
         }
 
         if typecheck {
-            typechecker::solve(&statements, &self.namespace_id_to_path)?;
+            typechecker::solve(&statements, &self.namespace_id_to_path, &self.functions)?;
         }
 
         if let Some(lua_file) = lua_file {
@@ -494,14 +494,12 @@ impl Compiler {
     }
 }
 
-// TODO(ed): Move this up into sylt?
-/*
 fn parse_signature(func_name: &str, sig: &str) -> ParserType {
     let token_stream = sylt_tokenizer::string_to_tokens(sig);
     let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
     let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
     let path = PathBuf::from(func_name);
-    let ctx = ParserContext::new(&tokens, &spans, &path, &path);
+    let ctx = sylt_parser::Context::new(&tokens, &spans, &path, &path);
     match sylt_parser::parse_type(ctx) {
         Ok((_, ty)) => ty,
         Err((_, errs)) => {
@@ -513,6 +511,7 @@ fn parse_signature(func_name: &str, sig: &str) -> ParserType {
     }
 }
 
+/*
 pub(crate) fn first_ok_or_errs<I, T, E>(mut iter: I) -> Result<T, Vec<E>>
 where
     I: Iterator<Item = Result<T, E>>,
