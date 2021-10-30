@@ -2,8 +2,8 @@
 use crate as sylt_std;
 
 use colored::Colorize;
-use std::collections::HashMap;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use sungod::Ra;
 use sylt_common::error::RuntimeError;
@@ -23,7 +23,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     dbg,
     ? "Prints values to stdout",
-    -> "fn #X -> #X",
+    -> "fn *X -> *X",
     [value] => {
         eprintln!(
             "DBG: {:?}",
@@ -33,12 +33,11 @@ sylt_macro::extern_function!(
     }
 );
 
-
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     random_choice,
     ? "Selects an element randomly from a list",
-    -> "fn [#ITEM] -> #ITEM",
+    -> "fn [*ITEM] -> *ITEM",
     [Value::List(list)] => {
         Ok(list.borrow()[Ra::ggen::<usize>() % list.borrow().len()].clone())
     }
@@ -48,7 +47,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     for_each,
     ? "Does something for each element in a list",
-    -> "fn [#ITEM], fn #ITEM -> void -> void",
+    -> "fn [*ITEM], fn *ITEM -> void -> void",
     [List(list), callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
@@ -59,12 +58,11 @@ sylt_macro::extern_function!(
     }
 );
 
-
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     map,
     ? "Applies a function to all elements in a list",
-    -> "fn [#ITEM], fn #ITEM -> #OUT -> [#OUT]",
+    -> "fn [*ITEM], fn *ITEM -> *OUT -> [*OUT]",
     [List(list), callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
@@ -77,12 +75,11 @@ sylt_macro::extern_function!(
     }
 );
 
-
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     reduce,
     ? "Reduce the list to a single element, returns 'nil' if the input list is empty",
-    -> "fn [#ITEM], fn #ITEM, #ITEM -> #OUT -> #OUT | nil",
+    -> "fn [*ITEM], fn *ITEM, *ITEM -> *OUT -> *OUT | nil",
     [List(list), callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
@@ -99,7 +96,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     fold,
     ? "Applies a function to all elements pairwise in order, starts with the accumulator",
-    -> "fn [#ITEM], #OUT, fn #ITEM, #OUT -> #OUT -> #OUT",
+    -> "fn [*ITEM], *OUT, fn *ITEM, *OUT -> *OUT -> *OUT",
     [List(list), start, callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
@@ -111,12 +108,11 @@ sylt_macro::extern_function!(
     }
 );
 
-
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     filter,
     ? "Creates a new list with the elements that pass the test function",
-    -> "fn [#ITEM], fn #ITEM -> bool -> [#ITEM]",
+    -> "fn [*ITEM], fn *ITEM -> bool -> [*ITEM]",
     [List(list), callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
@@ -151,7 +147,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     push,
     ? "Appends an element to the end of a list",
-    -> "fn [#ITEM], #ITEM -> void",
+    -> "fn [*ITEM], *ITEM -> void",
     [List(ls), v] => {
         ls.borrow_mut().push(v.clone());
         Ok(Nil)
@@ -162,7 +158,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     prepend,
     ? "Adds an element to the start of a list",
-    -> "fn [#ITEM], #ITEM -> void",
+    -> "fn [*ITEM], *ITEM -> void",
     [List(ls), v] => {
         // NOTE(ed): Deliberately no type checking.
         ls.borrow_mut().insert(0, v.clone());
@@ -174,7 +170,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     add,
     ? "Inserts a value into a set",
-    -> "fn {#ITEM}, #ITEM -> void",
+    -> "fn {*ITEM}, *ITEM -> void",
     [Set(ls), v] => {
         // NOTE(ed): Deliberately no type checking.
         ls.borrow_mut().insert(v.clone());
@@ -187,7 +183,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     len,
     ? "Gives the length of list",
-    -> "fn [#ITEM] | {#KEY: #VALUE} -> int",
+    -> "fn [*ITEM] | {*KEY: *VALUE} -> int",
     [List(ls)] => {
         Ok(Int(ls.borrow().len() as i64))
     },
@@ -200,7 +196,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     clear,
     ? "Removes all elements in a container",
-    -> "fn [#ITEM] | {#ITEM} | {#KEY: #VALUE} -> void",
+    -> "fn [*ITEM] | {*ITEM} | {*KEY: *VALUE} -> void",
     [Dict(ls)] => {
         ls.borrow_mut().clear();
         Ok(Nil)
@@ -364,7 +360,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     rem,
     ? "Returns the value x modulo y",
-    -> "fn #X, #X -> #X",
+    -> "fn *X, *X -> *X",
     [Float(x), Float(y)] => { Ok(Float(x.rem_euclid(*y))) },
     [Int(x), Int(y)] => { Ok(Int(x.rem_euclid(*y))) }
 );
@@ -403,7 +399,6 @@ sylt_macro::extern_function!(
         Ok(Float(sum))
     }
 );
-
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",
@@ -476,12 +471,11 @@ sylt_macro::extern_function!(
     [] => { Ok(Bool(cfg!(debug_assertions))) }
 );
 
-
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     pop,
     ? "Removes the last element in the list, and returns it",
-    -> "fn [#ITEM] -> #ITEM?",
+    -> "fn [*ITEM] -> *ITEM?",
     [List(ls)] => {
         Ok(ls.borrow_mut().pop().unwrap_or(Nil))
     }
@@ -491,12 +485,11 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     last,
     ? "Returns the last element in a list",
-    -> "fn [#ITEM] -> #ITEM?",
+    -> "fn [*ITEM] -> *ITEM?",
     [List(ls)] => {
         Ok(ls.borrow().last().cloned().unwrap_or(Nil))
     }
 );
-
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",
@@ -513,7 +506,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     as_str,
     ? "Converts to a string representation",
-    -> "fn #X -> str",
+    -> "fn *X -> str",
     [v] => { Ok(Value::String(Rc::new(v.to_string()))) }
 );
 
@@ -521,7 +514,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     print,
     ? "Prints values to stdout",
-    -> "fn #X -> void",
+    -> "fn *X -> void",
     _ => {
         println!("{}", ctx.machine
             .stack_from_base(ctx.stack_base)
@@ -537,7 +530,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     spy,
     ? "Prints a values to stdout and then returns it",
-    -> "fn str, #X -> #X",
+    -> "fn str, *X -> *X",
     [tag, x] => {
         println!("{}: {}", tag, x);
         Ok(x.clone())
