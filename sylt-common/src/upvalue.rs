@@ -10,10 +10,7 @@ pub struct UpValue {
 
 impl UpValue {
     pub fn new(slot: usize) -> Self {
-        Self {
-            slot,
-            value: Value::Nil,
-        }
+        Self { slot, value: Value::Nil }
     }
 
     pub fn get(&self, stack: &[Value]) -> Value {

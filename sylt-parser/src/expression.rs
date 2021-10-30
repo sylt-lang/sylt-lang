@@ -112,10 +112,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         match ctx.token() {
             T::Identifier(name) => {
                 // Parameter name
-                let ident = Identifier {
-                    span: ctx.span(),
-                    name: name.clone(),
-                };
+                let ident = Identifier { span: ctx.span(), name: name.clone() };
                 if name == "self" {
                     raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
                 }
@@ -150,10 +147,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
             T::LeftBrace | T::Do => {
                 // No return type so we assume `-> Void`.
-                break Type {
-                    span: ctx.span(),
-                    kind: Resolved(Void),
-                };
+                break Type { span: ctx.span(), kind: Resolved(Void) };
             }
 
             t => {
@@ -176,11 +170,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             comments,
         }) = last_statement
         {
-            statements.push(Statement {
-                span,
-                kind: StatementKind::Ret { value },
-                comments,
-            });
+            statements.push(Statement { span, kind: StatementKind::Ret { value }, comments });
         } else if let Some(statement) = last_statement {
             statements.push(statement);
         }
@@ -198,13 +188,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         }),
     };
 
-    Ok((
-        ctx,
-        Expression {
-            span,
-            kind: function,
-        },
-    ))
+    Ok((ctx, Expression { span, kind: function }))
 }
 
 /// Parse an expression until we reach a token with higher precedence.
@@ -293,13 +277,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             let span = ctx.span();
             match (blob(ctx), assignable(ctx)) {
                 (Ok(result), _) => Ok(result),
-                (_, Ok((ctx, assign))) => Ok((
-                    ctx,
-                    Expression {
-                        span,
-                        kind: Get(assign),
-                    },
-                )),
+                (_, Ok((ctx, assign))) => Ok((ctx, Expression { span, kind: Get(assign) })),
                 (Err((_, mut blob_errs)), Err((_, mut ass_errs))) => {
                     let errs = vec![
                         syntax_error!(ctx, "Neither a blob instantiation or an identifier - check the two errors below"),
@@ -354,14 +332,7 @@ fn if_expression<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expr
     let fail = Box::new(rhs);
     Ok((
         ctx,
-        Expression {
-            span,
-            kind: IfExpression {
-                condition,
-                pass,
-                fail,
-            },
-        },
+        Expression { span, kind: IfExpression { condition, pass, fail } },
     ))
 }
 
@@ -379,18 +350,12 @@ fn arrow_call<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Express
     ) -> ParseResult<'t, Expression> {
         let span = ctx.span();
         let kind = match rhs.kind {
-            Get(Assignable {
-                kind: Call(callee, args),
-                ..
-            }) => Get(Assignable {
+            Get(Assignable { kind: Call(callee, args), .. }) => Get(Assignable {
                 kind: ArrowCall(Box::new(lhs), callee, args),
                 span: rhs.span,
             }),
 
-            Get(Assignable {
-                kind: ArrowCall(pre, callee, args),
-                ..
-            }) => {
+            Get(Assignable { kind: ArrowCall(pre, callee, args), .. }) => {
                 let (_, pre) = prepend_expresion(ctx, lhs, *pre)?;
                 Get(Assignable {
                     kind: ArrowCall(Box::new(pre), callee, args),
@@ -434,13 +399,7 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
                     kind: AssignableKind::Expression(Box::new(lhs.clone())),
                 },
             )?;
-            return Ok((
-                ctx,
-                Expression {
-                    span: ctx.span(),
-                    kind: Get(ass),
-                },
-            ));
+            return Ok((ctx, Expression { span: ctx.span(), kind: Get(ass) }));
         }
         _ => {}
     }
@@ -554,15 +513,9 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
     use ExpressionKind::{Parenthesis, Tuple};
     let result = if is_tuple {
-        Expression {
-            span,
-            kind: Tuple(exprs),
-        }
+        Expression { span, kind: Tuple(exprs) }
     } else {
-        Expression {
-            span,
-            kind: Parenthesis(Box::new(exprs.remove(0))),
-        }
+        Expression { span, kind: Parenthesis(Box::new(exprs.remove(0))) }
     };
     Ok((ctx, result))
 }
@@ -619,13 +572,7 @@ fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     }
 
     use ExpressionKind::Blob;
-    Ok((
-        ctx,
-        Expression {
-            span,
-            kind: Blob { blob, fields },
-        },
-    ))
+    Ok((ctx, Expression { span, kind: Blob { blob, fields } }))
 }
 
 // Parse a list expression, e.g. `[1, 2, a(3)]`
@@ -656,13 +603,7 @@ fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let ctx = ctx.pop_skip_newlines(skip_newlines);
     let ctx = expect!(ctx, T::RightBracket, "Expected ']'");
     use ExpressionKind::List;
-    Ok((
-        ctx,
-        Expression {
-            span,
-            kind: List(exprs),
-        },
-    ))
+    Ok((ctx, Expression { span, kind: List(exprs) }))
 }
 
 /// Parse either a set or dict expression.
@@ -909,11 +850,7 @@ impl PrettyPrint for Expression {
                 write!(f, "Paren\n")?;
                 expr.pretty_print(f, indent + 1)?;
             }
-            EK::IfExpression {
-                condition,
-                pass,
-                fail,
-            } => {
+            EK::IfExpression { condition, pass, fail } => {
                 write!(f, "IfExpression\n")?;
                 write_indent(f, indent)?;
                 write!(f, "condition:\n")?;
@@ -925,12 +862,7 @@ impl PrettyPrint for Expression {
                 write!(f, "fail:\n")?;
                 fail.pretty_print(f, indent + 1)?;
             }
-            EK::Function {
-                name,
-                params,
-                ret,
-                body,
-            } => {
+            EK::Function { name, params, ret, body } => {
                 write!(f, "Fn {} ", name)?;
                 for (i, (name, ty)) in params.iter().enumerate() {
                     if i != 0 {

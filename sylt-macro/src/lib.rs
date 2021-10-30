@@ -128,10 +128,7 @@ struct LinkRename {
 
 impl Parse for LinkRename {
     fn parse(input: ParseStream) -> Result<Self> {
-        Ok(Self {
-            _as: input.parse()?,
-            name: input.parse()?,
-        })
+        Ok(Self { _as: input.parse()?, name: input.parse()? })
     }
 }
 
@@ -142,10 +139,7 @@ struct Link {
 
 impl Parse for Link {
     fn parse(input: ParseStream) -> Result<Self> {
-        Ok(Self {
-            path: input.parse()?,
-            rename: input.parse().ok(),
-        })
+        Ok(Self { path: input.parse()?, rename: input.parse().ok() })
     }
 }
 
@@ -452,10 +446,7 @@ struct ModuleLink {
 
 impl ModuleLink {
     fn new() -> Self {
-        Self {
-            state: LinkState::Open,
-            mapping: Vec::new(),
-        }
+        Self { state: LinkState::Open, mapping: Vec::new() }
     }
 }
 

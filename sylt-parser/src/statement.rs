@@ -299,14 +299,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     (ctx, NameIdentifier::Implicit(Identifier { span, name }))
                 }
             };
-            (
-                ctx,
-                Use {
-                    path: path_ident,
-                    name: alias,
-                    file,
-                },
-            )
+            (ctx, Use { path: path_ident, name: alias, file })
         }
 
         // `: A is : B`
@@ -337,10 +330,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let (ctx, value) = if matches!(ctx.token(), T::Newline) {
                 (
                     ctx,
-                    Expression {
-                        span: ctx.span(),
-                        kind: ExpressionKind::Nil,
-                    },
+                    Expression { span: ctx.span(), kind: ExpressionKind::Nil },
                 )
             } else {
                 expression(ctx)?
@@ -354,22 +344,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let (ctx, condition) = if matches!(ctx.token(), T::Do) {
                 (
                     ctx,
-                    Expression {
-                        span: ctx.span(),
-                        kind: ExpressionKind::Bool(true),
-                    },
+                    Expression { span: ctx.span(), kind: ExpressionKind::Bool(true) },
                 )
             } else {
                 expression(ctx)?
             };
             let (ctx, body) = statement(ctx)?;
-            (
-                ctx.prev(),
-                Loop {
-                    condition,
-                    body: Box::new(body),
-                },
-            )
+            (ctx.prev(), Loop { condition, body: Box::new(body) })
         }
 
         // `if <expression> <statement> [else <statement>]`. Note that the else is optional.
@@ -474,10 +455,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             if name == "self" {
                 raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
             }
-            let ident = Identifier {
-                name: name.clone(),
-                span: ctx.span(),
-            };
+            let ident = Identifier { name: name.clone(), span: ctx.span() };
             let ctx = ctx.skip(1);
             let kind = match ctx.token() {
                 T::ColonColon => VarKind::Const,
@@ -495,10 +473,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     Definition {
                         ident,
                         kind,
-                        ty: Type {
-                            span: ctx.span(),
-                            kind: TypeKind::Implied,
-                        },
+                        ty: Type { span: ctx.span(), kind: TypeKind::Implied },
                         value,
                     },
                 )
@@ -510,10 +485,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             if name == "self" {
                 raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
             }
-            let ident = Identifier {
-                name: name.clone(),
-                span: ctx.span(),
-            };
+            let ident = Identifier { name: name.clone(), span: ctx.span() };
             // Skip identifier and ':'.
             let ctx = ctx.skip(2);
 
@@ -547,15 +519,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 // The value to define the variable to.
                 let (ctx, value) = expression(ctx)?;
 
-                (
-                    ctx,
-                    Definition {
-                        ident,
-                        kind,
-                        ty,
-                        value,
-                    },
-                )
+                (ctx, Definition { ident, kind, ty, value })
             }
         }
 
@@ -578,14 +542,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 };
                 // The expression to assign the assignable to.
                 let (ctx, value) = expression(ctx.skip(1))?;
-                Ok((
-                    ctx,
-                    Assignment {
-                        kind,
-                        target,
-                        value,
-                    },
-                ))
+                Ok((ctx, Assignment { kind, target, value }))
             }
 
             match (assignment(ctx), expression(ctx)) {
@@ -610,14 +567,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     let ctx = ctx.pop_skip_newlines(skip_newlines);
     comments.append(&mut ctx.comments_since_last_statement());
     let ctx = ctx.push_last_statement_location();
-    Ok((
-        ctx,
-        Statement {
-            span,
-            kind,
-            comments,
-        },
-    ))
+    Ok((ctx, Statement { span, kind, comments }))
 }
 
 /// Parse an outer statement.

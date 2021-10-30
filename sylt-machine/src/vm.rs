@@ -762,10 +762,7 @@ impl Machine for VM {
                     }
                     Value::ExternFunction(slot) => {
                         let extern_func = self.extern_functions[slot];
-                        let ctx = RuntimeContext {
-                            stack_base: new_base + 1,
-                            machine: self,
-                        };
+                        let ctx = RuntimeContext { stack_base: new_base + 1, machine: self };
                         let res = match extern_func(ctx) {
                             Ok(value) => value,
                             Err(ek) => error!(self, ek, "Failed in external function"),

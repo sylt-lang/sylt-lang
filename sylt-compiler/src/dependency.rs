@@ -129,11 +129,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             .union(&assignable_dependencies(ctx, target))
             .cloned()
             .collect(),
-        If {
-            condition,
-            pass,
-            fail,
-        } => [
+        If { condition, pass, fail } => [
             dependencies(ctx, condition),
             statement_dependencies(ctx, pass),
             statement_dependencies(ctx, fail),
@@ -156,9 +152,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             ctx.variables.truncate(vars_before);
             deps
         }
-        Definition {
-            ident, value, ty, ..
-        } => {
+        Definition { ident, value, ty, .. } => {
             ctx.shadow(&ident.name);
             dependencies(ctx, value)
                 .union(&type_dependencies(ctx, ty))
@@ -204,11 +198,7 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<Name> {
             .cloned()
             .collect(),
 
-        IfExpression {
-            condition,
-            pass,
-            fail,
-        } => [pass, fail, condition]
+        IfExpression { condition, pass, fail } => [pass, fail, condition]
             .iter()
             .map(|expr| dependencies(ctx, expr))
             .flatten()
@@ -325,19 +315,9 @@ pub(crate) fn initialization_order<'a>(
                     name: NameIdentifier::Alias(Identifier { name, .. }),
                     ..
                 }
-                | ExternalDefinition {
-                    ident: Identifier { name, .. },
-                    ..
-                }
-                | Definition {
-                    ident: Identifier { name, .. },
-                    ..
-                } => {
-                    let mut ctx = Context {
-                        compiler,
-                        namespace,
-                        variables: Vec::new(),
-                    };
+                | ExternalDefinition { ident: Identifier { name, .. }, .. }
+                | Definition { ident: Identifier { name, .. }, .. } => {
+                    let mut ctx = Context { compiler, namespace, variables: Vec::new() };
                     to_order.insert(
                         *compiler.namespaces[namespace].get(name).unwrap(),
                         (

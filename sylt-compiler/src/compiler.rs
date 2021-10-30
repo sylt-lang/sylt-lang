@@ -39,7 +39,6 @@ impl Variable {
             slot,
             kind,
             line: span.line,
-
             captured: false,
             active: false,
         }
@@ -95,10 +94,7 @@ struct Context {
 
 impl Context {
     fn from_namespace(namespace: NamespaceID) -> Self {
-        Self {
-            namespace,
-            frame: 0,
-        }
+        Self { namespace, frame: 0 }
     }
 }
 
@@ -139,10 +135,7 @@ impl Frame {
             0,
             span,
         )];
-        Self {
-            variables,
-            upvalues: Vec::new(),
-        }
+        Self { variables, upvalues: Vec::new() }
     }
 }
 
@@ -458,10 +451,7 @@ impl Compiler {
         let name = "/preamble/";
         let start_span = tree.modules[0].1.span;
         self.frames.push(Frame::new(name, start_span));
-        let ctx = Context {
-            frame: 0,
-            ..Context::from_namespace(0)
-        };
+        let ctx = Context { frame: 0, ..Context::from_namespace(0) };
 
         let num_constants = self.extract_globals(&tree);
 
@@ -588,11 +578,7 @@ impl Compiler {
                             unreachable!()
                         }
                     }
-                    Use {
-                        path: _,
-                        name,
-                        file,
-                    } => {
+                    Use { path: _, name, file } => {
                         let ident = match name {
                             NameIdentifier::Implicit(ident) => ident,
                             NameIdentifier::Alias(ident) => ident,
@@ -600,21 +586,13 @@ impl Compiler {
                         let other = path_to_namespace_id[file];
                         (Name::Namespace(other), ident.name.clone(), ident.span)
                     }
-                    Definition {
-                        ident: Identifier { name, .. },
-                        kind,
-                        ..
-                    } => {
+                    Definition { ident: Identifier { name, .. }, kind, .. } => {
                         let var = self.define(name, *kind, statement.span);
                         self.activate(var);
                         num_constants += 1;
                         (Name::Global(var), name.clone(), statement.span)
                     }
-                    ExternalDefinition {
-                        ident: Identifier { name, .. },
-                        kind,
-                        ..
-                    } => {
+                    ExternalDefinition { ident: Identifier { name, .. }, kind, .. } => {
                         let var = self.define(name, *kind, statement.span);
                         self.activate(var);
                         num_constants += 1;

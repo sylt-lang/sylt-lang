@@ -26,10 +26,7 @@ struct BytecodeContext {
 
 impl From<BytecodeContext> for Context {
     fn from(ctx: BytecodeContext) -> Self {
-        Context {
-            namespace: ctx.namespace,
-            frame: ctx.frame,
-        }
+        Context { namespace: ctx.namespace, frame: ctx.frame }
     }
 }
 
@@ -42,11 +39,7 @@ pub struct BytecodeCompiler<'t> {
 
 impl<'t> BytecodeCompiler<'t> {
     pub(crate) fn new(compiler: &'t mut Compiler) -> Self {
-        Self {
-            compiler,
-            blocks: Vec::new(),
-            loops: Vec::new(),
-        }
+        Self { compiler, blocks: Vec::new(), loops: Vec::new() }
     }
 
     fn add_op(&mut self, ctx: BytecodeContext, span: Span, op: Op) -> usize {
@@ -246,11 +239,7 @@ impl<'t> BytecodeCompiler<'t> {
 
             Parenthesis(expr) => self.expression(expr, ctx),
 
-            IfExpression {
-                condition,
-                pass,
-                fail,
-            } => {
+            IfExpression { condition, pass, fail } => {
                 self.expression(condition, ctx);
 
                 let skip = self.add_op(ctx, expression.span, Op::Illegal);
@@ -265,12 +254,7 @@ impl<'t> BytecodeCompiler<'t> {
                 self.patch(ctx, out, op);
             }
 
-            Function {
-                name,
-                params,
-                ret: _,
-                body,
-            } => {
+            Function { name, params, ret: _, body } => {
                 let file = self.compiler.file_from_namespace(ctx.namespace).display();
                 let name = format!("fn {} {}:{}", name, file, expression.span.line);
 
@@ -643,11 +627,7 @@ impl<'t> BytecodeCompiler<'t> {
             }
 
             Continue {} => match self.loops.last().cloned() {
-                Some(LoopFrame {
-                    stack_size,
-                    continue_addr,
-                    ..
-                }) => {
+                Some(LoopFrame { stack_size, continue_addr, .. }) => {
                     self.emit_pop_until_size(ctx, statement.span, stack_size);
                     self.add_op(ctx, statement.span, Op::Jmp(continue_addr));
                 }
@@ -660,11 +640,7 @@ impl<'t> BytecodeCompiler<'t> {
             },
 
             Break {} => match self.loops.last().cloned() {
-                Some(LoopFrame {
-                    stack_size,
-                    break_addr,
-                    ..
-                }) => {
+                Some(LoopFrame { stack_size, break_addr, .. }) => {
                     self.emit_pop_until_size(ctx, statement.span, stack_size);
                     self.add_op(ctx, statement.span, Op::Jmp(break_addr));
                 }
@@ -688,12 +664,7 @@ impl<'t> BytecodeCompiler<'t> {
     }
 
     pub fn compile(&mut self, statement: &Statement, namespace: usize) {
-        let ctx = BytecodeContext {
-            block_slot: 0,
-            frame: 0,
-            scope: 0,
-            namespace,
-        };
+        let ctx = BytecodeContext { block_slot: 0, frame: 0, scope: 0, namespace };
         self.statement(&statement, ctx);
     }
 
@@ -704,12 +675,7 @@ impl<'t> BytecodeCompiler<'t> {
 
         let nil = self.compiler.constant(Value::Nil);
         // TODO(ed): This context is completely bogus...
-        let ctx = BytecodeContext {
-            block_slot: 0,
-            frame: 0,
-            namespace: 0,
-            scope: 0,
-        };
+        let ctx = BytecodeContext { block_slot: 0, frame: 0, namespace: 0, scope: 0 };
         for _ in 0..num_constants {
             // Uninitalized values have the value Nil
             self.add_op(ctx, span, nil);

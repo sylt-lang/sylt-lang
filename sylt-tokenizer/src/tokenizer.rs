@@ -16,19 +16,11 @@ pub struct Span {
     pub col_end: usize,
 }
 
-pub static ZERO_SPAN: Span = Span {
-    line: 0,
-    col_start: 0,
-    col_end: 0,
-};
+pub static ZERO_SPAN: Span = Span { line: 0, col_start: 0, col_end: 0 };
 
 impl Span {
     pub fn zero() -> Self {
-        Self {
-            line: 0,
-            col_start: 0,
-            col_end: 0,
-        }
+        Self { line: 0, col_start: 0, col_end: 0 }
     }
 }
 
@@ -70,14 +62,7 @@ pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
             let is_newline = token == Token::Newline;
             let col_start = char_at_byte[byte_range.start].unwrap() - last_newline;
             let col_end = char_at_byte[byte_range.end].unwrap() - last_newline;
-            let placed_token = PlacedToken {
-                token,
-                span: Span {
-                    line,
-                    col_start,
-                    col_end,
-                },
-            };
+            let placed_token = PlacedToken { token, span: Span { line, col_start, col_end } };
             if is_newline {
                 last_newline = char_at_byte[byte_range.start].unwrap();
                 line += 1;

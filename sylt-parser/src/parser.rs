@@ -301,10 +301,7 @@ impl<'a> Context<'a> {
     }
 
     fn push_last_statement_location(&self) -> Self {
-        Self {
-            last_statement: self.curr,
-            ..*self
-        }
+        Self { last_statement: self.curr, ..*self }
     }
 
     fn skip_if(&self, token: T) -> Self {
@@ -479,10 +476,7 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             let ctx = ctx.skip(1);
             match ctx.token() {
                 T::Identifier(name) => {
-                    let ident = Identifier {
-                        name: name.to_string(),
-                        span: ctx.span(),
-                    };
+                    let ident = Identifier { name: name.to_string(), span: ctx.span() };
                     (ctx.skip(1), Generic(ident))
                 }
                 _ => {
@@ -506,10 +500,7 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                             ret
                         } else {
                             // If we couldn't parse the return type, we assume `-> Void`.
-                            Type {
-                                span: ctx.span(),
-                                kind: Resolved(Void),
-                            }
+                            Type { span: ctx.span(), kind: Resolved(Void) }
                         };
                     }
 
@@ -608,10 +599,7 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         let (ctx, rest) = parse_type(ctx.skip(1))?;
         (
             ctx,
-            Type {
-                span,
-                kind: Union(Box::new(ty), Box::new(rest)),
-            },
+            Type { span, kind: Union(Box::new(ty), Box::new(rest)) },
         )
     } else {
         (ctx, ty)
@@ -619,16 +607,10 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
 
     // Nullable type. Compiles to `a | Void`.
     let (ctx, ty) = if matches!(ctx.token(), T::QuestionMark) {
-        let void = Type {
-            span: ctx.span(),
-            kind: Resolved(Void),
-        };
+        let void = Type { span: ctx.span(), kind: Resolved(Void) };
         (
             ctx.skip(1),
-            Type {
-                span,
-                kind: Union(Box::new(ty), Box::new(void)),
-            },
+            Type { span, kind: Union(Box::new(ty), Box::new(void)) },
         )
     } else {
         (ctx, ty)
@@ -681,10 +663,7 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
     };
 
     use AssignableKind::Call;
-    let result = Assignable {
-        span,
-        kind: Call(Box::new(callee), args),
-    };
+    let result = Assignable { span, kind: Call(Box::new(callee), args) };
     sub_assignable(ctx, result)
 }
 
@@ -709,13 +688,7 @@ fn assignable_index<'t>(ctx: Context<'t>, indexed: Assignable) -> ParseResult<'t
 fn assignable_dot<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t, Assignable> {
     use AssignableKind::Access;
     let (ctx, ident) = if let (T::Identifier(name), span, ctx) = ctx.skip(1).eat() {
-        (
-            ctx,
-            Identifier {
-                name: name.clone(),
-                span,
-            },
-        )
+        (ctx, Identifier { name: name.clone(), span })
     } else {
         raise_syntax_error!(
             ctx,
@@ -757,10 +730,7 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
     let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
         Assignable {
             span: outer_span,
-            kind: Read(Identifier {
-                span,
-                name: name.clone(),
-            }),
+            kind: Read(Identifier { span, name: name.clone() }),
         }
     } else {
         raise_syntax_error!(
@@ -828,13 +798,7 @@ fn module(
     }
 
     if errors.is_empty() {
-        (
-            use_files,
-            Ok(Module {
-                span: Span::zero(),
-                statements,
-            }),
-        )
+        (use_files, Ok(Module { span: Span::zero(), statements }))
     } else {
         (use_files, Err(errors))
     }
@@ -1091,12 +1055,7 @@ impl PrettyPrint for Statement {
                 }
                 write!(f, " }}")?;
             }
-            SK::Definition {
-                ident,
-                kind,
-                ty,
-                value,
-            } => {
+            SK::Definition { ident, kind, ty, value } => {
                 write!(f, "<Def> {} {:?} {}\n", ident.name, kind, ty)?;
                 value.pretty_print(f, indent + 1)?;
                 return Ok(());
@@ -1105,21 +1064,13 @@ impl PrettyPrint for Statement {
                 write!(f, "<ExtDef> {} {:?} {}\n", ident.name, kind, ty)?;
                 return Ok(());
             }
-            SK::Assignment {
-                kind,
-                target,
-                value,
-            } => {
+            SK::Assignment { kind, target, value } => {
                 write!(f, "<Ass> {:?}\n", kind)?;
                 target.pretty_print(f, indent + 1)?;
                 value.pretty_print(f, indent + 1)?;
                 return Ok(());
             }
-            SK::If {
-                condition,
-                pass,
-                fail,
-            } => {
+            SK::If { condition, pass, fail } => {
                 write!(f, "<If>\n")?;
                 condition.pretty_print(f, indent + 1)?;
                 pass.pretty_print(f, indent + 1)?;
