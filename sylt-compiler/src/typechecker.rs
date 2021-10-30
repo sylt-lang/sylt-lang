@@ -340,7 +340,13 @@ impl TypeChecker {
                     }
                     Ok(ret)
                 } else {
-                    panic!()
+                    return err_type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Violating(self.bake_type(f_copy)),
+                        "Not callable"
+                    );
                 }
             }
 
@@ -359,8 +365,8 @@ impl TypeChecker {
             ExpressionKind::Add(a, b) => {
                 let a = self.expression(&a, ctx)?;
                 let b = self.expression(&b, ctx)?;
-                self.annotate(a, Constraint::Add(b));
-                self.annotate(b, Constraint::Add(b));
+                self.add_constraint(a, Constraint::Add(b));
+                self.add_constraint(b, Constraint::Add(b));
                 self.unify(span, ctx, a, b)?;
                 Ok(a)
             }
@@ -614,71 +620,94 @@ impl TypeChecker {
     }
 
     fn unify(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<usize, Vec<Error>> {
-        self.check_constraints(span, ctx, a)?;
-        self.check_constraints(span, ctx, b)?;
+        let a = self.find(a);
+        let b = self.find(b);
 
-        match (self.fits(a, b), self.fits(b, a)) {
-            (Ok(_), Ok(_)) => {}
-            // TODO(ed): This isn't right is it?
-            (Ok(_), _) => self.types[b].ty = self.find_type(a),
-            (_, Ok(_)) => self.types[a].ty = self.find_type(b),
-            (Err(a_err), Err(_)) => {
-                return Err(vec![type_error!(
-                    self,
-                    span,
-                    ctx,
-                    TypeError::Mismatch {
-                        got: self.bake_type(a),
-                        expected: self.bake_type(b),
-                    },
-                    "{}",
-                    a_err
-                )])
-            }
-        }
-
+        // Unknown, X
+        //
+        // X, Unknown
         match (self.find_type(a), self.find_type(b)) {
-            (Type::List(a), Type::List(b)) => {
-                self.unify(span, ctx, a, b)?;
-            }
-            (Type::Set(a), Type::Set(b)) => {
-                self.unify(span, ctx, a, b)?;
-            }
-            (Type::Dict(a_k, a_v), Type::Dict(b_k, b_v)) => {
-                self.unify(span, ctx, a_k, b_k)?;
-                self.unify(span, ctx, a_v, b_v)?;
-            }
+            (_, Type::Unknown) => self.types[b].ty = self.find_type(a),
 
-            (Type::Tuple(a), Type::Tuple(b)) => {
-                for (a, b) in a.iter().zip(b.iter()) {
-                    self.unify(span, ctx, *a, *b)?;
+            (Type::Unknown, _) => self.types[a].ty = self.find_type(b),
+
+            _ => match (self.find_type(a), self.find_type(b)) {
+                (Type::Ty, Type::Ty) => {}
+                (Type::Void, Type::Void) => {}
+                (Type::Int, Type::Int) => {}
+                (Type::Float, Type::Float) => {}
+                (Type::Bool, Type::Bool) => {}
+                (Type::Str, Type::Str) => {}
+
+                (Type::List(a), Type::List(b)) => {
+                    self.unify(span, ctx, a, b)?;
                 }
-            }
-
-            (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
-                // TODO(ed): Something is wrong - the types (fn int -> str) and (fn ? -> ?) unify
-                eprintln!("A: {:?}", self.bake_type(a));
-                eprintln!("B: {:?}", self.bake_type(b));
-                eprintln!("{:?} -> {:?}, {:?} -> {:?}", a_args, a_ret, b_args, b_ret);
-                for (a, b) in a_args.iter().zip(b_args.iter()) {
-                    self.unify(span, ctx, *a, *b)?;
+                (Type::Set(a), Type::Set(b)) => {
+                    self.unify(span, ctx, a, b)?;
                 }
-                self.unify(span, ctx, a_ret, b_ret)?;
-            }
-
-            (Type::Blob(a_blob, a_field), Type::Blob(b_blob, b_field)) => {
-                for (a_name, a_ty) in a_field.iter() {
-                    let b_ty = b_field[a_name];
-                    self.unify(span, ctx, *a_ty, b_ty)?;
+                (Type::Dict(a_k, a_v), Type::Dict(b_k, b_v)) => {
+                    self.unify(span, ctx, a_k, b_k)?;
+                    self.unify(span, ctx, a_v, b_v)?;
                 }
-            }
 
-            _ => {}
+                (Type::Tuple(a), Type::Tuple(b)) => {
+                    for (a, b) in a.iter().zip(b.iter()) {
+                        self.unify(span, ctx, *a, *b)?;
+                    }
+                }
+
+                (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
+                    for (a, b) in a_args.iter().zip(b_args.iter()) {
+                        self.unify(span, ctx, *a, *b)?;
+                    }
+                    self.unify(span, ctx, a_ret, b_ret)?;
+                }
+
+                (Type::Blob(a_blob, a_field), Type::Blob(b_blob, b_field)) => {
+                    for (a_name, a_ty) in a_field.iter() {
+                        let b_ty = b_field[a_name];
+                        self.unify(span, ctx, *a_ty, b_ty)?;
+                    }
+                }
+
+                _ => {
+                    return err_type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Mismatch {
+                            got: self.bake_type(a),
+                            expected: self.bake_type(b),
+                        },
+                        "Types don't match"
+                    );
+                }
+            },
         }
 
         self.union(a, b);
 
+        self.check_constraints(span, ctx, a)?;
+        self.check_constraints(span, ctx, b)?;
+
         Ok(a)
+    }
+
+    fn print_type(&mut self, ty: usize) {
+        let ty = self.find(ty);
+        let mut same = BTreeSet::new();
+        for i in 0..self.types.len() {
+            if self.find(i) == ty {
+                same.insert(i);
+            }
+        }
+        eprintln!(
+            "{}: {:?} {:?} = {:?}",
+            ty,
+            self.bake_type(ty),
+            self.types[ty].constraints,
+            same
+        );
     }
 
     fn inner_copy(&mut self, old_ty: usize, seen: &mut HashMap<usize, usize>) -> usize {
@@ -757,7 +786,7 @@ impl TypeChecker {
         }
     }
 
-    fn annotate(&mut self, a: usize, constraint: Constraint) {
+    fn add_constraint(&mut self, a: usize, constraint: Constraint) {
         let a = self.find(a);
         self.types[a].constraints.insert(constraint);
     }
