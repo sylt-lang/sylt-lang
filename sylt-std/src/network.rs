@@ -1,8 +1,8 @@
 use crate as sylt_std;
 
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::io::Write;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::ops::DerefMut;
@@ -37,7 +37,10 @@ fn rpc_listen(
                     if let Some(handles) = handles.lock().unwrap().as_mut() {
                         handles.insert(addr, (stream, true));
                     } else {
-                        eprintln!("Server has been shutdown, ignoring connection from {:?}", addr);
+                        eprintln!(
+                            "Server has been shutdown, ignoring connection from {:?}",
+                            addr
+                        );
                         if let Err(e) = stream.shutdown(Shutdown::Both) {
                             eprintln!("Error disconnecting client {:?}: {:?}", addr, e)
                         }
@@ -149,15 +152,13 @@ pub fn n_rpc_connect(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     match stream.try_clone() {
         Ok(stream) => {
             SERVER_HANDLE.with(|server_handle| {
-                let _ = server_handle
-                    .borrow_mut()
-                    .insert(stream);
+                let _ = server_handle.borrow_mut().insert(stream);
             });
-        },
+        }
         Err(e) => {
             eprintln!("Error connecting to server: {:?}", e);
             return Ok(Value::Bool(false));
-        },
+        }
     }
 
     // Handle incoming RPCs by putting them on the queue.
@@ -194,9 +195,16 @@ pub fn n_rpc_is_client(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 }
 
 /// Parse args given to an external function as rpc arguments, i.e. one callable followed by 0..n arguments.
-fn get_rpc_args(ctx: RuntimeContext<'_>, arg_offset: usize, func_name: &str) -> Result<Vec<FlatValuePack>, RuntimeError> {
+fn get_rpc_args(
+    ctx: RuntimeContext<'_>,
+    arg_offset: usize,
+    func_name: &str,
+) -> Result<Vec<FlatValuePack>, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
-    let flat_values: Vec<FlatValuePack> = values[arg_offset..].iter().map(|v| FlatValue::pack(v)).collect();
+    let flat_values: Vec<FlatValuePack> = values[arg_offset..]
+        .iter()
+        .map(|v| FlatValue::pack(v))
+        .collect();
 
     if flat_values.len() != 0 {
         Ok(flat_values)
@@ -208,7 +216,7 @@ fn get_rpc_args(ctx: RuntimeContext<'_>, arg_offset: usize, func_name: &str) -> 
     }
 }
 
-#[sylt_macro::sylt_link(n_rpc_clients, "sylt_std::network", "fn #X, [#Y] -> void")]
+#[sylt_macro::sylt_link(n_rpc_clients, "sylt_std::network", "fn *X, [*Y] -> void")]
 pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     // Serialize the RPC.
     let serialized = match bincode::serialize(&get_rpc_args(ctx, 0, "n_rpc_clients")?) {
@@ -237,8 +245,7 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Nil)
 }
 
-
-#[sylt_macro::sylt_link(n_rpc_client_ip, "sylt_std::network", "fn #X, [#Y] -> bool")]
+#[sylt_macro::sylt_link(n_rpc_client_ip, "sylt_std::network", "fn *X, [*Y] -> bool")]
 pub fn n_rpc_client_ip(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let ip = match ctx.machine.stack_from_base(ctx.stack_base).get(0) {
         Some(Value::String(s)) => SocketAddr::from_str(s.as_ref()).unwrap(),
@@ -276,7 +283,7 @@ pub fn n_rpc_client_ip(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 }
 
 // TODO(gu): This doc is wrong since this takes variadic arguments.
-#[sylt_macro::sylt_link(n_rpc_server, "sylt_std::network", "fn #X, #Y -> bool")]
+#[sylt_macro::sylt_link(n_rpc_server, "sylt_std::network", "fn *X, *Y -> bool")]
 pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     // Serialize the RPC.
     let serialized = match bincode::serialize(&get_rpc_args(ctx, 0, "n_rpc_server")?) {
@@ -295,7 +302,7 @@ pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
                 Err(e) => {
                     eprintln!("Error sending data to server: {:?}", e);
                     Ok(Value::Bool(false))
-                },
+                }
             }
         } else {
             Ok(Value::Bool(false))
@@ -318,14 +325,14 @@ pub fn n_rpc_disconnect(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 
 #[sylt_macro::sylt_link(n_rpc_current_request_ip, "sylt_std::network", "fn -> str")]
 pub fn n_rpc_current_request_ip(_: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
-    CURRENT_REQUEST_SOCKET_ADDR.with(|current|
+    CURRENT_REQUEST_SOCKET_ADDR.with(|current| {
         Ok(Value::String(Rc::new(
             current
                 .borrow()
                 .map(|socket| socket.to_string())
-                .unwrap_or("".to_string())
+                .unwrap_or("".to_string()),
         )))
-    )
+    })
 }
 
 sylt_macro::extern_function!(
@@ -342,16 +349,11 @@ sylt_macro::extern_function!(
     },
 );
 
-
 #[sylt_macro::sylt_link(n_rpc_resolve, "sylt_std::network", "fn -> void")]
 pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     // Take the current queue.
-    let queue = RPC_QUEUE.with(|queue| {
-        std::mem::replace(
-            queue.lock().unwrap().deref_mut(),
-            Vec::new(),
-        )
-    });
+    let queue =
+        RPC_QUEUE.with(|queue| std::mem::replace(queue.lock().unwrap().deref_mut(), Vec::new()));
 
     // Convert the queue into Values that can be evaluated.
     let queue = queue
@@ -369,7 +371,10 @@ pub fn n_rpc_resolve(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
         // but it's needed since the runtime usually doesn't handle owned
         // values.
         let borrowed_values: Vec<_> = values.iter().collect();
-        if let Err(e) = ctx.machine.eval_call(values[0].clone(), &borrowed_values[1..]) {
+        if let Err(e) = ctx
+            .machine
+            .eval_call(values[0].clone(), &borrowed_values[1..])
+        {
             eprintln!("{}", e);
             panic!("Error evaluating received RPC");
         }
