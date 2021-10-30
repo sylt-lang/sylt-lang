@@ -549,9 +549,6 @@ impl TypeChecker {
         let a = self.find(a);
         let b = self.find(b);
 
-        // Unknown, X
-        //
-        // X, Unknown
         match (self.find_type(a), self.find_type(b)) {
             (_, Type::Unknown) => self.types[b].ty = self.find_type(a),
 
