@@ -254,12 +254,14 @@ impl TypeChecker {
                 target,
                 value,
             } => todo!(),
+
             StatementKind::Definition {
                 ident,
                 kind,
                 ty,
                 value,
             } => todo!(),
+
             StatementKind::ExternalDefinition { ident, kind, ty } => todo!(),
 
             StatementKind::Loop { condition, body } => todo!(),
@@ -518,7 +520,7 @@ impl TypeChecker {
         match self.find_type(a) {
             Type::Unknown => RuntimeType::Unknown,
             Type::Ty => RuntimeType::Ty,
-            Type::Void => RuntimeType::Ty,
+            Type::Void => RuntimeType::Void,
             Type::Int => RuntimeType::Int,
             Type::Float => RuntimeType::Float,
             Type::Bool => RuntimeType::Bool,
@@ -661,6 +663,7 @@ impl TypeChecker {
         Ok(a)
     }
 
+    #[allow(unused)]
     fn print_type(&mut self, ty: usize) {
         let ty = self.find(ty);
         let mut same = BTreeSet::new();
@@ -779,6 +782,47 @@ impl TypeChecker {
                     namespace: *namespace,
                 },
             )?;
+        }
+
+        let ctx = TypeCtx { namespace: 0 };
+        match self.globals.get(&(0, "start".to_string())).cloned() {
+            Some(Name::Global(var)) => {
+                let void = self.push_type(Type::Void);
+                let start = self.push_type(Type::Function(Vec::new(), void));
+                match self.unify(var.ident.span, ctx, var.ty, start) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        return err_type_error!(
+                            self,
+                            var.ident.span,
+                            ctx,
+                            TypeError::Mismatch {
+                                got: self.bake_type(var.ty),
+                                expected: self.bake_type(start),
+                            },
+                            "The start function has to have a given type"
+                        )
+                    }
+                }
+            }
+            Some(_) => {
+                return err_type_error!(
+                    self,
+                    Span::zero(),
+                    ctx,
+                    TypeError::Exotic,
+                    "Expected a start function in the main module - but it was something else"
+                )
+            }
+            None => {
+                return err_type_error!(
+                    self,
+                    Span::zero(),
+                    ctx,
+                    TypeError::Exotic,
+                    "Expected a start function in the main module - but couldn't find it"
+                )
+            }
         }
 
         Ok(())
