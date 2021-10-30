@@ -179,7 +179,7 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
             write_type(dest, indent, *val)?;
             write!(dest, "}}")
         }
-        TypeKind::Generic(ident) => write_identifier(dest, ident),
+        TypeKind::Generic(ident) => write!(dest, "{}", ident),
         TypeKind::Grouping(ty) => {
             write!(dest, "(")?;
             write_type(dest, indent, *ty)?;
