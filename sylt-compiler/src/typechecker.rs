@@ -136,6 +136,15 @@ impl TypeChecker {
     }
 
     fn resolve_type(&mut self, ty: &ParserType, ctx: TypeCtx) -> usize {
+        self.inner_resolve_type(ty, ctx, &mut HashMap::new())
+    }
+
+    fn inner_resolve_type(
+        &mut self,
+        ty: &ParserType,
+        ctx: TypeCtx,
+        seen: &mut HashMap<String, usize>,
+    ) -> usize {
         use TypeKind::*;
         let ty = match &ty.kind {
             Implied => Type::Unknown,
@@ -153,26 +162,43 @@ impl TypeChecker {
             UserDefined(assignable) => {
                 return self.type_assignable(assignable, ctx);
             }
-            // Union(a, b) => panic!(),
+
             Fn(params, ret) => {
-                let params = params.iter().map(|t| self.resolve_type(t, ctx)).collect();
-                let ret = self.resolve_type(ret, ctx);
+                let params = params
+                    .iter()
+                    .map(|t| self.inner_resolve_type(t, ctx, seen))
+                    .collect();
+                let ret = self.inner_resolve_type(ret, ctx, seen);
                 Type::Function(params, ret)
             }
-            Tuple(fields) => {
-                Type::Tuple(fields.iter().map(|t| self.resolve_type(t, ctx)).collect())
-            }
-            List(kind) => Type::List(self.resolve_type(kind, ctx)),
-            Set(kind) => Type::Set(self.resolve_type(kind, ctx)),
-            Dict(key, value) => {
-                Type::Dict(self.resolve_type(key, ctx), self.resolve_type(value, ctx))
-            }
+
+            Tuple(fields) => Type::Tuple(
+                fields
+                    .iter()
+                    .map(|t| self.inner_resolve_type(t, ctx, seen))
+                    .collect(),
+            ),
+
+            List(kind) => Type::List(self.inner_resolve_type(kind, ctx, seen)),
+
+            Set(kind) => Type::Set(self.inner_resolve_type(kind, ctx, seen)),
+
+            Dict(key, value) => Type::Dict(
+                self.inner_resolve_type(key, ctx, seen),
+                self.inner_resolve_type(value, ctx, seen),
+            ),
+
             Grouping(ty) => {
-                return self.resolve_type(ty, ctx);
+                return self.inner_resolve_type(ty, ctx, seen);
+            }
+
+            Generic(name) => {
+                return *seen
+                    .entry(name.clone())
+                    .or_insert_with(|| self.push_type(Type::Unknown))
             }
 
             Union(_, _) => todo!(),
-            Generic(_) => todo!(),
         };
         self.push_type(ty)
     }
@@ -204,6 +230,25 @@ impl TypeChecker {
                 Ok(None)
             }
 
+            StatementKind::If {
+                condition,
+                pass,
+                fail,
+            } => {
+                let condition = self.expression(condition, ctx)?;
+                let boolean = self.push_type(Type::Bool);
+                self.unify(span, ctx, boolean, condition)?;
+
+                let pass = self.statement(pass, ctx)?;
+                let fail = self.statement(fail, ctx)?;
+                match (pass, fail) {
+                    (Some(pass), Some(fail)) => Ok(Some(self.unify(span, ctx, pass, fail)?)),
+                    (Some(pass), _) => Ok(Some(pass)),
+                    (_, Some(fail)) => Ok(Some(fail)),
+                    _ => Ok(None),
+                }
+            }
+
             StatementKind::Assignment {
                 kind,
                 target,
@@ -216,11 +261,7 @@ impl TypeChecker {
                 value,
             } => todo!(),
             StatementKind::ExternalDefinition { ident, kind, ty } => todo!(),
-            StatementKind::If {
-                condition,
-                pass,
-                fail,
-            } => todo!(),
+
             StatementKind::Loop { condition, body } => todo!(),
             StatementKind::Break => todo!(),
             StatementKind::Continue => todo!(),
@@ -234,6 +275,7 @@ impl TypeChecker {
         let span = statement.span;
         match &statement.kind {
             StatementKind::Use { path, name, file } => todo!(),
+
             StatementKind::Blob { name, fields } => {
                 let ty = Type::Blob(
                     name.clone(),
@@ -278,11 +320,13 @@ impl TypeChecker {
             }
 
             StatementKind::ExternalDefinition { ident, kind, ty } => todo!(),
+
             StatementKind::If {
                 condition,
                 pass,
                 fail,
             } => todo!(),
+
             StatementKind::Loop { condition, body } => todo!(),
             StatementKind::Break => todo!(),
             StatementKind::Continue => todo!(),
@@ -399,8 +443,9 @@ impl TypeChecker {
             } => {
                 let ss = self.stack.len();
                 let mut args = Vec::new();
+                let mut seen = HashMap::new();
                 for (ident, ty) in params.iter() {
-                    let ty = self.resolve_type(ty, ctx);
+                    let ty = self.inner_resolve_type(ty, ctx, &mut seen);
                     args.push(ty);
 
                     let var = Variable {
@@ -411,7 +456,7 @@ impl TypeChecker {
                     self.stack.push(var);
                 }
 
-                let ret = self.resolve_type(ret, ctx);
+                let ret = self.inner_resolve_type(ret, ctx, &mut seen);
                 if let Some(actual_ret) = self.statement(body, ctx)? {
                     self.unify(span, ctx, ret, actual_ret)?;
                 } else {
