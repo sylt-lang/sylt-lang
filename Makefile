@@ -1,3 +1,4 @@
+BUILD := build
 MAIN := main.sy
 RESOURCES := res
 
@@ -11,10 +12,10 @@ all: $(MAIN_LOVE)
 run: $(MAIN_LOVE)
 	love $<
 
-%.love: %.lua | build
-	mv $< build/main.lua
-	cp -r $(RESOURCES)/* build/
-	zip -9 -j $@ build/*
+%.love: %.lua | $(BUILD)
+	mv $< $(BUILD)/main.lua
+	cp -r $(RESOURCES)/* $(BUILD)/
+	zip -9 -j $@ $(BUILD)/*
 
 %.lua: %.sy $(SYLT)
 	$(SYLT) --compile $@ $<
@@ -25,7 +26,7 @@ $(SYLT):
 clean:
 	rm -rf *.lua
 	rm -rf *.love
-	rm -rf build
+	rm -rf $(BUILD)
 
-build:
-	mkdir -p build
+$(BUILD):
+	mkdir -p $@
