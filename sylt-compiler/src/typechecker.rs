@@ -377,10 +377,19 @@ impl TypeChecker {
                         self.add_constraint(expression_ty, Constraint::Add(target_ty));
                         self.add_constraint(target_ty, Constraint::Add(expression_ty));
                     }
-                    ParserOp::Sub => todo!(),
-                    ParserOp::Mul => todo!(),
-                    ParserOp::Div => todo!(),
-                }
+                    ParserOp::Sub => {
+                        self.add_constraint(expression_ty, Constraint::Sub(target_ty));
+                        self.add_constraint(target_ty, Constraint::Sub(expression_ty));
+                    }
+                    ParserOp::Mul => {
+                        self.add_constraint(expression_ty, Constraint::Mul(target_ty));
+                        self.add_constraint(target_ty, Constraint::Mul(expression_ty));
+                    }
+                    ParserOp::Div => {
+                        self.add_constraint(expression_ty, Constraint::Mul(target_ty));
+                        self.add_constraint(target_ty, Constraint::Mul(expression_ty));
+                    }
+                };
                 self.unify(span, ctx, expression_ty, target_ty)?;
                 Ok(None)
             }
