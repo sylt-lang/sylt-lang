@@ -685,7 +685,17 @@ impl TypeChecker {
             }
 
             ExpressionKind::Set(_) => todo!(),
-            ExpressionKind::Dict(_) => todo!(),
+            ExpressionKind::Dict(exprs) => {
+                let key_ty = self.push_type(Type::Unknown);
+                let value_ty = self.push_type(Type::Unknown);
+                for (key, value) in exprs.iter().zip(exprs.iter().skip(1)).step_by(2) {
+                    let e = self.expression(key, ctx)?;
+                    self.unify(span, ctx, key_ty, e)?;
+                    let e = self.expression(value, ctx)?;
+                    self.unify(span, ctx, value_ty, e)?;
+                }
+                Ok(self.push_type(Type::Dict(key_ty, value_ty)))
+            },
 
             ExpressionKind::Int(_) => Ok(self.push_type(Type::Int)),
             ExpressionKind::Float(_) => Ok(self.push_type(Type::Float)),
@@ -1126,8 +1136,13 @@ impl TypeChecker {
                     }
                 ),
             },
-            Type::List(_) => todo!(),
-            Type::Dict(_, _) => todo!(),
+            Type::List(ty) => self.unify(span, ctx, ty, ret).map(|_| ()),
+            Type::Dict(key_ty, value_ty) => {
+                let int_ty = self.push_type(Type::Int);
+                self.unify(span, ctx, key_ty, int_ty)?;
+                self.unify(span, ctx, value_ty, ret)?;
+                Ok(())
+            },
             _ => err_type_error!(
                 self,
                 span,
