@@ -431,11 +431,7 @@ impl Compiler {
                             unreachable!()
                         }
                     }
-                    Use {
-                        path: _,
-                        name,
-                        file,
-                    } => {
+                    Use { name, file, .. } => {
                         let ident = match name {
                             NameIdentifier::Implicit(ident) => ident,
                             NameIdentifier::Alias(ident) => ident,
