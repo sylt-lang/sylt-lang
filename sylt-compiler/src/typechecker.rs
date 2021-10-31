@@ -3,7 +3,7 @@
 #![allow(unused_imports)]
 #![allow(unused_macros)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use sylt_common::error::{Error, TypeError};
 use sylt_common::{RustFunction, Type as RuntimeType};
@@ -663,8 +663,38 @@ impl TypeChecker {
             }
 
             ExpressionKind::Blob { blob, fields } => {
-                // TODO: check the fields
-                Ok(self.type_assignable(blob, ctx)?)
+                let blob_ty = self.type_assignable(blob, ctx)?;
+                let (blob_name, blob_fields) = match self.find_type(blob_ty) {
+                    Type::Blob(name, fields) => (name, fields),
+                    _ => unreachable!(),
+                };
+
+                let given_fields: BTreeMap<_, _> = fields.iter()
+                    .map(|(key, expr)| Ok((key.clone(), self.expression(expr, ctx)?)))
+                    .collect::<Result<_, Vec<Error>>>()?;
+
+                let mut errors = Vec::new();
+                for (field, field_ty) in given_fields.iter() {
+                    match blob_fields.get(field) {
+                        Some(_) => {},
+                        None => errors.push(type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::UnknownField {
+                                blob: blob_name.clone(),
+                                field: field.clone(),
+                            }
+                        )),
+                    }
+                }
+
+                if !errors.is_empty() {
+                    return Err(errors);
+                }
+
+                let given_blob = self.push_type(Type::Blob(blob_name, given_fields));
+                self.unify(span, ctx, given_blob, blob_ty)
             }
 
             ExpressionKind::Tuple(exprs) => {
@@ -684,7 +714,15 @@ impl TypeChecker {
                 Ok(self.push_type(Type::List(inner_ty)))
             }
 
-            ExpressionKind::Set(_) => todo!(),
+            ExpressionKind::Set(exprs) => {
+                let inner_ty = self.push_type(Type::Unknown);
+                for expr in exprs.iter() {
+                    let e = self.expression(expr, ctx)?;
+                    self.unify(span, ctx, inner_ty, e)?;
+                }
+                Ok(self.push_type(Type::Set(inner_ty)))
+            },
+
             ExpressionKind::Dict(exprs) => {
                 let key_ty = self.push_type(Type::Unknown);
                 let value_ty = self.push_type(Type::Unknown);
