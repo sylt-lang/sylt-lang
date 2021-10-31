@@ -650,7 +650,7 @@ impl TypeChecker {
 
     fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> Result<usize, Vec<Error>> {
         let span = expression.span;
-        match &expression.kind {
+        let res = match &expression.kind {
             ExpressionKind::Get(ass) => self.assignable(ass, ctx),
 
             ExpressionKind::Add(a, b) => {
@@ -741,6 +741,11 @@ impl TypeChecker {
             ExpressionKind::Str(_) => Ok(self.push_type(Type::Str)),
             ExpressionKind::Bool(_) => Ok(self.push_type(Type::Bool)),
             ExpressionKind::Nil => Ok(self.push_type(Type::Void)),
+        }?;
+        let res_ty = self.find_type(res);
+        match res_ty {
+            Type::Blob(_, _) => Ok(self.push_type(res_ty)),
+            _ => Ok(res),
         }
     }
 
