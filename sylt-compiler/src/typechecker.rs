@@ -75,10 +75,13 @@ struct TypeNode {
 #[derive(Clone, Debug, Hash, PartialOrd, Ord, PartialEq, Eq)]
 enum Constraint {
     Add(usize),
+
     Indexes(usize),
     IndexedBy(usize),
     IndexingGives(usize),
     GivenByIndex(usize),
+    ConstantIndex(i64),
+
     Field(String, usize),
 }
 
@@ -197,14 +200,14 @@ impl TypeChecker {
                             for (name, field_type) in fields.iter() {
                                 self.add_constraint(
                                     ty,
-                                    Constraint::Field(name.clone(), *field_type)
+                                    Constraint::Field(name.clone(), *field_type),
                                 );
                             }
-                        },
+                        }
                         _ => unreachable!(),
                     }
                     Ok(ty)
-                },
+                }
                 _ => todo!(),
             },
 
@@ -535,12 +538,14 @@ impl TypeChecker {
                     // TODO(ed): Annotate the errors?
                     for (a, p) in args.iter().zip(params.iter()) {
                         let a = self.expression(a, ctx)?;
-                        if dbg {
-                            eprintln!(">> {:?} {:?}", span.line, self.bake_type(a),);
-                        }
                         self.unify(span, ctx, *p, a)?;
                         let a = self.find(a);
+                        if dbg {
+                            self.print_type(a);
+                            self.print_type(*p);
+                        }
                     }
+
                     Ok(ret)
                 } else {
                     return err_type_error!(
@@ -563,85 +568,33 @@ impl TypeChecker {
                 self.assignable(&mapped_assignable, ctx)
             }
 
-            AssignableKind::Access(ass, ident) => todo!(),
+            AssignableKind::Access(outer, ident) => {
+                let outer = self.assignable(outer, ctx)?;
+                let ret = self.push_type(Type::Unknown);
+                self.add_constraint(outer, Constraint::Field(ident.name.clone(), ret));
+                self.check_constraints(span, ctx, outer)?;
+                Ok(ret)
+            }
 
             AssignableKind::Index(outer, syn_index) => {
                 let outer = self.assignable(outer, ctx)?;
                 let index = self.expression(syn_index, ctx)?;
-                self.add_constraint(index, Constraint::Indexes(outer));
-                self.add_constraint(outer, Constraint::IndexedBy(index));
-                self.check_constraints(span, ctx, outer)?;
-                self.check_constraints(span, ctx, index)?;
-                let outer_ty = self.find_type(outer);
-                match outer_ty {
-                    Type::Unknown => {
-                        let ret = self.push_type(Type::Unknown);
-                        // We don't add these if we don't have too.
-                        self.add_constraint(outer, Constraint::IndexingGives(ret));
-                        self.add_constraint(ret, Constraint::GivenByIndex(outer));
-                        Ok(ret)
+                match syn_index.kind {
+                    ExpressionKind::Int(index) => {
+                        self.add_constraint(outer, Constraint::ConstantIndex(index));
                     }
-
-                    Type::Function(_, _)
-                    | Type::Blob(_, _)
-                    | Type::Invalid
-                    | Type::Ty
-                    | Type::Void
-                    | Type::Int
-                    | Type::Float
-                    | Type::Bool
-                    | Type::Str => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            ctx,
-                            TypeError::Exotic,
-                            "{:?} cannot be index - at all",
-                            outer
-                        )
-                    }
-
-                    Type::Tuple(tys) => {
-                        let int = self.push_type(Type::Int);
-                        self.unify(span, ctx, index, int)?;
-                        match syn_index.kind {
-                            ExpressionKind::Int(index) => match tys.get(index as usize) {
-                                Some(ty) => Ok(*ty),
-                                None => {
-                                    return err_type_error!(
-                                        self,
-                                        span,
-                                        ctx,
-                                        TypeError::Exotic,
-                                        "Tuple index out of range, index {} but last index is {}",
-                                        index,
-                                        tys.len() - 1
-                                    )
-                                }
-                            },
-                            _ => {
-                                return err_type_error!(
-                                    self,
-                                    span,
-                                    ctx,
-                                    TypeError::Exotic,
-                                    "Tuples can only be index by integer constants"
-                                )
-                            }
-                        }
-                    }
-
-                    Type::List(ty) => {
-                        let int = self.push_type(Type::Int);
-                        self.unify(span, ctx, index, int)?;
-                        Ok(ty)
-                    }
-                    Type::Set(ty) => todo!("TODO(ed): Can a set be index?"),
-                    Type::Dict(key, value) => {
-                        self.unify(span, ctx, key, index)?;
-                        Ok(value)
+                    _ => {
+                        self.add_constraint(index, Constraint::Indexes(outer));
+                        self.add_constraint(outer, Constraint::IndexedBy(index));
                     }
                 }
+                let ret = self.push_type(Type::Unknown);
+                self.add_constraint(outer, Constraint::IndexingGives(ret));
+                self.add_constraint(ret, Constraint::GivenByIndex(outer));
+
+                self.check_constraints(span, ctx, outer)?;
+                self.check_constraints(span, ctx, index)?;
+                Ok(ret)
             }
 
             AssignableKind::Expression(expression) => self.expression(expression, ctx),
@@ -661,11 +614,8 @@ impl TypeChecker {
                 self.unify(span, ctx, a, b)?;
                 Ok(a)
             }
-
             ExpressionKind::Sub(_, _) => todo!(),
-
             ExpressionKind::Mul(a, b) => todo!(),
-
             ExpressionKind::Div(_, _) => todo!(),
             ExpressionKind::Neg(_) => todo!(),
             ExpressionKind::Comparison(_, _, _) => todo!(),
@@ -673,6 +623,7 @@ impl TypeChecker {
             ExpressionKind::And(_, _) => todo!(),
             ExpressionKind::Or(_, _) => todo!(),
             ExpressionKind::Not(_) => todo!(),
+
             ExpressionKind::Parenthesis(expr) => self.expression(expr, ctx),
             ExpressionKind::IfExpression {
                 condition,
@@ -744,7 +695,7 @@ impl TypeChecker {
         }?;
         let res_ty = self.find_type(res);
         match res_ty {
-            Type::Blob(_, _) => Ok(self.push_type(res_ty)),
+            // Type::Blob(_, _) => Ok(self.push_type(res_ty)),
             _ => Ok(res),
         }
     }
@@ -812,6 +763,8 @@ impl TypeChecker {
                 Constraint::IndexingGives(b) => self.is_given_by_indexing(span, ctx, a, *b),
                 Constraint::GivenByIndex(b) => self.is_given_by_indexing(span, ctx, *b, a),
 
+                Constraint::ConstantIndex(index) => self.constant_index(span, ctx, a, index),
+
                 Constraint::Field(name, expected_ty) => match self.find_type(a).clone() {
                     Type::Unknown => Ok(()),
                     Type::Blob(blob_name, fields) => match fields.get(name) {
@@ -837,7 +790,7 @@ impl TypeChecker {
                         self.bake_type(a),
                         name
                     ),
-                }
+                },
             }?
         }
         Ok(())
@@ -1149,6 +1102,31 @@ impl TypeChecker {
                     }
                 )
             }
+        }
+    }
+
+    fn constant_index(
+        &mut self,
+        span: Span,
+        ctx: TypeCtx,
+        a: usize,
+        index: i64,
+    ) -> Result<(), Vec<Error>> {
+        match self.find_type(a) {
+            Type::Unknown => todo!(),
+            Type::Ty => todo!(),
+            Type::Void => todo!(),
+            Type::Int => todo!(),
+            Type::Float => todo!(),
+            Type::Bool => todo!(),
+            Type::Str => todo!(),
+            Type::Tuple(_) => todo!(),
+            Type::List(_) => todo!(),
+            Type::Set(_) => todo!(),
+            Type::Dict(_, _) => todo!(),
+            Type::Function(_, _) => todo!(),
+            Type::Blob(_, _) => todo!(),
+            Type::Invalid => todo!(),
         }
     }
 
