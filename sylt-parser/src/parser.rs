@@ -1183,7 +1183,7 @@ impl Display for Type {
                 write!(f, "{{{}:{}}}", k, v)?;
             }
             TypeKind::Generic(name) => {
-                write!(f, "#{}", name.name)?;
+                write!(f, "*{}", name)?;
             }
             TypeKind::Grouping(ty) => {
                 write!(f, "({})", ty)?;
