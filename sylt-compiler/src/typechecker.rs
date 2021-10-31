@@ -94,6 +94,8 @@ enum Constraint {
     Cmp(usize),
     CmpEqu(usize),
 
+    Neg,
+
     Indexes(usize),
     IndexedBy(usize),
     IndexingGives(usize),
@@ -660,10 +662,25 @@ impl TypeChecker {
                 Ok(self.push_type(Type::Bool))
             }
 
-            ExpressionKind::Neg(_) => todo!(),
-            ExpressionKind::And(_, _) => todo!(),
-            ExpressionKind::Or(_, _) => todo!(),
-            ExpressionKind::Not(_) => todo!(),
+            ExpressionKind::Or(a, b) | ExpressionKind::And(a, b) => {
+                let a = self.expression(a, ctx)?;
+                let b = self.expression(b, ctx)?;
+                let boolean = self.push_type(Type::Bool);
+                self.unify(span, ctx, a, boolean)?;
+                self.unify(span, ctx, b, boolean)
+            }
+
+            ExpressionKind::Neg(a) => {
+                let a = self.expression(a, ctx)?;
+                self.add_constraint(a, Constraint::Neg);
+                Ok(a)
+            }
+
+            ExpressionKind::Not(a) => {
+                let a = self.expression(a, ctx)?;
+                let boolean = self.push_type(Type::Bool);
+                self.unify(span, ctx, a, boolean)
+            }
 
             ExpressionKind::Parenthesis(expr) => self.expression(expr, ctx),
             ExpressionKind::IfExpression {
@@ -855,6 +872,23 @@ impl TypeChecker {
                     self.equ(span, ctx, a, *b)?;
                     self.cmp(span, ctx, a, *b)
                 }
+
+                Constraint::Neg => match self.find_type(a) {
+                    Type::Unknown => Ok(()),
+                    Type::Int => Ok(()),
+                    Type::Float => Ok(()),
+                    _ => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::UniOp {
+                                val: self.bake_type(a),
+                                op: "-".to_string(),
+                            }
+                        )
+                    }
+                },
 
                 Constraint::IndexedBy(b) => self.is_indexed_by(span, ctx, a, *b),
                 Constraint::Indexes(b) => self.is_indexed_by(span, ctx, *b, a),
