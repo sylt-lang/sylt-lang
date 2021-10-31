@@ -80,7 +80,7 @@ enum Constraint {
     IndexedBy(usize),
     IndexingGives(usize),
     GivenByIndex(usize),
-    ConstantIndex(i64),
+    ConstantIndex(i64, usize),
 
     Field(String, usize),
 }
@@ -579,18 +579,18 @@ impl TypeChecker {
             AssignableKind::Index(outer, syn_index) => {
                 let outer = self.assignable(outer, ctx)?;
                 let index = self.expression(syn_index, ctx)?;
+                let ret = self.push_type(Type::Unknown);
                 match syn_index.kind {
                     ExpressionKind::Int(index) => {
-                        self.add_constraint(outer, Constraint::ConstantIndex(index));
+                        self.add_constraint(outer, Constraint::ConstantIndex(index, ret));
                     }
                     _ => {
                         self.add_constraint(index, Constraint::Indexes(outer));
                         self.add_constraint(outer, Constraint::IndexedBy(index));
+                        self.add_constraint(outer, Constraint::IndexingGives(ret));
+                        self.add_constraint(ret, Constraint::GivenByIndex(outer));
                     }
                 }
-                let ret = self.push_type(Type::Unknown);
-                self.add_constraint(outer, Constraint::IndexingGives(ret));
-                self.add_constraint(ret, Constraint::GivenByIndex(outer));
 
                 self.check_constraints(span, ctx, outer)?;
                 self.check_constraints(span, ctx, index)?;
@@ -763,7 +763,7 @@ impl TypeChecker {
                 Constraint::IndexingGives(b) => self.is_given_by_indexing(span, ctx, a, *b),
                 Constraint::GivenByIndex(b) => self.is_given_by_indexing(span, ctx, *b, a),
 
-                Constraint::ConstantIndex(index) => self.constant_index(span, ctx, a, index),
+                Constraint::ConstantIndex(index, ret) => self.constant_index(span, ctx, a, *index, *ret),
 
                 Constraint::Field(name, expected_ty) => match self.find_type(a).clone() {
                     Type::Unknown => Ok(()),
@@ -1111,22 +1111,30 @@ impl TypeChecker {
         ctx: TypeCtx,
         a: usize,
         index: i64,
+        ret: usize,
     ) -> Result<(), Vec<Error>> {
         match self.find_type(a) {
-            Type::Unknown => todo!(),
-            Type::Ty => todo!(),
-            Type::Void => todo!(),
-            Type::Int => todo!(),
-            Type::Float => todo!(),
-            Type::Bool => todo!(),
-            Type::Str => todo!(),
-            Type::Tuple(_) => todo!(),
+            Type::Tuple(tys) => match tys.get(index as usize) {
+                Some(ty) => self.unify(span, ctx, *ty, ret).map(|_| ()),
+                None => err_type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::TupleIndexOutOfRange {
+                        got: index,
+                        length: tys.len(),
+                    }
+                ),
+            },
             Type::List(_) => todo!(),
-            Type::Set(_) => todo!(),
             Type::Dict(_, _) => todo!(),
-            Type::Function(_, _) => todo!(),
-            Type::Blob(_, _) => todo!(),
-            Type::Invalid => todo!(),
+            _ => err_type_error!(
+                self,
+                span,
+                ctx,
+                TypeError::Violating(self.bake_type(a)),
+                "This type cannot be indexed"
+            ),
         }
     }
 
