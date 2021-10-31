@@ -9,8 +9,8 @@ use sylt_common::error::{Error, TypeError};
 use sylt_common::{RustFunction, Type as RuntimeType};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
-    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp, Span,
-    Statement, StatementKind, Type as ParserType, TypeKind, VarKind,
+    expression::ComparisonKind, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
+    Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeKind, VarKind,
 };
 
 use crate::{self as compiler, ty::Type, Context, Name as CompilerName};
@@ -57,6 +57,18 @@ macro_rules! type_error {
     };
 }
 
+macro_rules! bin_op {
+    ($self:expr, $span:expr, $ctx:expr, $a:expr, $b:expr, $con:expr) => {{
+        let a = $self.expression(&$a, $ctx)?;
+        let b = $self.expression(&$b, $ctx)?;
+        $self.add_constraint(a, $con(b));
+        $self.add_constraint(b, $con(a));
+        $self.check_constraints($span, $ctx, a)?;
+        $self.check_constraints($span, $ctx, b)?;
+        Ok(a) as Result<usize, Vec<Error>>
+    }};
+}
+
 #[derive(Clone, Debug)]
 struct Variable {
     ident: Identifier,
@@ -75,6 +87,12 @@ struct TypeNode {
 #[derive(Clone, Debug, Hash, PartialOrd, Ord, PartialEq, Eq)]
 enum Constraint {
     Add(usize),
+    Sub(usize),
+    Mul(usize),
+    Div(usize),
+    Equ(usize),
+    Cmp(usize),
+    CmpEqu(usize),
 
     Indexes(usize),
     IndexedBy(usize),
@@ -606,20 +624,34 @@ impl TypeChecker {
         let res = match &expression.kind {
             ExpressionKind::Get(ass) => self.assignable(ass, ctx),
 
-            ExpressionKind::Add(a, b) => {
-                let a = self.expression(&a, ctx)?;
-                let b = self.expression(&b, ctx)?;
-                self.add_constraint(a, Constraint::Add(b));
-                self.add_constraint(b, Constraint::Add(b));
-                self.unify(span, ctx, a, b)?;
-                Ok(a)
+            ExpressionKind::Add(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Add),
+            ExpressionKind::Sub(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Sub),
+            ExpressionKind::Mul(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Mul),
+            ExpressionKind::Div(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Div),
+
+            ExpressionKind::Comparison(a, comp, b) => match comp {
+                ComparisonKind::NotEquals | ComparisonKind::Equals => {
+                    bin_op!(self, span, ctx, a, b, Constraint::Equ)?;
+                    Ok(self.push_type(Type::Bool))
+                }
+                ComparisonKind::Less | ComparisonKind::Greater => {
+                    bin_op!(self, span, ctx, a, b, Constraint::Cmp)?;
+                    Ok(self.push_type(Type::Bool))
+                }
+                ComparisonKind::LessEqual | ComparisonKind::GreaterEqual => {
+                    bin_op!(self, span, ctx, a, b, Constraint::CmpEqu)?;
+                    Ok(self.push_type(Type::Bool))
+                }
+
+                ComparisonKind::In => todo!(),
+            },
+
+            ExpressionKind::AssertEq(a, b) => {
+                bin_op!(self, span, ctx, a, b, Constraint::Equ)?;
+                Ok(self.push_type(Type::Bool))
             }
-            ExpressionKind::Sub(_, _) => todo!(),
-            ExpressionKind::Mul(a, b) => todo!(),
-            ExpressionKind::Div(_, _) => todo!(),
+
             ExpressionKind::Neg(_) => todo!(),
-            ExpressionKind::Comparison(_, _, _) => todo!(),
-            ExpressionKind::AssertEq(_, _) => todo!(),
             ExpressionKind::And(_, _) => todo!(),
             ExpressionKind::Or(_, _) => todo!(),
             ExpressionKind::Not(_) => todo!(),
@@ -669,14 +701,15 @@ impl TypeChecker {
                     _ => unreachable!(),
                 };
 
-                let given_fields: BTreeMap<_, _> = fields.iter()
+                let given_fields: BTreeMap<_, _> = fields
+                    .iter()
                     .map(|(key, expr)| Ok((key.clone(), self.expression(expr, ctx)?)))
                     .collect::<Result<_, Vec<Error>>>()?;
 
                 let mut errors = Vec::new();
                 for (field, field_ty) in given_fields.iter() {
                     match blob_fields.get(field) {
-                        Some(_) => {},
+                        Some(_) => {}
                         None => errors.push(type_error!(
                             self,
                             span,
@@ -721,7 +754,7 @@ impl TypeChecker {
                     self.unify(span, ctx, inner_ty, e)?;
                 }
                 Ok(self.push_type(Type::Set(inner_ty)))
-            },
+            }
 
             ExpressionKind::Dict(exprs) => {
                 let key_ty = self.push_type(Type::Unknown);
@@ -733,7 +766,7 @@ impl TypeChecker {
                     self.unify(span, ctx, value_ty, e)?;
                 }
                 Ok(self.push_type(Type::Dict(key_ty, value_ty)))
-            },
+            }
 
             ExpressionKind::Int(_) => Ok(self.push_type(Type::Int)),
             ExpressionKind::Float(_) => Ok(self.push_type(Type::Float)),
@@ -804,6 +837,15 @@ impl TypeChecker {
             match constraint {
                 // It would be nice to know from where this came from
                 Constraint::Add(b) => self.add(span, ctx, a, *b),
+                Constraint::Sub(b) => self.sub(span, ctx, a, *b),
+                Constraint::Mul(b) => self.mul(span, ctx, a, *b),
+                Constraint::Div(b) => self.div(span, ctx, a, *b),
+                Constraint::Equ(b) => self.equ(span, ctx, a, *b),
+                Constraint::Cmp(b) => self.cmp(span, ctx, a, *b),
+                Constraint::CmpEqu(b) => {
+                    self.equ(span, ctx, a, *b)?;
+                    self.cmp(span, ctx, a, *b)
+                }
 
                 Constraint::IndexedBy(b) => self.is_indexed_by(span, ctx, a, *b),
                 Constraint::Indexes(b) => self.is_indexed_by(span, ctx, *b, a),
@@ -811,7 +853,9 @@ impl TypeChecker {
                 Constraint::IndexingGives(b) => self.is_given_by_indexing(span, ctx, a, *b),
                 Constraint::GivenByIndex(b) => self.is_given_by_indexing(span, ctx, *b, a),
 
-                Constraint::ConstantIndex(index, ret) => self.constant_index(span, ctx, a, *index, *ret),
+                Constraint::ConstantIndex(index, ret) => {
+                    self.constant_index(span, ctx, a, *index, *ret)
+                }
 
                 Constraint::Field(name, expected_ty) => match self.find_type(a).clone() {
                     Type::Unknown => Ok(()),
@@ -1039,17 +1083,9 @@ impl TypeChecker {
 
     fn add(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>> {
         match (self.find_type(a), self.find_type(b)) {
-            // TODO(ed): We can't prove it's not possible, right?
-            // This needs to be reasoned about later some how...
-            (Type::Unknown, Type::Unknown) => Ok(()),
+            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
 
-            // Make a guess at the type
-            (Type::Unknown, _) => Ok(()),
-            (_, Type::Unknown) => Ok(()),
-
-            (Type::Float, Type::Float) => Ok(()),
-            (Type::Int, Type::Int) => Ok(()),
-            (Type::Str, Type::Str) => Ok(()),
+            (Type::Float, Type::Float) | (Type::Int, Type::Int) | (Type::Str, Type::Str) => Ok(()),
 
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
                 for (a, b) in a.iter().zip(b.iter()) {
@@ -1067,6 +1103,157 @@ impl TypeChecker {
                         lhs: self.bake_type(a),
                         rhs: self.bake_type(b),
                         op: "+".to_string(),
+                    }
+                )
+            }
+        }
+    }
+
+    fn sub(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>> {
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
+
+            (Type::Float, Type::Float) | (Type::Int, Type::Int) => Ok(()),
+
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
+                for (a, b) in a.iter().zip(b.iter()) {
+                    self.sub(span, ctx, *a, *b)?;
+                }
+                Ok(())
+            }
+
+            _ => {
+                return err_type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::BinOp {
+                        lhs: self.bake_type(a),
+                        rhs: self.bake_type(b),
+                        op: "-".to_string(),
+                    }
+                )
+            }
+        }
+    }
+
+    fn mul(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>> {
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
+
+            (Type::Float, Type::Float) | (Type::Int, Type::Int) => Ok(()),
+
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
+                for (a, b) in a.iter().zip(b.iter()) {
+                    self.mul(span, ctx, *a, *b)?;
+                }
+                Ok(())
+            }
+
+            // TODO(ed): This isn't actually implemented in the runtime.
+            (Type::Tuple(a), Type::Float) | (Type::Tuple(a), Type::Int) => {
+                for a in a.iter() {
+                    self.mul(span, ctx, *a, b)?;
+                }
+                Ok(())
+            }
+            (Type::Float, Type::Tuple(b)) | (Type::Int, Type::Tuple(b)) => {
+                for b in b.iter() {
+                    self.mul(span, ctx, a, *b)?;
+                }
+                Ok(())
+            }
+
+            _ => {
+                return err_type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::BinOp {
+                        lhs: self.bake_type(a),
+                        rhs: self.bake_type(b),
+                        op: "*".to_string(),
+                    }
+                )
+            }
+        }
+    }
+
+    fn div(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>> {
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::Unknown, _) => Ok(()),
+            (_, Type::Unknown) => Ok(()),
+
+            (Type::Float, Type::Float) => Ok(()),
+            (Type::Int, Type::Int) => Ok(()),
+
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
+                for (a, b) in a.iter().zip(b.iter()) {
+                    self.div(span, ctx, *a, *b)?;
+                }
+                Ok(())
+            }
+
+            // TODO(ed): This isn't actually implemented in the runtime.
+            (Type::Tuple(a), Type::Float) | (Type::Tuple(a), Type::Int) => {
+                for a in a.iter() {
+                    self.div(span, ctx, *a, b)?;
+                }
+                Ok(())
+            }
+            (Type::Float, Type::Tuple(b)) | (Type::Int, Type::Tuple(b)) => {
+                for b in b.iter() {
+                    self.div(span, ctx, a, *b)?;
+                }
+                Ok(())
+            }
+
+            _ => {
+                return err_type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::BinOp {
+                        lhs: self.bake_type(a),
+                        rhs: self.bake_type(b),
+                        op: "/".to_string(),
+                    }
+                )
+            }
+        }
+    }
+
+    fn equ(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>> {
+        // Equal types all support equality!
+        self.unify(span, ctx, a, b).map(|_| ())
+    }
+
+    fn cmp(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>> {
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
+
+            (Type::Float, Type::Float)
+            | (Type::Int, Type::Int)
+            | (Type::Int, Type::Float)
+            | (Type::Float, Type::Int) => Ok(()),
+
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
+                for (a, b) in a.iter().zip(b.iter()) {
+                    self.cmp(span, ctx, *a, *b)?;
+                }
+                Ok(())
+            }
+
+            // TODO(ed): Maybe sets?
+            _ => {
+                return err_type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::BinOp {
+                        lhs: self.bake_type(a),
+                        rhs: self.bake_type(b),
+                        op: "<".to_string(),
                     }
                 )
             }
@@ -1180,7 +1367,7 @@ impl TypeChecker {
                 self.unify(span, ctx, key_ty, int_ty)?;
                 self.unify(span, ctx, value_ty, ret)?;
                 Ok(())
-            },
+            }
             _ => err_type_error!(
                 self,
                 span,
