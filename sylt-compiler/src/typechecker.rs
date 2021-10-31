@@ -814,21 +814,19 @@ impl TypeChecker {
 
                 Constraint::Field(name, expected_ty) => match self.find_type(a).clone() {
                     Type::Unknown => Ok(()),
-                    Type::Blob(blob_name, fields) => {
-                        match fields.get(name) {
-                            Some(actual_ty) => {
-                                self.unify(span, ctx, *expected_ty, *actual_ty).map(|_| ())
-                            },
-                            None => err_type_error!(
-                                self,
-                                span,
-                                ctx,
-                                TypeError::MissingField {
-                                    blob: blob_name.clone(),
-                                    field: name.clone(),
-                                }
-                            ),
+                    Type::Blob(blob_name, fields) => match fields.get(name) {
+                        Some(actual_ty) => {
+                            self.unify(span, ctx, *expected_ty, *actual_ty).map(|_| ())
                         }
+                        None => err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::MissingField {
+                                blob: blob_name.clone(),
+                                field: name.clone(),
+                            }
+                        ),
                     },
                     _ => err_type_error!(
                         self,
