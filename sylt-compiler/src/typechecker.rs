@@ -402,6 +402,17 @@ impl TypeChecker {
                 ty,
                 value,
             } => {
+                let pre_ty = self.push_type(Type::Unknown);
+                let var = Variable {
+                    ident: ident.clone(),
+                    ty: pre_ty,
+                    kind: *kind,
+                };
+                let is_function = matches!(value.kind, ExpressionKind::Function { .. });
+                if is_function {
+                    self.stack.push(var);
+                }
+
                 let expression_ty = self.expression(value, ctx)?;
                 let defined_ty = self.resolve_type(&ty, ctx)?;
                 let expression_ty = if matches!(self.find_type(defined_ty), Type::Unknown) {
@@ -417,7 +428,9 @@ impl TypeChecker {
                     ty: defined_ty,
                     kind: *kind,
                 };
-                self.stack.push(var);
+                if !is_function {
+                    self.stack.push(var);
+                }
                 Ok(None)
             }
 
@@ -473,6 +486,20 @@ impl TypeChecker {
                 ty,
                 value,
             } => {
+                let pre_ty = self.push_type(Type::Unknown);
+                let var = Variable {
+                    ident: ident.clone(),
+                    ty: pre_ty,
+                    kind: *kind,
+                };
+                let is_function = matches!(value.kind, ExpressionKind::Function { .. });
+                if is_function {
+                    self.globals.insert(
+                        (ctx.namespace, ident.name.clone()),
+                        Name::Global(var.clone()),
+                    );
+                }
+
                 let expression_ty = self.expression(value, ctx)?;
                 let defined_ty = self.resolve_type(&ty, ctx)?;
                 let expression_ty = if matches!(self.find_type(defined_ty), Type::Unknown) {
@@ -481,15 +508,15 @@ impl TypeChecker {
                 } else {
                     expression_ty
                 };
+                self.unify(span, ctx, pre_ty, defined_ty)?;
                 self.unify(span, ctx, expression_ty, defined_ty)?;
 
-                let var = Variable {
-                    ident: ident.clone(),
-                    ty: defined_ty,
-                    kind: *kind,
-                };
-                self.globals
-                    .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
+                if !is_function {
+                    self.globals.insert(
+                        (ctx.namespace, ident.name.clone()),
+                        Name::Global(var.clone()),
+                    );
+                }
             }
 
             StatementKind::ExternalDefinition { ident, kind, ty } => {
@@ -552,38 +579,53 @@ impl TypeChecker {
 
                 let f = self.assignable(f, ctx)?;
                 let f_copy = self.copy(f);
-                if let Type::Function(params, ret) = self.find_type(f_copy) {
-                    if args.len() != params.len() {
+                match self.find_type(f_copy) {
+                    Type::Function(params, ret) => {
+                        if args.len() != params.len() {
+                            return err_type_error!(
+                                self,
+                                span,
+                                ctx,
+                                TypeError::WrongArity {
+                                    got: args.len(),
+                                    expected: params.len()
+                                }
+                            );
+                        }
+                        // TODO(ed): Annotate the errors?
+                        for (a, p) in args.iter().zip(params.iter()) {
+                            let a = self.expression(a, ctx)?;
+                            self.unify(span, ctx, *p, a)?;
+                            let a = self.find(a);
+                            if dbg {
+                                self.print_type(a);
+                                self.print_type(*p);
+                            }
+                        }
+
+                        Ok(ret)
+                    }
+                    // This means we're recursing, so we deduce the type of the actual-f.
+                    // We want type-information to flow back.
+                    Type::Unknown => {
+                        let args = args
+                            .iter()
+                            .map(|a| self.expression(a, ctx))
+                            .collect::<Result<_, _>>()?;
+                        let ret = self.push_type(Type::Unknown);
+                        let inner_f = self.push_type(Type::Function(args, ret));
+                        self.unify(span, ctx, f, inner_f)?;
+                        Ok(ret)
+                    }
+                    _ => {
                         return err_type_error!(
                             self,
                             span,
                             ctx,
-                            TypeError::WrongArity {
-                                got: args.len(),
-                                expected: params.len()
-                            }
+                            TypeError::Violating(self.bake_type(f_copy)),
+                            "Not callable"
                         );
                     }
-                    // TODO(ed): Annotate the errors?
-                    for (a, p) in args.iter().zip(params.iter()) {
-                        let a = self.expression(a, ctx)?;
-                        self.unify(span, ctx, *p, a)?;
-                        let a = self.find(a);
-                        if dbg {
-                            self.print_type(a);
-                            self.print_type(*p);
-                        }
-                    }
-
-                    Ok(ret)
-                } else {
-                    return err_type_error!(
-                        self,
-                        span,
-                        ctx,
-                        TypeError::Violating(self.bake_type(f_copy)),
-                        "Not callable"
-                    );
                 }
             }
 
