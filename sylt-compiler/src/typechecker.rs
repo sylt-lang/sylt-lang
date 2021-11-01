@@ -791,6 +791,8 @@ impl TypeChecker {
                     panic!();
                 }
 
+                self.stack.truncate(ss);
+
                 Ok(self.push_type(Type::Function(args, ret)))
             }
 
