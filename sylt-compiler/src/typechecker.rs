@@ -57,6 +57,15 @@ macro_rules! type_error {
     };
 }
 
+macro_rules! todo_error {
+    () => {
+        TypeError::ToDo {
+            line: line!(),
+            file: file!().to_string(),
+        }
+    };
+}
+
 macro_rules! bin_op {
     ($self:expr, $span:expr, $ctx:expr, $a:expr, $b:expr, $con:expr) => {{
         let a = $self.expression(&$a, $ctx)?;
@@ -169,19 +178,33 @@ impl TypeChecker {
         ty_id
     }
 
-    fn namespace_chain(&self, assignable: &Assignable, ctx: TypeCtx) -> Option<TypeCtx> {
+    fn namespace_chain(
+        &self,
+        assignable: &Assignable,
+        ctx: TypeCtx,
+    ) -> Result<TypeCtx, Vec<Error>> {
         match &assignable.kind {
             AssignableKind::Read(ident) => {
                 if let Some(var) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
-                    None
+                    err_type_error! {
+                        self,
+                        Span::zero(),
+                        ctx,
+                        todo_error!()
+                    }
                 } else {
                     match self
                         .globals
                         .get(&(ctx.namespace, ident.name.clone()))
                         .cloned()
                     {
-                        Some(Name::Namespace(namespace)) => Some(TypeCtx { namespace, ..ctx }),
-                        _ => None,
+                        Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
+                        _ => err_type_error! {
+                            self,
+                            Span::zero(),
+                            ctx,
+                            todo_error!()
+                        },
                     }
                 }
             }
@@ -193,15 +216,25 @@ impl TypeChecker {
                     .get(&(ctx.namespace, ident.name.clone()))
                     .cloned()
                 {
-                    Some(Name::Namespace(namespace)) => Some(TypeCtx { namespace, ..ctx }),
-                    _ => None,
+                    Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
+                    _ => err_type_error! {
+                        self,
+                        Span::zero(),
+                        ctx,
+                        todo_error!()
+                    },
                 }
             }
 
             AssignableKind::Call(..)
             | AssignableKind::ArrowCall(..)
             | AssignableKind::Index(..)
-            | AssignableKind::Expression(..) => None,
+            | AssignableKind::Expression(..) => err_type_error! {
+                self,
+                Span::zero(),
+                ctx,
+                todo_error!()
+            },
         }
     }
 
@@ -237,19 +270,7 @@ impl TypeChecker {
             },
 
             AssignableKind::Access(ass, ident) => {
-                let ctx = match self.namespace_chain(ass, ctx) {
-                    Some(ctx) => ctx,
-                    None => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            ctx,
-                            TypeError::Exotic,
-                            "Cannot access something other than a namespace in a type"
-                        )
-                    }
-                };
-
+                let ctx = self.namespace_chain(ass, ctx)?;
                 match self
                     .globals
                     .get(&(ctx.namespace, ident.name.clone()))
@@ -663,14 +684,14 @@ impl TypeChecker {
             }
 
             AssignableKind::Access(outer, ident) => match self.namespace_chain(outer, ctx) {
-                Some(ctx) => self.assignable(
+                Ok(ctx) => self.assignable(
                     &Assignable {
                         span,
                         kind: AssignableKind::Read(ident.clone()),
                     },
                     ctx,
                 ),
-                None => {
+                Err(_) => {
                     let outer = self.assignable(outer, ctx)?;
                     let ret = self.push_type(Type::Unknown);
                     self.add_constraint(outer, Constraint::Field(ident.name.clone(), ret));
