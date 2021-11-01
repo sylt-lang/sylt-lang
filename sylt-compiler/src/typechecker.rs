@@ -16,6 +16,8 @@ use sylt_parser::{
 use crate::{self as compiler, ty::Type, Context, Name as CompilerName};
 use std::collections::{BTreeMap, BTreeSet};
 
+type TypeResult<T> = Result<T, Vec<Error>>;
+
 macro_rules! type_error_if_invalid {
     ($self:expr, $ty:expr, $span:expr, $ctx: expr, $kind:expr, $( $msg:expr ),+ ) => {
         if matches!($ty, Type::Invalid) {
@@ -74,7 +76,7 @@ macro_rules! bin_op {
         $self.add_constraint(b, $con(a));
         $self.check_constraints($span, $ctx, a)?;
         $self.check_constraints($span, $ctx, b)?;
-        Ok(a) as Result<usize, Vec<Error>>
+        Ok(a) as TypeResult<usize>
     }};
 }
 
@@ -178,11 +180,7 @@ impl TypeChecker {
         ty_id
     }
 
-    fn namespace_chain(
-        &self,
-        assignable: &Assignable,
-        ctx: TypeCtx,
-    ) -> Result<TypeCtx, Vec<Error>> {
+    fn namespace_chain(&self, assignable: &Assignable, ctx: TypeCtx) -> TypeResult<TypeCtx> {
         match &assignable.kind {
             AssignableKind::Read(ident) => {
                 if let Some(var) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
@@ -243,7 +241,7 @@ impl TypeChecker {
         span: Span,
         ctx: TypeCtx,
         assignable: &Assignable,
-    ) -> Result<usize, Vec<Error>> {
+    ) -> TypeResult<usize> {
         match &assignable.kind {
             AssignableKind::Read(ident) => match self
                 .globals
@@ -289,12 +287,7 @@ impl TypeChecker {
         }
     }
 
-    fn resolve_type(
-        &mut self,
-        span: Span,
-        ctx: TypeCtx,
-        ty: &ParserType,
-    ) -> Result<usize, Vec<Error>> {
+    fn resolve_type(&mut self, span: Span, ctx: TypeCtx, ty: &ParserType) -> TypeResult<usize> {
         self.inner_resolve_type(span, ctx, ty, &mut HashMap::new())
     }
 
@@ -304,7 +297,7 @@ impl TypeChecker {
         ctx: TypeCtx,
         ty: &ParserType,
         seen: &mut HashMap<String, usize>,
-    ) -> Result<usize, Vec<Error>> {
+    ) -> TypeResult<usize> {
         use TypeKind::*;
         let ty = match &ty.kind {
             Implied => Type::Unknown,
@@ -327,7 +320,7 @@ impl TypeChecker {
                 let params = params
                     .iter()
                     .map(|t| self.inner_resolve_type(span, ctx, t, seen))
-                    .collect::<Result<Vec<usize>, _>>()?;
+                    .collect::<TypeResult<Vec<_>>>()?;
                 let ret = self.inner_resolve_type(span, ctx, ret, seen)?;
                 Type::Function(params, ret)
             }
@@ -336,7 +329,7 @@ impl TypeChecker {
                 fields
                     .iter()
                     .map(|t| self.inner_resolve_type(span, ctx, t, seen))
-                    .collect::<Result<Vec<usize>, _>>()?,
+                    .collect::<TypeResult<Vec<_>>>()?,
             ),
 
             List(kind) => Type::List(self.inner_resolve_type(span, ctx, kind, seen)?),
@@ -364,11 +357,7 @@ impl TypeChecker {
         Ok(self.push_type(ty))
     }
 
-    fn statement(
-        &mut self,
-        statement: &Statement,
-        ctx: TypeCtx,
-    ) -> Result<Option<usize>, Vec<Error>> {
+    fn statement(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<Option<usize>> {
         let span = statement.span;
         match &statement.kind {
             StatementKind::Block { statements } => {
@@ -501,7 +490,7 @@ impl TypeChecker {
         }
     }
 
-    fn outer_statement(&mut self, statement: &Statement, ctx: TypeCtx) -> Result<(), Vec<Error>> {
+    fn outer_statement(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<()> {
         let span = statement.span;
         match &statement.kind {
             StatementKind::Use { name, file, .. } => {
@@ -596,7 +585,7 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn assignable(&mut self, assignable: &Assignable, ctx: TypeCtx) -> Result<usize, Vec<Error>> {
+    fn assignable(&mut self, assignable: &Assignable, ctx: TypeCtx) -> TypeResult<usize> {
         let span = assignable.span;
         match &assignable.kind {
             AssignableKind::Read(ident) => {
@@ -655,7 +644,7 @@ impl TypeChecker {
                         let args = args
                             .iter()
                             .map(|a| self.expression(a, ctx))
-                            .collect::<Result<_, _>>()?;
+                            .collect::<TypeResult<_>>()?;
                         let ret = self.push_type(Type::Unknown);
                         let inner_f = self.push_type(Type::Function(args, ret));
                         self.unify(span, ctx, f, inner_f)?;
@@ -725,7 +714,7 @@ impl TypeChecker {
         }
     }
 
-    fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> Result<usize, Vec<Error>> {
+    fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> TypeResult<usize> {
         let span = expression.span;
         let res = match &expression.kind {
             ExpressionKind::Get(ass) => self.assignable(ass, ctx),
@@ -827,7 +816,7 @@ impl TypeChecker {
                 let given_fields: BTreeMap<_, _> = fields
                     .iter()
                     .map(|(key, expr)| Ok((key.clone(), self.expression(expr, ctx)?)))
-                    .collect::<Result<_, Vec<Error>>>()?;
+                    .collect::<TypeResult<_>>()?;
 
                 let mut errors = Vec::new();
                 for (field, field_ty) in given_fields.iter() {
@@ -954,7 +943,7 @@ impl TypeChecker {
     }
 
     // This span is wierd - is it weird?
-    fn check_constraints(&mut self, span: Span, ctx: TypeCtx, a: usize) -> Result<(), Vec<Error>> {
+    fn check_constraints(&mut self, span: Span, ctx: TypeCtx, a: usize) -> TypeResult<()> {
         let a = self.find(a);
         for constraint in self.types[a].constraints.clone().iter() {
             match constraint {
@@ -1056,7 +1045,7 @@ impl TypeChecker {
             .collect();
     }
 
-    fn unify(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<usize, Vec<Error>> {
+    fn unify(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<usize> {
         let a = self.find(a);
         let b = self.find(b);
 
@@ -1221,7 +1210,7 @@ impl TypeChecker {
         self.types[a].constraints.insert(constraint);
     }
 
-    fn add(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>> {
+    fn add(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
 
@@ -1249,7 +1238,7 @@ impl TypeChecker {
         }
     }
 
-    fn sub(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>> {
+    fn sub(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
 
@@ -1277,7 +1266,7 @@ impl TypeChecker {
         }
     }
 
-    fn mul(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>> {
+    fn mul(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
 
@@ -1319,7 +1308,7 @@ impl TypeChecker {
         }
     }
 
-    fn div(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>> {
+    fn div(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) => Ok(()),
             (_, Type::Unknown) => Ok(()),
@@ -1363,12 +1352,12 @@ impl TypeChecker {
         }
     }
 
-    fn equ(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>> {
+    fn equ(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
         // Equal types all support equality!
         self.unify(span, ctx, a, b).map(|_| ())
     }
 
-    fn cmp(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> Result<(), Vec<Error>> {
+    fn cmp(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
 
@@ -1400,13 +1389,7 @@ impl TypeChecker {
         }
     }
 
-    fn is_indexed_by(
-        &mut self,
-        span: Span,
-        ctx: TypeCtx,
-        a: usize,
-        b: usize,
-    ) -> Result<(), Vec<Error>> {
+    fn is_indexed_by(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) => Ok(()),
             (_, Type::Unknown) => Ok(()),
@@ -1440,7 +1423,7 @@ impl TypeChecker {
         ctx: TypeCtx,
         a: usize,
         b: usize,
-    ) -> Result<(), Vec<Error>> {
+    ) -> TypeResult<()> {
         match self.find_type(a) {
             Type::Unknown => Ok(()),
 
@@ -1487,7 +1470,7 @@ impl TypeChecker {
         a: usize,
         index: i64,
         ret: usize,
-    ) -> Result<(), Vec<Error>> {
+    ) -> TypeResult<()> {
         match self.find_type(a) {
             Type::Tuple(tys) => match tys.get(index as usize) {
                 Some(ty) => self.unify(span, ctx, *ty, ret).map(|_| ()),
@@ -1518,7 +1501,7 @@ impl TypeChecker {
         }
     }
 
-    fn solve(&mut self, statements: &Vec<(&Statement, usize)>) -> Result<(), Vec<Error>> {
+    fn solve(&mut self, statements: &Vec<(&Statement, usize)>) -> TypeResult<()> {
         // Initialize the namespaces first.
         for (statement, namespace) in statements.iter() {
             if matches!(statement.kind, StatementKind::Use { .. }) {
@@ -1592,6 +1575,6 @@ pub(crate) fn solve(
     statements: &Vec<(&Statement, usize)>,
     namespace_to_file: &HashMap<usize, PathBuf>,
     functions: &HashMap<String, (usize, RustFunction, ParserType)>,
-) -> Result<(), Vec<Error>> {
+) -> TypeResult<()> {
     TypeChecker::new(namespace_to_file, functions).solve(statements)
 }
