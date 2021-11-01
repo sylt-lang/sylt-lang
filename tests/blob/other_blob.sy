@@ -1,0 +1,11 @@
+use _other_function_other
+
+start :: fn do
+    _other_function_other.a.a <=> 1
+    _other_function_other.a.a = 2
+    _other_function_other.a.a <=> 2
+
+    _other_function_other.b <=> 1
+    _other_function_other.b = 2
+    _other_function_other.b <=> 2
+end
