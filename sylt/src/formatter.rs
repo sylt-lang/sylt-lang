@@ -138,6 +138,11 @@ fn simplify_type(ty: Type) -> Type {
     }
 }
 
+fn write_constraint<W: Writer>(dest: &mut W, indent: u32, ty: TypeConstraint) -> fmt::Result {
+    // TODO hereh
+    asölkdjaslökfjalökds
+}
+
 fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
     let ty = simplify_type(ty);
     match ty.kind {
@@ -151,6 +156,11 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
         }
         TypeKind::Fn { constraints, params, ret } => {
             write!(dest, "fn")?;
+            if !constraints.is_empty() {
+                write!(dest, "<")?;
+                write_comma_separated!(dest, indent, write_constraint, constraints);
+                write!(dest, ">")?;
+            }
             if !params.is_empty() {
                 write!(dest, " ")?;
                 write_comma_separated!(dest, indent, write_type, params);
