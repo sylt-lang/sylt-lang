@@ -1106,10 +1106,10 @@ mod test {
         test!(parse_type, type_question: "int?" => Union(_, _));
         test!(parse_type, type_union_and_question: "int | void | str?" => Union(_, _));
 
-        test!(parse_type, type_fn_no_params: "fn ->" => Fn(_, _));
-        test!(parse_type, type_fn_one_param: "fn int? -> bool" => Fn(_, _));
-        test!(parse_type, type_fn_two_params: "fn int | void, int? -> str?" => Fn(_, _));
-        test!(parse_type, type_fn_only_ret: "fn -> bool?" => Fn(_, _));
+        test!(parse_type, type_fn_no_params: "fn ->" => Fn{ .. });
+        test!(parse_type, type_fn_one_param: "fn int? -> bool" => Fn{ .. });
+        test!(parse_type, type_fn_two_params: "fn int | void, int? -> str?" => Fn{ .. });
+        test!(parse_type, type_fn_only_ret: "fn -> bool?" => Fn{ .. });
 
         test!(parse_type, type_tuple_zero: "()" => Tuple(_));
         test!(parse_type, type_tuple_one: "(int,)" => Tuple(_));
