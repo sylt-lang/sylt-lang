@@ -112,8 +112,13 @@ fn simplify_type(ty: Type) -> Type {
             }).unwrap() // We always get one type
         }
 
-        TypeKind::Fn(args, ret) =>
-            Type { kind: TypeKind::Fn(args.into_iter().map(simplify_type).collect(), Box::new(simplify_type(*ret))), ..ty },
+        TypeKind::Fn{ constraints, params, ret } =>
+            Type { kind: TypeKind::Fn {
+                constraints: constraints.clone(),
+                params: params.into_iter().map(simplify_type).collect(),
+                ret: Box::new(simplify_type(*ret))
+            }, ..ty },
+
         TypeKind::Tuple(tys) =>
             Type { kind: TypeKind::Tuple(tys.into_iter().map(simplify_type).collect()), ..ty },
         TypeKind::List(a) =>
@@ -144,7 +149,7 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
             write!(dest, " | ")?;
             write_type(dest, indent, *rest)
         }
-        TypeKind::Fn(params, ret) => {
+        TypeKind::Fn { constraints, params, ret } => {
             write!(dest, "fn")?;
             if !params.is_empty() {
                 write!(dest, " ")?;

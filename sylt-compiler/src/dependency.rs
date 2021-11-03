@@ -103,7 +103,7 @@ fn type_dependencies(ctx: &mut Context, ty: &ParserType) -> BTreeSet<Name> {
         Grouping(ty) => type_dependencies(ctx, ty),
         UserDefined(assignable) => assignable_dependencies(ctx, &assignable),
 
-        Fn(params, ret) =>
+        Fn{ params, ret, .. } =>
             params.iter().chain([ret.as_ref()]).map(|t| type_dependencies(ctx, t)).flatten().collect(),
 
         Tuple(fields) =>
