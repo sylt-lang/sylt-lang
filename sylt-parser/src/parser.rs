@@ -577,7 +577,6 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             } else {
                 ctx
             };
-            eprintln!("{:?}", constraints);
 
             let mut params = Vec::new();
             // There might be multiple parameters.

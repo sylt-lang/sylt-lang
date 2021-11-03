@@ -3,10 +3,7 @@ use std::path::PathBuf;
 use sylt_common::{Error, Type as RuntimeType};
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::statement::NameIdentifier;
-use sylt_parser::{
-    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op, Statement,
-    StatementKind, Type, TypeKind, VarKind,
-};
+use sylt_parser::{Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op, Statement, StatementKind, Type, TypeConstraint, TypeKind, VarKind};
 
 use crate::Args;
 
@@ -138,9 +135,21 @@ fn simplify_type(ty: Type) -> Type {
     }
 }
 
-fn write_constraint<W: Writer>(dest: &mut W, indent: u32, ty: TypeConstraint) -> fmt::Result {
-    // TODO hereh
-    asölkdjaslökfjalökds
+fn write_constraint<W: Write>(dest: &mut W, _indent: u32, constraint: (String, Vec<TypeConstraint>)) -> fmt::Result {
+    let (name, constraints) = constraint;
+    write!(dest, "{}: ", name)?;
+    for (i, constraint) in constraints.iter().enumerate() {
+        if i != 0 {
+            write!(dest, " + ")?;
+        }
+
+        write!(dest, "{}", constraint.name.name)?;
+        for arg in constraint.args.iter() {
+            write!(dest, " {}", arg.name)?;
+        }
+    }
+
+    Ok(())
 }
 
 fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
