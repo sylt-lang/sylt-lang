@@ -114,6 +114,8 @@ enum Constraint {
     ConstantIndex(i64, usize),
 
     Field(String, usize),
+
+    Num,
 }
 
 struct TypeChecker {
@@ -326,6 +328,21 @@ impl TypeChecker {
                     .map(|t| self.inner_resolve_type(span, ctx, t, seen))
                     .collect::<TypeResult<Vec<_>>>()?;
                 let ret = self.inner_resolve_type(span, ctx, ret, seen)?;
+                for (var, constraints) in constraints.iter() {
+                    let var = match seen.get(var) {
+                        Some(var) => *var,
+                        None => return err_type_error!(self, span, ctx, todo_error!()),
+                    };
+
+                    for constraint in constraints.iter() {
+                        match constraint.name.name.as_str() {
+                            "Num" => self.add_constraint(var, Constraint::Num),
+                            "Container" => {}
+                            "SameContainer" => {}
+                            _ => return err_type_error!(self, span, ctx, todo_error!()),
+                        }
+                    }
+                }
                 Type::Function(params, ret)
             }
 
@@ -458,6 +475,7 @@ impl TypeChecker {
                 } else {
                     expression_ty
                 };
+
                 self.unify(span, ctx, expression_ty, defined_ty)?;
 
                 let var = Variable {
@@ -1016,6 +1034,17 @@ impl TypeChecker {
                         name
                     ),
                 },
+
+                Constraint::Num => match self.find_type(a) {
+                    Type::Unknown | Type::Float | Type::Int => Ok(()),
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Violating(self.bake_type(a)),
+                        "The Num constraint requires int or float"
+                    ),
+                },
             }?
         }
         Ok(())
@@ -1088,6 +1117,8 @@ impl TypeChecker {
                 }
 
                 (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
+                    // TODO: Make sure there is one place this is checked.
+                    assert_eq!(a_args.len(), b_args.len());
                     for (a, b) in a_args.iter().zip(b_args.iter()) {
                         self.unify(span, ctx, *a, *b)?;
                     }
@@ -1134,7 +1165,6 @@ impl TypeChecker {
         self.union(a, b);
 
         self.check_constraints(span, ctx, a)?;
-        self.check_constraints(span, ctx, b)?;
 
         Ok(a)
     }
@@ -1158,6 +1188,8 @@ impl TypeChecker {
     }
 
     fn inner_copy(&mut self, old_ty: usize, seen: &mut HashMap<usize, usize>) -> usize {
+        let old_ty = self.find(old_ty);
+
         if let Some(res) = seen.get(&old_ty) {
             return *res;
         }
