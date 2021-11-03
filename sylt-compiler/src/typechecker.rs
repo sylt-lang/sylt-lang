@@ -930,6 +930,20 @@ impl TypeChecker {
         root
     }
 
+    fn find_node(&mut self, a: usize) -> &TypeNode {
+        let ta = self.find(a);
+        &self.types[ta]
+    }
+
+    fn find_node_mut(&mut self, a: usize) -> &mut TypeNode {
+        let ta = self.find(a);
+        &mut self.types[ta]
+    }
+
+    fn find_type(&mut self, a: usize) -> Type {
+        self.find_node(a).ty.clone()
+    }
+
     fn bake_type(&mut self, a: usize) -> RuntimeType {
         match self.find_type(a) {
             Type::Unknown => RuntimeType::Unknown,
@@ -966,8 +980,7 @@ impl TypeChecker {
 
     // This span is wierd - is it weird?
     fn check_constraints(&mut self, span: Span, ctx: TypeCtx, a: usize) -> TypeResult<()> {
-        let a = self.find(a);
-        for constraint in self.types[a].constraints.clone().iter() {
+        for constraint in self.find_node(a).constraints.clone().iter() {
             match constraint {
                 // It would be nice to know from where this came from
                 Constraint::Add(b) => self.add(span, ctx, a, *b),
@@ -1050,11 +1063,6 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn find_type(&mut self, a: usize) -> Type {
-        let ta = self.find(a);
-        self.types[ta].ty.clone()
-    }
-
     fn union(&mut self, a: usize, b: usize) {
         let a = self.find(a);
         let b = self.find(b);
@@ -1087,9 +1095,9 @@ impl TypeChecker {
         }
 
         match (self.find_type(a), self.find_type(b)) {
-            (_, Type::Unknown) => self.types[b].ty = self.find_type(a),
+            (_, Type::Unknown) => self.find_node_mut(b).ty = self.find_type(a),
 
-            (Type::Unknown, _) => self.types[a].ty = self.find_type(b),
+            (Type::Unknown, _) => self.find_node_mut(a).ty = self.find_type(b),
 
             _ => match (self.find_type(a), self.find_type(b)) {
                 (Type::Ty, Type::Ty) => {}
@@ -1143,8 +1151,8 @@ impl TypeChecker {
                     let c = self.push_type(Type::Unknown);
                     self.union(a, c);
                     self.union(b, c);
-                    let c = self.find(c);
-                    self.types[c].ty = Type::Blob(format!("{} & {}", a_blob, b_blob), c_fields);
+                    self.find_node_mut(c).ty =
+                        Type::Blob(format!("{} & {}", a_blob, b_blob), c_fields);
                 }
 
                 _ => {
@@ -1182,7 +1190,7 @@ impl TypeChecker {
             "{}: {:?} {:?} = {:?}",
             ty,
             self.bake_type(ty),
-            self.types[ty].constraints,
+            self.find_node(ty).constraints,
             same
         );
     }
@@ -1194,11 +1202,11 @@ impl TypeChecker {
             return *res;
         }
         let new_ty = self.push_type(Type::Unknown);
-        self.types[new_ty].constraints = self.types[old_ty].constraints.clone();
+        self.find_node_mut(new_ty).constraints = self.find_node(old_ty).constraints.clone();
         seen.insert(old_ty, new_ty);
 
         let ty = self.find_type(old_ty);
-        self.types[new_ty].ty = match ty {
+        self.find_node_mut(new_ty).ty = match ty {
             Type::Invalid
             | Type::Unknown
             | Type::Ty
@@ -1242,8 +1250,7 @@ impl TypeChecker {
     }
 
     fn add_constraint(&mut self, a: usize, constraint: Constraint) {
-        let a = self.find(a);
-        self.types[a].constraints.insert(constraint);
+        self.find_node_mut(a).constraints.insert(constraint);
     }
 
     fn add(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
