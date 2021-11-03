@@ -307,6 +307,22 @@ impl Compiler {
         self.frames.push(Frame::new(name, start_span));
         let num_constants = self.extract_globals(&tree);
 
+        let num_functions = functions.len();
+        self.functions = functions
+            .to_vec()
+            .into_iter()
+            .enumerate()
+            .map(|(i, (s, f, sig))| (s.clone(), (i, f, parse_signature(&s, &sig))))
+            .collect();
+        assert_eq!(
+            num_functions,
+            self.functions.len(),
+            "There are {} names and {} extern functions - some extern functions share name",
+            self.functions.len(),
+            num_functions
+        );
+
+
         let statements = match dependency::initialization_order(&tree, &self) {
             Ok(statements) => statements,
             Err(statements) => {
