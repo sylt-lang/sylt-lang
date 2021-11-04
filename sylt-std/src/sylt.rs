@@ -79,7 +79,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     reduce,
     ? "Reduce the list to a single element, returns 'nil' if the input list is empty",
-    -> "fn [*ITEM], fn *ITEM, *ITEM -> *OUT -> *OUT | nil",
+    -> "fn [*ITEM], (fn *ITEM, *ITEM -> *OUT) -> *OUT", // The return is a lie!
     [List(list), callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
@@ -183,8 +183,11 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     len,
     ? "Gives the length of list",
-    -> "fn [*ITEM] | {*KEY: *VALUE} -> int",
+    -> "fn<C: Container> *C -> int",
     [List(ls)] => {
+        Ok(Int(ls.borrow().len() as i64))
+    },
+    [Set(ls)] => {
         Ok(Int(ls.borrow().len() as i64))
     },
     [Dict(ls)] => {
@@ -196,7 +199,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     clear,
     ? "Removes all elements in a container",
-    -> "fn [*ITEM] | {*ITEM} | {*KEY: *VALUE} -> void",
+    -> "fn<C: Container> *C -> void",
     [Dict(ls)] => {
         ls.borrow_mut().clear();
         Ok(Nil)
@@ -326,7 +329,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     sign,
     ? "Returns the sign of the value",
-    -> "(fn int -> int) | (fn float -> float)",
+    -> "fn<N: Num> *N -> *N",
     [Float(x)] => { Ok(Float(x.signum())) },
     [Int(x)] => { Ok(Int(x.signum())) }
 );
@@ -335,7 +338,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     clamp,
     ? "Clamps the value 'a' between 'lo' and 'hi'",
-    -> "(fn int, int, int -> int) | (fn float, float, float -> float)",
+    -> "fn<N: Num> *N, *N, *N -> *N",
     [Float(a), Float(lo), Float(hi)] => { Ok(Float(a.min(*hi).max(*lo))) },
     [Int(a), Int(lo), Int(hi)] => { Ok(Int(*a.min(hi).max(lo))) }
 );
@@ -344,23 +347,25 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     min,
     ? "Returns the smallest",
-    -> "fn float, float -> float",
-    [Float(a), Float(b)] => { Ok(Float(a.min(*b))) }
+    -> "fn<N: Num> *N, *N -> *N",
+    [Float(a), Float(b)] => { Ok(Float(a.min(*b))) },
+    [Int(a), Int(b)] => { Ok(Int(*a.min(b))) }
 );
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     max,
     ? "Returns the largest",
-    -> "fn float, float -> float",
-    [Float(a), Float(b)] => { Ok(Float(a.max(*b))) }
+    -> "fn<N: Num> *N, *N -> *N",
+    [Float(a), Float(b)] => { Ok(Float(a.max(*b))) },
+    [Int(a), Int(b)] => { Ok(Int(*a.max(b))) }
 );
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     rem,
     ? "Returns the value x modulo y",
-    -> "fn *X, *X -> *X",
+    -> "fn<N: Num> *N, *N -> *N",
     [Float(x), Float(y)] => { Ok(Float(x.rem_euclid(*y))) },
     [Int(x), Int(y)] => { Ok(Int(x.rem_euclid(*y))) }
 );
@@ -456,7 +461,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     dot,
     ? "Computes the scalar product",
-    -> "fn (float, float) -> float",
+    -> "fn (float, float), (float, float) -> float",
     [Tuple(a), Tuple(b)] => {
         let (ax, ay) = break_up_vec(a);
         let (bx, by) = break_up_vec(b);

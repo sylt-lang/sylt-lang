@@ -114,7 +114,7 @@ fn type_dependencies(ctx: &mut Context, ty: &ParserType) -> BTreeSet<Name> {
 
         List(kind) | Set(kind) => type_dependencies(ctx, kind),
 
-        Dict(a, b) | Union(a, b) => [type_dependencies(ctx, a), type_dependencies(ctx, b)]
+        Dict(a, b) => [type_dependencies(ctx, a), type_dependencies(ctx, b)]
             .iter()
             .flatten()
             .cloned()

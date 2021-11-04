@@ -268,7 +268,16 @@ impl TypeChecker {
                     }
                     Ok(ty)
                 }
-                _ => return err_type_error!(self, span, ctx, todo_error!()),
+                _ => {
+                    return err_type_error!(
+                        self,
+                        ident.span,
+                        ctx,
+                        TypeError::Exotic,
+                        "Cannot find type-variable '{}'",
+                        ident.name
+                    )
+                }
             },
 
             AssignableKind::Access(ass, ident) => {
@@ -442,9 +451,6 @@ impl TypeChecker {
                     .entry(name.clone())
                     .or_insert_with(|| self.push_type(Type::Unknown)))
             }
-
-            // TODO(ed): This is very wrong - but works for now.
-            Union(_, _) => Type::Void,
         };
         Ok(self.push_type(ty))
     }
