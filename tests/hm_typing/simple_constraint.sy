@@ -1,0 +1,12 @@
+sign: fn<a: Num> *a -> *a : fn a: *a -> *a
+    if a < 0 ret - (a / a)
+    if a > 0 ret (a / a)
+    a - a
+end
+
+start :: fn do
+    0 <=> sign' 0
+    0.0 <=> sign' 0.0
+    1.0 <=> sign' 123.0
+    -1 <=> sign' -123
+end

@@ -241,14 +241,14 @@ impl TypeChecker {
         ctx: TypeCtx,
         assignable: &Assignable,
     ) -> TypeResult<usize> {
+        let span = assignable.span;
         match &assignable.kind {
             AssignableKind::Read(ident) => match self
                 .globals
                 .get(&(ctx.namespace, ident.name.clone()))
                 .cloned()
-                .unwrap()
             {
-                Name::Blob(blob_ty) => {
+                Some(Name::Blob(blob_ty)) => {
                     let ty = self.push_type(blob_ty.clone());
                     match blob_ty {
                         Type::Blob(_, fields) => {
@@ -263,7 +263,7 @@ impl TypeChecker {
                     }
                     Ok(ty)
                 }
-                _ => todo!(),
+                _ => return err_type_error!(self, span, ctx, todo_error!()),
             },
 
             AssignableKind::Access(ass, ident) => {
@@ -272,17 +272,18 @@ impl TypeChecker {
                     .globals
                     .get(&(ctx.namespace, ident.name.clone()))
                     .cloned()
-                    .unwrap()
                 {
-                    Name::Blob(ty) => Ok(self.push_type(ty.clone())),
-                    _ => todo!(),
+                    Some(Name::Blob(ty)) => Ok(self.push_type(ty.clone())),
+                    _ => return err_type_error!(self, span, ctx, todo_error!()),
                 }
             }
 
             AssignableKind::Call(..)
             | AssignableKind::ArrowCall(..)
             | AssignableKind::Index(..)
-            | AssignableKind::Expression(..) => todo!(),
+            | AssignableKind::Expression(..) => {
+                return err_type_error!(self, span, ctx, todo_error!())
+            }
         }
     }
 
@@ -297,6 +298,26 @@ impl TypeChecker {
         ty: &ParserType,
         seen: &mut HashMap<String, usize>,
     ) -> TypeResult<usize> {
+        fn check_constraint_arity(
+            typechecker: &TypeChecker,
+            span: Span,
+            ctx: TypeCtx,
+            name: &str,
+            got: usize,
+            expected: usize,
+        ) -> TypeResult<()> {
+            if got != expected {
+                err_type_error!(
+                    typechecker,
+                    span,
+                    ctx,
+                    TypeError::WrongConstraintArity { name: name.into(), got, expected }
+                )
+            } else {
+                Ok(())
+            }
+        }
+
         use TypeKind::*;
         let ty = match &ty.kind {
             Implied => Type::Unknown,
@@ -324,15 +345,28 @@ impl TypeChecker {
                 for (var, constraints) in constraints.iter() {
                     let var = match seen.get(var) {
                         Some(var) => *var,
+                        // NOTE(ed): This disallowes type-variables that are only used for
+                        // constraints.
                         None => return err_type_error!(self, span, ctx, todo_error!()),
                     };
 
                     for constraint in constraints.iter() {
+                        let num_args = constraint.args.len();
                         match constraint.name.name.as_str() {
-                            "Num" => self.add_constraint(var, Constraint::Num),
+                            "Num" => {
+                                check_constraint_arity(self, span, ctx, "Num", num_args, 0)?;
+                                self.add_constraint(var, Constraint::Num);
+                            }
                             "Container" => {}
                             "SameContainer" => {}
-                            _ => return err_type_error!(self, span, ctx, todo_error!()),
+                            x => {
+                                return err_type_error!(
+                                    self,
+                                    span,
+                                    ctx,
+                                    TypeError::UnknownConstraint(x.into())
+                                )
+                            }
                         }
                     }
                 }

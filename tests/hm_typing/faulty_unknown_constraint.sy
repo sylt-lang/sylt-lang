@@ -1,0 +1,4 @@
+f: fn<a: Blargh> -> *a : fn -> int do 1 end
+
+start :: fn do end
+// error: $UnknownConstraint(..)
