@@ -115,7 +115,7 @@ enum Constraint {
     Num,
     Container,
     SameContainer(usize),
-    Content(usize),
+    Contains(usize),
 }
 
 struct TypeChecker {
@@ -402,6 +402,17 @@ impl TypeChecker {
                                 )?;
                                 self.add_constraint(var, Constraint::SameContainer(a));
                                 self.add_constraint(a, Constraint::SameContainer(var));
+                            }
+                            "Contains" => {
+                                check_constraint_arity(self, span, ctx, "Contains", num_args, 1)?;
+                                let a = parse_constraint_arg(
+                                    self,
+                                    span,
+                                    ctx,
+                                    &constraint.args[0].name,
+                                    seen,
+                                )?;
+                                self.add_constraint(var, Constraint::Contains(a));
                             }
                             x => {
                                 return err_type_error!(
@@ -1102,7 +1113,7 @@ impl TypeChecker {
                     ),
                 },
 
-                Constraint::Content(_) => todo!(),
+                Constraint::Contains(b) => self.is_contained_in(span, ctx, a, *b),
             }?
         }
         Ok(())
@@ -1278,7 +1289,7 @@ impl TypeChecker {
                 Constraint::SameContainer(x) => {
                     Constraint::SameContainer(self.inner_copy(*x, seen))
                 }
-                Constraint::Content(x) => Constraint::Content(self.inner_copy(*x, seen)),
+                Constraint::Contains(x) => Constraint::Contains(self.inner_copy(*x, seen)),
             })
             .collect();
 
@@ -1614,6 +1625,34 @@ impl TypeChecker {
                 ctx,
                 TypeError::Violating(self.bake_type(a)),
                 "This type cannot be indexed"
+            ),
+        }
+    }
+
+    fn is_contained_in(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::Unknown, _) => Ok(()),
+
+            (Type::Set(x), y) | (Type::List(x), y) => self.unify(span, ctx, x, b).map(|_| ()),
+
+            (Type::Dict(kx, vx), Type::Tuple(ys)) => {
+                if ys.len() == 2 {
+                    self.unify(span, ctx, kx, ys[0])?;
+                    self.unify(span, ctx, vx, ys[1]).map(|_| ())
+                } else {
+                    err_type_error!(self, span, ctx, todo_error!())
+                }
+            }
+
+            _ => err_type_error!(
+                self,
+                span,
+                ctx,
+                TypeError::Mismatch {
+                    got: self.bake_type(a),
+                    expected: self.bake_type(b)
+                },
+                "The Contains constraint forces a container"
             ),
         }
     }

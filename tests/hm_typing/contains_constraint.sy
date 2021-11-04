@@ -1,0 +1,10 @@
+f: fn<a: Contains b> *b, *a -> *a : fn _: *, a: * -> * do
+    a
+end
+
+start :: fn do
+    f' 1, {1, 2, 3}
+    f' "", [1, 2, 3]
+end
+
+// error: $Mismatch { .. }
