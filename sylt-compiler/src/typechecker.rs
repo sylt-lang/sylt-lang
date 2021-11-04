@@ -117,7 +117,7 @@ enum Constraint {
     Container,
     SameContainer(usize),
     Contains(usize),
-    IsContainedBy(usize),
+    Holds(usize),
 }
 
 struct TypeChecker {
@@ -373,7 +373,7 @@ impl TypeChecker {
                 check_constraint_arity(self, span, ctx, "Contains", num_args, 1)?;
                 let a = parse_constraint_arg(self, span, ctx, &constraint.args[0].name, seen)?;
                 self.add_constraint(var, Constraint::Contains(a));
-                self.add_constraint(a, Constraint::IsContainedBy(var));
+                self.add_constraint(a, Constraint::Holds(var));
             }
             x => return err_type_error!(self, span, ctx, TypeError::UnknownConstraint(x.into())),
         }
@@ -1107,7 +1107,7 @@ impl TypeChecker {
                 },
 
                 Constraint::Contains(b) => self.contains(span, ctx, a, *b),
-                Constraint::IsContainedBy(b) => self.contains(span, ctx, *b, a),
+                Constraint::Holds(b) => self.contains(span, ctx, *b, a),
             }?
         }
         Ok(())
@@ -1284,9 +1284,7 @@ impl TypeChecker {
                     Constraint::SameContainer(self.inner_copy(*x, seen))
                 }
                 Constraint::Contains(x) => Constraint::Contains(self.inner_copy(*x, seen)),
-                Constraint::IsContainedBy(x) => {
-                    Constraint::IsContainedBy(self.inner_copy(*x, seen))
-                }
+                Constraint::Holds(x) => Constraint::Holds(self.inner_copy(*x, seen)),
             })
             .collect();
 
