@@ -398,7 +398,7 @@ impl TypeChecker {
                 sylt_common::Type::Float => Type::Float,
                 sylt_common::Type::Bool => Type::Bool,
                 sylt_common::Type::String => Type::Str,
-                _ => todo!(),
+                x => unreachable!("Got an unexpected resolved type '{:?}'", x),
             },
 
             UserDefined(assignable) => {
@@ -563,7 +563,7 @@ impl TypeChecker {
             | StatementKind::Blob { .. }
             | StatementKind::IsCheck { .. }
             | StatementKind::ExternalDefinition { .. } => {
-                todo!("Illegal inner statement! Parser should have caught this.")
+                unreachable!("Illegal inner statement! Parser should have caught this.")
             }
         }
     }
