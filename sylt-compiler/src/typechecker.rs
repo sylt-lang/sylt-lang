@@ -61,10 +61,7 @@ macro_rules! type_error {
 
 macro_rules! todo_error {
     () => {
-        TypeError::ToDo {
-            line: line!(),
-            file: file!().to_string(),
-        }
+        TypeError::ToDo { line: line!(), file: file!().to_string() }
     };
 }
 
@@ -380,11 +377,7 @@ impl TypeChecker {
                 Ok(None)
             }
 
-            StatementKind::If {
-                condition,
-                pass,
-                fail,
-            } => {
+            StatementKind::If { condition, pass, fail } => {
                 let condition = self.expression(condition, ctx)?;
                 let boolean = self.push_type(Type::Bool);
                 self.unify(span, ctx, boolean, condition)?;
@@ -399,11 +392,7 @@ impl TypeChecker {
                 }
             }
 
-            StatementKind::Assignment {
-                kind,
-                target,
-                value,
-            } => {
+            StatementKind::Assignment { kind, target, value } => {
                 let expression_ty = self.expression(value, ctx)?;
                 let target_ty = self.assignable(target, ctx)?;
                 match kind {
@@ -429,18 +418,9 @@ impl TypeChecker {
                 Ok(None)
             }
 
-            StatementKind::Definition {
-                ident,
-                kind,
-                ty,
-                value,
-            } => {
+            StatementKind::Definition { ident, kind, ty, value } => {
                 let pre_ty = self.push_type(Type::Unknown);
-                let var = Variable {
-                    ident: ident.clone(),
-                    ty: pre_ty,
-                    kind: *kind,
-                };
+                let var = Variable { ident: ident.clone(), ty: pre_ty, kind: *kind };
                 let is_function = matches!(value.kind, ExpressionKind::Function { .. });
                 if is_function {
                     self.stack.push(var);
@@ -456,11 +436,7 @@ impl TypeChecker {
                 };
                 self.unify(span, ctx, expression_ty, defined_ty)?;
 
-                let var = Variable {
-                    ident: ident.clone(),
-                    ty: defined_ty,
-                    kind: *kind,
-                };
+                let var = Variable { ident: ident.clone(), ty: defined_ty, kind: *kind };
                 if !is_function {
                     self.stack.push(var);
                 }
@@ -513,18 +489,9 @@ impl TypeChecker {
                     .insert((ctx.namespace, name.clone()), Name::Blob(ty));
             }
 
-            StatementKind::Definition {
-                ident,
-                kind,
-                ty,
-                value,
-            } => {
+            StatementKind::Definition { ident, kind, ty, value } => {
                 let pre_ty = self.push_type(Type::Unknown);
-                let var = Variable {
-                    ident: ident.clone(),
-                    ty: pre_ty,
-                    kind: *kind,
-                };
+                let var = Variable { ident: ident.clone(), ty: pre_ty, kind: *kind };
                 let is_function = matches!(value.kind, ExpressionKind::Function { .. });
                 if is_function {
                     self.globals.insert(
@@ -554,11 +521,7 @@ impl TypeChecker {
 
             StatementKind::ExternalDefinition { ident, kind, ty } => {
                 let ty = self.resolve_type(span, ctx, ty)?;
-                let var = Variable {
-                    ident: ident.clone(),
-                    ty,
-                    kind: *kind,
-                };
+                let var = Variable { ident: ident.clone(), ty, kind: *kind };
                 self.globals
                     .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
             }
@@ -619,10 +582,7 @@ impl TypeChecker {
                                 self,
                                 span,
                                 ctx,
-                                TypeError::WrongArity {
-                                    got: args.len(),
-                                    expected: params.len()
-                                }
+                                TypeError::WrongArity { got: args.len(), expected: params.len() }
                             );
                         }
                         // TODO(ed): Annotate the errors?
@@ -665,19 +625,14 @@ impl TypeChecker {
             AssignableKind::ArrowCall(pre_arg, f, args) => {
                 let mut args = args.clone();
                 args.insert(0, Expression::clone(pre_arg));
-                let mapped_assignable = Assignable {
-                    span,
-                    kind: AssignableKind::Call(f.clone(), args),
-                };
+                let mapped_assignable =
+                    Assignable { span, kind: AssignableKind::Call(f.clone(), args) };
                 self.assignable(&mapped_assignable, ctx)
             }
 
             AssignableKind::Access(outer, ident) => match self.namespace_chain(outer, ctx) {
                 Ok(ctx) => self.assignable(
-                    &Assignable {
-                        span,
-                        kind: AssignableKind::Read(ident.clone()),
-                    },
+                    &Assignable { span, kind: AssignableKind::Read(ident.clone()) },
                     ctx,
                 ),
                 Err(_) => {
@@ -767,18 +722,9 @@ impl TypeChecker {
             }
 
             ExpressionKind::Parenthesis(expr) => self.expression(expr, ctx),
-            ExpressionKind::IfExpression {
-                condition,
-                pass,
-                fail,
-            } => todo!(),
+            ExpressionKind::IfExpression { condition, pass, fail } => todo!(),
 
-            ExpressionKind::Function {
-                name: _,
-                params,
-                ret,
-                body,
-            } => {
+            ExpressionKind::Function { name: _, params, ret, body } => {
                 let ss = self.stack.len();
                 let mut args = Vec::new();
                 let mut seen = HashMap::new();
@@ -786,11 +732,7 @@ impl TypeChecker {
                     let ty = self.inner_resolve_type(span, ctx, ty, &mut seen)?;
                     args.push(ty);
 
-                    let var = Variable {
-                        ident: ident.clone(),
-                        ty,
-                        kind: VarKind::Const,
-                    };
+                    let var = Variable { ident: ident.clone(), ty, kind: VarKind::Const };
                     self.stack.push(var);
                 }
 
@@ -968,10 +910,7 @@ impl TypeChecker {
                             self,
                             span,
                             ctx,
-                            TypeError::UniOp {
-                                val: self.bake_type(a),
-                                op: "-".to_string(),
-                            }
+                            TypeError::UniOp { val: self.bake_type(a), op: "-".to_string() }
                         )
                     }
                 },
@@ -1478,10 +1417,7 @@ impl TypeChecker {
                     self,
                     span,
                     ctx,
-                    TypeError::TupleIndexOutOfRange {
-                        got: index,
-                        length: tys.len(),
-                    }
+                    TypeError::TupleIndexOutOfRange { got: index, length: tys.len() }
                 ),
             },
             Type::List(ty) => self.unify(span, ctx, ty, ret).map(|_| ()),
@@ -1505,24 +1441,14 @@ impl TypeChecker {
         // Initialize the namespaces first.
         for (statement, namespace) in statements.iter() {
             if matches!(statement.kind, StatementKind::Use { .. }) {
-                self.outer_statement(
-                    statement,
-                    TypeCtx {
-                        namespace: *namespace,
-                    },
-                )?;
+                self.outer_statement(statement, TypeCtx { namespace: *namespace })?;
             }
         }
 
         // Then the rest.
         for (statement, namespace) in statements.iter() {
             if !matches!(statement.kind, StatementKind::Use { .. }) {
-                self.outer_statement(
-                    statement,
-                    TypeCtx {
-                        namespace: *namespace,
-                    },
-                )?;
+                self.outer_statement(statement, TypeCtx { namespace: *namespace })?;
             }
         }
 
