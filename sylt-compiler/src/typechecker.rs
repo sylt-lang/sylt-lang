@@ -113,6 +113,9 @@ enum Constraint {
     Field(String, usize),
 
     Num,
+    Container,
+    SameContainer(usize),
+    Content(usize),
 }
 
 struct TypeChecker {
@@ -318,6 +321,26 @@ impl TypeChecker {
             }
         }
 
+        fn parse_constraint_arg(
+            typechecker: &TypeChecker,
+            span: Span,
+            ctx: TypeCtx,
+            name: &str,
+            seen: &HashMap<String, usize>,
+        ) -> TypeResult<usize> {
+            match seen.get(name) {
+                Some(x) => Ok(*x),
+                _ => {
+                    return err_type_error!(
+                        typechecker,
+                        span,
+                        ctx,
+                        TypeError::UnknownConstraintArgument(name.into())
+                    )
+                }
+            }
+        }
+
         use TypeKind::*;
         let ty = match &ty.kind {
             Implied => Type::Unknown,
@@ -357,8 +380,29 @@ impl TypeChecker {
                                 check_constraint_arity(self, span, ctx, "Num", num_args, 0)?;
                                 self.add_constraint(var, Constraint::Num);
                             }
-                            "Container" => {}
-                            "SameContainer" => {}
+                            "Container" => {
+                                check_constraint_arity(self, span, ctx, "Container", num_args, 0)?;
+                                self.add_constraint(var, Constraint::Container);
+                            }
+                            "SameContainer" => {
+                                check_constraint_arity(
+                                    self,
+                                    span,
+                                    ctx,
+                                    "SameContainer",
+                                    num_args,
+                                    1,
+                                )?;
+                                let a = parse_constraint_arg(
+                                    self,
+                                    span,
+                                    ctx,
+                                    &constraint.args[0].name,
+                                    seen,
+                                )?;
+                                self.add_constraint(var, Constraint::SameContainer(a));
+                                self.add_constraint(a, Constraint::SameContainer(var));
+                            }
                             x => {
                                 return err_type_error!(
                                     self,
@@ -1024,9 +1068,41 @@ impl TypeChecker {
                         span,
                         ctx,
                         TypeError::Violating(self.bake_type(a)),
-                        "The Num constraint requires int or float"
+                        "The Num constraint forces int or float"
                     ),
                 },
+
+                Constraint::Container => match self.find_type(a) {
+                    Type::Unknown | Type::Set(..) | Type::List(..) | Type::Dict(..) => Ok(()),
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Violating(self.bake_type(a)),
+                        "The Container constraint forces set, list or dict"
+                    ),
+                },
+
+                Constraint::SameContainer(b) => match (self.find_type(a), self.find_type(*b)) {
+                    (Type::Unknown, _)
+                    | (_, Type::Unknown)
+                    | (Type::Set(..), Type::Set(..))
+                    | (Type::List(..), Type::List(..))
+                    | (Type::Dict(..), Type::Dict(..)) => Ok(()),
+
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Mismatch {
+                            got: self.bake_type(a),
+                            expected: self.bake_type(*b)
+                        },
+                        "The SameContainer constraint forces the outer containers to match"
+                    ),
+                },
+
+                Constraint::Content(_) => todo!(),
             }?
         }
         Ok(())
@@ -1171,8 +1247,40 @@ impl TypeChecker {
             return *res;
         }
         let new_ty = self.push_type(Type::Unknown);
-        self.find_node_mut(new_ty).constraints = self.find_node(old_ty).constraints.clone();
         seen.insert(old_ty, new_ty);
+
+        self.find_node_mut(new_ty).constraints = self
+            .find_node(old_ty)
+            .constraints
+            .clone()
+            .iter()
+            .map(|con| match &con {
+                Constraint::Add(x) => Constraint::Add(self.inner_copy(*x, seen)),
+                Constraint::Sub(x) => Constraint::Sub(self.inner_copy(*x, seen)),
+                Constraint::Mul(x) => Constraint::Mul(self.inner_copy(*x, seen)),
+                Constraint::Div(x) => Constraint::Div(self.inner_copy(*x, seen)),
+                Constraint::Equ(x) => Constraint::Equ(self.inner_copy(*x, seen)),
+                Constraint::Cmp(x) => Constraint::Cmp(self.inner_copy(*x, seen)),
+                Constraint::CmpEqu(x) => Constraint::CmpEqu(self.inner_copy(*x, seen)),
+                Constraint::Neg => Constraint::Neg,
+                Constraint::Indexes(x) => Constraint::Indexes(self.inner_copy(*x, seen)),
+                Constraint::IndexedBy(x) => Constraint::IndexedBy(self.inner_copy(*x, seen)),
+                Constraint::IndexingGives(x) => {
+                    Constraint::IndexingGives(self.inner_copy(*x, seen))
+                }
+                Constraint::GivenByIndex(x) => Constraint::GivenByIndex(self.inner_copy(*x, seen)),
+                Constraint::ConstantIndex(i, x) => {
+                    Constraint::ConstantIndex(*i, self.inner_copy(*x, seen))
+                }
+                Constraint::Field(f, x) => Constraint::Field(f.clone(), self.inner_copy(*x, seen)),
+                Constraint::Num => Constraint::Num,
+                Constraint::Container => Constraint::Container,
+                Constraint::SameContainer(x) => {
+                    Constraint::SameContainer(self.inner_copy(*x, seen))
+                }
+                Constraint::Content(x) => Constraint::Content(self.inner_copy(*x, seen)),
+            })
+            .collect();
 
         let ty = self.find_type(old_ty);
         self.find_node_mut(new_ty).ty = match ty {

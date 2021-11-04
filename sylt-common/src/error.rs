@@ -148,6 +148,7 @@ pub enum TypeError {
     },
 
     UnknownConstraint(String),
+    UnknownConstraintArgument(String),
 }
 
 // TODO(ed): Switch to spans for the whole compiler?
@@ -400,6 +401,9 @@ impl fmt::Display for TypeError {
 
             TypeError::UnknownConstraint(constraint) => {
                 write!(f, "Unknown constraint '{}'", constraint)
+            }
+            TypeError::UnknownConstraintArgument(argument) => {
+                write!(f, "Cannot resolve this constraint argument '{}'", argument)
             }
         }
     }
