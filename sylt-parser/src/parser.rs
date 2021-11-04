@@ -470,7 +470,7 @@ macro_rules! skip_until {
     };
 }
 
-// Parse a constraint argument
+/// Parse a constraint arguments `a b c`
 pub fn parse_type_constraint_argument<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Identifier>> {
     let mut args = Vec::new();
     let mut ctx = ctx;
@@ -489,8 +489,8 @@ pub fn parse_type_constraint_argument<'t>(ctx: Context<'t>) -> ParseResult<'t, V
     }
     Ok((ctx, args))
 }
-//
-// Parse a constraint argument
+
+/// Parse a type constraint `SomeConstraint a b c`
 pub fn parse_type_constraint<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeConstraint> {
     let span = ctx.span();
     let name = match ctx.token() {
@@ -1110,6 +1110,7 @@ mod test {
         test!(parse_type, type_fn_one_param: "fn int? -> bool" => Fn{ .. });
         test!(parse_type, type_fn_two_params: "fn int | void, int? -> str?" => Fn{ .. });
         test!(parse_type, type_fn_only_ret: "fn -> bool?" => Fn{ .. });
+        test!(parse_type, type_fn_constraints: "fn<a: A a b + B b b, b: A a a> -> bool" => Fn{ .. });
 
         test!(parse_type, type_tuple_zero: "()" => Tuple(_));
         test!(parse_type, type_tuple_one: "(int,)" => Tuple(_));
