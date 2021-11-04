@@ -315,11 +315,7 @@ impl TypeChecker {
                 return self.type_assignable(span, ctx, assignable);
             }
 
-            Fn {
-                constraints,
-                params,
-                ret,
-            } => {
+            Fn { constraints, params, ret } => {
                 let params = params
                     .iter()
                     .map(|t| self.inner_resolve_type(span, ctx, t, seen))
