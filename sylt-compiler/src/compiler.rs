@@ -301,7 +301,6 @@ impl Compiler {
 
         let num_constants = self.extract_globals(&tree);
 
-        // TODO
         let num_functions = functions.len();
         self.functions = functions
             .to_vec()
