@@ -23,11 +23,7 @@ pub struct LuaCompiler<'t> {
 
 impl<'t> LuaCompiler<'t> {
     pub(crate) fn new(compiler: &'t mut Compiler, file: Box<dyn Write>) -> Self {
-        Self {
-            compiler,
-            loops: Vec::new(),
-            file,
-        }
+        Self { compiler, loops: Vec::new(), file }
     }
 
     fn write(&mut self, msg: String) {
@@ -175,11 +171,7 @@ impl<'t> LuaCompiler<'t> {
                 self.expression(a, ctx);
             }
 
-            IfExpression {
-                condition,
-                pass,
-                fail,
-            } => {
+            IfExpression { condition, pass, fail } => {
                 write!(self, "(function ()");
                 write!(self, "if");
                 self.expression(condition, ctx);
@@ -193,12 +185,7 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, "end)()");
             }
 
-            Function {
-                name: _,
-                params,
-                ret: _,
-                body,
-            } => {
+            Function { name: _, params, ret: _, body } => {
                 // TODO(ed): We don't use multiple frames here...
                 let s = self.compiler.frames.last().unwrap().variables.len();
                 write!(self, "function (");
@@ -268,11 +255,9 @@ impl<'t> LuaCompiler<'t> {
             Blob { blob: _, fields } => {
                 // TODO(ed): Know which blob something is?
                 // TODO(ed): Fill in empty fields with nil-value
-                let self_slot = self.compiler.define(
-                    "self",
-                    VarKind::Mutable,
-                    expression.span
-                );
+                let self_slot = self
+                    .compiler
+                    .define("self", VarKind::Mutable, expression.span);
                 self.compiler.activate(self_slot);
 
                 // Set up closure for the self variable. The typechecker takes
@@ -394,9 +379,9 @@ impl<'t> LuaCompiler<'t> {
         self.compiler.panic = false;
 
         match &statement.kind {
-            Use { .. } | Blob { .. } | IsCheck { .. } | EmptyStatement => {}
+            Use { .. } | Blob { .. } | IsCheck { .. } | EmptyStatement => return,
 
-            ExternalDefinition { .. } => {}
+            ExternalDefinition { .. } => return,
 
             #[rustfmt::skip]
             Definition { ident, value, .. } => {
@@ -422,7 +407,7 @@ impl<'t> LuaCompiler<'t> {
         self.compiler.panic = false;
 
         match &statement.kind {
-            Use { .. } | Blob { .. } | EmptyStatement => {}
+            Use { .. } | Blob { .. } | EmptyStatement => return,
 
             IsCheck { .. } => {
                 error!(
@@ -620,10 +605,7 @@ impl<'t> LuaCompiler<'t> {
     }
 
     pub fn compile(&mut self, statement: &Statement, namespace: usize) {
-        let ctx = Context {
-            namespace,
-            frame: 0,
-        };
+        let ctx = Context { namespace, frame: 0 };
         self.outer_statement(&statement, ctx);
     }
 

@@ -2,8 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::value::Value;
 
-#[derive(Debug)]
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct UpValue {
     pub slot: usize,
     pub value: Value,
@@ -11,10 +10,7 @@ pub struct UpValue {
 
 impl UpValue {
     pub fn new(slot: usize) -> Self {
-        Self {
-            slot,
-            value: Value::Nil,
-        }
+        Self { slot, value: Value::Nil }
     }
 
     pub fn get(&self, stack: &[Value]) -> Value {

@@ -1,14 +1,15 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::hash::Hash;
 use std::fmt::{Debug, Display};
+use std::hash::Hash;
 
 pub trait Numbered {
     fn to_number(&self) -> usize;
 }
 
-#[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd, sylt_macro::Numbered)]
-#[derive(Deserialize, Serialize)]
+#[derive(
+    Clone, Eq, Hash, Ord, PartialEq, PartialOrd, sylt_macro::Numbered, Deserialize, Serialize,
+)]
 pub enum Type {
     Ty,
     Generic(String),
@@ -100,9 +101,8 @@ impl Type {
     fn inner_fits<'t>(
         &'t self,
         other: &'t Self,
-        same: &mut HashSet<(&'t Type, &'t Type)>
+        same: &mut HashSet<(&'t Type, &'t Type)>,
     ) -> Result<(), String> {
-
         // If we've seen the pair before - they have to match,
         // otherwise it isn't done and will fail later. We don't
         // need to do (infinitely) more work.
@@ -150,18 +150,24 @@ impl Type {
                     }
                 }
                 if a_args.len() != b_args.len() {
-                    return Err(
-                        format!(
-                            "mismatching arity, {} != {}",
-                            a_args.len(),
-                            b_args.len()
-                        ));
+                    return Err(format!(
+                        "mismatching arity, {} != {}",
+                        a_args.len(),
+                        b_args.len()
+                    ));
                 }
                 a_ret.inner_fits(b_ret, same)
             }
             (Type::Union(_), Type::Union(b)) => {
-                if let Err(msg) = b.iter().map(|x| self.inner_fits(x, same)).collect::<Result<Vec<_>, _>>() {
-                    Err(format!("'{:?}' doesn't fit a '{:?}, because {}'", self, other, msg))
+                if let Err(msg) = b
+                    .iter()
+                    .map(|x| self.inner_fits(x, same))
+                    .collect::<Result<Vec<_>, _>>()
+                {
+                    Err(format!(
+                        "'{:?}' doesn't fit a '{:?}, because {}'",
+                        self, other, msg
+                    ))
                 } else {
                     Ok(())
                 }

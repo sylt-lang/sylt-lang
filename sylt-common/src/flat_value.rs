@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet, hash_map::Entry};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::rc::Rc;
 
 use crate::{Type, UpValue, Value};
@@ -43,11 +43,19 @@ impl FlatValue {
     }
 
     /// Helper function to package values recursively into a 'flat' [Vec].
-    fn pack_inner(value: &Value, pack: &mut FlatValuePack, seen: &mut HashMap<usize, FlatValueID>) -> FlatValueID {
+    fn pack_inner(
+        value: &Value,
+        pack: &mut FlatValuePack,
+        seen: &mut HashMap<usize, FlatValueID>,
+    ) -> FlatValueID {
         let id = pack.len();
         match seen.entry(value.unique_id()) {
-            Entry::Occupied(entry) => { return *entry.get(); }
-            Entry::Vacant(entry) => { entry.insert(id); }
+            Entry::Occupied(entry) => {
+                return *entry.get();
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(id);
+            }
         }
         pack.push(FlatValue::Nil);
 
@@ -61,19 +69,35 @@ impl FlatValue {
                     .collect(),
             ),
             Value::Tuple(values) => FlatValue::Tuple(
-                values.iter().map(|value| Self::pack_inner(value, pack, seen)).collect(),
+                values
+                    .iter()
+                    .map(|value| Self::pack_inner(value, pack, seen))
+                    .collect(),
             ),
             Value::List(values) => FlatValue::List(
-                values.borrow().iter().map(|value| Self::pack_inner(value, pack, seen)).collect(),
+                values
+                    .borrow()
+                    .iter()
+                    .map(|value| Self::pack_inner(value, pack, seen))
+                    .collect(),
             ),
             Value::Set(values) => FlatValue::Set(
-                values.borrow().iter().map(|value| Self::pack_inner(value, pack, seen)).collect(),
+                values
+                    .borrow()
+                    .iter()
+                    .map(|value| Self::pack_inner(value, pack, seen))
+                    .collect(),
             ),
             Value::Dict(values) => FlatValue::Dict(
                 values
                     .borrow()
                     .iter()
-                    .map(|(v1, v2)| (Self::pack_inner(v1, pack, seen), Self::pack_inner(v2, pack, seen)))
+                    .map(|(v1, v2)| {
+                        (
+                            Self::pack_inner(v1, pack, seen),
+                            Self::pack_inner(v2, pack, seen),
+                        )
+                    })
                     .collect(),
             ),
             Value::Float(f) => FlatValue::Float(*f),
@@ -83,7 +107,10 @@ impl FlatValue {
             Value::Function(captured, slot) => FlatValue::Function(
                 captured
                     .iter()
-                    .map(|upvalue| FlatUpValue { slot: upvalue.borrow().slot, value: Self::pack_inner(&upvalue.borrow().value, pack, seen) })
+                    .map(|upvalue| FlatUpValue {
+                        slot: upvalue.borrow().slot,
+                        value: Self::pack_inner(&upvalue.borrow().value, pack, seen),
+                    })
                     .collect(),
                 *slot,
             ),
@@ -110,10 +137,7 @@ impl FlatValue {
             FlatValue::Bool(b) => Value::Bool(b),
             FlatValue::String(s) => Value::String(Rc::new(s)),
             // Function is specificly tricky - since it doesn't have a RefCell.
-            FlatValue::Function(_, slot) => Value::Function(
-                Rc::new(Vec::new()),
-                slot,
-            ),
+            FlatValue::Function(_, slot) => Value::Function(Rc::new(Vec::new()), slot),
             FlatValue::ExternFunction(slot) => Value::ExternFunction(slot),
             FlatValue::Nil => Value::Nil,
         }
@@ -132,16 +156,22 @@ impl FlatValue {
                     // We know the Rc hasn't moved out of this function - but we cannot
                     // garantee the requirements for `get_mut()` here. The container never moves
                     // so it is safe - this is a very precise piece of code.
-                    let values = unsafe { (Rc::as_ptr(values) as *mut Vec<Value>).as_mut() }.unwrap();
+                    let values =
+                        unsafe { (Rc::as_ptr(values) as *mut Vec<Value>).as_mut() }.unwrap();
                     for id in flat {
                         values.push(mapping[*id].clone());
                     }
                 }
                 (FlatValue::Function(flat, _), Value::Function(values, _)) => {
                     // See the tuple comment
-                    let values = unsafe { (Rc::as_ptr(values) as *mut Vec<Rc<RefCell<UpValue>>>).as_mut() }.unwrap();
+                    let values =
+                        unsafe { (Rc::as_ptr(values) as *mut Vec<Rc<RefCell<UpValue>>>).as_mut() }
+                            .unwrap();
                     for up in flat {
-                        values.push(Rc::new(RefCell::new(UpValue { slot: up.slot, value: mapping[up.value].clone() })));
+                        values.push(Rc::new(RefCell::new(UpValue {
+                            slot: up.slot,
+                            value: mapping[up.value].clone(),
+                        })));
                     }
                 }
                 (FlatValue::Blob(flat), Value::Blob(values)) => {
@@ -182,4 +212,3 @@ pub struct FlatUpValue {
     slot: usize,
     value: FlatValueID,
 }
-

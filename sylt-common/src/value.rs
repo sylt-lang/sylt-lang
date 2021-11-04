@@ -7,8 +7,7 @@ use std::rc::Rc;
 
 use crate::{ty::Type, upvalue::UpValue};
 
-#[derive(Clone)]
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub enum Value {
     Ty(Type),
     Blob(Rc<RefCell<HashMap<String, Value>>>),
@@ -41,7 +40,7 @@ impl Display for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::String(s) => write!(fmt, "{}", s),
-            value => value.safe_fmt(fmt, &mut HashSet::new())
+            value => value.safe_fmt(fmt, &mut HashSet::new()),
         }
     }
 }
@@ -104,7 +103,7 @@ impl Value {
             Value::Dict(v) => Rc::as_ptr(v) as usize,
             Value::Function(v, _) => Rc::as_ptr(v) as usize,
             Value::Tuple(v) => Rc::as_ptr(v) as usize,
-            Value::Nil => 0,  // TODO(ed): This is not a valid pointer - right?
+            Value::Nil => 0, // TODO(ed): This is not a valid pointer - right?
             Value::ExternFunction(slot) => slot + 2,
         }
     }
@@ -114,12 +113,14 @@ impl Value {
     fn safe_fmt(
         &self,
         fmt: &mut std::fmt::Formatter<'_>,
-        seen: &mut HashSet<usize>
+        seen: &mut HashSet<usize>,
     ) -> std::fmt::Result {
         match self {
             Value::Ty(ty) => write!(fmt, "<type \"{:?}\">", ty),
             Value::Blob(v) => {
-                write!(fmt, "{} (0x{:x}) {{",
+                write!(
+                    fmt,
+                    "{} (0x{:x}) {{",
                     if let Some(Value::String(name)) = v.borrow().get("_name") {
                         name.as_str()
                     } else {
@@ -147,7 +148,7 @@ impl Value {
                     write!(fmt, ":")?;
                 }
                 write!(fmt, "}}")
-            },
+            }
             Value::Float(f) => write!(fmt, "{:?}", f),
             Value::Int(i) => write!(fmt, "{}", i),
             Value::Bool(b) => write!(fmt, "{}", b),
@@ -164,7 +165,7 @@ impl Value {
                     e.safe_fmt(fmt, seen)?;
                 }
                 write!(fmt, "]")
-            },
+            }
             Value::Tuple(v) => {
                 write!(fmt, "(")?;
                 for (i, e) in v.iter().enumerate() {
@@ -177,7 +178,7 @@ impl Value {
                     write!(fmt, ",")?
                 }
                 write!(fmt, ")")
-            },
+            }
             Value::Set(v) => {
                 if !seen.insert(self.unique_id()) {
                     return write!(fmt, "{{...}}");
@@ -190,7 +191,7 @@ impl Value {
                     e.safe_fmt(fmt, seen)?;
                 }
                 write!(fmt, "}}")
-            },
+            }
             Value::Dict(v) => {
                 if !seen.insert(self.unique_id()) {
                     return write!(fmt, "{{...}}");
@@ -208,10 +209,10 @@ impl Value {
                     write!(fmt, ":")?;
                 }
                 write!(fmt, "}}")
-            },
+            }
             Value::Function(_, block) => {
                 write!(fmt, "<fn #{}>", block)
-            },
+            }
             Value::ExternFunction(slot) => write!(fmt, "<extern fn {}>", slot),
             Value::Nil => write!(fmt, "nil"),
         }

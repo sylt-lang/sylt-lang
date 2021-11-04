@@ -1,12 +1,12 @@
 use crate as sylt_std;
 
-use lingon::Game;
 use lingon::random::{Distribute, NoDice, Uniform};
 use lingon::renderer::{Rect, Sprite, Tint, Transform};
+use lingon::Game;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Mutex;
 use sylt_common::error::RuntimeError;
 use sylt_common::{RuntimeContext, Type, Value};
 
@@ -877,23 +877,27 @@ pub fn sylt_str(s: &str) -> Value {
 pub fn l_load_image<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> {
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     match (values.as_ref(), ctx.typecheck) {
-        ([Value::String(path), tilesize], false) => {
-            GAME.with(|game| {
-                let mut game = game.lock().unwrap();
-                let path = PathBuf::from(path.as_ref());
-                let image = game.assets.load_image(path);
-                let image = game.assets[image].clone();
+        ([Value::String(path), tilesize], false) => GAME.with(|game| {
+            let mut game = game.lock().unwrap();
+            let path = PathBuf::from(path.as_ref());
+            let image = game.assets.load_image(path);
+            let image = game.assets[image].clone();
 
-                let dim = unpack_int_int_tuple(tilesize);
-                let slot = game
-                    .renderer
-                    .add_sprite_sheet(image, (dim.0 as usize, dim.1 as usize));
-                Ok(Value::Tuple(Rc::new(vec![sylt_str("image"), Value::Int(slot as i64)])))
-            })
-        }
+            let dim = unpack_int_int_tuple(tilesize);
+            let slot = game
+                .renderer
+                .add_sprite_sheet(image, (dim.0 as usize, dim.1 as usize));
+            Ok(Value::Tuple(Rc::new(vec![
+                sylt_str("image"),
+                Value::Int(slot as i64),
+            ])))
+        }),
         ([Value::String(_), tilesize], true) => {
             unpack_int_int_tuple(tilesize);
-            Ok(Value::Tuple(Rc::new(vec![sylt_str("image"), Value::Int(0)])))
+            Ok(Value::Tuple(Rc::new(vec![
+                sylt_str("image"),
+                Value::Int(0),
+            ])))
         }
         (values, _) => Err(RuntimeError::ExternTypeMismatch(
             "l_load_image".to_string(),
@@ -912,10 +916,15 @@ pub fn l_load_audio<'t>(ctx: RuntimeContext<'t>) -> Result<Value, RuntimeError> 
         ([Value::String(path)], false) => {
             let path = PathBuf::from(path.as_ref());
             let audio = GAME.with(|game| game.lock().unwrap().assets.load_audio(path));
-            Ok(Value::Tuple(Rc::new(vec![sylt_str("audio"), Value::Int(*audio as i64)])))
+            Ok(Value::Tuple(Rc::new(vec![
+                sylt_str("audio"),
+                Value::Int(*audio as i64),
+            ])))
         }
-        ([Value::String(_)], true)
-            => Ok(Value::Tuple(Rc::new(vec![sylt_str("audio"), Value::Int(0)]))),
+        ([Value::String(_)], true) => Ok(Value::Tuple(Rc::new(vec![
+            sylt_str("audio"),
+            Value::Int(0),
+        ]))),
         (values, _) => Err(RuntimeError::ExternTypeMismatch(
             "l_load_image".to_string(),
             values.iter().map(Type::from).collect(),
@@ -941,13 +950,14 @@ pub fn l_text_input_update<'t>(ctx: RuntimeContext<'t>) -> Result<Value, Runtime
 
     let values = ctx.machine.stack_from_base(ctx.stack_base);
     match values.as_ref() {
-        [Value::String(s)] => {
-            GAME.with(|game| {
-                let mut s = std::string::String::clone(s);
-                let found_return = game.lock().unwrap().input.text_input_update(&mut s);
-                Ok(Value::Tuple(Rc::new(vec![Value::String(Rc::new(s)), Value::Bool(found_return)])))
-            })
-        }
+        [Value::String(s)] => GAME.with(|game| {
+            let mut s = std::string::String::clone(s);
+            let found_return = game.lock().unwrap().input.text_input_update(&mut s);
+            Ok(Value::Tuple(Rc::new(vec![
+                Value::String(Rc::new(s)),
+                Value::Bool(found_return),
+            ])))
+        }),
         _ => unimplemented!(),
     }
 }

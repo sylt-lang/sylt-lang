@@ -188,11 +188,7 @@ impl fmt::Display for Error {
 
                 write_source_line_at(f, file, *line)
             }
-            Error::SyntaxError {
-                file,
-                span,
-                message,
-            } => {
+            Error::SyntaxError { file, span, message } => {
                 write!(f, "{}: ", "syntax error".red())?;
                 write!(f, "{}\n", file_line_display(file, span.line))?;
                 write!(f, "{}Syntax Error on line {}\n", INDENT, span.line)?;
@@ -201,12 +197,7 @@ impl fmt::Display for Error {
 
                 write_source_span_at(f, file, *span)
             }
-            Error::TypeError {
-                kind,
-                file,
-                span,
-                message,
-            } => {
+            Error::TypeError { kind, file, span, message } => {
                 write!(
                     f,
                     "{}: {}\n",
@@ -221,11 +212,7 @@ impl fmt::Display for Error {
 
                 write_source_span_at(f, file, *span)
             }
-            Error::CompileError {
-                file,
-                span,
-                message,
-            } => {
+            Error::CompileError { file, span, message } => {
                 write!(f, "{}: ", "compile error".red())?;
                 write!(f, "{}\n", file_line_display(file, span.line))?;
                 write!(f, "{}Failed to compile line {}\n", INDENT, span.line)?;
@@ -424,7 +411,7 @@ mod test {
                             super::Span {
                                 line: $line,
                                 col_start: $col_start,
-                                col_end: $col_end,
+                                col_end: $col_end
                             }
                         ),
                     ),

@@ -72,7 +72,9 @@ where
                     // NOTE(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
                     // so we check stderr - which is a bad idea.
                     if !output.stderr.is_empty() {
-                        return Err(vec![Error::LuaError(String::from_utf8(output.stderr).unwrap())]);
+                        return Err(vec![Error::LuaError(
+                            String::from_utf8(output.stderr).unwrap(),
+                        )]);
                     }
                 }
                 Prog::Bytecode(_) => unreachable!(),
@@ -87,7 +89,8 @@ where
 
         (false, Some(s)) => {
             use std::fs::File;
-            let file = File::create(PathBuf::from(s)).expect(&format!("Failed to create file: {}", s));
+            let file =
+                File::create(PathBuf::from(s)).expect(&format!("Failed to create file: {}", s));
             let writer: Option<Box<dyn Write>> = Some(Box::new(file));
             // NOTE(ed): Lack of running
             compile_with_reader_to_writer(args, functions, reader, writer)?;

@@ -255,4 +255,3 @@ pub enum OpResult {
     #[doc(hidden)]
     Continue,
 }
-

@@ -16,19 +16,11 @@ pub struct Span {
     pub col_end: usize,
 }
 
-pub static ZERO_SPAN: Span = Span {
-    line: 0,
-    col_start: 0,
-    col_end: 0,
-};
+pub static ZERO_SPAN: Span = Span { line: 0, col_start: 0, col_end: 0 };
 
 impl Span {
     pub fn zero() -> Self {
-        Self {
-            line: 0,
-            col_start: 0,
-            col_end: 0,
-        }
+        Self { line: 0, col_start: 0, col_end: 0 }
     }
 }
 
@@ -70,14 +62,7 @@ pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
             let is_newline = token == Token::Newline;
             let col_start = char_at_byte[byte_range.start].unwrap() - last_newline;
             let col_end = char_at_byte[byte_range.end].unwrap() - last_newline;
-            let placed_token = PlacedToken {
-                token,
-                span: Span {
-                    line,
-                    col_start,
-                    col_end,
-                },
-            };
+            let placed_token = PlacedToken { token, span: Span { line, col_start, col_end } };
             if is_newline {
                 last_newline = char_at_byte[byte_range.start].unwrap();
                 line += 1;
@@ -89,7 +74,7 @@ pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Token, string_to_tokens};
+    use crate::{string_to_tokens, Token};
     use logos::Logos;
 
     fn lex(s: &str) -> Vec<Token> {
@@ -132,21 +117,18 @@ mod tests {
 
     #[test]
     fn simple_span() {
-        assert_placed_eq!(
-            string_to_tokens("1"),
-            (Token::Int(1), 1, 1..2),
-        );
+        assert_placed_eq!(string_to_tokens("1"), (Token::Int(1), 1, 1..2),);
         assert_placed_eq!(
             string_to_tokens("1\n"),
-            (Token::Int(1),  1, 1..2),
+            (Token::Int(1), 1, 1..2),
             (Token::Newline, 1, 2..3),
         );
         assert_placed_eq!(
             string_to_tokens("1\n23\n456"),
-            (Token::Int(1),   1, 1..2),
-            (Token::Newline,  1, 2..3),
-            (Token::Int(23),  2, 1..3),
-            (Token::Newline,  2, 3..4),
+            (Token::Int(1), 1, 1..2),
+            (Token::Newline, 1, 2..3),
+            (Token::Int(23), 2, 1..3),
+            (Token::Newline, 2, 3..4),
             (Token::Int(456), 3, 1..4),
         );
     }
@@ -157,12 +139,11 @@ mod tests {
         assert_placed_eq!(
             string_to_tokens("wow\nwöw\n"),
             (Token::Identifier(String::from("wow")), 1, 1..4),
-            (Token::Newline,                         1, 4..5),
-
-            (Token::Identifier(String::from("w")),   2, 1..2),
-            (Token::Error,                           2, 2..3),
-            (Token::Identifier(String::from("w")),   2, 3..4),
-            (Token::Newline,                         2, 4..5),
+            (Token::Newline, 1, 4..5),
+            (Token::Identifier(String::from("w")), 2, 1..2),
+            (Token::Error, 2, 2..3),
+            (Token::Identifier(String::from("w")), 2, 3..4),
+            (Token::Newline, 2, 4..5),
         );
     }
 
