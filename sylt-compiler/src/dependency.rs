@@ -1,12 +1,11 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::collections::btree_map::Entry::{Occupied, Vacant};
 use crate::{Compiler, Name};
-use sylt_parser::{
-    AST, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
-    Type as ParserType, TypeKind,
-    Statement, StatementKind,
-};
+use std::collections::btree_map::Entry::{Occupied, Vacant};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use sylt_parser::statement::NameIdentifier;
+use sylt_parser::{
+    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Statement, StatementKind,
+    Type as ParserType, TypeKind, AST,
+};
 
 struct Context<'a> {
     compiler: &'a Compiler,
@@ -29,23 +28,24 @@ impl Context<'_> {
 fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> BTreeSet<Name> {
     use AssignableKind::*;
     match &assignable.kind {
-        Read(ident) => {
-            match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
-                Some(&name) if !ctx.shadowed(&ident.name) => {
-                    [name].iter().cloned().collect::<BTreeSet<_>>()
-                },
-                _ => BTreeSet::new(),
+        Read(ident) => match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
+            Some(&name) if !ctx.shadowed(&ident.name) => {
+                [name].iter().cloned().collect::<BTreeSet<_>>()
             }
+            _ => BTreeSet::new(),
         },
         Call(ass, exprs) => assignable_dependencies(ctx, ass)
-            .union(&exprs.iter()
-                .map(|expr| dependencies(ctx, expr))
-                .flatten()
-                .collect()
+            .union(
+                &exprs
+                    .iter()
+                    .map(|expr| dependencies(ctx, expr))
+                    .flatten()
+                    .collect(),
             )
             .cloned()
             .collect(),
-        ArrowCall(expr, ass, exprs) => dependencies(ctx, expr).iter()
+        ArrowCall(expr, ass, exprs) => dependencies(ctx, expr)
+            .iter()
             .chain(assignable_dependencies(ctx, ass).iter())
             .cloned()
             .chain(exprs.iter().map(|e| dependencies(ctx, e)).flatten())
@@ -63,7 +63,7 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> BTreeS
                             Some(Name::Namespace(ns)) => Ok(*ns),
                             _ => Err(()),
                         }
-                    },
+                    }
                     Read(ident) => {
                         // Might be shadowed here
                         let shadowed = ctx.shadowed(&ident.name);
@@ -71,20 +71,18 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> BTreeS
                             Some(Name::Namespace(ns)) if !shadowed => Ok(*ns),
                             _ => Err(()),
                         }
-                    },
+                    }
                     _ => Err(()),
                 }
             }
             match recursive_namespace(ctx, ass) {
                 Ok(namespace) => match ctx.compiler.namespaces[namespace].get(&field.name) {
-                    Some(&name) => {
-                        [name].iter().cloned().collect::<BTreeSet<_>>()
-                    },
+                    Some(&name) => [name].iter().cloned().collect::<BTreeSet<_>>(),
                     _ => BTreeSet::new(),
                 },
                 Err(_) => assignable_dependencies(ctx, ass),
             }
-        },
+        }
         Index(ass, expr) => assignable_dependencies(ctx, ass)
             .union(&dependencies(ctx, expr))
             .cloned()
@@ -96,27 +94,31 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> BTreeS
 fn type_dependencies(ctx: &mut Context, ty: &ParserType) -> BTreeSet<Name> {
     use TypeKind::*;
     match &ty.kind {
-        | Implied
-        | Resolved(_)
-        | Generic(_) => BTreeSet::new(),
+        Implied | Resolved(_) | Generic(_) => BTreeSet::new(),
 
         Grouping(ty) => type_dependencies(ctx, ty),
         UserDefined(assignable) => assignable_dependencies(ctx, &assignable),
 
-        Fn(params, ret) =>
-            params.iter().chain([ret.as_ref()]).map(|t| type_dependencies(ctx, t)).flatten().collect(),
+        Fn(params, ret) => params
+            .iter()
+            .chain([ret.as_ref()])
+            .map(|t| type_dependencies(ctx, t))
+            .flatten()
+            .collect(),
 
-        Tuple(fields) =>
-            fields.iter().map(|t| type_dependencies(ctx, t)).flatten().collect(),
+        Tuple(fields) => fields
+            .iter()
+            .map(|t| type_dependencies(ctx, t))
+            .flatten()
+            .collect(),
 
-        | List(kind)
-        | Set(kind) => type_dependencies(ctx, kind),
+        List(kind) | Set(kind) => type_dependencies(ctx, kind),
 
-        | Dict(a, b)
-        | Union(a, b) => [
-            type_dependencies(ctx, a),
-            type_dependencies(ctx, b),
-        ].iter().flatten().cloned().collect(),
+        Dict(a, b) | Union(a, b) => [type_dependencies(ctx, a), type_dependencies(ctx, b)]
+            .iter()
+            .flatten()
+            .cloned()
+            .collect(),
     }
 }
 
@@ -127,71 +129,64 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             .union(&assignable_dependencies(ctx, target))
             .cloned()
             .collect(),
-        If { condition, pass, fail } => {
-            [
-                dependencies(ctx, condition),
-                statement_dependencies(ctx, pass),
-                statement_dependencies(ctx, fail),
-            ]
-            .iter()
-            .flatten()
-            .cloned()
-            .collect()
-        },
+        If { condition, pass, fail } => [
+            dependencies(ctx, condition),
+            statement_dependencies(ctx, pass),
+            statement_dependencies(ctx, fail),
+        ]
+        .iter()
+        .flatten()
+        .cloned()
+        .collect(),
         Loop { condition, body } => dependencies(ctx, condition)
             .union(&statement_dependencies(ctx, body))
             .cloned()
             .collect(),
         Block { statements } => {
             let vars_before = ctx.variables.len();
-            let deps = statements.iter()
+            let deps = statements
+                .iter()
                 .map(|stmt| statement_dependencies(ctx, stmt))
                 .flatten()
                 .collect();
             ctx.variables.truncate(vars_before);
             deps
-        },
+        }
         Definition { ident, value, ty, .. } => {
             ctx.shadow(&ident.name);
             dependencies(ctx, value)
                 .union(&type_dependencies(ctx, ty))
                 .cloned()
                 .collect()
-        },
+        }
 
-        | Ret { value }
-        | StatementExpression { value } => dependencies(ctx, value),
+        Ret { value } | StatementExpression { value } => dependencies(ctx, value),
 
         ExternalDefinition { ty, .. } => type_dependencies(ctx, ty),
 
         Blob { name, fields } => {
             ctx.shadow(&name);
-            fields.values()
+            fields
+                .values()
                 .map(|t| type_dependencies(ctx, t))
                 .flatten()
                 .collect()
         }
 
-        | Break
-        | Continue
-        | EmptyStatement
-        | IsCheck { .. }
-        | Unreachable
-        | Use { .. } => BTreeSet::new(),
+        Break | Continue | EmptyStatement | IsCheck { .. } | Unreachable | Use { .. } => {
+            BTreeSet::new()
+        }
     }
 }
 
 fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<Name> {
     use ExpressionKind::*;
     match &expression.kind {
-
         Get(assignable) => assignable_dependencies(ctx, assignable),
 
-        | Neg(expr)
-        | Not(expr)
-        | Parenthesis(expr) => dependencies(ctx, expr),
+        Neg(expr) | Not(expr) | Parenthesis(expr) => dependencies(ctx, expr),
 
-        | Comparison(lhs, _, rhs)
+        Comparison(lhs, _, rhs)
         | Add(lhs, rhs)
         | Sub(lhs, rhs)
         | Mul(lhs, rhs)
@@ -203,12 +198,11 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<Name> {
             .cloned()
             .collect(),
 
-        IfExpression { condition, pass, fail } => {
-            [pass, fail, condition].iter()
-                .map(|expr| dependencies(ctx, expr))
-                .flatten()
-                .collect()
-        },
+        IfExpression { condition, pass, fail } => [pass, fail, condition]
+            .iter()
+            .map(|expr| dependencies(ctx, expr))
+            .flatten()
+            .collect(),
 
         // Functions are a bit special. They only create dependencies once
         // called, which is a problem. It is currently impossible to know when
@@ -217,42 +211,39 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<Name> {
         Function { body, params, .. } => {
             let vars_before = ctx.variables.len();
             params.iter().for_each(|(ident, _)| ctx.shadow(&ident.name));
-            let type_deps = params.iter().map(|(_, ty)| type_dependencies(ctx, ty)).flatten().collect();
+            let type_deps = params
+                .iter()
+                .map(|(_, ty)| type_dependencies(ctx, ty))
+                .flatten()
+                .collect();
             let deps = statement_dependencies(ctx, body);
             ctx.variables.truncate(vars_before);
             [deps, type_deps].iter().flatten().cloned().collect()
-        },
-        Blob { blob, fields } => {
-            assignable_dependencies(ctx, blob).union(&fields.iter()
-                .map(|(_, expr)| dependencies(ctx, expr))
-                .flatten()
-                .collect()
+        }
+        Blob { blob, fields } => assignable_dependencies(ctx, blob)
+            .union(
+                &fields
+                    .iter()
+                    .map(|(_, expr)| dependencies(ctx, expr))
+                    .flatten()
+                    .collect(),
             )
             .cloned()
-            .collect()
-        },
+            .collect(),
 
-        | Tuple(exprs)
-        | List(exprs)
-        | Set(exprs)
-        | Dict(exprs) => {
-            exprs.iter()
-                .map(|expr| dependencies(ctx, expr))
-                .flatten()
-                .collect()
-        },
+        Tuple(exprs) | List(exprs) | Set(exprs) | Dict(exprs) => exprs
+            .iter()
+            .map(|expr| dependencies(ctx, expr))
+            .flatten()
+            .collect(),
 
         // No dependencies
-        | Float(_)
-        | Int(_)
-        | Str(_)
-        | Bool(_)
-        | Nil => BTreeSet::new(),
+        Float(_) | Int(_) | Str(_) | Bool(_) | Nil => BTreeSet::new(),
     }
 }
 
 fn order(
-    to_order: BTreeMap<Name, (BTreeSet<Name>, (&Statement, usize))>
+    to_order: BTreeMap<Name, (BTreeSet<Name>, (&Statement, usize))>,
 ) -> Result<Vec<(&Statement, usize)>, Vec<(&Statement, usize)>> {
     enum State {
         Inserting,
@@ -263,20 +254,26 @@ fn order(
         name: Name,
         to_order: &BTreeMap<Name, (BTreeSet<Name>, (&'a Statement, usize))>,
         inserted: &mut BTreeMap<Name, State>,
-        ordered: &mut Vec<(&'a Statement, usize)>
+        ordered: &mut Vec<(&'a Statement, usize)>,
     ) -> Result<(), Vec<(&'a Statement, usize)>> {
         match inserted.entry(name) {
             Vacant(entry) => entry.insert(State::Inserting),
-            Occupied(entry) => return match entry.get() {
-                State::Inserting => Err(Vec::new()),
-                State::Inserted => Ok(()),
-            },
+            Occupied(entry) => {
+                return match entry.get() {
+                    State::Inserting => Err(Vec::new()),
+                    State::Inserted => Ok(()),
+                }
+            }
         };
 
-        let (deps, statement) = to_order.get(&name).expect("Trying to find an identifier that does not exist");
+        let (deps, statement) = to_order
+            .get(&name)
+            .expect("Trying to find an identifier that does not exist");
         for dep in deps {
-            recurse(*dep, to_order, inserted, ordered)
-                .map_err(|mut cycle| { cycle.push(*statement); cycle })?;
+            recurse(*dep, to_order, inserted, ordered).map_err(|mut cycle| {
+                cycle.push(*statement);
+                cycle
+            })?;
         }
         ordered.push(*statement);
         inserted.insert(name, State::Inserted);
@@ -295,9 +292,10 @@ fn order(
 
 pub(crate) fn initialization_order<'a>(
     tree: &'a AST,
-    compiler: &Compiler
+    compiler: &Compiler,
 ) -> Result<Vec<(&'a Statement, usize)>, Vec<(&'a Statement, usize)>> {
-    let path_to_namespace_id: HashMap<_, _> = compiler.namespace_id_to_path
+    let path_to_namespace_id: HashMap<_, _> = compiler
+        .namespace_id_to_path
         .iter()
         .map(|(a, b)| (b.clone(), *a))
         .collect();
@@ -308,30 +306,35 @@ pub(crate) fn initialization_order<'a>(
         for statement in module.statements.iter() {
             use StatementKind::*;
             match &statement.kind {
-                | Blob { name, .. }
-                | Use { name: NameIdentifier::Implicit(Identifier { name, .. }), .. }
-                | Use { name: NameIdentifier::Alias(Identifier { name, .. }), .. }
-                | ExternalDefinition { ident: Identifier { name, ..}, .. }
-                | Definition { ident: Identifier { name, ..}, .. } => {
-                    let mut ctx = Context {
-                        compiler,
-                        namespace,
-                        variables: Vec::new(),
-                    };
+                Blob { name, .. }
+                | Use {
+                    name: NameIdentifier::Implicit(Identifier { name, .. }),
+                    ..
+                }
+                | Use {
+                    name: NameIdentifier::Alias(Identifier { name, .. }),
+                    ..
+                }
+                | ExternalDefinition { ident: Identifier { name, .. }, .. }
+                | Definition { ident: Identifier { name, .. }, .. } => {
+                    let mut ctx = Context { compiler, namespace, variables: Vec::new() };
                     to_order.insert(
                         *compiler.namespaces[namespace].get(name).unwrap(),
                         (
                             statement_dependencies(&mut ctx, statement),
-                            (statement, namespace)
-                        )
+                            (statement, namespace),
+                        ),
                     );
-                },
+                }
 
                 IsCheck { .. } => is_checks.push((statement, namespace)),
 
-                _ => {},
+                _ => {}
             }
         }
     }
-    return order(to_order).map(|mut o| { o.extend(is_checks); o });
+    return order(to_order).map(|mut o| {
+        o.extend(is_checks);
+        o
+    });
 }

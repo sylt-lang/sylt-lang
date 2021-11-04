@@ -1,11 +1,11 @@
 use self::expression::expression;
 use self::statement::outer_statement;
 use std::collections::{HashMap, HashSet};
-use std::fmt::{Display, Debug};
+use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
 use sylt_common::Type as RuntimeType;
-use sylt_tokenizer::{PlacedToken, Token, ZERO_SPAN, string_to_tokens};
+use sylt_tokenizer::{string_to_tokens, PlacedToken, Token, ZERO_SPAN};
 
 pub mod expression;
 pub mod statement;
@@ -231,7 +231,7 @@ impl<'a> Context<'a> {
             spans,
             curr: 0,
             file,
-            root
+            root,
         }
     }
 
@@ -301,10 +301,7 @@ impl<'a> Context<'a> {
     }
 
     fn push_last_statement_location(&self) -> Self {
-        Self {
-            last_statement: self.curr,
-            ..*self
-        }
+        Self { last_statement: self.curr, ..*self }
     }
 
     fn skip_if(&self, token: T) -> Self {
@@ -352,7 +349,6 @@ impl<'a> Context<'a> {
     }
 }
 
-
 /// Add more text to an error message after it has been created.
 #[macro_export]
 macro_rules! detail_if_error {
@@ -389,7 +385,6 @@ macro_rules! detail_if_error {
         }
     };
 }
-
 
 /// Construct a syntax error at the current token with a message.
 #[macro_export]
@@ -481,10 +476,7 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             let ctx = ctx.skip(1);
             match ctx.token() {
                 T::Identifier(name) => {
-                    let ident = Identifier {
-                        name: name.to_string(),
-                        span: ctx.span(),
-                    };
+                    let ident = Identifier { name: name.to_string(), span: ctx.span() };
                     (ctx.skip(1), Generic(ident))
                 }
                 _ => {
@@ -508,10 +500,7 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                             ret
                         } else {
                             // If we couldn't parse the return type, we assume `-> Void`.
-                            Type {
-                                span: ctx.span(),
-                                kind: Resolved(Void),
-                            }
+                            Type { span: ctx.span(), kind: Resolved(Void) }
                         };
                     }
 
@@ -610,10 +599,7 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         let (ctx, rest) = parse_type(ctx.skip(1))?;
         (
             ctx,
-            Type {
-                span,
-                kind: Union(Box::new(ty), Box::new(rest)),
-            },
+            Type { span, kind: Union(Box::new(ty), Box::new(rest)) },
         )
     } else {
         (ctx, ty)
@@ -621,16 +607,10 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
 
     // Nullable type. Compiles to `a | Void`.
     let (ctx, ty) = if matches!(ctx.token(), T::QuestionMark) {
-        let void = Type {
-            span: ctx.span(),
-            kind: Resolved(Void),
-        };
+        let void = Type { span: ctx.span(), kind: Resolved(Void) };
         (
             ctx.skip(1),
-            Type {
-                span,
-                kind: Union(Box::new(ty), Box::new(void)),
-            },
+            Type { span, kind: Union(Box::new(ty), Box::new(void)) },
         )
     } else {
         (ctx, ty)
@@ -683,10 +663,7 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
     };
 
     use AssignableKind::Call;
-    let result = Assignable {
-        span,
-        kind: Call(Box::new(callee), args),
-    };
+    let result = Assignable { span, kind: Call(Box::new(callee), args) };
     sub_assignable(ctx, result)
 }
 
@@ -711,13 +688,7 @@ fn assignable_index<'t>(ctx: Context<'t>, indexed: Assignable) -> ParseResult<'t
 fn assignable_dot<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t, Assignable> {
     use AssignableKind::Access;
     let (ctx, ident) = if let (T::Identifier(name), span, ctx) = ctx.skip(1).eat() {
-        (
-            ctx,
-            Identifier {
-                name: name.clone(),
-                span,
-            },
-        )
+        (ctx, Identifier { name: name.clone(), span })
     } else {
         raise_syntax_error!(
             ctx,
@@ -759,10 +730,7 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
     let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
         Assignable {
             span: outer_span,
-            kind: Read(Identifier {
-                span,
-                name: name.clone(),
-            }),
+            kind: Read(Identifier { span, name: name.clone() }),
         }
     } else {
         raise_syntax_error!(
@@ -783,7 +751,11 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
 /// Returns any errors that occured when parsing the file. Basic error
 /// continuation is performed, so errored statements are skipped until a newline
 /// or EOF.
-fn module(path: &Path, root: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
+fn module(
+    path: &Path,
+    root: &Path,
+    token_stream: &[PlacedToken],
+) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
     let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
     let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
     let mut ctx = Context::new(&tokens, &spans, path, root);
@@ -826,13 +798,7 @@ fn module(path: &Path, root: &Path, token_stream: &[PlacedToken]) -> (Vec<PathBu
     }
 
     if errors.is_empty() {
-        (
-            use_files,
-            Ok(Module {
-                span: Span::zero(),
-                statements,
-            }),
-        )
+        (use_files, Ok(Module { span: Span::zero(), statements }))
     } else {
         (use_files, Err(errors))
     }
@@ -861,7 +827,7 @@ pub fn find_conflict_markers(file: &Path, source: &str) -> Vec<Error> {
                     line: i + 1,
                     col_start: 1,
                     col_end: conflict_marker.len() + 1,
-                }
+                },
             });
         }
     }
@@ -879,7 +845,7 @@ pub fn find_conflict_markers(file: &Path, source: &str) -> Vec<Error> {
 /// continuation is performed as documented in [module].
 pub fn tree<F>(path: &Path, reader: F) -> Result<AST, Vec<Error>>
 where
-    F: Fn(&Path) -> Result<String, Error>
+    F: Fn(&Path) -> Result<String, Error>,
 {
     // Files we've already parsed. This ensures circular includes don't parse infinitely.
     let mut visited = HashSet::new();
@@ -926,13 +892,14 @@ where
     } else {
         // Filter out errors for already seen spans
         let mut seen = HashSet::new();
-        let errors = errors.into_iter().filter(|err| match err {
-            Error::SyntaxError { span, file, .. } => {
-                seen.insert((span.clone(), file.clone()))
-            }
+        let errors = errors
+            .into_iter()
+            .filter(|err| match err {
+                Error::SyntaxError { span, file, .. } => seen.insert((span.clone(), file.clone())),
 
-            _ => true
-        }).collect();
+                _ => true,
+            })
+            .collect();
         Err(errors)
     }
 }
@@ -1081,7 +1048,9 @@ impl PrettyPrint for Statement {
             SK::Blob { name, fields } => {
                 write!(f, "<Blob> {} {{ ", name)?;
                 for (i, (name, ty)) in fields.iter().enumerate() {
-                    if i != 0 { write!(f, ", ")?; }
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}: {}", name, ty)?;
                 }
                 write!(f, " }}")?;
@@ -1130,7 +1099,9 @@ impl PrettyPrint for Statement {
             }
             SK::Block { statements } => {
                 write!(f, "<Block>\n")?;
-                statements.iter().try_for_each(|stmt| stmt.pretty_print(f, indent + 1))?;
+                statements
+                    .iter()
+                    .try_for_each(|stmt| stmt.pretty_print(f, indent + 1))?;
                 return Ok(());
             }
             SK::StatementExpression { value } => {
@@ -1168,7 +1139,9 @@ impl Display for Type {
             TypeKind::Fn(args, ret) => {
                 write!(f, "Fn ")?;
                 for (i, arg) in args.iter().enumerate() {
-                    if i != 0 { write!(f, ", ")?; }
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}", arg)?;
                 }
                 write!(f, " -> {}", ret)?;
@@ -1176,7 +1149,9 @@ impl Display for Type {
             TypeKind::Tuple(tys) => {
                 write!(f, "(")?;
                 for (i, ty) in tys.iter().enumerate() {
-                    if i != 0 { write!(f, " ")?; }
+                    if i != 0 {
+                        write!(f, " ")?;
+                    }
                     write!(f, "{},", ty)?;
                 }
                 write!(f, ")")?;
@@ -1212,7 +1187,9 @@ impl PrettyPrint for Assignable {
                 write!(f, "[Call] ")?;
                 func.pretty_print(f, indent)?;
                 for (i, arg) in args.iter().enumerate() {
-                    if i != 0 { write!(f, ", ")?; }
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
                     arg.pretty_print(f, indent + 1)?;
                 }
             }
@@ -1221,7 +1198,9 @@ impl PrettyPrint for Assignable {
                 func.pretty_print(f, indent)?;
                 add.pretty_print(f, indent)?;
                 for (i, arg) in args.iter().enumerate() {
-                    if i != 0 { write!(f, ", ")?; }
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
                     arg.pretty_print(f, indent + 1)?;
                 }
             }
@@ -1242,4 +1221,3 @@ impl PrettyPrint for Assignable {
         Ok(())
     }
 }
-

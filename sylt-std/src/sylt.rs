@@ -2,8 +2,8 @@
 use crate as sylt_std;
 
 use colored::Colorize;
-use std::collections::HashMap;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use sungod::Ra;
 use sylt_common::error::RuntimeError;
@@ -33,7 +33,6 @@ sylt_macro::extern_function!(
     }
 );
 
-
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     random_choice,
@@ -59,7 +58,6 @@ sylt_macro::extern_function!(
     }
 );
 
-
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     map,
@@ -76,7 +74,6 @@ sylt_macro::extern_function!(
         Ok(List(Rc::new(RefCell::new(mapped))))
     }
 );
-
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",
@@ -110,7 +107,6 @@ sylt_macro::extern_function!(
         Ok(folded)
     }
 );
-
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",
@@ -404,7 +400,6 @@ sylt_macro::extern_function!(
     }
 );
 
-
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     magnitude,
@@ -476,7 +471,6 @@ sylt_macro::extern_function!(
     [] => { Ok(Bool(cfg!(debug_assertions))) }
 );
 
-
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     pop,
@@ -496,7 +490,6 @@ sylt_macro::extern_function!(
         Ok(ls.borrow().last().cloned().unwrap_or(Nil))
     }
 );
-
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",

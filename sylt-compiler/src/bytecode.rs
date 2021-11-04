@@ -3,8 +3,8 @@ use sylt_common::error::Error;
 use sylt_common::{Block, Op, Value};
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
-    Assignable, AssignableKind, Expression, ExpressionKind, Op as ParserOp,
-    Span, Statement, StatementKind, VarKind,
+    Assignable, AssignableKind, Expression, ExpressionKind, Op as ParserOp, Span, Statement,
+    StatementKind, VarKind,
 };
 
 use crate::*;
@@ -26,13 +26,9 @@ struct BytecodeContext {
 
 impl From<BytecodeContext> for Context {
     fn from(ctx: BytecodeContext) -> Self {
-        Context {
-            namespace: ctx.namespace,
-            frame: ctx.frame,
-        }
+        Context { namespace: ctx.namespace, frame: ctx.frame }
     }
 }
-
 
 pub struct BytecodeCompiler<'t> {
     compiler: &'t mut Compiler,
@@ -43,11 +39,7 @@ pub struct BytecodeCompiler<'t> {
 
 impl<'t> BytecodeCompiler<'t> {
     pub(crate) fn new(compiler: &'t mut Compiler) -> Self {
-        Self {
-            compiler,
-            blocks: Vec::new(),
-            loops: Vec::new(),
-        }
+        Self { compiler, blocks: Vec::new(), loops: Vec::new() }
     }
 
     fn add_op(&mut self, ctx: BytecodeContext, span: Span, op: Op) -> usize {
@@ -71,7 +63,12 @@ impl<'t> BytecodeCompiler<'t> {
             .curr()
     }
 
-    fn push_frame_and_block(&mut self, ctx: BytecodeContext, name: &str, span: Span) -> BytecodeContext {
+    fn push_frame_and_block(
+        &mut self,
+        ctx: BytecodeContext,
+        name: &str,
+        span: Span,
+    ) -> BytecodeContext {
         let file_as_path = PathBuf::from(self.compiler.file_from_namespace(ctx.namespace));
 
         let block = Block::new(&name, ctx.namespace, &file_as_path);
@@ -86,7 +83,13 @@ impl<'t> BytecodeCompiler<'t> {
     }
 
     fn emit_pop_until_size(&mut self, ctx: BytecodeContext, span: Span, target_size: usize) {
-        let vars: Vec<_> = self.compiler.frames[ctx.frame].variables.iter().skip(target_size).rev().cloned().collect();
+        let vars: Vec<_> = self.compiler.frames[ctx.frame]
+            .variables
+            .iter()
+            .skip(target_size)
+            .rev()
+            .cloned()
+            .collect();
         for var in &vars {
             if var.captured {
                 self.add_op(ctx, span, Op::PopUpvalue);
@@ -98,7 +101,9 @@ impl<'t> BytecodeCompiler<'t> {
 
     fn pop_until_size(&mut self, ctx: BytecodeContext, span: Span, target_size: usize) {
         self.emit_pop_until_size(ctx, span, target_size);
-        self.compiler.frames[ctx.frame].variables.truncate(target_size);
+        self.compiler.frames[ctx.frame]
+            .variables
+            .truncate(target_size);
     }
 
     fn assignable(&mut self, ass: &Assignable, ctx: BytecodeContext) -> Option<usize> {
@@ -155,7 +160,14 @@ impl<'t> BytecodeCompiler<'t> {
         }
     }
 
-    fn bin_op(&mut self, a: &Expression, b: &Expression, ops: &[Op], span: Span, ctx: BytecodeContext) {
+    fn bin_op(
+        &mut self,
+        a: &Expression,
+        b: &Expression,
+        ops: &[Op],
+        span: Span,
+        ctx: BytecodeContext,
+    ) {
         self.expression(&a, ctx);
         self.expression(&b, ctx);
         for op in ops {
@@ -190,7 +202,7 @@ impl<'t> BytecodeCompiler<'t> {
                 Less => self.bin_op(a, b, &[Op::Less], expression.span, ctx),
                 LessEqual => self.bin_op(a, b, &[Op::Greater, Op::Not], expression.span, ctx),
                 In => self.bin_op(a, b, &[Op::Contains], expression.span, ctx),
-            }
+            },
 
             AssertEq(a, b) => self.bin_op(a, b, &[Op::Equal, Op::Assert], expression.span, ctx),
 
@@ -227,11 +239,7 @@ impl<'t> BytecodeCompiler<'t> {
 
             Parenthesis(expr) => self.expression(expr, ctx),
 
-            IfExpression {
-                condition,
-                pass,
-                fail,
-            } => {
+            IfExpression { condition, pass, fail } => {
                 self.expression(condition, ctx);
 
                 let skip = self.add_op(ctx, expression.span, Op::Illegal);
@@ -246,19 +254,16 @@ impl<'t> BytecodeCompiler<'t> {
                 self.patch(ctx, out, op);
             }
 
-            Function {
-                name,
-                params,
-                ret: _,
-                body,
-            } => {
+            Function { name, params, ret: _, body } => {
                 let file = self.compiler.file_from_namespace(ctx.namespace).display();
                 let name = format!("fn {} {}:{}", name, file, expression.span.line);
 
                 // === Frame begin ===
                 let inner_ctx = self.push_frame_and_block(ctx, &name, expression.span);
                 for (ident, _) in params.iter() {
-                    let param = self.compiler.define(&ident.name, VarKind::Const, ident.span);
+                    let param = self
+                        .compiler
+                        .define(&ident.name, VarKind::Const, ident.span);
                     self.compiler.activate(param);
                 }
 
@@ -270,7 +275,8 @@ impl<'t> BytecodeCompiler<'t> {
                     self.add_op(inner_ctx, body.span, Op::Return);
                 }
 
-                self.blocks[inner_ctx.block_slot].upvalues = self.compiler
+                self.blocks[inner_ctx.block_slot].upvalues = self
+                    .compiler
                     .pop_frame(inner_ctx.into())
                     .upvalues
                     .into_iter()
@@ -293,7 +299,9 @@ impl<'t> BytecodeCompiler<'t> {
 
                 // Set self to nil so that we can capture it.
                 self.push(Value::Nil, expression.span, inner_ctx);
-                let slot = self.compiler.define("self", VarKind::Mutable, expression.span);
+                let slot = self
+                    .compiler
+                    .define("self", VarKind::Mutable, expression.span);
                 self.compiler.activate(slot);
 
                 // Initialize the blob. This may capture self.
@@ -310,16 +318,14 @@ impl<'t> BytecodeCompiler<'t> {
                 self.read_identifier("self", expression.span, inner_ctx, inner_ctx.namespace);
                 self.add_op(inner_ctx, expression.span, Op::Return);
 
-                self.blocks[inner_ctx.block_slot].upvalues = self.compiler
+                self.blocks[inner_ctx.block_slot].upvalues = self
+                    .compiler
                     .pop_frame(inner_ctx.into())
                     .upvalues
                     .into_iter()
                     .map(|u| (u.parent, u.upupvalue, u.ty))
                     .collect();
-                let function = Value::Function(
-                    Rc::new(Vec::new()),
-                    inner_ctx.block_slot
-                );
+                let function = Value::Function(Rc::new(Vec::new()), inner_ctx.block_slot);
 
                 // Call the closure.
                 let function = self.compiler.constant(function);
@@ -378,8 +384,7 @@ impl<'t> BytecodeCompiler<'t> {
                 Some(Name::External(_)) => {
                     error!(
                         self.compiler,
-                        ctx, span,
-                        "External values aren't allowed when compiling to byte-code "
+                        ctx, span, "External values aren't allowed when compiling to byte-code "
                     );
                 }
                 Some(Name::Blob(blob)) => {
@@ -426,7 +431,10 @@ impl<'t> BytecodeCompiler<'t> {
                 Some(Name::Global(slot)) => {
                     let var = &self.compiler.frames[0].variables[*slot];
                     if var.kind.immutable() && ctx.frame != 0 {
-                        error!(self.compiler, ctx, span, "Cannot mutate constant '{}'", name);
+                        error!(
+                            self.compiler,
+                            ctx, span, "Cannot mutate constant '{}'", name
+                        );
                     } else {
                         let op = Op::AssignGlobal(var.slot);
                         self.add_op(ctx, span, op);
@@ -473,7 +481,8 @@ impl<'t> BytecodeCompiler<'t> {
                 // TODO(ed): Should they be? Is this how we should type the standard library?
                 error!(
                     self.compiler,
-                    ctx, statement.span,
+                    ctx,
+                    statement.span,
                     "External values aren't allowed when compiling to byte-code "
                 );
             }
@@ -623,9 +632,12 @@ impl<'t> BytecodeCompiler<'t> {
                     self.add_op(ctx, statement.span, Op::Jmp(continue_addr));
                 }
                 None => {
-                    error!(self.compiler, ctx, statement.span, "`continue` statement not in a loop");
+                    error!(
+                        self.compiler,
+                        ctx, statement.span, "`continue` statement not in a loop"
+                    );
                 }
-            }
+            },
 
             Break {} => match self.loops.last().cloned() {
                 Some(LoopFrame { stack_size, break_addr, .. }) => {
@@ -633,9 +645,12 @@ impl<'t> BytecodeCompiler<'t> {
                     self.add_op(ctx, statement.span, Op::Jmp(break_addr));
                 }
                 None => {
-                    error!(self.compiler, ctx, statement.span, "`continue` statement not in a loop");
+                    error!(
+                        self.compiler,
+                        ctx, statement.span, "`continue` statement not in a loop"
+                    );
                 }
-            }
+            },
 
             Unreachable {} => {
                 self.add_op(ctx, statement.span, Op::Unreachable);
@@ -648,47 +663,26 @@ impl<'t> BytecodeCompiler<'t> {
         }
     }
 
-    pub fn compile(
-        &mut self,
-        statement: &Statement,
-        namespace: usize,
-    ) {
-        let ctx = BytecodeContext {
-            block_slot: 0,
-            frame: 0,
-            scope: 0,
-            namespace,
-        };
+    pub fn compile(&mut self, statement: &Statement, namespace: usize) {
+        let ctx = BytecodeContext { block_slot: 0, frame: 0, scope: 0, namespace };
         self.statement(&statement, ctx);
     }
 
-    pub fn preamble(
-        &mut self,
-        span: Span,
-        num_constants: usize,
-    ) {
+    pub fn preamble(&mut self, span: Span, num_constants: usize) {
         let name = "/preamble/";
         let block = Block::new(name, 0, &self.compiler.namespace_id_to_path[&0]);
         self.blocks.push(block);
 
         let nil = self.compiler.constant(Value::Nil);
         // TODO(ed): This context is completely bogus...
-        let ctx = BytecodeContext {
-            block_slot: 0,
-            frame: 0,
-            namespace: 0,
-            scope: 0,
-        };
+        let ctx = BytecodeContext { block_slot: 0, frame: 0, namespace: 0, scope: 0 };
         for _ in 0..num_constants {
             // Uninitalized values have the value Nil
             self.add_op(ctx, span, nil);
         }
     }
 
-    pub fn postamble(
-        &mut self,
-        span: Span,
-    ) {
+    pub fn postamble(&mut self, span: Span) {
         let ctx = BytecodeContext {
             block_slot: 0,
             frame: self.compiler.frames.len() - 1,
@@ -714,7 +708,7 @@ impl<'t> BytecodeCompiler<'t> {
 // TODO(ed): This should move to the typechecker - since we always want this check.
 fn all_paths_return(statement: &Statement) -> bool {
     match &statement.kind {
-        | StatementKind::Assignment { .. }
+        StatementKind::Assignment { .. }
         | StatementKind::Blob { .. }
         | StatementKind::Break
         | StatementKind::Continue
