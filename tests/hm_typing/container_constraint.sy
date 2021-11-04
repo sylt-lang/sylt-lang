@@ -1,11 +1,11 @@
-f: fn<a: SameContainer b> *a, *b -> *b : fn a: *, b: * -> * do
-    b
+f: fn<a: Container> *a -> *a : fn a: * -> * do
+    a
 end
 
 start :: fn do
-    f' [1, 2, 3], ["a", "b", "c"]
-    f' {1, 2, 3}, {"a", "b", "c"}
-    f' {1, 2, 3}, ["a", "b", "c"]
+    f' {1, 2, 3}
+    f' [1, 2, 3]
+    f' 1
 end
 
-// error: $Mismatch { .. }
+// error: $Violating(..)
