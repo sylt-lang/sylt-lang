@@ -1642,7 +1642,7 @@ impl TypeChecker {
 
     fn contains(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
-            (Type::Unknown, _) => Ok(()),
+            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
 
             (Type::Set(x), y) | (Type::List(x), y) => self.unify(span, ctx, x, b).map(|_| ()),
 
