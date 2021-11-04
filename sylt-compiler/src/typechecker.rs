@@ -795,7 +795,15 @@ impl TypeChecker {
                     Ok(self.push_type(Type::Bool))
                 }
 
-                ComparisonKind::In => todo!(),
+                ComparisonKind::In => {
+                    let a = self.expression(&a, ctx)?;
+                    let b = self.expression(&b, ctx)?;
+                    self.add_constraint(a, Constraint::Holds(b));
+                    self.add_constraint(b, Constraint::Contains(a));
+                    self.check_constraints(span, ctx, a)?;
+                    self.check_constraints(span, ctx, b)?;
+                    Ok(self.push_type(Type::Bool))
+                }
             },
 
             ExpressionKind::AssertEq(a, b) => {
