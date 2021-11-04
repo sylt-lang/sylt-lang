@@ -274,7 +274,7 @@ impl TypeChecker {
                         ident.span,
                         ctx,
                         TypeError::Exotic,
-                        "Cannot find type-variable '{}'",
+                        "Cannot find type '{}' - is it perhaps a type-variable?",
                         ident.name
                     )
                 }
