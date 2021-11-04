@@ -10,7 +10,8 @@ use sylt_common::{RustFunction, Type as RuntimeType};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     expression::ComparisonKind, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
-    Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeKind, VarKind,
+    Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeConstraint, TypeKind,
+    VarKind,
 };
 
 use crate::{self as compiler, ty::Type, Context, Name as CompilerName};
@@ -116,6 +117,7 @@ enum Constraint {
     Container,
     SameContainer(usize),
     Contains(usize),
+    IsContainedBy(usize),
 }
 
 struct TypeChecker {
@@ -294,13 +296,14 @@ impl TypeChecker {
         self.inner_resolve_type(span, ctx, ty, &mut HashMap::new())
     }
 
-    fn inner_resolve_type(
+    fn resolve_constraint(
         &mut self,
         span: Span,
         ctx: TypeCtx,
-        ty: &ParserType,
-        seen: &mut HashMap<String, usize>,
-    ) -> TypeResult<usize> {
+        var: usize,
+        constraint: &TypeConstraint,
+        seen: &HashMap<String, usize>,
+    ) -> TypeResult<()> {
         fn check_constraint_arity(
             typechecker: &TypeChecker,
             span: Span,
@@ -341,6 +344,40 @@ impl TypeChecker {
             }
         }
 
+        let num_args = constraint.args.len();
+        match constraint.name.name.as_str() {
+            "Num" => {
+                check_constraint_arity(self, span, ctx, "Num", num_args, 0)?;
+                self.add_constraint(var, Constraint::Num);
+            }
+            "Container" => {
+                check_constraint_arity(self, span, ctx, "Container", num_args, 0)?;
+                self.add_constraint(var, Constraint::Container);
+            }
+            "SameContainer" => {
+                check_constraint_arity(self, span, ctx, "SameContainer", num_args, 1)?;
+                let a = parse_constraint_arg(self, span, ctx, &constraint.args[0].name, seen)?;
+                self.add_constraint(var, Constraint::SameContainer(a));
+                self.add_constraint(a, Constraint::SameContainer(var));
+            }
+            "Contains" => {
+                check_constraint_arity(self, span, ctx, "Contains", num_args, 1)?;
+                let a = parse_constraint_arg(self, span, ctx, &constraint.args[0].name, seen)?;
+                self.add_constraint(var, Constraint::Contains(a));
+                self.add_constraint(a, Constraint::IsContainedBy(var));
+            }
+            x => return err_type_error!(self, span, ctx, TypeError::UnknownConstraint(x.into())),
+        }
+        Ok(())
+    }
+
+    fn inner_resolve_type(
+        &mut self,
+        span: Span,
+        ctx: TypeCtx,
+        ty: &ParserType,
+        seen: &mut HashMap<String, usize>,
+    ) -> TypeResult<usize> {
         use TypeKind::*;
         let ty = match &ty.kind {
             Implied => Type::Unknown,
@@ -374,55 +411,7 @@ impl TypeChecker {
                     };
 
                     for constraint in constraints.iter() {
-                        let num_args = constraint.args.len();
-                        match constraint.name.name.as_str() {
-                            "Num" => {
-                                check_constraint_arity(self, span, ctx, "Num", num_args, 0)?;
-                                self.add_constraint(var, Constraint::Num);
-                            }
-                            "Container" => {
-                                check_constraint_arity(self, span, ctx, "Container", num_args, 0)?;
-                                self.add_constraint(var, Constraint::Container);
-                            }
-                            "SameContainer" => {
-                                check_constraint_arity(
-                                    self,
-                                    span,
-                                    ctx,
-                                    "SameContainer",
-                                    num_args,
-                                    1,
-                                )?;
-                                let a = parse_constraint_arg(
-                                    self,
-                                    span,
-                                    ctx,
-                                    &constraint.args[0].name,
-                                    seen,
-                                )?;
-                                self.add_constraint(var, Constraint::SameContainer(a));
-                                self.add_constraint(a, Constraint::SameContainer(var));
-                            }
-                            "Contains" => {
-                                check_constraint_arity(self, span, ctx, "Contains", num_args, 1)?;
-                                let a = parse_constraint_arg(
-                                    self,
-                                    span,
-                                    ctx,
-                                    &constraint.args[0].name,
-                                    seen,
-                                )?;
-                                self.add_constraint(var, Constraint::Contains(a));
-                            }
-                            x => {
-                                return err_type_error!(
-                                    self,
-                                    span,
-                                    ctx,
-                                    TypeError::UnknownConstraint(x.into())
-                                )
-                            }
-                        }
+                        self.resolve_constraint(span, ctx, var, constraint, seen)?;
                     }
                 }
                 Type::Function(params, ret)
@@ -1022,9 +1011,7 @@ impl TypeChecker {
                 }
 
                 Constraint::Neg => match self.find_type(a) {
-                    Type::Unknown => Ok(()),
-                    Type::Int => Ok(()),
-                    Type::Float => Ok(()),
+                    Type::Unknown | Type::Int | Type::Float => Ok(()),
                     _ => {
                         return err_type_error!(
                             self,
@@ -1113,7 +1100,8 @@ impl TypeChecker {
                     ),
                 },
 
-                Constraint::Contains(b) => self.is_contained_in(span, ctx, a, *b),
+                Constraint::Contains(b) => self.contains(span, ctx, a, *b),
+                Constraint::IsContainedBy(b) => self.contains(span, ctx, *b, a),
             }?
         }
         Ok(())
@@ -1290,6 +1278,9 @@ impl TypeChecker {
                     Constraint::SameContainer(self.inner_copy(*x, seen))
                 }
                 Constraint::Contains(x) => Constraint::Contains(self.inner_copy(*x, seen)),
+                Constraint::IsContainedBy(x) => {
+                    Constraint::IsContainedBy(self.inner_copy(*x, seen))
+                }
             })
             .collect();
 
@@ -1629,7 +1620,7 @@ impl TypeChecker {
         }
     }
 
-    fn is_contained_in(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+    fn contains(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) => Ok(()),
 
