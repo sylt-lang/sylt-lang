@@ -832,7 +832,15 @@ impl TypeChecker {
             }
 
             ExpressionKind::Parenthesis(expr) => self.expression(expr, ctx),
-            ExpressionKind::IfExpression { condition, pass, fail } => todo!(),
+
+            ExpressionKind::IfExpression { condition, pass, fail } => {
+                let boolean = self.push_type(Type::Bool);
+                let condition = self.expression(condition, ctx)?;
+                self.unify(span, ctx, condition, boolean)?;
+                let pass = self.expression(pass, ctx)?;
+                let fail = self.expression(fail, ctx)?;
+                self.unify(span, ctx, pass, fail)
+            }
 
             ExpressionKind::Function { name: _, params, ret, body } => {
                 let ss = self.stack.len();
