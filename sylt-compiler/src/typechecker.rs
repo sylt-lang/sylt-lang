@@ -117,7 +117,7 @@ enum Constraint {
     Container,
     SameContainer(usize),
     Contains(usize),
-    Holds(usize),
+    IsContainedIn(usize),
 }
 
 struct TypeChecker {
@@ -373,7 +373,7 @@ impl TypeChecker {
                 check_constraint_arity(self, span, ctx, "Contains", num_args, 1)?;
                 let a = parse_constraint_arg(self, span, ctx, &constraint.args[0].name, seen)?;
                 self.add_constraint(var, Constraint::Contains(a));
-                self.add_constraint(a, Constraint::Holds(var));
+                self.add_constraint(a, Constraint::IsContainedIn(var));
             }
             x => return err_type_error!(self, span, ctx, TypeError::UnknownConstraint(x.into())),
         }
@@ -798,7 +798,7 @@ impl TypeChecker {
                 ComparisonKind::In => {
                     let a = self.expression(&a, ctx)?;
                     let b = self.expression(&b, ctx)?;
-                    self.add_constraint(a, Constraint::Holds(b));
+                    self.add_constraint(a, Constraint::IsContainedIn(b));
                     self.add_constraint(b, Constraint::Contains(a));
                     self.check_constraints(span, ctx, a)?;
                     self.check_constraints(span, ctx, b)?;
@@ -1123,7 +1123,7 @@ impl TypeChecker {
                 },
 
                 Constraint::Contains(b) => self.contains(span, ctx, a, *b),
-                Constraint::Holds(b) => self.contains(span, ctx, *b, a),
+                Constraint::IsContainedIn(b) => self.contains(span, ctx, *b, a),
             }?
         }
         Ok(())
@@ -1300,7 +1300,9 @@ impl TypeChecker {
                     Constraint::SameContainer(self.inner_copy(*x, seen))
                 }
                 Constraint::Contains(x) => Constraint::Contains(self.inner_copy(*x, seen)),
-                Constraint::Holds(x) => Constraint::Holds(self.inner_copy(*x, seen)),
+                Constraint::IsContainedIn(x) => {
+                    Constraint::IsContainedIn(self.inner_copy(*x, seen))
+                }
             })
             .collect();
 
