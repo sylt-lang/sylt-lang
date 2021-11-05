@@ -35,7 +35,7 @@ fn assignable_dependencies(
             Some(_) if !ctx.shadowed(&ident.name) => [(ident.name.clone(), ctx.namespace)]
                 .iter()
                 .cloned()
-                .collect::<BTreeSet<_>>(),
+                .collect(),
             _ => BTreeSet::new(),
         },
         Call(ass, exprs) => assignable_dependencies(ctx, ass)
@@ -81,10 +81,7 @@ fn assignable_dependencies(
             }
             match recursive_namespace(ctx, ass) {
                 Ok(namespace) => match ctx.compiler.namespaces[namespace].get(&field.name) {
-                    Some(_) => [(field.name.clone(), namespace)]
-                        .iter()
-                        .cloned()
-                        .collect::<BTreeSet<_>>(),
+                    Some(_) => [(field.name.clone(), namespace)].iter().cloned().collect(),
                     _ => BTreeSet::new(),
                 },
                 Err(_) => assignable_dependencies(ctx, ass),
@@ -309,7 +306,7 @@ pub(crate) fn initialization_order<'a>(
     let mut to_order = BTreeMap::new();
     let mut is_checks = Vec::new();
     for (path, module) in tree.modules.iter() {
-        let namespace = *path_to_namespace_id.get(path).unwrap();
+        let namespace = path_to_namespace_id[path];
         for statement in module.statements.iter() {
             use StatementKind::*;
             match &statement.kind {
