@@ -668,10 +668,7 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         }
     };
 
-    // Wrap it in a syntax tree node.
-    let ty = Type { span, kind };
-
-    Ok((ctx, ty))
+    Ok((ctx, Type { span, kind }))
 }
 
 /// Parse an [AssignableKind::Call]
