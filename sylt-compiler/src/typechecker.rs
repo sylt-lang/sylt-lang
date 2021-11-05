@@ -93,6 +93,16 @@ struct TypeNode {
     constraints: BTreeSet<Constraint>,
 }
 
+/// # Constraints for type variables
+///
+/// Most constraints force `Unknown` types into becoming a certain type and causes a `TypeError`
+/// otherwise. Constraints applied to two or more type variables need to make sure all variables
+/// have the constraint in some way. For example, if some type has the `Contains` constraint, the
+/// contained type must have the `IsContainedIn` constraint. If this is not the case, the
+/// typechecker may miss some constraints when unifying.
+///
+/// In theory, `Unknown` is the only type that can have a constraint. In practice, concrete types
+/// may have constraints since they need to be checked at least once.
 #[derive(Clone, Debug, Hash, PartialOrd, Ord, PartialEq, Eq)]
 enum Constraint {
     Add(usize),
