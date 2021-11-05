@@ -127,7 +127,7 @@ enum Constraint {
     Container,
     SameContainer(usize),
     Contains(usize),
-    IsContainedBy(usize),
+    IsContainedIn(usize),
 }
 
 struct TypeChecker {
@@ -278,7 +278,16 @@ impl TypeChecker {
                     }
                     Ok(ty)
                 }
-                _ => return err_type_error!(self, span, ctx, todo_error!()),
+                _ => {
+                    return err_type_error!(
+                        self,
+                        ident.span,
+                        ctx,
+                        TypeError::Exotic,
+                        "Cannot find type '{}' - is it perhaps a type-variable?",
+                        ident.name
+                    )
+                }
             },
 
             AssignableKind::Access(ass, ident) => {
@@ -374,7 +383,7 @@ impl TypeChecker {
                 check_constraint_arity(self, span, ctx, "Contains", num_args, 1)?;
                 let a = parse_constraint_arg(self, span, ctx, &constraint.args[0].name, seen)?;
                 self.add_constraint(var, Constraint::Contains(a));
-                self.add_constraint(a, Constraint::IsContainedBy(var));
+                self.add_constraint(a, Constraint::IsContainedIn(var));
             }
             x => return err_type_error!(self, span, ctx, TypeError::UnknownConstraint(x.into())),
         }
@@ -399,7 +408,7 @@ impl TypeChecker {
                 sylt_common::Type::Float => Type::Float,
                 sylt_common::Type::Bool => Type::Bool,
                 sylt_common::Type::String => Type::Str,
-                _ => todo!(),
+                x => unreachable!("Got an unexpected resolved type '{:?}'", x),
             },
 
             UserDefined(assignable) => {
@@ -452,9 +461,6 @@ impl TypeChecker {
                     .entry(name.clone())
                     .or_insert_with(|| self.push_type(Type::Unknown)))
             }
-
-            // TODO(ed): This is very wrong - but works for now.
-            Union(_, _) => Type::Void,
         };
         Ok(self.push_type(ty))
     }
@@ -567,7 +573,7 @@ impl TypeChecker {
             | StatementKind::Blob { .. }
             | StatementKind::IsCheck { .. }
             | StatementKind::ExternalDefinition { .. } => {
-                todo!("Illegal inner statement! Parser should have caught this.")
+                unreachable!("Illegal inner statement! Parser should have caught this.")
             }
         }
     }
@@ -799,7 +805,15 @@ impl TypeChecker {
                     Ok(self.push_type(Type::Bool))
                 }
 
-                ComparisonKind::In => todo!(),
+                ComparisonKind::In => {
+                    let a = self.expression(&a, ctx)?;
+                    let b = self.expression(&b, ctx)?;
+                    self.add_constraint(a, Constraint::IsContainedIn(b));
+                    self.add_constraint(b, Constraint::Contains(a));
+                    self.check_constraints(span, ctx, a)?;
+                    self.check_constraints(span, ctx, b)?;
+                    Ok(self.push_type(Type::Bool))
+                }
             },
 
             ExpressionKind::AssertEq(a, b) => {
@@ -828,7 +842,15 @@ impl TypeChecker {
             }
 
             ExpressionKind::Parenthesis(expr) => self.expression(expr, ctx),
-            ExpressionKind::IfExpression { condition, pass, fail } => todo!(),
+
+            ExpressionKind::IfExpression { condition, pass, fail } => {
+                let boolean = self.push_type(Type::Bool);
+                let condition = self.expression(condition, ctx)?;
+                self.unify(span, ctx, condition, boolean)?;
+                let pass = self.expression(pass, ctx)?;
+                let fail = self.expression(fail, ctx)?;
+                self.unify(span, ctx, pass, fail)
+            }
 
             ExpressionKind::Function { name: _, params, ret, body } => {
                 let ss = self.stack.len();
@@ -1111,7 +1133,7 @@ impl TypeChecker {
                 },
 
                 Constraint::Contains(b) => self.contains(span, ctx, a, *b),
-                Constraint::IsContainedBy(b) => self.contains(span, ctx, *b, a),
+                Constraint::IsContainedIn(b) => self.contains(span, ctx, *b, a),
             }?
         }
         Ok(())
@@ -1288,8 +1310,8 @@ impl TypeChecker {
                     Constraint::SameContainer(self.inner_copy(*x, seen))
                 }
                 Constraint::Contains(x) => Constraint::Contains(self.inner_copy(*x, seen)),
-                Constraint::IsContainedBy(x) => {
-                    Constraint::IsContainedBy(self.inner_copy(*x, seen))
+                Constraint::IsContainedIn(x) => {
+                    Constraint::IsContainedIn(self.inner_copy(*x, seen))
                 }
             })
             .collect();
@@ -1632,7 +1654,7 @@ impl TypeChecker {
 
     fn contains(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
-            (Type::Unknown, _) => Ok(()),
+            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
 
             (Type::Set(x), y) | (Type::List(x), y) => self.unify(span, ctx, x, b).map(|_| ()),
 

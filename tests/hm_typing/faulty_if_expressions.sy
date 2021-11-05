@@ -1,0 +1,11 @@
+f: fn -> * : external
+
+start :: fn do
+    1 if true else 1
+
+    a :: f'
+    b :: "a"
+    (a + 1) if true else b
+end
+
+// error: $Mismatch { .. }

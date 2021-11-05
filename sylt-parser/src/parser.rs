@@ -168,8 +168,6 @@ pub enum TypeKind {
     Resolved(RuntimeType),
     /// I.e. blobs.
     UserDefined(Assignable),
-    /// A type that can be either `a` or `b`.
-    Union(Box<Type>, Box<Type>),
     /// `(params, return)`.
     Fn {
         constraints: BTreeMap<String, Vec<TypeConstraint>>,
@@ -670,33 +668,7 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         }
     };
 
-    // Wrap it in a syntax tree node.
-    let ty = Type { span, kind };
-
-    // Union type, `a | b`
-    let (ctx, ty) = if matches!(ctx.token(), T::Pipe) {
-        // Parse the other type.
-        let (ctx, rest) = parse_type(ctx.skip(1))?;
-        (
-            ctx,
-            Type { span, kind: Union(Box::new(ty), Box::new(rest)) },
-        )
-    } else {
-        (ctx, ty)
-    };
-
-    // Nullable type. Compiles to `a | Void`.
-    let (ctx, ty) = if matches!(ctx.token(), T::QuestionMark) {
-        let void = Type { span: ctx.span(), kind: Resolved(Void) };
-        (
-            ctx.skip(1),
-            Type { span, kind: Union(Box::new(ty), Box::new(void)) },
-        )
-    } else {
-        (ctx, ty)
-    };
-
-    Ok((ctx, ty))
+    Ok((ctx, Type { span, kind }))
 }
 
 /// Parse an [AssignableKind::Call]
@@ -1056,32 +1028,24 @@ mod test {
         test!(parse_type, type_int: "int" => Resolved(RT::Int));
         test!(parse_type, type_float: "float" => Resolved(RT::Float));
         test!(parse_type, type_str: "str" => Resolved(RT::String));
-        test!(parse_type, type_unknown_access: "a.A | int" => Union(_, _));
-        test!(parse_type, type_unknown_access_call: "a.b().A | int" => Union(_, _));
         test!(parse_type, type_unknown: "blargh" => UserDefined(_));
-        test!(parse_type, type_union: "int | int" => Union(_, _));
-        test!(parse_type, type_question: "int?" => Union(_, _));
-        test!(parse_type, type_union_and_question: "int | void | str?" => Union(_, _));
 
         test!(parse_type, type_fn_no_params: "fn ->" => Fn{ .. });
-        test!(parse_type, type_fn_one_param: "fn int? -> bool" => Fn{ .. });
-        test!(parse_type, type_fn_two_params: "fn int | void, int? -> str?" => Fn{ .. });
-        test!(parse_type, type_fn_only_ret: "fn -> bool?" => Fn{ .. });
+        test!(parse_type, type_fn_one_param: "fn int -> bool" => Fn{ .. });
+        test!(parse_type, type_fn_two_params: "fn int, int -> str" => Fn{ .. });
+        test!(parse_type, type_fn_only_ret: "fn -> bool" => Fn{ .. });
         test!(parse_type, type_fn_constraints: "fn<a: A a b + B b b, b: A a a> -> bool" => Fn{ .. });
 
         test!(parse_type, type_tuple_zero: "()" => Tuple(_));
         test!(parse_type, type_tuple_one: "(int,)" => Tuple(_));
         test!(parse_type, type_grouping: "(int)" => Grouping(_));
-        test!(parse_type, type_tuple_complex: "(int | float?, str, str,)" => Tuple(_));
+        test!(parse_type, type_tuple_complex: "(int, str, str,)" => Tuple(_));
 
         test!(parse_type, type_list_one: "[int]" => List(_));
-        test!(parse_type, type_list_complex: "[int | float?]" => List(_));
 
         test!(parse_type, type_set_one: "{int}" => Set(_));
-        test!(parse_type, type_set_complex: "{int | float?}" => Set(_));
 
         test!(parse_type, type_dict_one: "{int : int}" => Dict(_, _));
-        test!(parse_type, type_dict_complex: "{int | float? : int | int | int?}" => Dict(_, _));
     }
 }
 
@@ -1213,9 +1177,6 @@ impl Display for Type {
                 write!(f, "User(")?;
                 name.pretty_print(f, 0)?;
                 write!(f, ")")?;
-            }
-            TypeKind::Union(a, b) => {
-                write!(f, "{} | {}", a, b)?;
             }
             TypeKind::Fn { constraints, params, ret } => {
                 write!(f, "Fn ")?;
