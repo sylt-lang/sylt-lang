@@ -1,9 +1,10 @@
 start :: fn do
+    len({"a", "b", "c"}) <=> 3
+    len({"a": "b"}) <=> 1
     len([1, 2]) <=> 2
     len({1: 2}) <=> 1
-    a: {int: int} | [int] : [1, 2]
-    len(a) <=> 2
-    b: [int] | {int: int} : [1, 2]
-    len(b) <=> 2
+    len({:}) <=> 0
+    len({}) <=> 0
+    len([]) <=> 0
 end
 
