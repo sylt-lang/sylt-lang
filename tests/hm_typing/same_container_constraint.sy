@@ -2,10 +2,6 @@ f: fn<a: SameContainer b> *a, *b -> *b : fn a: *, b: * -> * do
     b
 end
 
-g: fn<a: Container> *a -> *a : fn a: * -> * do
-    a
-end
-
 start :: fn do
     f' [1, 2, 3], ["a", "b", "c"]
     f' {1, 2, 3}, {"a", "b", "c"}
