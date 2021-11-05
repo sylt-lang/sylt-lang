@@ -82,33 +82,73 @@ pub enum TypeError {
     Exotic,
 
     // This error should be implemented at a later time.
-    ToDo { line: u32, file: String },
+    ToDo {
+        line: u32,
+        file: String,
+    },
 
     Violating(Type),
 
-    BinOp { lhs: Type, rhs: Type, op: String },
+    BinOp {
+        lhs: Type,
+        rhs: Type,
+        op: String,
+    },
 
-    UniOp { val: Type, op: String },
+    UniOp {
+        val: Type,
+        op: String,
+    },
 
-    Mismatch { got: Type, expected: Type },
+    Mismatch {
+        got: Type,
+        expected: Type,
+    },
 
-    MismatchAssign { got: Type, expected: Type },
+    MismatchAssign {
+        got: Type,
+        expected: Type,
+    },
 
     Mutability,
 
-    ExcessiveForce { got: Type, expected: Type },
+    ExcessiveForce {
+        got: Type,
+        expected: Type,
+    },
 
     NamespaceNotExpression,
 
-    WrongArity { got: usize, expected: usize },
+    WrongArity {
+        got: usize,
+        expected: usize,
+    },
 
-    UnknownField { blob: String, field: String },
+    UnknownField {
+        blob: String,
+        field: String,
+    },
 
-    MissingField { blob: String, field: String },
+    MissingField {
+        blob: String,
+        field: String,
+    },
 
-    TupleIndexOutOfRange { got: i64, length: usize },
+    TupleIndexOutOfRange {
+        got: i64,
+        length: usize,
+    },
 
     UnresolvedName(String),
+
+    WrongConstraintArity {
+        name: String,
+        got: usize,
+        expected: usize,
+    },
+
+    UnknownConstraint(String),
+    UnknownConstraintArgument(String),
 }
 
 // TODO(ed): Switch to spans for the whole compiler?
@@ -334,17 +374,36 @@ impl fmt::Display for TypeError {
             TypeError::WrongArity { got, expected } => {
                 write!(f, "Expected {} arguments but got {}", expected, got)
             }
+
             TypeError::UnknownField { blob, field } => {
                 write!(f, "Cannot find field '{}.{}'", blob, field)
             }
+
             TypeError::MissingField { blob, field } => {
                 write!(f, "Blob instance lacks field '{}.{}'", blob, field)
             }
+
             TypeError::TupleIndexOutOfRange { length, got } => {
                 write!(f, "A tuple of length {} has no element {}", length, got)
             }
+
             TypeError::UnresolvedName(name) => {
                 write!(f, "Cannot resolve name '{}'", name)
+            }
+
+            TypeError::WrongConstraintArity { name, got, expected } => {
+                write!(
+                    f,
+                    "Constraint '{}' take {} arguments, got {}",
+                    name, got, expected
+                )
+            }
+
+            TypeError::UnknownConstraint(constraint) => {
+                write!(f, "Unknown constraint '{}'", constraint)
+            }
+            TypeError::UnknownConstraintArgument(argument) => {
+                write!(f, "Cannot resolve this constraint argument '{}'", argument)
             }
         }
     }

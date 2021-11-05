@@ -43,7 +43,7 @@ impl Display for Type {
             Type::Ty => write!(f, "Type"),
             Type::Generic(name) => write!(f, "#{}", name),
             Type::Void => write!(f, "void"),
-            Type::Unknown => write!(f, "?"),
+            Type::Unknown => write!(f, "*"),
             Type::Int => write!(f, "int"),
             Type::Float => write!(f, "float"),
             Type::Bool => write!(f, "bool"),

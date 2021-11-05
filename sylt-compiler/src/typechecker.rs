@@ -10,7 +10,8 @@ use sylt_common::{RustFunction, Type as RuntimeType};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     expression::ComparisonKind, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
-    Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeKind, VarKind,
+    Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeConstraint, TypeKind,
+    VarKind,
 };
 
 use crate::{self as compiler, ty::Type, Context, Name as CompilerName};
@@ -92,6 +93,16 @@ struct TypeNode {
     constraints: BTreeSet<Constraint>,
 }
 
+/// # Constraints for type variables
+///
+/// Most constraints force `Unknown` types into becoming a certain type and causes a `TypeError`
+/// otherwise. Constraints applied to two or more type variables need to make sure all variables
+/// have the constraint in some way. For example, if some type has the `Contains` constraint, the
+/// contained type must have the `IsContainedIn` constraint. If this is not the case, the
+/// typechecker may miss some constraints when unifying.
+///
+/// In theory, `Unknown` is the only type that can have a constraint. In practice, concrete types
+/// may have constraints since they need to be checked at least once.
 #[derive(Clone, Debug, Hash, PartialOrd, Ord, PartialEq, Eq)]
 enum Constraint {
     Add(usize),
@@ -113,6 +124,10 @@ enum Constraint {
     Field(String, usize),
 
     Num,
+    Container,
+    SameContainer(usize),
+    Contains(usize),
+    IsContainedBy(usize),
 }
 
 struct TypeChecker {
@@ -241,14 +256,14 @@ impl TypeChecker {
         ctx: TypeCtx,
         assignable: &Assignable,
     ) -> TypeResult<usize> {
+        let span = assignable.span;
         match &assignable.kind {
             AssignableKind::Read(ident) => match self
                 .globals
                 .get(&(ctx.namespace, ident.name.clone()))
                 .cloned()
-                .unwrap()
             {
-                Name::Blob(blob_ty) => {
+                Some(Name::Blob(blob_ty)) => {
                     let ty = self.push_type(blob_ty.clone());
                     match blob_ty {
                         Type::Blob(_, fields) => {
@@ -263,7 +278,7 @@ impl TypeChecker {
                     }
                     Ok(ty)
                 }
-                _ => todo!(),
+                _ => return err_type_error!(self, span, ctx, todo_error!()),
             },
 
             AssignableKind::Access(ass, ident) => {
@@ -272,22 +287,98 @@ impl TypeChecker {
                     .globals
                     .get(&(ctx.namespace, ident.name.clone()))
                     .cloned()
-                    .unwrap()
                 {
-                    Name::Blob(ty) => Ok(self.push_type(ty.clone())),
-                    _ => todo!(),
+                    Some(Name::Blob(ty)) => Ok(self.push_type(ty.clone())),
+                    _ => return err_type_error!(self, span, ctx, todo_error!()),
                 }
             }
 
             AssignableKind::Call(..)
             | AssignableKind::ArrowCall(..)
             | AssignableKind::Index(..)
-            | AssignableKind::Expression(..) => todo!(),
+            | AssignableKind::Expression(..) => {
+                return err_type_error!(self, span, ctx, todo_error!())
+            }
         }
     }
 
     fn resolve_type(&mut self, span: Span, ctx: TypeCtx, ty: &ParserType) -> TypeResult<usize> {
         self.inner_resolve_type(span, ctx, ty, &mut HashMap::new())
+    }
+
+    fn resolve_constraint(
+        &mut self,
+        span: Span,
+        ctx: TypeCtx,
+        var: usize,
+        constraint: &TypeConstraint,
+        seen: &HashMap<String, usize>,
+    ) -> TypeResult<()> {
+        fn check_constraint_arity(
+            typechecker: &TypeChecker,
+            span: Span,
+            ctx: TypeCtx,
+            name: &str,
+            got: usize,
+            expected: usize,
+        ) -> TypeResult<()> {
+            if got != expected {
+                err_type_error!(
+                    typechecker,
+                    span,
+                    ctx,
+                    TypeError::WrongConstraintArity { name: name.into(), got, expected }
+                )
+            } else {
+                Ok(())
+            }
+        }
+
+        fn parse_constraint_arg(
+            typechecker: &TypeChecker,
+            span: Span,
+            ctx: TypeCtx,
+            name: &str,
+            seen: &HashMap<String, usize>,
+        ) -> TypeResult<usize> {
+            match seen.get(name) {
+                Some(x) => Ok(*x),
+                _ => {
+                    return err_type_error!(
+                        typechecker,
+                        span,
+                        ctx,
+                        TypeError::UnknownConstraintArgument(name.into())
+                    )
+                }
+            }
+        }
+
+        let num_args = constraint.args.len();
+        match constraint.name.name.as_str() {
+            "Num" => {
+                check_constraint_arity(self, span, ctx, "Num", num_args, 0)?;
+                self.add_constraint(var, Constraint::Num);
+            }
+            "Container" => {
+                check_constraint_arity(self, span, ctx, "Container", num_args, 0)?;
+                self.add_constraint(var, Constraint::Container);
+            }
+            "SameContainer" => {
+                check_constraint_arity(self, span, ctx, "SameContainer", num_args, 1)?;
+                let a = parse_constraint_arg(self, span, ctx, &constraint.args[0].name, seen)?;
+                self.add_constraint(var, Constraint::SameContainer(a));
+                self.add_constraint(a, Constraint::SameContainer(var));
+            }
+            "Contains" => {
+                check_constraint_arity(self, span, ctx, "Contains", num_args, 1)?;
+                let a = parse_constraint_arg(self, span, ctx, &constraint.args[0].name, seen)?;
+                self.add_constraint(var, Constraint::Contains(a));
+                self.add_constraint(a, Constraint::IsContainedBy(var));
+            }
+            x => return err_type_error!(self, span, ctx, TypeError::UnknownConstraint(x.into())),
+        }
+        Ok(())
     }
 
     fn inner_resolve_type(
@@ -324,16 +415,13 @@ impl TypeChecker {
                 for (var, constraints) in constraints.iter() {
                     let var = match seen.get(var) {
                         Some(var) => *var,
+                        // NOTE(ed): This disallowes type-variables that are only used for
+                        // constraints.
                         None => return err_type_error!(self, span, ctx, todo_error!()),
                     };
 
                     for constraint in constraints.iter() {
-                        match constraint.name.name.as_str() {
-                            "Num" => self.add_constraint(var, Constraint::Num),
-                            "Container" => {}
-                            "SameContainer" => {}
-                            _ => return err_type_error!(self, span, ctx, todo_error!()),
-                        }
+                        self.resolve_constraint(span, ctx, var, constraint, seen)?;
                     }
                 }
                 Type::Function(params, ret)
@@ -933,9 +1021,7 @@ impl TypeChecker {
                 }
 
                 Constraint::Neg => match self.find_type(a) {
-                    Type::Unknown => Ok(()),
-                    Type::Int => Ok(()),
-                    Type::Float => Ok(()),
+                    Type::Unknown | Type::Int | Type::Float => Ok(()),
                     _ => {
                         return err_type_error!(
                             self,
@@ -990,9 +1076,42 @@ impl TypeChecker {
                         span,
                         ctx,
                         TypeError::Violating(self.bake_type(a)),
-                        "The Num constraint requires int or float"
+                        "The Num constraint forces int or float"
                     ),
                 },
+
+                Constraint::Container => match self.find_type(a) {
+                    Type::Unknown | Type::Set(..) | Type::List(..) | Type::Dict(..) => Ok(()),
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Violating(self.bake_type(a)),
+                        "The Container constraint forces set, list or dict"
+                    ),
+                },
+
+                Constraint::SameContainer(b) => match (self.find_type(a), self.find_type(*b)) {
+                    (Type::Unknown, _)
+                    | (_, Type::Unknown)
+                    | (Type::Set(..), Type::Set(..))
+                    | (Type::List(..), Type::List(..))
+                    | (Type::Dict(..), Type::Dict(..)) => Ok(()),
+
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Mismatch {
+                            got: self.bake_type(a),
+                            expected: self.bake_type(*b)
+                        },
+                        "The SameContainer constraint forces the outer containers to match"
+                    ),
+                },
+
+                Constraint::Contains(b) => self.contains(span, ctx, a, *b),
+                Constraint::IsContainedBy(b) => self.contains(span, ctx, *b, a),
             }?
         }
         Ok(())
@@ -1137,8 +1256,43 @@ impl TypeChecker {
             return *res;
         }
         let new_ty = self.push_type(Type::Unknown);
-        self.find_node_mut(new_ty).constraints = self.find_node(old_ty).constraints.clone();
         seen.insert(old_ty, new_ty);
+
+        self.find_node_mut(new_ty).constraints = self
+            .find_node(old_ty)
+            .constraints
+            .clone()
+            .iter()
+            .map(|con| match &con {
+                Constraint::Add(x) => Constraint::Add(self.inner_copy(*x, seen)),
+                Constraint::Sub(x) => Constraint::Sub(self.inner_copy(*x, seen)),
+                Constraint::Mul(x) => Constraint::Mul(self.inner_copy(*x, seen)),
+                Constraint::Div(x) => Constraint::Div(self.inner_copy(*x, seen)),
+                Constraint::Equ(x) => Constraint::Equ(self.inner_copy(*x, seen)),
+                Constraint::Cmp(x) => Constraint::Cmp(self.inner_copy(*x, seen)),
+                Constraint::CmpEqu(x) => Constraint::CmpEqu(self.inner_copy(*x, seen)),
+                Constraint::Neg => Constraint::Neg,
+                Constraint::Indexes(x) => Constraint::Indexes(self.inner_copy(*x, seen)),
+                Constraint::IndexedBy(x) => Constraint::IndexedBy(self.inner_copy(*x, seen)),
+                Constraint::IndexingGives(x) => {
+                    Constraint::IndexingGives(self.inner_copy(*x, seen))
+                }
+                Constraint::GivenByIndex(x) => Constraint::GivenByIndex(self.inner_copy(*x, seen)),
+                Constraint::ConstantIndex(i, x) => {
+                    Constraint::ConstantIndex(*i, self.inner_copy(*x, seen))
+                }
+                Constraint::Field(f, x) => Constraint::Field(f.clone(), self.inner_copy(*x, seen)),
+                Constraint::Num => Constraint::Num,
+                Constraint::Container => Constraint::Container,
+                Constraint::SameContainer(x) => {
+                    Constraint::SameContainer(self.inner_copy(*x, seen))
+                }
+                Constraint::Contains(x) => Constraint::Contains(self.inner_copy(*x, seen)),
+                Constraint::IsContainedBy(x) => {
+                    Constraint::IsContainedBy(self.inner_copy(*x, seen))
+                }
+            })
+            .collect();
 
         let ty = self.find_type(old_ty);
         self.find_node_mut(new_ty).ty = match ty {
@@ -1472,6 +1626,34 @@ impl TypeChecker {
                 ctx,
                 TypeError::Violating(self.bake_type(a)),
                 "This type cannot be indexed"
+            ),
+        }
+    }
+
+    fn contains(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::Unknown, _) => Ok(()),
+
+            (Type::Set(x), y) | (Type::List(x), y) => self.unify(span, ctx, x, b).map(|_| ()),
+
+            (Type::Dict(kx, vx), Type::Tuple(ys)) => {
+                if ys.len() == 2 {
+                    self.unify(span, ctx, kx, ys[0])?;
+                    self.unify(span, ctx, vx, ys[1]).map(|_| ())
+                } else {
+                    err_type_error!(self, span, ctx, todo_error!())
+                }
+            }
+
+            _ => err_type_error!(
+                self,
+                span,
+                ctx,
+                TypeError::Mismatch {
+                    got: self.bake_type(a),
+                    expected: self.bake_type(b)
+                },
+                "The Contains constraint forces a container"
             ),
         }
     }
