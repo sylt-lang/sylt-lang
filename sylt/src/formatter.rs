@@ -400,7 +400,6 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
         }
         StatementKind::ExternalDefinition { ident, kind, ty } => {
             assert!(!matches!(ty.kind, TypeKind::Implied), "Should not parse");
-            assert!(!kind.force(), "Should not parse");
 
             write_indents(dest, indent)?;
             write_identifier(dest, ident)?;
@@ -423,15 +422,10 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
                     match kind {
                         VarKind::Const => " :: ",
                         VarKind::Mutable => " := ",
-                        VarKind::ForceConst => unreachable!("can't force an implied type"),
-                        VarKind::ForceMutable => unreachable!("can't force an implied type"),
                     }
                 )?;
             } else {
                 write!(dest, ": ")?;
-                if kind.force() {
-                    write!(dest, "!")?;
-                }
                 write_type(dest, indent, ty)?;
                 if kind.immutable() {
                     write!(dest, " : ")?;

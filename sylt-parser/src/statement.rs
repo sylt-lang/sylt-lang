@@ -490,15 +490,11 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let ctx = ctx.skip(2);
 
             let (ctx, kind, ty) = {
-                let forced = matches!(ctx.token(), T::Bang); // !int
-                let ctx = ctx.skip_if(T::Bang);
                 let (ctx, ty) = parse_type(ctx)?;
-                let kind = match (ctx.token(), forced) {
-                    (T::Colon, true) => VarKind::ForceConst,
-                    (T::Equal, true) => VarKind::ForceMutable,
-                    (T::Colon, false) => VarKind::Const,
-                    (T::Equal, false) => VarKind::Mutable,
-                    (t, _) => {
+                let kind = match ctx.token() {
+                    T::Colon => VarKind::Const,
+                    T::Equal => VarKind::Mutable,
+                    t => {
                         raise_syntax_error!(
                             ctx,
                             "Expected ':' or '=' for definition, but got '{:?}'",
@@ -511,9 +507,6 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             };
 
             if matches!(ctx.token(), T::External) {
-                if kind.force() {
-                    raise_syntax_error!(ctx, "Cannot force types on external definitions");
-                }
                 (ctx.skip(1), ExternalDefinition { ident, kind, ty })
             } else {
                 // The value to define the variable to.

@@ -59,25 +59,16 @@ pub enum Prec {
     Arrow,
 }
 
-/// Variables can be any combination of `{Force,}{Const,Mutable}`.
-///
-/// Forced variable kinds are a signal to the type checker that the type is
-/// assumed and shouldn't be checked.
+/// Variables can be either `Const` or `Mutable`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum VarKind {
     Const,
     Mutable,
-    ForceConst,
-    ForceMutable,
 }
 
 impl VarKind {
     pub fn immutable(&self) -> bool {
-        matches!(self, VarKind::Const | VarKind::ForceConst)
-    }
-
-    pub fn force(&self) -> bool {
-        matches!(self, VarKind::ForceConst | VarKind::ForceMutable)
+        matches!(self, VarKind::Const)
     }
 }
 
