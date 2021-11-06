@@ -1,6 +1,0 @@
-start :: fn do
-    a : int|float = 1
-    -a <=> -1
-    b : int|float = 2.0
-    -b <=> -2.0
-end

@@ -1,6 +1,0 @@
-start :: fn do
-    len({1: 2})
-    a: {int: int} | [int] : [1, 2, 3]
-    len(a)
-end
-

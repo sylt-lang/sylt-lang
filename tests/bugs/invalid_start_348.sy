@@ -1,2 +1,2 @@
 start :: {}
-// error: $Violating { .. }
+// error: $Mismatch { .. }

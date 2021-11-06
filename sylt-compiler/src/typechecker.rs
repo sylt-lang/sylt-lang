@@ -1106,7 +1106,7 @@ impl TypeChecker {
                         span,
                         ctx,
                         TypeError::Exotic,
-                        "Only blobs can have fields, {} is not a blob, so it cannot have a fild {}",
+                        "The type \"{}\" is not a blob, so it cannot have a field \"{}\"",
                         self.bake_type(a),
                         name
                     ),
@@ -1744,7 +1744,7 @@ impl TypeChecker {
                                 got: self.bake_type(var.ty),
                                 expected: self.bake_type(start),
                             },
-                            "The start function has to have a given type"
+                            "The start function has the wrong type"
                         )
                     }
                 }

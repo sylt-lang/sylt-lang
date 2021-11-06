@@ -1,10 +1,10 @@
 start :: fn do
     a: [int] = [1, 2]
     b: [int] = []
-    c: [int | str] = [1, "abc"]
-    d: [int | str] = [1]
-    e: [int | str] = ["s"]
-    f: [int | str] = []
+    c: [str] = ["abc"]
+    d: [float] = [.1, .2, .3, .4, .5, .6, .7]
+    e: [*] = []
+    f: [str] = []
     a
     b
     c
