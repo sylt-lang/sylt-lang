@@ -889,10 +889,23 @@ impl TypeChecker {
                     .collect::<TypeResult<_>>()?;
 
                 let mut errors = Vec::new();
+                for (field, field_ty) in blob_fields.iter() {
+                    if !given_fields.contains_key(field) {
+                        errors.push(type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::MissingField {
+                                blob: blob_name.clone(),
+                                field: field.clone(),
+                            }
+                        ));
+                    }
+                }
+
                 for (field, field_ty) in given_fields.iter() {
-                    match blob_fields.get(field) {
-                        Some(_) => {}
-                        None => errors.push(type_error!(
+                    if !blob_fields.contains_key(field) {
+                        errors.push(type_error!(
                             self,
                             span,
                             ctx,
@@ -900,7 +913,7 @@ impl TypeChecker {
                                 blob: blob_name.clone(),
                                 field: field.clone(),
                             }
-                        )),
+                        ));
                     }
                 }
 
@@ -1210,25 +1223,36 @@ impl TypeChecker {
                 }
 
                 (Type::Blob(a_blob, a_fields), Type::Blob(b_blob, b_fields)) => {
-                    let mut c_fields = BTreeMap::new();
-                    for (a_name, a_ty) in a_fields.iter() {
-                        let b_ty = match b_fields.get(a_name) {
-                            Some(b_ty) => *b_ty,
-                            None => continue,
-                        };
-                        match self.unify(span, ctx, *a_ty, b_ty) {
-                            Ok(_) => {
-                                c_fields.insert(a_name.clone(), *a_ty);
-                            }
-                            Err(_) => {}
-                        }
+                    if a_fields.len() != b_fields.len() {
+                        return err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::Mismatch {
+                                got: self.bake_type(a),
+                                expected: self.bake_type(b)
+                            },
+                            "Blobs have different number of fields"
+                        );
                     }
 
-                    let c = self.push_type(Type::Unknown);
-                    self.union(a, c);
-                    self.union(b, c);
-                    self.find_node_mut(c).ty =
-                        Type::Blob(format!("{} & {}", a_blob, b_blob), c_fields);
+                    for (a_field, a_ty) in a_fields.iter() {
+                        let b_ty = match b_fields.get(a_field) {
+                            Some(b_ty) => *b_ty,
+                            None => {
+                                return err_type_error!(
+                                    self,
+                                    span,
+                                    ctx,
+                                    TypeError::MissingField {
+                                        blob: b_blob.clone(),
+                                        field: a_field.clone()
+                                    }
+                                )
+                            }
+                        };
+                        self.unify(span, ctx, *a_ty, b_ty)?;
+                    }
                 }
 
                 _ => {
