@@ -363,7 +363,11 @@ function add(s, v)
 end
 
 function len(c)
-    return #c
+    local s = 0
+    for _ in pairs(c) do
+        s = s + 1
+    end
+    return s
 end
 
 function clear(c)
