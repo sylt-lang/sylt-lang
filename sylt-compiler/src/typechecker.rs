@@ -657,7 +657,12 @@ impl TypeChecker {
                         Some(Name::Global(var)) => Ok(var.ty),
                         None => match self.functions.get(&ident.name) {
                             Some(f) => Ok(*f),
-                            None => panic!("Cannot read variable: {:?}", ident.name),
+                            None => err_type_error!(
+                                self,
+                                span,
+                                ctx,
+                                TypeError::UnresolvedName(ident.name.clone())
+                            ),
                         },
                         _ => panic!("Not a variable!"),
                     }
@@ -871,7 +876,7 @@ impl TypeChecker {
 
                 let given_fields: BTreeMap<_, _> = fields
                     .iter()
-                    .map(|(key, expr)| Ok((key.clone(), self.expression(expr, ctx)?)))
+                    .map(|(key, expr)| Ok((key.clone(), self.push_type(Type::Unknown))))
                     .collect::<TypeResult<_>>()?;
 
                 let mut errors = Vec::new();
@@ -907,7 +912,26 @@ impl TypeChecker {
                     return Err(errors);
                 }
 
-                let given_blob = self.push_type(Type::Blob(blob_name, given_fields));
+                let given_blob =
+                    self.push_type(Type::Blob(blob_name.clone(), given_fields.clone()));
+
+                // Unify the fields with their real types
+                for (key, expr) in fields {
+                    let is_function = matches!(expr.kind, ExpressionKind::Function { .. });
+                    if is_function {
+                        self.stack.push(Variable {
+                            ident: Identifier { name: "self".to_string(), span },
+                            kind: VarKind::Const,
+                            ty: given_blob,
+                        });
+                    }
+                    let expr_ty = self.expression(expr, ctx)?;
+                    self.unify(span, ctx, expr_ty, given_fields[key])?;
+                    if is_function {
+                        self.stack.pop();
+                    }
+                }
+
                 self.unify(span, ctx, given_blob, blob_ty)
             }
 
