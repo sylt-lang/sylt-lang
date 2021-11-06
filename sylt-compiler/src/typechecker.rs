@@ -1231,6 +1231,7 @@ impl TypeChecker {
                 }
 
                 (Type::Blob(a_blob, a_fields), Type::Blob(b_blob, b_fields)) => {
+                    // TODO(ed): This should give information about the violating fields.
                     if a_fields.len() != b_fields.len() {
                         return err_type_error!(
                             self,
