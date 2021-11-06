@@ -542,4 +542,14 @@ sylt_macro::extern_function!(
     }
 );
 
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    unsafe_force,
+    ? "Coerce any value into any type",
+    -> "fn *X -> *Y",
+    [x] => {
+        Ok(x.clone())
+    }
+);
+
 sylt_macro::sylt_link_gen!("sylt_std::sylt");
