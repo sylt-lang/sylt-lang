@@ -916,9 +916,9 @@ impl TypeChecker {
                     self.push_type(Type::Blob(blob_name.clone(), given_fields.clone()));
 
                 // Unify the fields with their real types
+                let ss = self.stack.len();
                 for (key, expr) in fields {
-                    let is_function = matches!(expr.kind, ExpressionKind::Function { .. });
-                    if is_function {
+                    if matches!(expr.kind, ExpressionKind::Function { .. }) {
                         self.stack.push(Variable {
                             ident: Identifier { name: "self".to_string(), span },
                             kind: VarKind::Const,
@@ -927,9 +927,7 @@ impl TypeChecker {
                     }
                     let expr_ty = self.expression(expr, ctx)?;
                     self.unify(span, ctx, expr_ty, given_fields[key])?;
-                    if is_function {
-                        self.stack.pop();
-                    }
+                    self.stack.truncate(ss);
                 }
 
                 self.unify(span, ctx, given_blob, blob_ty)
