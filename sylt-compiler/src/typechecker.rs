@@ -1013,8 +1013,15 @@ impl TypeChecker {
         self.find_node(a).ty.clone()
     }
 
-    fn bake_type(&mut self, a: usize) -> RuntimeType {
-        match self.find_type(a) {
+    fn inner_bake_type(&mut self, a: usize, seen: &mut HashMap<usize, RuntimeType>) -> RuntimeType {
+        let a = self.find(a);
+        if seen.contains_key(&a) {
+            return seen[&a].clone();
+        }
+
+        seen.insert(a, RuntimeType::Unknown);
+
+        let res = match self.find_type(a) {
             Type::Unknown => RuntimeType::Unknown,
             Type::Ty => RuntimeType::Ty,
             Type::Void => RuntimeType::Void,
@@ -1022,29 +1029,40 @@ impl TypeChecker {
             Type::Float => RuntimeType::Float,
             Type::Bool => RuntimeType::Bool,
             Type::Str => RuntimeType::String,
-            Type::Tuple(tys) => {
-                RuntimeType::Tuple(tys.iter().map(|ty| self.bake_type(*ty)).collect())
-            }
-            Type::List(ty) => RuntimeType::List(Box::new(self.bake_type(ty))),
-            Type::Set(ty) => RuntimeType::Set(Box::new(self.bake_type(ty))),
+            Type::Tuple(tys) => RuntimeType::Tuple(
+                tys.iter()
+                    .map(|ty| self.inner_bake_type(*ty, seen))
+                    .collect(),
+            ),
+            Type::List(ty) => RuntimeType::List(Box::new(self.inner_bake_type(ty, seen))),
+            Type::Set(ty) => RuntimeType::Set(Box::new(self.inner_bake_type(ty, seen))),
             Type::Dict(ty_k, ty_v) => RuntimeType::Dict(
-                Box::new(self.bake_type(ty_k)),
-                Box::new(self.bake_type(ty_v)),
+                Box::new(self.inner_bake_type(ty_k, seen)),
+                Box::new(self.inner_bake_type(ty_v, seen)),
             ),
             Type::Function(args, ret) => RuntimeType::Function(
-                args.iter().map(|ty| self.bake_type(*ty)).collect(),
-                Box::new(self.bake_type(ret)),
+                args.iter()
+                    .map(|ty| self.inner_bake_type(*ty, seen))
+                    .collect(),
+                Box::new(self.inner_bake_type(ret, seen)),
             ),
             Type::Blob(name, fields) => RuntimeType::Blob(
                 name.clone(),
                 fields
                     .iter()
-                    .map(|(name, ty)| (name.clone(), self.bake_type(*ty)))
+                    .map(|(name, ty)| (name.clone(), self.inner_bake_type(*ty, seen)))
                     .collect(),
             ),
 
             Type::Invalid => RuntimeType::Invalid,
-        }
+        };
+
+        seen.insert(a, res.clone());
+        return res;
+    }
+
+    fn bake_type(&mut self, a: usize) -> RuntimeType {
+        self.inner_bake_type(a, &mut HashMap::new())
     }
 
     // This span is wierd - is it weird?
