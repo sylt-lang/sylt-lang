@@ -6,10 +6,7 @@ start :: fn do
     b = "abc"
     a = 2
     a += "abc"
-    a: {str|int: int} = {"ab": 2, 2: 2}
-    a: {int|float} = [2, 2, 2.0]
+    a: {str: int} = {"ab": 2}
+    a: {int} = [2, 2]
 end
-// error: $MismatchAssign { got: Type::String, expected: Type::Int }
-// error: $Mutability
-// error: $BinOp { .. }
-// error: $Mismatch { .. }
+// error: $Mismatch { got: Type::String, expected: Type::Int }
