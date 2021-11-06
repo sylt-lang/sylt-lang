@@ -1,8 +1,0 @@
-A :: blob {
-    a: int | void,
-}
-start :: fn do
-    a := A {}
-    print(a.a)
-end
-// error: $MissingField { .. }

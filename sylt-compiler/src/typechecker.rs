@@ -263,21 +263,7 @@ impl TypeChecker {
                 .get(&(ctx.namespace, ident.name.clone()))
                 .cloned()
             {
-                Some(Name::Blob(blob_ty)) => {
-                    let ty = self.push_type(blob_ty.clone());
-                    match blob_ty {
-                        Type::Blob(_, fields) => {
-                            for (name, field_type) in fields.iter() {
-                                self.add_constraint(
-                                    ty,
-                                    Constraint::Field(name.clone(), *field_type),
-                                );
-                            }
-                        }
-                        _ => unreachable!(),
-                    }
-                    Ok(ty)
-                }
+                Some(Name::Blob(blob_ty)) => Ok(self.push_type(blob_ty.clone())),
                 _ => {
                     return err_type_error!(
                         self,
@@ -671,7 +657,12 @@ impl TypeChecker {
                         Some(Name::Global(var)) => Ok(var.ty),
                         None => match self.functions.get(&ident.name) {
                             Some(f) => Ok(*f),
-                            None => panic!("Cannot read variable: {:?}", ident.name),
+                            None => err_type_error!(
+                                self,
+                                span,
+                                ctx,
+                                TypeError::UnresolvedName(ident.name.clone())
+                            ),
                         },
                         _ => panic!("Not a variable!"),
                     }
@@ -885,14 +876,27 @@ impl TypeChecker {
 
                 let given_fields: BTreeMap<_, _> = fields
                     .iter()
-                    .map(|(key, expr)| Ok((key.clone(), self.expression(expr, ctx)?)))
+                    .map(|(key, expr)| Ok((key.clone(), self.push_type(Type::Unknown))))
                     .collect::<TypeResult<_>>()?;
 
                 let mut errors = Vec::new();
+                for (field, field_ty) in blob_fields.iter() {
+                    if !given_fields.contains_key(field) {
+                        errors.push(type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::MissingField {
+                                blob: blob_name.clone(),
+                                field: field.clone(),
+                            }
+                        ));
+                    }
+                }
+
                 for (field, field_ty) in given_fields.iter() {
-                    match blob_fields.get(field) {
-                        Some(_) => {}
-                        None => errors.push(type_error!(
+                    if !blob_fields.contains_key(field) {
+                        errors.push(type_error!(
                             self,
                             span,
                             ctx,
@@ -900,7 +904,7 @@ impl TypeChecker {
                                 blob: blob_name.clone(),
                                 field: field.clone(),
                             }
-                        )),
+                        ));
                     }
                 }
 
@@ -908,7 +912,24 @@ impl TypeChecker {
                     return Err(errors);
                 }
 
-                let given_blob = self.push_type(Type::Blob(blob_name, given_fields));
+                let given_blob =
+                    self.push_type(Type::Blob(blob_name.clone(), given_fields.clone()));
+
+                // Unify the fields with their real types
+                let ss = self.stack.len();
+                for (key, expr) in fields {
+                    if matches!(expr.kind, ExpressionKind::Function { .. }) {
+                        self.stack.push(Variable {
+                            ident: Identifier { name: "self".to_string(), span },
+                            kind: VarKind::Const,
+                            ty: given_blob,
+                        });
+                    }
+                    let expr_ty = self.expression(expr, ctx)?;
+                    self.unify(span, ctx, expr_ty, given_fields[key])?;
+                    self.stack.truncate(ss);
+                }
+
                 self.unify(span, ctx, given_blob, blob_ty)
             }
 
@@ -1210,25 +1231,37 @@ impl TypeChecker {
                 }
 
                 (Type::Blob(a_blob, a_fields), Type::Blob(b_blob, b_fields)) => {
-                    let mut c_fields = BTreeMap::new();
-                    for (a_name, a_ty) in a_fields.iter() {
-                        let b_ty = match b_fields.get(a_name) {
-                            Some(b_ty) => *b_ty,
-                            None => continue,
-                        };
-                        match self.unify(span, ctx, *a_ty, b_ty) {
-                            Ok(_) => {
-                                c_fields.insert(a_name.clone(), *a_ty);
-                            }
-                            Err(_) => {}
-                        }
+                    // TODO(ed): This should give information about the violating fields.
+                    if a_fields.len() != b_fields.len() {
+                        return err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::Mismatch {
+                                got: self.bake_type(a),
+                                expected: self.bake_type(b)
+                            },
+                            "Blobs have different number of fields"
+                        );
                     }
 
-                    let c = self.push_type(Type::Unknown);
-                    self.union(a, c);
-                    self.union(b, c);
-                    self.find_node_mut(c).ty =
-                        Type::Blob(format!("{} & {}", a_blob, b_blob), c_fields);
+                    for (a_field, a_ty) in a_fields.iter() {
+                        let b_ty = match b_fields.get(a_field) {
+                            Some(b_ty) => *b_ty,
+                            None => {
+                                return err_type_error!(
+                                    self,
+                                    span,
+                                    ctx,
+                                    TypeError::MissingField {
+                                        blob: b_blob.clone(),
+                                        field: a_field.clone()
+                                    }
+                                )
+                            }
+                        };
+                        self.unify(span, ctx, *a_ty, b_ty)?;
+                    }
                 }
 
                 _ => {
