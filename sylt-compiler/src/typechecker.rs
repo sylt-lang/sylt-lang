@@ -1058,7 +1058,7 @@ impl TypeChecker {
         };
 
         seen.insert(a, res.clone());
-        return res;
+        res
     }
 
     fn bake_type(&mut self, a: usize) -> RuntimeType {
