@@ -263,21 +263,7 @@ impl TypeChecker {
                 .get(&(ctx.namespace, ident.name.clone()))
                 .cloned()
             {
-                Some(Name::Blob(blob_ty)) => {
-                    let ty = self.push_type(blob_ty.clone());
-                    match blob_ty {
-                        Type::Blob(_, fields) => {
-                            for (name, field_type) in fields.iter() {
-                                self.add_constraint(
-                                    ty,
-                                    Constraint::Field(name.clone(), *field_type),
-                                );
-                            }
-                        }
-                        _ => unreachable!(),
-                    }
-                    Ok(ty)
-                }
+                Some(Name::Blob(blob_ty)) => Ok(self.push_type(blob_ty.clone())),
                 _ => {
                     return err_type_error!(
                         self,
