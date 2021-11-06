@@ -115,16 +115,16 @@ __TUPLE_META.__eq = function(a, b)
 end
 __TUPLE_META.__lt = function(a, b)
     for x = 1, #a, 1 do
-        if not (a[x] < b[x]) then
-            return false
+        if a[x] ~= b[x] then
+            return a[x] < b[x]
         end
     end
-    return true
+    return false
 end
 __TUPLE_META.__le = function(a, b)
     for x = 1, #a, 1 do
-        if not (a[x] <= b[x]) then
-            return false
+        if a[x] ~= b[x] then
+            return a[x] < b[x]
         end
     end
     return true
