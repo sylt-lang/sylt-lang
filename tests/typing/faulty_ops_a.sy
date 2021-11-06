@@ -1,5 +1,5 @@
-use _import
 start :: fn do
-    _import.q + 1.0
+    1 + 1
+    "abc" + 1
 end
 // error: $BinOp { .. }

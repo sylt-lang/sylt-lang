@@ -1,5 +1,6 @@
-use _import
 start :: fn do
-    _import.q + 1.0
+    a :: [1, 2, 3]
+    a[0]
+    a["abc"]
 end
 // error: $BinOp { .. }

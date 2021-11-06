@@ -1,6 +1,0 @@
-start :: fn do
-    a :: (1, "not", "an", "int")
-    b: !int = a[0 + 0]
-    b
-end
-
