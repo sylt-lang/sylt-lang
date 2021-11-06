@@ -441,6 +441,8 @@ function spy(tag, x)
     return x
 end
 
+unsafe_force = __IDENTITY
+
 function __CONTAINS(a, b)
     local ty = getmetatable(b)._type
     if ty == "list" then

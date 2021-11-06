@@ -1,0 +1,3 @@
+start :: fn do
+    a: int = unsafe_force([])
+end
