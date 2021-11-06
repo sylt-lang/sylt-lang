@@ -897,11 +897,11 @@ mod op {
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => a
                 .iter()
                 .zip(b.iter())
-                .find_map(|(a, b)| match less(a, b) {
-                    Value::Bool(true) => None,
-                    a => Some(a),
+                .find_map(|(a, b)| match eq(a, b) {
+                    Value::Bool(false) => Some(less(a, b)),
+                    _ => None,
                 })
-                .unwrap_or(Value::Bool(true)),
+                .unwrap_or(Value::Bool(false)),
             _ => Value::Nil,
         }
     }
