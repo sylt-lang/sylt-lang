@@ -1,6 +1,6 @@
 use self::expression::expression;
 use self::statement::outer_statement;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
@@ -59,25 +59,16 @@ pub enum Prec {
     Arrow,
 }
 
-/// Variables can be any combination of `{Force,}{Const,Mutable}`.
-///
-/// Forced variable kinds are a signal to the type checker that the type is
-/// assumed and shouldn't be checked.
+/// Variables can be either `Const` or `Mutable`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum VarKind {
     Const,
     Mutable,
-    ForceConst,
-    ForceMutable,
 }
 
 impl VarKind {
     pub fn immutable(&self) -> bool {
-        matches!(self, VarKind::Const | VarKind::ForceConst)
-    }
-
-    pub fn force(&self) -> bool {
-        matches!(self, VarKind::ForceConst | VarKind::ForceMutable)
+        matches!(self, VarKind::Const)
     }
 }
 
@@ -168,10 +159,12 @@ pub enum TypeKind {
     Resolved(RuntimeType),
     /// I.e. blobs.
     UserDefined(Assignable),
-    /// A type that can be either `a` or `b`.
-    Union(Box<Type>, Box<Type>),
     /// `(params, return)`.
-    Fn(Vec<Type>, Box<Type>),
+    Fn {
+        constraints: BTreeMap<String, Vec<TypeConstraint>>,
+        params: Vec<Type>,
+        ret: Box<Type>,
+    },
     /// Tuples can mix types since the length is constant.
     Tuple(Vec<Type>),
     /// Lists only contain a single type.
@@ -181,7 +174,7 @@ pub enum TypeKind {
     /// `(key, value)`.
     Dict(Box<Type>, Box<Type>),
     /// A generic type
-    Generic(Identifier),
+    Generic(String),
     /// `(inner_type)` - useful for correcting ambiguous types
     Grouping(Box<Type>),
 }
@@ -197,6 +190,13 @@ impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
         self.kind == other.kind
     }
+}
+
+/// A list of type constraints for a type-variable
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeConstraint {
+    pub name: Identifier,
+    pub args: Vec<Identifier>,
 }
 
 type ParseResult<'t, T> = Result<(Context<'t>, T), (Context<'t>, Vec<Error>)>;
@@ -454,9 +454,43 @@ macro_rules! skip_until {
     };
 }
 
+/// Parse a constraint arguments `a b c`
+pub fn parse_type_constraint_argument<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Identifier>> {
+    let mut args = Vec::new();
+    let mut ctx = ctx;
+    loop {
+        match ctx.token() {
+            T::Identifier(var) => args.push(Identifier { span: ctx.span(), name: var.clone() }),
+            T::Plus | T::Comma | T::Greater => break,
+            _ => {
+                raise_syntax_error!(ctx, "Expected a constraint argument, ',' or '+'");
+            }
+        }
+        ctx = ctx.skip(1);
+    }
+    Ok((ctx, args))
+}
+
+/// Parse a type constraint `SomeConstraint a b c`
+pub fn parse_type_constraint<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeConstraint> {
+    let span = ctx.span();
+    let name = match ctx.token() {
+        T::Identifier(name) => name.clone(),
+        _ => {
+            raise_syntax_error!(ctx, "Expected constraint name");
+        }
+    };
+    let ctx = ctx.skip(1);
+    let (ctx, args) = parse_type_constraint_argument(ctx)?;
+    Ok((
+        ctx,
+        TypeConstraint { name: Identifier { span, name }, args },
+    ))
+}
+
 /// Parse a [Type] definition, e.g. `fn int, int, bool -> bool`.
 pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
-    use RuntimeType::{Bool, Float, Int, String, Void};
+    use RuntimeType::{Bool, Float, Int, String, Unknown, Void};
     use TypeKind::*;
     let span = ctx.span();
     let (ctx, kind) = match ctx.token() {
@@ -472,24 +506,59 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             }
         },
 
-        T::Hash => {
+        T::Star => {
             let ctx = ctx.skip(1);
             match ctx.token() {
-                T::Identifier(name) => {
-                    let ident = Identifier { name: name.to_string(), span: ctx.span() };
-                    (ctx.skip(1), Generic(ident))
-                }
-                _ => {
-                    raise_syntax_error!(ctx, "Expected identifier when parsing generic type");
-                }
+                T::Identifier(name) => (ctx.skip(1), Generic(name.clone())),
+                _ => (ctx, Resolved(Unknown)),
             }
         }
 
         // Function type
         T::Fn => {
-            let mut ctx = ctx.skip(1);
+            let ctx = ctx.skip(1);
+
+            let mut constraints = BTreeMap::new();
+            let ctx = if matches!(ctx.token(), T::Less) {
+                let mut ctx = ctx.skip(1);
+                'outer: loop {
+                    match ctx.tokens_lookahead::<2>() {
+                        [T::Identifier(ident), T::Colon] => {
+                            ctx = ctx.skip(2);
+                            let mut constraint_list = Vec::new();
+                            loop {
+                                let (inner_ctx, constraint) = parse_type_constraint(ctx)?;
+                                constraint_list.push(constraint);
+                                let token = inner_ctx.token();
+                                ctx = inner_ctx.skip(1);
+                                match token {
+                                    T::Plus => {}
+                                    T::Comma => {
+                                        constraints.insert(ident.clone(), constraint_list);
+                                        break;
+                                    }
+                                    T::EOF | T::Greater => {
+                                        constraints.insert(ident.clone(), constraint_list);
+                                        break 'outer;
+                                    }
+                                    _ => unreachable!("Checked in parse_type_constraint_argument"),
+                                }
+                            }
+                        }
+
+                        _ => {
+                            raise_syntax_error!(ctx, "Failed to parse type constraint");
+                        }
+                    }
+                }
+                ctx
+            } else {
+                ctx
+            };
+
             let mut params = Vec::new();
             // There might be multiple parameters.
+            let mut ctx = ctx;
             let ret = loop {
                 match ctx.token() {
                     // Arrow implies only one type (the return type) is left.
@@ -522,7 +591,7 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                     }
                 }
             };
-            (ctx, Fn(params, Box::new(ret)))
+            (ctx, Fn { constraints, params, ret: Box::new(ret) })
         }
 
         // Tuple
@@ -590,33 +659,7 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         }
     };
 
-    // Wrap it in a syntax tree node.
-    let ty = Type { span, kind };
-
-    // Union type, `a | b`
-    let (ctx, ty) = if matches!(ctx.token(), T::Pipe) {
-        // Parse the other type.
-        let (ctx, rest) = parse_type(ctx.skip(1))?;
-        (
-            ctx,
-            Type { span, kind: Union(Box::new(ty), Box::new(rest)) },
-        )
-    } else {
-        (ctx, ty)
-    };
-
-    // Nullable type. Compiles to `a | Void`.
-    let (ctx, ty) = if matches!(ctx.token(), T::QuestionMark) {
-        let void = Type { span: ctx.span(), kind: Resolved(Void) };
-        (
-            ctx.skip(1),
-            Type { span, kind: Union(Box::new(ty), Box::new(void)) },
-        )
-    } else {
-        (ctx, ty)
-    };
-
-    Ok((ctx, ty))
+    Ok((ctx, Type { span, kind }))
 }
 
 /// Parse an [AssignableKind::Call]
@@ -976,31 +1019,24 @@ mod test {
         test!(parse_type, type_int: "int" => Resolved(RT::Int));
         test!(parse_type, type_float: "float" => Resolved(RT::Float));
         test!(parse_type, type_str: "str" => Resolved(RT::String));
-        test!(parse_type, type_unknown_access: "a.A | int" => Union(_, _));
-        test!(parse_type, type_unknown_access_call: "a.b().A | int" => Union(_, _));
         test!(parse_type, type_unknown: "blargh" => UserDefined(_));
-        test!(parse_type, type_union: "int | int" => Union(_, _));
-        test!(parse_type, type_question: "int?" => Union(_, _));
-        test!(parse_type, type_union_and_question: "int | void | str?" => Union(_, _));
 
-        test!(parse_type, type_fn_no_params: "fn ->" => Fn(_, _));
-        test!(parse_type, type_fn_one_param: "fn int? -> bool" => Fn(_, _));
-        test!(parse_type, type_fn_two_params: "fn int | void, int? -> str?" => Fn(_, _));
-        test!(parse_type, type_fn_only_ret: "fn -> bool?" => Fn(_, _));
+        test!(parse_type, type_fn_no_params: "fn ->" => Fn{ .. });
+        test!(parse_type, type_fn_one_param: "fn int -> bool" => Fn{ .. });
+        test!(parse_type, type_fn_two_params: "fn int, int -> str" => Fn{ .. });
+        test!(parse_type, type_fn_only_ret: "fn -> bool" => Fn{ .. });
+        test!(parse_type, type_fn_constraints: "fn<a: A a b + B b b, b: A a a> -> bool" => Fn{ .. });
 
         test!(parse_type, type_tuple_zero: "()" => Tuple(_));
         test!(parse_type, type_tuple_one: "(int,)" => Tuple(_));
         test!(parse_type, type_grouping: "(int)" => Grouping(_));
-        test!(parse_type, type_tuple_complex: "(int | float?, str, str,)" => Tuple(_));
+        test!(parse_type, type_tuple_complex: "(int, str, str,)" => Tuple(_));
 
         test!(parse_type, type_list_one: "[int]" => List(_));
-        test!(parse_type, type_list_complex: "[int | float?]" => List(_));
 
         test!(parse_type, type_set_one: "{int}" => Set(_));
-        test!(parse_type, type_set_complex: "{int | float?}" => Set(_));
 
         test!(parse_type, type_dict_one: "{int : int}" => Dict(_, _));
-        test!(parse_type, type_dict_complex: "{int | float? : int | int | int?}" => Dict(_, _));
     }
 }
 
@@ -1133,16 +1169,30 @@ impl Display for Type {
                 name.pretty_print(f, 0)?;
                 write!(f, ")")?;
             }
-            TypeKind::Union(a, b) => {
-                write!(f, "{} | {}", a, b)?;
-            }
-            TypeKind::Fn(args, ret) => {
+            TypeKind::Fn { constraints, params, ret } => {
                 write!(f, "Fn ")?;
-                for (i, arg) in args.iter().enumerate() {
+                if constraints.len() > 0 {
+                    write!(f, "<")?;
+                    for (var, constraints) in constraints.iter() {
+                        write!(f, "{}: ", var)?;
+                        for (i, constraint) in constraints.iter().enumerate() {
+                            if i != 0 {
+                                write!(f, " + ")?;
+                            }
+                            write!(f, "{}", constraint.name.name)?;
+                            for arg in constraint.args.iter() {
+                                write!(f, " {}", arg.name)?;
+                            }
+                        }
+                        write!(f, ",")?;
+                    }
+                    write!(f, ">")?;
+                }
+                for (i, param) in params.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", arg)?;
+                    write!(f, "{}", param)?;
                 }
                 write!(f, " -> {}", ret)?;
             }
@@ -1166,7 +1216,7 @@ impl Display for Type {
                 write!(f, "{{{}:{}}}", k, v)?;
             }
             TypeKind::Generic(name) => {
-                write!(f, "#{}", name.name)?;
+                write!(f, "*{}", name)?;
             }
             TypeKind::Grouping(ty) => {
                 write!(f, "({})", ty)?;

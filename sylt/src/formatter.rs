@@ -5,7 +5,7 @@ use sylt_parser::expression::ComparisonKind;
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op, Statement,
-    StatementKind, Type, TypeKind, VarKind,
+    StatementKind, Type, TypeConstraint, TypeKind, VarKind,
 };
 
 use crate::Args;
@@ -86,85 +86,39 @@ fn write_blob_fields<T, W: Write>(
     Ok(())
 }
 
-fn simplify_type(ty: Type) -> Type {
-    fn remove_duplicates(ty: Type, mut seen: Vec<Type>) -> Vec<Type> {
-        match ty.kind {
-            TypeKind::Union(ty, rest) => {
-                if seen.iter().find(|a| **a == *ty).is_none() {
-                    seen.push(*ty);
-                }
-                remove_duplicates(*rest, seen)
-            }
-            _ => {
-                if seen.iter().find(|a| **a == ty).is_none() {
-                    seen.push(ty);
-                }
-                seen
-            }
+fn write_constraint<W: Write>(
+    dest: &mut W,
+    _indent: u32,
+    constraint: (String, Vec<TypeConstraint>),
+) -> fmt::Result {
+    let (name, constraints) = constraint;
+    write!(dest, "{}: ", name)?;
+    for (i, constraint) in constraints.iter().enumerate() {
+        if i != 0 {
+            write!(dest, " + ")?;
+        }
+
+        write!(dest, "{}", constraint.name.name)?;
+        for arg in constraint.args.iter() {
+            write!(dest, " {}", arg.name)?;
         }
     }
 
-    match ty.kind {
-        TypeKind::Union(_, _) => {
-            let without_dupes = remove_duplicates(ty.clone(), Vec::new());
-            without_dupes
-                .into_iter()
-                .reduce(|a, b| Type {
-                    kind: TypeKind::Union(Box::new(a), Box::new(b)),
-                    span: ty.span,
-                })
-                .unwrap() // We always get one type
-        }
-
-        TypeKind::Fn(args, ret) => Type {
-            kind: TypeKind::Fn(
-                args.into_iter().map(simplify_type).collect(),
-                Box::new(simplify_type(*ret)),
-            ),
-            ..ty
-        },
-        TypeKind::Tuple(tys) => Type {
-            kind: TypeKind::Tuple(tys.into_iter().map(simplify_type).collect()),
-            ..ty
-        },
-        TypeKind::List(a) => Type {
-            kind: TypeKind::List(Box::new(simplify_type(*a))),
-            ..ty
-        },
-        TypeKind::Set(a) => Type {
-            kind: TypeKind::Set(Box::new(simplify_type(*a))),
-            ..ty
-        },
-        TypeKind::Dict(a, b) => Type {
-            kind: TypeKind::Dict(Box::new(simplify_type(*a)), Box::new(simplify_type(*b))),
-            ..ty
-        },
-
-        TypeKind::Grouping(a) => Type {
-            kind: TypeKind::Grouping(Box::new(simplify_type(*a))),
-            ..ty
-        },
-
-        TypeKind::Implied
-        | TypeKind::UserDefined(_)
-        | TypeKind::Resolved(_)
-        | TypeKind::Generic(_) => ty,
-    }
+    Ok(())
 }
 
 fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
-    let ty = simplify_type(ty);
     match ty.kind {
         TypeKind::Implied => unreachable!(),
         TypeKind::Resolved(ty) => write!(dest, "{}", ty),
         TypeKind::UserDefined(assignable) => write_assignable(dest, indent, assignable),
-        TypeKind::Union(ty, rest) => {
-            write_type(dest, indent, *ty)?;
-            write!(dest, " | ")?;
-            write_type(dest, indent, *rest)
-        }
-        TypeKind::Fn(params, ret) => {
+        TypeKind::Fn { constraints, params, ret } => {
             write!(dest, "fn")?;
+            if !constraints.is_empty() {
+                write!(dest, "<")?;
+                write_comma_separated!(dest, indent, write_constraint, constraints);
+                write!(dest, ">")?;
+            }
             if !params.is_empty() {
                 write!(dest, " ")?;
                 write_comma_separated!(dest, indent, write_type, params);
@@ -198,7 +152,7 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
             write_type(dest, indent, *val)?;
             write!(dest, "}}")
         }
-        TypeKind::Generic(ident) => write_identifier(dest, ident),
+        TypeKind::Generic(ident) => write!(dest, "*{}", ident),
         TypeKind::Grouping(ty) => {
             write!(dest, "(")?;
             write_type(dest, indent, *ty)?;
@@ -446,7 +400,6 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
         }
         StatementKind::ExternalDefinition { ident, kind, ty } => {
             assert!(!matches!(ty.kind, TypeKind::Implied), "Should not parse");
-            assert!(!kind.force(), "Should not parse");
 
             write_indents(dest, indent)?;
             write_identifier(dest, ident)?;
@@ -469,15 +422,10 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
                     match kind {
                         VarKind::Const => " :: ",
                         VarKind::Mutable => " := ",
-                        VarKind::ForceConst => unreachable!("can't force an implied type"),
-                        VarKind::ForceMutable => unreachable!("can't force an implied type"),
                     }
                 )?;
             } else {
                 write!(dest, ": ")?;
-                if kind.force() {
-                    write!(dest, "!")?;
-                }
                 write_type(dest, indent, ty)?;
                 if kind.immutable() {
                     write!(dest, " : ")?;

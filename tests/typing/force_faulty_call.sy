@@ -1,9 +1,0 @@
-f :: fn -> int | bool do
-    ret 1
-end
-
-start :: fn do
-    a: int = f'
-    a <=> 1
-end
-// error: $Mismatch { got: Type::Int, .. }

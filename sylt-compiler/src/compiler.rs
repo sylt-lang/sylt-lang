@@ -7,14 +7,12 @@ use sylt_common::error::Error;
 use sylt_common::prog::{BytecodeProg, Prog};
 use sylt_common::{Op, RustFunction, Type, Value};
 use sylt_parser::statement::NameIdentifier;
-use sylt_parser::{
-    Assignable, AssignableKind, Context as ParserContext, Identifier, Span, StatementKind,
-    Type as ParserType, TypeKind, VarKind, AST,
-};
+use sylt_parser::{Identifier, Span, StatementKind, Type as ParserType, VarKind, AST};
 
 mod bytecode;
 mod dependency;
 mod lua;
+mod ty;
 mod typechecker;
 
 type VarSlot = usize;
@@ -145,7 +143,7 @@ struct Compiler {
     namespaces: Vec<Namespace>,
 
     frames: Vec<Frame>,
-    functions: HashMap<String, (usize, RustFunction, Type)>,
+    functions: HashMap<String, (usize, RustFunction, ParserType)>,
 
     panic: bool,
     errors: Vec<Error>,
@@ -269,157 +267,6 @@ impl Compiler {
         Ok(Lookup::Upvalue(up))
     }
 
-    fn resolve_type_namespace(
-        &mut self,
-        assignable: &Assignable,
-        namespace: usize,
-        ctx: Context,
-    ) -> Option<usize> {
-        use AssignableKind::*;
-        match &assignable.kind {
-            Access(inner, ident) => self
-                .resolve_type_namespace(&inner, namespace, ctx)
-                .and_then(|namespace| self.namespaces[namespace].get(&ident.name))
-                .and_then(|o| match o {
-                    Name::Namespace(namespace) => Some(*namespace),
-                    _ => None,
-                })
-                .or_else(|| {
-                    error!(
-                        self,
-                        ctx,
-                        assignable.span,
-                        "While parsing namespace access '{}' is not a namespace",
-                        ident.name
-                    );
-                    None
-                }),
-            Read(ident) => self.namespaces[namespace]
-                .get(&ident.name)
-                .and_then(|o| match o {
-                    Name::Namespace(namespace) => Some(*namespace),
-                    _ => None,
-                })
-                .or_else(|| {
-                    error!(
-                        self,
-                        ctx,
-                        assignable.span,
-                        "While parsing namespace '{}' is not a namespace",
-                        ident.name
-                    );
-                    None
-                }),
-            ArrowCall(..) | Call(..) => {
-                error!(self, ctx, assignable.span, "Cannot have calls in types");
-                None
-            }
-            Index(_, _) => {
-                error!(self, ctx, assignable.span, "Cannot have indexing in types");
-                None
-            }
-            Expression(_) => {
-                error!(
-                    self,
-                    ctx, assignable.span, "Cannot have expressions in types"
-                );
-                None
-            }
-        }
-    }
-
-    fn resolve_type_ident(
-        &mut self,
-        assignable: &Assignable,
-        namespace: usize,
-        ctx: Context,
-    ) -> Type {
-        use AssignableKind::*;
-        match &assignable.kind {
-            Read(ident) => self.namespaces[namespace]
-                .get(&ident.name)
-                .and_then(|name| match name {
-                    Name::Blob(blob) => match &self.constants[*blob] {
-                        Value::Ty(ty) => Some(ty.clone()),
-                        _ => None,
-                    },
-                    _ => None,
-                })
-                .unwrap_or_else(|| {
-                    error!(
-                        self,
-                        ctx, assignable.span, "While parsing type '{}' is not a blob", ident.name
-                    );
-                    Type::Void
-                }),
-            Access(inner, ident) => self
-                .resolve_type_namespace(&inner, namespace, ctx)
-                .and_then(|namespace| self.namespaces[namespace].get(&ident.name))
-                .and_then(|name| match name {
-                    Name::Blob(blob) => match &self.constants[*blob] {
-                        Value::Ty(ty) => Some(ty.clone()),
-                        _ => None,
-                    },
-                    _ => None,
-                })
-                .unwrap_or_else(|| {
-                    error!(
-                        self,
-                        ctx, assignable.span, "While parsing type '{}' is not a blob", ident.name
-                    );
-                    Type::Void
-                }),
-            ArrowCall(..) | Call(..) => {
-                error!(self, ctx, assignable.span, "Cannot have calls in types");
-                Type::Void
-            }
-            Index(..) => {
-                error!(self, ctx, assignable.span, "Cannot have indexing in types");
-                Type::Void
-            }
-            Expression(_) => {
-                error!(
-                    self,
-                    ctx, assignable.span, "Cannot have expressions in types"
-                );
-                Type::Void
-            }
-        }
-    }
-
-    fn resolve_type(&mut self, ty: &ParserType, ctx: Context) -> Type {
-        use TypeKind::*;
-        match &ty.kind {
-            Implied => Type::Unknown,
-            Resolved(ty) => ty.clone(),
-            UserDefined(assignable) => self.resolve_type_ident(&assignable, ctx.namespace, ctx),
-            Union(a, b) => match (self.resolve_type(a, ctx), self.resolve_type(b, ctx)) {
-                (Type::Union(_), _) => panic!("Didn't expect union on RHS - check parser"),
-                (a, Type::Union(mut us)) => {
-                    us.insert(a);
-                    Type::Union(us)
-                }
-                (a, b) => Type::Union(vec![a, b].into_iter().collect()),
-            },
-            Fn(params, ret) => {
-                let params = params.iter().map(|t| self.resolve_type(t, ctx)).collect();
-                let ret = Box::new(self.resolve_type(ret, ctx));
-                Type::Function(params, ret)
-            }
-            Tuple(fields) => {
-                Type::Tuple(fields.iter().map(|t| self.resolve_type(t, ctx)).collect())
-            }
-            List(kind) => Type::List(Box::new(self.resolve_type(kind, ctx))),
-            Set(kind) => Type::Set(Box::new(self.resolve_type(kind, ctx))),
-            Dict(key, value) => Type::Dict(
-                Box::new(self.resolve_type(key, ctx)),
-                Box::new(self.resolve_type(value, ctx)),
-            ),
-            Generic(name) => Type::Generic(name.name.clone()),
-            Grouping(ty) => self.resolve_type(ty, ctx),
-        }
-    }
-
     fn define(&mut self, name: &str, kind: VarKind, span: Span) -> VarSlot {
         let frame = &mut self.frames.last_mut().unwrap().variables;
         let slot = frame.len();
@@ -451,7 +298,6 @@ impl Compiler {
         let name = "/preamble/";
         let start_span = tree.modules[0].1.span;
         self.frames.push(Frame::new(name, start_span));
-        let ctx = Context { frame: 0, ..Context::from_namespace(0) };
 
         let num_constants = self.extract_globals(&tree);
 
@@ -460,12 +306,7 @@ impl Compiler {
             .to_vec()
             .into_iter()
             .enumerate()
-            .map(|(i, (s, f, sig))| {
-                (
-                    s.clone(),
-                    (i, f, self.resolve_type(&parse_signature(&s, &sig), ctx)),
-                )
-            })
+            .map(|(i, (s, f, sig))| (s.clone(), (i, f, parse_signature(&s, &sig))))
             .collect();
         assert_eq!(
             num_functions,
@@ -494,7 +335,7 @@ impl Compiler {
         }
 
         if typecheck {
-            typechecker::solve(&mut self, &statements)?;
+            typechecker::solve(&statements, &self.namespace_id_to_path, &self.functions)?;
         }
 
         if let Some(lua_file) = lua_file {
@@ -578,7 +419,7 @@ impl Compiler {
                             unreachable!()
                         }
                     }
-                    Use { path: _, name, file } => {
+                    Use { name, file, .. } => {
                         let ident = match name {
                             NameIdentifier::Implicit(ident) => ident,
                             NameIdentifier::Alias(ident) => ident,
@@ -629,13 +470,12 @@ impl Compiler {
     }
 }
 
-// TODO(ed): Move this up into sylt?
 fn parse_signature(func_name: &str, sig: &str) -> ParserType {
     let token_stream = sylt_tokenizer::string_to_tokens(sig);
     let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
     let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
     let path = PathBuf::from(func_name);
-    let ctx = ParserContext::new(&tokens, &spans, &path, &path);
+    let ctx = sylt_parser::Context::new(&tokens, &spans, &path, &path);
     match sylt_parser::parse_type(ctx) {
         Ok((_, ty)) => ty,
         Err((_, errs)) => {
@@ -654,18 +494,4 @@ pub fn compile(
     functions: &[(String, RustFunction, String)],
 ) -> Result<Prog, Vec<Error>> {
     Compiler::new().compile(typecheck, lua_file, prog, functions)
-}
-
-pub(crate) fn first_ok_or_errs<I, T, E>(mut iter: I) -> Result<T, Vec<E>>
-where
-    I: Iterator<Item = Result<T, E>>,
-{
-    let mut errs = Vec::new();
-    loop {
-        match iter.next() {
-            Some(Ok(t)) => return Ok(t),
-            Some(Err(e)) => errs.push(e),
-            None => return Err(errs),
-        }
-    }
 }

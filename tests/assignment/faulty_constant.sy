@@ -1,0 +1,6 @@
+start :: fn do
+    a :: 1
+    a = 2
+end
+
+// error: $Assignability

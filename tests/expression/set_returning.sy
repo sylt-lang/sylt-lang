@@ -3,17 +3,9 @@ q :: fn -> {int} do
     ret g
 end
 
-h :: fn -> {int | str} do
-    g :: {0, "a"}
-    ret g
-end
-
 start :: fn do
     g :: q()
     (0 in g) <=> true
     false <=> (1 in g)
-    h :: h()
-    (0 in h) <=> true
-    true <=> ("a" in h)
 end
 

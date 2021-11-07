@@ -1,0 +1,11 @@
+use _other_blob
+
+start :: fn do
+    _other_blob.a.a <=> 1
+    _other_blob.a.a = 2
+    _other_blob.a.a <=> 2
+
+    _other_blob.b <=> 1
+    _other_blob.b = 2
+    _other_blob.b <=> 2
+end

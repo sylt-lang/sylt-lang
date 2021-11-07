@@ -1,6 +1,0 @@
-start :: fn do
-    a: int | str | bool = 1
-    b: !int | str = a
-    b <=> 1
-end
-

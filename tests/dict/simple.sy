@@ -2,7 +2,5 @@ start :: fn do
     a :: {1: 1, 2: 2}
     a[1] <=> 1
     a[2] <=> 2
-    res: int | void = a[0]
-    res <=> nil
 end
 

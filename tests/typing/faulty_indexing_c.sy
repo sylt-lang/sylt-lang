@@ -1,0 +1,7 @@
+start :: fn do
+    a :: {"abc": 1, "bcd": 2}
+    a["abc"] + 123
+    a["qqq"] + 123
+    a[123] + 123
+end
+// error: $Mismatch { .. }

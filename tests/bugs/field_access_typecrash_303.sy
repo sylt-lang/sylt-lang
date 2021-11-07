@@ -3,4 +3,4 @@ start :: fn do
     a.a
     a
 end
-// error: $Violating(Type::Int)
+// error: $Exotic

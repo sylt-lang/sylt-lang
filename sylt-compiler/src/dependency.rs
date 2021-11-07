@@ -25,13 +25,17 @@ impl Context<'_> {
     }
 }
 
-fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> BTreeSet<Name> {
+fn assignable_dependencies(
+    ctx: &mut Context,
+    assignable: &Assignable,
+) -> BTreeSet<(String, usize)> {
     use AssignableKind::*;
     match &assignable.kind {
         Read(ident) => match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
-            Some(&name) if !ctx.shadowed(&ident.name) => {
-                [name].iter().cloned().collect::<BTreeSet<_>>()
-            }
+            Some(_) if !ctx.shadowed(&ident.name) => [(ident.name.clone(), ctx.namespace)]
+                .iter()
+                .cloned()
+                .collect(),
             _ => BTreeSet::new(),
         },
         Call(ass, exprs) => assignable_dependencies(ctx, ass)
@@ -77,7 +81,7 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> BTreeS
             }
             match recursive_namespace(ctx, ass) {
                 Ok(namespace) => match ctx.compiler.namespaces[namespace].get(&field.name) {
-                    Some(&name) => [name].iter().cloned().collect::<BTreeSet<_>>(),
+                    Some(_) => [(field.name.clone(), namespace)].iter().cloned().collect(),
                     _ => BTreeSet::new(),
                 },
                 Err(_) => assignable_dependencies(ctx, ass),
@@ -91,7 +95,7 @@ fn assignable_dependencies(ctx: &mut Context, assignable: &Assignable) -> BTreeS
     }
 }
 
-fn type_dependencies(ctx: &mut Context, ty: &ParserType) -> BTreeSet<Name> {
+fn type_dependencies(ctx: &mut Context, ty: &ParserType) -> BTreeSet<(String, usize)> {
     use TypeKind::*;
     match &ty.kind {
         Implied | Resolved(_) | Generic(_) => BTreeSet::new(),
@@ -99,7 +103,7 @@ fn type_dependencies(ctx: &mut Context, ty: &ParserType) -> BTreeSet<Name> {
         Grouping(ty) => type_dependencies(ctx, ty),
         UserDefined(assignable) => assignable_dependencies(ctx, &assignable),
 
-        Fn(params, ret) => params
+        Fn { params, ret, .. } => params
             .iter()
             .chain([ret.as_ref()])
             .map(|t| type_dependencies(ctx, t))
@@ -114,7 +118,7 @@ fn type_dependencies(ctx: &mut Context, ty: &ParserType) -> BTreeSet<Name> {
 
         List(kind) | Set(kind) => type_dependencies(ctx, kind),
 
-        Dict(a, b) | Union(a, b) => [type_dependencies(ctx, a), type_dependencies(ctx, b)]
+        Dict(a, b) => [type_dependencies(ctx, a), type_dependencies(ctx, b)]
             .iter()
             .flatten()
             .cloned()
@@ -122,7 +126,7 @@ fn type_dependencies(ctx: &mut Context, ty: &ParserType) -> BTreeSet<Name> {
     }
 }
 
-fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<Name> {
+fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<(String, usize)> {
     use StatementKind::*;
     match &statement.kind {
         Assignment { target, value, .. } => dependencies(ctx, value)
@@ -179,7 +183,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
     }
 }
 
-fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<Name> {
+fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<(String, usize)> {
     use ExpressionKind::*;
     match &expression.kind {
         Get(assignable) => assignable_dependencies(ctx, assignable),
@@ -243,7 +247,7 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<Name> {
 }
 
 fn order(
-    to_order: BTreeMap<Name, (BTreeSet<Name>, (&Statement, usize))>,
+    to_order: BTreeMap<(String, usize), (BTreeSet<(String, usize)>, (&Statement, usize))>,
 ) -> Result<Vec<(&Statement, usize)>, Vec<(&Statement, usize)>> {
     enum State {
         Inserting,
@@ -251,12 +255,12 @@ fn order(
     }
 
     fn recurse<'a>(
-        name: Name,
-        to_order: &BTreeMap<Name, (BTreeSet<Name>, (&'a Statement, usize))>,
-        inserted: &mut BTreeMap<Name, State>,
+        global: &(String, usize),
+        to_order: &BTreeMap<(String, usize), (BTreeSet<(String, usize)>, (&'a Statement, usize))>,
+        inserted: &mut BTreeMap<(String, usize), State>,
         ordered: &mut Vec<(&'a Statement, usize)>,
     ) -> Result<(), Vec<(&'a Statement, usize)>> {
-        match inserted.entry(name) {
+        match inserted.entry(global.clone()) {
             Vacant(entry) => entry.insert(State::Inserting),
             Occupied(entry) => {
                 return match entry.get() {
@@ -267,16 +271,16 @@ fn order(
         };
 
         let (deps, statement) = to_order
-            .get(&name)
+            .get(&global)
             .expect("Trying to find an identifier that does not exist");
         for dep in deps {
-            recurse(*dep, to_order, inserted, ordered).map_err(|mut cycle| {
+            recurse(dep, to_order, inserted, ordered).map_err(|mut cycle| {
                 cycle.push(*statement);
                 cycle
             })?;
         }
         ordered.push(*statement);
-        inserted.insert(name, State::Inserted);
+        inserted.insert(global.clone(), State::Inserted);
 
         Ok(())
     }
@@ -284,7 +288,7 @@ fn order(
     let mut ordered = Vec::new();
     let mut inserted = BTreeMap::new();
     for (name, _) in to_order.iter() {
-        recurse(*name, &to_order, &mut inserted, &mut ordered)?;
+        recurse(name, &to_order, &mut inserted, &mut ordered)?;
     }
 
     Ok(ordered)
@@ -302,7 +306,7 @@ pub(crate) fn initialization_order<'a>(
     let mut to_order = BTreeMap::new();
     let mut is_checks = Vec::new();
     for (path, module) in tree.modules.iter() {
-        let namespace = *path_to_namespace_id.get(path).unwrap();
+        let namespace = path_to_namespace_id[path];
         for statement in module.statements.iter() {
             use StatementKind::*;
             match &statement.kind {
@@ -319,7 +323,7 @@ pub(crate) fn initialization_order<'a>(
                 | Definition { ident: Identifier { name, .. }, .. } => {
                     let mut ctx = Context { compiler, namespace, variables: Vec::new() };
                     to_order.insert(
-                        *compiler.namespaces[namespace].get(name).unwrap(),
+                        (name.clone(), namespace),
                         (
                             statement_dependencies(&mut ctx, statement),
                             (statement, namespace),

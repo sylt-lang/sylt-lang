@@ -23,7 +23,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     dbg,
     ? "Prints values to stdout",
-    -> "fn #X -> #X",
+    -> "fn *X -> *X",
     [value] => {
         eprintln!(
             "DBG: {:?}",
@@ -37,7 +37,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     random_choice,
     ? "Selects an element randomly from a list",
-    -> "fn [#ITEM] -> #ITEM",
+    -> "fn [*ITEM] -> *ITEM",
     [Value::List(list)] => {
         Ok(list.borrow()[Ra::ggen::<usize>() % list.borrow().len()].clone())
     }
@@ -47,7 +47,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     for_each,
     ? "Does something for each element in a list",
-    -> "fn [#ITEM], fn #ITEM -> void -> void",
+    -> "fn [*ITEM], fn *ITEM -> void -> void",
     [List(list), callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
@@ -62,7 +62,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     map,
     ? "Applies a function to all elements in a list",
-    -> "fn [#ITEM], fn #ITEM -> #OUT -> [#OUT]",
+    -> "fn [*ITEM], fn *ITEM -> *OUT -> [*OUT]",
     [List(list), callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
@@ -79,7 +79,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     reduce,
     ? "Reduce the list to a single element, returns 'nil' if the input list is empty",
-    -> "fn [#ITEM], fn #ITEM, #ITEM -> #OUT -> #OUT | nil",
+    -> "fn [*ITEM], (fn *ITEM, *ITEM -> *OUT) -> *OUT", // The return is a lie!
     [List(list), callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
@@ -96,7 +96,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     fold,
     ? "Applies a function to all elements pairwise in order, starts with the accumulator",
-    -> "fn [#ITEM], #OUT, fn #ITEM, #OUT -> #OUT -> #OUT",
+    -> "fn [*ITEM], *OUT, fn *ITEM, *OUT -> *OUT -> *OUT",
     [List(list), start, callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
@@ -112,7 +112,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     filter,
     ? "Creates a new list with the elements that pass the test function",
-    -> "fn [#ITEM], fn #ITEM -> bool -> [#ITEM]",
+    -> "fn [*ITEM], fn *ITEM -> bool -> [*ITEM]",
     [List(list), callable] => {
         let list = Rc::clone(list);
         let callable = callable.clone();
@@ -147,7 +147,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     push,
     ? "Appends an element to the end of a list",
-    -> "fn [#ITEM], #ITEM -> void",
+    -> "fn [*ITEM], *ITEM -> void",
     [List(ls), v] => {
         ls.borrow_mut().push(v.clone());
         Ok(Nil)
@@ -158,7 +158,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     prepend,
     ? "Adds an element to the start of a list",
-    -> "fn [#ITEM], #ITEM -> void",
+    -> "fn [*ITEM], *ITEM -> void",
     [List(ls), v] => {
         // NOTE(ed): Deliberately no type checking.
         ls.borrow_mut().insert(0, v.clone());
@@ -170,7 +170,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     add,
     ? "Inserts a value into a set",
-    -> "fn {#ITEM}, #ITEM -> void",
+    -> "fn {*ITEM}, *ITEM -> void",
     [Set(ls), v] => {
         // NOTE(ed): Deliberately no type checking.
         ls.borrow_mut().insert(v.clone());
@@ -183,8 +183,11 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     len,
     ? "Gives the length of list",
-    -> "fn [#ITEM] | {#KEY: #VALUE} -> int",
+    -> "fn<C: Container> *C -> int",
     [List(ls)] => {
+        Ok(Int(ls.borrow().len() as i64))
+    },
+    [Set(ls)] => {
         Ok(Int(ls.borrow().len() as i64))
     },
     [Dict(ls)] => {
@@ -196,7 +199,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     clear,
     ? "Removes all elements in a container",
-    -> "fn [#ITEM] | {#ITEM} | {#KEY: #VALUE} -> void",
+    -> "fn<C: Container> *C -> void",
     [Dict(ls)] => {
         ls.borrow_mut().clear();
         Ok(Nil)
@@ -326,7 +329,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     sign,
     ? "Returns the sign of the value",
-    -> "(fn int -> int) | (fn float -> float)",
+    -> "fn<N: Num> *N -> *N",
     [Float(x)] => { Ok(Float(x.signum())) },
     [Int(x)] => { Ok(Int(x.signum())) }
 );
@@ -335,7 +338,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     clamp,
     ? "Clamps the value 'a' between 'lo' and 'hi'",
-    -> "(fn int, int, int -> int) | (fn float, float, float -> float)",
+    -> "fn<N: Num> *N, *N, *N -> *N",
     [Float(a), Float(lo), Float(hi)] => { Ok(Float(a.min(*hi).max(*lo))) },
     [Int(a), Int(lo), Int(hi)] => { Ok(Int(*a.min(hi).max(lo))) }
 );
@@ -344,23 +347,25 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     min,
     ? "Returns the smallest",
-    -> "fn float, float -> float",
-    [Float(a), Float(b)] => { Ok(Float(a.min(*b))) }
+    -> "fn<N: Num> *N, *N -> *N",
+    [Float(a), Float(b)] => { Ok(Float(a.min(*b))) },
+    [Int(a), Int(b)] => { Ok(Int(*a.min(b))) }
 );
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     max,
     ? "Returns the largest",
-    -> "fn float, float -> float",
-    [Float(a), Float(b)] => { Ok(Float(a.max(*b))) }
+    -> "fn<N: Num> *N, *N -> *N",
+    [Float(a), Float(b)] => { Ok(Float(a.max(*b))) },
+    [Int(a), Int(b)] => { Ok(Int(*a.max(b))) }
 );
 
 sylt_macro::extern_function!(
     "sylt_std::sylt",
     rem,
     ? "Returns the value x modulo y",
-    -> "fn #X, #X -> #X",
+    -> "fn<N: Num> *N, *N -> *N",
     [Float(x), Float(y)] => { Ok(Float(x.rem_euclid(*y))) },
     [Int(x), Int(y)] => { Ok(Int(x.rem_euclid(*y))) }
 );
@@ -456,7 +461,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     dot,
     ? "Computes the scalar product",
-    -> "fn (float, float) -> float",
+    -> "fn (float, float), (float, float) -> float",
     [Tuple(a), Tuple(b)] => {
         let (ax, ay) = break_up_vec(a);
         let (bx, by) = break_up_vec(b);
@@ -475,7 +480,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     pop,
     ? "Removes the last element in the list, and returns it",
-    -> "fn [#ITEM] -> #ITEM?",
+    -> "fn [*ITEM] -> *ITEM?",
     [List(ls)] => {
         Ok(ls.borrow_mut().pop().unwrap_or(Nil))
     }
@@ -485,7 +490,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     last,
     ? "Returns the last element in a list",
-    -> "fn [#ITEM] -> #ITEM?",
+    -> "fn [*ITEM] -> *ITEM?",
     [List(ls)] => {
         Ok(ls.borrow().last().cloned().unwrap_or(Nil))
     }
@@ -506,7 +511,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     as_str,
     ? "Converts to a string representation",
-    -> "fn #X -> str",
+    -> "fn *X -> str",
     [v] => { Ok(Value::String(Rc::new(v.to_string()))) }
 );
 
@@ -514,7 +519,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     print,
     ? "Prints values to stdout",
-    -> "fn #X -> void",
+    -> "fn *X -> void",
     _ => {
         println!("{}", ctx.machine
             .stack_from_base(ctx.stack_base)
@@ -530,9 +535,19 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     spy,
     ? "Prints a values to stdout and then returns it",
-    -> "fn str, #X -> #X",
+    -> "fn str, *X -> *X",
     [tag, x] => {
         println!("{}: {}", tag, x);
+        Ok(x.clone())
+    }
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    unsafe_force,
+    ? "Coerce any value into any type",
+    -> "fn *X -> *Y",
+    [x] => {
         Ok(x.clone())
     }
 );

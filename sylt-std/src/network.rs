@@ -216,7 +216,7 @@ fn get_rpc_args(
     }
 }
 
-#[sylt_macro::sylt_link(n_rpc_clients, "sylt_std::network", "fn #X, [#Y] -> void")]
+#[sylt_macro::sylt_link(n_rpc_clients, "sylt_std::network", "fn *X, [*Y] -> void")]
 pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     // Serialize the RPC.
     let serialized = match bincode::serialize(&get_rpc_args(ctx, 0, "n_rpc_clients")?) {
@@ -245,7 +245,7 @@ pub fn n_rpc_clients(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     Ok(Value::Nil)
 }
 
-#[sylt_macro::sylt_link(n_rpc_client_ip, "sylt_std::network", "fn #X, [#Y] -> bool")]
+#[sylt_macro::sylt_link(n_rpc_client_ip, "sylt_std::network", "fn *X, [*Y] -> bool")]
 pub fn n_rpc_client_ip(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     let ip = match ctx.machine.stack_from_base(ctx.stack_base).get(0) {
         Some(Value::String(s)) => SocketAddr::from_str(s.as_ref()).unwrap(),
@@ -283,7 +283,7 @@ pub fn n_rpc_client_ip(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
 }
 
 // TODO(gu): This doc is wrong since this takes variadic arguments.
-#[sylt_macro::sylt_link(n_rpc_server, "sylt_std::network", "fn #X, #Y -> bool")]
+#[sylt_macro::sylt_link(n_rpc_server, "sylt_std::network", "fn *X, *Y -> bool")]
 pub fn n_rpc_server(ctx: RuntimeContext<'_>) -> Result<Value, RuntimeError> {
     // Serialize the RPC.
     let serialized = match bincode::serialize(&get_rpc_args(ctx, 0, "n_rpc_server")?) {

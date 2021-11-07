@@ -1,1314 +1,1866 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use sylt_common::error::{Error, TypeError};
-use sylt_common::{Type, Value::Ty as ValueType};
-use sylt_parser::expression::ComparisonKind;
+use sylt_common::{RustFunction, Type as RuntimeType};
+use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
-    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp, Span,
-    Statement, StatementKind, VarKind,
+    expression::ComparisonKind, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
+    Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeConstraint, TypeKind,
+    VarKind,
 };
 
-use crate::{self as compiler, first_ok_or_errs, Context, Name as CompilerName};
-use compiler::Compiler;
+use crate::ty::Type;
+use std::collections::{BTreeMap, BTreeSet};
 
-macro_rules! type_error_if_invalid {
-    ($self:expr, $ty:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
-        if matches!($ty, Type::Invalid) {
-            return err_type_error!($self, $span, $kind, $( $msg ),*);
-        }
-    };
-    ($self:expr, $ty:expr, $span:expr, $kind:expr) => {
-        if matches!($ty, Type::Invalid) {
-            return err_type_error!($self, $span, $kind);
-        }
-    };
-}
+type TypeResult<T> = Result<T, Vec<Error>>;
 
 macro_rules! err_type_error {
-    ($self:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
-        Err(vec![Error::TypeError {
-            kind: $kind,
-            file: $self.file(),
-            span: $span,
-            message: Some(format!($( $msg ),*)),
-        }])
+    ($self:expr, $span:expr, $ctx: expr, $kind:expr, $( $msg:expr ),+ ) => {
+        Err(vec![type_error!($self, $span, $ctx, $kind, $($msg),*)])
     };
-    ($self:expr, $span:expr, $kind:expr) => {
-        Err(vec![Error::TypeError {
-            kind: $kind,
-            file: $self.file(),
-            span: $span,
-            message: None,
-        }])
+    ($self:expr, $span:expr, $ctx: expr, $kind:expr) => {
+        Err(vec![type_error!($self, $span, $ctx, $kind)])
     };
 }
 
 macro_rules! type_error {
-    ($self:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
+    ($self:expr, $span:expr, $ctx: expr, $kind:expr, $( $msg:expr ),+ ) => {
         Error::TypeError {
             kind: $kind,
-            file: $self.file(),
+            file: $self.namespace_to_file[&$ctx.namespace].clone(),
             span: $span,
             message: Some(format!($( $msg ),*)),
         }
     };
-    ($self:expr, $span:expr, $kind:expr) => {
+    ($self:expr, $span:expr, $ctx: expr, $kind:expr) => {
         Error::TypeError {
             kind: $kind,
-            file: $self.file(),
+            file: $self.namespace_to_file[&$ctx.namespace].clone(),
             span: $span,
             message: None,
         }
     };
+}
+
+macro_rules! todo_error {
+    () => {
+        TypeError::ToDo { line: line!(), file: file!().to_string() }
+    };
+}
+
+macro_rules! bin_op {
+    ($self:expr, $span:expr, $ctx:expr, $a:expr, $b:expr, $con:expr) => {{
+        let a = $self.expression(&$a, $ctx)?;
+        let b = $self.expression(&$b, $ctx)?;
+        $self.add_constraint(a, $con(b));
+        $self.add_constraint(b, $con(a));
+        $self.check_constraints($span, $ctx, a)?;
+        $self.check_constraints($span, $ctx, b)?;
+        Ok(a) as TypeResult<usize>
+    }};
 }
 
 #[derive(Clone, Debug)]
 struct Variable {
     ident: Identifier,
-    ty: Type,
+    ty: usize,
     kind: VarKind,
 }
 
-impl Variable {
-    fn new(ident: Identifier, ty: Type, kind: VarKind) -> Self {
-        Self { ident, ty, kind }
-    }
+#[derive(Clone, Debug)]
+struct TypeNode {
+    ty: Type,
+    parent: Option<usize>,
+    size: usize,
+    constraints: BTreeSet<Constraint>,
 }
 
-struct TypeChecker<'c> {
-    compiler: &'c mut Compiler,
-    namespace: usize,
+/// # Constraints for type variables
+///
+/// Most constraints force `Unknown` types into becoming a certain type and causes a `TypeError`
+/// otherwise. Constraints applied to two or more type variables need to make sure all variables
+/// have the constraint in some way. For example, if some type has the `Contains` constraint, the
+/// contained type must have the `IsContainedIn` constraint. If this is not the case, the
+/// typechecker may miss some constraints when unifying.
+///
+/// In theory, `Unknown` is the only type that can have a constraint. In practice, concrete types
+/// may have constraints since they need to be checked at least once.
+#[derive(Clone, Debug, Hash, PartialOrd, Ord, PartialEq, Eq)]
+enum Constraint {
+    Add(usize),
+    Sub(usize),
+    Mul(usize),
+    Div(usize),
+    Equ(usize),
+    Cmp(usize),
+    CmpEqu(usize),
+
+    Neg,
+
+    Indexes(usize),
+    IndexedBy(usize),
+    IndexingGives(usize),
+    GivenByIndex(usize),
+    ConstantIndex(i64, usize),
+
+    Field(String, usize),
+
+    Num,
+    Container,
+    SameContainer(usize),
+    Contains(usize),
+    IsContainedIn(usize),
+}
+
+struct TypeChecker {
     globals: HashMap<(usize, String), Name>,
     stack: Vec<Variable>,
+    types: Vec<TypeNode>,
+    namespace_to_file: HashMap<usize, PathBuf>,
+    // TODO(ed): This can probably be removed via some trickery
+    file_to_namespace: HashMap<PathBuf, usize>,
+    functions: HashMap<String, usize>,
+}
+
+#[derive(Clone, Debug, Copy)]
+struct TypeCtx {
+    namespace: usize,
 }
 
 #[derive(Debug, Clone)]
 enum Name {
-    Blob(usize),
-    Global(Option<(Type, VarKind)>),
+    Blob(Type),
+    Global(Variable),
     Namespace(usize),
 }
 
-#[derive(Debug, Clone)]
-enum Lookup {
-    Value(Type, VarKind),
-    Namespace(usize),
-}
-
-impl<'c> TypeChecker<'c> {
-    fn new(compiler: &'c mut Compiler) -> Self {
-        let globals = compiler
-            .namespaces
+impl TypeChecker {
+    fn new(
+        namespace_to_file: &HashMap<usize, PathBuf>,
+        functions: &HashMap<String, (usize, RustFunction, ParserType)>,
+    ) -> Self {
+        let mut res = Self {
+            globals: HashMap::new(),
+            stack: Vec::new(),
+            types: Vec::new(),
+            namespace_to_file: namespace_to_file.clone(),
+            file_to_namespace: namespace_to_file
+                .iter()
+                .map(|(a, b)| (b.clone(), a.clone()))
+                .collect(),
+            functions: HashMap::new(),
+        };
+        res.functions = functions
             .iter()
-            .enumerate()
-            .map(|(i, n)| {
-                n.iter().map(move |(k, v)| {
-                    (
-                        (i, k.clone()),
-                        match v {
-                            compiler::Name::Blob(b) => Name::Blob(*b),
-                            compiler::Name::Namespace(n) => Name::Namespace(*n),
-                            compiler::Name::Global(_) | compiler::Name::External(_) => {
-                                Name::Global(None)
-                            }
-                        },
-                    )
-                })
+            .map(|(name, (_, _, ty))| {
+                (
+                    name.clone(),
+                    res.resolve_type(Span::zero(), TypeCtx { namespace: 0 }, ty)
+                        // NOTE(ed): This is a special error - that a user should never see.
+                        .map_err(|err| panic!("Failed to parse type for {:?}\n{}", name, err[0]))
+                        .unwrap(),
+                )
             })
-            .flatten()
             .collect();
-
-        Self { compiler, namespace: 0, globals, stack: Vec::new() }
+        res
     }
 
-    fn file(&self) -> PathBuf {
-        self.compiler.file_from_namespace(self.namespace).into()
+    fn push_type(&mut self, ty: Type) -> usize {
+        let ty_id = self.types.len();
+        self.types.push(TypeNode {
+            ty,
+            parent: None,
+            size: 1,
+            constraints: BTreeSet::new(),
+        });
+        ty_id
     }
 
-    fn compiler_context(&self) -> compiler::Context {
-        compiler::Context::from_namespace(self.namespace)
-    }
-
-    fn solve_generics_recursively(
-        &self,
-        span: Span,
-        generics: &mut HashMap<String, Type>,
-        par: &Type,
-        arg: &Type,
-    ) -> Result<Type, Vec<Error>> {
-        Ok(match (par, arg) {
-            (_, Type::Generic(_)) => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::Violating(arg.clone()),
-                    "Generics are not supported as arguments - only parameters"
-                );
-            }
-            (Type::Generic(name), _) => {
-                match generics.entry(name.clone()) {
-                    Entry::Occupied(known) => {
-                        let known = known.get();
-                        if let Err(reason) = known.fits(&arg) {
-                            // TODO(ed): Point to the argument maybe?
-                            return err_type_error!(
-                                self,
-                                span,
-                                TypeError::Mismatch { got: arg.clone(), expected: known.clone() },
-                                "because {}. The type was inferred from previous arguments.",
-                                reason
-                            );
-                        }
-                        known.clone()
-                    }
-                    Entry::Vacant(unknown) => unknown.insert(arg.clone()).clone(),
-                }
-            }
-            (x, y) if x.fits(&y).is_ok() => x.clone(),
-
-            (Type::Tuple(a), Type::Tuple(b)) => Type::Tuple(
-                a.iter()
-                    .zip(b.iter())
-                    .map(|(a, b)| self.solve_generics_recursively(span, generics, a, b))
-                    .collect::<Result<Vec<_>, _>>()?,
-            ),
-            (Type::List(a), Type::List(b)) => Type::List(Box::new(
-                self.solve_generics_recursively(span, generics, a, b)?,
-            )),
-            (Type::Set(a), Type::Set(b)) => Type::Set(Box::new(
-                self.solve_generics_recursively(span, generics, a, b)?,
-            )),
-            (Type::Dict(ak, av), Type::Dict(bk, bv)) => Type::Dict(
-                Box::new(self.solve_generics_recursively(span, generics, ak, bk)?),
-                Box::new(self.solve_generics_recursively(span, generics, av, bv)?),
-            ),
-            (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
-                let args = a_args
-                    .iter()
-                    .zip(b_args.iter())
-                    .map(|(a, b)| self.solve_generics_recursively(span, generics, a, b))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let ret = Box::new(self.solve_generics_recursively(span, generics, a_ret, b_ret)?);
-                Type::Function(args, ret)
-            }
-            (a, Type::Union(b)) => {
-                // This is technically wrong, it fails when guesses don't hold, like
-                // `fn #X | #Y, #Y, #X -> void`, if we give in `int, int, float`.
-                // We would assume:
-                //   #X = int,
-                //   #Y = int,
-                // and fail on the third argument. Even though:
-                //   #X = float,
-                //   #Y = int,
-                // would work.
-                //
-                // This complexity requires a lot more code and was therefore skipped.
-                for t in b {
-                    let mut new_generics = generics.clone();
-                    self.solve_generics_recursively(span, &mut new_generics, a, t)?;
-                    *generics = new_generics;
-                }
-                a.clone()
-            }
-            (Type::Union(a), b) => first_ok_or_errs(a.iter().map(|ty| {
-                let mut new_generics = generics.clone();
-                let ret = self.solve_generics_recursively(span, &mut new_generics, ty, b);
-                if ret.is_ok() {
-                    *generics = new_generics;
-                }
-                ret
-            }))
-            .map_err(|errs| errs.into_iter().flatten().collect::<Vec<_>>())?,
-            _ => {
-                // TODO(ed): Point to the argument maybe?
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::Mismatch { got: arg.clone(), expected: par.clone() }
-                );
-            }
-        })
-    }
-
-    fn resolve_functions_from_args(
-        &self,
-        span: Span,
-        args: &Vec<Type>,
-        ty: &Type,
-    ) -> Result<(Vec<Type>, Type), Vec<Error>> {
-        let (params, ret) = match ty {
-            // Recursive case
-            Type::Union(tys) => {
-                let mut solutions = Vec::new();
-                let mut errors = Vec::new();
-                for ty in tys.iter() {
-                    match self.resolve_functions_from_args(span, args, ty) {
-                        Ok(res) => {
-                            solutions.push(res);
-                        }
-                        Err(mut err) => {
-                            errors.append(&mut err);
-                        }
-                    }
-                }
-                // We limit ourselves to one solution, anything else is ambiguous.
-                if solutions.len() == 1 {
-                    return Ok(solutions.remove(0));
-                } else {
-                    return Err(errors);
-                }
-            }
-            Type::Function(params, ret) => (params, ret),
-            Type::Unknown => {
-                return Ok((args.clone(), Type::Unknown));
-            }
-            ty => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::Violating(ty.clone()),
-                    "{:?} cannot be called as a function",
-                    ty
-                );
-            }
-        };
-
-        if args.len() != params.len() {
-            return err_type_error!(
-                self,
-                span,
-                TypeError::WrongArity { got: args.len(), expected: params.len() }
-            );
-        }
-
-        let mut generics: HashMap<_, Type> = HashMap::new();
-        for (par, arg) in params.iter().zip(args.iter()) {
-            if matches!(arg, Type::Generic(_)) {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::Violating(arg.clone()),
-                    "Generics are not supported as arguments - only parameters"
-                );
-            }
-            self.solve_generics_recursively(span, &mut generics, par, arg)?;
-        }
-        let ret = if let Type::Generic(ret) = ret.as_ref() {
-            match generics.get(ret) {
-                Some(ty) => ty.clone(),
-                None => {
-                    return err_type_error!(
-                        self,
-                        span,
-                        TypeError::Exotic,
-                        "Generics are only allowed if they can be deduced from the function signature, but '#{}' is not mentioned in the parameters",
-                        ret
-                    );
-                }
-            }
-        } else {
-            Type::clone(&ret)
-        };
-        Ok((args.to_vec(), ret))
-    }
-
-    fn assignable(
-        &mut self,
-        assignable: &Assignable,
-        namespace: usize,
-    ) -> Result<Lookup, Vec<Error>> {
-        use AssignableKind as AK;
-        use Lookup::*;
+    fn namespace_chain(&self, assignable: &Assignable, ctx: TypeCtx) -> TypeResult<TypeCtx> {
         let span = assignable.span;
         match &assignable.kind {
-            AK::Read(ident) => {
-                if let Some(var) = self.stack.iter().rfind(|var| var.ident.name == ident.name) {
-                    return Ok(Value(var.ty.clone(), var.kind));
-                }
-                match &self.globals.get(&(namespace, ident.name.clone())) {
-                    Some(Name::Global(Some((ty, kind)))) => {
-                        return Ok(Value(ty.clone(), *kind));
-                    }
-                    Some(Name::Global(None)) => {
-                        // TODO(ed): This error should be caught earlier in the compiler - no point
-                        // doing it twice.
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::UnresolvedName(ident.name.clone()),
-                            "Read before being defined"
-                        );
-                    }
-                    Some(Name::Blob(blob)) => {
-                        if let crate::Value::Ty(b) = &self.compiler.constants[*blob] {
-                            return Ok(Value(b.clone(), VarKind::Const));
-                        }
-                    }
-                    Some(Name::Namespace(id)) => return Ok(Namespace(*id)),
-                    None => {}
-                }
-                if let Some((_, _, ty)) = self.compiler.functions.get(&ident.name) {
-                    return Ok(Value(ty.clone(), VarKind::Const));
-                } else {
-                    return err_type_error!(
+            AssignableKind::Read(ident) => {
+                if let Some(_) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
+                    err_type_error! {
                         self,
                         span,
-                        TypeError::UnresolvedName(ident.name.clone())
-                    );
-                }
-            }
-            AK::Call(fun, args) => {
-                // TODO(ed): External functions need a different lookup.
-                let ty = match self.assignable(fun, namespace)? {
-                    Value(ty, _) => ty,
-                    Namespace(_) => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::NamespaceNotExpression,
-                            "Namespace cannot be called like a function"
-                        );
+                        ctx,
+                        todo_error!()
                     }
-                };
-                let args = args
-                    .iter()
-                    .map(|e| self.expression(e))
-                    .collect::<Result<Vec<_>, Vec<_>>>()?;
-                let (_params, ret) = self.resolve_functions_from_args(span, &args, &ty)?;
-                return Ok(Value(Type::clone(&ret), VarKind::Const));
-            }
-            AK::ArrowCall(extra, fun, args) => {
-                // DRY
-                let mut args = args.clone();
-                args.insert(0, Expression::clone(extra));
-                return self.assignable(
-                    &Assignable { span, kind: AK::Call(Box::clone(fun), args) },
-                    namespace,
-                );
-            }
-            AK::Access(thing, field) => {
-                match self.assignable(thing, namespace)? {
-                    Value(ty, _kind) => {
-                        match &ty {
-                            Type::Unknown => Ok(Value(Type::Unknown, VarKind::Mutable)),
-                            Type::Blob(name, fields) => {
-                                match fields.get(&field.name) {
-                                    Some(ty) => Ok(Value(ty.clone(), VarKind::Mutable)),
-                                    None => match field.name.as_str() {
-                                        // TODO(ed): These result in poor error messages
-                                        "_id" => Ok(Value(Type::Int, VarKind::Const)),
-                                        "_name" => Ok(Value(Type::String, VarKind::Const)),
-                                        _ => err_type_error!(
-                                            self,
-                                            field.span,
-                                            TypeError::UnknownField {
-                                                blob: name.clone(),
-                                                field: field.name.clone()
-                                            }
-                                        ),
-                                    },
-                                }
-                            }
-                            ty => err_type_error!(
-                                self,
-                                span,
-                                TypeError::Violating(ty.clone()),
-                                "Only namespaces and blobs support '.'-access"
-                            ),
-                        }
-                    }
-                    Namespace(namespace) => {
-                        return self.assignable(
-                            &Assignable { span: field.span, kind: AK::Read(field.clone()) },
-                            namespace,
-                        );
-                    }
-                }
-            }
-            AK::Index(thing, index_expr) => {
-                // TODO(ed): We could disallow mutating via reference here - not sure we want to thought.
-                let thing = if let Value(val, _) = self.assignable(thing, namespace)? {
-                    val
                 } else {
-                    return err_type_error!(self, span, TypeError::NamespaceNotExpression);
-                };
-                let index = self.expression(index_expr)?;
-                let ret = match (thing, index) {
-                    (Type::List(ret), index) => {
-                        if let Err(reason) = index.fits(&Type::Int) {
-                            return err_type_error!(
-                                self,
-                                span,
-                                TypeError::Mismatch { got: index, expected: Type::Int },
-                                "List indexing requires '{:?}' and {}",
-                                Type::Int,
-                                reason
-                            );
-                        }
-                        Value(Type::clone(&ret), VarKind::Mutable)
-                    }
-                    (Type::Tuple(kinds), index) => {
-                        if let Err(reason) = index.fits(&Type::Int) {
-                            return err_type_error!(
-                                self,
-                                span,
-                                TypeError::Mismatch { got: index, expected: Type::Int },
-                                "Tuple indexing requires '{:?}' and {}",
-                                Type::Int,
-                                reason
-                            );
-                        }
-                        // TODO(ed): Clean this up a bit
-                        let val = if let ExpressionKind::Int(index) = index_expr.kind {
-                            if let Some(val) = kinds.get(index as usize) {
-                                val.clone()
-                            } else {
-                                return err_type_error!(
-                                    self,
-                                    span,
-                                    TypeError::TupleIndexOutOfRange {
-                                        length: kinds.len(),
-                                        got: index,
-                                    }
-                                );
-                            }
-                        } else {
-                            Type::maybe_union(kinds.iter())
-                        };
-                        Value(val, VarKind::Const)
-                    }
-                    (Type::Dict(key, val), index) => {
-                        if let Err(reason) = key.fits(&index) {
-                            return err_type_error!(
-                                self,
-                                span,
-                                TypeError::Mismatch { got: index, expected: Type::clone(&key) },
-                                "Dict key-type is '{:?}' and {}",
-                                key,
-                                reason
-                            );
-                        }
-                        Value(Type::clone(&val), VarKind::Mutable)
-                    }
-                    (ty, _) => {
-                        return err_type_error!(
+                    match self
+                        .globals
+                        .get(&(ctx.namespace, ident.name.clone()))
+                        .cloned()
+                    {
+                        Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
+                        _ => err_type_error! {
                             self,
                             span,
-                            TypeError::Violating(ty.clone()),
-                            "'{:?}' cannot be indexed, only List, Tuple and Dict can be",
-                            ty
-                        );
+                            ctx,
+                            todo_error!()
+                        },
                     }
-                };
-                return Ok(ret);
+                }
             }
-            AK::Expression(expr) => {
-                return Ok(Value(self.expression(&expr)?, VarKind::Const));
+
+            AssignableKind::Access(ass, ident) => {
+                let ctx = self.namespace_chain(ass, ctx)?;
+                match self
+                    .globals
+                    .get(&(ctx.namespace, ident.name.clone()))
+                    .cloned()
+                {
+                    Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
+                    _ => err_type_error! {
+                        self,
+                        span,
+                        ctx,
+                        todo_error!()
+                    },
+                }
+            }
+
+            AssignableKind::Call(..)
+            | AssignableKind::ArrowCall(..)
+            | AssignableKind::Index(..)
+            | AssignableKind::Expression(..) => err_type_error! {
+                self,
+                span,
+                ctx,
+                todo_error!()
+            },
+        }
+    }
+
+    fn type_assignable(
+        &mut self,
+        _span: Span,
+        ctx: TypeCtx,
+        assignable: &Assignable,
+    ) -> TypeResult<usize> {
+        let span = assignable.span;
+        match &assignable.kind {
+            AssignableKind::Read(ident) => match self
+                .globals
+                .get(&(ctx.namespace, ident.name.clone()))
+                .cloned()
+            {
+                Some(Name::Blob(blob_ty)) => Ok(self.push_type(blob_ty.clone())),
+                _ => {
+                    return err_type_error!(
+                        self,
+                        ident.span,
+                        ctx,
+                        TypeError::Exotic,
+                        "Cannot find type '{}' - is it perhaps a type-variable?",
+                        ident.name
+                    )
+                }
+            },
+
+            AssignableKind::Access(ass, ident) => {
+                let ctx = self.namespace_chain(ass, ctx)?;
+                match self
+                    .globals
+                    .get(&(ctx.namespace, ident.name.clone()))
+                    .cloned()
+                {
+                    Some(Name::Blob(ty)) => Ok(self.push_type(ty.clone())),
+                    _ => return err_type_error!(self, span, ctx, todo_error!()),
+                }
+            }
+
+            AssignableKind::Call(..)
+            | AssignableKind::ArrowCall(..)
+            | AssignableKind::Index(..)
+            | AssignableKind::Expression(..) => {
+                return err_type_error!(self, span, ctx, todo_error!())
             }
         }
     }
 
-    fn bin_op(
+    fn resolve_type(&mut self, span: Span, ctx: TypeCtx, ty: &ParserType) -> TypeResult<usize> {
+        self.inner_resolve_type(span, ctx, ty, &mut HashMap::new())
+    }
+
+    fn resolve_constraint(
         &mut self,
         span: Span,
-        lhs: &Expression,
-        rhs: &Expression,
-        op: fn(&Type, &Type) -> Type,
-        name: &str,
-    ) -> Result<Type, Vec<Error>> {
-        let lhs = self.expression(lhs)?;
-        let rhs = self.expression(rhs)?;
-        let res = op(&lhs, &rhs);
-        type_error_if_invalid!(
-            self,
-            res,
-            span,
-            TypeError::BinOp { lhs, rhs, op: name.into() }
-        );
-        Ok(res)
-    }
-
-    fn uni_op(
-        &mut self,
-        span: Span,
-        val: &Expression,
-        op: fn(&Type) -> Type,
-        name: &str,
-    ) -> Result<Type, Vec<Error>> {
-        let val = self.expression(val)?;
-        let res = op(&val);
-        type_error_if_invalid!(self, res, span, TypeError::UniOp { val, op: name.into() });
-        Ok(res)
-    }
-
-    fn expression_union_or_errors<'a>(
-        &mut self,
-        expressions: impl Iterator<Item = &'a Expression>,
-    ) -> Result<Type, Vec<Error>> {
-        let ty: Vec<Type> = expressions
-            .map(|e| self.expression(e))
-            .collect::<Result<Vec<Type>, Vec<Error>>>()?;
-        Ok(Type::maybe_union(ty.iter()))
-    }
-
-    fn expression(&mut self, expression: &Expression) -> Result<Type, Vec<Error>> {
-        use ExpressionKind as EK;
-        let span = expression.span;
-        let res = match &expression.kind {
-            EK::Get(assignable) => match self.assignable(assignable, self.namespace)? {
-                Lookup::Value(value, _) => value,
-                Lookup::Namespace(_) => {
-                    return err_type_error!(self, span, TypeError::NamespaceNotExpression);
-                }
-            },
-
-            EK::Add(a, b) => self.bin_op(span, a, b, op::add, "Addition")?,
-            EK::Sub(a, b) => self.bin_op(span, a, b, op::sub, "Subtraction")?,
-            EK::Mul(a, b) => self.bin_op(span, a, b, op::mul, "Multiplication")?,
-            EK::Div(a, b) => self.bin_op(span, a, b, op::div, "Division")?,
-            EK::AssertEq(a, b) => self.bin_op(span, a, b, op::eq, "Equality")?,
-
-            EK::Comparison(a, cmp, b) => match cmp {
-                ComparisonKind::Equals | ComparisonKind::NotEquals => {
-                    self.bin_op(span, a, b, op::eq, "Equality")?
-                }
-                ComparisonKind::Greater
-                | ComparisonKind::GreaterEqual
-                | ComparisonKind::Less
-                | ComparisonKind::LessEqual => self.bin_op(span, a, b, op::cmp, "Comparison")?,
-                ComparisonKind::In => {
-                    let a = self.expression(a)?;
-                    let b = self.expression(b)?;
-                    // TODO(ed): Verify the order here
-                    let ret = match (&a, &b) {
-                        (a, Type::List(b)) | (a, Type::Set(b)) | (a, Type::Dict(b, _)) => b.fits(a),
-                        _ => Err("".into()),
-                    };
-                    if let Err(msg) = ret {
-                        let err = Error::TypeError {
-                            kind: TypeError::BinOp { lhs: a, rhs: b, op: "Containment".into() },
-                            file: self.file(),
-                            span,
-                            message: if msg.is_empty() {
-                                None
-                            } else {
-                                Some(format!("because {}", msg))
-                            },
-                        };
-                        return Err(vec![err]);
-                    }
-                    Type::Bool
-                }
-            },
-
-            EK::Neg(a) => self.uni_op(span, a, op::neg, "Negation")?,
-
-            EK::And(a, b) => self.bin_op(span, a, b, op::and, "Boolean and")?,
-            EK::Or(a, b) => self.bin_op(span, a, b, op::or, "Boolean or")?,
-            EK::Not(a) => self.uni_op(span, a, op::not, "Boolean not")?,
-
-            EK::Parenthesis(expr) => self.expression(expr)?,
-
-            EK::Tuple(values) => {
-                let mut types = Vec::new();
-                for v in values.iter() {
-                    types.push(self.expression(v)?);
-                }
-                Type::Tuple(types)
-            }
-            EK::Float(_) => Type::Float,
-            EK::Int(_) => Type::Int,
-            EK::Str(_) => Type::String,
-            EK::Bool(_) => Type::Bool,
-            EK::Nil => Type::Void,
-
-            EK::Set(values) => {
-                let ty = self.expression_union_or_errors(values.iter())?;
-                Type::Set(Box::new(ty))
-            }
-
-            EK::List(values) => {
-                let ty = self.expression_union_or_errors(values.iter())?;
-                Type::List(Box::new(ty))
-            }
-
-            EK::Dict(values) => {
-                let key = self.expression_union_or_errors(values.iter().skip(0).step_by(2))?;
-                let val = self.expression_union_or_errors(values.iter().skip(1).step_by(2))?;
-                Type::Dict(Box::new(key), Box::new(val))
-            }
-
-            EK::Function { name: _, params, ret, body } => {
-                let stack_size = self.stack.len();
-                let mut param_types = Vec::new();
-                for (ident, ty) in params {
-                    let ty = self.compiler.resolve_type(ty, self.compiler_context());
-                    param_types.push(ty.clone());
-                    self.stack
-                        .push(Variable::new(ident.clone(), ty, VarKind::Const));
-                }
-
-                let ret = self.compiler.resolve_type(ret, self.compiler_context());
-                let actual_ret = self
-                    .statement(body)?
-                    .expect("A function that doesn't return a value");
-
-                if let Err(reason) = ret.fits(&actual_ret) {
-                    return err_type_error!(
-                        self,
-                        span,
-                        TypeError::Mismatch { got: actual_ret, expected: ret },
-                        "Return type doesn't match, {}",
-                        reason
-                    );
-                }
-
-                self.stack.truncate(stack_size);
-
-                Type::Function(param_types, Box::new(ret))
-            }
-
-            EK::IfExpression { condition, pass, fail } => {
-                let condition_ty = self.expression(condition)?;
-                if !matches!(condition_ty, Type::Bool) {
-                    return err_type_error!(
-                        self,
-                        condition.span,
-                        TypeError::Mismatch { got: condition_ty, expected: Type::Bool },
-                        "Only boolean expressions are valid if-expression conditions"
-                    );
-                }
-
-                // TODO(ed) check nullables and the actual condition
-                Type::maybe_union([self.expression(pass)?, self.expression(fail)?].iter())
-            }
-
-            EK::Blob { blob, fields } => {
-                let (blob_ty, blob_name, blob_fields) =
-                    match self.assignable(blob, self.namespace)? {
-                        Lookup::Value(ty, _) => match ty.clone() {
-                            Type::Blob(name, fields) => (ty, name, fields),
-                            _ => {
-                                return err_type_error!(
-                                    self,
-                                    span,
-                                    TypeError::Violating(ty),
-                                    "A blob was expected when instancing"
-                                )
-                            }
-                        },
-                        Lookup::Namespace(_) => {
-                            return err_type_error!(self, span, TypeError::NamespaceNotExpression);
-                        }
-                    };
-                let mut errors = Vec::new();
-                let mut initalizer = HashMap::new();
-                let self_var = Variable::new(
-                    Identifier { span: expression.span, name: "self".to_string() },
-                    blob_ty,
-                    VarKind::Mutable,
-                );
-                let stack_size = self.stack.len();
-                for (name, expr) in fields {
-                    if matches!(expr.kind, EK::Function { .. }) {
-                        self.stack.push(self_var.clone());
-                    }
-                    let value = self.expression(&expr);
-                    self.stack.truncate(stack_size);
-                    let ty = match value {
-                        Ok(ty) => (ty, expr.span),
-                        Err(mut errs) => {
-                            errors.append(&mut errs);
-                            continue;
-                        }
-                    };
-                    initalizer.insert(name.clone(), ty);
-                }
-                for (name, (rhs, span)) in initalizer.iter() {
-                    match blob_fields.get(name) {
-                        Some(lhs) => match lhs.fits(rhs) {
-                            Ok(_) => {}
-                            Err(reason) => {
-                                // TODO(ed): Not super sold on this error message - it can be better.
-                                errors.push(type_error!(
-                                    self,
-                                    *span,
-                                    TypeError::Mismatch { expected: lhs.clone(), got: rhs.clone() },
-                                    "because {}.{} is a '{:?}' and {}",
-                                    blob_name,
-                                    name,
-                                    lhs,
-                                    reason
-                                ));
-                            }
-                        },
-                        None => {
-                            errors.push(type_error!(
-                                self,
-                                *span,
-                                TypeError::UnknownField {
-                                    blob: blob_name.clone(),
-                                    field: name.clone()
-                                },
-                                "{}.{} does not exist on the original blob type",
-                                blob_name,
-                                name
-                            ));
-                        }
-                    }
-                }
-                // No point checking that all fields are there if they're the wrong type,
-                // we'll get duplicate errors.
-                if !errors.is_empty() {
-                    return Err(errors);
-                }
-                for name in blob_fields.keys() {
-                    if initalizer.contains_key(name) {
-                        continue;
-                    }
-                    // TODO(ed): Not super sold on this error message - it can be better.
-                    errors.push(type_error!(
-                        self,
-                        span,
-                        TypeError::MissingField { blob: blob_name.clone(), field: name.clone() }
-                    ));
-                }
-                if !errors.is_empty() {
-                    return Err(errors);
-                }
-                Type::Blob(blob_name, blob_fields)
-            }
-        };
-        Ok(res)
-    }
-
-    fn statement(&mut self, statement: &Statement) -> Result<Option<Type>, Vec<Error>> {
-        use StatementKind as SK;
-        let span = statement.span;
-        let ret = match &statement.kind {
-            SK::Assignment { kind, target, value } => {
-                let value = self.expression(value)?;
-                let target_ty = match self.assignable(target, self.namespace)? {
-                    Lookup::Value(_, kind) if kind.immutable() => {
-                        // TODO(ed): I want this to point to the equal-sign, the parser is
-                        // probably a bit off.
-                        // TODO(ed): This should not be a type error - prefereably a compile error?
-                        return err_type_error!(self, span, TypeError::Mutability);
-                    }
-                    Lookup::Namespace(_) => {
-                        return err_type_error!(self, span, TypeError::NamespaceNotExpression);
-                    }
-                    Lookup::Value(ty, _) => ty,
-                };
-                let result = match kind {
-                    ParserOp::Nop => value.clone(),
-                    ParserOp::Add => op::add(&target_ty, &value),
-                    ParserOp::Sub => op::sub(&target_ty, &value),
-                    ParserOp::Mul => op::mul(&target_ty, &value),
-                    ParserOp::Div => op::div(&target_ty, &value),
-                };
-                type_error_if_invalid!(
-                    self,
-                    result,
+        ctx: TypeCtx,
+        var: usize,
+        constraint: &TypeConstraint,
+        seen: &HashMap<String, usize>,
+    ) -> TypeResult<()> {
+        fn check_constraint_arity(
+            typechecker: &TypeChecker,
+            span: Span,
+            ctx: TypeCtx,
+            name: &str,
+            got: usize,
+            expected: usize,
+        ) -> TypeResult<()> {
+            if got != expected {
+                err_type_error!(
+                    typechecker,
                     span,
-                    TypeError::BinOp {
-                        lhs: target_ty.clone(),
-                        rhs: value.clone(),
-                        op: match kind {
-                            ParserOp::Nop => unreachable!(),
-                            ParserOp::Add => "Addition",
-                            ParserOp::Sub => "Subtraction",
-                            ParserOp::Mul => "Multiplication",
-                            ParserOp::Div => "Division",
-                        }
-                        .to_string()
-                    }
-                );
-                // TODO(ed): Is the fits-order correct?
-                if let Err(reason) = target_ty.fits(&result) {
-                    // TODO(ed): I want this to point to the equal-sign, the parser is
-                    // probably a bit off.
+                    ctx,
+                    TypeError::WrongConstraintArity { name: name.into(), got, expected }
+                )
+            } else {
+                Ok(())
+            }
+        }
+
+        fn parse_constraint_arg(
+            typechecker: &TypeChecker,
+            span: Span,
+            ctx: TypeCtx,
+            name: &str,
+            seen: &HashMap<String, usize>,
+        ) -> TypeResult<usize> {
+            match seen.get(name) {
+                Some(x) => Ok(*x),
+                _ => {
                     return err_type_error!(
-                        self,
+                        typechecker,
                         span,
-                        TypeError::MismatchAssign { got: result, expected: target_ty },
-                        "because {}",
-                        reason
-                    );
-                }
-                None
-            }
-
-            SK::ExternalDefinition { .. } => None,
-
-            SK::Definition { ident, kind, ty, value } => {
-                let slot = self.stack.len();
-                let ty = self.compiler.resolve_type(ty, self.compiler_context());
-                let ty = if matches!(ty, Type::Unknown) {
-                    // Special case if it's a function
-                    if let ExpressionKind::Function { params, ret, .. } = &value.kind {
-                        let params = params
-                            .iter()
-                            .map(|(_, ty)| self.compiler.resolve_type(ty, self.compiler_context()))
-                            .collect();
-                        let ret = self.compiler.resolve_type(ret, self.compiler_context());
-                        Type::Function(params, Box::new(ret))
-                    } else {
-                        Type::Unknown
-                    }
-                } else {
-                    ty
-                };
-
-                let value = self.expression(value);
-                self.stack
-                    .push(Variable::new(ident.clone(), ty.clone(), *kind));
-                let value = value?;
-
-                let fit = ty.fits(&value);
-                let ty = match (kind.force(), fit) {
-                    (true, Ok(_)) => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::ExcessiveForce { got: ty, expected: value }
-                        )
-                    }
-                    (true, Err(_)) => ty,
-                    (false, Ok(_)) => {
-                        if matches!(ty, Type::Unknown) {
-                            value
-                        } else {
-                            ty
-                        }
-                    }
-                    (false, Err(reason)) => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::Mismatch { got: ty, expected: value },
-                            "because {}",
-                            reason
-                        )
-                    }
-                };
-                self.stack[slot].ty = ty;
-                None
-            }
-
-            SK::If { condition, pass, fail } => {
-                let ty = self.expression(condition)?;
-                if !matches!(ty, Type::Bool) {
-                    return err_type_error!(
-                        self,
-                        condition.span,
-                        TypeError::Mismatch { got: ty, expected: Type::Bool },
-                        "Only boolean expressions are valid if-statement conditions"
-                    );
-                }
-                match (self.statement(pass)?, self.statement(fail)?) {
-                    (None, None) => None,
-                    (p, f) => Some(Type::maybe_union(p.iter().chain(&f))),
+                        ctx,
+                        TypeError::UnknownConstraintArgument(name.into())
+                    )
                 }
             }
-            SK::Loop { condition, body } => {
-                let ty = self.expression(condition)?;
-                if !matches!(ty, Type::Bool) {
-                    return err_type_error!(
-                        self,
-                        condition.span,
-                        TypeError::Mismatch { got: ty, expected: Type::Bool },
-                        "Only boolean expressions are valid if-statement conditions"
-                    );
-                }
-                self.statement(body)?
+        }
+
+        let num_args = constraint.args.len();
+        match constraint.name.name.as_str() {
+            "Num" => {
+                check_constraint_arity(self, span, ctx, "Num", num_args, 0)?;
+                self.add_constraint(var, Constraint::Num);
             }
-
-            SK::IsCheck { lhs, rhs } => {
-                let lhs = self.compiler.resolve_type(lhs, self.compiler_context());
-                let rhs = self.compiler.resolve_type(rhs, self.compiler_context());
-                if let Err(msg) = rhs.fits(&lhs) {
-                    return err_type_error!(
-                        self,
-                        span,
-                        TypeError::Mismatch { got: lhs, expected: rhs },
-                        "Is-check failed - {}",
-                        msg
-                    );
-                }
-                None
+            "Container" => {
+                check_constraint_arity(self, span, ctx, "Container", num_args, 0)?;
+                self.add_constraint(var, Constraint::Container);
             }
-
-            SK::Block { statements } => {
-                let stack_size = self.stack.len();
-
-                let mut errors = Vec::new();
-                let mut rets = Vec::new();
-                for stmt in statements {
-                    match self.statement(stmt) {
-                        Ok(Some(ty)) => {
-                            rets.push(ty);
-                        }
-                        Ok(None) => {}
-                        Err(mut errs) => {
-                            errors.append(&mut errs);
-                        }
-                    }
-                }
-
-                self.stack.truncate(stack_size);
-
-                if !errors.is_empty() {
-                    return Err(errors);
-                }
-                Some(Type::maybe_union(rets.iter()))
+            "SameContainer" => {
+                check_constraint_arity(self, span, ctx, "SameContainer", num_args, 1)?;
+                let a = parse_constraint_arg(self, span, ctx, &constraint.args[0].name, seen)?;
+                self.add_constraint(var, Constraint::SameContainer(a));
+                self.add_constraint(a, Constraint::SameContainer(var));
             }
-
-            SK::Ret { value } => Some(self.expression(value)?),
-            SK::StatementExpression { value } => {
-                self.expression(value)?;
-                None
+            "Contains" => {
+                check_constraint_arity(self, span, ctx, "Contains", num_args, 1)?;
+                let a = parse_constraint_arg(self, span, ctx, &constraint.args[0].name, seen)?;
+                self.add_constraint(var, Constraint::Contains(a));
+                self.add_constraint(a, Constraint::IsContainedIn(var));
             }
-
-            SK::Use { .. }
-            | SK::Blob { .. }
-            | SK::Continue
-            | SK::Break
-            | SK::Unreachable
-            | SK::EmptyStatement => None,
-        };
-        Ok(ret)
-    }
-
-    fn outer_definition(&mut self, namespace: usize, stmt: &Statement) -> Result<(), Vec<Error>> {
-        use StatementKind as SK;
-
-        let span = stmt.span;
-        match &stmt.kind {
-            SK::Blob { name, fields } => {
-                let ctx = Context::from_namespace(namespace);
-                let fields = fields
-                    .iter()
-                    .map(|(k, v)| (k.clone(), self.compiler.resolve_type(&v, ctx)))
-                    .collect();
-                if let Some(CompilerName::Blob(slot)) =
-                    self.compiler.namespaces[ctx.namespace].get(name)
-                {
-                    match &mut self.compiler.constants[*slot] {
-                        ValueType(Type::Blob(_, b_fields)) => {
-                            *b_fields = fields;
-                        }
-                        _ => unreachable!(),
-                    }
-                } else {
-                    // We've yet to fill it in, but that's why we have a prepass.
-                }
-            }
-
-            SK::ExternalDefinition { ident, kind, ty } => {
-                let name = match &self.globals.get(&(namespace, ident.name.clone())) {
-                    Some(Name::Global(None)) => {
-                        let ty = self.compiler.resolve_type(ty, self.compiler_context());
-                        (ty, *kind)
-                    }
-
-                    // TODO(ed): Throw earlier errors before typechecking -
-                    // so we don't have to care about the duplicates.
-                    x => unreachable!("X: {:?}", x),
-                };
-                self.globals
-                    .insert((namespace, ident.name.clone()), Name::Global(Some(name)));
-            }
-
-            SK::Definition { ident, kind, ty, value } => {
-                let name = match &self.globals.get(&(namespace, ident.name.clone())) {
-                    Some(Name::Global(None)) => {
-                        let ty = self.compiler.resolve_type(ty, self.compiler_context());
-                        let ty = if matches!(ty, Type::Unknown) {
-                            // Special case if it's a function
-                            if let ExpressionKind::Function { params, ret, .. } = &value.kind {
-                                let params = params
-                                    .iter()
-                                    .map(|(_, ty)| {
-                                        self.compiler.resolve_type(ty, self.compiler_context())
-                                    })
-                                    .collect();
-                                let ret = self.compiler.resolve_type(ret, self.compiler_context());
-                                Type::Function(params, Box::new(ret))
-                            } else {
-                                Type::Unknown
-                            }
-                        } else {
-                            ty
-                        };
-                        let name = Name::Global(Some((ty.clone(), *kind)));
-                        self.globals.insert((namespace, ident.name.clone()), name);
-                        let value = self.expression(value)?;
-                        let fit = ty.fits(&value);
-                        let ty = match (kind.force(), fit) {
-                            (true, Ok(_)) => {
-                                return err_type_error!(
-                                    self,
-                                    span,
-                                    TypeError::ExcessiveForce { got: ty, expected: value }
-                                )
-                            }
-                            (true, Err(_)) => ty,
-                            (false, Ok(_)) => value,
-                            (false, Err(reason)) => {
-                                return err_type_error!(
-                                    self,
-                                    span,
-                                    TypeError::Mismatch { got: ty, expected: value },
-                                    "because {}",
-                                    reason
-                                )
-                            }
-                        };
-                        (ty, *kind)
-                    }
-                    // TODO(ed): Throw earlier errors before typechecking -
-                    // so we don't have to care about the duplicates.
-                    x => unreachable!("X: {:?}", x),
-                };
-                self.globals
-                    .insert((namespace, ident.name.clone()), Name::Global(Some(name)));
-            }
-
-            _ => {}
+            x => return err_type_error!(self, span, ctx, TypeError::UnknownConstraint(x.into())),
         }
         Ok(())
     }
 
-    fn solve(mut self, statements: &Vec<(&Statement, usize)>) -> Result<(), Vec<Error>> {
-        for (statement, namespace) in statements.iter() {
-            // Ignore errors since they'll be caught later and
-            // there are false positives.
-            self.stack.clear();
-            let _ = self.outer_definition(*namespace, &statement);
-        }
+    fn inner_resolve_type(
+        &mut self,
+        span: Span,
+        ctx: TypeCtx,
+        ty: &ParserType,
+        seen: &mut HashMap<String, usize>,
+    ) -> TypeResult<usize> {
+        use TypeKind::*;
+        let ty = match &ty.kind {
+            Implied => Type::Unknown,
 
-        let mut errors = Vec::new();
-        for (statement, namespace) in statements.iter() {
-            self.namespace = *namespace;
-            self.stack.clear();
-            if let Err(mut errs) = self.statement(&statement) {
-                errors.append(&mut errs);
+            Resolved(ty) => match ty {
+                RuntimeType::Void => Type::Void,
+                RuntimeType::Unknown => Type::Unknown,
+                RuntimeType::Int => Type::Int,
+                RuntimeType::Float => Type::Float,
+                RuntimeType::Bool => Type::Bool,
+                RuntimeType::String => Type::Str,
+                x => unreachable!("Got an unexpected resolved type '{:?}'", x),
+            },
+
+            UserDefined(assignable) => {
+                return self.type_assignable(span, ctx, assignable);
             }
-        }
-        let span = statements
-            .iter()
-            .find_map(|(stmt, _)| {
-                if let StatementKind::Definition { ident, .. } = &stmt.kind {
-                    if ident.name == "start" {
-                        return Some(ident.span);
+
+            Fn { constraints, params, ret } => {
+                let params = params
+                    .iter()
+                    .map(|t| self.inner_resolve_type(span, ctx, t, seen))
+                    .collect::<TypeResult<Vec<_>>>()?;
+                let ret = self.inner_resolve_type(span, ctx, ret, seen)?;
+                for (var, constraints) in constraints.iter() {
+                    let var = match seen.get(var) {
+                        Some(var) => *var,
+                        // NOTE(ed): This disallowes type-variables that are only used for
+                        // constraints.
+                        None => return err_type_error!(self, span, ctx, todo_error!()),
+                    };
+
+                    for constraint in constraints.iter() {
+                        self.resolve_constraint(span, ctx, var, constraint, seen)?;
                     }
                 }
-                None
-            })
-            .unwrap_or_else(|| Span { col_start: 0, col_end: 0, line: 0 });
+                Type::Function(params, ret)
+            }
 
-        let call_start = &Assignable {
-            span,
-            kind: AssignableKind::Call(
-                Box::new(Assignable {
-                    span,
-                    kind: AssignableKind::Read(Identifier {
-                        span: Span::zero(),
-                        name: "start".to_string(),
-                    }),
-                }),
-                Vec::new(),
+            Tuple(fields) => Type::Tuple(
+                fields
+                    .iter()
+                    .map(|t| self.inner_resolve_type(span, ctx, t, seen))
+                    .collect::<TypeResult<Vec<_>>>()?,
+            ),
+
+            List(kind) => Type::List(self.inner_resolve_type(span, ctx, kind, seen)?),
+
+            Set(kind) => Type::Set(self.inner_resolve_type(span, ctx, kind, seen)?),
+
+            Dict(key, value) => Type::Dict(
+                self.inner_resolve_type(span, ctx, key, seen)?,
+                self.inner_resolve_type(span, ctx, value, seen)?,
+            ),
+
+            Grouping(ty) => {
+                return self.inner_resolve_type(span, ctx, ty, seen);
+            }
+
+            Generic(name) => {
+                return Ok(*seen
+                    .entry(name.clone())
+                    .or_insert_with(|| self.push_type(Type::Unknown)))
+            }
+        };
+        Ok(self.push_type(ty))
+    }
+
+    fn statement(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<Option<usize>> {
+        let span = statement.span;
+        match &statement.kind {
+            StatementKind::Block { statements } => {
+                // Left this for Gustav
+                let ss = self.stack.len();
+                let rets = self.push_type(Type::Unknown);
+                for stmt in statements.iter() {
+                    if let Some(ret) = self.statement(stmt, ctx)? {
+                        self.unify(span, ctx, rets, ret)?;
+                    }
+                }
+                self.stack.truncate(ss);
+                Ok(Some(rets))
+            }
+
+            StatementKind::Ret { value } => Ok(Some(self.expression(value, ctx)?)),
+
+            StatementKind::StatementExpression { value } => {
+                self.expression(value, ctx)?;
+                Ok(None)
+            }
+
+            StatementKind::If { condition, pass, fail } => {
+                let condition = self.expression(condition, ctx)?;
+                let boolean = self.push_type(Type::Bool);
+                self.unify(span, ctx, boolean, condition)?;
+
+                let pass = self.statement(pass, ctx)?;
+                let fail = self.statement(fail, ctx)?;
+                match (pass, fail) {
+                    (Some(pass), Some(fail)) => Ok(Some(self.unify(span, ctx, pass, fail)?)),
+                    (Some(pass), _) => Ok(Some(pass)),
+                    (_, Some(fail)) => Ok(Some(fail)),
+                    _ => Ok(None),
+                }
+            }
+
+            StatementKind::Assignment { kind, target, value } => {
+                self.can_assign(span, ctx, target)?;
+                let expression_ty = self.expression(value, ctx)?;
+                let target_ty = self.assignable(target, ctx)?;
+                match kind {
+                    ParserOp::Nop => {}
+                    ParserOp::Add => {
+                        self.add_constraint(expression_ty, Constraint::Add(target_ty));
+                        self.add_constraint(target_ty, Constraint::Add(expression_ty));
+                    }
+                    ParserOp::Sub => {
+                        self.add_constraint(expression_ty, Constraint::Sub(target_ty));
+                        self.add_constraint(target_ty, Constraint::Sub(expression_ty));
+                    }
+                    ParserOp::Mul => {
+                        self.add_constraint(expression_ty, Constraint::Mul(target_ty));
+                        self.add_constraint(target_ty, Constraint::Mul(expression_ty));
+                    }
+                    ParserOp::Div => {
+                        self.add_constraint(expression_ty, Constraint::Mul(target_ty));
+                        self.add_constraint(target_ty, Constraint::Mul(expression_ty));
+                    }
+                };
+                self.unify(span, ctx, expression_ty, target_ty)?;
+                Ok(None)
+            }
+
+            StatementKind::Definition { ident, kind, ty, value } => {
+                let pre_ty = self.push_type(Type::Unknown);
+                let var = Variable { ident: ident.clone(), ty: pre_ty, kind: *kind };
+                let is_function = matches!(value.kind, ExpressionKind::Function { .. });
+                if is_function {
+                    self.stack.push(var);
+                }
+
+                let expression_ty = self.expression(value, ctx)?;
+                let defined_ty = self.resolve_type(span, ctx, &ty)?;
+                let expression_ty = if matches!(self.find_type(defined_ty), Type::Unknown) {
+                    // TODO(ed): Not sure this is needed
+                    self.copy(expression_ty)
+                } else {
+                    expression_ty
+                };
+
+                self.unify(span, ctx, expression_ty, defined_ty)?;
+
+                let var = Variable { ident: ident.clone(), ty: defined_ty, kind: *kind };
+                if !is_function {
+                    self.stack.push(var);
+                }
+                Ok(None)
+            }
+
+            StatementKind::Loop { condition, body } => {
+                let condition = self.expression(condition, ctx)?;
+                let boolean = self.push_type(Type::Bool);
+                self.unify(span, ctx, boolean, condition)?;
+
+                self.statement(body, ctx)
+            }
+
+            StatementKind::Break => Ok(None),
+            StatementKind::Continue => Ok(None),
+
+            StatementKind::Unreachable => Ok(None),
+            StatementKind::EmptyStatement => Ok(None),
+
+            StatementKind::Use { .. }
+            | StatementKind::Blob { .. }
+            | StatementKind::IsCheck { .. }
+            | StatementKind::ExternalDefinition { .. } => {
+                unreachable!("Illegal inner statement! Parser should have caught this.")
+            }
+        }
+    }
+
+    fn outer_statement(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<()> {
+        let span = statement.span;
+        match &statement.kind {
+            StatementKind::Use { name, file, .. } => {
+                let ident = match name {
+                    NameIdentifier::Implicit(ident) => ident,
+                    NameIdentifier::Alias(ident) => ident,
+                };
+                let other = self.file_to_namespace[file];
+                self.globals
+                    .insert((ctx.namespace, ident.name.clone()), Name::Namespace(other));
+            }
+
+            StatementKind::Blob { name, fields } => {
+                let mut resolved_fields = BTreeMap::new();
+                for (k, t) in fields.iter() {
+                    resolved_fields.insert(k.clone(), self.resolve_type(span, ctx, t)?);
+                }
+                let ty = Type::Blob(name.clone(), resolved_fields);
+                self.globals
+                    .insert((ctx.namespace, name.clone()), Name::Blob(ty));
+            }
+
+            StatementKind::Definition { ident, kind, ty, value } => {
+                let pre_ty = self.push_type(Type::Unknown);
+                let var = Variable { ident: ident.clone(), ty: pre_ty, kind: *kind };
+                let is_function = matches!(value.kind, ExpressionKind::Function { .. });
+                if is_function {
+                    self.globals.insert(
+                        (ctx.namespace, ident.name.clone()),
+                        Name::Global(var.clone()),
+                    );
+                }
+
+                let expression_ty = self.expression(value, ctx)?;
+                let defined_ty = self.resolve_type(span, ctx, &ty)?;
+                let expression_ty = if matches!(self.find_type(defined_ty), Type::Unknown) {
+                    // TODO(ed): Not sure this is needed
+                    self.copy(expression_ty)
+                } else {
+                    expression_ty
+                };
+                self.unify(span, ctx, pre_ty, defined_ty)?;
+                self.unify(span, ctx, expression_ty, defined_ty)?;
+
+                if !is_function {
+                    self.globals.insert(
+                        (ctx.namespace, ident.name.clone()),
+                        Name::Global(var.clone()),
+                    );
+                }
+            }
+
+            StatementKind::ExternalDefinition { ident, kind, ty } => {
+                let ty = self.resolve_type(span, ctx, ty)?;
+                let var = Variable { ident: ident.clone(), ty, kind: *kind };
+                self.globals
+                    .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
+            }
+
+            StatementKind::IsCheck { lhs, rhs } => {
+                let lhs = self.resolve_type(span, ctx, lhs)?;
+                let rhs = self.resolve_type(span, ctx, rhs)?;
+                self.unify(span, ctx, lhs, rhs)?;
+            }
+
+            StatementKind::Assignment { .. }
+            | StatementKind::Loop { .. }
+            | StatementKind::Break
+            | StatementKind::Continue
+            | StatementKind::Ret { .. }
+            | StatementKind::If { .. }
+            | StatementKind::Block { .. }
+            | StatementKind::StatementExpression { .. }
+            | StatementKind::Unreachable
+            | StatementKind::EmptyStatement => {
+                panic!("Illegal outer statement! Parser should have caught this")
+            }
+        }
+        Ok(())
+    }
+
+    fn assignable(&mut self, assignable: &Assignable, ctx: TypeCtx) -> TypeResult<usize> {
+        let span = assignable.span;
+        match &assignable.kind {
+            AssignableKind::Read(ident) => {
+                if let Some(var) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
+                    Ok(var.ty)
+                } else {
+                    match self.globals.get(&(ctx.namespace, ident.name.clone())) {
+                        Some(Name::Global(var)) => Ok(var.ty),
+                        None => match self.functions.get(&ident.name) {
+                            Some(f) => Ok(*f),
+                            None => err_type_error!(
+                                self,
+                                span,
+                                ctx,
+                                TypeError::UnresolvedName(ident.name.clone())
+                            ),
+                        },
+                        _ => panic!("Not a variable!"),
+                    }
+                }
+            }
+
+            AssignableKind::Call(f, args) => {
+                let dbg = if let AssignableKind::Read(name) = &f.kind {
+                    name.name == "dbg"
+                } else {
+                    false
+                };
+
+                let f = self.assignable(f, ctx)?;
+                let f_copy = self.copy(f);
+                match self.find_type(f_copy) {
+                    Type::Function(params, ret) => {
+                        if args.len() != params.len() {
+                            return err_type_error!(
+                                self,
+                                span,
+                                ctx,
+                                TypeError::WrongArity { got: args.len(), expected: params.len() }
+                            );
+                        }
+                        // TODO(ed): Annotate the errors?
+                        for (a, p) in args.iter().zip(params.iter()) {
+                            let a = self.expression(a, ctx)?;
+                            self.unify(span, ctx, *p, a)?;
+                            let a = self.find(a);
+                            if dbg {
+                                self.print_type(a);
+                                self.print_type(*p);
+                            }
+                        }
+
+                        Ok(ret)
+                    }
+                    // This means we're recursing, so we deduce the type of the actual-f.
+                    // We want type-information to flow back.
+                    Type::Unknown => {
+                        let args = args
+                            .iter()
+                            .map(|a| self.expression(a, ctx))
+                            .collect::<TypeResult<_>>()?;
+                        let ret = self.push_type(Type::Unknown);
+                        let inner_f = self.push_type(Type::Function(args, ret));
+                        self.unify(span, ctx, f, inner_f)?;
+                        Ok(ret)
+                    }
+                    _ => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::Violating(self.bake_type(f_copy)),
+                            "Not callable"
+                        );
+                    }
+                }
+            }
+
+            AssignableKind::ArrowCall(pre_arg, f, args) => {
+                let mut args = args.clone();
+                args.insert(0, Expression::clone(pre_arg));
+                let mapped_assignable =
+                    Assignable { span, kind: AssignableKind::Call(f.clone(), args) };
+                self.assignable(&mapped_assignable, ctx)
+            }
+
+            AssignableKind::Access(outer, ident) => match self.namespace_chain(outer, ctx) {
+                Ok(ctx) => self.assignable(
+                    &Assignable { span, kind: AssignableKind::Read(ident.clone()) },
+                    ctx,
+                ),
+                Err(_) => {
+                    let outer = self.assignable(outer, ctx)?;
+                    let ret = self.push_type(Type::Unknown);
+                    self.add_constraint(outer, Constraint::Field(ident.name.clone(), ret));
+                    self.check_constraints(span, ctx, outer)?;
+                    Ok(ret)
+                }
+            },
+
+            AssignableKind::Index(outer, syn_index) => {
+                let outer = self.assignable(outer, ctx)?;
+                let index = self.expression(syn_index, ctx)?;
+                let ret = self.push_type(Type::Unknown);
+                match syn_index.kind {
+                    ExpressionKind::Int(index) => {
+                        self.add_constraint(outer, Constraint::ConstantIndex(index, ret));
+                    }
+                    _ => {
+                        self.add_constraint(index, Constraint::Indexes(outer));
+                        self.add_constraint(outer, Constraint::IndexedBy(index));
+                        self.add_constraint(outer, Constraint::IndexingGives(ret));
+                        self.add_constraint(ret, Constraint::GivenByIndex(outer));
+                    }
+                }
+
+                self.check_constraints(span, ctx, outer)?;
+                self.check_constraints(span, ctx, index)?;
+                Ok(ret)
+            }
+
+            AssignableKind::Expression(expression) => self.expression(expression, ctx),
+        }
+    }
+
+    fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> TypeResult<usize> {
+        let span = expression.span;
+        let res = match &expression.kind {
+            ExpressionKind::Get(ass) => self.assignable(ass, ctx),
+
+            ExpressionKind::Add(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Add),
+            ExpressionKind::Sub(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Sub),
+            ExpressionKind::Mul(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Mul),
+            ExpressionKind::Div(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Div),
+
+            ExpressionKind::Comparison(a, comp, b) => match comp {
+                ComparisonKind::NotEquals | ComparisonKind::Equals => {
+                    bin_op!(self, span, ctx, a, b, Constraint::Equ)?;
+                    Ok(self.push_type(Type::Bool))
+                }
+                ComparisonKind::Less | ComparisonKind::Greater => {
+                    bin_op!(self, span, ctx, a, b, Constraint::Cmp)?;
+                    Ok(self.push_type(Type::Bool))
+                }
+                ComparisonKind::LessEqual | ComparisonKind::GreaterEqual => {
+                    bin_op!(self, span, ctx, a, b, Constraint::CmpEqu)?;
+                    Ok(self.push_type(Type::Bool))
+                }
+
+                ComparisonKind::In => {
+                    let a = self.expression(&a, ctx)?;
+                    let b = self.expression(&b, ctx)?;
+                    self.add_constraint(a, Constraint::IsContainedIn(b));
+                    self.add_constraint(b, Constraint::Contains(a));
+                    self.check_constraints(span, ctx, a)?;
+                    self.check_constraints(span, ctx, b)?;
+                    Ok(self.push_type(Type::Bool))
+                }
+            },
+
+            ExpressionKind::AssertEq(a, b) => {
+                bin_op!(self, span, ctx, a, b, Constraint::Equ)?;
+                Ok(self.push_type(Type::Bool))
+            }
+
+            ExpressionKind::Or(a, b) | ExpressionKind::And(a, b) => {
+                let a = self.expression(a, ctx)?;
+                let b = self.expression(b, ctx)?;
+                let boolean = self.push_type(Type::Bool);
+                self.unify(span, ctx, a, boolean)?;
+                self.unify(span, ctx, b, boolean)
+            }
+
+            ExpressionKind::Neg(a) => {
+                let a = self.expression(a, ctx)?;
+                self.add_constraint(a, Constraint::Neg);
+                Ok(a)
+            }
+
+            ExpressionKind::Not(a) => {
+                let a = self.expression(a, ctx)?;
+                let boolean = self.push_type(Type::Bool);
+                self.unify(span, ctx, a, boolean)
+            }
+
+            ExpressionKind::Parenthesis(expr) => self.expression(expr, ctx),
+
+            ExpressionKind::IfExpression { condition, pass, fail } => {
+                let boolean = self.push_type(Type::Bool);
+                let condition = self.expression(condition, ctx)?;
+                self.unify(span, ctx, condition, boolean)?;
+                let pass = self.expression(pass, ctx)?;
+                let fail = self.expression(fail, ctx)?;
+                self.unify(span, ctx, pass, fail)
+            }
+
+            ExpressionKind::Function { name: _, params, ret, body } => {
+                let ss = self.stack.len();
+                let mut args = Vec::new();
+                let mut seen = HashMap::new();
+                for (ident, ty) in params.iter() {
+                    let ty = self.inner_resolve_type(span, ctx, ty, &mut seen)?;
+                    args.push(ty);
+
+                    let var = Variable { ident: ident.clone(), ty, kind: VarKind::Const };
+                    self.stack.push(var);
+                }
+
+                let ret = self.inner_resolve_type(span, ctx, ret, &mut seen)?;
+                if let Some(actual_ret) = self.statement(body, ctx)? {
+                    self.unify(span, ctx, ret, actual_ret)?;
+                } else {
+                    panic!();
+                }
+
+                self.stack.truncate(ss);
+
+                Ok(self.push_type(Type::Function(args, ret)))
+            }
+
+            ExpressionKind::Blob { blob, fields } => {
+                let blob_ty = self.type_assignable(span, ctx, blob)?;
+                let (blob_name, blob_fields) = match self.find_type(blob_ty) {
+                    Type::Blob(name, fields) => (name, fields),
+                    _ => unreachable!(),
+                };
+
+                let given_fields: BTreeMap<_, _> = fields
+                    .iter()
+                    .map(|(key, _)| Ok((key.clone(), self.push_type(Type::Unknown))))
+                    .collect::<TypeResult<_>>()?;
+
+                let mut errors = Vec::new();
+                for (field, _) in blob_fields.iter() {
+                    if !given_fields.contains_key(field) {
+                        errors.push(type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::MissingField {
+                                blob: blob_name.clone(),
+                                field: field.clone(),
+                            }
+                        ));
+                    }
+                }
+
+                for (field, _) in given_fields.iter() {
+                    if !blob_fields.contains_key(field) {
+                        errors.push(type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::UnknownField {
+                                blob: blob_name.clone(),
+                                field: field.clone(),
+                            }
+                        ));
+                    }
+                }
+
+                if !errors.is_empty() {
+                    return Err(errors);
+                }
+
+                let given_blob =
+                    self.push_type(Type::Blob(blob_name.clone(), given_fields.clone()));
+
+                // Unify the fields with their real types
+                let ss = self.stack.len();
+                for (key, expr) in fields {
+                    if matches!(expr.kind, ExpressionKind::Function { .. }) {
+                        self.stack.push(Variable {
+                            ident: Identifier { name: "self".to_string(), span },
+                            kind: VarKind::Const,
+                            ty: given_blob,
+                        });
+                    }
+                    let expr_ty = self.expression(expr, ctx)?;
+                    self.unify(span, ctx, expr_ty, given_fields[key])?;
+                    self.stack.truncate(ss);
+                }
+
+                self.unify(span, ctx, given_blob, blob_ty)
+            }
+
+            ExpressionKind::Tuple(exprs) => {
+                let mut tys = Vec::new();
+                for expr in exprs.iter() {
+                    tys.push(self.expression(expr, ctx)?);
+                }
+                Ok(self.push_type(Type::Tuple(tys)))
+            }
+
+            ExpressionKind::List(exprs) => {
+                let inner_ty = self.push_type(Type::Unknown);
+                for expr in exprs.iter() {
+                    let e = self.expression(expr, ctx)?;
+                    self.unify(span, ctx, inner_ty, e)?;
+                }
+                Ok(self.push_type(Type::List(inner_ty)))
+            }
+
+            ExpressionKind::Set(exprs) => {
+                let inner_ty = self.push_type(Type::Unknown);
+                for expr in exprs.iter() {
+                    let e = self.expression(expr, ctx)?;
+                    self.unify(span, ctx, inner_ty, e)?;
+                }
+                Ok(self.push_type(Type::Set(inner_ty)))
+            }
+
+            ExpressionKind::Dict(exprs) => {
+                let key_ty = self.push_type(Type::Unknown);
+                let value_ty = self.push_type(Type::Unknown);
+                for (key, value) in exprs.iter().zip(exprs.iter().skip(1)).step_by(2) {
+                    let e = self.expression(key, ctx)?;
+                    self.unify(span, ctx, key_ty, e)?;
+                    let e = self.expression(value, ctx)?;
+                    self.unify(span, ctx, value_ty, e)?;
+                }
+                Ok(self.push_type(Type::Dict(key_ty, value_ty)))
+            }
+
+            ExpressionKind::Int(_) => Ok(self.push_type(Type::Int)),
+            ExpressionKind::Float(_) => Ok(self.push_type(Type::Float)),
+            ExpressionKind::Str(_) => Ok(self.push_type(Type::Str)),
+            ExpressionKind::Bool(_) => Ok(self.push_type(Type::Bool)),
+            ExpressionKind::Nil => Ok(self.push_type(Type::Void)),
+        }?;
+        let res_ty = self.find_type(res);
+        match res_ty {
+            // Type::Blob(_, _) => Ok(self.push_type(res_ty)),
+            _ => Ok(res),
+        }
+    }
+
+    fn find(&mut self, a: usize) -> usize {
+        let mut root = a;
+        while let Some(next) = self.types[root].parent {
+            root = next;
+        }
+
+        let mut node = a;
+        while let Some(next) = self.types[node].parent {
+            self.types[node].parent = Some(root);
+            node = next;
+        }
+
+        root
+    }
+
+    fn find_node(&mut self, a: usize) -> &TypeNode {
+        let ta = self.find(a);
+        &self.types[ta]
+    }
+
+    fn find_node_mut(&mut self, a: usize) -> &mut TypeNode {
+        let ta = self.find(a);
+        &mut self.types[ta]
+    }
+
+    fn find_type(&mut self, a: usize) -> Type {
+        self.find_node(a).ty.clone()
+    }
+
+    fn inner_bake_type(&mut self, a: usize, seen: &mut HashMap<usize, RuntimeType>) -> RuntimeType {
+        let a = self.find(a);
+        if seen.contains_key(&a) {
+            return seen[&a].clone();
+        }
+
+        seen.insert(a, RuntimeType::Unknown);
+
+        let res = match self.find_type(a) {
+            Type::Unknown => RuntimeType::Unknown,
+            Type::Ty => RuntimeType::Ty,
+            Type::Void => RuntimeType::Void,
+            Type::Int => RuntimeType::Int,
+            Type::Float => RuntimeType::Float,
+            Type::Bool => RuntimeType::Bool,
+            Type::Str => RuntimeType::String,
+            Type::Tuple(tys) => RuntimeType::Tuple(
+                tys.iter()
+                    .map(|ty| self.inner_bake_type(*ty, seen))
+                    .collect(),
+            ),
+            Type::List(ty) => RuntimeType::List(Box::new(self.inner_bake_type(ty, seen))),
+            Type::Set(ty) => RuntimeType::Set(Box::new(self.inner_bake_type(ty, seen))),
+            Type::Dict(ty_k, ty_v) => RuntimeType::Dict(
+                Box::new(self.inner_bake_type(ty_k, seen)),
+                Box::new(self.inner_bake_type(ty_v, seen)),
+            ),
+            Type::Function(args, ret) => RuntimeType::Function(
+                args.iter()
+                    .map(|ty| self.inner_bake_type(*ty, seen))
+                    .collect(),
+                Box::new(self.inner_bake_type(ret, seen)),
+            ),
+            Type::Blob(name, fields) => RuntimeType::Blob(
+                name.clone(),
+                fields
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.inner_bake_type(*ty, seen)))
+                    .collect(),
+            ),
+
+            Type::Invalid => RuntimeType::Invalid,
+        };
+
+        seen.insert(a, res.clone());
+        res
+    }
+
+    fn bake_type(&mut self, a: usize) -> RuntimeType {
+        self.inner_bake_type(a, &mut HashMap::new())
+    }
+
+    // This span is wierd - is it weird?
+    fn check_constraints(&mut self, span: Span, ctx: TypeCtx, a: usize) -> TypeResult<()> {
+        for constraint in self.find_node(a).constraints.clone().iter() {
+            match constraint {
+                // It would be nice to know from where this came from
+                Constraint::Add(b) => self.add(span, ctx, a, *b),
+                Constraint::Sub(b) => self.sub(span, ctx, a, *b),
+                Constraint::Mul(b) => self.mul(span, ctx, a, *b),
+                Constraint::Div(b) => self.div(span, ctx, a, *b),
+                Constraint::Equ(b) => self.equ(span, ctx, a, *b),
+                Constraint::Cmp(b) => self.cmp(span, ctx, a, *b),
+                Constraint::CmpEqu(b) => {
+                    self.equ(span, ctx, a, *b)?;
+                    self.cmp(span, ctx, a, *b)
+                }
+
+                Constraint::Neg => match self.find_type(a) {
+                    Type::Unknown | Type::Int | Type::Float => Ok(()),
+                    _ => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::UniOp { val: self.bake_type(a), op: "-".to_string() }
+                        )
+                    }
+                },
+
+                Constraint::IndexedBy(b) => self.is_indexed_by(span, ctx, a, *b),
+                Constraint::Indexes(b) => self.is_indexed_by(span, ctx, *b, a),
+
+                Constraint::IndexingGives(b) => self.is_given_by_indexing(span, ctx, a, *b),
+                Constraint::GivenByIndex(b) => self.is_given_by_indexing(span, ctx, *b, a),
+
+                Constraint::ConstantIndex(index, ret) => {
+                    self.constant_index(span, ctx, a, *index, *ret)
+                }
+
+                Constraint::Field(name, expected_ty) => match self.find_type(a).clone() {
+                    Type::Unknown => Ok(()),
+                    Type::Blob(blob_name, fields) => match fields.get(name) {
+                        Some(actual_ty) => {
+                            self.unify(span, ctx, *expected_ty, *actual_ty).map(|_| ())
+                        }
+                        None => err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::MissingField {
+                                blob: blob_name.clone(),
+                                field: name.clone(),
+                            }
+                        ),
+                    },
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Exotic,
+                        "The type \"{}\" is not a blob, so it cannot have a field \"{}\"",
+                        self.bake_type(a),
+                        name
+                    ),
+                },
+
+                Constraint::Num => match self.find_type(a) {
+                    Type::Unknown | Type::Float | Type::Int => Ok(()),
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Violating(self.bake_type(a)),
+                        "The Num constraint forces int or float"
+                    ),
+                },
+
+                Constraint::Container => match self.find_type(a) {
+                    Type::Unknown | Type::Set(..) | Type::List(..) | Type::Dict(..) => Ok(()),
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Violating(self.bake_type(a)),
+                        "The Container constraint forces set, list or dict"
+                    ),
+                },
+
+                Constraint::SameContainer(b) => match (self.find_type(a), self.find_type(*b)) {
+                    (Type::Unknown, _)
+                    | (_, Type::Unknown)
+                    | (Type::Set(..), Type::Set(..))
+                    | (Type::List(..), Type::List(..))
+                    | (Type::Dict(..), Type::Dict(..)) => Ok(()),
+
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Mismatch {
+                            got: self.bake_type(a),
+                            expected: self.bake_type(*b)
+                        },
+                        "The SameContainer constraint forces the outer containers to match"
+                    ),
+                },
+
+                Constraint::Contains(b) => self.contains(span, ctx, a, *b),
+                Constraint::IsContainedIn(b) => self.contains(span, ctx, *b, a),
+            }?
+        }
+        Ok(())
+    }
+
+    fn union(&mut self, a: usize, b: usize) {
+        let a = self.find(a);
+        let b = self.find(b);
+
+        if a == b {
+            return;
+        }
+
+        let (a, b) = if self.types[a].size < self.types[b].size {
+            (b, a)
+        } else {
+            (a, b)
+        };
+
+        self.types[b].parent = Some(a);
+        self.types[a].size += self.types[b].size;
+        self.types[a].constraints = self.types[a]
+            .constraints
+            .union(&self.types[b].constraints)
+            .cloned()
+            .collect();
+    }
+
+    fn unify(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<usize> {
+        let a = self.find(a);
+        let b = self.find(b);
+
+        if a == b {
+            return Ok(a);
+        }
+
+        match (self.find_type(a), self.find_type(b)) {
+            (_, Type::Unknown) => self.find_node_mut(b).ty = self.find_type(a),
+
+            (Type::Unknown, _) => self.find_node_mut(a).ty = self.find_type(b),
+
+            _ => match (self.find_type(a), self.find_type(b)) {
+                (Type::Ty, Type::Ty) => {}
+                (Type::Void, Type::Void) => {}
+                (Type::Int, Type::Int) => {}
+                (Type::Float, Type::Float) => {}
+                (Type::Bool, Type::Bool) => {}
+                (Type::Str, Type::Str) => {}
+
+                (Type::List(a), Type::List(b)) => {
+                    self.unify(span, ctx, a, b)?;
+                }
+                (Type::Set(a), Type::Set(b)) => {
+                    self.unify(span, ctx, a, b)?;
+                }
+                (Type::Dict(a_k, a_v), Type::Dict(b_k, b_v)) => {
+                    self.unify(span, ctx, a_k, b_k)?;
+                    self.unify(span, ctx, a_v, b_v)?;
+                }
+
+                (Type::Tuple(a), Type::Tuple(b)) => {
+                    for (a, b) in a.iter().zip(b.iter()) {
+                        self.unify(span, ctx, *a, *b)?;
+                    }
+                }
+
+                (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
+                    // TODO: Make sure there is one place this is checked.
+                    if a_args.len() != b_args.len() {
+                        return err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::WrongArity { got: a_args.len(), expected: b_args.len() }
+                        );
+                    }
+                    for (a, b) in a_args.iter().zip(b_args.iter()) {
+                        self.unify(span, ctx, *a, *b)?;
+                    }
+                    self.unify(span, ctx, a_ret, b_ret)?;
+                }
+
+                (Type::Blob(_a_blob, a_fields), Type::Blob(b_blob, b_fields)) => {
+                    // TODO(ed): This should give information about the violating fields.
+                    if a_fields.len() != b_fields.len() {
+                        return err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::Mismatch {
+                                got: self.bake_type(a),
+                                expected: self.bake_type(b)
+                            },
+                            "Blobs have different number of fields"
+                        );
+                    }
+
+                    for (a_field, a_ty) in a_fields.iter() {
+                        let b_ty = match b_fields.get(a_field) {
+                            Some(b_ty) => *b_ty,
+                            None => {
+                                return err_type_error!(
+                                    self,
+                                    span,
+                                    ctx,
+                                    TypeError::MissingField {
+                                        blob: b_blob.clone(),
+                                        field: a_field.clone()
+                                    }
+                                )
+                            }
+                        };
+                        self.unify(span, ctx, *a_ty, b_ty)?;
+                    }
+                }
+
+                _ => {
+                    return err_type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Mismatch {
+                            got: self.bake_type(a),
+                            expected: self.bake_type(b),
+                        },
+                        "Types don't match"
+                    );
+                }
+            },
+        }
+
+        self.union(a, b);
+
+        self.check_constraints(span, ctx, a)?;
+
+        Ok(a)
+    }
+
+    #[allow(unused)]
+    fn print_type(&mut self, ty: usize) {
+        let ty = self.find(ty);
+        let mut same = BTreeSet::new();
+        for i in 0..self.types.len() {
+            if self.find(i) == ty {
+                same.insert(i);
+            }
+        }
+        eprintln!(
+            "{}: {:?} {:?} = {:?}",
+            ty,
+            self.bake_type(ty),
+            self.find_node(ty).constraints,
+            same
+        );
+    }
+
+    fn inner_copy(&mut self, old_ty: usize, seen: &mut HashMap<usize, usize>) -> usize {
+        let old_ty = self.find(old_ty);
+
+        if let Some(res) = seen.get(&old_ty) {
+            return *res;
+        }
+        let new_ty = self.push_type(Type::Unknown);
+        seen.insert(old_ty, new_ty);
+
+        self.find_node_mut(new_ty).constraints = self
+            .find_node(old_ty)
+            .constraints
+            .clone()
+            .iter()
+            .map(|con| match &con {
+                Constraint::Add(x) => Constraint::Add(self.inner_copy(*x, seen)),
+                Constraint::Sub(x) => Constraint::Sub(self.inner_copy(*x, seen)),
+                Constraint::Mul(x) => Constraint::Mul(self.inner_copy(*x, seen)),
+                Constraint::Div(x) => Constraint::Div(self.inner_copy(*x, seen)),
+                Constraint::Equ(x) => Constraint::Equ(self.inner_copy(*x, seen)),
+                Constraint::Cmp(x) => Constraint::Cmp(self.inner_copy(*x, seen)),
+                Constraint::CmpEqu(x) => Constraint::CmpEqu(self.inner_copy(*x, seen)),
+                Constraint::Neg => Constraint::Neg,
+                Constraint::Indexes(x) => Constraint::Indexes(self.inner_copy(*x, seen)),
+                Constraint::IndexedBy(x) => Constraint::IndexedBy(self.inner_copy(*x, seen)),
+                Constraint::IndexingGives(x) => {
+                    Constraint::IndexingGives(self.inner_copy(*x, seen))
+                }
+                Constraint::GivenByIndex(x) => Constraint::GivenByIndex(self.inner_copy(*x, seen)),
+                Constraint::ConstantIndex(i, x) => {
+                    Constraint::ConstantIndex(*i, self.inner_copy(*x, seen))
+                }
+                Constraint::Field(f, x) => Constraint::Field(f.clone(), self.inner_copy(*x, seen)),
+                Constraint::Num => Constraint::Num,
+                Constraint::Container => Constraint::Container,
+                Constraint::SameContainer(x) => {
+                    Constraint::SameContainer(self.inner_copy(*x, seen))
+                }
+                Constraint::Contains(x) => Constraint::Contains(self.inner_copy(*x, seen)),
+                Constraint::IsContainedIn(x) => {
+                    Constraint::IsContainedIn(self.inner_copy(*x, seen))
+                }
+            })
+            .collect();
+
+        let ty = self.find_type(old_ty);
+        self.find_node_mut(new_ty).ty = match ty {
+            Type::Invalid
+            | Type::Unknown
+            | Type::Ty
+            | Type::Void
+            | Type::Int
+            | Type::Float
+            | Type::Bool
+            | Type::Str => ty,
+
+            Type::Tuple(tys) => {
+                Type::Tuple(tys.iter().map(|ty| self.inner_copy(*ty, seen)).collect())
+            }
+
+            Type::List(ty) => Type::List(self.inner_copy(ty, seen)),
+            Type::Set(ty) => Type::Set(self.inner_copy(ty, seen)),
+
+            Type::Dict(ty_k, ty_v) => {
+                Type::Dict(self.inner_copy(ty_k, seen), self.inner_copy(ty_v, seen))
+            }
+
+            Type::Function(args, ret) => Type::Function(
+                args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
+                self.inner_copy(ret, seen),
+            ),
+
+            // TODO(ed): We can cheat here and just copy the table directly.
+            Type::Blob(name, fields) => Type::Blob(
+                name.clone(),
+                fields
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.inner_copy(*ty, seen)))
+                    .collect(),
             ),
         };
-        if let Err(mut errs) = self.assignable(call_start, 0) {
-            for mut err in errs.iter_mut() {
-                if let Error::TypeError { message, kind, .. } = &mut err {
-                    let _ = message.insert("the program entry point".to_string());
-                    match kind {
-                        TypeError::WrongArity { got, expected } => {
-                            std::mem::swap(got, expected);
+        new_ty
+    }
+
+    fn copy(&mut self, ty: usize) -> usize {
+        let mut seen = HashMap::new();
+        self.inner_copy(ty, &mut seen)
+    }
+
+    fn can_assign(&mut self, span: Span, ctx: TypeCtx, assignable: &Assignable) -> TypeResult<()> {
+        match &assignable.kind {
+            AssignableKind::Read(ident) => {
+                if let Some(var) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
+                    if !var.kind.immutable() {
+                        Ok(())
+                    } else {
+                        err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::Assignability,
+                            "Cannot assign to constants"
+                        )
+                    }
+                } else {
+                    match self.globals.get(&(ctx.namespace, ident.name.clone())) {
+                        Some(Name::Global(var)) => {
+                            if !var.kind.immutable() {
+                                Ok(())
+                            } else {
+                                err_type_error!(
+                                    self,
+                                    span,
+                                    ctx,
+                                    TypeError::Assignability,
+                                    "Cannot assign to constants"
+                                )
+                            }
                         }
-                        _ => {}
+                        Some(_) => err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::Assignability,
+                            "\"{}\" is not a variable",
+                            ident.name.clone()
+                        ),
+                        _ => err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::Assignability,
+                            "Variable \"{}\" not found. If declaring, use :=",
+                            ident.name.clone()
+                        ),
                     }
                 }
             }
-            errors.append(&mut errs);
+            AssignableKind::ArrowCall(_, _, _) | AssignableKind::Call(_, _) => err_type_error!(
+                self,
+                span,
+                ctx,
+                TypeError::Assignability,
+                "Cannot assign to function calls"
+            ),
+            AssignableKind::Access(outer, ident) => match self.namespace_chain(&outer, ctx) {
+                Ok(ctx) => self.can_assign(
+                    span,
+                    ctx,
+                    &Assignable { span, kind: AssignableKind::Read(ident.clone()) },
+                ),
+                Err(_) => Ok(()),
+            },
+            AssignableKind::Index(_, _) => Ok(()),
+            AssignableKind::Expression(_) => err_type_error!(
+                self,
+                span,
+                ctx,
+                TypeError::Assignability,
+                "Cannot assign to expressions"
+            ),
+        }
+    }
+
+    fn add_constraint(&mut self, a: usize, constraint: Constraint) {
+        self.find_node_mut(a).constraints.insert(constraint);
+    }
+
+    fn add(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
+
+            (Type::Float, Type::Float) | (Type::Int, Type::Int) | (Type::Str, Type::Str) => Ok(()),
+
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
+                for (a, b) in a.iter().zip(b.iter()) {
+                    self.add(span, ctx, *a, *b)?;
+                }
+                Ok(())
+            }
+
+            _ => {
+                return err_type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::BinOp {
+                        lhs: self.bake_type(a),
+                        rhs: self.bake_type(b),
+                        op: "+".to_string(),
+                    }
+                )
+            }
+        }
+    }
+
+    fn sub(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
+
+            (Type::Float, Type::Float) | (Type::Int, Type::Int) => Ok(()),
+
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
+                for (a, b) in a.iter().zip(b.iter()) {
+                    self.sub(span, ctx, *a, *b)?;
+                }
+                Ok(())
+            }
+
+            _ => {
+                return err_type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::BinOp {
+                        lhs: self.bake_type(a),
+                        rhs: self.bake_type(b),
+                        op: "-".to_string(),
+                    }
+                )
+            }
+        }
+    }
+
+    fn mul(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
+
+            (Type::Float, Type::Float) | (Type::Int, Type::Int) => Ok(()),
+
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
+                for (a, b) in a.iter().zip(b.iter()) {
+                    self.mul(span, ctx, *a, *b)?;
+                }
+                Ok(())
+            }
+
+            // TODO(ed): This isn't actually implemented in the runtime.
+            (Type::Tuple(a), Type::Float) | (Type::Tuple(a), Type::Int) => {
+                for a in a.iter() {
+                    self.mul(span, ctx, *a, b)?;
+                }
+                Ok(())
+            }
+            (Type::Float, Type::Tuple(b)) | (Type::Int, Type::Tuple(b)) => {
+                for b in b.iter() {
+                    self.mul(span, ctx, a, *b)?;
+                }
+                Ok(())
+            }
+
+            _ => {
+                return err_type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::BinOp {
+                        lhs: self.bake_type(a),
+                        rhs: self.bake_type(b),
+                        op: "*".to_string(),
+                    }
+                )
+            }
+        }
+    }
+
+    fn div(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::Unknown, _) => Ok(()),
+            (_, Type::Unknown) => Ok(()),
+
+            (Type::Float, Type::Float) => Ok(()),
+            (Type::Int, Type::Int) => Ok(()),
+
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
+                for (a, b) in a.iter().zip(b.iter()) {
+                    self.div(span, ctx, *a, *b)?;
+                }
+                Ok(())
+            }
+
+            // TODO(ed): This isn't actually implemented in the runtime.
+            (Type::Tuple(a), Type::Float) | (Type::Tuple(a), Type::Int) => {
+                for a in a.iter() {
+                    self.div(span, ctx, *a, b)?;
+                }
+                Ok(())
+            }
+            (Type::Float, Type::Tuple(b)) | (Type::Int, Type::Tuple(b)) => {
+                for b in b.iter() {
+                    self.div(span, ctx, a, *b)?;
+                }
+                Ok(())
+            }
+
+            _ => {
+                return err_type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::BinOp {
+                        lhs: self.bake_type(a),
+                        rhs: self.bake_type(b),
+                        op: "/".to_string(),
+                    }
+                )
+            }
+        }
+    }
+
+    fn equ(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+        // Equal types all support equality!
+        self.unify(span, ctx, a, b).map(|_| ())
+    }
+
+    fn cmp(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
+
+            (Type::Float, Type::Float)
+            | (Type::Int, Type::Int)
+            | (Type::Int, Type::Float)
+            | (Type::Float, Type::Int) => Ok(()),
+
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
+                for (a, b) in a.iter().zip(b.iter()) {
+                    self.cmp(span, ctx, *a, *b)?;
+                }
+                Ok(())
+            }
+
+            // TODO(ed): Maybe sets?
+            _ => {
+                return err_type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::BinOp {
+                        lhs: self.bake_type(a),
+                        rhs: self.bake_type(b),
+                        op: "<".to_string(),
+                    }
+                )
+            }
+        }
+    }
+
+    fn is_indexed_by(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::Unknown, _) => Ok(()),
+            (_, Type::Unknown) => Ok(()),
+
+            (Type::List(_), Type::Int) => Ok(()),
+            (Type::Tuple(_), Type::Int) => Ok(()),
+            // TODO(ed): Sets!
+            (Type::Dict(k, _), _) => {
+                self.unify(span, ctx, k, b)?;
+                Ok(())
+            }
+
+            _ => {
+                return err_type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::BinOp {
+                        lhs: self.bake_type(a),
+                        rhs: self.bake_type(b),
+                        op: "Indexing".to_string(),
+                    }
+                )
+            }
+        }
+    }
+
+    fn is_given_by_indexing(
+        &mut self,
+        span: Span,
+        ctx: TypeCtx,
+        a: usize,
+        b: usize,
+    ) -> TypeResult<()> {
+        match self.find_type(a) {
+            Type::Unknown => Ok(()),
+
+            Type::Tuple(_) => {
+                // NOTE(ed): If we get here - it means we're checking the constraint, but the
+                // constraint shouldn't be added because we only ever check constants.
+                return err_type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::Exotic,
+                    "Tuples can only be indexed by integer constants"
+                );
+            }
+            Type::List(given) => {
+                self.unify(span, ctx, given, b)?;
+                Ok(())
+            }
+            // TODO(ed): Sets!
+            Type::Dict(_, given) => {
+                self.unify(span, ctx, given, b)?;
+                Ok(())
+            }
+
+            _ => {
+                return err_type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::BinOp {
+                        lhs: self.bake_type(a),
+                        rhs: self.bake_type(b),
+                        op: "Indexing".to_string(),
+                    }
+                )
+            }
+        }
+    }
+
+    fn constant_index(
+        &mut self,
+        span: Span,
+        ctx: TypeCtx,
+        a: usize,
+        index: i64,
+        ret: usize,
+    ) -> TypeResult<()> {
+        match self.find_type(a) {
+            Type::Tuple(tys) => match tys.get(index as usize) {
+                Some(ty) => self.unify(span, ctx, *ty, ret).map(|_| ()),
+                None => err_type_error!(
+                    self,
+                    span,
+                    ctx,
+                    TypeError::TupleIndexOutOfRange { got: index, length: tys.len() }
+                ),
+            },
+            Type::List(ty) => self.unify(span, ctx, ty, ret).map(|_| ()),
+            Type::Dict(key_ty, value_ty) => {
+                let int_ty = self.push_type(Type::Int);
+                self.unify(span, ctx, key_ty, int_ty)?;
+                self.unify(span, ctx, value_ty, ret)?;
+                Ok(())
+            }
+            _ => err_type_error!(
+                self,
+                span,
+                ctx,
+                TypeError::Violating(self.bake_type(a)),
+                "This type cannot be indexed"
+            ),
+        }
+    }
+
+    fn contains(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
+
+            (Type::Set(x), _) | (Type::List(x), _) => self.unify(span, ctx, x, b).map(|_| ()),
+
+            (Type::Dict(kx, vx), Type::Tuple(ys)) => {
+                if ys.len() == 2 {
+                    self.unify(span, ctx, kx, ys[0])?;
+                    self.unify(span, ctx, vx, ys[1]).map(|_| ())
+                } else {
+                    err_type_error!(self, span, ctx, todo_error!())
+                }
+            }
+
+            _ => err_type_error!(
+                self,
+                span,
+                ctx,
+                TypeError::Mismatch {
+                    got: self.bake_type(a),
+                    expected: self.bake_type(b)
+                },
+                "The Contains constraint forces a container"
+            ),
+        }
+    }
+
+    fn solve(&mut self, statements: &Vec<(&Statement, usize)>) -> TypeResult<()> {
+        // Initialize the namespaces first.
+        for (statement, namespace) in statements.iter() {
+            if matches!(statement.kind, StatementKind::Use { .. }) {
+                self.outer_statement(statement, TypeCtx { namespace: *namespace })?;
+            }
         }
 
-        // Typecheck the implied syntax of calling start.
-        if !errors.is_empty() {
-            Err(errors)
-        } else {
-            Ok(())
+        // Then the rest.
+        for (statement, namespace) in statements.iter() {
+            if !matches!(statement.kind, StatementKind::Use { .. }) {
+                self.outer_statement(statement, TypeCtx { namespace: *namespace })?;
+            }
         }
+
+        let ctx = TypeCtx { namespace: 0 };
+        match self.globals.get(&(0, "start".to_string())).cloned() {
+            Some(Name::Global(var)) => {
+                let void = self.push_type(Type::Void);
+                let start = self.push_type(Type::Function(Vec::new(), void));
+                match self.unify(var.ident.span, ctx, var.ty, start) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        return err_type_error!(
+                            self,
+                            var.ident.span,
+                            ctx,
+                            TypeError::Mismatch {
+                                got: self.bake_type(var.ty),
+                                expected: self.bake_type(start),
+                            },
+                            "The start function has the wrong type"
+                        )
+                    }
+                }
+            }
+            Some(_) => {
+                return err_type_error!(
+                    self,
+                    Span::zero(),
+                    ctx,
+                    TypeError::Exotic,
+                    "Expected a start function in the main module - but it was something else"
+                )
+            }
+            None => {
+                return err_type_error!(
+                    self,
+                    Span::zero(),
+                    ctx,
+                    TypeError::Exotic,
+                    "Expected a start function in the main module - but couldn't find it"
+                )
+            }
+        }
+
+        Ok(())
     }
 }
 
 pub(crate) fn solve(
-    compiler: &mut Compiler,
     statements: &Vec<(&Statement, usize)>,
-) -> Result<(), Vec<Error>> {
-    TypeChecker::new(compiler).solve(statements)
-}
-
-/// Module with all the operators that can be applied
-/// to values.
-///
-/// Broken out because they need to be recursive.
-mod op {
-    use super::Type;
-    use std::collections::BTreeSet;
-
-    fn tuple_bin_op(a: &Vec<Type>, b: &Vec<Type>, f: fn(&Type, &Type) -> Type) -> Type {
-        Type::Tuple(a.iter().zip(b.iter()).map(|(a, b)| f(a, b)).collect())
-    }
-
-    fn tuple_un_op(a: &Vec<Type>, f: fn(&Type) -> Type) -> Type {
-        Type::Tuple(a.iter().map(f).collect())
-    }
-
-    fn union_bin_op(a: &BTreeSet<Type>, b: &Type, f: fn(&Type, &Type) -> Type) -> Type {
-        a.iter()
-            .find_map(|x| {
-                let x = f(x, b);
-                if x.is_nil() {
-                    None
-                } else {
-                    Some(x)
-                }
-            })
-            .unwrap_or(Type::Invalid)
-    }
-
-    pub fn neg(value: &Type) -> Type {
-        match value {
-            Type::Float => Type::Float,
-            Type::Int => Type::Int,
-            Type::Tuple(a) => tuple_un_op(a, neg),
-            Type::Union(a) => {
-                if a.iter().all(|ty| ty.is_number()) {
-                    value.clone()
-                } else {
-                    Type::Invalid
-                }
-            }
-            Type::Unknown => Type::Unknown,
-            _ => Type::Invalid,
-        }
-    }
-
-    pub fn not(value: &Type) -> Type {
-        match value {
-            Type::Bool => Type::Bool,
-            Type::Tuple(a) => tuple_un_op(a, not),
-            Type::Unknown => Type::Bool,
-            _ => Type::Invalid,
-        }
-    }
-
-    pub fn add(a: &Type, b: &Type) -> Type {
-        match (a, b) {
-            (Type::Float, Type::Float) => Type::Float,
-            (Type::Int, Type::Int) => Type::Int,
-            (Type::String, Type::String) => Type::String,
-            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, add),
-            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => add(a, a),
-            (Type::Unknown, Type::Unknown) => Type::Unknown,
-            _ => Type::Invalid,
-        }
-    }
-
-    pub fn sub(a: &Type, b: &Type) -> Type {
-        add(a, &neg(b))
-    }
-
-    pub fn mul(a: &Type, b: &Type) -> Type {
-        match (a, b) {
-            (Type::Float, Type::Float) => Type::Float,
-            (Type::Int, Type::Int) => Type::Int,
-            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, mul),
-            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => mul(a, a),
-            (Type::Unknown, Type::Unknown) => Type::Unknown,
-            _ => Type::Invalid,
-        }
-    }
-
-    pub fn div(a: &Type, b: &Type) -> Type {
-        match (a, b) {
-            (Type::Float, Type::Float) => Type::Float,
-            (Type::Int, Type::Int) => Type::Int,
-            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, div),
-            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => div(a, a),
-            (Type::Unknown, Type::Unknown) => Type::Unknown,
-            _ => Type::Invalid,
-        }
-    }
-
-    pub fn eq(a: &Type, b: &Type) -> Type {
-        match (a, b) {
-            (Type::Float, Type::Float) => Type::Bool,
-            (Type::Int, Type::Int) => Type::Bool,
-            (Type::String, Type::String) => Type::Bool,
-            (Type::Bool, Type::Bool) => Type::Bool,
-            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => a
-                .iter()
-                .zip(b.iter())
-                .find_map(|(a, b)| match eq(a, b) {
-                    Type::Bool => None,
-                    a => Some(a),
-                })
-                .unwrap_or(Type::Bool),
-            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => eq(a, a),
-            (Type::Unknown, Type::Unknown) => Type::Unknown,
-            (Type::Union(a), b) | (b, Type::Union(a)) => union_bin_op(&a, b, eq),
-            (Type::Void, Type::Void) => Type::Bool,
-            (Type::List(a), Type::List(b)) => eq(a, b),
-            (Type::Set(a), Type::Set(b)) => eq(a, b),
-            (Type::Dict(a, b), Type::Dict(c, d)) if matches!(eq(a, c), Type::Bool) => eq(b, d),
-            _ => Type::Invalid,
-        }
-    }
-
-    pub fn cmp(a: &Type, b: &Type) -> Type {
-        match (a, b) {
-            (Type::Float, Type::Float)
-            | (Type::Int, Type::Int)
-            | (Type::Float, Type::Int)
-            | (Type::Int, Type::Float) => Type::Bool,
-            (Type::String, Type::String) => Type::Bool,
-            (Type::Bool, Type::Bool) => Type::Bool,
-            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => a
-                .iter()
-                .zip(b.iter())
-                .find_map(|(a, b)| match cmp(a, b) {
-                    Type::Bool => None,
-                    a => Some(a),
-                })
-                .unwrap_or(Type::Bool),
-            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => cmp(a, a),
-            (Type::Unknown, Type::Unknown) => Type::Unknown,
-            _ => Type::Invalid,
-        }
-    }
-
-    pub fn and(a: &Type, b: &Type) -> Type {
-        match (a, b) {
-            (Type::Bool, Type::Bool) => Type::Bool,
-            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, and),
-            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => and(a, a),
-            (Type::Unknown, Type::Unknown) => Type::Unknown,
-            _ => Type::Invalid,
-        }
-    }
-
-    pub fn or(a: &Type, b: &Type) -> Type {
-        match (a, b) {
-            (Type::Bool, Type::Bool) => Type::Bool,
-            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, or),
-            (Type::Unknown, a) | (a, Type::Unknown) if !matches!(a, Type::Unknown) => or(a, a),
-            (Type::Unknown, Type::Unknown) => Type::Unknown,
-            _ => Type::Invalid,
-        }
-    }
+    namespace_to_file: &HashMap<usize, PathBuf>,
+    functions: &HashMap<String, (usize, RustFunction, ParserType)>,
+) -> TypeResult<()> {
+    TypeChecker::new(namespace_to_file, functions).solve(statements)
 }

@@ -81,32 +81,74 @@ pub enum TypeError {
     // since some errors are quite exotic.
     Exotic,
 
+    // This error should be implemented at a later time.
+    ToDo {
+        line: u32,
+        file: String,
+    },
+
     Violating(Type),
 
-    BinOp { lhs: Type, rhs: Type, op: String },
+    BinOp {
+        lhs: Type,
+        rhs: Type,
+        op: String,
+    },
 
-    UniOp { val: Type, op: String },
+    UniOp {
+        val: Type,
+        op: String,
+    },
 
-    Mismatch { got: Type, expected: Type },
+    Mismatch {
+        got: Type,
+        expected: Type,
+    },
 
-    MismatchAssign { got: Type, expected: Type },
+    MismatchAssign {
+        got: Type,
+        expected: Type,
+    },
 
-    Mutability,
+    Assignability,
 
-    ExcessiveForce { got: Type, expected: Type },
+    ExcessiveForce {
+        got: Type,
+        expected: Type,
+    },
 
     NamespaceNotExpression,
 
-    // TODO(ed): Some of these are more like compile errors
-    WrongArity { got: usize, expected: usize },
+    WrongArity {
+        got: usize,
+        expected: usize,
+    },
 
-    UnknownField { blob: String, field: String },
+    UnknownField {
+        blob: String,
+        field: String,
+    },
 
-    MissingField { blob: String, field: String },
+    MissingField {
+        blob: String,
+        field: String,
+    },
 
-    TupleIndexOutOfRange { got: i64, length: usize },
+    TupleIndexOutOfRange {
+        got: i64,
+        length: usize,
+    },
 
     UnresolvedName(String),
+
+    WrongConstraintArity {
+        name: String,
+        got: usize,
+        expected: usize,
+    },
+
+    UnknownConstraint(String),
+    UnknownConstraintArgument(String),
 }
 
 // TODO(ed): Switch to spans for the whole compiler?
@@ -285,6 +327,14 @@ impl fmt::Display for TypeError {
         match self {
             TypeError::Exotic => Ok(()),
 
+            TypeError::ToDo { line, file } => {
+                write!(
+                    f,
+                    "Todo: implement this error on line {} in file {}",
+                    line, file
+                )
+            }
+
             TypeError::Mismatch { got, expected } => {
                 write!(f, "A '{:?}' cannot be a '{:?}'", got, expected)
             }
@@ -293,8 +343,8 @@ impl fmt::Display for TypeError {
                 write!(f, "Cannot assign a '{:?}' to a '{:?}'", got, expected)
             }
 
-            TypeError::Mutability => {
-                write!(f, "Constants are immutable")
+            TypeError::Assignability => {
+                write!(f, "Could not assign")
             }
 
             TypeError::BinOp { op, lhs, rhs } => {
@@ -324,17 +374,36 @@ impl fmt::Display for TypeError {
             TypeError::WrongArity { got, expected } => {
                 write!(f, "Expected {} arguments but got {}", expected, got)
             }
+
             TypeError::UnknownField { blob, field } => {
                 write!(f, "Cannot find field '{}.{}'", blob, field)
             }
+
             TypeError::MissingField { blob, field } => {
                 write!(f, "Blob instance lacks field '{}.{}'", blob, field)
             }
+
             TypeError::TupleIndexOutOfRange { length, got } => {
                 write!(f, "A tuple of length {} has no element {}", length, got)
             }
+
             TypeError::UnresolvedName(name) => {
                 write!(f, "Cannot resolve name '{}'", name)
+            }
+
+            TypeError::WrongConstraintArity { name, got, expected } => {
+                write!(
+                    f,
+                    "Constraint '{}' take {} arguments, got {}",
+                    name, got, expected
+                )
+            }
+
+            TypeError::UnknownConstraint(constraint) => {
+                write!(f, "Unknown constraint '{}'", constraint)
+            }
+            TypeError::UnknownConstraintArgument(argument) => {
+                write!(f, "Cannot resolve this constraint argument '{}'", argument)
             }
         }
     }

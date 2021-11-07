@@ -363,7 +363,11 @@ function add(s, v)
 end
 
 function len(c)
-    return #c
+    local s = 0
+    for _ in pairs(c) do
+        s = s + 1
+    end
+    return s
 end
 
 function clear(c)
@@ -440,6 +444,8 @@ function spy(tag, x)
     print(tag, x)
     return x
 end
+
+unsafe_force = __IDENTITY
 
 function __CONTAINS(a, b)
     local ty = getmetatable(b)._type

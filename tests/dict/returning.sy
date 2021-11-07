@@ -3,18 +3,15 @@ q :: fn -> {int: bool} do
     ret g
 end
 
-h :: fn -> {int | str: int | str} do
-    g :: {0: 0, "a": "a"}
+h :: fn -> {int: str} do
+    g :: {0: "a"}
     ret g
 end
 
 start :: fn do
     g :: q()
     g[0] <=> true
-    res: bool | void = g[1]
-    nil <=> res
     h :: h()
-    h[0] <=> 0
-    "a" <=> h["a"]
+    h[0] <=> "a"
 end
 
