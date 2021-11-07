@@ -124,7 +124,6 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                     (
                         ctx,
                         Type {
-                            // If we couldn't parse the return type, we assume `-> Void`.
                             span: ctx.span(),
                             kind: Resolved(Unknown),
                         },
