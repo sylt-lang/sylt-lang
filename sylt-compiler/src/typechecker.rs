@@ -490,6 +490,7 @@ impl TypeChecker {
             }
 
             StatementKind::Assignment { kind, target, value } => {
+                self.can_assign(span, ctx, target)?;
                 let expression_ty = self.expression(value, ctx)?;
                 let target_ty = self.assignable(target, ctx)?;
                 match kind {
@@ -1409,6 +1410,81 @@ impl TypeChecker {
     fn copy(&mut self, ty: usize) -> usize {
         let mut seen = HashMap::new();
         self.inner_copy(ty, &mut seen)
+    }
+
+    fn can_assign(&mut self, span: Span, ctx: TypeCtx, assignable: &Assignable) -> TypeResult<()> {
+        match &assignable.kind {
+            AssignableKind::Read(ident) => {
+                if let Some(var) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
+                    if !var.kind.immutable() {
+                        Ok(())
+                    } else {
+                        err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::Assignability,
+                            "Cannot assign to constants"
+                        )
+                    }
+                } else {
+                    match self.globals.get(&(ctx.namespace, ident.name.clone())) {
+                        Some(Name::Global(var)) => {
+                            if !var.kind.immutable() {
+                                Ok(())
+                            } else {
+                                err_type_error!(
+                                    self,
+                                    span,
+                                    ctx,
+                                    TypeError::Assignability,
+                                    "Cannot assign to constants"
+                                )
+                            }
+                        }
+                        Some(_) => err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::Assignability,
+                            "\"{}\" is not a variable",
+                            ident.name.clone()
+                        ),
+                        _ => err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::Assignability,
+                            "Variable \"{}\" not found. If declaring, use :=",
+                            ident.name.clone()
+                        ),
+                    }
+                }
+            }
+            AssignableKind::ArrowCall(_, _, _) | AssignableKind::Call(_, _) => err_type_error!(
+                self,
+                span,
+                ctx,
+                TypeError::Assignability,
+                "Cannot assign to function calls"
+            ),
+            AssignableKind::Access(outer, ident) => match self.namespace_chain(&outer, ctx) {
+                Ok(ctx) => self.can_assign(
+                    span,
+                    ctx,
+                    &Assignable { span, kind: AssignableKind::Read(ident.clone()) },
+                ),
+                Err(_) => Ok(()),
+            },
+            AssignableKind::Index(_, _) => Ok(()),
+            AssignableKind::Expression(_) => err_type_error!(
+                self,
+                span,
+                ctx,
+                TypeError::Assignability,
+                "Cannot assign to expressions"
+            ),
+        }
     }
 
     fn add_constraint(&mut self, a: usize, constraint: Constraint) {

@@ -110,7 +110,7 @@ pub enum TypeError {
         expected: Type,
     },
 
-    Mutability,
+    Assignability,
 
     ExcessiveForce {
         got: Type,
@@ -343,8 +343,8 @@ impl fmt::Display for TypeError {
                 write!(f, "Cannot assign a '{:?}' to a '{:?}'", got, expected)
             }
 
-            TypeError::Mutability => {
-                write!(f, "Constants are immutable")
+            TypeError::Assignability => {
+                write!(f, "Could not assign")
             }
 
             TypeError::BinOp { op, lhs, rhs } => {
