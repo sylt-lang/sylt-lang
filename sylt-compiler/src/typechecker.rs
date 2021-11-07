@@ -483,15 +483,22 @@ impl TypeChecker {
         match &statement.kind {
             StatementKind::Block { statements } => {
                 // Left this for Gustav
+
                 let ss = self.stack.len();
                 let rets = self.push_type(Type::Unknown);
+                let mut any_return = false;
                 for stmt in statements.iter() {
                     if let Some(ret) = self.statement(stmt, ctx)? {
                         self.unify(span, ctx, rets, ret)?;
+                        any_return = true;
                     }
                 }
                 self.stack.truncate(ss);
-                Ok(Some(rets))
+                if any_return {
+                    Ok(Some(rets))
+                } else {
+                    Ok(None)
+                }
             }
 
             StatementKind::Ret { value } => Ok(Some(self.expression(value, ctx)?)),
@@ -887,7 +894,8 @@ impl TypeChecker {
                 if let Some(actual_ret) = self.statement(body, ctx)? {
                     self.unify(span, ctx, ret, actual_ret)?;
                 } else {
-                    panic!();
+                    let void = self.push_type(Type::Void);
+                    self.unify(span, ctx, ret, void)?;
                 }
 
                 self.stack.truncate(ss);

@@ -101,7 +101,7 @@ impl PartialEq for Expression {
 
 /// Parse an [ExpressionKind::Function]: `fn a: int, b: bool -> bool <statement>`
 fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-    use RuntimeType::Void;
+    use RuntimeType::{Unknown, Void};
     use TypeKind::Resolved;
 
     let span = ctx.span();
@@ -116,13 +116,23 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 if name == "self" {
                     raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
                 }
-                ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after parameter name");
-                // Parameter type
-                let (_ctx, param) = parse_type(ctx)?;
-                ctx = _ctx; // assign to outer
-
-                params.push((ident, param));
-
+                ctx = ctx.skip(1);
+                if matches!(ctx.token(), T::Colon) {
+                    ctx = ctx.skip(1);
+                    // Parameter type
+                    let (ctx_, ty) = parse_type(ctx)?;
+                    ctx = ctx_;
+                    params.push((ident, ty));
+                } else {
+                    params.push((
+                        ident,
+                        Type {
+                            // If we couldn't parse the return type, we assume `-> Void`.
+                            span: ctx.span(),
+                            kind: Resolved(Unknown),
+                        },
+                    ));
+                };
                 ctx = if matches!(ctx.token(), T::Comma | T::Do | T::Arrow) {
                     ctx.skip_if(T::Comma)
                 } else {
@@ -133,15 +143,11 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             // Parse return type
             T::Arrow => {
                 ctx = ctx.skip(1);
-                break if let Ok((_ctx, ret)) = parse_type(ctx) {
-                    ctx = _ctx; // assign to outer
+                break if let Ok((ctx_, ret)) = parse_type(ctx) {
+                    ctx = ctx_; // assign to outer
                     ret
                 } else {
-                    Type {
-                        // If we couldn't parse the return type, we assume `-> Void`.
-                        span: ctx.span(),
-                        kind: Resolved(Void),
-                    }
+                    Type { span: ctx.span(), kind: Resolved(Unknown) }
                 };
             }
 
@@ -196,9 +202,9 @@ fn parse_precedence<'t>(ctx: Context<'t>, prec: Prec) -> ParseResult<'t, Express
     // Initial value, e.g. a number value, assignable, ...
     let (mut ctx, mut expr) = prefix(ctx)?;
     while prec <= precedence(ctx.token()) {
-        if let Ok((_ctx, _expr)) = infix(ctx, &expr) {
+        if let Ok((ctx_, _expr)) = infix(ctx, &expr) {
             // assign to outer
-            ctx = _ctx;
+            ctx = ctx_;
             expr = _expr;
         } else {
             break;
@@ -498,9 +504,9 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
             // Another inner expression.
             _ => {
-                let (_ctx, expr) = expression(ctx)?;
+                let (ctx_, expr) = expression(ctx)?;
                 exprs.push(expr);
-                ctx = _ctx; // assign to outer
+                ctx = ctx_; // assign to outer
 
                 // Not a tuple, until it is.
                 is_tuple |= matches!(ctx.token(), T::Comma);
@@ -543,8 +549,8 @@ fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
                 ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after field name");
                 // Get the value; `55` in the example above.
-                let (_ctx, expr) = expression(ctx)?;
-                ctx = _ctx; // assign to outer
+                let (ctx_, expr) = expression(ctx)?;
+                ctx = ctx_; // assign to outer
 
                 if !matches!(ctx.token(), T::Comma | T::RightBrace) {
                     raise_syntax_error!(
@@ -592,9 +598,9 @@ fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
             // Another one.
             _ => {
-                let (_ctx, expr) = expression(ctx)?;
+                let (ctx_, expr) = expression(ctx)?;
                 exprs.push(expr);
-                ctx = _ctx; // assign to outer
+                ctx = ctx_; // assign to outer
                 ctx = ctx.skip_if(T::Comma);
             }
         }
@@ -642,9 +648,9 @@ fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             // Something that's part of an inner expression.
             _ => {
                 // Parse the expression.
-                let (_ctx, expr) =
+                let (ctx_, expr) =
                     detail_if_error!(expression(ctx), "failed to parse dict or set")?;
-                ctx = _ctx; // assign to outer
+                ctx = ctx_; // assign to outer
                 exprs.push(expr);
 
                 // If a) we know we're a dict or b) the next token is a colon, parse the value of the dict.
@@ -652,8 +658,8 @@ fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 if *is_dict.get_or_insert_with(|| matches!(ctx.token(), T::Colon)) {
                     ctx = expect!(ctx, T::Colon, "Expected ':' for dict pair");
                     // Parse value expression.
-                    let (_ctx, expr) = expression(ctx)?;
-                    ctx = _ctx; // assign to outer
+                    let (ctx_, expr) = expression(ctx)?;
+                    ctx = ctx_; // assign to outer
                     exprs.push(expr);
                 }
 
@@ -784,6 +790,12 @@ mod test {
 
     test!(expression, if_expr: "a if b else c" => IfExpression { .. });
     test!(expression, if_expr_more: "1 + 1 + 1 if b else 2 + 2 + 2" => IfExpression { .. });
+
+    test!(expression, fn_implicit_unknown_1: "fn a do 1 end" => _);
+    test!(expression, fn_implicit_unknown_2: "fn a, b do 1 end" => _);
+    test!(expression, fn_implicit_unknown_3: "fn a, b, c do 1 end" => _);
+
+    test!(expression, fn_invalid_empty_tuple: "fn -> () end" => _);
 
     fail!(expression, fn_self_arg: "fn self: int do 1 end" => _);
 }
