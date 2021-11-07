@@ -2,4 +2,4 @@ start :: fn do
     b :: "abc"
     b = "abc"
 end
-// error: $Mismatch { .. }
+// error: $Assignability
