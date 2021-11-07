@@ -254,7 +254,6 @@ impl<'t> LuaCompiler<'t> {
 
             Blob { blob: _, fields } => {
                 // TODO(ed): Know which blob something is?
-                // TODO(ed): Fill in empty fields with nil-value
                 let self_slot = self
                     .compiler
                     .define("self", VarKind::Mutable, expression.span);
