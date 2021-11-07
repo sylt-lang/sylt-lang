@@ -799,6 +799,8 @@ mod test {
     test!(expression, fn_implicit_unknown_2: "fn a, b do 1 end" => _);
     test!(expression, fn_implicit_unknown_3: "fn a, b, c do 1 end" => _);
 
+    fail!(expression, fn_invalid_empty_tuple: "fn -> () end" => _);
+
     fail!(expression, fn_self_arg: "fn self: int do 1 end" => _);
 }
 
