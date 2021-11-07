@@ -6,7 +6,7 @@ X :: blob {
     b: B,
 }
 
-a: !X = 1
+a: X = unsafe_force(1)
 
 start :: fn do
     a.b.b = 1
