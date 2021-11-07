@@ -5,8 +5,8 @@ use sylt_common::{RustFunction, Type as RuntimeType};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     expression::ComparisonKind, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
-    Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeConstraint, TypeKind,
-    VarKind,
+    Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeAssignable,
+    TypeAssignableKind, TypeConstraint, TypeKind, VarKind,
 };
 
 use crate::ty::Type;
@@ -233,15 +233,66 @@ impl TypeChecker {
         }
     }
 
+    fn type_namespace_chain(
+        &self,
+        assignable: &TypeAssignable,
+        ctx: TypeCtx,
+    ) -> TypeResult<TypeCtx> {
+        let span = assignable.span;
+        match &assignable.kind {
+            TypeAssignableKind::Read(ident) => {
+                if let Some(_) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
+                    err_type_error! {
+                        self,
+                        span,
+                        ctx,
+                        todo_error!()
+                    }
+                } else {
+                    match self
+                        .globals
+                        .get(&(ctx.namespace, ident.name.clone()))
+                        .cloned()
+                    {
+                        Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
+                        _ => err_type_error! {
+                            self,
+                            span,
+                            ctx,
+                            todo_error!()
+                        },
+                    }
+                }
+            }
+
+            TypeAssignableKind::Access(ass, ident) => {
+                let ctx = self.type_namespace_chain(ass, ctx)?;
+                match self
+                    .globals
+                    .get(&(ctx.namespace, ident.name.clone()))
+                    .cloned()
+                {
+                    Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
+                    _ => err_type_error! {
+                        self,
+                        span,
+                        ctx,
+                        todo_error!()
+                    },
+                }
+            }
+        }
+    }
+
     fn type_assignable(
         &mut self,
         _span: Span,
         ctx: TypeCtx,
-        assignable: &Assignable,
+        assignable: &TypeAssignable,
     ) -> TypeResult<usize> {
         let span = assignable.span;
         match &assignable.kind {
-            AssignableKind::Read(ident) => match self
+            TypeAssignableKind::Read(ident) => match self
                 .globals
                 .get(&(ctx.namespace, ident.name.clone()))
                 .cloned()
@@ -259,8 +310,8 @@ impl TypeChecker {
                 }
             },
 
-            AssignableKind::Access(ass, ident) => {
-                let ctx = self.namespace_chain(ass, ctx)?;
+            TypeAssignableKind::Access(ass, ident) => {
+                let ctx = self.type_namespace_chain(ass, ctx)?;
                 match self
                     .globals
                     .get(&(ctx.namespace, ident.name.clone()))
@@ -269,13 +320,6 @@ impl TypeChecker {
                     Some(Name::Blob(ty)) => Ok(self.push_type(ty.clone())),
                     _ => return err_type_error!(self, span, ctx, todo_error!()),
                 }
-            }
-
-            AssignableKind::Call(..)
-            | AssignableKind::ArrowCall(..)
-            | AssignableKind::Index(..)
-            | AssignableKind::Expression(..) => {
-                return err_type_error!(self, span, ctx, todo_error!())
             }
         }
     }

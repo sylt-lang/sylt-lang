@@ -5,6 +5,17 @@ pub enum Token {
     #[regex(r"[A-Za-z_][A-Za-z0-9_]*", |lex| lex.slice().to_string())]
     Identifier(String),
 
+    #[token("void")]
+    VoidType,
+    #[token("bool")]
+    BoolType,
+    #[token("int")]
+    IntType,
+    #[token("float")]
+    FloatType,
+    #[token("str")]
+    StrType,
+
     #[regex(r#""[^"]*""#, |lex| { let mut s = lex.slice().to_string(); s.remove(0); s.pop(); s })]
     String(String),
 

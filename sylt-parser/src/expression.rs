@@ -66,7 +66,7 @@ pub enum ExpressionKind {
     },
     /// A blob instantiation.
     Blob {
-        blob: Assignable,
+        blob: TypeAssignable,
         fields: Vec<(String, Expression)>, // Keep calling order
     },
     /// `(a, b, ..)`
@@ -529,7 +529,7 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 /// Parse a blob instantiation, e.g. `A { b: 55 }`.
 fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let span = ctx.span();
-    let (ctx, blob) = assignable(ctx)?;
+    let (ctx, blob) = type_assignable(ctx)?;
     let ctx = expect!(ctx, T::LeftBrace, "Expected '{{' after blob name");
     let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
 

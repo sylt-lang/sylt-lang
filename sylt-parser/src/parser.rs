@@ -152,13 +152,24 @@ impl PartialEq for Assignable {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum TypeAssignableKind {
+    Read(Identifier),
+    Access(Box<TypeAssignable>, Identifier),
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeAssignable {
+    pub span: Span,
+    pub kind: TypeAssignableKind,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum TypeKind {
     /// An unspecified type that is left to the type checker.
     Implied,
     /// A specified type by the user.
     Resolved(RuntimeType),
     /// I.e. blobs.
-    UserDefined(Assignable),
+    UserDefined(TypeAssignable),
     /// `(params, return)`.
     Fn {
         constraints: BTreeMap<String, Vec<TypeConstraint>>,
@@ -488,23 +499,75 @@ pub fn parse_type_constraint<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeConstr
     ))
 }
 
+pub fn type_assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeAssignable> {
+    fn type_assignable_inner<'t>(
+        ctx: Context<'t>,
+        assignable: TypeAssignableKind,
+    ) -> ParseResult<'t, TypeAssignableKind> {
+        let span = ctx.span();
+        match ctx.token() {
+            T::Identifier(name) if is_capitalized(name) => {
+                let ctx = ctx.skip(1);
+                let ident = Identifier { span, name: name.clone() };
+                let assignable = TypeAssignable { span, kind: assignable };
+                Ok((ctx, TypeAssignableKind::Access(Box::new(assignable), ident)))
+            }
+
+            T::Identifier(name) if !is_capitalized(name) => {
+                let ctx = expect!(ctx.skip(1), T::Dot, "Expected '.' after namespace");
+                let (ctx, assignable) = type_assignable_inner(ctx, assignable)?;
+                let ident = Identifier { span, name: name.clone() };
+                type_assignable_inner(
+                    ctx,
+                    TypeAssignableKind::Access(
+                        Box::new(TypeAssignable { span, kind: assignable }),
+                        ident,
+                    ),
+                )
+            }
+
+            _ => Ok((ctx, assignable)),
+        }
+    }
+
+    let span = ctx.span();
+    let (ctx, kind) = match ctx.token() {
+        T::Identifier(name) if is_capitalized(name) => {
+            let ctx = ctx.skip(1);
+            let ident = Identifier { span, name: name.clone() };
+            (ctx, TypeAssignableKind::Read(ident))
+        }
+
+        T::Identifier(name) if !is_capitalized(name) => {
+            let ctx = expect!(ctx.skip(1), T::Dot, "Expected '.' after namespace");
+            let outer = TypeAssignableKind::Read(Identifier { span, name: name.clone() });
+            type_assignable_inner(ctx, outer)?
+        }
+
+        _ => {
+            raise_syntax_error!(ctx, "Failed to parse user-defined type");
+        }
+    };
+
+    Ok((ctx, TypeAssignable { span, kind }))
+}
+
 /// Parse a [Type] definition, e.g. `fn int, int, bool -> bool`.
 pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     use RuntimeType::{Bool, Float, Int, String, Unknown, Void};
     use TypeKind::*;
     let span = ctx.span();
     let (ctx, kind) = match ctx.token() {
-        T::Identifier(name) => match name.as_str() {
-            "void" => (ctx.skip(1), Resolved(Void)),
-            "int" => (ctx.skip(1), Resolved(Int)),
-            "float" => (ctx.skip(1), Resolved(Float)),
-            "bool" => (ctx.skip(1), Resolved(Bool)),
-            "str" => (ctx.skip(1), Resolved(String)),
-            _ => {
-                let (ctx, assignable) = assignable(ctx)?;
-                (ctx, UserDefined(assignable))
-            }
-        },
+        T::VoidType => (ctx.skip(1), Resolved(Void)),
+        T::IntType => (ctx.skip(1), Resolved(Int)),
+        T::FloatType => (ctx.skip(1), Resolved(Float)),
+        T::BoolType => (ctx.skip(1), Resolved(Bool)),
+        T::StrType => (ctx.skip(1), Resolved(String)),
+
+        T::Identifier(_) => {
+            let (ctx, ass) = type_assignable(ctx)?;
+            (ctx, UserDefined(ass))
+        }
 
         T::Star => {
             let ctx = ctx.skip(1);
@@ -1019,7 +1082,7 @@ mod test {
         test!(parse_type, type_int: "int" => Resolved(RT::Int));
         test!(parse_type, type_float: "float" => Resolved(RT::Float));
         test!(parse_type, type_str: "str" => Resolved(RT::String));
-        test!(parse_type, type_unknown: "blargh" => UserDefined(_));
+        test!(parse_type, type_unknown: "Blargh" => UserDefined(_));
 
         test!(parse_type, type_fn_no_params: "fn ->" => Fn{ .. });
         test!(parse_type, type_fn_one_param: "fn int -> bool" => Fn{ .. });
@@ -1270,4 +1333,24 @@ impl PrettyPrint for Assignable {
         }
         Ok(())
     }
+}
+
+impl PrettyPrint for TypeAssignable {
+    fn pretty_print(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
+        // Deliberately doesn't write out the indentation
+        match &self.kind {
+            TypeAssignableKind::Read(ident) => {
+                write!(f, "[Read] {}", ident.name)?;
+            }
+            TypeAssignableKind::Access(a, ident) => {
+                write!(f, "[Access] {}", ident.name)?;
+                a.pretty_print(f, indent)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+fn is_capitalized(s: &str) -> bool {
+    char::is_uppercase(s.chars().next().unwrap_or('a'))
 }
