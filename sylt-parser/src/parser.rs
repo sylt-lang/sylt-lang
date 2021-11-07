@@ -559,6 +559,9 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
     let span = ctx.span();
     let (ctx, kind) = match ctx.token() {
         T::VoidType => (ctx.skip(1), Resolved(Void)),
+        T::LeftParen if matches!(ctx.skip(1).token(), T::RightParen) => {
+            (ctx.skip(2), Resolved(Void))
+        }
         T::IntType => (ctx.skip(1), Resolved(Int)),
         T::FloatType => (ctx.skip(1), Resolved(Float)),
         T::BoolType => (ctx.skip(1), Resolved(Bool)),
@@ -1090,7 +1093,7 @@ mod test {
         test!(parse_type, type_fn_only_ret: "fn -> bool" => Fn{ .. });
         test!(parse_type, type_fn_constraints: "fn<a: A a b + B b b, b: A a a> -> bool" => Fn{ .. });
 
-        test!(parse_type, type_tuple_zero: "()" => Tuple(_));
+        test!(parse_type, type_tuple_zero: "()" => Resolved(RT::Void));
         test!(parse_type, type_tuple_one: "(int,)" => Tuple(_));
         test!(parse_type, type_grouping: "(int)" => Grouping(_));
         test!(parse_type, type_tuple_complex: "(int, str, str,)" => Tuple(_));
