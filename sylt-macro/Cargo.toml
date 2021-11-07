@@ -13,6 +13,7 @@ edition = "2018"
 proc-macro = true
 doctest = false
 test = false
+path = "src/macro.rs"
 
 [dependencies]
 syn = { version = "1", features = ["full"] }
