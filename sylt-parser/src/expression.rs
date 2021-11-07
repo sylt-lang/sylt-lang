@@ -121,13 +121,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                     // Parameter type
                     parse_type(ctx)?
                 } else {
-                    (
-                        ctx,
-                        Type {
-                            span: ctx.span(),
-                            kind: Resolved(Unknown),
-                        },
-                    )
+                    (ctx, Type { span: ctx.span(), kind: Resolved(Unknown) })
                 };
                 ctx = ctx_;
                 params.push((ident, param));
