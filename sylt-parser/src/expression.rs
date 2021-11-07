@@ -116,27 +116,27 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 if name == "self" {
                     raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
                 }
-                let (ctx_, param) = if matches!(ctx.skip(1).token(), T::Colon) {
-                    let ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after parameter name");
+                ctx = ctx.skip(1);
+                if matches!(ctx.token(), T::Colon) {
+                    ctx = ctx.skip(1);
                     // Parameter type
-                    parse_type(ctx)?
+                    let (ctx_, ty) = parse_type(ctx)?;
+                    ctx = ctx_;
+                    params.push((ident, ty));
                 } else {
-                    (
-                        ctx,
+                    params.push((
+                        ident,
                         Type {
                             // If we couldn't parse the return type, we assume `-> Void`.
                             span: ctx.span(),
                             kind: Resolved(Unknown),
                         },
-                    )
+                    ));
                 };
-                ctx = ctx_;
-                params.push((ident, param));
-
-                ctx = if matches!(ctx.token(), T::Comma | T::Do | T::Arrow | T::LeftBrace) {
+                ctx = if matches!(ctx.token(), T::Comma | T::Do | T::Arrow) {
                     ctx.skip_if(T::Comma)
                 } else {
-                    raise_syntax_error!(ctx, "Expected ',' '{{' or '->' after type parameter")
+                    raise_syntax_error!(ctx, "Expected '->', 'do' or ',' after parameter")
                 };
             }
 
@@ -795,10 +795,11 @@ mod test {
     test!(expression, if_expr: "a if b else c" => IfExpression { .. });
     test!(expression, if_expr_more: "1 + 1 + 1 if b else 2 + 2 + 2" => IfExpression { .. });
 
+    test!(expression, fn_implicit_unknown_1: "fn a do 1 end" => _);
+    test!(expression, fn_implicit_unknown_2: "fn a, b do 1 end" => _);
+    test!(expression, fn_implicit_unknown_3: "fn a, b, c do 1 end" => _);
+
     fail!(expression, fn_self_arg: "fn self: int do 1 end" => _);
-    fail!(expression, fn_implicit_unknown_1: "fn a do 1 end" => _);
-    fail!(expression, fn_implicit_unknown_2: "fn a, b do 1 end" => _);
-    fail!(expression, fn_implicit_unknown_3: "fn a, b, c do 1 end" => _);
 }
 
 impl PrettyPrint for Expression {
