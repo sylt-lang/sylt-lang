@@ -1,4 +1,4 @@
-// TODO(ed, er): If you see these during code-review, remind us to remove it.
+// TODO(ed, er): If you see these during cod got: todo!(), expected: todo!()  got: todo!(), expected: todo!() e-review, remind us to remove it.
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 #![allow(unused_macros)]
@@ -1242,7 +1242,14 @@ impl TypeChecker {
 
                 (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
                     // TODO: Make sure there is one place this is checked.
-                    assert_eq!(a_args.len(), b_args.len());
+                    if a_args.len() != b_args.len() {
+                        return err_type_error!(
+                            self,
+                            span,
+                            ctx,
+                            TypeError::WrongArity { got: a_args.len(), expected: b_args.len() }
+                        );
+                    }
                     for (a, b) in a_args.iter().zip(b_args.iter()) {
                         self.unify(span, ctx, *a, *b)?;
                     }

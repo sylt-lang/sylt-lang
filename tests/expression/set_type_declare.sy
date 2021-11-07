@@ -1,5 +1,0 @@
-start :: fn do
-    a: {int | str} = {1, "abc"}
-    a
-end
-
