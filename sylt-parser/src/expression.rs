@@ -101,7 +101,7 @@ impl PartialEq for Expression {
 
 /// Parse an [ExpressionKind::Function]: `fn a: int, b: bool -> bool <statement>`
 fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-    use RuntimeType::Void;
+    use RuntimeType::{Unknown, Void};
     use TypeKind::Resolved;
 
     let span = ctx.span();
@@ -116,11 +116,21 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 if name == "self" {
                     raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
                 }
-                ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after parameter name");
-                // Parameter type
-                let (_ctx, param) = parse_type(ctx)?;
-                ctx = _ctx; // assign to outer
-
+                let (ctx_, param) = if matches!(ctx.skip(1).token(), T::Colon) {
+                    let ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after parameter name");
+                    // Parameter type
+                    parse_type(ctx)?
+                } else {
+                    (
+                        ctx,
+                        Type {
+                            // If we couldn't parse the return type, we assume `-> Void`.
+                            span: ctx.span(),
+                            kind: Resolved(Unknown),
+                        },
+                    )
+                };
+                ctx = ctx_;
                 params.push((ident, param));
 
                 ctx = if matches!(ctx.token(), T::Comma | T::Do | T::Arrow | T::LeftBrace) {
@@ -786,6 +796,9 @@ mod test {
     test!(expression, if_expr_more: "1 + 1 + 1 if b else 2 + 2 + 2" => IfExpression { .. });
 
     fail!(expression, fn_self_arg: "fn self: int do 1 end" => _);
+    fail!(expression, fn_implicit_unknown_1: "fn a do 1 end" => _);
+    fail!(expression, fn_implicit_unknown_2: "fn a, b do 1 end" => _);
+    fail!(expression, fn_implicit_unknown_3: "fn a, b, c do 1 end" => _);
 }
 
 impl PrettyPrint for Expression {
