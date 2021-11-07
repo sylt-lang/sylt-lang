@@ -1,9 +1,4 @@
-// TODO(ed, er): If you see these during cod got: todo!(), expected: todo!()  got: todo!(), expected: todo!() e-review, remind us to remove it.
-#![allow(unused_variables)]
-#![allow(unused_imports)]
-#![allow(unused_macros)]
-
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use sylt_common::error::{Error, TypeError};
 use sylt_common::{RustFunction, Type as RuntimeType};
@@ -14,23 +9,10 @@ use sylt_parser::{
     VarKind,
 };
 
-use crate::{self as compiler, ty::Type, Context, Name as CompilerName};
+use crate::ty::Type;
 use std::collections::{BTreeMap, BTreeSet};
 
 type TypeResult<T> = Result<T, Vec<Error>>;
-
-macro_rules! type_error_if_invalid {
-    ($self:expr, $ty:expr, $span:expr, $ctx: expr, $kind:expr, $( $msg:expr ),+ ) => {
-        if matches!($ty, Type::Invalid) {
-            return err_type_error!($self, $span, $ctx, $kind, $( $msg ),*);
-        }
-    };
-    ($self:expr, $ty:expr, $span:expr, $ctx: expr, $kind:expr) => {
-        if matches!($ty, Type::Invalid) {
-            return err_type_error!($self, $span, $ctx, $kind);
-        }
-    };
-}
 
 macro_rules! err_type_error {
     ($self:expr, $span:expr, $ctx: expr, $kind:expr, $( $msg:expr ),+ ) => {
@@ -195,12 +177,13 @@ impl TypeChecker {
     }
 
     fn namespace_chain(&self, assignable: &Assignable, ctx: TypeCtx) -> TypeResult<TypeCtx> {
+        let span = assignable.span;
         match &assignable.kind {
             AssignableKind::Read(ident) => {
-                if let Some(var) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
+                if let Some(_) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
                     err_type_error! {
                         self,
-                        Span::zero(),
+                        span,
                         ctx,
                         todo_error!()
                     }
@@ -213,7 +196,7 @@ impl TypeChecker {
                         Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
                         _ => err_type_error! {
                             self,
-                            Span::zero(),
+                            span,
                             ctx,
                             todo_error!()
                         },
@@ -231,7 +214,7 @@ impl TypeChecker {
                     Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
                     _ => err_type_error! {
                         self,
-                        Span::zero(),
+                        span,
                         ctx,
                         todo_error!()
                     },
@@ -243,7 +226,7 @@ impl TypeChecker {
             | AssignableKind::Index(..)
             | AssignableKind::Expression(..) => err_type_error! {
                 self,
-                Span::zero(),
+                span,
                 ctx,
                 todo_error!()
             },
@@ -252,7 +235,7 @@ impl TypeChecker {
 
     fn type_assignable(
         &mut self,
-        span: Span,
+        _span: Span,
         ctx: TypeCtx,
         assignable: &Assignable,
     ) -> TypeResult<usize> {
@@ -388,12 +371,12 @@ impl TypeChecker {
             Implied => Type::Unknown,
 
             Resolved(ty) => match ty {
-                sylt_common::Type::Void => Type::Void,
-                sylt_common::Type::Unknown => Type::Unknown,
-                sylt_common::Type::Int => Type::Int,
-                sylt_common::Type::Float => Type::Float,
-                sylt_common::Type::Bool => Type::Bool,
-                sylt_common::Type::String => Type::Str,
+                RuntimeType::Void => Type::Void,
+                RuntimeType::Unknown => Type::Unknown,
+                RuntimeType::Int => Type::Int,
+                RuntimeType::Float => Type::Float,
+                RuntimeType::Bool => Type::Bool,
+                RuntimeType::String => Type::Str,
                 x => unreachable!("Got an unexpected resolved type '{:?}'", x),
             },
 
@@ -877,11 +860,11 @@ impl TypeChecker {
 
                 let given_fields: BTreeMap<_, _> = fields
                     .iter()
-                    .map(|(key, expr)| Ok((key.clone(), self.push_type(Type::Unknown))))
+                    .map(|(key, _)| Ok((key.clone(), self.push_type(Type::Unknown))))
                     .collect::<TypeResult<_>>()?;
 
                 let mut errors = Vec::new();
-                for (field, field_ty) in blob_fields.iter() {
+                for (field, _) in blob_fields.iter() {
                     if !given_fields.contains_key(field) {
                         errors.push(type_error!(
                             self,
@@ -895,7 +878,7 @@ impl TypeChecker {
                     }
                 }
 
-                for (field, field_ty) in given_fields.iter() {
+                for (field, _) in given_fields.iter() {
                     if !blob_fields.contains_key(field) {
                         errors.push(type_error!(
                             self,
@@ -1256,7 +1239,7 @@ impl TypeChecker {
                     self.unify(span, ctx, a_ret, b_ret)?;
                 }
 
-                (Type::Blob(a_blob, a_fields), Type::Blob(b_blob, b_fields)) => {
+                (Type::Blob(_a_blob, a_fields), Type::Blob(b_blob, b_fields)) => {
                     // TODO(ed): This should give information about the violating fields.
                     if a_fields.len() != b_fields.len() {
                         return err_type_error!(
@@ -1790,7 +1773,7 @@ impl TypeChecker {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
 
-            (Type::Set(x), y) | (Type::List(x), y) => self.unify(span, ctx, x, b).map(|_| ()),
+            (Type::Set(x), _) | (Type::List(x), _) => self.unify(span, ctx, x, b).map(|_| ()),
 
             (Type::Dict(kx, vx), Type::Tuple(ys)) => {
                 if ys.len() == 2 {
