@@ -147,11 +147,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                     ctx = ctx_; // assign to outer
                     ret
                 } else {
-                    Type {
-                        // If we couldn't parse the return type, we assume `-> Void`.
-                        span: ctx.span(),
-                        kind: Resolved(Unknown),
-                    }
+                    Type { span: ctx.span(), kind: Resolved(Unknown) }
                 };
             }
 
@@ -799,7 +795,7 @@ mod test {
     test!(expression, fn_implicit_unknown_2: "fn a, b do 1 end" => _);
     test!(expression, fn_implicit_unknown_3: "fn a, b, c do 1 end" => _);
 
-    fail!(expression, fn_invalid_empty_tuple: "fn -> () end" => _);
+    test!(expression, fn_invalid_empty_tuple: "fn -> () end" => _);
 
     fail!(expression, fn_self_arg: "fn self: int do 1 end" => _);
 }
