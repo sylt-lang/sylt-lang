@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Statement, StatementKind,
-    Type as ParserType, TypeKind, AST,
+    Type as ParserType, TypeAssignable, TypeAssignableKind, TypeKind, AST,
 };
 
 struct Context<'a> {
@@ -95,13 +95,57 @@ fn assignable_dependencies(
     }
 }
 
+fn type_assignable_dependencies(
+    ctx: &mut Context,
+    assignable: &TypeAssignable,
+) -> BTreeSet<(String, usize)> {
+    use TypeAssignableKind::*;
+    match &assignable.kind {
+        Read(ident) => match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
+            Some(_) => [(ident.name.clone(), ctx.namespace)]
+                .iter()
+                .cloned()
+                .collect(),
+            _ => BTreeSet::new(),
+        },
+        Access(ass, field) => {
+            // Get namespace access recursively
+            // NOTE: This will ignore the actual namespace as a dependency, which
+            // is not a problem since the compiler already initializes namespaces
+            // before the dependency analysis.
+            fn recursive_namespace(ctx: &mut Context, ass: &TypeAssignable) -> Result<usize, ()> {
+                match &ass.kind {
+                    Access(lhs, field) => {
+                        let namespace = recursive_namespace(ctx, lhs)?;
+                        match ctx.compiler.namespaces[namespace].get(&field.name) {
+                            Some(Name::Namespace(ns)) => Ok(*ns),
+                            _ => Err(()),
+                        }
+                    }
+                    Read(ident) => match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
+                        Some(Name::Namespace(ns)) => Ok(*ns),
+                        _ => Err(()),
+                    },
+                }
+            }
+            match recursive_namespace(ctx, ass) {
+                Ok(namespace) => match ctx.compiler.namespaces[namespace].get(&field.name) {
+                    Some(_) => [(field.name.clone(), namespace)].iter().cloned().collect(),
+                    _ => BTreeSet::new(),
+                },
+                Err(_) => BTreeSet::new(),
+            }
+        }
+    }
+}
+
 fn type_dependencies(ctx: &mut Context, ty: &ParserType) -> BTreeSet<(String, usize)> {
     use TypeKind::*;
     match &ty.kind {
         Implied | Resolved(_) | Generic(_) => BTreeSet::new(),
 
         Grouping(ty) => type_dependencies(ctx, ty),
-        UserDefined(assignable) => assignable_dependencies(ctx, &assignable),
+        UserDefined(assignable) => type_assignable_dependencies(ctx, &assignable),
 
         Fn { params, ret, .. } => params
             .iter()
@@ -224,7 +268,7 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<(String,
             ctx.variables.truncate(vars_before);
             [deps, type_deps].iter().flatten().cloned().collect()
         }
-        Blob { blob, fields } => assignable_dependencies(ctx, blob)
+        Blob { blob, fields } => type_assignable_dependencies(ctx, blob)
             .union(
                 &fields
                     .iter()
