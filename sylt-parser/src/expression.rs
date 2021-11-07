@@ -256,7 +256,6 @@ fn value<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Expression), (Context<'t>
         T::Float(f) => Float(f),
         T::Int(i) => Int(i),
         T::Bool(b) => Bool(b),
-        T::Nil => Nil,
         T::String(s) => Str(s),
         t => {
             raise_syntax_error!(ctx, "Cannot parse value, '{:?}' is not a valid value", t);
@@ -272,11 +271,11 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     match ctx.token() {
         T::Fn => function(ctx),
 
-        T::LeftParen => grouping_or_tuple(ctx),
+        T::LeftParen => grouping_tuple_or_unit(ctx),
         T::LeftBracket => list(ctx),
         T::LeftBrace => set_or_dict(ctx),
 
-        T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
+        T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) => value(ctx),
         T::Minus | T::Not => unary(ctx),
 
         T::Identifier(_) => {
@@ -484,7 +483,7 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
 /// one-sized tuple containing `1`.
 ///
 /// `()` as well as `(,)` are parsed as zero-sized tuples.
-fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+fn grouping_tuple_or_unit<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let span = ctx.span();
     let ctx = expect!(ctx, T::LeftParen, "Expected '('");
     let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
@@ -517,11 +516,11 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let ctx = ctx.pop_skip_newlines(skip_newlines);
     let ctx = expect!(ctx, T::RightParen, "Expected ')'");
 
-    use ExpressionKind::{Parenthesis, Tuple};
-    let result = if is_tuple {
-        Expression { span, kind: Tuple(exprs) }
-    } else {
-        Expression { span, kind: Parenthesis(Box::new(exprs.remove(0))) }
+    use ExpressionKind::{Nil, Parenthesis, Tuple};
+    let result = match (is_tuple, exprs.len()) {
+        (_, 0) => Expression { span, kind: Nil },
+        (true, _) => Expression { span, kind: Tuple(exprs) },
+        _ => Expression { span, kind: Parenthesis(Box::new(exprs.remove(0))) },
     };
     Ok((ctx, result))
 }
@@ -722,7 +721,7 @@ mod test {
     test!(expression, grouping_one: "(0)" => Parenthesis(_));
     test!(expression, tuple: "(0, 0)" => Tuple(_));
     test!(expression, tuple_one: "(0,)" => Tuple(_));
-    test!(expression, tuple_empty: "()" => Tuple(_));
+    test!(expression, tuple_empty: "()" => Nil);
     test!(expression, list: "[0, 0]" => List(_));
     test!(expression, set: "{1, 1}" => Set(_));
     test!(expression, dict: "{1: 1}" => Dict(_));

@@ -214,7 +214,7 @@ impl Value {
                 write!(fmt, "<fn #{}>", block)
             }
             Value::ExternFunction(slot) => write!(fmt, "<extern fn {}>", slot),
-            Value::Nil => write!(fmt, "nil"),
+            Value::Nil => write!(fmt, "()"),
         }
     }
 }

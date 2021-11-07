@@ -1,4 +1,4 @@
 start :: fn do
-    if false ret nil else ret nil
+    if false ret () else ret ()
 end
 

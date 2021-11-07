@@ -2,7 +2,7 @@
 -- Built in types
 
 -- THE nil-table
-__NIL = setmetatable( { "nil" }, { __tostring = function() return "nil" end } )
+__NIL = setmetatable( { "nil" }, { __tostring = function() return "()" end } )
 
 __IDENTITY = function(x) return x end
 

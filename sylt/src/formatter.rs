@@ -359,7 +359,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
         ExpressionKind::Int(i) => write!(dest, "{}", i)?,
         ExpressionKind::Str(s) => write!(dest, "\"{}\"", s)?,
         ExpressionKind::Bool(b) => write!(dest, "{}", b)?,
-        ExpressionKind::Nil => write!(dest, "nil")?,
+        ExpressionKind::Nil => write!(dest, "()")?,
     }
 
     Ok(())

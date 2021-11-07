@@ -53,6 +53,6 @@ start :: fn do
     // Other
     print(d)
     print(pop)
-    as_str(nil) <=> "nil"
+    as_str(()) <=> "()"
 end
 
