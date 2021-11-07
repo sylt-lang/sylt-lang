@@ -143,8 +143,8 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             // Parse return type
             T::Arrow => {
                 ctx = ctx.skip(1);
-                break if let Ok((_ctx, ret)) = parse_type(ctx) {
-                    ctx = _ctx; // assign to outer
+                break if let Ok((ctx_, ret)) = parse_type(ctx) {
+                    ctx = ctx_; // assign to outer
                     ret
                 } else {
                     Type {
@@ -206,9 +206,9 @@ fn parse_precedence<'t>(ctx: Context<'t>, prec: Prec) -> ParseResult<'t, Express
     // Initial value, e.g. a number value, assignable, ...
     let (mut ctx, mut expr) = prefix(ctx)?;
     while prec <= precedence(ctx.token()) {
-        if let Ok((_ctx, _expr)) = infix(ctx, &expr) {
+        if let Ok((ctx_, _expr)) = infix(ctx, &expr) {
             // assign to outer
-            ctx = _ctx;
+            ctx = ctx_;
             expr = _expr;
         } else {
             break;
@@ -508,9 +508,9 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
             // Another inner expression.
             _ => {
-                let (_ctx, expr) = expression(ctx)?;
+                let (ctx_, expr) = expression(ctx)?;
                 exprs.push(expr);
-                ctx = _ctx; // assign to outer
+                ctx = ctx_; // assign to outer
 
                 // Not a tuple, until it is.
                 is_tuple |= matches!(ctx.token(), T::Comma);
@@ -553,8 +553,8 @@ fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
                 ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after field name");
                 // Get the value; `55` in the example above.
-                let (_ctx, expr) = expression(ctx)?;
-                ctx = _ctx; // assign to outer
+                let (ctx_, expr) = expression(ctx)?;
+                ctx = ctx_; // assign to outer
 
                 if !matches!(ctx.token(), T::Comma | T::RightBrace) {
                     raise_syntax_error!(
@@ -602,9 +602,9 @@ fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
             // Another one.
             _ => {
-                let (_ctx, expr) = expression(ctx)?;
+                let (ctx_, expr) = expression(ctx)?;
                 exprs.push(expr);
-                ctx = _ctx; // assign to outer
+                ctx = ctx_; // assign to outer
                 ctx = ctx.skip_if(T::Comma);
             }
         }
@@ -652,9 +652,9 @@ fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             // Something that's part of an inner expression.
             _ => {
                 // Parse the expression.
-                let (_ctx, expr) =
+                let (ctx_, expr) =
                     detail_if_error!(expression(ctx), "failed to parse dict or set")?;
-                ctx = _ctx; // assign to outer
+                ctx = ctx_; // assign to outer
                 exprs.push(expr);
 
                 // If a) we know we're a dict or b) the next token is a colon, parse the value of the dict.
@@ -662,8 +662,8 @@ fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 if *is_dict.get_or_insert_with(|| matches!(ctx.token(), T::Colon)) {
                     ctx = expect!(ctx, T::Colon, "Expected ':' for dict pair");
                     // Parse value expression.
-                    let (_ctx, expr) = expression(ctx)?;
-                    ctx = _ctx; // assign to outer
+                    let (ctx_, expr) = expression(ctx)?;
+                    ctx = ctx_; // assign to outer
                     exprs.push(expr);
                 }
 
