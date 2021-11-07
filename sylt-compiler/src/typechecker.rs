@@ -439,6 +439,10 @@ impl TypeChecker {
         match &statement.kind {
             StatementKind::Block { statements } => {
                 // Left this for Gustav
+                if statements.is_empty() {
+                    return Ok(None);
+                }
+
                 let ss = self.stack.len();
                 let rets = self.push_type(Type::Unknown);
                 for stmt in statements.iter() {
@@ -843,7 +847,8 @@ impl TypeChecker {
                 if let Some(actual_ret) = self.statement(body, ctx)? {
                     self.unify(span, ctx, ret, actual_ret)?;
                 } else {
-                    panic!();
+                    let void = self.push_type(Type::Void);
+                    self.unify(span, ctx, ret, void)?;
                 }
 
                 self.stack.truncate(ss);

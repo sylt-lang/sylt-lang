@@ -1,0 +1,4 @@
+f :: fn a, b -> int do end
+
+// error: $Mismatch { .. }
+
