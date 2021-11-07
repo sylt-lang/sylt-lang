@@ -273,7 +273,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
         T::Minus | T::Not => unary(ctx),
 
-        T::TypeIdentifier(_) | T::Identifier(_) => {
+        T::Identifier(_) => {
             let span = ctx.span();
             match (blob(ctx), assignable(ctx)) {
                 (Ok(result), _) => Ok(result),

@@ -471,9 +471,7 @@ pub fn parse_type_constraint_argument<'t>(ctx: Context<'t>) -> ParseResult<'t, V
     let mut ctx = ctx;
     loop {
         match ctx.token() {
-            T::Identifier(var) | T::TypeIdentifier(var) => {
-                args.push(Identifier { span: ctx.span(), name: var.clone() })
-            }
+            T::Identifier(var) => args.push(Identifier { span: ctx.span(), name: var.clone() }),
             T::Plus | T::Comma | T::Greater => break,
             _ => {
                 raise_syntax_error!(ctx, "Expected a constraint argument, ',' or '+'");
@@ -488,7 +486,7 @@ pub fn parse_type_constraint_argument<'t>(ctx: Context<'t>) -> ParseResult<'t, V
 pub fn parse_type_constraint<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeConstraint> {
     let span = ctx.span();
     let name = match ctx.token() {
-        T::Identifier(name) | T::TypeIdentifier(name) => name.clone(),
+        T::Identifier(name) => name.clone(),
         _ => {
             raise_syntax_error!(ctx, "Expected constraint name");
         }
@@ -508,14 +506,14 @@ pub fn type_assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeAssignable> 
     ) -> ParseResult<'t, TypeAssignableKind> {
         let span = ctx.span();
         match ctx.token() {
-            T::TypeIdentifier(name) => {
+            T::Identifier(name) if is_capitalized(name) => {
                 let ctx = ctx.skip(1);
                 let ident = Identifier { span, name: name.clone() };
                 let assignable = TypeAssignable { span, kind: assignable };
                 Ok((ctx, TypeAssignableKind::Access(Box::new(assignable), ident)))
             }
 
-            T::Identifier(name) => {
+            T::Identifier(name) if !is_capitalized(name) => {
                 let ctx = expect!(ctx.skip(1), T::Dot, "Expected '.' after namespace");
                 let (ctx, assignable) = type_assignable_inner(ctx, assignable)?;
                 let ident = Identifier { span, name: name.clone() };
@@ -534,13 +532,13 @@ pub fn type_assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeAssignable> 
 
     let span = ctx.span();
     let (ctx, kind) = match ctx.token() {
-        T::TypeIdentifier(name) => {
+        T::Identifier(name) if is_capitalized(name) => {
             let ctx = ctx.skip(1);
             let ident = Identifier { span, name: name.clone() };
             (ctx, TypeAssignableKind::Read(ident))
         }
 
-        T::Identifier(name) => {
+        T::Identifier(name) if !is_capitalized(name) => {
             let ctx = expect!(ctx.skip(1), T::Dot, "Expected '.' after namespace");
             let outer = TypeAssignableKind::Read(Identifier { span, name: name.clone() });
             type_assignable_inner(ctx, outer)?
@@ -566,7 +564,7 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         T::BoolType => (ctx.skip(1), Resolved(Bool)),
         T::StrType => (ctx.skip(1), Resolved(String)),
 
-        T::TypeIdentifier(_) | T::Identifier(_) => {
+        T::Identifier(_) => {
             let (ctx, ass) = type_assignable(ctx)?;
             (ctx, UserDefined(ass))
         }
@@ -574,9 +572,7 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         T::Star => {
             let ctx = ctx.skip(1);
             match ctx.token() {
-                T::TypeIdentifier(name) | T::Identifier(name) => {
-                    (ctx.skip(1), Generic(name.clone()))
-                }
+                T::Identifier(name) => (ctx.skip(1), Generic(name.clone())),
                 _ => (ctx, Resolved(Unknown)),
             }
         }
@@ -590,7 +586,7 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                 let mut ctx = ctx.skip(1);
                 'outer: loop {
                     match ctx.tokens_lookahead::<2>() {
-                        [T::TypeIdentifier(ident) | T::Identifier(ident), T::Colon] => {
+                        [T::Identifier(ident), T::Colon] => {
                             ctx = ctx.skip(2);
                             let mut constraint_list = Vec::new();
                             loop {
@@ -797,15 +793,14 @@ fn assignable_index<'t>(ctx: Context<'t>, indexed: Assignable) -> ParseResult<'t
 /// Parse an [AssignableKind::Access].
 fn assignable_dot<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t, Assignable> {
     use AssignableKind::Access;
-    let (ctx, ident) =
-        if let (T::Identifier(name) | T::TypeIdentifier(name), span, ctx) = ctx.skip(1).eat() {
-            (ctx, Identifier { name: name.clone(), span })
-        } else {
-            raise_syntax_error!(
-                ctx,
-                "Assignable expressions have to start with an identifier"
-            );
-        };
+    let (ctx, ident) = if let (T::Identifier(name), span, ctx) = ctx.skip(1).eat() {
+        (ctx, Identifier { name: name.clone(), span })
+    } else {
+        raise_syntax_error!(
+            ctx,
+            "Assignable expressions have to start with an identifier"
+        );
+    };
 
     let access = Assignable {
         span: ctx.span(),
@@ -838,18 +833,17 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
     let outer_span = ctx.span();
 
     // Get the identifier.
-    let ident =
-        if let (T::Identifier(name) | T::TypeIdentifier(name), span) = (ctx.token(), ctx.span()) {
-            Assignable {
-                span: outer_span,
-                kind: Read(Identifier { span, name: name.clone() }),
-            }
-        } else {
-            raise_syntax_error!(
-                ctx,
-                "Assignable expressions have to start with an identifier"
-            );
-        };
+    let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
+        Assignable {
+            span: outer_span,
+            kind: Read(Identifier { span, name: name.clone() }),
+        }
+    } else {
+        raise_syntax_error!(
+            ctx,
+            "Assignable expressions have to start with an identifier"
+        );
+    };
 
     // Parse chained [], . and ().
     sub_assignable(ctx.skip(1), ident)
@@ -1355,4 +1349,8 @@ impl PrettyPrint for TypeAssignable {
         }
         Ok(())
     }
+}
+
+fn is_capitalized(s: &str) -> bool {
+    char::is_uppercase(s.chars().next().unwrap_or('a'))
 }

@@ -2,11 +2,8 @@ use logos::Logos;
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 pub enum Token {
-    #[regex(r"[a-z_][A-Za-z0-9_]*", |lex| lex.slice().to_string())]
+    #[regex(r"[A-Za-z_][A-Za-z0-9_]*", |lex| lex.slice().to_string())]
     Identifier(String),
-
-    #[regex(r"[A-Z][A-Za-z0-9_]*", |lex| lex.slice().to_string())]
-    TypeIdentifier(String),
 
     #[token("void")]
     VoidType,

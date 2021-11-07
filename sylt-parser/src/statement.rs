@@ -403,13 +403,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // Blob declaration: `A :: blob { <fields> }
-        [T::Identifier(_), T::ColonColon, T::Blob, ..] => {
-            raise_syntax_error!(
-                ctx,
-                "User defined types have to start with a capital letter"
-            );
-        }
-        [T::TypeIdentifier(name), T::ColonColon, T::Blob, ..] => {
+        [T::Identifier(name), T::ColonColon, T::Blob, ..] => {
+            if !is_capitalized(name) {
+                raise_syntax_error!(
+                    ctx,
+                    "User defined types have to start with a capital letter"
+                );
+            }
             let name = name.clone();
             let ctx = expect!(ctx.skip(3), T::LeftBrace, "Expected '{{' to open blob");
             let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
@@ -457,7 +457,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // Implied type declaration, e.g. `a :: 1` or `a := 1`.
-        [T::Identifier(name) | T::TypeIdentifier(name), T::ColonColon | T::ColonEqual, ..] => {
+        [T::Identifier(name), T::ColonColon | T::ColonEqual, ..] => {
             if name == "self" {
                 raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
             }
@@ -487,7 +487,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // Variable declaration with specified type, e.g. `c : int = 3` or `b : int | bool : false`.
-        [T::Identifier(name) | T::TypeIdentifier(name), T::Colon, ..] => {
+        [T::Identifier(name), T::Colon, ..] => {
             if name == "self" {
                 raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
             }
