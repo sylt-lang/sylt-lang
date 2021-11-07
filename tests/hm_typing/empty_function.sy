@@ -1,4 +1,5 @@
-f :: fn a, b -> int do end
+f :: fn -> int do end
 
+start :: fn do end
 // error: $Mismatch { .. }
 

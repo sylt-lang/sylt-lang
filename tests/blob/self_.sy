@@ -3,7 +3,7 @@ A :: blob {
     f: fn -> int,
 }
 
-start :: fn ->
+start :: fn do
     a := A {
         a: 1,
         f: fn -> int do

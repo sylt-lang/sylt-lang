@@ -1,4 +1,4 @@
-start :: fn ->
+start :: fn do
     add :: fn a: *, b: * -> int a + b end
 
     sum :: reduce' [1, 2, 3, 4], add

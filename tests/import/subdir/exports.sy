@@ -1,5 +1,5 @@
 use _numbers
 
 one :: _numbers.one
-start :: fn -> end
+start :: fn do end
 

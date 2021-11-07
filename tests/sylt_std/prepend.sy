@@ -1,4 +1,4 @@
-start :: fn ->
+start :: fn do
     a := [1, 2, 3, 4]
     prepend(a, 0)
     print(a)
