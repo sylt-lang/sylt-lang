@@ -66,7 +66,7 @@ pub enum ExpressionKind {
     },
     /// A blob instantiation.
     Blob {
-        blob: Assignable,
+        blob: TypeAssignable,
         fields: Vec<(String, Expression)>, // Keep calling order
     },
     /// `(a, b, ..)`
@@ -123,10 +123,10 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
                 params.push((ident, param));
 
-                ctx = if matches!(ctx.token(), T::Comma | T::Do | T::Arrow | T::LeftBrace) {
+                ctx = if matches!(ctx.token(), T::Comma | T::Do | T::Arrow) {
                     ctx.skip_if(T::Comma)
                 } else {
-                    raise_syntax_error!(ctx, "Expected ',' '{{' or '->' after type parameter")
+                    raise_syntax_error!(ctx, "Expected '->', 'do' or ',' after parameter")
                 };
             }
 
@@ -273,7 +273,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
         T::Minus | T::Not => unary(ctx),
 
-        T::Identifier(_) => {
+        T::TypeIdentifier(_) | T::Identifier(_) => {
             let span = ctx.span();
             match (blob(ctx), assignable(ctx)) {
                 (Ok(result), _) => Ok(result),
@@ -523,7 +523,7 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 /// Parse a blob instantiation, e.g. `A { b: 55 }`.
 fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let span = ctx.span();
-    let (ctx, blob) = assignable(ctx)?;
+    let (ctx, blob) = type_assignable(ctx)?;
     let ctx = expect!(ctx, T::LeftBrace, "Expected '{{' after blob name");
     let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
 

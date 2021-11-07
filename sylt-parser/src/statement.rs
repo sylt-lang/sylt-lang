@@ -403,7 +403,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // Blob declaration: `A :: blob { <fields> }
-        [T::Identifier(name), T::ColonColon, T::Blob, ..] => {
+        [T::Identifier(_), T::ColonColon, T::Blob, ..] => {
+            raise_syntax_error!(
+                ctx,
+                "User defined types have to start with a capital letter"
+            );
+        }
+        [T::TypeIdentifier(name), T::ColonColon, T::Blob, ..] => {
             let name = name.clone();
             let ctx = expect!(ctx.skip(3), T::LeftBrace, "Expected '{{' to open blob");
             let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
@@ -451,7 +457,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // Implied type declaration, e.g. `a :: 1` or `a := 1`.
-        [T::Identifier(name), T::ColonColon | T::ColonEqual, ..] => {
+        [T::Identifier(name) | T::TypeIdentifier(name), T::ColonColon | T::ColonEqual, ..] => {
             if name == "self" {
                 raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
             }
@@ -481,7 +487,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // Variable declaration with specified type, e.g. `c : int = 3` or `b : int | bool : false`.
-        [T::Identifier(name), T::Colon, ..] => {
+        [T::Identifier(name) | T::TypeIdentifier(name), T::Colon, ..] => {
             if name == "self" {
                 raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
             }
@@ -617,7 +623,7 @@ mod test {
     test!(statement, statement_idek: "a'.c'.c.b()().c = 0\n" => _);
 
     test!(statement, statement_is_check: ":A is :B\n" => IsCheck { .. });
-    test!(statement, statement_is_check_nested: ":A.c.d is :B.d.d\n" => IsCheck { .. });
+    test!(statement, statement_is_check_nested: ":a.c.D is :b.d.D\n" => IsCheck { .. });
 
     test!(statement, statement_if_newline: "if 1 \n\n+\n 1\n\n < 2 do end\n" => _);
 
@@ -630,7 +636,7 @@ mod test {
     test!(outer_statement, outer_statement_blob_no_last_comma: "B :: blob { \na: A\n }\n" => _);
     test!(outer_statement, outer_statement_blob_yes_last_comma: "B :: blob { \na: A,\n }\n" => _);
     test!(outer_statement, outer_statement_declaration: "B :: fn -> do end\n" => _);
-    test!(outer_statement, outer_statement_use: "use ABC\n" => _);
+    test!(outer_statement, outer_statement_use: "use abc\n" => _);
     test!(outer_statement, outer_statement_use_rename: "use a as b\n" => _);
     test!(outer_statement, outer_statement_use_subdir: "use a/b/c/d/e\n" => _);
     test!(outer_statement, outer_statement_use_subdir_rename: "use a/b as c\n" => _);

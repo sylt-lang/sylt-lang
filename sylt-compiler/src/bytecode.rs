@@ -4,7 +4,7 @@ use sylt_common::{Block, Op, Value};
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Op as ParserOp, Span, Statement,
-    StatementKind, VarKind,
+    StatementKind, TypeAssignable, TypeAssignableKind, VarKind,
 };
 
 use crate::*;
@@ -148,6 +148,22 @@ impl<'t> BytecodeCompiler<'t> {
             }
             Expression(expr) => {
                 self.expression(expr, ctx);
+            }
+        }
+        None
+    }
+
+    fn type_assignable(&mut self, ass: &TypeAssignable, ctx: BytecodeContext) -> Option<usize> {
+        use TypeAssignableKind::*;
+
+        match &ass.kind {
+            Read(ident) => {
+                return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
+            }
+            Access(a, field) => {
+                if let Some(namespace) = self.type_assignable(a, ctx) {
+                    return self.read_identifier(&field.name, field.span, ctx, namespace);
+                }
             }
         }
         None
@@ -305,7 +321,7 @@ impl<'t> BytecodeCompiler<'t> {
                 self.compiler.activate(slot);
 
                 // Initialize the blob. This may capture self.
-                self.assignable(blob, inner_ctx);
+                self.type_assignable(blob, inner_ctx);
                 for (name, field) in fields.iter() {
                     let name = self.compiler.constant(Value::String(Rc::new(name.clone())));
                     self.add_op(inner_ctx, field.span, name);

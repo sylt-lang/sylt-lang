@@ -5,7 +5,7 @@ use sylt_parser::expression::ComparisonKind;
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op, Statement,
-    StatementKind, Type, TypeConstraint, TypeKind, VarKind,
+    StatementKind, Type, TypeAssignable, TypeAssignableKind, TypeConstraint, TypeKind, VarKind,
 };
 
 use crate::Args;
@@ -111,7 +111,7 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
     match ty.kind {
         TypeKind::Implied => unreachable!(),
         TypeKind::Resolved(ty) => write!(dest, "{}", ty),
-        TypeKind::UserDefined(assignable) => write_assignable(dest, indent, assignable),
+        TypeKind::UserDefined(assignable) => write_type_assignable(dest, indent, assignable),
         TypeKind::Fn { constraints, params, ret } => {
             write!(dest, "fn")?;
             if !constraints.is_empty() {
@@ -157,6 +157,21 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
             write!(dest, "(")?;
             write_type(dest, indent, *ty)?;
             write!(dest, ")")
+        }
+    }
+}
+
+fn write_type_assignable<W: Write>(
+    dest: &mut W,
+    indent: u32,
+    assignable: TypeAssignable,
+) -> fmt::Result {
+    match assignable.kind {
+        TypeAssignableKind::Read(identifier) => write_identifier(dest, identifier),
+        TypeAssignableKind::Access(accessable, ident) => {
+            write_type_assignable(dest, indent, *accessable)?;
+            write!(dest, ".")?;
+            write_identifier(dest, ident)
         }
     }
 }
@@ -299,7 +314,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             }
         }
         ExpressionKind::Blob { blob, fields } => {
-            write_assignable(dest, indent, blob)?;
+            write_type_assignable(dest, indent, blob)?;
             write_blob_fields(dest, indent + 1, fields, write_expression)?;
         }
         ExpressionKind::Tuple(exprs) => {
