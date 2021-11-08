@@ -176,30 +176,19 @@ impl TypeChecker {
         ty_id
     }
 
-    fn namespace_chain(&self, assignable: &Assignable, ctx: TypeCtx) -> TypeResult<TypeCtx> {
-        let span = assignable.span;
+    fn namespace_chain(&self, assignable: &Assignable, ctx: TypeCtx) -> Option<TypeCtx> {
         match &assignable.kind {
             AssignableKind::Read(ident) => {
                 if let Some(_) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
-                    err_type_error! {
-                        self,
-                        span,
-                        ctx,
-                        todo_error!()
-                    }
+                    None
                 } else {
                     match self
                         .globals
                         .get(&(ctx.namespace, ident.name.clone()))
                         .cloned()
                     {
-                        Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
-                        _ => err_type_error! {
-                            self,
-                            span,
-                            ctx,
-                            todo_error!()
-                        },
+                        Some(Name::Namespace(namespace)) => Some(TypeCtx { namespace, ..ctx }),
+                        _ => None,
                     }
                 }
             }
@@ -211,25 +200,15 @@ impl TypeChecker {
                     .get(&(ctx.namespace, ident.name.clone()))
                     .cloned()
                 {
-                    Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
-                    _ => err_type_error! {
-                        self,
-                        span,
-                        ctx,
-                        todo_error!()
-                    },
+                    Some(Name::Namespace(namespace)) => Some(TypeCtx { namespace, ..ctx }),
+                    _ => None,
                 }
             }
 
             AssignableKind::Call(..)
             | AssignableKind::ArrowCall(..)
             | AssignableKind::Index(..)
-            | AssignableKind::Expression(..) => err_type_error! {
-                self,
-                span,
-                ctx,
-                todo_error!()
-            },
+            | AssignableKind::Expression(..) => None,
         }
     }
 
@@ -769,11 +748,11 @@ impl TypeChecker {
             }
 
             AssignableKind::Access(outer, ident) => match self.namespace_chain(outer, ctx) {
-                Ok(ctx) => self.assignable(
+                Some(ctx) => self.assignable(
                     &Assignable { span, kind: AssignableKind::Read(ident.clone()) },
                     ctx,
                 ),
-                Err(_) => {
+                None => {
                     let outer = self.assignable(outer, ctx)?;
                     let ret = self.push_type(Type::Unknown);
                     self.add_constraint(outer, Constraint::Field(ident.name.clone(), ret));
@@ -1511,12 +1490,12 @@ impl TypeChecker {
                 "Cannot assign to function calls"
             ),
             AssignableKind::Access(outer, ident) => match self.namespace_chain(&outer, ctx) {
-                Ok(ctx) => self.can_assign(
+                Some(ctx) => self.can_assign(
                     span,
                     ctx,
                     &Assignable { span, kind: AssignableKind::Read(ident.clone()) },
                 ),
-                Err(_) => Ok(()),
+                None => Ok(()),
             },
             AssignableKind::Index(_, _) => Ok(()),
             AssignableKind::Expression(_) => err_type_error!(
