@@ -240,7 +240,9 @@ impl TypeChecker {
                             self,
                             ident.span,
                             ctx,
-                            todo_error!()
+                            TypeError::UnresolvedName(ident.name.clone()),
+                            "Failed to find namespace '{}' - did you foreget an import?",
+                            ident.name
                         },
                     }
                 }
