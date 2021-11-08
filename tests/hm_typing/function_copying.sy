@@ -1,0 +1,5 @@
+start :: fn do
+    [1] -> for_each' print
+    l : [fn int -> void] : [print]
+    print(1.0)
+end
