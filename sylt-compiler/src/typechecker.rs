@@ -460,7 +460,15 @@ impl TypeChecker {
                         Some(var) => *var,
                         // NOTE(ed): This disallowes type-variables that are only used for
                         // constraints.
-                        None => return err_type_error!(self, span, ctx, todo_error!()),
+                        None => {
+                            return err_type_error!(
+                                self,
+                                span,
+                                ctx,
+                                TypeError::UnresolvedName(var.clone()),
+                                "Unused type-variable (only usages in the function signature are counted)"
+                            )
+                        }
                     };
 
                     for constraint in constraints.iter() {
