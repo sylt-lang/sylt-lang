@@ -278,7 +278,6 @@ impl TypeChecker {
         calling_ctx: TypeCtx,
         assignable: &TypeAssignable,
     ) -> TypeResult<usize> {
-        let span = assignable.span;
         match &assignable.kind {
             TypeAssignableKind::Read(ident) => match self
                 .globals
