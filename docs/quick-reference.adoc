@@ -69,7 +69,7 @@ add :: fn x: int, y: int -> int do
     ret x + y
 end
 
-two_squared :: fn n: int -> int do n * n end(2)  // <1>
+two_squared :: fn n -> n * n end(2)  // <1>
 
 // Different ways of calling functions
 
@@ -84,9 +84,7 @@ add' 1, 2
 "Hello, world!" -> print()
 1 -> add' 2
 
-[1, 2, 3] -> for_each' fn n: int do
-    print(n)
-end
+[1, 2, 3] -> for_each' print
 ----
 
 <1> This creates a function with an implicit return. The function is then
@@ -133,14 +131,6 @@ dict: {str: int} = {"a": 1, "b": 2}
 set: {int} = {1, 2, 3}
 function: fn -> void = fn do end
 
-// Other types
-
-forced_int: !int = "str"
-union: int | str = 1
-union = "now a string"
-maybe_int: int? = nil
-maybe_int = 1
-
 // Disambiguation
 
 empty_dict := {:}
@@ -158,30 +148,29 @@ Spider :: blob {
     eat_bug: fn -> void,
 }
 
-new_spider :: fn x: float, y: float -> Spider do
-    self: !Spider = nil // Set up the variable
-    self = Spider {
+new_spider :: fn x, y ->
+    Spider {
         hp: 5,
-        position: position,
+        position: (x, y),
         eat_bug: fn do
             self.hp += 1
         end,
     }
-    ret self
 end
 
 spider := new_spider(0.0, 0.0)
-
-// Duck typing
-
-creatures: [Creature] = []
-creatures -> push' new_spider' 0.0, 0.0
-creatures[0].hp -= 1   // Ok
-creatures[0].eat_bug() // Type error
-
-spider: !Spider = creatures[0]
-spider.eat_bug()
 ----
+
+// Keeping this example here until we have a good pattern for this.
+// Duck typing
+//
+//creatures: [Creature] = []
+//creatures -> push' new_spider' 0.0, 0.0
+//creatures[0].hp -= 1   // Ok
+//creatures[0].eat_bug() // Type error
+//
+//spider: !Spider = creatures[0]
+//spider.eat_bug()
 
 == Imports
 [source, sylt]
@@ -206,11 +195,11 @@ cos :: fn t: float -> float end
 atan2 :: fn x: float, y: float -> float end
 sqrt :: fn x: float -> float end
 abs :: fn x: float -> float end
-sign :: fn x: #X -> #X end
-clamp :: fn a: #X, low: #X, high: #X -> #X end
+sign :: fn x: *X -> *X end
+clamp :: fn a: *X, low: *X, high: *X -> *X end
 min :: fn a: float, b: float -> float end
 max :: fn a: float, b: float -> float end
-rem :: fn x: #X, y: #X -> #X end
+rem :: fn x: *X, y: *X -> *X end
 pow :: fn x: float, y: float -> float end
 angle :: fn coord: (float, float) -> float end
 magnitude :: fn coord: (float, float) -> float end
@@ -222,30 +211,30 @@ dot :: fn coord: (float, float) -> float end
 // Conversions
 as_float :: fn n: int -> float end
 as_int :: fn n: float -> int end
-as_str :: fn x: #X -> str end
+as_str :: fn x: *X -> str end
 as_chars :: fn s: str -> [int] end
 as_char :: fn s: str -> int end
 
 // Iterators
-filter :: fn list: [#Item], f: fn #Item -> bool -> [#Item] end
-fold :: fn list: [#Item], init: #Item, f: fn #Item, #Item -> #Out -> #Out end
-for_each :: fn list: [#Item], f: fn #Item -> void -> void end
-map :: fn list: [#Item], f: fn #Item -> #Out -> [#Out] end
-reduce :: fn list: [#Item], f: fn #Item, #Item -> #Out -> #Out end
+filter :: fn list: [*Item], f: fn *Item -> bool -> [*Item] end
+fold :: fn list: [*Item], init: *Item, f: fn *Item, *Item -> *Out -> *Out end
+for_each :: fn list: [*Item], f: fn *Item -> void -> void end
+map :: fn list: [*Item], f: fn *Item -> *Out -> [*Out] end
+reduce :: fn list: [*Item], f: fn *Item, *Item -> *Out -> *Out end
 
 // System
-print :: fn x: #X -> void end
-dbg :: fn x: #X -> #X end
+print :: fn x: *X -> void end
+dbg :: fn x: *X -> *X end
 args :: fn -> {str: str} end
 debug_assertions :: fn -> bool end
 thread_sleep :: fn seconds: float -> void end
 
 // Lists, sets and dicts
-push :: fn list: [#Item], item: #Item -> void end
-add :: fn set: {#Item}, item: #Item -> void end
-clear :: fn list: [#Item] -> void end
-len :: fn x: [#Item] | {#Key: #Value} -> int end
-pop :: fn list: [#Item] -> #Item? end
-last :: fn list: [#Item] -> #Item? end
-random_choice :: fn list: [#Item] -> #Item end
+push :: fn list: [*Item], item: *Item -> void end
+add :: fn set: {*Item}, item: *Item -> void end
+clear :: fn list: [*Item] -> void end
+len :: fn x: *Container -> int end
+pop :: fn list: [*Item] -> *Item end
+last :: fn list: [*Item] -> *Item end
+random_choice :: fn list: [*Item] -> *Item end
 ----
