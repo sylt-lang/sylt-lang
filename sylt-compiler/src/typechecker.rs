@@ -279,38 +279,65 @@ impl TypeChecker {
     fn type_assignable(
         &mut self,
         _span: Span,
-        ctx: TypeCtx,
+        calling_ctx: TypeCtx,
         assignable: &TypeAssignable,
     ) -> TypeResult<usize> {
         let span = assignable.span;
         match &assignable.kind {
             TypeAssignableKind::Read(ident) => match self
                 .globals
-                .get(&(ctx.namespace, ident.name.clone()))
+                .get(&(calling_ctx.namespace, ident.name.clone()))
                 .cloned()
             {
                 Some(Name::Blob(blob_ty)) => Ok(self.push_type(blob_ty.clone())),
-                _ => {
-                    return err_type_error!(
+                None => {
+                    err_type_error!(
                         self,
                         ident.span,
-                        ctx,
+                        calling_ctx,
+                        TypeError::UnresolvedName(ident.name.clone()),
+                        "Expected a blob"
+                    )
+                }
+                _ => {
+                    err_type_error!(
+                        self,
+                        ident.span,
+                        calling_ctx,
                         TypeError::Exotic,
-                        "Cannot find type '{}' - is it perhaps a type-variable?",
+                        "Expected a blob - '{}' should be a blob",
                         ident.name
                     )
                 }
             },
 
             TypeAssignableKind::Access(ass, ident) => {
-                let ctx = self.type_namespace_chain(ass, ctx, ctx)?;
+                let ctx = self.type_namespace_chain(ass, calling_ctx, calling_ctx)?;
                 match self
                     .globals
                     .get(&(ctx.namespace, ident.name.clone()))
                     .cloned()
                 {
                     Some(Name::Blob(ty)) => Ok(self.push_type(ty.clone())),
-                    _ => return err_type_error!(self, span, ctx, todo_error!()),
+                    None => {
+                        err_type_error!(
+                            self,
+                            ident.span,
+                            calling_ctx,
+                            TypeError::UnresolvedName(ident.name.clone()),
+                            "Expected a blob"
+                        )
+                    }
+                    _ => {
+                        err_type_error!(
+                            self,
+                            ident.span,
+                            calling_ctx,
+                            TypeError::Exotic,
+                            "Expected a blob - '{}' should be a blob",
+                            ident.name
+                        )
+                    }
                 }
             }
         }
