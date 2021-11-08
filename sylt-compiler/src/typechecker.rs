@@ -215,17 +215,19 @@ impl TypeChecker {
     fn type_namespace_chain(
         &self,
         assignable: &TypeAssignable,
+        calling_ctx: TypeCtx,
         ctx: TypeCtx,
     ) -> TypeResult<TypeCtx> {
-        let span = assignable.span;
         match &assignable.kind {
             TypeAssignableKind::Read(ident) => {
                 if let Some(_) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
                     err_type_error! {
                         self,
-                        span,
-                        ctx,
-                        todo_error!()
+                        ident.span,
+                        calling_ctx,
+                        TypeError::Exotic,
+                        "Expected a namespace with the name '{}' - but found a local variable",
+                        ident.name
                     }
                 } else {
                     match self
@@ -236,7 +238,7 @@ impl TypeChecker {
                         Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
                         _ => err_type_error! {
                             self,
-                            span,
+                            ident.span,
                             ctx,
                             todo_error!()
                         },
@@ -245,18 +247,29 @@ impl TypeChecker {
             }
 
             TypeAssignableKind::Access(ass, ident) => {
-                let ctx = self.type_namespace_chain(ass, ctx)?;
+                let ctx = self.type_namespace_chain(ass, calling_ctx, ctx)?;
                 match self
                     .globals
                     .get(&(ctx.namespace, ident.name.clone()))
                     .cloned()
                 {
                     Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
+                    None => {
+                        return err_type_error!(
+                            self,
+                            ident.span,
+                            calling_ctx,
+                            TypeError::UnresolvedName(ident.name.clone()),
+                            "Did you foreget an import?"
+                        )
+                    }
                     _ => err_type_error! {
                         self,
-                        span,
-                        ctx,
-                        todo_error!()
+                        ident.span,
+                        calling_ctx,
+                        TypeError::Exotic,
+                        "This access should be a namespace or a blob - but it's a global {}",
+                        ident.name
                     },
                 }
             }
@@ -290,7 +303,7 @@ impl TypeChecker {
             },
 
             TypeAssignableKind::Access(ass, ident) => {
-                let ctx = self.type_namespace_chain(ass, ctx)?;
+                let ctx = self.type_namespace_chain(ass, ctx, ctx)?;
                 match self
                     .globals
                     .get(&(ctx.namespace, ident.name.clone()))
