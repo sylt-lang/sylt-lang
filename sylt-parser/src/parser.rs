@@ -515,15 +515,12 @@ pub fn type_assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeAssignable> 
 
             T::Identifier(name) if !is_capitalized(name) => {
                 let ctx = expect!(ctx.skip(1), T::Dot, "Expected '.' after namespace");
-                let (ctx, assignable) = type_assignable_inner(ctx, assignable)?;
                 let ident = Identifier { span, name: name.clone() };
-                type_assignable_inner(
-                    ctx,
-                    TypeAssignableKind::Access(
-                        Box::new(TypeAssignable { span, kind: assignable }),
-                        ident,
-                    ),
-                )
+                let assignable = TypeAssignableKind::Access(
+                    Box::new(TypeAssignable { span, kind: assignable }),
+                    ident,
+                );
+                type_assignable_inner(ctx, assignable)
             }
 
             _ => Ok((ctx, assignable)),
