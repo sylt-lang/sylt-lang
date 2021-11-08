@@ -42,12 +42,6 @@ macro_rules! type_error {
     };
 }
 
-macro_rules! todo_error {
-    () => {
-        TypeError::ToDo { line: line!(), file: file!().to_string() }
-    };
-}
-
 macro_rules! bin_op {
     ($self:expr, $span:expr, $ctx:expr, $a:expr, $b:expr, $con:expr) => {{
         let a = $self.expression(&$a, $ctx)?;
@@ -1861,7 +1855,14 @@ impl TypeChecker {
                     self.unify(span, ctx, kx, ys[0])?;
                     self.unify(span, ctx, vx, ys[1]).map(|_| ())
                 } else {
-                    err_type_error!(self, span, ctx, todo_error!())
+                    err_type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Violating(self.bake_type(b)),
+                        "Expected a tuple of length 2 - but got length {}",
+                        ys.len()
+                    )
                 }
             }
 
