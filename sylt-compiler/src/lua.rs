@@ -326,10 +326,7 @@ impl<'t> LuaCompiler<'t> {
                         // Same as external - but defined from sylt-std
                         write!(self, "{}", name);
                     } else {
-                        error!(
-                            self.compiler,
-                            ctx, span, "No identifier found named: '{}'", name
-                        );
+                        error!(self.compiler, span, "No identifier found named: '{}'", name);
                     }
                 }
             },
@@ -351,10 +348,7 @@ impl<'t> LuaCompiler<'t> {
                 Some(Name::Global(slot)) => {
                     let var = &self.compiler.frames[0].variables[slot];
                     if var.kind.immutable() && ctx.frame != 0 {
-                        error!(
-                            self.compiler,
-                            ctx, span, "Cannot mutate constant '{}'", name
-                        );
+                        error!(self.compiler, span, "Cannot mutate constant '{}'", name);
                     } else {
                         self.write_global(slot);
                     }
@@ -362,7 +356,6 @@ impl<'t> LuaCompiler<'t> {
                 _ => {
                     error!(
                         self.compiler,
-                        ctx,
                         span,
                         "Cannot assign '{}' in '{}'",
                         name,
@@ -411,7 +404,7 @@ impl<'t> LuaCompiler<'t> {
             IsCheck { .. } => {
                 error!(
                     self.compiler,
-                    ctx, statement.span, "is-checks only valid in outer-scope"
+                    statement.span, "is-checks only valid in outer-scope"
                 );
             }
 
@@ -428,7 +421,7 @@ impl<'t> LuaCompiler<'t> {
             ExternalDefinition { .. } => {
                 error!(
                     self.compiler,
-                    ctx, statement.span, "External definitions must lie in the outmost scope"
+                    statement.span, "External definitions must lie in the outmost scope"
                 );
             }
 

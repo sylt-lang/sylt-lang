@@ -90,12 +90,6 @@ struct Context {
     frame: usize,
 }
 
-impl Context {
-    fn from_namespace(namespace: NamespaceID) -> Self {
-        Self { namespace, frame: 0 }
-    }
-}
-
 type Namespace = HashMap<String, Name>;
 type ConstantID = usize;
 type NamespaceID = usize;
@@ -156,13 +150,13 @@ struct Compiler {
 
 #[macro_export]
 macro_rules! error {
-    ($compiler:expr, $ctx:expr, $span:expr, $( $msg:expr ),+ ) => {
+    ($compiler:expr, $span:expr, $( $msg:expr ),+ ) => {
         if !$compiler.panic {
             $compiler.panic = true;
 
             let msg = format!($( $msg ),*).into();
             let err = Error::CompileError {
-                file: $compiler.file_from_namespace($ctx.namespace).into(),
+                file: $compiler.file_from_namespace($span.file_id).into(),
                 span: $span,
                 message: Some(msg),
             };
@@ -172,9 +166,9 @@ macro_rules! error {
 }
 
 macro_rules! error_no_panic {
-    ($compiler:expr, $ctx:expr, $span:expr, $( $msg:expr ),+ ) => {
+    ($compiler:expr, $span:expr, $( $msg:expr ),+ ) => {
         {
-            error!($compiler, $ctx, $span, $( $msg ),*);
+            error!($compiler, $span, $( $msg ),*);
             $compiler.panic = false;
         }
     };
@@ -319,13 +313,8 @@ impl Compiler {
         let statements = match dependency::initialization_order(&tree, &self) {
             Ok(statements) => statements,
             Err(statements) => {
-                statements.iter().for_each(|(statement, namespace)| {
-                    error_no_panic!(
-                        self,
-                        Context::from_namespace(*namespace),
-                        statement.span,
-                        "Dependency cycle"
-                    )
+                statements.iter().for_each(|(statement, _)| {
+                    error_no_panic!(self, statement.span, "Dependency cycle")
                 });
                 statements
             }
@@ -404,7 +393,6 @@ impl Compiler {
         // initialized at a later stage.
         for (path, module) in tree.modules.iter() {
             let slot = path_to_namespace_id[path];
-            let ctx = Context::from_namespace(slot);
 
             let mut namespace = Namespace::new();
             for statement in module.statements.iter() {
@@ -444,7 +432,7 @@ impl Compiler {
                     IsCheck { .. } | EmptyStatement => continue,
 
                     _ => {
-                        error!(self, ctx, statement.span, "Invalid outer statement");
+                        error!(self, statement.span, "Invalid outer statement");
                         continue;
                     }
                 };
@@ -456,10 +444,7 @@ impl Compiler {
                     Entry::Occupied(_) => {
                         error!(
                             self,
-                            ctx,
-                            span,
-                            "A global variable with the name '{}' already exists",
-                            ident_name
+                            span, "A global variable with the name '{}' already exists", ident_name
                         );
                     }
                 }
