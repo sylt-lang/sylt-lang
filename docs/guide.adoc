@@ -44,7 +44,8 @@ NUMBERS :: []  // a constant declaration
 Constant variables (apart from functions) should be written in
 `SCREAMING_SNAKE_CASE`.
 
-The type of the variable is inferred but can be supplied.
+The type of the variable is inferred but can be supplied if you want to be
+explicit.
 
 === Functions
 
@@ -63,9 +64,9 @@ In this example we see two functions. First, we define a new function and store
 it in the constant variable `greet`. We also use the print-function in the
 function body and print a string to the terminal.
 
-The function block starts with `do` and ends with `end`. The `do` can be
-replaced with a `->` if the function returns something. See the following
-examples.
+The function block starts with `do` or `->` and ends with `end`. `do` indicates
+no return value while `->` means the function returns something. See the
+following examples.
 
 .Function that takes a single parameter.
 [source, sylt]
@@ -303,7 +304,7 @@ end
 
 `new_player` creates a `Player` with a built in update-function that
 only mutates the created `Player` blob. The `Player` blob is baked
-into the update-function as the constant `self`.
+into the update-function as `self`.
 
 There are a lot of fun things you can do with closures, but this
 language feature can easily be abused to create unreadable code.
@@ -460,7 +461,7 @@ l := [1, 2, 3]
 l -> for_each' print
 
 l -> for_each' fn a: int do
-    // ...
+    // something
 end
 ----
 
@@ -728,38 +729,6 @@ end
 
 spider := new_spider(0.0, 0.0)
 ----
-
-// Leaving this here until we decide what happens with ducktyping
-//Notice that the `Spider` blob has many fields in common with the `Creature`
-//blob from before. This fact can be used to do something called
-//https://en.wikipedia.org/wiki/Duck_typing[duck typing], which effectively
-//allows us to assign `Spider` blobs to `Creature` variables.
-//
-//.Duck typing
-//[source, sylt]
-//----
-//creatures: [Creature] = []
-//creatures -> push' new_spider' 0.0, 0.0
-//creatures[0].hp -= 1   // Ok
-//creatures[0].eat_bug() // Type error
-//----
-//
-//This type error may seem counter-intuitive. We know that `creatures[0]` is a
-//`Spider` which has the `eat_bug` function, yet we are not allowed to call it.
-//What is really going on here? Once the `Spider` blob is put into the list
-//of type `[Creature]` some type information is lost, meaning, there is no
-//reliable way of knowing the true type of something in the list. `creatures` is
-//a list of `Creature`s and other blobs containing the same fields as `Creature`,
-//though every element is treated as if being of type `Creature`.
-//
-//To call the `eat_bug` function anyway, forced types may be used.
-//
-//.Force general blob into specific blob
-//[source, sylt]
-//----
-//spider: !Spider = creatures[0]
-//spider.eat_bug() // Ok, as long as creatures[0] is a Spider
-//----
 
 == Standard library
 
