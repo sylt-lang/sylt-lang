@@ -36,7 +36,7 @@ impl Variable {
             ty,
             slot,
             kind,
-            line: span.line,
+            line: span.line_start,
             captured: false,
             active: false,
         }
@@ -341,11 +341,11 @@ impl Compiler {
         if let Some(lua_file) = lua_file {
             let mut lua_compiler = lua::LuaCompiler::new(&mut self, Box::new(lua_file));
 
-            lua_compiler.preamble(Span::zero(), 0);
+            lua_compiler.preamble(Span::zero(0), 0);
             for (statement, namespace) in statements.iter() {
                 lua_compiler.compile(statement, *namespace);
             }
-            lua_compiler.postamble(Span::zero());
+            lua_compiler.postamble(Span::zero(0));
 
             if !self.errors.is_empty() {
                 return Err(self.errors);
@@ -471,11 +471,11 @@ impl Compiler {
 }
 
 fn parse_signature(func_name: &str, sig: &str) -> ParserType {
-    let token_stream = sylt_tokenizer::string_to_tokens(sig);
+    let token_stream = sylt_tokenizer::string_to_tokens(0, sig);
     let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
     let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
     let path = PathBuf::from(func_name);
-    let ctx = sylt_parser::Context::new(&tokens, &spans, &path, &path);
+    let ctx = sylt_parser::Context::new(&tokens, &spans, &path, 0, &path);
     match sylt_parser::parse_type(ctx) {
         Ok((_, ty)) => ty,
         Err((_, errs)) => {

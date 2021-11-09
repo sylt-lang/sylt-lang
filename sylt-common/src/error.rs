@@ -42,7 +42,7 @@ fn underline(f: &mut fmt::Formatter<'_>, col_start: usize, len: usize) -> fmt::R
 }
 
 fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &Path, span: Span) -> fmt::Result {
-    write_source_line_at(f, file, span.line)?;
+    write_source_line_at(f, file, span.line_start)?;
     write!(f, "{}", INDENT)?;
     underline(f, span.col_start, span.col_end - span.col_start)
 }
@@ -208,11 +208,11 @@ impl fmt::Display for Error {
             }
             Error::GitConflictError { file, span } => {
                 write!(f, "{}: ", "git conflict error".red())?;
-                write!(f, "{}\n", file_line_display(file, span.line))?;
+                write!(f, "{}\n", file_line_display(file, span.line_start))?;
                 write!(
                     f,
                     "{}Git conflict marker found at line {}\n",
-                    INDENT, span.line,
+                    INDENT, span.line_start,
                 )?;
 
                 write_source_span_at(f, file, *span)
@@ -230,8 +230,8 @@ impl fmt::Display for Error {
             }
             Error::SyntaxError { file, span, message } => {
                 write!(f, "{}: ", "syntax error".red())?;
-                write!(f, "{}\n", file_line_display(file, span.line))?;
-                write!(f, "{}Syntax Error on line {}\n", INDENT, span.line)?;
+                write!(f, "{}\n", file_line_display(file, span.line_start))?;
+                write!(f, "{}Syntax Error on line {}\n", INDENT, span.line_start)?;
 
                 write!(f, "{}{}\n", INDENT, message)?;
 
@@ -242,7 +242,7 @@ impl fmt::Display for Error {
                     f,
                     "{}: {}\n",
                     "typecheck error".red(),
-                    file_line_display(file, span.line)
+                    file_line_display(file, span.line_start)
                 )?;
                 write!(f, "{}{}\n", INDENT, kind)?;
 
@@ -254,8 +254,8 @@ impl fmt::Display for Error {
             }
             Error::CompileError { file, span, message } => {
                 write!(f, "{}: ", "compile error".red())?;
-                write!(f, "{}\n", file_line_display(file, span.line))?;
-                write!(f, "{}Failed to compile line {}\n", INDENT, span.line)?;
+                write!(f, "{}\n", file_line_display(file, span.line_start))?;
+                write!(f, "{}Failed to compile line {}\n", INDENT, span.line_start)?;
 
                 if let Some(message) = message {
                     write!(f, "{}{}\n", INDENT, message)?;

@@ -9,18 +9,29 @@ pub struct Span {
     // TODO(ed): Do this more intelligent, so
     // we can show ranges. Maybe even go back
     // to offsets from start of the file.
-    pub line: usize,
-    /// The first column that this Span contains.
+    pub file_id: usize,
+
+    pub byte_start: usize,
+    pub byte_end: usize,
+
+    pub line_start: usize,
+    pub line_end: usize,
+
     pub col_start: usize,
-    /// The first column that this Span doesn't contain.
     pub col_end: usize,
 }
 
-pub static ZERO_SPAN: Span = Span { line: 0, col_start: 0, col_end: 0 };
-
 impl Span {
-    pub fn zero() -> Self {
-        Self { line: 0, col_start: 0, col_end: 0 }
+    pub fn zero(file_id: usize) -> Self {
+        Self {
+            file_id,
+            byte_start: 0,
+            byte_end: 0,
+            line_start: 0,
+            line_end: 0,
+            col_start: 0,
+            col_end: 0,
+        }
     }
 }
 
@@ -30,7 +41,7 @@ pub struct PlacedToken {
     pub span: Span,
 }
 
-pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
+pub fn string_to_tokens(file_id: usize, content: &str) -> Vec<PlacedToken> {
     // A list containing which char index a specific byte index is at.
     //
     // Since &str contains UTF-8, a byte offset (which is what the lexer gives
@@ -62,12 +73,20 @@ pub fn string_to_tokens(content: &str) -> Vec<PlacedToken> {
             let is_newline = token == Token::Newline;
             let col_start = char_at_byte[byte_range.start].unwrap() - last_newline;
             let col_end = char_at_byte[byte_range.end].unwrap() - last_newline;
-            let placed_token = PlacedToken { token, span: Span { line, col_start, col_end } };
+            let span = Span {
+                file_id,
+                col_start,
+                col_end,
+                line_start: line,
+                line_end: line,
+                byte_start: byte_range.start,
+                byte_end: byte_range.end,
+            };
             if is_newline {
                 last_newline = char_at_byte[byte_range.start].unwrap();
                 line += 1;
             }
-            placed_token
+            PlacedToken { token, span }
         })
         .collect()
 }

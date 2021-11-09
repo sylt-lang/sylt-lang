@@ -46,7 +46,7 @@ impl<'t> BytecodeCompiler<'t> {
         self.blocks
             .get_mut(ctx.block_slot)
             .expect("Invalid block id")
-            .add(op, span.line)
+            .add(op, span.line_start)
     }
 
     fn patch(&mut self, ctx: BytecodeContext, ip: usize, op: Op) {
@@ -272,7 +272,7 @@ impl<'t> BytecodeCompiler<'t> {
 
             Function { name, params, ret: _, body } => {
                 let file = self.compiler.file_from_namespace(ctx.namespace).display();
-                let name = format!("fn {} {}:{}", name, file, expression.span.line);
+                let name = format!("fn {} {}:{}", name, file, expression.span.line_start);
 
                 // === Frame begin ===
                 let inner_ctx = self.push_frame_and_block(ctx, &name, expression.span);
@@ -708,10 +708,10 @@ impl<'t> BytecodeCompiler<'t> {
 
         // TODO(ed): Real ugly hack until we can run the typechecker before the compiler.
         self.compiler.panic = true;
-        self.read_identifier("start", Span::zero(), ctx, 0);
+        self.read_identifier("start", Span::zero(0), ctx, 0);
         self.compiler.panic = false;
 
-        self.add_op(ctx, Span::zero(), Op::Call(0));
+        self.add_op(ctx, Span::zero(0), Op::Call(0));
 
         let nil = self.compiler.constant(Value::Nil);
         self.add_op(ctx, span, nil);
