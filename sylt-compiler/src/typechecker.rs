@@ -220,7 +220,7 @@ impl TypeChecker {
                         ident.span,
                         calling_ctx,
                         TypeError::Exotic,
-                        "Expected a namespace with the name '{}' - but found a local variable",
+                        "'{}' is a local variable, not a namespace",
                         ident.name
                     }
                 } else {
@@ -235,8 +235,7 @@ impl TypeChecker {
                             ident.span,
                             ctx,
                             TypeError::UnresolvedName(ident.name.clone()),
-                            "Failed to find namespace '{}' - did you foreget an import?",
-                            ident.name
+                            "Did you forget an import?"
                         },
                     }
                 }
@@ -251,12 +250,12 @@ impl TypeChecker {
                 {
                     Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
                     None => {
-                        return err_type_error!(
+                        err_type_error!(
                             self,
                             ident.span,
                             calling_ctx,
                             TypeError::UnresolvedName(ident.name.clone()),
-                            "Did you foreget an import?"
+                            "Did you forget an import?"
                         )
                     }
                     _ => err_type_error! {
@@ -264,7 +263,7 @@ impl TypeChecker {
                         ident.span,
                         calling_ctx,
                         TypeError::Exotic,
-                        "This access should be a namespace or a blob - but it's a global {}",
+                        "'{}' should be a namespace or a blob but it's a global",
                         ident.name
                     },
                 }
@@ -300,7 +299,7 @@ impl TypeChecker {
                         ident.span,
                         calling_ctx,
                         TypeError::Exotic,
-                        "Expected a blob - '{}' should be a blob",
+                        "Expected a blob but got '{}'",
                         ident.name
                     )
                 }
@@ -329,7 +328,7 @@ impl TypeChecker {
                             ident.span,
                             calling_ctx,
                             TypeError::Exotic,
-                            "Expected a blob - '{}' should be a blob",
+                            "Expected a blob but got '{}'",
                             ident.name
                         )
                     }
@@ -459,7 +458,7 @@ impl TypeChecker {
                                 span,
                                 ctx,
                                 TypeError::UnresolvedName(var.clone()),
-                                "Unused type-variable (only usages in the function signature are counted)"
+                                "Unused type-variable. (Only usages in the function signature are counted)"
                             )
                         }
                     };
@@ -1859,7 +1858,7 @@ impl TypeChecker {
                         span,
                         ctx,
                         TypeError::Violating(self.bake_type(b)),
-                        "Expected a tuple of length 2 - but got length {}",
+                        "Expected length of tuple to be 2 but it was {}",
                         ys.len()
                     )
                 }
