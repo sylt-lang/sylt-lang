@@ -42,12 +42,6 @@ macro_rules! type_error {
     };
 }
 
-macro_rules! todo_error {
-    () => {
-        TypeError::ToDo { line: line!(), file: file!().to_string() }
-    };
-}
-
 macro_rules! bin_op {
     ($self:expr, $span:expr, $ctx:expr, $a:expr, $b:expr, $con:expr) => {{
         let a = $self.expression(&$a, $ctx)?;
@@ -176,30 +170,19 @@ impl TypeChecker {
         ty_id
     }
 
-    fn namespace_chain(&self, assignable: &Assignable, ctx: TypeCtx) -> TypeResult<TypeCtx> {
-        let span = assignable.span;
+    fn namespace_chain(&self, assignable: &Assignable, ctx: TypeCtx) -> Option<TypeCtx> {
         match &assignable.kind {
             AssignableKind::Read(ident) => {
                 if let Some(_) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
-                    err_type_error! {
-                        self,
-                        span,
-                        ctx,
-                        todo_error!()
-                    }
+                    None
                 } else {
                     match self
                         .globals
                         .get(&(ctx.namespace, ident.name.clone()))
                         .cloned()
                     {
-                        Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
-                        _ => err_type_error! {
-                            self,
-                            span,
-                            ctx,
-                            todo_error!()
-                        },
+                        Some(Name::Namespace(namespace)) => Some(TypeCtx { namespace, ..ctx }),
+                        _ => None,
                     }
                 }
             }
@@ -211,42 +194,34 @@ impl TypeChecker {
                     .get(&(ctx.namespace, ident.name.clone()))
                     .cloned()
                 {
-                    Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
-                    _ => err_type_error! {
-                        self,
-                        span,
-                        ctx,
-                        todo_error!()
-                    },
+                    Some(Name::Namespace(namespace)) => Some(TypeCtx { namespace, ..ctx }),
+                    _ => None,
                 }
             }
 
             AssignableKind::Call(..)
             | AssignableKind::ArrowCall(..)
             | AssignableKind::Index(..)
-            | AssignableKind::Expression(..) => err_type_error! {
-                self,
-                span,
-                ctx,
-                todo_error!()
-            },
+            | AssignableKind::Expression(..) => None,
         }
     }
 
     fn type_namespace_chain(
         &self,
         assignable: &TypeAssignable,
+        calling_ctx: TypeCtx,
         ctx: TypeCtx,
     ) -> TypeResult<TypeCtx> {
-        let span = assignable.span;
         match &assignable.kind {
             TypeAssignableKind::Read(ident) => {
                 if let Some(_) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
                     err_type_error! {
                         self,
-                        span,
-                        ctx,
-                        todo_error!()
+                        ident.span,
+                        calling_ctx,
+                        TypeError::Exotic,
+                        "'{}' is a local variable, not a namespace",
+                        ident.name
                     }
                 } else {
                     match self
@@ -257,27 +232,39 @@ impl TypeChecker {
                         Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
                         _ => err_type_error! {
                             self,
-                            span,
+                            ident.span,
                             ctx,
-                            todo_error!()
+                            TypeError::UnresolvedName(ident.name.clone()),
+                            "Did you forget an import?"
                         },
                     }
                 }
             }
 
             TypeAssignableKind::Access(ass, ident) => {
-                let ctx = self.type_namespace_chain(ass, ctx)?;
+                let ctx = self.type_namespace_chain(ass, calling_ctx, ctx)?;
                 match self
                     .globals
                     .get(&(ctx.namespace, ident.name.clone()))
                     .cloned()
                 {
                     Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
+                    None => {
+                        err_type_error!(
+                            self,
+                            ident.span,
+                            calling_ctx,
+                            TypeError::UnresolvedName(ident.name.clone()),
+                            "Did you forget an import?"
+                        )
+                    }
                     _ => err_type_error! {
                         self,
-                        span,
-                        ctx,
-                        todo_error!()
+                        ident.span,
+                        calling_ctx,
+                        TypeError::Exotic,
+                        "'{}' should be a namespace or a blob but it's a global",
+                        ident.name
                     },
                 }
             }
@@ -287,38 +274,64 @@ impl TypeChecker {
     fn type_assignable(
         &mut self,
         _span: Span,
-        ctx: TypeCtx,
+        calling_ctx: TypeCtx,
         assignable: &TypeAssignable,
     ) -> TypeResult<usize> {
-        let span = assignable.span;
         match &assignable.kind {
             TypeAssignableKind::Read(ident) => match self
                 .globals
-                .get(&(ctx.namespace, ident.name.clone()))
+                .get(&(calling_ctx.namespace, ident.name.clone()))
                 .cloned()
             {
                 Some(Name::Blob(blob_ty)) => Ok(self.push_type(blob_ty.clone())),
-                _ => {
-                    return err_type_error!(
+                None => {
+                    err_type_error!(
                         self,
                         ident.span,
-                        ctx,
+                        calling_ctx,
+                        TypeError::UnresolvedName(ident.name.clone()),
+                        "Expected a blob"
+                    )
+                }
+                _ => {
+                    err_type_error!(
+                        self,
+                        ident.span,
+                        calling_ctx,
                         TypeError::Exotic,
-                        "Cannot find type '{}' - is it perhaps a type-variable?",
+                        "Expected a blob but got '{}'",
                         ident.name
                     )
                 }
             },
 
             TypeAssignableKind::Access(ass, ident) => {
-                let ctx = self.type_namespace_chain(ass, ctx)?;
+                let ctx = self.type_namespace_chain(ass, calling_ctx, calling_ctx)?;
                 match self
                     .globals
                     .get(&(ctx.namespace, ident.name.clone()))
                     .cloned()
                 {
                     Some(Name::Blob(ty)) => Ok(self.push_type(ty.clone())),
-                    _ => return err_type_error!(self, span, ctx, todo_error!()),
+                    None => {
+                        err_type_error!(
+                            self,
+                            ident.span,
+                            calling_ctx,
+                            TypeError::UnresolvedName(ident.name.clone()),
+                            "Expected a blob"
+                        )
+                    }
+                    _ => {
+                        err_type_error!(
+                            self,
+                            ident.span,
+                            calling_ctx,
+                            TypeError::Exotic,
+                            "Expected a blob but got '{}'",
+                            ident.name
+                        )
+                    }
                 }
             }
         }
@@ -439,7 +452,15 @@ impl TypeChecker {
                         Some(var) => *var,
                         // NOTE(ed): This disallowes type-variables that are only used for
                         // constraints.
-                        None => return err_type_error!(self, span, ctx, todo_error!()),
+                        None => {
+                            return err_type_error!(
+                                self,
+                                span,
+                                ctx,
+                                TypeError::UnresolvedName(var.clone()),
+                                "Unused type-variable. (Only usages in the function signature are counted)"
+                            )
+                        }
                     };
 
                     for constraint in constraints.iter() {
@@ -769,11 +790,11 @@ impl TypeChecker {
             }
 
             AssignableKind::Access(outer, ident) => match self.namespace_chain(outer, ctx) {
-                Ok(ctx) => self.assignable(
+                Some(ctx) => self.assignable(
                     &Assignable { span, kind: AssignableKind::Read(ident.clone()) },
                     ctx,
                 ),
-                Err(_) => {
+                None => {
                     let outer = self.assignable(outer, ctx)?;
                     let ret = self.push_type(Type::Unknown);
                     self.add_constraint(outer, Constraint::Field(ident.name.clone(), ret));
@@ -1511,12 +1532,12 @@ impl TypeChecker {
                 "Cannot assign to function calls"
             ),
             AssignableKind::Access(outer, ident) => match self.namespace_chain(&outer, ctx) {
-                Ok(ctx) => self.can_assign(
+                Some(ctx) => self.can_assign(
                     span,
                     ctx,
                     &Assignable { span, kind: AssignableKind::Read(ident.clone()) },
                 ),
-                Err(_) => Ok(()),
+                None => Ok(()),
             },
             AssignableKind::Index(_, _) => Ok(()),
             AssignableKind::Expression(_) => err_type_error!(
@@ -1832,7 +1853,14 @@ impl TypeChecker {
                     self.unify(span, ctx, kx, ys[0])?;
                     self.unify(span, ctx, vx, ys[1]).map(|_| ())
                 } else {
-                    err_type_error!(self, span, ctx, todo_error!())
+                    err_type_error!(
+                        self,
+                        span,
+                        ctx,
+                        TypeError::Violating(self.bake_type(b)),
+                        "Expected length of tuple to be 2 but it was {}",
+                        ys.len()
+                    )
                 }
             }
 
