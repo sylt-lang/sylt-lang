@@ -371,9 +371,11 @@ impl<'t> LuaCompiler<'t> {
         self.compiler.panic = false;
 
         match &statement.kind {
-            Use { .. } | Blob { .. } | IsCheck { .. } | EmptyStatement => return,
-
-            ExternalDefinition { .. } => return,
+            Use { .. }
+            | Blob { .. }
+            | IsCheck { .. }
+            | EmptyStatement
+            | ExternalDefinition { .. } => return,
 
             #[rustfmt::skip]
             Definition { ident, value, .. } => {
