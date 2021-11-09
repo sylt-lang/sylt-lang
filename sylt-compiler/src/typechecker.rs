@@ -1758,7 +1758,7 @@ impl TypeChecker {
                     span,
                     ctx,
                     TypeError::Exotic,
-                    "Tuples can only be indexed by integer constants"
+                    "Tuples can only be indexed by positive integer constants"
                 );
             }
             Type::List(given) => {
