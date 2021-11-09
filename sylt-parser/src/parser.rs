@@ -952,8 +952,6 @@ pub fn find_conflict_markers(file: &Path, file_id: usize, source: &str) -> Vec<E
                     col_end: conflict_marker.len() + 1,
 
                     file_id,
-                    byte_start: 0,
-                    byte_end: 0,
                 },
             });
         }
@@ -1041,11 +1039,11 @@ mod test {
         ($f:ident, $name:ident: $str:expr => $ans:pat) => {
             #[test]
             fn $name() {
-                let token_stream = ::sylt_tokenizer::string_to_tokens($str);
+                let token_stream = ::sylt_tokenizer::string_to_tokens(0, $str);
                 let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
                 let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
                 let path = ::std::path::PathBuf::from(stringify!($name));
-                let result = $f($crate::Context::new(&tokens, &spans, &path, &path));
+                let result = $f($crate::Context::new(&tokens, &spans, &path, 0, &path));
                 assert!(
                     result.is_ok(),
                     "\nSyntax tree test didn't parse for:\n{}\nErrs: {:?}",
@@ -1074,11 +1072,11 @@ mod test {
         ($f:ident, $name:ident: $str:expr => $ans:pat) => {
             #[test]
             fn $name() {
-                let token_stream = ::sylt_tokenizer::string_to_tokens($str);
+                let token_stream = ::sylt_tokenizer::string_to_tokens(0, $str);
                 let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
                 let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
                 let path = ::std::path::PathBuf::from(stringify!($name));
-                let result = $f($crate::Context::new(&tokens, &spans, &path, &path));
+                let result = $f($crate::Context::new(&tokens, &spans, &path, 0, &path));
                 assert!(
                     result.is_err(),
                     "\nSyntax tree test parsed - when it should have failed - for:\n{}\n",

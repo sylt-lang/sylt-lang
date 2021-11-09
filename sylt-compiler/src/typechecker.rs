@@ -30,6 +30,7 @@ macro_rules! type_error {
             file: $self.namespace_to_file[&$span.file_id].clone(),
             span: $span,
             message: Some(format!($( $msg ),*)),
+            helpers: Vec::new(),
         }
     };
     ($self:expr, $span:expr, $kind:expr) => {
@@ -38,6 +39,7 @@ macro_rules! type_error {
             file: $self.namespace_to_file[&$span.file_id].clone(),
             span: $span,
             message: None,
+            helpers: Vec::new(),
         }
     };
 }

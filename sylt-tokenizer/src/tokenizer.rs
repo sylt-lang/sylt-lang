@@ -11,9 +11,6 @@ pub struct Span {
     // to offsets from start of the file.
     pub file_id: usize,
 
-    pub byte_start: usize,
-    pub byte_end: usize,
-
     pub line_start: usize,
     pub line_end: usize,
 
@@ -25,8 +22,6 @@ impl Span {
     pub fn zero(file_id: usize) -> Self {
         Self {
             file_id,
-            byte_start: 0,
-            byte_end: 0,
             line_start: 0,
             line_end: 0,
             col_start: 0,
@@ -79,8 +74,6 @@ pub fn string_to_tokens(file_id: usize, content: &str) -> Vec<PlacedToken> {
                 col_end,
                 line_start: line,
                 line_end: line,
-                byte_start: byte_range.start,
-                byte_end: byte_range.end,
             };
             if is_newline {
                 last_newline = char_at_byte[byte_range.start].unwrap();
@@ -116,15 +109,19 @@ mod tests {
     }
 
     macro_rules! assert_placed_eq {
-        ($a:expr, $( ($token:expr, $line:expr, $range:expr) ),+ $(,)? ) => {
+        ($a:expr, $( ($token:expr, $line:expr, $col_range:expr) ),+ $(,)? ) => {
             let a = $a;
             let b = vec![ $(
                 $crate::PlacedToken {
                     token: $token,
                     span: $crate::Span {
-                        line: $line,
-                        col_start: $range.start,
-                        col_end: $range.end,
+                        file_id: 0,
+
+                        line_start: $line,
+                        line_end: $line,
+
+                        col_start: $col_range.start,
+                        col_end: $col_range.end,
                     }
                 }
             ),*];
@@ -136,14 +133,14 @@ mod tests {
 
     #[test]
     fn simple_span() {
-        assert_placed_eq!(string_to_tokens("1"), (Token::Int(1), 1, 1..2),);
+        assert_placed_eq!(string_to_tokens(0, "1"), (Token::Int(1), 1, 1..2),);
         assert_placed_eq!(
-            string_to_tokens("1\n"),
+            string_to_tokens(0, "1\n"),
             (Token::Int(1), 1, 1..2),
             (Token::Newline, 1, 2..3),
         );
         assert_placed_eq!(
-            string_to_tokens("1\n23\n456"),
+            string_to_tokens(0, "1\n23\n456"),
             (Token::Int(1), 1, 1..2),
             (Token::Newline, 1, 2..3),
             (Token::Int(23), 2, 1..3),
@@ -156,7 +153,7 @@ mod tests {
     fn span_with_non_ascii() {
         // The 'ö' is an error but we want to check that its span is a single char.
         assert_placed_eq!(
-            string_to_tokens("wow\nwöw\n"),
+            string_to_tokens(0, "wow\nwöw\n"),
             (Token::Identifier(String::from("wow")), 1, 1..4),
             (Token::Newline, 1, 4..5),
             (Token::Identifier(String::from("w")), 2, 1..2),

@@ -468,9 +468,13 @@ mod test {
                         SourceSpanTester(
                             &path,
                             super::Span {
-                                line: $line,
+                                file_id: 0,
+
+                                line_start: $line,
+                                line_end: $line,
+
                                 col_start: $col_start,
-                                col_end: $col_end
+                                col_end: $col_end,
                             }
                         ),
                     ),
