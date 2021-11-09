@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use sylt_common::error::{Error, TypeError};
+use sylt_common::error::{Error, Helper, TypeError};
 use sylt_common::{RustFunction, Type as RuntimeType};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
@@ -13,6 +13,29 @@ use crate::ty::Type;
 use std::collections::{BTreeMap, BTreeSet};
 
 type TypeResult<T> = Result<T, Vec<Error>>;
+
+trait Help {
+    fn help(self, typechecker: &TypeChecker, span: Span, message: String) -> Self;
+}
+
+impl<T> Help for TypeResult<T> {
+    fn help(mut self, typechecker: &TypeChecker, span: Span, message: String) -> Self {
+        match &mut self {
+            Ok(_) => {}
+            Err(errs) => match &mut errs.last_mut() {
+                Some(Error::TypeError { helpers, .. }) => {
+                    helpers.push(Helper {
+                        file: typechecker.namespace_to_file[&span.file_id].clone(),
+                        span,
+                        message,
+                    });
+                }
+                _ => panic!("Cannot help on this error"),
+            },
+        }
+        self
+    }
+}
 
 macro_rules! err_type_error {
     ($self:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
@@ -67,6 +90,7 @@ struct Variable {
     ident: Identifier,
     ty: usize,
     kind: VarKind,
+    span: Span,
 }
 
 #[derive(Clone, Debug)]
@@ -536,7 +560,12 @@ impl TypeChecker {
 
             StatementKind::Definition { ident, kind, ty, value } => {
                 let pre_ty = self.push_type(Type::Unknown);
-                let var = Variable { ident: ident.clone(), ty: pre_ty, kind: *kind };
+                let var = Variable {
+                    ident: ident.clone(),
+                    ty: pre_ty,
+                    kind: *kind,
+                    span,
+                };
                 let is_function = matches!(value.kind, ExpressionKind::Function { .. });
                 if is_function {
                     self.stack.push(var);
@@ -553,7 +582,12 @@ impl TypeChecker {
 
                 self.unify(span, ctx, expression_ty, defined_ty)?;
 
-                let var = Variable { ident: ident.clone(), ty: defined_ty, kind: *kind };
+                let var = Variable {
+                    ident: ident.clone(),
+                    ty: defined_ty,
+                    kind: *kind,
+                    span,
+                };
                 if !is_function {
                     self.stack.push(var);
                 }
@@ -608,7 +642,12 @@ impl TypeChecker {
 
             StatementKind::Definition { ident, kind, ty, value } => {
                 let pre_ty = self.push_type(Type::Unknown);
-                let var = Variable { ident: ident.clone(), ty: pre_ty, kind: *kind };
+                let var = Variable {
+                    ident: ident.clone(),
+                    ty: pre_ty,
+                    kind: *kind,
+                    span,
+                };
                 let is_function = matches!(value.kind, ExpressionKind::Function { .. });
                 if is_function {
                     self.globals.insert(
@@ -638,7 +677,7 @@ impl TypeChecker {
 
             StatementKind::ExternalDefinition { ident, kind, ty } => {
                 let ty = self.resolve_type(span, ctx, ty)?;
-                let var = Variable { ident: ident.clone(), ty, kind: *kind };
+                let var = Variable { ident: ident.clone(), ty, kind: *kind, span };
                 self.globals
                     .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
             }
@@ -867,7 +906,12 @@ impl TypeChecker {
                     let ty = self.inner_resolve_type(span, ctx, ty, &mut seen)?;
                     args.push(ty);
 
-                    let var = Variable { ident: ident.clone(), ty, kind: VarKind::Const };
+                    let var = Variable {
+                        ident: ident.clone(),
+                        ty,
+                        kind: VarKind::Const,
+                        span,
+                    };
                     self.stack.push(var);
                 }
 
@@ -938,6 +982,7 @@ impl TypeChecker {
                             ident: Identifier { name: "self".to_string(), span },
                             kind: VarKind::Const,
                             ty: given_blob,
+                            span,
                         });
                     }
                     let expr_ty = self.expression(expr, ctx)?;
@@ -1436,6 +1481,11 @@ impl TypeChecker {
                             TypeError::Assignability,
                             "Cannot assign to constants"
                         )
+                        .help(
+                            self,
+                            var.span,
+                            "Originally defined here".into(),
+                        )
                     }
                 } else {
                     match self.globals.get(&(ctx.namespace, ident.name.clone())) {
@@ -1448,6 +1498,11 @@ impl TypeChecker {
                                     span,
                                     TypeError::Assignability,
                                     "Cannot assign to constants"
+                                )
+                                .help(
+                                    self,
+                                    var.span,
+                                    "Originally defined here".into(),
                                 )
                             }
                         }

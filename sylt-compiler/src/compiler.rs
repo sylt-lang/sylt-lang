@@ -22,7 +22,7 @@ struct Variable {
     name: String,
     ty: Type,
     slot: usize,
-    line: usize,
+    span: Span,
     kind: VarKind,
 
     captured: bool,
@@ -36,7 +36,7 @@ impl Variable {
             ty,
             slot,
             kind,
-            line: span.line_start,
+            span,
             captured: false,
             active: false,
         }
@@ -51,7 +51,7 @@ struct Upvalue {
     name: String,
     ty: Type,
     slot: usize,
-    line: usize,
+    span: Span,
     kind: VarKind,
 }
 
@@ -69,7 +69,7 @@ impl Upvalue {
             name: var.name.clone(),
             ty: var.ty.clone(),
             slot: 0,
-            line: var.line,
+            span: var.span,
             kind: var.kind,
         }
     }
