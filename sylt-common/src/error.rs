@@ -76,6 +76,13 @@ pub enum RuntimeError {
 }
 
 #[derive(Debug, Clone)]
+pub struct Helper {
+    file: PathBuf,
+    span: Span,
+    message: String,
+}
+
+#[derive(Debug, Clone)]
 pub enum TypeError {
     // The message should be given afterwards,
     // since some errors are quite exotic.
@@ -173,6 +180,7 @@ pub enum Error {
         file: PathBuf,
         span: Span,
         message: Option<String>,
+        helpers: Vec<Helper>,
     },
 
     CompileError {
@@ -223,7 +231,9 @@ impl fmt::Display for Error {
                 write!(f, "{}\n", file_line_display(file, *line))?;
                 write!(f, "{}{}\n", INDENT, kind)?;
                 if let Some(message) = message {
-                    write!(f, "{}\n", message)?;
+                    for line in message.split('\n') {
+                        write!(f, "{}{}\n", INDENT, line)?;
+                    }
                 }
 
                 write_source_line_at(f, file, *line)
@@ -233,24 +243,39 @@ impl fmt::Display for Error {
                 write!(f, "{}\n", file_line_display(file, span.line_start))?;
                 write!(f, "{}Syntax Error on line {}\n", INDENT, span.line_start)?;
 
-                write!(f, "{}{}\n", INDENT, message)?;
+                for line in message.split('\n') {
+                    write!(f, "{}{}\n", INDENT, line)?;
+                }
 
                 write_source_span_at(f, file, *span)
             }
-            Error::TypeError { kind, file, span, message } => {
+            Error::TypeError { kind, file, span, message, helpers } => {
                 write!(
                     f,
                     "{}: {}\n",
                     "typecheck error".red(),
                     file_line_display(file, span.line_start)
                 )?;
-                write!(f, "{}{}\n", INDENT, kind)?;
-
-                if let Some(message) = message {
-                    write!(f, "{}{}\n", INDENT, message)?;
+                if !matches!(kind, TypeError::Exotic) {
+                    write!(f, "{}{}\n", INDENT, kind)?;
                 }
 
-                write_source_span_at(f, file, *span)
+                if let Some(message) = message {
+                    for line in message.split('\n') {
+                        write!(f, "{}{}\n", INDENT, line)?;
+                    }
+                }
+                write_source_span_at(f, file, *span)?;
+
+                if !helpers.is_empty() {
+                    // TODO(ed): Might be helpfull to not write all the errors?
+                    write!(f, "{}{}\n", INDENT, "help:".yellow())?;
+                    for Helper { message, file, span } in helpers.iter() {
+                        write!(f, "{}{}\n", INDENT, message)?;
+                        write_source_span_at(f, file, *span)?;
+                    }
+                }
+                Ok(())
             }
             Error::CompileError { file, span, message } => {
                 write!(f, "{}: ", "compile error".red())?;
@@ -258,9 +283,10 @@ impl fmt::Display for Error {
                 write!(f, "{}Failed to compile line {}\n", INDENT, span.line_start)?;
 
                 if let Some(message) = message {
-                    write!(f, "{}{}\n", INDENT, message)?;
+                    for line in message.split('\n') {
+                        write!(f, "{}{}\n", INDENT, line)?;
+                    }
                 }
-
                 write_source_span_at(f, file, *span)
             }
         }
