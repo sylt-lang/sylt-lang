@@ -629,6 +629,7 @@ impl TypeChecker {
 
             StatementKind::Use { .. }
             | StatementKind::Blob { .. }
+            | StatementKind::Enum { .. }
             | StatementKind::IsCheck { .. }
             | StatementKind::ExternalDefinition { .. } => {
                 unreachable!("Illegal inner statement! Parser should have caught this.")
@@ -647,6 +648,10 @@ impl TypeChecker {
                 let other = self.file_to_namespace[file];
                 self.globals
                     .insert((ctx.namespace, ident.name.clone()), Name::Namespace(other));
+            }
+
+            StatementKind::Enum { .. } => {
+                todo!();
             }
 
             StatementKind::Blob { name, fields } => {

@@ -394,6 +394,9 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             let fields_as_tuples = fields.into_iter().collect();
             write_blob_fields(dest, indent + 1, fields_as_tuples, write_type)?;
         }
+        StatementKind::Enum { .. } => {
+            todo!();
+        }
         StatementKind::Block { statements } => {
             write_indents(dest, indent)?;
             write!(dest, "do\n")?;

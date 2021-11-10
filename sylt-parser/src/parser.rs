@@ -1154,12 +1154,30 @@ impl PrettyPrint for Module {
 impl PrettyPrint for Statement {
     fn pretty_print(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
         use StatementKind as SK;
+
         write_indent(f, indent)?;
         write!(f, "{} ", self.span.line_start)?;
         match &self.kind {
             SK::Use { path, name, file } => {
                 write!(f, "<Use> {} {}", path.name, name)?;
                 write!(f, " {:?}", file)?;
+            }
+            SK::Enum { name, variants } => {
+                write!(f, "<Blob> {} {{ ", name)?;
+                for (i, (name, variant)) in variants.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}(", name)?;
+                    for (i, ty) in variant.tuple.iter().enumerate() {
+                        if i != 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", ty)?;
+                    }
+                    write!(f, ")")?;
+                }
+                write!(f, " }}")?;
             }
             SK::Blob { name, fields } => {
                 write!(f, "<Blob> {} {{ ", name)?;

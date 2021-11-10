@@ -401,7 +401,7 @@ impl<'t> LuaCompiler<'t> {
         self.compiler.panic = false;
 
         match &statement.kind {
-            Use { .. } | Blob { .. } | EmptyStatement => return,
+            Use { .. } | Enum { .. } | Blob { .. } | EmptyStatement => return,
 
             IsCheck { .. } => {
                 error!(

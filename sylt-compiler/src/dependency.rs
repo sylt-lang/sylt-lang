@@ -221,6 +221,21 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
                 .collect()
         }
 
+        Enum { name, variants } => {
+            ctx.shadow(&name);
+            variants
+                .values()
+                .map(|var| {
+                    var.tuple
+                        .iter()
+                        .map(|t| type_dependencies(ctx, t))
+                        .flatten()
+                        .collect::<BTreeSet<_>>()
+                })
+                .flatten()
+                .collect()
+        }
+
         Break | Continue | EmptyStatement | IsCheck { .. } | Unreachable | Use { .. } => {
             BTreeSet::new()
         }

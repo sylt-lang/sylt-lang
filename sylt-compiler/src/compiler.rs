@@ -407,6 +407,9 @@ impl Compiler {
                             unreachable!()
                         }
                     }
+                    Enum { .. } => {
+                        todo!();
+                    }
                     Use { name, file, .. } => {
                         let ident = match name {
                             NameIdentifier::Implicit(ident) => ident,
