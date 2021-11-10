@@ -1576,8 +1576,10 @@ impl TypeChecker {
     }
 
     fn add_constraint(&mut self, a: usize, span: Span, constraint: Constraint) {
-        // TODO(ed): Don't reinsert stuff?
-        self.find_node_mut(a).constraints.insert(constraint, span);
+        self.find_node_mut(a)
+            .constraints
+            .entry(constraint)
+            .or_insert_with(|| span);
     }
 
     fn add(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
