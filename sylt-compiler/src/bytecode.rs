@@ -699,7 +699,6 @@ impl<'t> BytecodeCompiler<'t> {
             scope: 0,
         };
 
-        // TODO(ed): Real ugly hack until we can run the typechecker before the compiler.
         self.compiler.panic = true;
         self.read_identifier("start", Span::zero(0), ctx, 0);
         self.compiler.panic = false;
