@@ -428,8 +428,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             }
             let name = name.clone();
             let ctx = ctx.skip(3);
-            let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
-
+            let (mut ctx, skip_newlines) = ctx.push_skip_newlines(false);
             let mut variants = HashMap::new();
             // Parse variants: `A(..)`
             loop {
@@ -437,7 +436,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     T::Newline => {
                         ctx = ctx.skip(1);
                     }
-                    // Done with fields.
+                    // Done with variants.
                     T::End => {
                         break;
                     }
@@ -457,7 +456,8 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         }
                         let mut tuple = Vec::new();
                         if matches!(ctx.token(), T::LeftParen) {
-                            ctx = ctx.skip(1);
+                            let (ctx_, skip_newlines) = ctx.push_skip_newlines(true);
+                            ctx = ctx_.skip(1);
                             loop {
                                 match ctx.token() {
                                     T::RightParen | T::EOF => break,
@@ -465,22 +465,28 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                                         let (ctx_, ty) = parse_type(ctx)?;
                                         tuple.push(ty);
                                         ctx = ctx_;
-                                        if !matches!(ctx.token(), T::Comma | T::RightParen) {
+                                        if !matches!(
+                                            ctx.token(),
+                                            T::Comma | T::Newline | T::RightParen
+                                        ) {
                                             raise_syntax_error!(ctx, "Expected a deliminator ','");
                                         }
+                                        ctx = ctx.skip_if(T::Newline);
                                         ctx = ctx.skip_if(T::Comma);
                                     }
                                 }
                             }
+                            ctx = ctx.pop_skip_newlines(skip_newlines);
                             ctx =
                                 expect!(ctx, T::RightParen, "Expected ')' after variant elements");
                         }
                         variants.insert(variant, EnumVariant { tuple, span });
 
-                        if !matches!(ctx.token(), T::Comma | T::End) {
+                        if !matches!(ctx.token(), T::Comma | T::End | T::Newline) {
                             raise_syntax_error!(ctx, "Expected a deliminator ','");
                         }
                         ctx = ctx.skip_if(T::Comma);
+                        ctx = ctx.skip_if(T::Newline);
                     }
 
                     _ => {
@@ -738,11 +744,11 @@ mod test {
     test!(outer_statement, outer_statement_use_subdir_rename: "use a/b as c\n" => _);
     test!(outer_statement, outer_statement_empty: "\n" => _);
 
-    test!(outer_statement, outer_statement_enum: "A :: enum A, B end" => _);
-    test!(outer_statement, outer_statement_enum_trailing_comma: "A :: enum A, B, end" => _);
-    test!(outer_statement, outer_statement_enum_empty: "A :: enum end" => _);
-    test!(outer_statement, outer_statement_enum_tuples: "A :: enum A(int, int), B(int,), C(), end" => _);
-    test!(outer_statement, outer_statement_enum_newlines: "A :: enum A(int, int)\n\n B(int,)\n C()\n end" => _);
+    test!(outer_statement, outer_statement_enum: "A :: enum A, B end\n" => _);
+    test!(outer_statement, outer_statement_enum_trailing_comma: "A :: enum A, B, end\n" => _);
+    test!(outer_statement, outer_statement_enum_empty: "A :: enum end\n" => _);
+    test!(outer_statement, outer_statement_enum_tuples: "A :: enum A(int, int), B(int,), C(), end\n" => _);
+    test!(outer_statement, outer_statement_enum_newlines: "A :: enum A(int, int)\n\n B(int,)\n C()\n end\n" => _);
 
     fail!(statement, statement_blob_newline: "A :: blob { a: int\n b: int }\n" => _);
     fail!(statement, statement_blob_self: "A :: blob { self: int }" => _);
