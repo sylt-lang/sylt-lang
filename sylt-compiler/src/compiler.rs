@@ -324,8 +324,7 @@ impl Compiler {
         }
 
         if typecheck {
-            typechecker::solve(&statements, &self.namespace_id_to_path, &self.functions)
-                .map_err(|err| vec![err])?;
+            typechecker::solve(&statements, &self.namespace_id_to_path, &self.functions)?;
         }
 
         if let Some(lua_file) = lua_file {

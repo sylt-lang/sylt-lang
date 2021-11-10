@@ -12,7 +12,7 @@ use sylt_parser::{
 use crate::ty::Type;
 use std::collections::{BTreeMap, BTreeSet};
 
-type TypeResult<T> = Result<T, Error>;
+type TypeResult<T> = Result<T, Vec<Error>>;
 
 trait Help {
     fn help(self, typechecker: &TypeChecker, span: Span, message: String) -> Self;
@@ -22,14 +22,16 @@ impl<T> Help for TypeResult<T> {
     fn help(mut self, typechecker: &TypeChecker, span: Span, message: String) -> Self {
         match &mut self {
             Ok(_) => {}
-            Err(Error::TypeError { helpers, .. }) => {
-                helpers.push(Helper {
-                    file: typechecker.namespace_to_file[&span.file_id].clone(),
-                    span,
-                    message,
-                });
-            }
-            _ => panic!("Cannot help on this error"),
+            Err(errs) => match &mut errs.last_mut() {
+                Some(Error::TypeError { helpers, .. }) => {
+                    helpers.push(Helper {
+                        file: typechecker.namespace_to_file[&span.file_id].clone(),
+                        span,
+                        message,
+                    });
+                }
+                _ => panic!("Cannot help on this error"),
+            },
         }
         self
     }
@@ -37,10 +39,10 @@ impl<T> Help for TypeResult<T> {
 
 macro_rules! err_type_error {
     ($self:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
-        Err(type_error!($self, $span, $kind, $($msg),*))
+        Err(vec![type_error!($self, $span, $kind, $($msg),*)])
     };
     ($self:expr, $span:expr, $kind:expr) => {
-        Err(type_error!($self, $span, $kind))
+        Err(vec![type_error!($self, $span, $kind)])
     };
 }
 
