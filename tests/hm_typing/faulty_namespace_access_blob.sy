@@ -1,0 +1,9 @@
+use faulty_namespace_access_blob
+
+B :: 1
+
+start :: fn do
+    b: faulty_namespace_access_blob.B = 0
+end
+
+// error: $Exotic
