@@ -587,6 +587,23 @@ greet("world") // Ok
 greet(1)       // Type error
 ----
 
+=== Type inference
+
+For the most part it is optional to write out types in Sylt programs. The Sylt
+compiler uses a process called _unification_ to deduce the types in the
+program. It will complain if it finds types that does not make any sense.
+
+.Type deduction
+[source, sylt]
+----
+list_of_one :: fn element ->
+    [element]
+end
+
+str_list = list_of_one("string") // Ok, type [str]
+int_list = list_of_one(3)        // Ok, type [int]
+----
+
 === Basic types
 
 These types are the building blocks of the type system. These examples show off
