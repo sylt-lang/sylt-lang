@@ -420,8 +420,6 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
         // Blob declaration: `Abc :: enum A, B, C end`
         [T::Identifier(name), T::ColonColon, T::Enum, ..] => {
-            // TODO(new_ed): Force new_ed to fix this shitty code
-            //  - old_ed
             if !is_capitalized(name) {
                 raise_syntax_error!(
                     ctx,
@@ -471,7 +469,10 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                                             ctx.token(),
                                             T::Comma | T::Newline | T::RightParen
                                         ) {
-                                            raise_syntax_error!(ctx, "Expected a deliminator ','");
+                                            raise_syntax_error!(
+                                                ctx,
+                                                "Expected a deliminator ',' or newline"
+                                            );
                                         }
                                         ctx = ctx.skip_if(T::Newline);
                                         ctx = ctx.skip_if(T::Comma);
