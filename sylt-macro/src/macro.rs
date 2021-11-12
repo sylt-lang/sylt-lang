@@ -218,7 +218,7 @@ fn parse_test_settings(contents: String) -> TestSettings {
             }
             if line.starts_with("@") {
                 line = format!(
-                    "Error::SyntaxError {{ span: Span {{ line: {}, ..}}, .. }}",
+                    "Error::SyntaxError {{ span: Span {{ line_start: {}, ..}}, .. }}",
                     &line[1..]
                 );
             }

@@ -42,7 +42,7 @@ fn underline(f: &mut fmt::Formatter<'_>, col_start: usize, len: usize) -> fmt::R
 }
 
 fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &Path, span: Span) -> fmt::Result {
-    write_source_line_at(f, file, span.line)?;
+    write_source_line_at(f, file, span.line_start)?;
     write!(f, "{}", INDENT)?;
     underline(f, span.col_start, span.col_end - span.col_start)
 }
@@ -73,6 +73,13 @@ pub enum RuntimeError {
     AssertFailed,
     InvalidProgram,
     Unreachable,
+}
+
+#[derive(Debug, Clone)]
+pub struct Helper {
+    pub file: PathBuf,
+    pub span: Span,
+    pub message: String,
 }
 
 #[derive(Debug, Clone)]
@@ -173,6 +180,7 @@ pub enum Error {
         file: PathBuf,
         span: Span,
         message: Option<String>,
+        helpers: Vec<Helper>,
     },
 
     CompileError {
@@ -208,11 +216,11 @@ impl fmt::Display for Error {
             }
             Error::GitConflictError { file, span } => {
                 write!(f, "{}: ", "git conflict error".red())?;
-                write!(f, "{}\n", file_line_display(file, span.line))?;
+                write!(f, "{}\n", file_line_display(file, span.line_start))?;
                 write!(
                     f,
                     "{}Git conflict marker found at line {}\n",
-                    INDENT, span.line,
+                    INDENT, span.line_start,
                 )?;
 
                 write_source_span_at(f, file, *span)
@@ -223,44 +231,62 @@ impl fmt::Display for Error {
                 write!(f, "{}\n", file_line_display(file, *line))?;
                 write!(f, "{}{}\n", INDENT, kind)?;
                 if let Some(message) = message {
-                    write!(f, "{}\n", message)?;
+                    for line in message.split('\n') {
+                        write!(f, "{}{}\n", INDENT, line)?;
+                    }
                 }
 
                 write_source_line_at(f, file, *line)
             }
             Error::SyntaxError { file, span, message } => {
                 write!(f, "{}: ", "syntax error".red())?;
-                write!(f, "{}\n", file_line_display(file, span.line))?;
-                write!(f, "{}Syntax Error on line {}\n", INDENT, span.line)?;
+                write!(f, "{}\n", file_line_display(file, span.line_start))?;
+                write!(f, "{}Syntax Error on line {}\n", INDENT, span.line_start)?;
 
-                write!(f, "{}{}\n", INDENT, message)?;
+                for line in message.split('\n') {
+                    write!(f, "{}{}\n", INDENT, line)?;
+                }
 
                 write_source_span_at(f, file, *span)
             }
-            Error::TypeError { kind, file, span, message } => {
+            Error::TypeError { kind, file, span, message, helpers } => {
                 write!(
                     f,
                     "{}: {}\n",
                     "typecheck error".red(),
-                    file_line_display(file, span.line)
+                    file_line_display(file, span.line_start)
                 )?;
-                write!(f, "{}{}\n", INDENT, kind)?;
-
-                if let Some(message) = message {
-                    write!(f, "{}{}\n", INDENT, message)?;
+                if !matches!(kind, TypeError::Exotic) {
+                    write!(f, "{}{}\n", INDENT, kind)?;
                 }
 
-                write_source_span_at(f, file, *span)
+                if let Some(message) = message {
+                    for line in message.split('\n') {
+                        write!(f, "{}{}\n", INDENT, line)?;
+                    }
+                }
+                write_source_span_at(f, file, *span)?;
+
+                if !helpers.is_empty() {
+                    // TODO(ed): Might be helpfull to not write all the errors?
+                    write!(f, "{}\n", "help:".yellow())?;
+                    for Helper { message, file, span } in helpers.iter() {
+                        write!(f, "{}{}\n", INDENT, message)?;
+                        write_source_span_at(f, file, *span)?;
+                    }
+                }
+                Ok(())
             }
             Error::CompileError { file, span, message } => {
                 write!(f, "{}: ", "compile error".red())?;
-                write!(f, "{}\n", file_line_display(file, span.line))?;
-                write!(f, "{}Failed to compile line {}\n", INDENT, span.line)?;
+                write!(f, "{}\n", file_line_display(file, span.line_start))?;
+                write!(f, "{}Failed to compile line {}\n", INDENT, span.line_start)?;
 
                 if let Some(message) = message {
-                    write!(f, "{}{}\n", INDENT, message)?;
+                    for line in message.split('\n') {
+                        write!(f, "{}{}\n", INDENT, line)?;
+                    }
                 }
-
                 write_source_span_at(f, file, *span)
             }
         }
@@ -468,9 +494,13 @@ mod test {
                         SourceSpanTester(
                             &path,
                             super::Span {
-                                line: $line,
+                                file_id: 0,
+
+                                line_start: $line,
+                                line_end: $line,
+
                                 col_start: $col_start,
-                                col_end: $col_end
+                                col_end: $col_end,
                             }
                         ),
                     ),

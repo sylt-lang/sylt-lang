@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use sylt_common::error::{Error, TypeError};
+use sylt_common::error::{Error, Helper, TypeError};
 use sylt_common::{RustFunction, Type as RuntimeType};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
@@ -14,30 +14,55 @@ use std::collections::{BTreeMap, BTreeSet};
 
 type TypeResult<T> = Result<T, Vec<Error>>;
 
+trait Help {
+    fn help(self, typechecker: &TypeChecker, span: Span, message: String) -> Self;
+}
+
+impl<T> Help for TypeResult<T> {
+    fn help(mut self, typechecker: &TypeChecker, span: Span, message: String) -> Self {
+        match &mut self {
+            Ok(_) => {}
+            Err(errs) => match &mut errs.last_mut() {
+                Some(Error::TypeError { helpers, .. }) => {
+                    helpers.push(Helper {
+                        file: typechecker.namespace_to_file[&span.file_id].clone(),
+                        span,
+                        message,
+                    });
+                }
+                _ => panic!("Cannot help on this error"),
+            },
+        }
+        self
+    }
+}
+
 macro_rules! err_type_error {
-    ($self:expr, $span:expr, $ctx: expr, $kind:expr, $( $msg:expr ),+ ) => {
-        Err(vec![type_error!($self, $span, $ctx, $kind, $($msg),*)])
+    ($self:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
+        Err(vec![type_error!($self, $span, $kind, $($msg),*)])
     };
-    ($self:expr, $span:expr, $ctx: expr, $kind:expr) => {
-        Err(vec![type_error!($self, $span, $ctx, $kind)])
+    ($self:expr, $span:expr, $kind:expr) => {
+        Err(vec![type_error!($self, $span, $kind)])
     };
 }
 
 macro_rules! type_error {
-    ($self:expr, $span:expr, $ctx: expr, $kind:expr, $( $msg:expr ),+ ) => {
+    ($self:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
         Error::TypeError {
             kind: $kind,
-            file: $self.namespace_to_file[&$ctx.namespace].clone(),
+            file: $self.namespace_to_file[&$span.file_id].clone(),
             span: $span,
             message: Some(format!($( $msg ),*)),
+            helpers: Vec::new(),
         }
     };
-    ($self:expr, $span:expr, $ctx: expr, $kind:expr) => {
+    ($self:expr, $span:expr, $kind:expr) => {
         Error::TypeError {
             kind: $kind,
-            file: $self.namespace_to_file[&$ctx.namespace].clone(),
+            file: $self.namespace_to_file[&$span.file_id].clone(),
             span: $span,
             message: None,
+            helpers: Vec::new(),
         }
     };
 }
@@ -46,8 +71,8 @@ macro_rules! bin_op {
     ($self:expr, $span:expr, $ctx:expr, $a:expr, $b:expr, $con:expr) => {{
         let a = $self.expression(&$a, $ctx)?;
         let b = $self.expression(&$b, $ctx)?;
-        $self.add_constraint(a, $con(b));
-        $self.add_constraint(b, $con(a));
+        $self.add_constraint(a, $span, $con(b));
+        $self.add_constraint(b, $span, $con(a));
         $self.check_constraints($span, $ctx, a)?;
         $self.check_constraints($span, $ctx, b)?;
         Ok(a) as TypeResult<usize>
@@ -59,6 +84,7 @@ struct Variable {
     ident: Identifier,
     ty: usize,
     kind: VarKind,
+    span: Span,
 }
 
 #[derive(Clone, Debug)]
@@ -66,7 +92,7 @@ struct TypeNode {
     ty: Type,
     parent: Option<usize>,
     size: usize,
-    constraints: BTreeSet<Constraint>,
+    constraints: BTreeMap<Constraint, Span>,
 }
 
 /// # Constraints for type variables
@@ -149,7 +175,7 @@ impl TypeChecker {
             .map(|(name, (_, _, ty))| {
                 (
                     name.clone(),
-                    res.resolve_type(Span::zero(), TypeCtx { namespace: 0 }, ty)
+                    res.resolve_type(Span::zero(0), TypeCtx { namespace: 0 }, ty)
                         // NOTE(ed): This is a special error - that a user should never see.
                         .map_err(|err| panic!("Failed to parse type for {:?}\n{}", name, err[0]))
                         .unwrap(),
@@ -165,7 +191,7 @@ impl TypeChecker {
             ty,
             parent: None,
             size: 1,
-            constraints: BTreeSet::new(),
+            constraints: BTreeMap::new(),
         });
         ty_id
     }
@@ -209,7 +235,6 @@ impl TypeChecker {
     fn type_namespace_chain(
         &self,
         assignable: &TypeAssignable,
-        calling_ctx: TypeCtx,
         ctx: TypeCtx,
     ) -> TypeResult<TypeCtx> {
         match &assignable.kind {
@@ -218,7 +243,6 @@ impl TypeChecker {
                     err_type_error! {
                         self,
                         ident.span,
-                        calling_ctx,
                         TypeError::Exotic,
                         "'{}' is a local variable, not a namespace",
                         ident.name
@@ -233,7 +257,6 @@ impl TypeChecker {
                         _ => err_type_error! {
                             self,
                             ident.span,
-                            ctx,
                             TypeError::UnresolvedName(ident.name.clone()),
                             "Did you forget an import?"
                         },
@@ -242,7 +265,7 @@ impl TypeChecker {
             }
 
             TypeAssignableKind::Access(ass, ident) => {
-                let ctx = self.type_namespace_chain(ass, calling_ctx, ctx)?;
+                let ctx = self.type_namespace_chain(ass, ctx)?;
                 match self
                     .globals
                     .get(&(ctx.namespace, ident.name.clone()))
@@ -253,7 +276,6 @@ impl TypeChecker {
                         err_type_error!(
                             self,
                             ident.span,
-                            calling_ctx,
                             TypeError::UnresolvedName(ident.name.clone()),
                             "Did you forget an import?"
                         )
@@ -261,7 +283,6 @@ impl TypeChecker {
                     _ => err_type_error! {
                         self,
                         ident.span,
-                        calling_ctx,
                         TypeError::Exotic,
                         "'{}' should be a namespace or a blob but it's a global",
                         ident.name
@@ -271,16 +292,11 @@ impl TypeChecker {
         }
     }
 
-    fn type_assignable(
-        &mut self,
-        _span: Span,
-        calling_ctx: TypeCtx,
-        assignable: &TypeAssignable,
-    ) -> TypeResult<usize> {
+    fn type_assignable(&mut self, ctx: TypeCtx, assignable: &TypeAssignable) -> TypeResult<usize> {
         match &assignable.kind {
             TypeAssignableKind::Read(ident) => match self
                 .globals
-                .get(&(calling_ctx.namespace, ident.name.clone()))
+                .get(&(ctx.namespace, ident.name.clone()))
                 .cloned()
             {
                 Some(Name::Blob(blob_ty)) => Ok(self.push_type(blob_ty.clone())),
@@ -288,7 +304,6 @@ impl TypeChecker {
                     err_type_error!(
                         self,
                         ident.span,
-                        calling_ctx,
                         TypeError::UnresolvedName(ident.name.clone()),
                         "Expected a blob"
                     )
@@ -297,7 +312,6 @@ impl TypeChecker {
                     err_type_error!(
                         self,
                         ident.span,
-                        calling_ctx,
                         TypeError::Exotic,
                         "Expected a blob but got '{}'",
                         ident.name
@@ -306,7 +320,7 @@ impl TypeChecker {
             },
 
             TypeAssignableKind::Access(ass, ident) => {
-                let ctx = self.type_namespace_chain(ass, calling_ctx, calling_ctx)?;
+                let ctx = self.type_namespace_chain(ass, ctx)?;
                 match self
                     .globals
                     .get(&(ctx.namespace, ident.name.clone()))
@@ -317,7 +331,6 @@ impl TypeChecker {
                         err_type_error!(
                             self,
                             ident.span,
-                            calling_ctx,
                             TypeError::UnresolvedName(ident.name.clone()),
                             "Expected a blob"
                         )
@@ -326,7 +339,6 @@ impl TypeChecker {
                         err_type_error!(
                             self,
                             ident.span,
-                            calling_ctx,
                             TypeError::Exotic,
                             "Expected a blob but got '{}'",
                             ident.name
@@ -344,7 +356,6 @@ impl TypeChecker {
     fn resolve_constraint(
         &mut self,
         span: Span,
-        ctx: TypeCtx,
         var: usize,
         constraint: &TypeConstraint,
         seen: &HashMap<String, usize>,
@@ -352,7 +363,6 @@ impl TypeChecker {
         fn check_constraint_arity(
             typechecker: &TypeChecker,
             span: Span,
-            ctx: TypeCtx,
             name: &str,
             got: usize,
             expected: usize,
@@ -361,7 +371,6 @@ impl TypeChecker {
                 err_type_error!(
                     typechecker,
                     span,
-                    ctx,
                     TypeError::WrongConstraintArity { name: name.into(), got, expected }
                 )
             } else {
@@ -372,7 +381,6 @@ impl TypeChecker {
         fn parse_constraint_arg(
             typechecker: &TypeChecker,
             span: Span,
-            ctx: TypeCtx,
             name: &str,
             seen: &HashMap<String, usize>,
         ) -> TypeResult<usize> {
@@ -382,7 +390,6 @@ impl TypeChecker {
                     return err_type_error!(
                         typechecker,
                         span,
-                        ctx,
                         TypeError::UnknownConstraintArgument(name.into())
                     )
                 }
@@ -392,26 +399,26 @@ impl TypeChecker {
         let num_args = constraint.args.len();
         match constraint.name.name.as_str() {
             "Num" => {
-                check_constraint_arity(self, span, ctx, "Num", num_args, 0)?;
-                self.add_constraint(var, Constraint::Num);
+                check_constraint_arity(self, span, "Num", num_args, 0)?;
+                self.add_constraint(var, span, Constraint::Num);
             }
             "Container" => {
-                check_constraint_arity(self, span, ctx, "Container", num_args, 0)?;
-                self.add_constraint(var, Constraint::Container);
+                check_constraint_arity(self, span, "Container", num_args, 0)?;
+                self.add_constraint(var, span, Constraint::Container);
             }
             "SameContainer" => {
-                check_constraint_arity(self, span, ctx, "SameContainer", num_args, 1)?;
-                let a = parse_constraint_arg(self, span, ctx, &constraint.args[0].name, seen)?;
-                self.add_constraint(var, Constraint::SameContainer(a));
-                self.add_constraint(a, Constraint::SameContainer(var));
+                check_constraint_arity(self, span, "SameContainer", num_args, 1)?;
+                let a = parse_constraint_arg(self, span, &constraint.args[0].name, seen)?;
+                self.add_constraint(var, span, Constraint::SameContainer(a));
+                self.add_constraint(a, span, Constraint::SameContainer(var));
             }
             "Contains" => {
-                check_constraint_arity(self, span, ctx, "Contains", num_args, 1)?;
-                let a = parse_constraint_arg(self, span, ctx, &constraint.args[0].name, seen)?;
-                self.add_constraint(var, Constraint::Contains(a));
-                self.add_constraint(a, Constraint::IsContainedIn(var));
+                check_constraint_arity(self, span, "Contains", num_args, 1)?;
+                let a = parse_constraint_arg(self, span, &constraint.args[0].name, seen)?;
+                self.add_constraint(var, span, Constraint::Contains(a));
+                self.add_constraint(a, span, Constraint::IsContainedIn(var));
             }
-            x => return err_type_error!(self, span, ctx, TypeError::UnknownConstraint(x.into())),
+            x => return err_type_error!(self, span, TypeError::UnknownConstraint(x.into())),
         }
         Ok(())
     }
@@ -438,7 +445,7 @@ impl TypeChecker {
             },
 
             UserDefined(assignable) => {
-                return self.type_assignable(span, ctx, assignable);
+                return self.type_assignable(ctx, assignable);
             }
 
             Fn { constraints, params, ret } => {
@@ -456,7 +463,6 @@ impl TypeChecker {
                             return err_type_error!(
                                 self,
                                 span,
-                                ctx,
                                 TypeError::UnresolvedName(var.clone()),
                                 "Unused type-variable. (Only usages in the function signature are counted)"
                             )
@@ -464,7 +470,7 @@ impl TypeChecker {
                     };
 
                     for constraint in constraints.iter() {
-                        self.resolve_constraint(span, ctx, var, constraint, seen)?;
+                        self.resolve_constraint(span, var, constraint, seen)?;
                     }
                 }
                 Type::Function(params, ret)
@@ -551,20 +557,20 @@ impl TypeChecker {
                 match kind {
                     ParserOp::Nop => {}
                     ParserOp::Add => {
-                        self.add_constraint(expression_ty, Constraint::Add(target_ty));
-                        self.add_constraint(target_ty, Constraint::Add(expression_ty));
+                        self.add_constraint(expression_ty, span, Constraint::Add(target_ty));
+                        self.add_constraint(target_ty, span, Constraint::Add(expression_ty));
                     }
                     ParserOp::Sub => {
-                        self.add_constraint(expression_ty, Constraint::Sub(target_ty));
-                        self.add_constraint(target_ty, Constraint::Sub(expression_ty));
+                        self.add_constraint(expression_ty, span, Constraint::Sub(target_ty));
+                        self.add_constraint(target_ty, span, Constraint::Sub(expression_ty));
                     }
                     ParserOp::Mul => {
-                        self.add_constraint(expression_ty, Constraint::Mul(target_ty));
-                        self.add_constraint(target_ty, Constraint::Mul(expression_ty));
+                        self.add_constraint(expression_ty, span, Constraint::Mul(target_ty));
+                        self.add_constraint(target_ty, span, Constraint::Mul(expression_ty));
                     }
                     ParserOp::Div => {
-                        self.add_constraint(expression_ty, Constraint::Mul(target_ty));
-                        self.add_constraint(target_ty, Constraint::Mul(expression_ty));
+                        self.add_constraint(expression_ty, span, Constraint::Mul(target_ty));
+                        self.add_constraint(target_ty, span, Constraint::Mul(expression_ty));
                     }
                 };
                 self.unify(span, ctx, expression_ty, target_ty)?;
@@ -573,7 +579,12 @@ impl TypeChecker {
 
             StatementKind::Definition { ident, kind, ty, value } => {
                 let pre_ty = self.push_type(Type::Unknown);
-                let var = Variable { ident: ident.clone(), ty: pre_ty, kind: *kind };
+                let var = Variable {
+                    ident: ident.clone(),
+                    ty: pre_ty,
+                    kind: *kind,
+                    span,
+                };
                 let is_function = matches!(value.kind, ExpressionKind::Function { .. });
                 if is_function {
                     self.stack.push(var);
@@ -590,7 +601,12 @@ impl TypeChecker {
 
                 self.unify(span, ctx, expression_ty, defined_ty)?;
 
-                let var = Variable { ident: ident.clone(), ty: defined_ty, kind: *kind };
+                let var = Variable {
+                    ident: ident.clone(),
+                    ty: defined_ty,
+                    kind: *kind,
+                    span,
+                };
                 if !is_function {
                     self.stack.push(var);
                 }
@@ -645,7 +661,12 @@ impl TypeChecker {
 
             StatementKind::Definition { ident, kind, ty, value } => {
                 let pre_ty = self.push_type(Type::Unknown);
-                let var = Variable { ident: ident.clone(), ty: pre_ty, kind: *kind };
+                let var = Variable {
+                    ident: ident.clone(),
+                    ty: pre_ty,
+                    kind: *kind,
+                    span,
+                };
                 let is_function = matches!(value.kind, ExpressionKind::Function { .. });
                 if is_function {
                     self.globals.insert(
@@ -675,7 +696,7 @@ impl TypeChecker {
 
             StatementKind::ExternalDefinition { ident, kind, ty } => {
                 let ty = self.resolve_type(span, ctx, ty)?;
-                let var = Variable { ident: ident.clone(), ty, kind: *kind };
+                let var = Variable { ident: ident.clone(), ty, kind: *kind, span };
                 self.globals
                     .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
             }
@@ -716,7 +737,6 @@ impl TypeChecker {
                             None => err_type_error!(
                                 self,
                                 span,
-                                ctx,
                                 TypeError::UnresolvedName(ident.name.clone())
                             ),
                         },
@@ -740,7 +760,6 @@ impl TypeChecker {
                             return err_type_error!(
                                 self,
                                 span,
-                                ctx,
                                 TypeError::WrongArity { got: args.len(), expected: params.len() }
                             );
                         }
@@ -773,7 +792,6 @@ impl TypeChecker {
                         return err_type_error!(
                             self,
                             span,
-                            ctx,
                             TypeError::Violating(self.bake_type(f_copy)),
                             "Not callable"
                         );
@@ -797,7 +815,7 @@ impl TypeChecker {
                 None => {
                     let outer = self.assignable(outer, ctx)?;
                     let ret = self.push_type(Type::Unknown);
-                    self.add_constraint(outer, Constraint::Field(ident.name.clone(), ret));
+                    self.add_constraint(outer, span, Constraint::Field(ident.name.clone(), ret));
                     self.check_constraints(span, ctx, outer)?;
                     Ok(ret)
                 }
@@ -809,13 +827,13 @@ impl TypeChecker {
                 let ret = self.push_type(Type::Unknown);
                 match syn_index.kind {
                     ExpressionKind::Int(index) => {
-                        self.add_constraint(outer, Constraint::ConstantIndex(index, ret));
+                        self.add_constraint(outer, span, Constraint::ConstantIndex(index, ret));
                     }
                     _ => {
-                        self.add_constraint(index, Constraint::Indexes(outer));
-                        self.add_constraint(outer, Constraint::IndexedBy(index));
-                        self.add_constraint(outer, Constraint::IndexingGives(ret));
-                        self.add_constraint(ret, Constraint::GivenByIndex(outer));
+                        self.add_constraint(index, span, Constraint::Indexes(outer));
+                        self.add_constraint(outer, span, Constraint::IndexedBy(index));
+                        self.add_constraint(outer, span, Constraint::IndexingGives(ret));
+                        self.add_constraint(ret, span, Constraint::GivenByIndex(outer));
                     }
                 }
 
@@ -855,8 +873,8 @@ impl TypeChecker {
                 ComparisonKind::In => {
                     let a = self.expression(&a, ctx)?;
                     let b = self.expression(&b, ctx)?;
-                    self.add_constraint(a, Constraint::IsContainedIn(b));
-                    self.add_constraint(b, Constraint::Contains(a));
+                    self.add_constraint(a, span, Constraint::IsContainedIn(b));
+                    self.add_constraint(b, span, Constraint::Contains(a));
                     self.check_constraints(span, ctx, a)?;
                     self.check_constraints(span, ctx, b)?;
                     Ok(self.push_type(Type::Bool))
@@ -878,7 +896,7 @@ impl TypeChecker {
 
             ExpressionKind::Neg(a) => {
                 let a = self.expression(a, ctx)?;
-                self.add_constraint(a, Constraint::Neg);
+                self.add_constraint(a, span, Constraint::Neg);
                 Ok(a)
             }
 
@@ -907,7 +925,12 @@ impl TypeChecker {
                     let ty = self.inner_resolve_type(span, ctx, ty, &mut seen)?;
                     args.push(ty);
 
-                    let var = Variable { ident: ident.clone(), ty, kind: VarKind::Const };
+                    let var = Variable {
+                        ident: ident.clone(),
+                        ty,
+                        kind: VarKind::Const,
+                        span,
+                    };
                     self.stack.push(var);
                 }
 
@@ -925,7 +948,7 @@ impl TypeChecker {
             }
 
             ExpressionKind::Blob { blob, fields } => {
-                let blob_ty = self.type_assignable(span, ctx, blob)?;
+                let blob_ty = self.type_assignable(ctx, blob)?;
                 let (blob_name, blob_fields) = match self.find_type(blob_ty) {
                     Type::Blob(name, fields) => (name, fields),
                     _ => unreachable!(),
@@ -942,7 +965,6 @@ impl TypeChecker {
                         errors.push(type_error!(
                             self,
                             span,
-                            ctx,
                             TypeError::MissingField {
                                 blob: blob_name.clone(),
                                 field: field.clone(),
@@ -956,7 +978,6 @@ impl TypeChecker {
                         errors.push(type_error!(
                             self,
                             span,
-                            ctx,
                             TypeError::UnknownField {
                                 blob: blob_name.clone(),
                                 field: field.clone(),
@@ -980,6 +1001,7 @@ impl TypeChecker {
                             ident: Identifier { name: "self".to_string(), span },
                             kind: VarKind::Const,
                             ty: given_blob,
+                            span,
                         });
                     }
                     let expr_ty = self.expression(expr, ctx)?;
@@ -1124,7 +1146,7 @@ impl TypeChecker {
 
     // This span is wierd - is it weird?
     fn check_constraints(&mut self, span: Span, ctx: TypeCtx, a: usize) -> TypeResult<()> {
-        for constraint in self.find_node(a).constraints.clone().iter() {
+        for (constraint, original_span) in self.find_node(a).constraints.clone().iter() {
             match constraint {
                 // It would be nice to know from where this came from
                 Constraint::Add(b) => self.add(span, ctx, a, *b),
@@ -1133,10 +1155,7 @@ impl TypeChecker {
                 Constraint::Div(b) => self.div(span, ctx, a, *b),
                 Constraint::Equ(b) => self.equ(span, ctx, a, *b),
                 Constraint::Cmp(b) => self.cmp(span, ctx, a, *b),
-                Constraint::CmpEqu(b) => {
-                    self.equ(span, ctx, a, *b)?;
-                    self.cmp(span, ctx, a, *b)
-                }
+                Constraint::CmpEqu(b) => self.equ(span, ctx, a, *b).and(self.cmp(span, ctx, a, *b)),
 
                 Constraint::Neg => match self.find_type(a) {
                     Type::Unknown | Type::Int | Type::Float => Ok(()),
@@ -1144,7 +1163,6 @@ impl TypeChecker {
                         return err_type_error!(
                             self,
                             span,
-                            ctx,
                             TypeError::UniOp { val: self.bake_type(a), op: "-".to_string() }
                         )
                     }
@@ -1169,7 +1187,6 @@ impl TypeChecker {
                         None => err_type_error!(
                             self,
                             span,
-                            ctx,
                             TypeError::MissingField {
                                 blob: blob_name.clone(),
                                 field: name.clone(),
@@ -1179,7 +1196,6 @@ impl TypeChecker {
                     _ => err_type_error!(
                         self,
                         span,
-                        ctx,
                         TypeError::Exotic,
                         "The type \"{}\" is not a blob, so it cannot have a field \"{}\"",
                         self.bake_type(a),
@@ -1192,7 +1208,6 @@ impl TypeChecker {
                     _ => err_type_error!(
                         self,
                         span,
-                        ctx,
                         TypeError::Violating(self.bake_type(a)),
                         "The Num constraint forces int or float"
                     ),
@@ -1203,7 +1218,6 @@ impl TypeChecker {
                     _ => err_type_error!(
                         self,
                         span,
-                        ctx,
                         TypeError::Violating(self.bake_type(a)),
                         "The Container constraint forces set, list or dict"
                     ),
@@ -1219,7 +1233,6 @@ impl TypeChecker {
                     _ => err_type_error!(
                         self,
                         span,
-                        ctx,
                         TypeError::Mismatch {
                             got: self.bake_type(a),
                             expected: self.bake_type(*b)
@@ -1230,7 +1243,8 @@ impl TypeChecker {
 
                 Constraint::Contains(b) => self.contains(span, ctx, a, *b),
                 Constraint::IsContainedIn(b) => self.contains(span, ctx, *b, a),
-            }?
+            }
+            .help(self, *original_span, "Requirement came from".to_string())?
         }
         Ok(())
     }
@@ -1251,11 +1265,11 @@ impl TypeChecker {
 
         self.types[b].parent = Some(a);
         self.types[a].size += self.types[b].size;
-        self.types[a].constraints = self.types[a]
-            .constraints
-            .union(&self.types[b].constraints)
-            .cloned()
-            .collect();
+
+        // TODO(ed): Which span should we keep? The one closest to the top? Should we combine them?
+        for (con, span) in self.types[b].constraints.clone().iter() {
+            self.types[a].constraints.insert(con.clone(), *span);
+        }
     }
 
     fn unify(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<usize> {
@@ -1302,7 +1316,6 @@ impl TypeChecker {
                         return err_type_error!(
                             self,
                             span,
-                            ctx,
                             TypeError::WrongArity { got: a_args.len(), expected: b_args.len() }
                         );
                     }
@@ -1318,7 +1331,6 @@ impl TypeChecker {
                         return err_type_error!(
                             self,
                             span,
-                            ctx,
                             TypeError::Mismatch {
                                 got: self.bake_type(a),
                                 expected: self.bake_type(b)
@@ -1334,7 +1346,6 @@ impl TypeChecker {
                                 return err_type_error!(
                                     self,
                                     span,
-                                    ctx,
                                     TypeError::MissingField {
                                         blob: b_blob.clone(),
                                         field: a_field.clone()
@@ -1350,7 +1361,6 @@ impl TypeChecker {
                     return err_type_error!(
                         self,
                         span,
-                        ctx,
                         TypeError::Mismatch {
                             got: self.bake_type(a),
                             expected: self.bake_type(b),
@@ -1400,34 +1410,45 @@ impl TypeChecker {
             .constraints
             .clone()
             .iter()
-            .map(|con| match &con {
-                Constraint::Add(x) => Constraint::Add(self.inner_copy(*x, seen)),
-                Constraint::Sub(x) => Constraint::Sub(self.inner_copy(*x, seen)),
-                Constraint::Mul(x) => Constraint::Mul(self.inner_copy(*x, seen)),
-                Constraint::Div(x) => Constraint::Div(self.inner_copy(*x, seen)),
-                Constraint::Equ(x) => Constraint::Equ(self.inner_copy(*x, seen)),
-                Constraint::Cmp(x) => Constraint::Cmp(self.inner_copy(*x, seen)),
-                Constraint::CmpEqu(x) => Constraint::CmpEqu(self.inner_copy(*x, seen)),
-                Constraint::Neg => Constraint::Neg,
-                Constraint::Indexes(x) => Constraint::Indexes(self.inner_copy(*x, seen)),
-                Constraint::IndexedBy(x) => Constraint::IndexedBy(self.inner_copy(*x, seen)),
-                Constraint::IndexingGives(x) => {
-                    Constraint::IndexingGives(self.inner_copy(*x, seen))
-                }
-                Constraint::GivenByIndex(x) => Constraint::GivenByIndex(self.inner_copy(*x, seen)),
-                Constraint::ConstantIndex(i, x) => {
-                    Constraint::ConstantIndex(*i, self.inner_copy(*x, seen))
-                }
-                Constraint::Field(f, x) => Constraint::Field(f.clone(), self.inner_copy(*x, seen)),
-                Constraint::Num => Constraint::Num,
-                Constraint::Container => Constraint::Container,
-                Constraint::SameContainer(x) => {
-                    Constraint::SameContainer(self.inner_copy(*x, seen))
-                }
-                Constraint::Contains(x) => Constraint::Contains(self.inner_copy(*x, seen)),
-                Constraint::IsContainedIn(x) => {
-                    Constraint::IsContainedIn(self.inner_copy(*x, seen))
-                }
+            .map(|(con, span)| {
+                (
+                    match &con {
+                        Constraint::Add(x) => Constraint::Add(self.inner_copy(*x, seen)),
+                        Constraint::Sub(x) => Constraint::Sub(self.inner_copy(*x, seen)),
+                        Constraint::Mul(x) => Constraint::Mul(self.inner_copy(*x, seen)),
+                        Constraint::Div(x) => Constraint::Div(self.inner_copy(*x, seen)),
+                        Constraint::Equ(x) => Constraint::Equ(self.inner_copy(*x, seen)),
+                        Constraint::Cmp(x) => Constraint::Cmp(self.inner_copy(*x, seen)),
+                        Constraint::CmpEqu(x) => Constraint::CmpEqu(self.inner_copy(*x, seen)),
+                        Constraint::Neg => Constraint::Neg,
+                        Constraint::Indexes(x) => Constraint::Indexes(self.inner_copy(*x, seen)),
+                        Constraint::IndexedBy(x) => {
+                            Constraint::IndexedBy(self.inner_copy(*x, seen))
+                        }
+                        Constraint::IndexingGives(x) => {
+                            Constraint::IndexingGives(self.inner_copy(*x, seen))
+                        }
+                        Constraint::GivenByIndex(x) => {
+                            Constraint::GivenByIndex(self.inner_copy(*x, seen))
+                        }
+                        Constraint::ConstantIndex(i, x) => {
+                            Constraint::ConstantIndex(*i, self.inner_copy(*x, seen))
+                        }
+                        Constraint::Field(f, x) => {
+                            Constraint::Field(f.clone(), self.inner_copy(*x, seen))
+                        }
+                        Constraint::Num => Constraint::Num,
+                        Constraint::Container => Constraint::Container,
+                        Constraint::SameContainer(x) => {
+                            Constraint::SameContainer(self.inner_copy(*x, seen))
+                        }
+                        Constraint::Contains(x) => Constraint::Contains(self.inner_copy(*x, seen)),
+                        Constraint::IsContainedIn(x) => {
+                            Constraint::IsContainedIn(self.inner_copy(*x, seen))
+                        }
+                    },
+                    *span,
+                )
             })
             .collect();
 
@@ -1485,9 +1506,13 @@ impl TypeChecker {
                         err_type_error!(
                             self,
                             span,
-                            ctx,
                             TypeError::Assignability,
                             "Cannot assign to constants"
+                        )
+                        .help(
+                            self,
+                            var.span,
+                            "Originally defined here".into(),
                         )
                     }
                 } else {
@@ -1499,16 +1524,19 @@ impl TypeChecker {
                                 err_type_error!(
                                     self,
                                     span,
-                                    ctx,
                                     TypeError::Assignability,
                                     "Cannot assign to constants"
+                                )
+                                .help(
+                                    self,
+                                    var.span,
+                                    "Originally defined here".into(),
                                 )
                             }
                         }
                         Some(_) => err_type_error!(
                             self,
                             span,
-                            ctx,
                             TypeError::Assignability,
                             "\"{}\" is not a variable",
                             ident.name.clone()
@@ -1516,7 +1544,6 @@ impl TypeChecker {
                         _ => err_type_error!(
                             self,
                             span,
-                            ctx,
                             TypeError::Assignability,
                             "Variable \"{}\" not found. If declaring, use :=",
                             ident.name.clone()
@@ -1527,7 +1554,6 @@ impl TypeChecker {
             AssignableKind::ArrowCall(_, _, _) | AssignableKind::Call(_, _) => err_type_error!(
                 self,
                 span,
-                ctx,
                 TypeError::Assignability,
                 "Cannot assign to function calls"
             ),
@@ -1543,15 +1569,15 @@ impl TypeChecker {
             AssignableKind::Expression(_) => err_type_error!(
                 self,
                 span,
-                ctx,
                 TypeError::Assignability,
                 "Cannot assign to expressions"
             ),
         }
     }
 
-    fn add_constraint(&mut self, a: usize, constraint: Constraint) {
-        self.find_node_mut(a).constraints.insert(constraint);
+    fn add_constraint(&mut self, a: usize, span: Span, constraint: Constraint) {
+        // TODO(ed): Don't reinsert stuff?
+        self.find_node_mut(a).constraints.insert(constraint, span);
     }
 
     fn add(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
@@ -1571,7 +1597,6 @@ impl TypeChecker {
                 return err_type_error!(
                     self,
                     span,
-                    ctx,
                     TypeError::BinOp {
                         lhs: self.bake_type(a),
                         rhs: self.bake_type(b),
@@ -1599,7 +1624,6 @@ impl TypeChecker {
                 return err_type_error!(
                     self,
                     span,
-                    ctx,
                     TypeError::BinOp {
                         lhs: self.bake_type(a),
                         rhs: self.bake_type(b),
@@ -1641,7 +1665,6 @@ impl TypeChecker {
                 return err_type_error!(
                     self,
                     span,
-                    ctx,
                     TypeError::BinOp {
                         lhs: self.bake_type(a),
                         rhs: self.bake_type(b),
@@ -1685,7 +1708,6 @@ impl TypeChecker {
                 return err_type_error!(
                     self,
                     span,
-                    ctx,
                     TypeError::BinOp {
                         lhs: self.bake_type(a),
                         rhs: self.bake_type(b),
@@ -1722,7 +1744,6 @@ impl TypeChecker {
                 return err_type_error!(
                     self,
                     span,
-                    ctx,
                     TypeError::BinOp {
                         lhs: self.bake_type(a),
                         rhs: self.bake_type(b),
@@ -1750,7 +1771,6 @@ impl TypeChecker {
                 return err_type_error!(
                     self,
                     span,
-                    ctx,
                     TypeError::BinOp {
                         lhs: self.bake_type(a),
                         rhs: self.bake_type(b),
@@ -1777,7 +1797,6 @@ impl TypeChecker {
                 return err_type_error!(
                     self,
                     span,
-                    ctx,
                     TypeError::Exotic,
                     "Tuples can only be indexed by positive integer constants"
                 );
@@ -1796,7 +1815,6 @@ impl TypeChecker {
                 return err_type_error!(
                     self,
                     span,
-                    ctx,
                     TypeError::BinOp {
                         lhs: self.bake_type(a),
                         rhs: self.bake_type(b),
@@ -1821,7 +1839,6 @@ impl TypeChecker {
                 None => err_type_error!(
                     self,
                     span,
-                    ctx,
                     TypeError::TupleIndexOutOfRange { got: index, length: tys.len() }
                 ),
             },
@@ -1835,7 +1852,6 @@ impl TypeChecker {
             _ => err_type_error!(
                 self,
                 span,
-                ctx,
                 TypeError::Violating(self.bake_type(a)),
                 "This type cannot be indexed"
             ),
@@ -1856,7 +1872,6 @@ impl TypeChecker {
                     err_type_error!(
                         self,
                         span,
-                        ctx,
                         TypeError::Violating(self.bake_type(b)),
                         "Expected length of tuple to be 2 but it was {}",
                         ys.len()
@@ -1867,7 +1882,6 @@ impl TypeChecker {
             _ => err_type_error!(
                 self,
                 span,
-                ctx,
                 TypeError::Mismatch {
                     got: self.bake_type(a),
                     expected: self.bake_type(b)
@@ -1903,7 +1917,6 @@ impl TypeChecker {
                         return err_type_error!(
                             self,
                             var.ident.span,
-                            ctx,
                             TypeError::Mismatch {
                                 got: self.bake_type(var.ty),
                                 expected: self.bake_type(start),
@@ -1916,8 +1929,7 @@ impl TypeChecker {
             Some(_) => {
                 return err_type_error!(
                     self,
-                    Span::zero(),
-                    ctx,
+                    Span::zero(ctx.namespace),
                     TypeError::Exotic,
                     "Expected a start function in the main module - but it was something else"
                 )
@@ -1925,8 +1937,7 @@ impl TypeChecker {
             None => {
                 return err_type_error!(
                     self,
-                    Span::zero(),
-                    ctx,
+                    Span::zero(ctx.namespace),
                     TypeError::Exotic,
                     "Expected a start function in the main module - but couldn't find it"
                 )

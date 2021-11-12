@@ -22,7 +22,7 @@ struct Variable {
     name: String,
     ty: Type,
     slot: usize,
-    line: usize,
+    span: Span,
     kind: VarKind,
 
     captured: bool,
@@ -36,7 +36,7 @@ impl Variable {
             ty,
             slot,
             kind,
-            line: span.line,
+            span,
             captured: false,
             active: false,
         }
@@ -51,7 +51,7 @@ struct Upvalue {
     name: String,
     ty: Type,
     slot: usize,
-    line: usize,
+    span: Span,
     kind: VarKind,
 }
 
@@ -69,7 +69,7 @@ impl Upvalue {
             name: var.name.clone(),
             ty: var.ty.clone(),
             slot: 0,
-            line: var.line,
+            span: var.span,
             kind: var.kind,
         }
     }
@@ -88,12 +88,6 @@ impl Upvalue {
 struct Context {
     namespace: NamespaceID,
     frame: usize,
-}
-
-impl Context {
-    fn from_namespace(namespace: NamespaceID) -> Self {
-        Self { namespace, frame: 0 }
-    }
 }
 
 type Namespace = HashMap<String, Name>;
@@ -156,13 +150,13 @@ struct Compiler {
 
 #[macro_export]
 macro_rules! error {
-    ($compiler:expr, $ctx:expr, $span:expr, $( $msg:expr ),+ ) => {
+    ($compiler:expr, $span:expr, $( $msg:expr ),+ ) => {
         if !$compiler.panic {
             $compiler.panic = true;
 
             let msg = format!($( $msg ),*).into();
             let err = Error::CompileError {
-                file: $compiler.file_from_namespace($ctx.namespace).into(),
+                file: $compiler.file_from_namespace($span.file_id).into(),
                 span: $span,
                 message: Some(msg),
             };
@@ -172,9 +166,9 @@ macro_rules! error {
 }
 
 macro_rules! error_no_panic {
-    ($compiler:expr, $ctx:expr, $span:expr, $( $msg:expr ),+ ) => {
+    ($compiler:expr, $span:expr, $( $msg:expr ),+ ) => {
         {
-            error!($compiler, $ctx, $span, $( $msg ),*);
+            error!($compiler, $span, $( $msg ),*);
             $compiler.panic = false;
         }
     };
@@ -319,13 +313,8 @@ impl Compiler {
         let statements = match dependency::initialization_order(&tree, &self) {
             Ok(statements) => statements,
             Err(statements) => {
-                statements.iter().for_each(|(statement, namespace)| {
-                    error_no_panic!(
-                        self,
-                        Context::from_namespace(*namespace),
-                        statement.span,
-                        "Dependency cycle"
-                    )
+                statements.iter().for_each(|(statement, _)| {
+                    error_no_panic!(self, statement.span, "Dependency cycle")
                 });
                 statements
             }
@@ -341,11 +330,11 @@ impl Compiler {
         if let Some(lua_file) = lua_file {
             let mut lua_compiler = lua::LuaCompiler::new(&mut self, Box::new(lua_file));
 
-            lua_compiler.preamble(Span::zero(), 0);
+            lua_compiler.preamble(Span::zero(0), 0);
             for (statement, namespace) in statements.iter() {
                 lua_compiler.compile(statement, *namespace);
             }
-            lua_compiler.postamble(Span::zero());
+            lua_compiler.postamble(Span::zero(0));
 
             if !self.errors.is_empty() {
                 return Err(self.errors);
@@ -404,7 +393,6 @@ impl Compiler {
         // initialized at a later stage.
         for (path, module) in tree.modules.iter() {
             let slot = path_to_namespace_id[path];
-            let ctx = Context::from_namespace(slot);
 
             let mut namespace = Namespace::new();
             for statement in module.statements.iter() {
@@ -444,7 +432,7 @@ impl Compiler {
                     IsCheck { .. } | EmptyStatement => continue,
 
                     _ => {
-                        error!(self, ctx, statement.span, "Invalid outer statement");
+                        error!(self, statement.span, "Invalid outer statement");
                         continue;
                     }
                 };
@@ -456,10 +444,7 @@ impl Compiler {
                     Entry::Occupied(_) => {
                         error!(
                             self,
-                            ctx,
-                            span,
-                            "A global variable with the name '{}' already exists",
-                            ident_name
+                            span, "A global variable with the name '{}' already exists", ident_name
                         );
                     }
                 }
@@ -471,11 +456,11 @@ impl Compiler {
 }
 
 fn parse_signature(func_name: &str, sig: &str) -> ParserType {
-    let token_stream = sylt_tokenizer::string_to_tokens(sig);
+    let token_stream = sylt_tokenizer::string_to_tokens(0, sig);
     let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
     let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
     let path = PathBuf::from(func_name);
-    let ctx = sylt_parser::Context::new(&tokens, &spans, &path, &path);
+    let ctx = sylt_parser::Context::new(&tokens, &spans, &path, 0, &path);
     match sylt_parser::parse_type(ctx) {
         Ok((_, ty)) => ty,
         Err((_, errs)) => {

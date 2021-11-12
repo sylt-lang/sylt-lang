@@ -46,7 +46,7 @@ impl<'t> BytecodeCompiler<'t> {
         self.blocks
             .get_mut(ctx.block_slot)
             .expect("Invalid block id")
-            .add(op, span.line)
+            .add(op, span.line_start)
     }
 
     fn patch(&mut self, ctx: BytecodeContext, ip: usize, op: Op) {
@@ -272,7 +272,7 @@ impl<'t> BytecodeCompiler<'t> {
 
             Function { name, params, ret: _, body } => {
                 let file = self.compiler.file_from_namespace(ctx.namespace).display();
-                let name = format!("fn {} {}:{}", name, file, expression.span.line);
+                let name = format!("fn {} {}:{}", name, file, expression.span.line_start);
 
                 // === Frame begin ===
                 let inner_ctx = self.push_frame_and_block(ctx, &name, expression.span);
@@ -400,7 +400,7 @@ impl<'t> BytecodeCompiler<'t> {
                 Some(Name::External(_)) => {
                     error!(
                         self.compiler,
-                        ctx, span, "External values aren't allowed when compiling to byte-code "
+                        span, "External values aren't allowed when compiling to byte-code "
                     );
                 }
                 Some(Name::Blob(blob)) => {
@@ -416,7 +416,6 @@ impl<'t> BytecodeCompiler<'t> {
                     } else {
                         error!(
                             self.compiler,
-                            ctx,
                             span,
                             "Cannot read '{}' in '{}'",
                             name,
@@ -447,10 +446,7 @@ impl<'t> BytecodeCompiler<'t> {
                 Some(Name::Global(slot)) => {
                     let var = &self.compiler.frames[0].variables[*slot];
                     if var.kind.immutable() && ctx.frame != 0 {
-                        error!(
-                            self.compiler,
-                            ctx, span, "Cannot mutate constant '{}'", name
-                        );
+                        error!(self.compiler, span, "Cannot mutate constant '{}'", name);
                     } else {
                         let op = Op::AssignGlobal(var.slot);
                         self.add_op(ctx, span, op);
@@ -460,7 +456,6 @@ impl<'t> BytecodeCompiler<'t> {
                 _ => {
                     error!(
                         self.compiler,
-                        ctx,
                         span,
                         "Cannot assign '{}' in '{}'",
                         name,
@@ -497,9 +492,7 @@ impl<'t> BytecodeCompiler<'t> {
                 // TODO(ed): Should they be? Is this how we should type the standard library?
                 error!(
                     self.compiler,
-                    ctx,
-                    statement.span,
-                    "External values aren't allowed when compiling to byte-code "
+                    statement.span, "External values aren't allowed when compiling to byte-code "
                 );
             }
 
@@ -537,7 +530,7 @@ impl<'t> BytecodeCompiler<'t> {
                     ArrowCall(..) | Call(..) => {
                         error!(
                             self.compiler,
-                            ctx, statement.span, "Cannot assign to result from function call"
+                            statement.span, "Cannot assign to result from function call"
                         );
                     }
                     Access(a, field) => {
@@ -650,7 +643,7 @@ impl<'t> BytecodeCompiler<'t> {
                 None => {
                     error!(
                         self.compiler,
-                        ctx, statement.span, "`continue` statement not in a loop"
+                        statement.span, "`continue` statement not in a loop"
                     );
                 }
             },
@@ -663,7 +656,7 @@ impl<'t> BytecodeCompiler<'t> {
                 None => {
                     error!(
                         self.compiler,
-                        ctx, statement.span, "`continue` statement not in a loop"
+                        statement.span, "`continue` statement not in a loop"
                     );
                 }
             },
@@ -708,10 +701,10 @@ impl<'t> BytecodeCompiler<'t> {
 
         // TODO(ed): Real ugly hack until we can run the typechecker before the compiler.
         self.compiler.panic = true;
-        self.read_identifier("start", Span::zero(), ctx, 0);
+        self.read_identifier("start", Span::zero(0), ctx, 0);
         self.compiler.panic = false;
 
-        self.add_op(ctx, Span::zero(), Op::Call(0));
+        self.add_op(ctx, Span::zero(0), Op::Call(0));
 
         let nil = self.compiler.constant(Value::Nil);
         self.add_op(ctx, span, nil);
