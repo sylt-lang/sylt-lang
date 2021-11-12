@@ -100,6 +100,7 @@ enum Name {
     External(VarKind),
     Global(ConstantID),
     Blob(BlobID),
+    Enum(BlobID),
     Namespace(NamespaceID),
 }
 
@@ -407,8 +408,14 @@ impl Compiler {
                             unreachable!()
                         }
                     }
-                    Enum { .. } => {
-                        todo!();
+                    Enum { name, .. } => {
+                        let en =
+                            self.constant(Value::Ty(Type::Enum(name.clone(), Default::default())));
+                        if let Op::Constant(slot) = en {
+                            (Name::Enum(slot), name.clone(), statement.span)
+                        } else {
+                            unreachable!()
+                        }
                     }
                     Use { name, file, .. } => {
                         let ident = match name {

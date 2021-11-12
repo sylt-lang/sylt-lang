@@ -315,6 +315,9 @@ impl<'t> LuaCompiler<'t> {
                 Some(Name::Blob(blob)) => {
                     self.write_global(blob);
                 }
+                Some(Name::Enum(blob)) => {
+                    self.write_global(blob);
+                }
                 Some(Name::External(_)) => {
                     write!(self, "{}", name);
                 }
