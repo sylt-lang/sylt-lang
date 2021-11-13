@@ -5,7 +5,7 @@ use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
 use sylt_common::Type as RuntimeType;
-use sylt_tokenizer::{string_to_tokens, PlacedToken, Token, ZERO_SPAN};
+use sylt_tokenizer::{string_to_tokens, PlacedToken, Token};
 
 pub mod expression;
 pub mod statement;
@@ -229,12 +229,20 @@ pub struct Context<'a> {
     curr: usize,
     /// The file we're currently parsing.
     pub file: &'a Path,
+    /// The magical id - used later on
+    pub file_id: usize,
     /// The source root - the top most folder.
     pub root: &'a Path,
 }
 
 impl<'a> Context<'a> {
-    pub fn new(tokens: &'a [Token], spans: &'a [Span], file: &'a Path, root: &'a Path) -> Self {
+    pub fn new(
+        tokens: &'a [Token],
+        spans: &'a [Span],
+        file: &'a Path,
+        file_id: usize,
+        root: &'a Path,
+    ) -> Self {
         Self {
             skip_newlines: false,
             last_statement: 0,
@@ -242,13 +250,14 @@ impl<'a> Context<'a> {
             spans,
             curr: 0,
             file,
+            file_id,
             root,
         }
     }
 
     /// Get a [Span] representing the current location of the parser.
     fn span(&self) -> Span {
-        *self.peek().1
+        self.peek().1
     }
 
     fn comments_since_last_statement(&self) -> Vec<String> {
@@ -332,9 +341,10 @@ impl<'a> Context<'a> {
     }
 
     /// Return the current [Token] and [Span].
-    fn peek(&self) -> (&Token, &Span) {
+    fn peek(&self) -> (&Token, Span) {
         let token = self.tokens.get(self.curr).unwrap_or(&T::EOF);
-        let span = self.spans.get(self.curr).unwrap_or(&ZERO_SPAN);
+        let zero_span = Span::zero(self.file_id);
+        let span = self.spans.get(self.curr).unwrap_or(&zero_span).clone();
         (token, span)
     }
 
@@ -515,15 +525,12 @@ pub fn type_assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeAssignable> 
 
             T::Identifier(name) if !is_capitalized(name) => {
                 let ctx = expect!(ctx.skip(1), T::Dot, "Expected '.' after namespace");
-                let (ctx, assignable) = type_assignable_inner(ctx, assignable)?;
                 let ident = Identifier { span, name: name.clone() };
-                type_assignable_inner(
-                    ctx,
-                    TypeAssignableKind::Access(
-                        Box::new(TypeAssignable { span, kind: assignable }),
-                        ident,
-                    ),
-                )
+                let assignable = TypeAssignableKind::Access(
+                    Box::new(TypeAssignable { span, kind: assignable }),
+                    ident,
+                );
+                type_assignable_inner(ctx, assignable)
             }
 
             _ => Ok((ctx, assignable)),
@@ -859,21 +866,23 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
 /// or EOF.
 fn module(
     path: &Path,
+    file_id: usize,
     root: &Path,
     token_stream: &[PlacedToken],
 ) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
     let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
     let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
-    let mut ctx = Context::new(&tokens, &spans, path, root);
     let mut errors = Vec::new();
     let mut use_files = Vec::new();
     let mut statements = Vec::new();
+    let mut ctx = Context::new(&tokens, &spans, path, file_id, root);
     while !matches!(ctx.token(), T::EOF) {
         // Ignore newlines.
         if matches!(ctx.token(), T::Newline) {
             ctx = ctx.skip(1);
             continue;
         }
+
         // Parse an outer statement.
         ctx = match outer_statement(ctx) {
             Ok((ctx, statement)) => {
@@ -904,7 +913,10 @@ fn module(
     }
 
     if errors.is_empty() {
-        (use_files, Ok(Module { span: Span::zero(), statements }))
+        (
+            use_files,
+            Ok(Module { span: Span::zero(file_id), statements }),
+        )
     } else {
         (use_files, Err(errors))
     }
@@ -922,7 +934,7 @@ fn module(
 /// - [Error::FileNotFound] if the file couldn't be found.
 /// - [Error::GitConflictError] if conflict markers were found.
 /// - Any [Error::IOError] that occured when reading the file.
-pub fn find_conflict_markers(file: &Path, source: &str) -> Vec<Error> {
+pub fn find_conflict_markers(file: &Path, file_id: usize, source: &str) -> Vec<Error> {
     let mut errs = Vec::new();
     for (i, line) in source.lines().enumerate() {
         let conflict_marker = "<<<<<<<";
@@ -930,9 +942,13 @@ pub fn find_conflict_markers(file: &Path, source: &str) -> Vec<Error> {
             errs.push(Error::GitConflictError {
                 file: file.to_path_buf(),
                 span: Span {
-                    line: i + 1,
+                    line_start: i + 1,
+                    line_end: i + 1,
+
                     col_start: 1,
                     col_end: conflict_marker.len() + 1,
+
+                    file_id,
                 },
             });
         }
@@ -966,20 +982,22 @@ where
         if visited.contains(&file) {
             continue;
         }
+        let file_id = visited.len();
+        visited.insert(file.clone());
+
         // Lex into tokens.
         match reader(&file) {
             Ok(source) => {
                 // Look for conflict markers
-                let mut conflict_errors = find_conflict_markers(&file, &source);
+                let mut conflict_errors = find_conflict_markers(&file, file_id, &source);
                 if !conflict_errors.is_empty() {
                     errors.append(&mut conflict_errors);
-                    visited.insert(file);
                     continue;
                 }
 
-                let tokens = string_to_tokens(&source);
+                let tokens = string_to_tokens(file_id, &source);
                 // Parse the module.
-                let (mut next, result) = module(&file, &root, &tokens);
+                let (mut next, result) = module(&file, file_id, &root, &tokens);
                 match result {
                     Ok(module) => modules.push((file.clone(), module)),
                     Err(mut errs) => errors.append(&mut errs),
@@ -990,7 +1008,6 @@ where
                 errors.push(Error::FileNotFound(file.clone()));
             }
         }
-        visited.insert(file);
     }
 
     if errors.is_empty() {
@@ -1019,11 +1036,11 @@ mod test {
         ($f:ident, $name:ident: $str:expr => $ans:pat) => {
             #[test]
             fn $name() {
-                let token_stream = ::sylt_tokenizer::string_to_tokens($str);
+                let token_stream = ::sylt_tokenizer::string_to_tokens(0, $str);
                 let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
                 let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
                 let path = ::std::path::PathBuf::from(stringify!($name));
-                let result = $f($crate::Context::new(&tokens, &spans, &path, &path));
+                let result = $f($crate::Context::new(&tokens, &spans, &path, 0, &path));
                 assert!(
                     result.is_ok(),
                     "\nSyntax tree test didn't parse for:\n{}\nErrs: {:?}",
@@ -1052,11 +1069,11 @@ mod test {
         ($f:ident, $name:ident: $str:expr => $ans:pat) => {
             #[test]
             fn $name() {
-                let token_stream = ::sylt_tokenizer::string_to_tokens($str);
+                let token_stream = ::sylt_tokenizer::string_to_tokens(0, $str);
                 let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
                 let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
                 let path = ::std::path::PathBuf::from(stringify!($name));
-                let result = $f($crate::Context::new(&tokens, &spans, &path, &path));
+                let result = $f($crate::Context::new(&tokens, &spans, &path, 0, &path));
                 assert!(
                     result.is_err(),
                     "\nSyntax tree test parsed - when it should have failed - for:\n{}\n",
@@ -1138,7 +1155,7 @@ impl PrettyPrint for Statement {
     fn pretty_print(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
         use StatementKind as SK;
         write_indent(f, indent)?;
-        write!(f, "{} ", self.span.line)?;
+        write!(f, "{} ", self.span.line_start)?;
         match &self.kind {
             SK::Use { path, name, file } => {
                 write!(f, "<Use> {} {}", path.name, name)?;

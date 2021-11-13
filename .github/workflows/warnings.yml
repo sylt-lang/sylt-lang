@@ -19,3 +19,6 @@ jobs:
 
     - name: Warnings
       run: cargo check --package sylt --no-default-features
+
+    - name: rustfmt
+      run: cargo fmt -- --check
