@@ -676,7 +676,9 @@ impl TypeChecker {
     fn assignable(&mut self, assignable: &Assignable, ctx: TypeCtx) -> TypeResult<usize> {
         let span = assignable.span;
         match &assignable.kind {
-            // NOTE: This will copy types that are functions since they may be generalized.
+            // FIXME: Functions are copied since they may be specialized
+            // several times, this does not work properly when functions are
+            // passed to an unknown function parameter.
             AssignableKind::Read(ident) => {
                 if let Some(var) = self
                     .stack
@@ -686,7 +688,6 @@ impl TypeChecker {
                 {
                     match self.find_type(var.ty) {
                         Type::Function(..) => Ok(self.copy(var.ty)),
-                        Type::Unknown => Ok(self.copy(var.ty)),
                         _ => Ok(var.ty),
                     }
                 } else {
@@ -715,8 +716,7 @@ impl TypeChecker {
 
             AssignableKind::Call(f, args) => {
                 let f = self.assignable(f, ctx)?;
-                let f_copy = self.copy(f);
-                match self.find_type(f_copy) {
+                match self.find_type(f) {
                     Type::Function(params, ret) => {
                         if args.len() != params.len() {
                             return err_type_error!(
@@ -751,7 +751,7 @@ impl TypeChecker {
                             self,
                             span,
                             ctx,
-                            TypeError::Violating(self.bake_type(f_copy)),
+                            TypeError::Violating(self.bake_type(f)),
                             "Not callable"
                         );
                     }
