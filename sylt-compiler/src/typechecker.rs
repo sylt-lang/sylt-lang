@@ -577,38 +577,8 @@ impl TypeChecker {
                 Ok(None)
             }
 
-            StatementKind::Definition { ident, kind, ty, value } => {
-                // NOTE: If changing here, change in the other Definition as well.
-                let defined_ty = self.resolve_type(span, ctx, &ty)?;
-
-                let is_function = match &value.kind {
-                    ExpressionKind::Function { params, .. } => {
-                        let args = params
-                            .iter()
-                            .map(|_| self.push_type(Type::Unknown))
-                            .collect();
-                        let ret = self.push_type(Type::Unknown);
-                        let fn_ty = self.push_type(Type::Function(args, ret));
-                        self.unify(span, ctx, defined_ty, fn_ty)?;
-                        let var = Variable { ident: ident.clone(), ty: fn_ty, kind: *kind, span };
-                        self.stack.push(var);
-                        true
-                    }
-                    _ => false,
-                };
-
-                let expression_ty = self.expression(value, ctx)?;
-                self.unify(span, ctx, expression_ty, defined_ty)?;
-
-                let var = Variable {
-                    ident: ident.clone(),
-                    ty: defined_ty,
-                    kind: *kind,
-                    span,
-                };
-                if !is_function {
-                    self.stack.push(var);
-                }
+            StatementKind::Definition { .. } => {
+                self.definition(statement, false, ctx)?;
                 Ok(None)
             }
 
@@ -658,42 +628,8 @@ impl TypeChecker {
                     .insert((ctx.namespace, name.clone()), Name::Blob(ty));
             }
 
-            StatementKind::Definition { ident, kind, ty, value } => {
-                // NOTE: If changing here, change in the other Definition as well.
-                let defined_ty = self.resolve_type(span, ctx, &ty)?;
-
-                let is_function = match &value.kind {
-                    ExpressionKind::Function { params, .. } => {
-                        let args = params
-                            .iter()
-                            .map(|_| self.push_type(Type::Unknown))
-                            .collect();
-                        let ret = self.push_type(Type::Unknown);
-                        let fn_ty = self.push_type(Type::Function(args, ret));
-                        self.unify(span, ctx, defined_ty, fn_ty)?;
-                        let var = Variable { ident: ident.clone(), ty: fn_ty, kind: *kind, span };
-                        self.globals
-                            .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
-                        true
-                    }
-                    _ => false,
-                };
-
-                let expression_ty = self.expression(value, ctx)?;
-                self.unify(span, ctx, expression_ty, defined_ty)?;
-
-                let var = Variable {
-                    ident: ident.clone(),
-                    ty: defined_ty,
-                    kind: *kind,
-                    span,
-                };
-                if !is_function {
-                    self.globals.insert(
-                        (ctx.namespace, ident.name.clone()),
-                        Name::Global(var.clone()),
-                    );
-                }
+            StatementKind::Definition { .. } => {
+                self.definition(statement, true, ctx)?;
             }
 
             StatementKind::ExternalDefinition { ident, kind, ty } => {
@@ -1063,6 +999,58 @@ impl TypeChecker {
             // Type::Blob(_, _) => Ok(self.push_type(res_ty)),
             _ => Ok(res),
         }
+    }
+
+    fn definition(&mut self, statement: &Statement, global: bool, ctx: TypeCtx) -> TypeResult<()> {
+        let span = statement.span;
+        match &statement.kind {
+            StatementKind::Definition { ident, kind, ty, value } => {
+                let defined_ty = self.resolve_type(span, ctx, &ty)?;
+
+                let is_function = match &value.kind {
+                    ExpressionKind::Function { params, .. } => {
+                        let args = params
+                            .iter()
+                            .map(|_| self.push_type(Type::Unknown))
+                            .collect();
+                        let ret = self.push_type(Type::Unknown);
+                        let fn_ty = self.push_type(Type::Function(args, ret));
+                        self.unify(span, ctx, defined_ty, fn_ty)?;
+                        let var = Variable { ident: ident.clone(), ty: fn_ty, kind: *kind, span };
+                        if global {
+                            self.globals
+                                .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
+                        } else {
+                            self.stack.push(var);
+                        }
+                        true
+                    }
+                    _ => false,
+                };
+
+                let expression_ty = self.expression(value, ctx)?;
+                self.unify(span, ctx, expression_ty, defined_ty)?;
+
+                if !is_function {
+                    let var = Variable {
+                        ident: ident.clone(),
+                        ty: defined_ty,
+                        kind: *kind,
+                        span,
+                    };
+                    if global {
+                        self.globals.insert(
+                            (ctx.namespace, ident.name.clone()),
+                            Name::Global(var.clone()),
+                        );
+                    } else {
+                        self.stack.push(var);
+                    }
+                }
+            }
+            _ => unreachable!(),
+        }
+        Ok(())
     }
 
     fn find(&mut self, a: usize) -> usize {
