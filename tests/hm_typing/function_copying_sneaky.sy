@@ -1,0 +1,12 @@
+f :: fn a ->
+    b : [*] : [a]
+    b[0]' 1
+    b[0]' "hello"
+    a' "hello"
+end
+
+start :: fn do
+    f' print
+end
+
+// error: $Violating(..)

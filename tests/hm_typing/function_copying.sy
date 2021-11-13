@@ -1,0 +1,10 @@
+f1 :: fn a do end
+
+start :: fn do
+    f2 :: fn a do end
+
+    l : [fn int -> void] : [print, f1, f2]
+    print("")
+    f1("")
+    f2("")
+end
