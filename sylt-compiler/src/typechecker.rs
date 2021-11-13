@@ -1892,10 +1892,10 @@ impl TypeChecker {
             Some(Name::Global(var)) => {
                 let void = self.push_type(Type::Void);
                 let start = self.push_type(Type::Function(Vec::new(), void));
-                match self.unify(var.ident.span, ctx, var.ty, start) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        return err_type_error!(
+                self.unify(var.ident.span, ctx, var.ty, start)
+                    .map(|_| ())
+                    .or_else(|_| {
+                        err_type_error!(
                             self,
                             var.ident.span,
                             TypeError::Mismatch {
@@ -1904,11 +1904,10 @@ impl TypeChecker {
                             },
                             "The start function has the wrong type"
                         )
-                    }
-                }
+                    })
             }
             Some(_) => {
-                return err_type_error!(
+                err_type_error!(
                     self,
                     Span::zero(ctx.namespace),
                     TypeError::Exotic,
@@ -1916,7 +1915,7 @@ impl TypeChecker {
                 )
             }
             None => {
-                return err_type_error!(
+                err_type_error!(
                     self,
                     Span::zero(ctx.namespace),
                     TypeError::Exotic,
@@ -1924,8 +1923,6 @@ impl TypeChecker {
                 )
             }
         }
-
-        Ok(())
     }
 }
 
