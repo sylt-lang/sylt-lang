@@ -14,7 +14,7 @@ class Sylt < ::Rouge::RegexLexer
 
     rule %r((and|or|not|if|else|loop|break|continue|blob|in|is|do|end|fn|ret|use|as|external)\b), Keyword
     rule %r((bool|float|int|str|void)\b), Keyword::Type
-    rule %r((false|true|nil)\b), Keyword::Constant
+    rule %r((false|true|nil|self)\b), Keyword::Constant
 
     rule %r([A-Za-z_][A-Za-z0-9_]*), Name
 
