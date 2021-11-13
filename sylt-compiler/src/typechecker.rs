@@ -579,23 +579,26 @@ impl TypeChecker {
 
             StatementKind::Definition { ident, kind, ty, value } => {
                 // NOTE: If changing here, change in the other Definition as well.
-                let pre_ty = self.push_type(Type::Unknown);
-                let var = Variable {
-                    ident: ident.clone(),
-                    ty: pre_ty,
-                    kind: *kind,
-                    span,
-                };
-                let is_function = matches!(value.kind, ExpressionKind::Function { .. });
-                if is_function {
-                    self.stack.push(var);
-                }
-
-                let expression_ty = self.expression(value, ctx)?;
                 let defined_ty = self.resolve_type(span, ctx, &ty)?;
 
+                let is_function = match &value.kind {
+                    ExpressionKind::Function { params, .. } => {
+                        let args = params
+                            .iter()
+                            .map(|_| self.push_type(Type::Unknown))
+                            .collect();
+                        let ret = self.push_type(Type::Unknown);
+                        let fn_ty = self.push_type(Type::Function(args, ret));
+                        self.unify(span, ctx, defined_ty, fn_ty)?;
+                        let var = Variable { ident: ident.clone(), ty: fn_ty, kind: *kind, span };
+                        self.stack.push(var);
+                        true
+                    }
+                    _ => false,
+                };
+
+                let expression_ty = self.expression(value, ctx)?;
                 self.unify(span, ctx, expression_ty, defined_ty)?;
-                self.unify(span, ctx, defined_ty, pre_ty)?;
 
                 let var = Variable {
                     ident: ident.clone(),
@@ -657,27 +660,34 @@ impl TypeChecker {
 
             StatementKind::Definition { ident, kind, ty, value } => {
                 // NOTE: If changing here, change in the other Definition as well.
-                let pre_ty = self.push_type(Type::Unknown);
+                let defined_ty = self.resolve_type(span, ctx, &ty)?;
+
+                let is_function = match &value.kind {
+                    ExpressionKind::Function { params, .. } => {
+                        let args = params
+                            .iter()
+                            .map(|_| self.push_type(Type::Unknown))
+                            .collect();
+                        let ret = self.push_type(Type::Unknown);
+                        let fn_ty = self.push_type(Type::Function(args, ret));
+                        self.unify(span, ctx, defined_ty, fn_ty)?;
+                        let var = Variable { ident: ident.clone(), ty: fn_ty, kind: *kind, span };
+                        self.globals
+                            .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
+                        true
+                    }
+                    _ => false,
+                };
+
+                let expression_ty = self.expression(value, ctx)?;
+                self.unify(span, ctx, expression_ty, defined_ty)?;
+
                 let var = Variable {
                     ident: ident.clone(),
-                    ty: pre_ty,
+                    ty: defined_ty,
                     kind: *kind,
                     span,
                 };
-                let is_function = matches!(value.kind, ExpressionKind::Function { .. });
-                if is_function {
-                    self.globals.insert(
-                        (ctx.namespace, ident.name.clone()),
-                        Name::Global(var.clone()),
-                    );
-                }
-
-                let expression_ty = self.expression(value, ctx)?;
-                let defined_ty = self.resolve_type(span, ctx, &ty)?;
-
-                self.unify(span, ctx, pre_ty, defined_ty)?;
-                self.unify(span, ctx, expression_ty, defined_ty)?;
-
                 if !is_function {
                     self.globals.insert(
                         (ctx.namespace, ident.name.clone()),
@@ -774,18 +784,12 @@ impl TypeChecker {
 
                         Ok(ret)
                     }
-                    // This means we're recursing, so we deduce the type of the actual-f.
-                    // We want type-information to flow back.
-                    Type::Unknown => {
-                        let args = args
-                            .iter()
-                            .map(|a| self.expression(a, ctx))
-                            .collect::<TypeResult<_>>()?;
-                        let ret = self.push_type(Type::Unknown);
-                        let inner_f = self.push_type(Type::Function(args, ret));
-                        self.unify(span, ctx, f, inner_f)?;
-                        Ok(ret)
-                    }
+                    Type::Unknown => err_type_error!(
+                        self,
+                        span,
+                        TypeError::Violating(self.bake_type(f)),
+                        "Unknown types cannot be called"
+                    ),
                     _ => {
                         return err_type_error!(
                             self,
