@@ -387,7 +387,7 @@ impl TypeChecker {
             match seen.get(name) {
                 Some(x) => Ok(*x),
                 _ => {
-                    return err_type_error!(
+                    err_type_error!(
                         typechecker,
                         span,
                         TypeError::UnknownConstraintArgument(name.into())
@@ -779,14 +779,12 @@ impl TypeChecker {
                         self.unify(span, ctx, f, inner_f)?;
                         Ok(ret)
                     }
-                    _ => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::Violating(self.bake_type(f_copy)),
-                            "Not callable"
-                        );
-                    }
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        TypeError::Violating(self.bake_type(f_copy)),
+                        "Not callable"
+                    ),
                 }
             }
 
@@ -1150,13 +1148,11 @@ impl TypeChecker {
 
                 Constraint::Neg => match self.find_type(a) {
                     Type::Unknown | Type::Int | Type::Float => Ok(()),
-                    _ => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::UniOp { val: self.bake_type(a), op: "-".to_string() }
-                        )
-                    }
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        TypeError::UniOp { val: self.bake_type(a), op: "-".to_string() }
+                    ),
                 },
 
                 Constraint::IndexedBy(b) => self.is_indexed_by(span, ctx, a, *b),
@@ -1577,17 +1573,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "+".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "+".to_string(),
+                }
+            ),
         }
     }
 
@@ -1604,17 +1598,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "-".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "-".to_string(),
+                }
+            ),
         }
     }
 
@@ -1645,17 +1637,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "*".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "*".to_string(),
+                }
+            ),
         }
     }
 
@@ -1688,17 +1678,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "/".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "/".to_string(),
+                }
+            ),
         }
     }
 
@@ -1724,17 +1712,15 @@ impl TypeChecker {
             }
 
             // TODO(ed): Maybe sets?
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "<".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "<".to_string(),
+                }
+            ),
         }
     }
 
@@ -1751,17 +1737,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "Indexing".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "Indexing".to_string(),
+                }
+            ),
         }
     }
 
@@ -1795,17 +1779,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "Indexing".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "Indexing".to_string(),
+                }
+            ),
         }
     }
 
