@@ -592,12 +592,6 @@ impl TypeChecker {
 
                 let expression_ty = self.expression(value, ctx)?;
                 let defined_ty = self.resolve_type(span, ctx, &ty)?;
-                let expression_ty = if matches!(self.find_type(defined_ty), Type::Unknown) {
-                    // TODO(ed): Not sure this is needed
-                    self.copy(expression_ty)
-                } else {
-                    expression_ty
-                };
 
                 self.unify(span, ctx, expression_ty, defined_ty)?;
 
@@ -677,12 +671,6 @@ impl TypeChecker {
 
                 let expression_ty = self.expression(value, ctx)?;
                 let defined_ty = self.resolve_type(span, ctx, &ty)?;
-                let expression_ty = if matches!(self.find_type(defined_ty), Type::Unknown) {
-                    // TODO(ed): Not sure this is needed
-                    self.copy(expression_ty)
-                } else {
-                    expression_ty
-                };
                 self.unify(span, ctx, pre_ty, defined_ty)?;
                 self.unify(span, ctx, expression_ty, defined_ty)?;
 
