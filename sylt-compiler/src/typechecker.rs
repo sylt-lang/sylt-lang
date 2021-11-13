@@ -625,7 +625,10 @@ impl TypeChecker {
             | StatementKind::Blob { .. }
             | StatementKind::IsCheck { .. }
             | StatementKind::ExternalDefinition { .. } => {
-                unreachable!("Illegal inner statement! Parser should have caught this.")
+                unreachable!(
+                    "Illegal inner statement at {:?}! Parser should have caught this.",
+                    span
+                )
             }
         }
     }
