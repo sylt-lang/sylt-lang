@@ -1487,24 +1487,17 @@ impl TypeChecker {
     fn can_assign(&mut self, span: Span, ctx: TypeCtx, assignable: &Assignable) -> TypeResult<()> {
         match &assignable.kind {
             AssignableKind::Read(ident) => {
-                if let Some(var) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
-                    if !var.kind.immutable() {
-                        Ok(())
-                    } else {
-                        err_type_error!(
-                            self,
-                            span,
-                            TypeError::Assignability,
-                            "Cannot assign to constants"
-                        )
-                        .help(
-                            self,
-                            var.span,
-                            "Originally defined here".into(),
-                        )
-                    }
-                } else {
-                    match self.globals.get(&(ctx.namespace, ident.name.clone())) {
+                match self.stack.iter().rfind(|v| v.ident.name == ident.name) {
+                    Some(var) if !var.kind.immutable() => Ok(()),
+                    Some(var) => err_type_error!(
+                        self,
+                        span,
+                        TypeError::Assignability,
+                        "Cannot assign to constants"
+                    )
+                    .help(self, var.span, "Originally defined here".into()),
+                    // Not a local variable. Is it a global?
+                    _ => match self.globals.get(&(ctx.namespace, ident.name.clone())) {
                         Some(Name::Global(var)) => {
                             if !var.kind.immutable() {
                                 Ok(())
@@ -1536,7 +1529,7 @@ impl TypeChecker {
                             "Variable \"{}\" not found. If declaring, use :=",
                             ident.name.clone()
                         ),
-                    }
+                    },
                 }
             }
             AssignableKind::ArrowCall(_, _, _) | AssignableKind::Call(_, _) => err_type_error!(
