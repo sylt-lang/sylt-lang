@@ -597,6 +597,7 @@ impl TypeChecker {
             StatementKind::EmptyStatement => Ok(None),
 
             StatementKind::Use { .. }
+            | StatementKind::From { .. }
             | StatementKind::Blob { .. }
             | StatementKind::IsCheck { .. }
             | StatementKind::ExternalDefinition { .. } => {
@@ -617,6 +618,8 @@ impl TypeChecker {
                 self.globals
                     .insert((ctx.namespace, ident.name.clone()), Name::Namespace(other));
             }
+
+            StatementKind::From { .. } => todo!(),
 
             StatementKind::Blob { name, fields } => {
                 let mut resolved_fields = BTreeMap::new();

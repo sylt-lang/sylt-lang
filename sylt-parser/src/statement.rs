@@ -33,6 +33,15 @@ pub enum StatementKind {
         file: PathBuf,
     },
 
+    /// "Imports" variables from another file.
+    ///
+    /// `from <file> use <var1>, <var2>
+    From {
+        path: Identifier,
+        names: Vec<NameIdentifier>,
+        file: PathBuf,
+    },
+
     /// Defines a new Blob.
     ///
     /// `A :: blob { <field>.. }`.
@@ -300,6 +309,46 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 }
             };
             (ctx, Use { path: path_ident, name: alias, file })
+        }
+
+        // `from path/to/file use var`
+        [T::From, ..] => {
+            let ctx = ctx.skip(1);
+            let (ctx, path_ident) = path(ctx)?;
+            let path = &path_ident.name;
+            let name = path
+                .trim_start_matches("/")
+                .trim_end_matches("/")
+                .to_string();
+            let file = {
+                let parent = if path.starts_with("/") {
+                    ctx.root
+                } else {
+                    ctx.file.parent().unwrap()
+                };
+                // Importing a folder is the same as importing exports.sy
+                // in the folder.
+                parent.join(if path == "/" {
+                    format!("exports.sy")
+                } else if path_ident.name.ends_with("/") {
+                    format!("{}/exports.sy", name)
+                } else {
+                    format!("{}.sy", name)
+                })
+            };
+            let ctx = expect!(ctx, T::Use, "Expected 'use' after path");
+            let mut names = Vec::new();
+            let ctx = match ctx.tokens_lookahead::<1>() {
+                [T::Identifier(name)] => {
+                    names.push(NameIdentifier::Implicit(Identifier {
+                        name: name.clone(),
+                        span: ctx.span(),
+                    }));
+                    ctx.skip(1)
+                }
+                _ => raise_syntax_error!(ctx, "Expected identifier"),
+            };
+            (ctx, From { path: path_ident, names, file })
         }
 
         // `: A is : B`
@@ -581,6 +630,7 @@ pub fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
         | Definition { .. }
         | ExternalDefinition { .. }
         | Use { .. }
+        | From { .. }
         | IsCheck { .. }
         | EmptyStatement
         => Ok((ctx, stmt)),

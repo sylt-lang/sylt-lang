@@ -888,7 +888,7 @@ fn module(
             Ok((ctx, statement)) => {
                 use StatementKind::*;
                 // Yank `use`s and add it to the used-files list.
-                if let Use { file, .. } = &statement.kind {
+                if let Use { file, .. } | From { file, .. } = &statement.kind {
                     use_files.push(file.clone());
                 }
                 statements.push(statement);
@@ -1161,6 +1161,7 @@ impl PrettyPrint for Statement {
                 write!(f, "<Use> {} {}", path.name, name)?;
                 write!(f, " {:?}", file)?;
             }
+            SK::From { .. } => todo!(),
             SK::Blob { name, fields } => {
                 write!(f, "<Blob> {} {{ ", name)?;
                 for (i, (name, ty)) in fields.iter().enumerate() {

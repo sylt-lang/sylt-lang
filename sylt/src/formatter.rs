@@ -505,6 +505,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
                 write_identifier(dest, alias)?;
             }
         }
+        StatementKind::From { .. } => todo!(),
     }
     write!(dest, "\n")?;
 

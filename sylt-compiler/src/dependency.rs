@@ -221,6 +221,8 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
                 .collect()
         }
 
+        From { .. } => todo!(),
+
         Break | Continue | EmptyStatement | IsCheck { .. } | Unreachable | Use { .. } => {
             BTreeSet::new()
         }

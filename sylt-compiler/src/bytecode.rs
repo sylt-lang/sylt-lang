@@ -471,7 +471,7 @@ impl<'t> BytecodeCompiler<'t> {
         self.compiler.panic = false;
 
         match &statement.kind {
-            Use { .. } | Blob { .. } | IsCheck { .. } | EmptyStatement => {}
+            Use { .. } | From { .. } | Blob { .. } | IsCheck { .. } | EmptyStatement => {}
 
             #[rustfmt::skip]
             Definition { ident, kind, value, .. } => {
@@ -727,6 +727,7 @@ fn all_paths_return(statement: &Statement) -> bool {
         | StatementKind::IsCheck { .. }
         | StatementKind::StatementExpression { .. }
         | StatementKind::Unreachable
+        | StatementKind::From { .. }
         | StatementKind::Use { .. } => false,
 
         StatementKind::If { pass, fail, .. } => all_paths_return(pass) && all_paths_return(fail),
