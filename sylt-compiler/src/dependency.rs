@@ -177,6 +177,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             .union(&assignable_dependencies(ctx, target))
             .cloned()
             .collect(),
+
         If { condition, pass, fail } => [
             dependencies(ctx, condition),
             statement_dependencies(ctx, pass),
@@ -186,10 +187,12 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
         .flatten()
         .cloned()
         .collect(),
+
         Loop { condition, body } => dependencies(ctx, condition)
             .union(&statement_dependencies(ctx, body))
             .cloned()
             .collect(),
+
         Block { statements } => {
             let vars_before = ctx.variables.len();
             let deps = statements
@@ -200,6 +203,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             ctx.variables.truncate(vars_before);
             deps
         }
+
         Definition { ident, value, ty, .. } => {
             ctx.shadow(&ident.name);
             dependencies(ctx, value)
@@ -221,7 +225,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
                 .collect()
         }
 
-        From { file, name, .. } => {
+        From { file, imports, .. } => {
             let old_ns = ctx.namespace;
             ctx.namespace = ctx
                 .compiler
@@ -229,13 +233,19 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
                 .iter()
                 .find_map(|(ns, path)| if path == file { Some(*ns) } else { None })
                 .unwrap();
-            let deps = assignable_dependencies(
-                ctx,
-                &Assignable {
-                    span: name.span,
-                    kind: AssignableKind::Read(name.clone()),
-                },
-            );
+            let deps = imports
+                .iter()
+                .map(|name| {
+                    assignable_dependencies(
+                        ctx,
+                        &Assignable {
+                            span: name.span,
+                            kind: AssignableKind::Read(name.clone()),
+                        },
+                    )
+                })
+                .flatten()
+                .collect();
             ctx.namespace = old_ns;
             deps
         }
@@ -373,6 +383,19 @@ pub(crate) fn initialization_order<'a>(
         for statement in module.statements.iter() {
             use StatementKind::*;
             match &statement.kind {
+                From { imports, .. } => {
+                    let mut ctx = Context { compiler, namespace, variables: Vec::new() };
+                    imports.iter().for_each(|Identifier { name, .. }| {
+                        to_order.insert(
+                            (name.clone(), namespace),
+                            (
+                                statement_dependencies(&mut ctx, statement),
+                                (statement, namespace),
+                            ),
+                        );
+                    });
+                }
+
                 Blob { name, .. }
                 | Use {
                     name: NameIdentifier::Implicit(Identifier { name, .. }),
@@ -382,7 +405,6 @@ pub(crate) fn initialization_order<'a>(
                     name: NameIdentifier::Alias(Identifier { name, .. }),
                     ..
                 }
-                | From { name: Identifier { name, .. }, .. }
                 | ExternalDefinition { ident: Identifier { name, .. }, .. }
                 | Definition { ident: Identifier { name, .. }, .. } => {
                     let mut ctx = Context { compiler, namespace, variables: Vec::new() };

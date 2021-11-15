@@ -389,6 +389,7 @@ impl Compiler {
             .collect();
 
         let mut num_constants = 0;
+        let mut from_statements = Vec::new();
         // Find all globals in all files and declare them. The globals are
         // initialized at a later stage.
         for (path, module) in tree.modules.iter() {
@@ -407,11 +408,11 @@ impl Compiler {
                             unreachable!()
                         }
                     }
-                    From { name: Identifier { name, span }, .. } => {
-                        let var = self.define(name, VarKind::Const, statement.span);
-                        self.activate(var);
-                        num_constants += 1;
-                        vec![(Name::Global(var), name.clone(), *span)]
+                    From { .. } => {
+                        // We cannot resolve this here since the namespace
+                        // might not be loaded yet. We process these after.
+                        from_statements.push(statement.clone());
+                        Vec::new()
                     }
                     Use { name, file, .. } => {
                         let ident = match name {
@@ -459,6 +460,41 @@ impl Compiler {
                 }
             }
             self.namespaces[slot] = namespace;
+        }
+
+        for from_stmt in from_statements.into_iter() {
+            let slot = from_stmt.span.file_id;
+            match from_stmt.kind {
+                StatementKind::From { imports, file, .. } => {
+                    let from_slot = path_to_namespace_id[&file];
+                    for Identifier { name: ident_name, span } in imports.iter() {
+                        let name = match self.namespaces[from_slot].get(ident_name) {
+                            Some(name) => name.clone(),
+                            None => {
+                                error!(
+                                    self,
+                                    *span, "Nothing named '{}' in '{:?}'", ident_name, file
+                                );
+                                continue;
+                            }
+                        };
+                        match self.namespaces[slot].entry(ident_name.clone()) {
+                            Entry::Vacant(vac) => {
+                                vac.insert(name);
+                            }
+                            Entry::Occupied(_) => {
+                                error!(
+                                    self,
+                                    *span,
+                                    "A global variable with the name '{}' already exists",
+                                    ident_name
+                                );
+                            }
+                        }
+                    }
+                }
+                _ => unreachable!(),
+            }
         }
         num_constants
     }

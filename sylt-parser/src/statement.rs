@@ -38,7 +38,7 @@ pub enum StatementKind {
     /// `from <file> use <var1>
     From {
         path: Identifier,
-        name: Identifier,
+        imports: Vec<Identifier>,
         file: PathBuf,
     },
 
@@ -336,15 +336,41 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     format!("{}.sy", name)
                 })
             };
-            let ctx = expect!(ctx, T::Use, "Expected 'use' after path");
-            let (ctx, name) = match ctx.tokens_lookahead::<1>() {
-                [T::Identifier(name)] => (
-                    ctx.skip(1),
-                    Identifier { name: name.clone(), span: ctx.span() },
-                ),
-                _ => raise_syntax_error!(ctx, "Expected identifier"),
+            let mut ctx = expect!(ctx, T::Use, "Expected 'use' after path");
+            let mut imports = Vec::new();
+
+            let paren = matches!(ctx.token(), T::LeftParen);
+            let (ctx_, skip_paren) = if paren {
+                ctx = ctx.skip(1);
+                ctx.push_skip_newlines(true)
+            } else {
+                ctx.push_skip_newlines(false)
             };
-            (ctx, From { path: path_ident, name, file })
+            ctx = ctx_;
+            loop {
+                match ctx.token() {
+                    T::RightParen | T::Newline => break,
+                    T::Identifier(name) => {
+                        imports.push(Identifier { name: name.clone(), span: ctx.span() });
+                        ctx = ctx.skip(1);
+                        if matches!(ctx.token(), T::Comma | T::RightParen) {
+                            syntax_error!(ctx, "Expected ',' after imports");
+                        }
+                        ctx = ctx.skip_if(T::Comma);
+                    }
+                    _ => raise_syntax_error!(ctx, "Expected identifier"),
+                };
+            }
+            if imports.is_empty() {
+                raise_syntax_error!(ctx, "Something has to be imported in an import statement");
+            }
+            let ctx = ctx.pop_skip_newlines(skip_paren);
+            let ctx = if paren {
+                expect!(ctx, T::RightParen, "Expected ')' after import list")
+            } else {
+                ctx
+            };
+            (ctx, From { path: path_ident, imports, file })
         }
 
         // `: A is : B`
