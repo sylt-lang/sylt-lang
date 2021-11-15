@@ -620,12 +620,13 @@ impl TypeChecker {
             }
 
             StatementKind::From { imports, file, .. } => {
+                // TODO(ed): This shouldn't be nessecary - the namespace should be set up
+                // Correctly already.
                 let other = self.file_to_namespace[file];
-                let mut errs = Vec::new();
-                imports.iter().for_each(|ident| {
+                for ident in imports.iter() {
                     let other_var = match &self.globals[&(other, ident.name.clone())] {
                         Name::Global(var) => var.clone(),
-                        _ => todo!(),
+                        Name::Blob(_) | Name::Namespace(_) => continue,
                     };
                     let var = Variable {
                         ident: ident.clone(),
@@ -633,15 +634,9 @@ impl TypeChecker {
                         kind: VarKind::Const,
                         span,
                     };
-                    match self.unify(span, ctx, var.ty, other_var.ty) {
-                        Ok(_) => {}
-                        Err(mut err) => errs.append(&mut err),
-                    }
+                    self.unify(span, ctx, var.ty, other_var.ty)?;
                     self.globals
                         .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
-                });
-                if !errs.is_empty() {
-                    return Err(errs);
                 }
             }
 
