@@ -619,7 +619,22 @@ impl TypeChecker {
                     .insert((ctx.namespace, ident.name.clone()), Name::Namespace(other));
             }
 
-            StatementKind::From { .. } => todo!(),
+            StatementKind::From { name: ident, file, .. } => {
+                let other = self.file_to_namespace[file];
+                let other_var = match &self.globals[&(other, ident.name.clone())] {
+                    Name::Global(var) => var.clone(),
+                    _ => todo!(),
+                };
+                let var = Variable {
+                    ident: ident.clone(),
+                    ty: self.push_type(Type::Unknown),
+                    kind: VarKind::Const,
+                    span,
+                };
+                self.unify(span, ctx, var.ty, other_var.ty)?;
+                self.globals
+                    .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
+            }
 
             StatementKind::Blob { name, fields } => {
                 let mut resolved_fields = BTreeMap::new();

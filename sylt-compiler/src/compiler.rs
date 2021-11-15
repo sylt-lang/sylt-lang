@@ -407,18 +407,12 @@ impl Compiler {
                             unreachable!()
                         }
                     }
-                    From { names, file, .. } => names
-                        .iter()
-                        .map(|name| {
-                            let ident = match name {
-                                NameIdentifier::Implicit(ident) => ident,
-                                NameIdentifier::Alias(ident) => ident,
-                            };
-                            dbg!(&path_to_namespace_id, &file);
-                            let other = path_to_namespace_id[file];
-                            (Name::Namespace(other), ident.name.clone(), ident.span)
-                        })
-                        .collect(),
+                    From { name: Identifier { name, span }, .. } => {
+                        let var = self.define(name, VarKind::Const, statement.span);
+                        self.activate(var);
+                        num_constants += 1;
+                        vec![(Name::Global(var), name.clone(), *span)]
+                    }
                     Use { name, file, .. } => {
                         let ident = match name {
                             NameIdentifier::Implicit(ident) => ident,

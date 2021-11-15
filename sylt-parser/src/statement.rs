@@ -35,10 +35,10 @@ pub enum StatementKind {
 
     /// "Imports" variables from another file.
     ///
-    /// `from <file> use <var1>, <var2>
+    /// `from <file> use <var1>
     From {
         path: Identifier,
-        names: Vec<NameIdentifier>,
+        name: Identifier,
         file: PathBuf,
     },
 
@@ -337,18 +337,14 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 })
             };
             let ctx = expect!(ctx, T::Use, "Expected 'use' after path");
-            let mut names = Vec::new();
-            let ctx = match ctx.tokens_lookahead::<1>() {
-                [T::Identifier(name)] => {
-                    names.push(NameIdentifier::Implicit(Identifier {
-                        name: name.clone(),
-                        span: ctx.span(),
-                    }));
-                    ctx.skip(1)
-                }
+            let (ctx, name) = match ctx.tokens_lookahead::<1>() {
+                [T::Identifier(name)] => (
+                    ctx.skip(1),
+                    Identifier { name: name.clone(), span: ctx.span() },
+                ),
                 _ => raise_syntax_error!(ctx, "Expected identifier"),
             };
-            (ctx, From { path: path_ident, names, file })
+            (ctx, From { path: path_ident, name, file })
         }
 
         // `: A is : B`

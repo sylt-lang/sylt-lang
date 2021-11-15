@@ -221,7 +221,24 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
                 .collect()
         }
 
-        From { .. } => todo!(),
+        From { file, name, .. } => {
+            let old_ns = ctx.namespace;
+            ctx.namespace = ctx
+                .compiler
+                .namespace_id_to_path
+                .iter()
+                .find_map(|(ns, path)| if path == file { Some(*ns) } else { None })
+                .unwrap();
+            let deps = assignable_dependencies(
+                ctx,
+                &Assignable {
+                    span: name.span,
+                    kind: AssignableKind::Read(name.clone()),
+                },
+            );
+            ctx.namespace = old_ns;
+            deps
+        }
 
         Break | Continue | EmptyStatement | IsCheck { .. } | Unreachable | Use { .. } => {
             BTreeSet::new()
@@ -365,6 +382,7 @@ pub(crate) fn initialization_order<'a>(
                     name: NameIdentifier::Alias(Identifier { name, .. }),
                     ..
                 }
+                | From { name: Identifier { name, .. }, .. }
                 | ExternalDefinition { ident: Identifier { name, .. }, .. }
                 | Definition { ident: Identifier { name, .. }, .. } => {
                     let mut ctx = Context { compiler, namespace, variables: Vec::new() };
@@ -377,6 +395,22 @@ pub(crate) fn initialization_order<'a>(
                     );
                 }
 
+                //From { names, .. } => {
+                //    for name_ident in names.iter() {
+                //        let name = match name_ident {
+                //            NameIdentifier::Implicit(ident) => ident.name.clone(),
+                //            NameIdentifier::Alias(ident) => ident.name.clone(),
+                //        };
+                //        let mut ctx = Context { compiler, namespace, variables: Vec::new() };
+                //        to_order.insert(
+                //            (name, namespace),
+                //            (
+                //                statement_dependencies(&mut ctx, statement),
+                //                (statement, namespace),
+                //            ),
+                //        );
+                //    }
+                //}
                 IsCheck { .. } => is_checks.push((statement, namespace)),
 
                 _ => {}

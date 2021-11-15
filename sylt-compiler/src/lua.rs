@@ -377,6 +377,19 @@ impl<'t> LuaCompiler<'t> {
             | EmptyStatement
             | ExternalDefinition { .. } => return,
 
+            From { name, file, .. } => {
+                let other_ns = self
+                    .compiler
+                    .namespace_id_to_path
+                    .iter()
+                    .find_map(|(ns, path)| if path == file { Some(*ns) } else { None })
+                    .unwrap();
+
+                self.set_identifier(&name.name, statement.span, ctx, ctx.namespace);
+                write!(self, "=");
+                self.read_identifier(&name.name, statement.span, ctx, other_ns);
+            }
+
             #[rustfmt::skip]
             Definition { ident, value, .. } => {
                 self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
