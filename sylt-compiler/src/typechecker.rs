@@ -24,11 +24,7 @@ impl<T> Help for TypeResult<T> {
             Ok(_) => {}
             Err(errs) => match &mut errs.last_mut() {
                 Some(Error::TypeError { helpers, .. }) => {
-                    helpers.push(Helper {
-                        file: typechecker.namespace_to_file[&span.file_id].clone(),
-                        span,
-                        message,
-                    });
+                    helpers.push(Helper { file: typechecker.span_file(&span), span, message });
                 }
                 _ => panic!("Cannot help on this error"),
             },
@@ -50,7 +46,7 @@ macro_rules! type_error {
     ($self:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
         Error::TypeError {
             kind: $kind,
-            file: $self.namespace_to_file[&$span.file_id].clone(),
+            file: $self.span_file(&$span),
             span: $span,
             message: Some(format!($( $msg ),*)),
             helpers: Vec::new(),
@@ -59,7 +55,7 @@ macro_rules! type_error {
     ($self:expr, $span:expr, $kind:expr) => {
         Error::TypeError {
             kind: $kind,
-            file: $self.namespace_to_file[&$span.file_id].clone(),
+            file: $self.span_file(&$span),
             span: $span,
             message: None,
             helpers: Vec::new(),
@@ -658,7 +654,12 @@ impl TypeChecker {
             | StatementKind::StatementExpression { .. }
             | StatementKind::Unreachable
             | StatementKind::EmptyStatement => {
-                panic!("Illegal outer statement! Parser should have caught this")
+                panic!(
+                    "Illegal outer statement between lines {} and {} in '{}'! Parser should have caught this",
+                    span.line_start,
+                    span.line_end,
+                    self.span_file(&span).display()
+                )
             }
         }
         Ok(())
@@ -1910,6 +1911,10 @@ impl TypeChecker {
                 )
             }
         }
+    }
+
+    fn span_file(&self, span: &Span) -> PathBuf {
+        self.namespace_to_file[&span.file_id].clone()
     }
 }
 
