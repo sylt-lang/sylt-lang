@@ -1,0 +1,6 @@
+from _b use (a, b)
+
+start :: fn do
+    print' a
+    print' b
+end
