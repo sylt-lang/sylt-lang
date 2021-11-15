@@ -24,11 +24,7 @@ impl<T> Help for TypeResult<T> {
             Ok(_) => {}
             Err(errs) => match &mut errs.last_mut() {
                 Some(Error::TypeError { helpers, .. }) => {
-                    helpers.push(Helper {
-                        file: typechecker.namespace_to_file[&span.file_id].clone(),
-                        span,
-                        message,
-                    });
+                    helpers.push(Helper { file: typechecker.span_file(&span), span, message });
                 }
                 _ => panic!("Cannot help on this error"),
             },
@@ -50,7 +46,7 @@ macro_rules! type_error {
     ($self:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
         Error::TypeError {
             kind: $kind,
-            file: $self.namespace_to_file[&$span.file_id].clone(),
+            file: $self.span_file(&$span),
             span: $span,
             message: Some(format!($( $msg ),*)),
             helpers: Vec::new(),
@@ -59,7 +55,7 @@ macro_rules! type_error {
     ($self:expr, $span:expr, $kind:expr) => {
         Error::TypeError {
             kind: $kind,
-            file: $self.namespace_to_file[&$span.file_id].clone(),
+            file: $self.span_file(&$span),
             span: $span,
             message: None,
             helpers: Vec::new(),
@@ -387,7 +383,7 @@ impl TypeChecker {
             match seen.get(name) {
                 Some(x) => Ok(*x),
                 _ => {
-                    return err_type_error!(
+                    err_type_error!(
                         typechecker,
                         span,
                         TypeError::UnknownConstraintArgument(name.into())
@@ -600,7 +596,10 @@ impl TypeChecker {
             | StatementKind::Blob { .. }
             | StatementKind::IsCheck { .. }
             | StatementKind::ExternalDefinition { .. } => {
-                unreachable!("Illegal inner statement! Parser should have caught this.")
+                unreachable!(
+                    "Illegal inner statement at {:?}! Parser should have caught this.",
+                    span
+                )
             }
         }
     }
@@ -655,7 +654,12 @@ impl TypeChecker {
             | StatementKind::StatementExpression { .. }
             | StatementKind::Unreachable
             | StatementKind::EmptyStatement => {
-                panic!("Illegal outer statement! Parser should have caught this")
+                unreachable!(
+                    "Illegal outer statement between lines {} and {} in '{}'! Parser should have caught this",
+                    span.line_start,
+                    span.line_end,
+                    self.span_file(&span).display()
+                )
             }
         }
         Ok(())
@@ -726,14 +730,12 @@ impl TypeChecker {
                         TypeError::Violating(self.bake_type(f)),
                         "Unknown types cannot be called"
                     ),
-                    _ => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::Violating(self.bake_type(f)),
-                            "Not callable"
-                        );
-                    }
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        TypeError::Violating(self.bake_type(f)),
+                        "Not callable"
+                    ),
                 }
             }
 
@@ -1149,13 +1151,11 @@ impl TypeChecker {
 
                 Constraint::Neg => match self.find_type(a) {
                     Type::Unknown | Type::Int | Type::Float => Ok(()),
-                    _ => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::UniOp { val: self.bake_type(a), op: "-".to_string() }
-                        )
-                    }
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        TypeError::UniOp { val: self.bake_type(a), op: "-".to_string() }
+                    ),
                 },
 
                 Constraint::IndexedBy(b) => self.is_indexed_by(span, ctx, a, *b),
@@ -1489,24 +1489,17 @@ impl TypeChecker {
     fn can_assign(&mut self, span: Span, ctx: TypeCtx, assignable: &Assignable) -> TypeResult<()> {
         match &assignable.kind {
             AssignableKind::Read(ident) => {
-                if let Some(var) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
-                    if !var.kind.immutable() {
-                        Ok(())
-                    } else {
-                        err_type_error!(
-                            self,
-                            span,
-                            TypeError::Assignability,
-                            "Cannot assign to constants"
-                        )
-                        .help(
-                            self,
-                            var.span,
-                            "Originally defined here".into(),
-                        )
-                    }
-                } else {
-                    match self.globals.get(&(ctx.namespace, ident.name.clone())) {
+                match self.stack.iter().rfind(|v| v.ident.name == ident.name) {
+                    Some(var) if !var.kind.immutable() => Ok(()),
+                    Some(var) => err_type_error!(
+                        self,
+                        span,
+                        TypeError::Assignability,
+                        "Cannot assign to constants"
+                    )
+                    .help(self, var.span, "Originally defined here".into()),
+                    // Not a local variable. Is it a global?
+                    _ => match self.globals.get(&(ctx.namespace, ident.name.clone())) {
                         Some(Name::Global(var)) => {
                             if !var.kind.immutable() {
                                 Ok(())
@@ -1538,7 +1531,7 @@ impl TypeChecker {
                             "Variable \"{}\" not found. If declaring, use :=",
                             ident.name.clone()
                         ),
-                    }
+                    },
                 }
             }
             AssignableKind::ArrowCall(_, _, _) | AssignableKind::Call(_, _) => err_type_error!(
@@ -1583,17 +1576,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "+".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "+".to_string(),
+                }
+            ),
         }
     }
 
@@ -1610,17 +1601,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "-".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "-".to_string(),
+                }
+            ),
         }
     }
 
@@ -1651,17 +1640,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "*".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "*".to_string(),
+                }
+            ),
         }
     }
 
@@ -1694,17 +1681,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "/".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "/".to_string(),
+                }
+            ),
         }
     }
 
@@ -1730,17 +1715,15 @@ impl TypeChecker {
             }
 
             // TODO(ed): Maybe sets?
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "<".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "<".to_string(),
+                }
+            ),
         }
     }
 
@@ -1757,17 +1740,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "Indexing".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "Indexing".to_string(),
+                }
+            ),
         }
     }
 
@@ -1801,17 +1782,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "Indexing".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "Indexing".to_string(),
+                }
+            ),
         }
     }
 
@@ -1901,10 +1880,10 @@ impl TypeChecker {
             Some(Name::Global(var)) => {
                 let void = self.push_type(Type::Void);
                 let start = self.push_type(Type::Function(Vec::new(), void));
-                match self.unify(var.ident.span, ctx, var.ty, start) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        return err_type_error!(
+                self.unify(var.ident.span, ctx, var.ty, start)
+                    .map(|_| ())
+                    .or_else(|_| {
+                        err_type_error!(
                             self,
                             var.ident.span,
                             TypeError::Mismatch {
@@ -1913,11 +1892,10 @@ impl TypeChecker {
                             },
                             "The start function has the wrong type"
                         )
-                    }
-                }
+                    })
             }
             Some(_) => {
-                return err_type_error!(
+                err_type_error!(
                     self,
                     Span::zero(ctx.namespace),
                     TypeError::Exotic,
@@ -1925,7 +1903,7 @@ impl TypeChecker {
                 )
             }
             None => {
-                return err_type_error!(
+                err_type_error!(
                     self,
                     Span::zero(ctx.namespace),
                     TypeError::Exotic,
@@ -1933,8 +1911,10 @@ impl TypeChecker {
                 )
             }
         }
+    }
 
-        Ok(())
+    fn span_file(&self, span: &Span) -> PathBuf {
+        self.namespace_to_file[&span.file_id].clone()
     }
 }
 
