@@ -654,7 +654,7 @@ impl TypeChecker {
             | StatementKind::StatementExpression { .. }
             | StatementKind::Unreachable
             | StatementKind::EmptyStatement => {
-                panic!(
+                unreachable!(
                     "Illegal outer statement between lines {} and {} in '{}'! Parser should have caught this",
                     span.line_start,
                     span.line_end,
