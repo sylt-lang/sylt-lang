@@ -505,7 +505,19 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
                 write_identifier(dest, alias)?;
             }
         }
-        StatementKind::From { .. } => todo!(),
+        StatementKind::From { path, imports, file: _ } => {
+            write_indents(dest, indent)?;
+            write!(dest, "from ")?;
+            write_identifier(dest, path)?;
+            write!(dest, " use ")?;
+            if imports.len() == 1 {
+                write_identifier(dest, imports[0].clone())?;
+            } else {
+                write!(dest, "(")?;
+                write_comma_separated!(dest, indent, (|a, _, b| write_identifier(a, b)), imports);
+                write!(dest, ")")?;
+            }
+        }
     }
     write!(dest, "\n")?;
 
