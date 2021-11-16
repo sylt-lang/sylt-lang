@@ -113,8 +113,13 @@ impl<'t> BytecodeCompiler<'t> {
             Read(ident) => {
                 return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
             }
-            Variant { .. } => {
-                todo!();
+            Variant { variant, value, .. } => {
+                let variant = self
+                    .compiler
+                    .constant(Value::String(Rc::new(variant.name.clone())));
+                self.add_op(ctx, ass.span, variant);
+                self.expression(value, ctx);
+                self.add_op(ctx, ass.span, Op::Tag);
             }
             Call(f, expr) => {
                 self.assignable(f, ctx);

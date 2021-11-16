@@ -446,40 +446,20 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         if variants.contains_key(&variant) {
                             raise_syntax_error!(ctx, "Variant '{}' is declared twice", variant);
                         }
-                        let mut tuple = Vec::new();
-                        if matches!(ctx.token(), T::LeftParen) {
-                            let (ctx_, skip_newlines) = ctx.push_skip_newlines(true);
-                            ctx = ctx_.skip(1);
-                            loop {
-                                match ctx.token() {
-                                    T::RightParen | T::EOF => break,
-                                    _ => {
-                                        let (ctx_, ty) = parse_type(ctx)?;
-                                        tuple.push(ty);
-                                        ctx = ctx_;
-                                        if !matches!(
-                                            ctx.token(),
-                                            T::Comma | T::Newline | T::RightParen
-                                        ) {
-                                            raise_syntax_error!(
-                                                ctx,
-                                                "Expected a deliminator ',' or newline"
-                                            );
-                                        }
-                                        ctx = ctx.skip_if(T::Newline);
-                                        ctx = ctx.skip_if(T::Comma);
-                                    }
-                                }
-                            }
-                            ctx = ctx.pop_skip_newlines(skip_newlines);
-                            ctx =
-                                expect!(ctx, T::RightParen, "Expected ')' after variant elements");
-                        }
-                        variants.insert(variant, Type { span, kind: TypeKind::Tuple(tuple) });
-
-                        if !matches!(ctx.token(), T::Comma | T::End | T::Newline) {
-                            raise_syntax_error!(ctx, "Expected a deliminator ','");
-                        }
+                        let (ctx_, ty) = if matches!(ctx.token(), T::End | T::Comma | T::Newline) {
+                            (
+                                ctx,
+                                Type { span, kind: TypeKind::Resolved(RuntimeType::Void) },
+                            )
+                        } else {
+                            let (ctx_, ty) = parse_type(ctx)?;
+                            if !matches!(ctx_.token(), T::Comma | T::End | T::Newline) {
+                                raise_syntax_error!(ctx, "Expected a deliminator ','");
+                            };
+                            (ctx_, ty)
+                        };
+                        ctx = ctx_;
+                        variants.insert(variant, ty);
                         ctx = ctx.skip_if(T::Comma);
                         ctx = ctx.skip_if(T::Newline);
                     }

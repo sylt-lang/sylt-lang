@@ -53,6 +53,10 @@ pub enum Op {
     ///
     /// {A, B, C, D, A, E} - Dict(6) - {D(A:E, C:D)}
     Dict(usize),
+    /// Creates a new [Value::Variant] with the tag and value as given by the stack.
+    ///
+    /// {"A", B} - Tag - {"A" B}
+    Tag,
 
     /// Indexes something indexable,
     /// and adds that element to the stack.
