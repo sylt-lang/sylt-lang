@@ -468,27 +468,27 @@ impl Compiler {
                 StatementKind::From { imports, file, .. } => {
                     let from_slot = path_to_namespace_id[&file];
                     for (ident, alias) in imports.iter() {
-                        let Identifier { name: ident_name, span } = alias.as_ref().unwrap_or(ident);
-                        let name = match self.namespaces[from_slot].get(ident_name) {
-                            Some(name) => name.clone(),
+                        let name = match self.namespaces[from_slot].get(&ident.name) {
+                            Some(name) => *name,
                             None => {
                                 error!(
                                     self,
-                                    *span, "Nothing named '{}' in '{:?}'", ident_name, file
+                                    ident.span, "Nothing named '{}' in '{:?}'", ident.name, file
                                 );
                                 continue;
                             }
                         };
-                        match self.namespaces[slot].entry(ident_name.clone()) {
+                        let real_ident = alias.as_ref().unwrap_or(ident);
+                        match self.namespaces[slot].entry(real_ident.name.clone()) {
                             Entry::Vacant(vac) => {
                                 vac.insert(name);
                             }
                             Entry::Occupied(_) => {
                                 error!(
                                     self,
-                                    *span,
+                                    real_ident.span,
                                     "A global variable with the name '{}' already exists",
-                                    ident_name
+                                    real_ident.name
                                 );
                             }
                         }

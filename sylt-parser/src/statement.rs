@@ -355,12 +355,14 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         ctx = ctx.skip(1);
                         let alias = if matches!(ctx.token(), T::As) {
                             ctx = ctx.skip(1);
-                            match ctx.token() {
+                            let _alias = match ctx.token() {
                                 T::Identifier(name) => {
                                     Some(Identifier { name: name.clone(), span: ctx.span() })
                                 }
                                 _ => raise_syntax_error!(ctx, "Expected identifier after 'as'"),
-                            }
+                            };
+                            ctx = ctx.skip(1);
+                            _alias
                         } else {
                             None
                         };
