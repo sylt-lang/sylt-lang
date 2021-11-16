@@ -1,0 +1,5 @@
+from _from_circular use num2 as num1
+
+start :: fn do
+     num1 <=> 200
+end

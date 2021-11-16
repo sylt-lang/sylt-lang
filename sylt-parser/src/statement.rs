@@ -740,6 +740,7 @@ mod test {
     fail!(statement, statement_assign_self_var: "self := 1" => _);
     fail!(statement, statement_assign_self_type: "self: int = 1" => _);
     fail!(statement, outer_statement_from_invalid: "from b use a!" => _);
+    fail!(statement, outer_statement_from_alias_invalid: "from b use a as !" => _);
 }
 
 impl Display for NameIdentifier {
