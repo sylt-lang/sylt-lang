@@ -225,6 +225,8 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
                 .collect()
         }
 
+        // If it seems weird that From statements have dependencies, just think
+        // of them as several reads at the same time (spoiler: that's what they are).
         From { file, imports, .. } => {
             let old_ns = ctx.namespace;
             ctx.namespace = ctx
@@ -417,22 +419,6 @@ pub(crate) fn initialization_order<'a>(
                     );
                 }
 
-                //From { names, .. } => {
-                //    for name_ident in names.iter() {
-                //        let name = match name_ident {
-                //            NameIdentifier::Implicit(ident) => ident.name.clone(),
-                //            NameIdentifier::Alias(ident) => ident.name.clone(),
-                //        };
-                //        let mut ctx = Context { compiler, namespace, variables: Vec::new() };
-                //        to_order.insert(
-                //            (name, namespace),
-                //            (
-                //                statement_dependencies(&mut ctx, statement),
-                //                (statement, namespace),
-                //            ),
-                //        );
-                //    }
-                //}
                 IsCheck { .. } => is_checks.push((statement, namespace)),
 
                 _ => {}
