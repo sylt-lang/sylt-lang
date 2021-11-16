@@ -121,8 +121,7 @@ pub enum AssignableKind {
     Read(Identifier),
     /// Instance of an Enum variant `Abc.A(1, 2, 3)`
     Variant {
-        namespace_lookup: Option<Box<Assignable>>,
-        enum_name: Identifier,
+        enum_ass: Box<Assignable>,
         variant: Identifier,
         value: Box<Expression>,
     },
@@ -821,9 +820,9 @@ fn assignable_dot_or_variant<'t>(
 fn assignable_variant<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t, Assignable> {
     let span = ctx.span();
     // TODO(ed): I kinda dislike this - but I think it's okay?
-    let (namespace_lookup, enum_name) = match accessed.kind {
-        AssignableKind::Read(enum_name) => (None, enum_name),
-        AssignableKind::Access(chain, enum_name) => (Some(chain), enum_name),
+    let enum_name = match &accessed.kind {
+        AssignableKind::Read(enum_name) => enum_name,
+        AssignableKind::Access(_, enum_name) => enum_name,
         AssignableKind::Index(_, _) => {
             raise_syntax_error!(ctx, "Indexing cannot lead into enum-variant");
         }
@@ -832,6 +831,10 @@ fn assignable_variant<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult
         }
         AssignableKind::Expression(_) | AssignableKind::Variant { .. } => unreachable!(),
     };
+    if !is_capitalized(&enum_name.name) {
+        raise_syntax_error!(ctx, "Enums have to start with a capital letter");
+    }
+    drop(enum_name);
 
     let ctx = expect!(ctx, T::Dot, "Expected '.' after variant name");
 
@@ -852,8 +855,7 @@ fn assignable_variant<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult
         Assignable {
             span,
             kind: Variant {
-                namespace_lookup,
-                enum_name,
+                enum_ass: Box::new(accessed),
                 variant,
                 value: Box::new(value),
             },
@@ -1396,11 +1398,9 @@ impl PrettyPrint for Assignable {
                     arg.pretty_print(f, indent + 1)?;
                 }
             }
-            AssignableKind::Variant { namespace_lookup, enum_name, variant, value } => {
-                if let Some(ns) = namespace_lookup {
-                    ns.pretty_print(f, indent)?;
-                }
-                write!(f, "[Variant] {}.{}", enum_name.name, variant.name)?;
+            AssignableKind::Variant { enum_ass, variant, value } => {
+                enum_ass.pretty_print(f, indent)?;
+                write!(f, "[Variant] {}", variant.name)?;
                 value.pretty_print(f, indent + 1)?;
             }
             AssignableKind::ArrowCall(func, add, args) => {
@@ -1415,8 +1415,8 @@ impl PrettyPrint for Assignable {
                 }
             }
             AssignableKind::Access(a, ident) => {
-                write!(f, "[Access] {}", ident.name)?;
                 a.pretty_print(f, indent)?;
+                write!(f, "[Access] {}", ident.name)?;
             }
             AssignableKind::Index(a, expr) => {
                 write!(f, "[Index]")?;

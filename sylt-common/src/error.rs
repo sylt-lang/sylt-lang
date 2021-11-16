@@ -156,6 +156,8 @@ pub enum TypeError {
 
     UnknownConstraint(String),
     UnknownConstraintArgument(String),
+
+    UnknownVariant(String, String),
 }
 
 // TODO(ed): Switch to spans for the whole compiler?
@@ -428,8 +430,17 @@ impl fmt::Display for TypeError {
             TypeError::UnknownConstraint(constraint) => {
                 write!(f, "Unknown constraint '{}'", constraint)
             }
+
             TypeError::UnknownConstraintArgument(argument) => {
                 write!(f, "Cannot resolve this constraint argument '{}'", argument)
+            }
+
+            TypeError::UnknownVariant(enum_name, var_name) => {
+                write!(
+                    f,
+                    "Enum '{}' doesn't have variant '{}'",
+                    enum_name, var_name
+                )
             }
         }
     }

@@ -31,23 +31,10 @@ fn assignable_dependencies(
 ) -> BTreeSet<(String, usize)> {
     use AssignableKind::*;
     match &assignable.kind {
-        Variant { namespace_lookup, enum_name, value, .. } => {
-            let deps = match namespace_lookup {
-                Some(ns) => assignable_dependencies(
-                    ctx,
-                    &Assignable {
-                        span: assignable.span,
-                        kind: Access(ns.clone(), enum_name.clone()),
-                    },
-                ),
-                _ => [(enum_name.name.clone(), ctx.namespace)]
-                    .iter()
-                    .cloned()
-                    .collect(),
-            };
-            // TODO(ed): Add enum as dependency (this is hard since it's in a different namespace?
-            deps.union(&dependencies(ctx, value)).cloned().collect()
-        }
+        Variant { enum_ass, value, .. } => assignable_dependencies(ctx, enum_ass)
+            .union(&dependencies(ctx, value))
+            .cloned()
+            .collect(),
         Read(ident) => match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
             Some(_) if !ctx.shadowed(&ident.name) => [(ident.name.clone(), ctx.namespace)]
                 .iter()

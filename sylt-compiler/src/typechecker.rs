@@ -199,9 +199,6 @@ impl TypeChecker {
 
     fn namespace_chain(&self, assignable: &Assignable, ctx: TypeCtx) -> Option<TypeCtx> {
         match &assignable.kind {
-            AssignableKind::Variant { .. } => {
-                todo!();
-            }
             AssignableKind::Read(ident) => {
                 if let Some(_) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
                     None
@@ -229,7 +226,8 @@ impl TypeChecker {
                 }
             }
 
-            AssignableKind::Call(..)
+            AssignableKind::Variant { .. }
+            | AssignableKind::Call(..)
             | AssignableKind::ArrowCall(..)
             | AssignableKind::Index(..)
             | AssignableKind::Expression(..) => None,
@@ -303,13 +301,13 @@ impl TypeChecker {
                 .get(&(ctx.namespace, ident.name.clone()))
                 .cloned()
             {
-                Some(Name::Blob(blob_ty)) => Ok(self.push_type(blob_ty.clone())),
+                Some(Name::Blob(ty)) | Some(Name::Enum(ty)) => Ok(self.push_type(ty.clone())),
                 None => {
                     err_type_error!(
                         self,
                         ident.span,
                         TypeError::UnresolvedName(ident.name.clone()),
-                        "Expected a blob"
+                        "Expected a blob or an enum"
                     )
                 }
                 _ => {
@@ -330,7 +328,7 @@ impl TypeChecker {
                     .get(&(ctx.namespace, ident.name.clone()))
                     .cloned()
                 {
-                    Some(Name::Blob(ty)) => Ok(self.push_type(ty.clone())),
+                    Some(Name::Blob(ty)) | Some(Name::Enum(ty)) => Ok(self.push_type(ty.clone())),
                     None => {
                         err_type_error!(
                             self,
@@ -741,8 +739,81 @@ impl TypeChecker {
     fn assignable(&mut self, assignable: &Assignable, ctx: TypeCtx) -> TypeResult<usize> {
         let span = assignable.span;
         match &assignable.kind {
-            AssignableKind::Variant { .. } => {
-                todo!();
+            AssignableKind::Variant { enum_ass, variant, value } => {
+                let (ctx, enum_name) = match &enum_ass.kind {
+                    AssignableKind::Read(enum_name) => (ctx, enum_name),
+                    AssignableKind::Access(chain, enum_name) => match self.namespace_chain(chain, ctx) {
+                        Some(ctx) => (ctx, enum_name),
+                        None => return err_type_error!(
+                            self,
+                            span,
+                            TypeError::Exotic,
+                            "Not all accesses are namespace accesses\nsince enums cannot be stored anywhere"
+                        ),
+                    }
+
+                    AssignableKind::Call(_, _)
+                    | AssignableKind::Variant { .. }
+                    | AssignableKind::ArrowCall(_, _, _)
+                    | AssignableKind::Index(_, _)
+                    | AssignableKind::Expression(_) => unreachable!(),
+                };
+                match self.stack.iter().rfind(|v| v.ident.name == enum_name.name) {
+                    Some(var) => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::Exotic,
+                            "Expected an enum - but the local variable '{}'",
+                            var.ident.name
+                        )
+                        .help(
+                            self,
+                            var.span,
+                            format!("'{}' was declared here", var.ident.name),
+                        )?
+                    }
+                    None => {}
+                };
+                let ty = match self.globals.get(&(ctx.namespace, enum_name.name.clone())) {
+                    // TODO(ed): Is this correct?
+                    Some(Name::Enum(ty)) => {
+                        let ty = ty.clone();
+                        self.push_type(ty)
+                    }
+                    _ => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::UnresolvedName(enum_name.name.clone())
+                        )
+                    }
+                };
+
+                let (enum_name, variants) = match self.find_type(ty) {
+                    Type::Enum(name, variants) => (name, variants),
+                    Type::Unknown => todo!("Should this ever happen?"),
+                    _ => {
+                        return err_type_error!(
+                            self,
+                            variant.span,
+                            TypeError::Violating(self.bake_type(ty)),
+                            "Is not an enum-variant"
+                        )
+                    }
+                };
+                let var_ty = match variants.get(&variant.name) {
+                    Some(ty) => *ty,
+                    None => {
+                        return err_type_error!(
+                            self,
+                            variant.span,
+                            TypeError::UnknownVariant(enum_name, variant.name.clone())
+                        )
+                    }
+                };
+                let expr_ty = self.expression(value, ctx)?;
+                self.unify(variant.span, ctx, var_ty, expr_ty)
             }
 
             AssignableKind::Read(ident) => {
@@ -1383,6 +1454,35 @@ impl TypeChecker {
                     }
                 }
 
+                (Type::Enum(a_name, a_variants), Type::Blob(b_name, b_variants)) => {
+                    for (a_var, _) in a_variants.iter() {
+                        match b_variants.get(a_var) {
+                            // Do unify later
+                            Some(_) => {}
+                            None => {
+                                return err_type_error!(
+                                    self,
+                                    span,
+                                    TypeError::UnknownVariant(b_name.clone(), a_var.clone())
+                                )
+                            }
+                        };
+                    }
+                    for (b_var, b_ty) in b_variants.iter() {
+                        let a_ty = match a_variants.get(b_var) {
+                            Some(a_ty) => *a_ty,
+                            None => {
+                                return err_type_error!(
+                                    self,
+                                    span,
+                                    TypeError::UnknownVariant(a_name.clone(), b_var.clone())
+                                )
+                            }
+                        };
+                        self.unify(span, ctx, a_ty, *b_ty)?;
+                    }
+                }
+
                 _ => {
                     return err_type_error!(
                         self,
@@ -1533,7 +1633,12 @@ impl TypeChecker {
     fn can_assign(&mut self, span: Span, ctx: TypeCtx, assignable: &Assignable) -> TypeResult<()> {
         match &assignable.kind {
             AssignableKind::Variant { .. } => {
-                todo!();
+                err_type_error!(
+                    self,
+                    span,
+                    TypeError::Assignability,
+                    "Cannot assign to enum-variant"
+                )
             }
             AssignableKind::Read(ident) => {
                 if let Some(var) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
