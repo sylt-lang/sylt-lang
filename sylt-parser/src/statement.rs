@@ -438,7 +438,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         if !is_capitalized(&variant) {
                             raise_syntax_error!(
                                 ctx,
-                                "Enum kinds have to start with a capital letter"
+                                "Enum variants have to start with a capital letter"
                             );
                         }
                         let span = ctx.span();
