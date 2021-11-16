@@ -225,13 +225,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             ctx.shadow(&name);
             variants
                 .values()
-                .map(|var| {
-                    var.tuple
-                        .iter()
-                        .map(|t| type_dependencies(ctx, t))
-                        .flatten()
-                        .collect::<BTreeSet<_>>()
-                })
+                .map(|t| type_dependencies(ctx, t))
                 .flatten()
                 .collect()
         }
@@ -329,9 +323,10 @@ fn order(
             }
         };
 
-        let (deps, statement) = to_order
-            .get(&global)
-            .expect("Trying to find an identifier that does not exist");
+        let (deps, statement) = to_order.get(&global).expect(&format!(
+            "Trying to find an identifier that does not exist ({:?})",
+            global.0
+        ));
         for dep in deps {
             recurse(dep, to_order, inserted, ordered).map_err(|mut cycle| {
                 cycle.push(*statement);
@@ -370,6 +365,7 @@ pub(crate) fn initialization_order<'a>(
             use StatementKind::*;
             match &statement.kind {
                 Blob { name, .. }
+                | Enum { name, .. }
                 | Use {
                     name: NameIdentifier::Implicit(Identifier { name, .. }),
                     ..

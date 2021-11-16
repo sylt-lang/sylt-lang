@@ -9,14 +9,6 @@ pub enum NameIdentifier {
     Alias(Identifier),
 }
 
-/// A kind of an enum
-#[derive(Debug, Clone, PartialEq)]
-pub struct EnumVariant {
-    pub span: Span,
-    // TODO(ed): Maybe support blobs here aswell?
-    pub tuple: Vec<Type>,
-}
-
 /// The different kinds of [Statement]s.
 ///
 /// There are both shorter statements like `a = b + 1` as well as longer
@@ -54,7 +46,7 @@ pub enum StatementKind {
     /// `A :: enum <variant>.. end`.
     Enum {
         name: String,
-        variants: HashMap<String, EnumVariant>,
+        variants: HashMap<String, Type>,
     },
 
     /// Assigns to a variable (`a = <expression>`), optionally with an operator
@@ -483,7 +475,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                             ctx =
                                 expect!(ctx, T::RightParen, "Expected ')' after variant elements");
                         }
-                        variants.insert(variant, EnumVariant { tuple, span });
+                        variants.insert(variant, Type { span, kind: TypeKind::Tuple(tuple) });
 
                         if !matches!(ctx.token(), T::Comma | T::End | T::Newline) {
                             raise_syntax_error!(ctx, "Expected a deliminator ','");

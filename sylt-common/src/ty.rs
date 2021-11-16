@@ -26,7 +26,7 @@ pub enum Type {
     Dict(Box<Type>, Box<Type>),
     Function(Vec<Type>, Box<Type>),
     Blob(String, BTreeMap<String, Type>),
-    Enum(String, BTreeMap<String, Vec<Type>>),
+    Enum(String, BTreeMap<String, Type>),
     ExternFunction(usize),
 
     Invalid,

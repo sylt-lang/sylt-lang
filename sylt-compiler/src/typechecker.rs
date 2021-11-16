@@ -150,6 +150,7 @@ struct TypeCtx {
 #[derive(Debug, Clone)]
 enum Name {
     Blob(Type),
+    Enum(Type),
     Global(Variable),
     Namespace(usize),
 }
@@ -650,8 +651,14 @@ impl TypeChecker {
                     .insert((ctx.namespace, ident.name.clone()), Name::Namespace(other));
             }
 
-            StatementKind::Enum { .. } => {
-                todo!();
+            StatementKind::Enum { name, variants } => {
+                let mut resolved_variants = BTreeMap::new();
+                for (k, t) in variants.iter() {
+                    resolved_variants.insert(k.clone(), self.resolve_type(span, ctx, t)?);
+                }
+                let ty = Type::Enum(name.clone(), resolved_variants);
+                self.globals
+                    .insert((ctx.namespace, name.clone()), Name::Enum(ty));
             }
 
             StatementKind::Blob { name, fields } => {
@@ -1137,6 +1144,13 @@ impl TypeChecker {
                     .map(|(name, ty)| (name.clone(), self.inner_bake_type(*ty, seen)))
                     .collect(),
             ),
+            Type::Enum(name, variants) => RuntimeType::Enum(
+                name.clone(),
+                variants
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.inner_bake_type(*ty, seen)))
+                    .collect(),
+            ),
 
             Type::Invalid => RuntimeType::Invalid,
         };
@@ -1488,6 +1502,14 @@ impl TypeChecker {
             Type::Blob(name, fields) => Type::Blob(
                 name.clone(),
                 fields
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.inner_copy(*ty, seen)))
+                    .collect(),
+            ),
+
+            Type::Enum(name, variants) => Type::Enum(
+                name.clone(),
+                variants
                     .iter()
                     .map(|(name, ty)| (name.clone(), self.inner_copy(*ty, seen)))
                     .collect(),

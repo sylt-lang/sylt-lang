@@ -1163,19 +1163,12 @@ impl PrettyPrint for Statement {
                 write!(f, " {:?}", file)?;
             }
             SK::Enum { name, variants } => {
-                write!(f, "<Blob> {} {{ ", name)?;
-                for (i, (name, variant)) in variants.iter().enumerate() {
+                write!(f, "<Enum> {} {{ ", name)?;
+                for (i, (name, ty)) in variants.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}(", name)?;
-                    for (i, ty) in variant.tuple.iter().enumerate() {
-                        if i != 0 {
-                            write!(f, ", ")?;
-                        }
-                        write!(f, "{}", ty)?;
-                    }
-                    write!(f, ")")?;
+                    write!(f, "<{} {}>", name, ty)?;
                 }
                 write!(f, " }}")?;
             }
