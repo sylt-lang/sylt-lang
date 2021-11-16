@@ -1,0 +1,12 @@
+from _constants use (
+    one,
+    two,
+)
+from _constants use _one, three
+
+start :: fn do
+    one() <=> 1
+    two() <=> 2.0
+    _one <=> 1
+    three() <=> 3
+end
