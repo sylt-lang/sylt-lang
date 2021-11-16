@@ -119,6 +119,13 @@ impl PartialEq for Identifier {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AssignableKind {
     Read(Identifier),
+    /// Instance of an Enum variant `Abc.A(1, 2, 3)`
+    Variant {
+        namespace_lookup: Option<Box<Assignable>>,
+        enum_name: Identifier,
+        variant: Identifier,
+        value: Box<Expression>,
+    },
     /// A function call.
     Call(Box<Assignable>, Vec<Expression>),
     /// An arrow function call. `a -> f' b`
@@ -797,7 +804,64 @@ fn assignable_index<'t>(ctx: Context<'t>, indexed: Assignable) -> ParseResult<'t
     sub_assignable(ctx, result)
 }
 
-/// Parse an [AssignableKind::Access].
+/// Parse an [AssignableKind::Access] or [AssignableKind::Variant].
+fn assignable_dot_or_variant<'t>(
+    ctx: Context<'t>,
+    accessed: Assignable,
+) -> ParseResult<'t, Assignable> {
+    // TODO(ed): It might be possible to remove this branch?
+    // TODO(ed): We throw away error information here...
+    match assignable_variant(ctx, accessed.clone()) {
+        Ok(variant) => Ok(variant),
+        Err(_) => assignable_dot(ctx, accessed),
+    }
+}
+
+/// Parse an [AssignableKind::Variant].
+fn assignable_variant<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t, Assignable> {
+    let span = ctx.span();
+    // TODO(ed): I kinda dislike this - but I think it's okay?
+    let (namespace_lookup, enum_name) = match accessed.kind {
+        AssignableKind::Read(enum_name) => (None, enum_name),
+        AssignableKind::Access(chain, enum_name) => (Some(chain), enum_name),
+        AssignableKind::Index(_, _) => {
+            raise_syntax_error!(ctx, "Indexing cannot lead into enum-variant");
+        }
+        AssignableKind::Call(_, _) | AssignableKind::ArrowCall(_, _, _) => {
+            raise_syntax_error!(ctx, "A function call cannot lead into enum-variant");
+        }
+        AssignableKind::Expression(_) | AssignableKind::Variant { .. } => unreachable!(),
+    };
+
+    let ctx = expect!(ctx, T::Dot, "Expected '.' after variant name");
+
+    let (ctx, variant) = if let (T::Identifier(name), span, ctx) = ctx.eat() {
+        if !is_capitalized(name) {
+            raise_syntax_error!(ctx, "Enum variants have to start with a capital letter");
+        }
+        (ctx, Identifier { name: name.clone(), span })
+    } else {
+        raise_syntax_error!(ctx, "Expected an identifier after '.' in variant");
+    };
+
+    let (ctx, value) = expression(ctx)?;
+
+    use AssignableKind::Variant;
+    Ok((
+        ctx,
+        Assignable {
+            span,
+            kind: Variant {
+                namespace_lookup,
+                enum_name,
+                variant,
+                value: Box::new(value),
+            },
+        },
+    ))
+}
+
+/// Parse an [AssignableKind::Access]
 fn assignable_dot<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t, Assignable> {
     use AssignableKind::Access;
     let (ctx, ident) = if let (T::Identifier(name), span, ctx) = ctx.skip(1).eat() {
@@ -821,7 +885,7 @@ fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'
     match ctx.token() {
         T::Prime | T::LeftParen => assignable_call(ctx, assignable),
         T::LeftBracket => assignable_index(ctx, assignable),
-        T::Dot => assignable_dot(ctx, assignable),
+        T::Dot => assignable_dot_or_variant(ctx, assignable),
         _ => Ok((ctx, assignable)),
     }
 }
@@ -841,10 +905,8 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
 
     // Get the identifier.
     let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
-        Assignable {
-            span: outer_span,
-            kind: Read(Identifier { span, name: name.clone() }),
-        }
+        let ident = Identifier { span, name: name.clone() };
+        Assignable { span: outer_span, kind: Read(ident) }
     } else {
         raise_syntax_error!(
             ctx,
@@ -1333,6 +1395,13 @@ impl PrettyPrint for Assignable {
                     }
                     arg.pretty_print(f, indent + 1)?;
                 }
+            }
+            AssignableKind::Variant { namespace_lookup, enum_name, variant, value } => {
+                if let Some(ns) = namespace_lookup {
+                    ns.pretty_print(f, indent)?;
+                }
+                write!(f, "[Variant] {}.{}", enum_name.name, variant.name)?;
+                value.pretty_print(f, indent + 1)?;
             }
             AssignableKind::ArrowCall(func, add, args) => {
                 write!(f, "[ArrowCall] ")?;

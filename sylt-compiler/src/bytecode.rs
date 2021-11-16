@@ -113,6 +113,9 @@ impl<'t> BytecodeCompiler<'t> {
             Read(ident) => {
                 return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
             }
+            Variant { .. } => {
+                todo!();
+            }
             Call(f, expr) => {
                 self.assignable(f, ctx);
                 for expr in expr.iter() {
@@ -530,6 +533,12 @@ impl<'t> BytecodeCompiler<'t> {
                         write_mutator_op(self, ctx, *kind);
 
                         self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
+                    }
+                    Variant { .. } => {
+                        error!(
+                            self.compiler,
+                            statement.span, "Cannot assign to enum-variant"
+                        );
                     }
                     ArrowCall(..) | Call(..) => {
                         error!(

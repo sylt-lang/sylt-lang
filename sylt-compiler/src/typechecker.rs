@@ -199,6 +199,9 @@ impl TypeChecker {
 
     fn namespace_chain(&self, assignable: &Assignable, ctx: TypeCtx) -> Option<TypeCtx> {
         match &assignable.kind {
+            AssignableKind::Variant { .. } => {
+                todo!();
+            }
             AssignableKind::Read(ident) => {
                 if let Some(_) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
                     None
@@ -738,6 +741,10 @@ impl TypeChecker {
     fn assignable(&mut self, assignable: &Assignable, ctx: TypeCtx) -> TypeResult<usize> {
         let span = assignable.span;
         match &assignable.kind {
+            AssignableKind::Variant { .. } => {
+                todo!();
+            }
+
             AssignableKind::Read(ident) => {
                 if let Some(var) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
                     Ok(var.ty)
@@ -1525,6 +1532,9 @@ impl TypeChecker {
 
     fn can_assign(&mut self, span: Span, ctx: TypeCtx, assignable: &Assignable) -> TypeResult<()> {
         match &assignable.kind {
+            AssignableKind::Variant { .. } => {
+                todo!();
+            }
             AssignableKind::Read(ident) => {
                 if let Some(var) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
                     if !var.kind.immutable() {
