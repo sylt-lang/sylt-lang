@@ -467,7 +467,8 @@ impl Compiler {
             match from_stmt.kind {
                 StatementKind::From { imports, file, .. } => {
                     let from_slot = path_to_namespace_id[&file];
-                    for Identifier { name: ident_name, span } in imports.iter() {
+                    for (ident, alias) in imports.iter() {
+                        let Identifier { name: ident_name, span } = alias.as_ref().unwrap_or(ident);
                         let name = match self.namespaces[from_slot].get(ident_name) {
                             Some(name) => name.clone(),
                             None => {

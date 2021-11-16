@@ -237,7 +237,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
                 .unwrap();
             let deps = imports
                 .iter()
-                .map(|name| {
+                .map(|(name, _)| {
                     assignable_dependencies(
                         ctx,
                         &Assignable {
@@ -387,7 +387,8 @@ pub(crate) fn initialization_order<'a>(
             match &statement.kind {
                 From { imports, .. } => {
                     let mut ctx = Context { compiler, namespace, variables: Vec::new() };
-                    imports.iter().for_each(|Identifier { name, .. }| {
+                    imports.iter().for_each(|(ident, alias)| {
+                        let name = &alias.as_ref().unwrap_or(ident).name;
                         to_order.insert(
                             (name.clone(), namespace),
                             (

@@ -38,7 +38,7 @@ pub enum StatementKind {
     /// `from <file> use <var1>
     From {
         path: Identifier,
-        imports: Vec<Identifier>,
+        imports: Vec<(Identifier, Option<Identifier>)>,
         file: PathBuf,
     },
 
@@ -351,8 +351,22 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 match ctx.token() {
                     T::RightParen | T::Newline => break,
                     T::Identifier(name) => {
-                        imports.push(Identifier { name: name.clone(), span: ctx.span() });
+                        let ident = Identifier { name: name.clone(), span: ctx.span() };
                         ctx = ctx.skip(1);
+                        let alias = if matches!(ctx.token(), T::As) {
+                            ctx = ctx.skip(1);
+                            match ctx.token() {
+                                T::Identifier(name) => {
+                                    Some(Identifier { name: name.clone(), span: ctx.span() })
+                                }
+                                _ => raise_syntax_error!(ctx, "Expected identifier after 'as'"),
+                            }
+                        } else {
+                            None
+                        };
+
+                        imports.push((ident, alias));
+
                         if !matches!(ctx.token(), T::Comma | T::RightParen | T::Newline) {
                             raise_syntax_error!(ctx, "Expected ',' after import");
                         }

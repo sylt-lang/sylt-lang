@@ -506,15 +506,28 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             }
         }
         StatementKind::From { path, imports, file: _ } => {
+            fn write_import<W: Write>(
+                dest: &mut W,
+                _indent: u32,
+                import: (Identifier, Option<Identifier>),
+            ) -> fmt::Result {
+                write_identifier(dest, import.0.clone())?;
+                if let Some(alias) = import.1 {
+                    write!(dest, " as ")?;
+                    write_identifier(dest, alias.clone())
+                } else {
+                    Ok(())
+                }
+            }
             write_indents(dest, indent)?;
             write!(dest, "from ")?;
             write_identifier(dest, path)?;
             write!(dest, " use ")?;
             if imports.len() == 1 {
-                write_identifier(dest, imports[0].clone())?;
+                write_import(dest, indent, imports[0].clone())?;
             } else {
                 write!(dest, "(")?;
-                write_comma_separated!(dest, indent, (|a, _, b| write_identifier(a, b)), imports);
+                write_comma_separated!(dest, indent, write_import, imports);
                 write!(dest, ")")?;
             }
         }

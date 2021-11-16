@@ -623,20 +623,22 @@ impl TypeChecker {
                 // TODO(ed): This shouldn't be nessecary - the namespace should be set up
                 // Correctly already.
                 let other = self.file_to_namespace[file];
-                for ident in imports.iter() {
+                for (ident, alias) in imports.iter() {
                     let other_var = match &self.globals[&(other, ident.name.clone())] {
                         Name::Global(var) => var.clone(),
                         Name::Blob(_) | Name::Namespace(_) => continue,
                     };
                     let var = Variable {
-                        ident: ident.clone(),
+                        ident: alias.as_ref().unwrap_or(ident).clone(),
                         ty: self.push_type(Type::Unknown),
                         kind: VarKind::Const,
                         span,
                     };
                     self.unify(span, ctx, var.ty, other_var.ty)?;
-                    self.globals
-                        .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
+                    self.globals.insert(
+                        (ctx.namespace, alias.as_ref().unwrap_or(ident).name.clone()),
+                        Name::Global(var),
+                    );
                 }
             }
 
