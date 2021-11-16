@@ -353,8 +353,8 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     T::Identifier(name) => {
                         imports.push(Identifier { name: name.clone(), span: ctx.span() });
                         ctx = ctx.skip(1);
-                        if matches!(ctx.token(), T::Comma | T::RightParen) {
-                            syntax_error!(ctx, "Expected ',' after imports");
+                        if !matches!(ctx.token(), T::Comma | T::RightParen | T::Newline) {
+                            raise_syntax_error!(ctx, "Expected ',' after import");
                         }
                         ctx = ctx.skip_if(T::Comma);
                     }
@@ -723,6 +723,7 @@ mod test {
     fail!(statement, statement_assign_self_const: "self :: 1" => _);
     fail!(statement, statement_assign_self_var: "self := 1" => _);
     fail!(statement, statement_assign_self_type: "self: int = 1" => _);
+    fail!(statement, outer_statement_from_invalid: "from b use a!" => _);
 }
 
 impl Display for NameIdentifier {
