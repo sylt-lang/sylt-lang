@@ -1,0 +1,8 @@
+from _from_circular use f, num_copy
+
+num1 :: 100
+num2 :: 200
+
+start :: fn do
+    f() <=> num2
+end
