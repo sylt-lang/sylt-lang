@@ -619,21 +619,25 @@ impl TypeChecker {
                     .insert((ctx.namespace, ident.name.clone()), Name::Namespace(other));
             }
 
-            StatementKind::From { name: ident, file, .. } => {
+            StatementKind::From { imports, file, .. } => {
+                // TODO(ed): This shouldn't be nessecary - the namespace should be set up
+                // Correctly already.
                 let other = self.file_to_namespace[file];
-                let other_var = match &self.globals[&(other, ident.name.clone())] {
-                    Name::Global(var) => var.clone(),
-                    _ => todo!(),
-                };
-                let var = Variable {
-                    ident: ident.clone(),
-                    ty: self.push_type(Type::Unknown),
-                    kind: VarKind::Const,
-                    span,
-                };
-                self.unify(span, ctx, var.ty, other_var.ty)?;
-                self.globals
-                    .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
+                for ident in imports.iter() {
+                    let other_var = match &self.globals[&(other, ident.name.clone())] {
+                        Name::Global(var) => var.clone(),
+                        Name::Blob(_) | Name::Namespace(_) => continue,
+                    };
+                    let var = Variable {
+                        ident: ident.clone(),
+                        ty: self.push_type(Type::Unknown),
+                        kind: VarKind::Const,
+                        span,
+                    };
+                    self.unify(span, ctx, var.ty, other_var.ty)?;
+                    self.globals
+                        .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
+                }
             }
 
             StatementKind::Blob { name, fields } => {
