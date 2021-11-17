@@ -98,7 +98,7 @@ impl Value {
             Value::Int(i) => i as *const _ as usize,
             Value::Bool(b) => b as *const _ as usize,
             Value::Blob(v) => Rc::as_ptr(v) as usize,
-            Value::Variant(v, val) => Rc::as_ptr(v) as usize
+            Value::Variant(v, _) => Rc::as_ptr(v) as usize,
             Value::String(s) => Rc::as_ptr(s) as usize,
             Value::List(v) => Rc::as_ptr(v) as usize,
             Value::Set(v) => Rc::as_ptr(v) as usize,
