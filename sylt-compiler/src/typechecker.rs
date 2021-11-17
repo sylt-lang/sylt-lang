@@ -1454,7 +1454,7 @@ impl TypeChecker {
                     }
                 }
 
-                (Type::Enum(a_name, a_variants), Type::Blob(b_name, b_variants)) => {
+                (Type::Enum(a_name, a_variants), Type::Enum(b_name, b_variants)) => {
                     for (a_var, _) in a_variants.iter() {
                         match b_variants.get(a_var) {
                             // Do unify later
