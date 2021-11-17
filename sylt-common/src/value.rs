@@ -11,6 +11,7 @@ use crate::{ty::Type, upvalue::UpValue};
 pub enum Value {
     Ty(Type),
     Blob(Rc<RefCell<HashMap<String, Value>>>),
+    Variant(Rc<String>, Box<Value>),
     Tuple(Rc<Vec<Value>>),
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
@@ -97,6 +98,7 @@ impl Value {
             Value::Int(i) => i as *const _ as usize,
             Value::Bool(b) => b as *const _ as usize,
             Value::Blob(v) => Rc::as_ptr(v) as usize,
+            Value::Variant(v, _) => Rc::as_ptr(v) as usize,
             Value::String(s) => Rc::as_ptr(s) as usize,
             Value::List(v) => Rc::as_ptr(v) as usize,
             Value::Set(v) => Rc::as_ptr(v) as usize,
@@ -148,6 +150,10 @@ impl Value {
                     write!(fmt, ":")?;
                 }
                 write!(fmt, "}}")
+            }
+            Value::Variant(v, value) => {
+                write!(fmt, "enum {} ", v)?;
+                value.safe_fmt(fmt, seen)
             }
             Value::Float(f) => write!(fmt, "{:?}", f),
             Value::Int(i) => write!(fmt, "{}", i),

@@ -24,11 +24,7 @@ impl<T> Help for TypeResult<T> {
             Ok(_) => {}
             Err(errs) => match &mut errs.last_mut() {
                 Some(Error::TypeError { helpers, .. }) => {
-                    helpers.push(Helper {
-                        file: typechecker.namespace_to_file[&span.file_id].clone(),
-                        span,
-                        message,
-                    });
+                    helpers.push(Helper { file: typechecker.span_file(&span), span, message });
                 }
                 _ => panic!("Cannot help on this error"),
             },
@@ -50,7 +46,7 @@ macro_rules! type_error {
     ($self:expr, $span:expr, $kind:expr, $( $msg:expr ),+ ) => {
         Error::TypeError {
             kind: $kind,
-            file: $self.namespace_to_file[&$span.file_id].clone(),
+            file: $self.span_file(&$span),
             span: $span,
             message: Some(format!($( $msg ),*)),
             helpers: Vec::new(),
@@ -59,7 +55,7 @@ macro_rules! type_error {
     ($self:expr, $span:expr, $kind:expr) => {
         Error::TypeError {
             kind: $kind,
-            file: $self.namespace_to_file[&$span.file_id].clone(),
+            file: $self.span_file(&$span),
             span: $span,
             message: None,
             helpers: Vec::new(),
@@ -150,6 +146,7 @@ struct TypeCtx {
 #[derive(Debug, Clone)]
 enum Name {
     Blob(Type),
+    Enum(Type),
     Global(Variable),
     Namespace(usize),
 }
@@ -225,7 +222,8 @@ impl TypeChecker {
                 }
             }
 
-            AssignableKind::Call(..)
+            AssignableKind::Variant { .. }
+            | AssignableKind::Call(..)
             | AssignableKind::ArrowCall(..)
             | AssignableKind::Index(..)
             | AssignableKind::Expression(..) => None,
@@ -299,13 +297,13 @@ impl TypeChecker {
                 .get(&(ctx.namespace, ident.name.clone()))
                 .cloned()
             {
-                Some(Name::Blob(blob_ty)) => Ok(self.push_type(blob_ty.clone())),
+                Some(Name::Blob(ty)) | Some(Name::Enum(ty)) => Ok(self.push_type(ty.clone())),
                 None => {
                     err_type_error!(
                         self,
                         ident.span,
                         TypeError::UnresolvedName(ident.name.clone()),
-                        "Expected a blob"
+                        "Expected a blob or an enum"
                     )
                 }
                 _ => {
@@ -326,7 +324,7 @@ impl TypeChecker {
                     .get(&(ctx.namespace, ident.name.clone()))
                     .cloned()
                 {
-                    Some(Name::Blob(ty)) => Ok(self.push_type(ty.clone())),
+                    Some(Name::Blob(ty)) | Some(Name::Enum(ty)) => Ok(self.push_type(ty.clone())),
                     None => {
                         err_type_error!(
                             self,
@@ -387,7 +385,7 @@ impl TypeChecker {
             match seen.get(name) {
                 Some(x) => Ok(*x),
                 _ => {
-                    return err_type_error!(
+                    err_type_error!(
                         typechecker,
                         span,
                         TypeError::UnknownConstraintArgument(name.into())
@@ -599,9 +597,13 @@ impl TypeChecker {
             StatementKind::Use { .. }
             | StatementKind::From { .. }
             | StatementKind::Blob { .. }
+            | StatementKind::Enum { .. }
             | StatementKind::IsCheck { .. }
             | StatementKind::ExternalDefinition { .. } => {
-                unreachable!("Illegal inner statement! Parser should have caught this.")
+                unreachable!(
+                    "Illegal inner statement at {:?}! Parser should have caught this.",
+                    span
+                )
             }
         }
     }
@@ -626,7 +628,7 @@ impl TypeChecker {
                 for (ident, alias) in imports.iter() {
                     let other_var = match &self.globals[&(other, ident.name.clone())] {
                         Name::Global(var) => var.clone(),
-                        Name::Blob(_) | Name::Namespace(_) => continue,
+                        Name::Blob(_) | Name::Enum(_) | Name::Namespace(_) => continue,
                     };
                     let var = Variable {
                         ident: alias.as_ref().unwrap_or(ident).clone(),
@@ -641,11 +643,24 @@ impl TypeChecker {
                     );
                 }
             }
+            StatementKind::Enum { name, variants } => {
+                let mut resolved_variants = BTreeMap::new();
+                let mut seen = HashMap::new();
+                for (k, t) in variants.iter() {
+                    resolved_variants
+                        .insert(k.clone(), self.inner_resolve_type(span, ctx, t, &mut seen)?);
+                }
+                let ty = Type::Enum(name.clone(), resolved_variants);
+                self.globals
+                    .insert((ctx.namespace, name.clone()), Name::Enum(ty));
+            }
 
             StatementKind::Blob { name, fields } => {
                 let mut resolved_fields = BTreeMap::new();
+                let mut seen = HashMap::new();
                 for (k, t) in fields.iter() {
-                    resolved_fields.insert(k.clone(), self.resolve_type(span, ctx, t)?);
+                    resolved_fields
+                        .insert(k.clone(), self.inner_resolve_type(span, ctx, t, &mut seen)?);
                 }
                 let ty = Type::Blob(name.clone(), resolved_fields);
                 self.globals
@@ -679,7 +694,12 @@ impl TypeChecker {
             | StatementKind::StatementExpression { .. }
             | StatementKind::Unreachable
             | StatementKind::EmptyStatement => {
-                panic!("Illegal outer statement! Parser should have caught this")
+                unreachable!(
+                    "Illegal outer statement between lines {} and {} in '{}'! Parser should have caught this",
+                    span.line_start,
+                    span.line_end,
+                    self.span_file(&span).display()
+                )
             }
         }
         Ok(())
@@ -688,6 +708,85 @@ impl TypeChecker {
     fn assignable(&mut self, assignable: &Assignable, ctx: TypeCtx) -> TypeResult<usize> {
         let span = assignable.span;
         match &assignable.kind {
+            AssignableKind::Variant { enum_ass, variant, value } => {
+                let (ctx, enum_name) = match &enum_ass.kind {
+                    AssignableKind::Read(enum_name) => (ctx, enum_name),
+                    AssignableKind::Access(chain, enum_name) => match self.namespace_chain(chain, ctx) {
+                        Some(ctx) => (ctx, enum_name),
+                        None => return err_type_error!(
+                            self,
+                            span,
+                            TypeError::Exotic,
+                            "Not all accesses are namespace accesses\nsince enums cannot be stored anywhere"
+                        ),
+                    }
+
+                    AssignableKind::Call(_, _)
+                    | AssignableKind::Variant { .. }
+                    | AssignableKind::ArrowCall(_, _, _)
+                    | AssignableKind::Index(_, _)
+                    | AssignableKind::Expression(_) => unreachable!(),
+                };
+                match self.stack.iter().rfind(|v| v.ident.name == enum_name.name) {
+                    Some(var) => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::Exotic,
+                            "Expected an enum - but the local variable '{}'",
+                            var.ident.name
+                        )
+                        .help(
+                            self,
+                            var.span,
+                            format!("'{}' was declared here", var.ident.name),
+                        )?
+                    }
+                    None => {}
+                };
+                let ty = match self.globals.get(&(ctx.namespace, enum_name.name.clone())) {
+                    Some(Name::Enum(ty)) => {
+                        // NOTE(ed): This allows enumerations to be generic, which is always fun!
+                        let ty = ty.clone();
+                        let ty = self.push_type(ty);
+                        self.copy(ty)
+                    }
+                    _ => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::UnresolvedName(enum_name.name.clone())
+                        )
+                    }
+                };
+
+                let (enum_name, variants) = match self.find_type(ty) {
+                    Type::Enum(name, variants) => (name, variants),
+                    Type::Unknown => todo!("Should this ever happen?"),
+                    _ => {
+                        return err_type_error!(
+                            self,
+                            variant.span,
+                            TypeError::Violating(self.bake_type(ty)),
+                            "Is not an enum-variant"
+                        )
+                    }
+                };
+                // Only unify this variant with the expression
+                let expr_ty = self.expression(value, ctx)?;
+                match variants.get(&variant.name) {
+                    Some(field_ty) => self.unify(variant.span, ctx, *field_ty, expr_ty)?,
+                    None => {
+                        return err_type_error!(
+                            self,
+                            variant.span,
+                            TypeError::UnknownVariant(enum_name, variant.name.clone())
+                        )
+                    }
+                };
+                Ok(ty)
+            }
+
             // FIXME: Functions are copied since they may be specialized
             // several times, this does not work properly when functions are
             // passed to an unknown function parameter.
@@ -720,7 +819,11 @@ impl TypeChecker {
                                 TypeError::UnresolvedName(ident.name.clone())
                             ),
                         },
-                        _ => panic!("Not a variable!"),
+                        _ => err_type_error!(
+                            self,
+                            span,
+                            TypeError::UnresolvedName(ident.name.clone())
+                        ),
                     }
                 }
             }
@@ -750,14 +853,12 @@ impl TypeChecker {
                         TypeError::Violating(self.bake_type(f)),
                         "Unknown types cannot be called"
                     ),
-                    _ => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::Violating(self.bake_type(f)),
-                            "Not callable"
-                        );
-                    }
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        TypeError::Violating(self.bake_type(f)),
+                        "Not callable"
+                    ),
                 }
             }
 
@@ -1146,6 +1247,13 @@ impl TypeChecker {
                     .map(|(name, ty)| (name.clone(), self.inner_bake_type(*ty, seen)))
                     .collect(),
             ),
+            Type::Enum(name, variants) => RuntimeType::Enum(
+                name.clone(),
+                variants
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.inner_bake_type(*ty, seen)))
+                    .collect(),
+            ),
 
             Type::Invalid => RuntimeType::Invalid,
         };
@@ -1173,13 +1281,11 @@ impl TypeChecker {
 
                 Constraint::Neg => match self.find_type(a) {
                     Type::Unknown | Type::Int | Type::Float => Ok(()),
-                    _ => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::UniOp { val: self.bake_type(a), op: "-".to_string() }
-                        )
-                    }
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        TypeError::UniOp { val: self.bake_type(a), op: "-".to_string() }
+                    ),
                 },
 
                 Constraint::IndexedBy(b) => self.is_indexed_by(span, ctx, a, *b),
@@ -1371,6 +1477,31 @@ impl TypeChecker {
                     }
                 }
 
+                (Type::Enum(a_name, a_variants), Type::Enum(b_name, b_variants)) => {
+                    for (a_var, _) in a_variants.iter() {
+                        if !b_variants.contains_key(a_var) {
+                            return err_type_error!(
+                                self,
+                                span,
+                                TypeError::UnknownVariant(b_name.clone(), a_var.clone())
+                            );
+                        }
+                    }
+                    for (b_var, b_ty) in b_variants.iter() {
+                        let a_ty = match a_variants.get(b_var) {
+                            Some(a_ty) => *a_ty,
+                            None => {
+                                return err_type_error!(
+                                    self,
+                                    span,
+                                    TypeError::UnknownVariant(a_name.clone(), b_var.clone())
+                                )
+                            }
+                        };
+                        self.unify(span, ctx, a_ty, *b_ty)?;
+                    }
+                }
+
                 _ => {
                     return err_type_error!(
                         self,
@@ -1501,6 +1632,14 @@ impl TypeChecker {
                     .map(|(name, ty)| (name.clone(), self.inner_copy(*ty, seen)))
                     .collect(),
             ),
+
+            Type::Enum(name, variants) => Type::Enum(
+                name.clone(),
+                variants
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.inner_copy(*ty, seen)))
+                    .collect(),
+            ),
         };
         new_ty
     }
@@ -1512,25 +1651,26 @@ impl TypeChecker {
 
     fn can_assign(&mut self, span: Span, ctx: TypeCtx, assignable: &Assignable) -> TypeResult<()> {
         match &assignable.kind {
+            AssignableKind::Variant { .. } => {
+                err_type_error!(
+                    self,
+                    span,
+                    TypeError::Assignability,
+                    "Cannot assign to enum-variant"
+                )
+            }
             AssignableKind::Read(ident) => {
-                if let Some(var) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
-                    if !var.kind.immutable() {
-                        Ok(())
-                    } else {
-                        err_type_error!(
-                            self,
-                            span,
-                            TypeError::Assignability,
-                            "Cannot assign to constants"
-                        )
-                        .help(
-                            self,
-                            var.span,
-                            "Originally defined here".into(),
-                        )
-                    }
-                } else {
-                    match self.globals.get(&(ctx.namespace, ident.name.clone())) {
+                match self.stack.iter().rfind(|v| v.ident.name == ident.name) {
+                    Some(var) if !var.kind.immutable() => Ok(()),
+                    Some(var) => err_type_error!(
+                        self,
+                        span,
+                        TypeError::Assignability,
+                        "Cannot assign to constants"
+                    )
+                    .help(self, var.span, "Originally defined here".into()),
+                    // Not a local variable. Is it a global?
+                    _ => match self.globals.get(&(ctx.namespace, ident.name.clone())) {
                         Some(Name::Global(var)) => {
                             if !var.kind.immutable() {
                                 Ok(())
@@ -1562,7 +1702,7 @@ impl TypeChecker {
                             "Variable \"{}\" not found. If declaring, use :=",
                             ident.name.clone()
                         ),
-                    }
+                    },
                 }
             }
             AssignableKind::ArrowCall(_, _, _) | AssignableKind::Call(_, _) => err_type_error!(
@@ -1590,8 +1730,10 @@ impl TypeChecker {
     }
 
     fn add_constraint(&mut self, a: usize, span: Span, constraint: Constraint) {
-        // TODO(ed): Don't reinsert stuff?
-        self.find_node_mut(a).constraints.insert(constraint, span);
+        self.find_node_mut(a)
+            .constraints
+            .entry(constraint)
+            .or_insert_with(|| span);
     }
 
     fn add(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
@@ -1607,17 +1749,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "+".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "+".to_string(),
+                }
+            ),
         }
     }
 
@@ -1634,17 +1774,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "-".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "-".to_string(),
+                }
+            ),
         }
     }
 
@@ -1675,17 +1813,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "*".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "*".to_string(),
+                }
+            ),
         }
     }
 
@@ -1718,17 +1854,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "/".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "/".to_string(),
+                }
+            ),
         }
     }
 
@@ -1754,17 +1888,15 @@ impl TypeChecker {
             }
 
             // TODO(ed): Maybe sets?
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "<".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "<".to_string(),
+                }
+            ),
         }
     }
 
@@ -1781,17 +1913,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "Indexing".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "Indexing".to_string(),
+                }
+            ),
         }
     }
 
@@ -1825,17 +1955,15 @@ impl TypeChecker {
                 Ok(())
             }
 
-            _ => {
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::BinOp {
-                        lhs: self.bake_type(a),
-                        rhs: self.bake_type(b),
-                        op: "Indexing".to_string(),
-                    }
-                )
-            }
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::BinOp {
+                    lhs: self.bake_type(a),
+                    rhs: self.bake_type(b),
+                    op: "Indexing".to_string(),
+                }
+            ),
         }
     }
 
@@ -1925,10 +2053,10 @@ impl TypeChecker {
             Some(Name::Global(var)) => {
                 let void = self.push_type(Type::Void);
                 let start = self.push_type(Type::Function(Vec::new(), void));
-                match self.unify(var.ident.span, ctx, var.ty, start) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        return err_type_error!(
+                self.unify(var.ident.span, ctx, var.ty, start)
+                    .map(|_| ())
+                    .or_else(|_| {
+                        err_type_error!(
                             self,
                             var.ident.span,
                             TypeError::Mismatch {
@@ -1937,11 +2065,10 @@ impl TypeChecker {
                             },
                             "The start function has the wrong type"
                         )
-                    }
-                }
+                    })
             }
             Some(_) => {
-                return err_type_error!(
+                err_type_error!(
                     self,
                     Span::zero(ctx.namespace),
                     TypeError::Exotic,
@@ -1949,7 +2076,7 @@ impl TypeChecker {
                 )
             }
             None => {
-                return err_type_error!(
+                err_type_error!(
                     self,
                     Span::zero(ctx.namespace),
                     TypeError::Exotic,
@@ -1957,8 +2084,10 @@ impl TypeChecker {
                 )
             }
         }
+    }
 
-        Ok(())
+    fn span_file(&self, span: &Span) -> PathBuf {
+        self.namespace_to_file[&span.file_id].clone()
     }
 }
 

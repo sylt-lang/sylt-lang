@@ -1,0 +1,18 @@
+Ab :: enum
+    A *,
+    B *,
+end
+
+f :: fn a ->
+    Ab.A a
+end
+
+start :: fn do
+    a :: f' 1
+    b :: f' "abc"
+
+    q := a
+    q = b
+end
+
+// error: $Mismatch { .. }

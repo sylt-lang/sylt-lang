@@ -337,6 +337,14 @@ impl Machine for VM {
                 self.stack.push(Value::Dict(Rc::new(RefCell::new(values))));
             }
 
+            Op::Tag => {
+                if let (Value::String(tag), value) = self.poppop() {
+                    self.stack.push(Value::Variant(tag, Box::new(value)));
+                } else {
+                    unreachable!("Tag failed - tag has to be a string");
+                }
+            }
+
             Op::PopUpvalue => {
                 let value = self.pop();
                 let slot = self.stack.len();

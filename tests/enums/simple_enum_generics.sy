@@ -1,0 +1,16 @@
+Maybe :: enum
+    Just *,
+    Nothing,
+end
+
+start :: fn do
+    a := Maybe.Just 1
+    print' a
+    a = Maybe.Nothing
+    print' a
+
+    b := Maybe.Just "abc"
+    print' b
+    b = Maybe.Nothing
+    print' b
+end
