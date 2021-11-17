@@ -415,8 +415,8 @@ impl<'t> BytecodeCompiler<'t> {
                     let op = Op::Constant(*blob);
                     self.add_op(ctx, span, op);
                 }
-                Some(Name::Enum(blob)) => {
-                    let op = Op::Constant(*blob);
+                Some(Name::Enum(enum_)) => {
+                    let op = Op::Constant(*enum_);
                     self.add_op(ctx, span, op);
                 }
                 Some(Name::Namespace(new_namespace)) => return Some(*new_namespace),

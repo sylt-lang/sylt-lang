@@ -320,8 +320,8 @@ impl<'t> LuaCompiler<'t> {
                 Some(Name::Blob(blob)) => {
                     self.write_global(blob);
                 }
-                Some(Name::Enum(blob)) => {
-                    self.write_global(blob);
+                Some(Name::Enum(enum_)) => {
+                    self.write_global(enum_);
                 }
                 Some(Name::External(_)) => {
                     write!(self, "{}", name);
