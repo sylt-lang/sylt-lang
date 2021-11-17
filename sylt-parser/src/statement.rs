@@ -9,6 +9,8 @@ pub enum NameIdentifier {
     Alias(Identifier),
 }
 
+type Alias = Identifier;
+
 /// The different kinds of [Statement]s.
 ///
 /// There are both shorter statements like `a = b + 1` as well as longer
@@ -35,10 +37,13 @@ pub enum StatementKind {
 
     /// "Imports" variables from another file.
     ///
-    /// `from <file> use <var1>
+    /// `from <file> use <var1>`.
+    /// `from <file> use <var1>, <var2>`.
+    /// `from <file> use (<var1>, <var2>)`.
+    /// `from <file> use <var1> as <alias>`.
     From {
         path: Identifier,
-        imports: Vec<(Identifier, Option<Identifier>)>,
+        imports: Vec<(Identifier, Option<Alias>)>,
         file: PathBuf,
     },
 
