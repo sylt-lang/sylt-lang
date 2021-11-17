@@ -409,12 +409,10 @@ impl Compiler {
                         }
                     }
                     Enum { name, .. } => {
-                        let en =
-                            self.constant(Value::Ty(Type::Enum(name.clone(), Default::default())));
-                        if let Op::Constant(slot) = en {
-                            (Name::Enum(slot), name.clone(), statement.span)
-                        } else {
-                            unreachable!()
+                        let enum_ = Type::Enum(name.clone(), Default::default());
+                        match self.constant(Value::Ty(enum_)) {
+                            Op::Constant(slot) => (Name::Enum(slot), name.clone(), statement.span),
+                            _ => unreachable!(),
                         }
                     }
                     Use { name, file, .. } => {
