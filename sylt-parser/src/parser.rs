@@ -850,7 +850,10 @@ fn assignable_variant<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult
         raise_syntax_error!(ctx, "Expected an identifier after '.' in variant");
     };
 
-    let (ctx, value) = expression(ctx)?;
+    let (ctx, value) = match expression(ctx) {
+        Ok(res) => res,
+        Err(_) => (ctx, Expression { span, kind: ExpressionKind::Nil }),
+    };
 
     use AssignableKind::Variant;
     Ok((
