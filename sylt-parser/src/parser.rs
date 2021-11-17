@@ -819,7 +819,8 @@ fn assignable_dot_or_variant<'t>(
 /// Parse an [AssignableKind::Variant].
 fn assignable_variant<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t, Assignable> {
     let span = ctx.span();
-    // TODO(ed): I kinda dislike this - but I think it's okay?
+    // TODO(ed): We shouldn't have to look at the previous assignables to know if this is valid -
+    // but I guess it's okay since we depend on it anyways?
     let enum_name = match &accessed.kind {
         AssignableKind::Read(enum_name) => enum_name,
         AssignableKind::Access(_, enum_name) => enum_name,
