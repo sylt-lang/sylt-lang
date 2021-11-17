@@ -41,7 +41,7 @@ pub enum StatementKind {
     /// `from <file> use <var1>, <var2>`.
     /// `from <file> use (<var1>, <var2>)`.
     /// `from <file> use <var1> as <alias>`.
-    From {
+    FromUse {
         path: Identifier,
         imports: Vec<(Identifier, Option<Alias>)>,
         file: PathBuf,
@@ -388,7 +388,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             } else {
                 ctx
             };
-            (ctx, From { path: path_ident, imports, file })
+            (ctx, FromUse { path: path_ident, imports, file })
         }
 
         // `: A is : B`
@@ -745,7 +745,7 @@ pub fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
         | Definition { .. }
         | ExternalDefinition { .. }
         | Use { .. }
-        | From { .. }
+        | FromUse { .. }
         | IsCheck { .. }
         | EmptyStatement
         => Ok((ctx, stmt)),

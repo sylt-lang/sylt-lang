@@ -958,7 +958,7 @@ fn module(
             Ok((ctx, statement)) => {
                 use StatementKind::*;
                 // Get the used files from 'use' and 'from' statements.
-                if let Use { file, .. } | From { file, .. } = &statement.kind {
+                if let Use { file, .. } | FromUse { file, .. } = &statement.kind {
                     use_files.push(file.clone());
                 }
                 statements.push(statement);
@@ -1232,7 +1232,7 @@ impl PrettyPrint for Statement {
                 write!(f, "<Use> {} {}", path.name, name)?;
                 write!(f, " {:?}", file)?;
             }
-            SK::From { path, imports, .. } => {
+            SK::FromUse { path, imports, .. } => {
                 write!(f, "<FromUse> {}\n", path.name)?;
                 for (ident, alias) in imports.iter() {
                     write!(f, "  {}", ident.name)?;

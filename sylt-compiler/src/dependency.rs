@@ -231,7 +231,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
 
         // If it seems weird that From statements have dependencies, just think
         // of them as several reads at the same time (spoiler: that's what they are).
-        From { file, imports, .. } => {
+        FromUse { file, imports, .. } => {
             let old_ns = ctx.namespace;
             ctx.namespace = ctx
                 .compiler
@@ -390,7 +390,7 @@ pub(crate) fn initialization_order<'a>(
         for statement in module.statements.iter() {
             use StatementKind::*;
             match &statement.kind {
-                From { imports, .. } => {
+                FromUse { imports, .. } => {
                     let mut ctx = Context { compiler, namespace, variables: Vec::new() };
                     imports.iter().for_each(|(ident, alias)| {
                         let name = &alias.as_ref().unwrap_or(ident).name;

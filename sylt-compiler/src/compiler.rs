@@ -409,7 +409,7 @@ impl Compiler {
                             unreachable!()
                         }
                     }
-                    From { .. } => {
+                    FromUse { .. } => {
                         // We cannot resolve this here since the namespace
                         // might not be loaded yet. We process these after.
                         from_statements.push(statement.clone());
@@ -469,7 +469,7 @@ impl Compiler {
         for from_stmt in from_statements.into_iter() {
             let slot = from_stmt.span.file_id;
             match from_stmt.kind {
-                StatementKind::From { imports, file, .. } => {
+                StatementKind::FromUse { imports, file, .. } => {
                     let from_slot = path_to_namespace_id[&file];
                     for (ident, alias) in imports.iter() {
                         let name = match self.namespaces[from_slot].get(&ident.name) {

@@ -485,7 +485,7 @@ impl<'t> BytecodeCompiler<'t> {
         match &statement.kind {
             Use { .. }
             | Enum { .. }
-            | From { .. }
+            | FromUse { .. }
             | Blob { .. }
             | IsCheck { .. }
             | EmptyStatement => {}
@@ -747,7 +747,7 @@ fn all_paths_return(statement: &Statement) -> bool {
         | StatementKind::IsCheck { .. }
         | StatementKind::StatementExpression { .. }
         | StatementKind::Unreachable
-        | StatementKind::From { .. }
+        | StatementKind::FromUse { .. }
         | StatementKind::Use { .. } => false,
 
         StatementKind::If { pass, fail, .. } => all_paths_return(pass) && all_paths_return(fail),

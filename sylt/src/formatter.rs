@@ -544,7 +544,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
                 write_identifier(dest, alias)?;
             }
         }
-        StatementKind::From { path, imports, file: _ } => {
+        StatementKind::FromUse { path, imports, file: _ } => {
             fn write_import<W: Write>(
                 dest: &mut W,
                 _indent: u32,

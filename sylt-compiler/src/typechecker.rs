@@ -595,7 +595,7 @@ impl TypeChecker {
             StatementKind::EmptyStatement => Ok(None),
 
             StatementKind::Use { .. }
-            | StatementKind::From { .. }
+            | StatementKind::FromUse { .. }
             | StatementKind::Blob { .. }
             | StatementKind::Enum { .. }
             | StatementKind::IsCheck { .. }
@@ -621,7 +621,7 @@ impl TypeChecker {
                     .insert((ctx.namespace, ident.name.clone()), Name::Namespace(other));
             }
 
-            StatementKind::From { imports, file, .. } => {
+            StatementKind::FromUse { imports, file, .. } => {
                 // TODO(ed): This shouldn't be nessecary since the namespace
                 // should be set up correctly already.
                 let other = self.file_to_namespace[file];
