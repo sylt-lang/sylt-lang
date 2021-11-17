@@ -50,8 +50,10 @@ impl<'t> LuaCompiler<'t> {
             Read(ident) => {
                 return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
             }
-            Variant { .. } => {
-                todo!();
+            Variant { variant, value, .. } => {
+                write!(self, "__VARIANT({{\"{}\", ", variant.name);
+                self.expression(value, ctx);
+                write!(self, "})");
             }
             Call(f, expr) => {
                 self.assignable(f, ctx);
@@ -379,6 +381,7 @@ impl<'t> LuaCompiler<'t> {
         match &statement.kind {
             Use { .. }
             | Blob { .. }
+            | Enum { .. }
             | IsCheck { .. }
             | EmptyStatement
             | ExternalDefinition { .. } => return,
