@@ -182,6 +182,33 @@ pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
     Ok((ctx, Identifier { span, name: result }))
 }
 
+pub fn use_path<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, PathBuf)> {
+    let (ctx, path_ident) = path(ctx)?;
+    let path = &path_ident.name;
+    let name = path
+        .trim_start_matches("/")
+        .trim_end_matches("/")
+        .to_string();
+    let file = {
+        let parent = if path.starts_with("/") {
+            ctx.root
+        } else {
+            ctx.file.parent().unwrap()
+        };
+        // Importing a folder is the same as importing exports.sy
+        // in the folder.
+        parent.join(if path == "/" {
+            format!("exports.sy")
+        } else if path_ident.name.ends_with("/") {
+            format!("{}/exports.sy", name)
+        } else {
+            format!("{}.sy", name)
+        })
+    };
+
+    Ok((ctx, (path_ident, file)))
+}
+
 pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
     // To allow implicit block-openings, like "fn ->"
     let mut ctx = ctx.skip_if(T::Do);
@@ -258,29 +285,8 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         // `use path/to/file`
         // `use path/to/file as alias`
         [T::Use, ..] => {
-            let ctx = ctx.skip(1);
-            let (ctx, path_ident) = path(ctx)?;
+            let (ctx, (path_ident, file)) = use_path(ctx.skip(1))?;
             let path = &path_ident.name;
-            let name = path
-                .trim_start_matches("/")
-                .trim_end_matches("/")
-                .to_string();
-            let file = {
-                let parent = if path.starts_with("/") {
-                    ctx.root
-                } else {
-                    ctx.file.parent().unwrap()
-                };
-                // Importing a folder is the same as importing exports.sy
-                // in the folder.
-                parent.join(if path == "/" {
-                    format!("exports.sy")
-                } else if path_ident.name.ends_with("/") {
-                    format!("{}/exports.sy", name)
-                } else {
-                    format!("{}.sy", name)
-                })
-            };
             let (ctx, alias) = match &ctx.tokens_lookahead::<2>() {
                 [T::As, T::Identifier(alias), ..] => (
                     ctx.skip(2),
@@ -299,12 +305,17 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     } else {
                         ctx.prev().span()
                     };
-                    let name = PathBuf::from(&name)
-                        .file_stem()
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .to_string();
+                    let name = PathBuf::from(
+                        &path
+                            .trim_start_matches("/")
+                            .trim_end_matches("/")
+                            .to_string(),
+                    )
+                    .file_stem()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_string();
                     (ctx, NameIdentifier::Implicit(Identifier { span, name }))
                 }
             };
@@ -313,29 +324,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
         // `from path/to/file use var`
         [T::From, ..] => {
-            let ctx = ctx.skip(1);
-            let (ctx, path_ident) = path(ctx)?;
-            let path = &path_ident.name;
-            let name = path
-                .trim_start_matches("/")
-                .trim_end_matches("/")
-                .to_string();
-            let file = {
-                let parent = if path.starts_with("/") {
-                    ctx.root
-                } else {
-                    ctx.file.parent().unwrap()
-                };
-                // Importing a folder is the same as importing exports.sy
-                // in the folder.
-                parent.join(if path == "/" {
-                    format!("exports.sy")
-                } else if path_ident.name.ends_with("/") {
-                    format!("{}/exports.sy", name)
-                } else {
-                    format!("{}.sy", name)
-                })
-            };
+            let (ctx, (path_ident, file)) = use_path(ctx.skip(1))?;
             let mut ctx = expect!(ctx, T::Use, "Expected 'use' after path");
             let mut imports = Vec::new();
 
