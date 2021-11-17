@@ -887,7 +887,7 @@ fn module(
         ctx = match outer_statement(ctx) {
             Ok((ctx, statement)) => {
                 use StatementKind::*;
-                // Yank `use`s and add it to the used-files list.
+                // Get the used files from 'use' and 'from' statements.
                 if let Use { file, .. } | From { file, .. } = &statement.kind {
                     use_files.push(file.clone());
                 }
