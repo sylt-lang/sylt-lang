@@ -620,8 +620,8 @@ impl TypeChecker {
             }
 
             StatementKind::From { imports, file, .. } => {
-                // TODO(ed): This shouldn't be nessecary - the namespace should be set up
-                // Correctly already.
+                // TODO(ed): This shouldn't be nessecary since the namespace
+                // should be set up correctly already.
                 let other = self.file_to_namespace[file];
                 for (ident, alias) in imports.iter() {
                     let other_var = match &self.globals[&(other, ident.name.clone())] {
