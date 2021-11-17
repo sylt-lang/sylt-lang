@@ -718,8 +718,12 @@ impl TypeChecker {
                     None => {}
                 };
                 let ty = match self.globals.get(&(ctx.namespace, enum_name.name.clone())) {
-                    // TODO(ed): Is this correct?
-                    Some(Name::Enum(ty)) => self.push_type(ty.clone()),
+                    Some(Name::Enum(ty)) => {
+                        // NOTE(ed): This allows enumerations to be generic, which is always fun!
+                        let ty = ty.clone();
+                        let ty = self.push_type(ty);
+                        self.copy(ty)
+                    }
                     _ => {
                         return err_type_error!(
                             self,
