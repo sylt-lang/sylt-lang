@@ -1454,17 +1454,13 @@ impl TypeChecker {
 
                 (Type::Enum(a_name, a_variants), Type::Enum(b_name, b_variants)) => {
                     for (a_var, _) in a_variants.iter() {
-                        match b_variants.get(a_var) {
-                            // Do unify later
-                            Some(_) => {}
-                            None => {
-                                return err_type_error!(
-                                    self,
-                                    span,
-                                    TypeError::UnknownVariant(b_name.clone(), a_var.clone())
-                                )
-                            }
-                        };
+                        if !b_variants.contains_key(a_var) {
+                            return err_type_error!(
+                                self,
+                                span,
+                                TypeError::UnknownVariant(b_name.clone(), a_var.clone())
+                            );
+                        }
                     }
                     for (b_var, b_ty) in b_variants.iter() {
                         let a_ty = match a_variants.get(b_var) {
