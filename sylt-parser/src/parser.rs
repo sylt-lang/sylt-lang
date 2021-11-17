@@ -1232,7 +1232,16 @@ impl PrettyPrint for Statement {
                 write!(f, "<Use> {} {}", path.name, name)?;
                 write!(f, " {:?}", file)?;
             }
-            SK::From { .. } => todo!(),
+            SK::From { path, imports, .. } => {
+                write!(f, "<FromUse> {}\n", path.name)?;
+                for (ident, alias) in imports.iter() {
+                    write!(f, "  {}", ident.name)?;
+                    if let Some(ident) = alias {
+                        write!(f, " as {}", ident.name)?;
+                    }
+                    write!(f, "\n")?;
+                }
+            }
             SK::Enum { name, variants } => {
                 write!(f, "<Enum> {} {{ ", name)?;
                 for (i, (name, ty)) in variants.iter().enumerate() {
