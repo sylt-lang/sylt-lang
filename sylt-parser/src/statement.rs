@@ -9,6 +9,8 @@ pub enum NameIdentifier {
     Alias(Identifier),
 }
 
+type Alias = Identifier;
+
 /// The different kinds of [Statement]s.
 ///
 /// There are both shorter statements like `a = b + 1` as well as longer
@@ -30,6 +32,18 @@ pub enum StatementKind {
     Use {
         path: Identifier,
         name: NameIdentifier,
+        file: PathBuf,
+    },
+
+    /// "Imports" variables from another file.
+    ///
+    /// `from <file> use <var1>`.
+    /// `from <file> use <var1>, <var2>`.
+    /// `from <file> use (<var1>, <var2>)`.
+    /// `from <file> use <var1> as <alias>`.
+    FromUse {
+        path: Identifier,
+        imports: Vec<(Identifier, Option<Alias>)>,
         file: PathBuf,
     },
 
@@ -181,6 +195,33 @@ pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
     Ok((ctx, Identifier { span, name: result }))
 }
 
+pub fn use_path<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, PathBuf)> {
+    let (ctx, path_ident) = path(ctx)?;
+    let path = &path_ident.name;
+    let name = path
+        .trim_start_matches("/")
+        .trim_end_matches("/")
+        .to_string();
+    let file = {
+        let parent = if path.starts_with("/") {
+            ctx.root
+        } else {
+            ctx.file.parent().unwrap()
+        };
+        // Importing a folder is the same as importing exports.sy
+        // in the folder.
+        parent.join(if path == "/" {
+            format!("exports.sy")
+        } else if path_ident.name.ends_with("/") {
+            format!("{}/exports.sy", name)
+        } else {
+            format!("{}.sy", name)
+        })
+    };
+
+    Ok((ctx, (path_ident, file)))
+}
+
 pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
     // To allow implicit block-openings, like "fn ->"
     let mut ctx = ctx.skip_if(T::Do);
@@ -257,29 +298,8 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         // `use path/to/file`
         // `use path/to/file as alias`
         [T::Use, ..] => {
-            let ctx = ctx.skip(1);
-            let (ctx, path_ident) = path(ctx)?;
+            let (ctx, (path_ident, file)) = use_path(ctx.skip(1))?;
             let path = &path_ident.name;
-            let name = path
-                .trim_start_matches("/")
-                .trim_end_matches("/")
-                .to_string();
-            let file = {
-                let parent = if path.starts_with("/") {
-                    ctx.root
-                } else {
-                    ctx.file.parent().unwrap()
-                };
-                // Importing a folder is the same as importing exports.sy
-                // in the folder.
-                parent.join(if path == "/" {
-                    format!("exports.sy")
-                } else if path_ident.name.ends_with("/") {
-                    format!("{}/exports.sy", name)
-                } else {
-                    format!("{}.sy", name)
-                })
-            };
             let (ctx, alias) = match &ctx.tokens_lookahead::<2>() {
                 [T::As, T::Identifier(alias), ..] => (
                     ctx.skip(2),
@@ -298,16 +318,77 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     } else {
                         ctx.prev().span()
                     };
-                    let name = PathBuf::from(&name)
-                        .file_stem()
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .to_string();
+                    let name = PathBuf::from(
+                        &path
+                            .trim_start_matches("/")
+                            .trim_end_matches("/")
+                            .to_string(),
+                    )
+                    .file_stem()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_string();
                     (ctx, NameIdentifier::Implicit(Identifier { span, name }))
                 }
             };
             (ctx, Use { path: path_ident, name: alias, file })
+        }
+
+        // `from path/to/file use var`
+        [T::From, ..] => {
+            let (ctx, (path_ident, file)) = use_path(ctx.skip(1))?;
+            let mut ctx = expect!(ctx, T::Use, "Expected 'use' after path");
+            let mut imports = Vec::new();
+
+            let paren = matches!(ctx.token(), T::LeftParen);
+            let (ctx_, skip_paren) = if paren {
+                ctx = ctx.skip(1);
+                ctx.push_skip_newlines(true)
+            } else {
+                ctx.push_skip_newlines(false)
+            };
+            ctx = ctx_;
+            loop {
+                match ctx.token() {
+                    T::RightParen | T::Newline => break,
+                    T::Identifier(name) => {
+                        let ident = Identifier { name: name.clone(), span: ctx.span() };
+                        ctx = ctx.skip(1);
+                        let alias = if matches!(ctx.token(), T::As) {
+                            ctx = ctx.skip(1);
+                            let _alias = match ctx.token() {
+                                T::Identifier(name) => {
+                                    Some(Identifier { name: name.clone(), span: ctx.span() })
+                                }
+                                _ => raise_syntax_error!(ctx, "Expected identifier after 'as'"),
+                            };
+                            ctx = ctx.skip(1);
+                            _alias
+                        } else {
+                            None
+                        };
+
+                        imports.push((ident, alias));
+
+                        if !matches!(ctx.token(), T::Comma | T::RightParen | T::Newline) {
+                            raise_syntax_error!(ctx, "Expected ',' after import");
+                        }
+                        ctx = ctx.skip_if(T::Comma);
+                    }
+                    _ => raise_syntax_error!(ctx, "Expected identifier"),
+                };
+            }
+            if imports.is_empty() {
+                raise_syntax_error!(ctx, "Something has to be imported in an import statement");
+            }
+            let ctx = ctx.pop_skip_newlines(skip_paren);
+            let ctx = if paren {
+                expect!(ctx, T::RightParen, "Expected ')' after import list")
+            } else {
+                ctx
+            };
+            (ctx, FromUse { path: path_ident, imports, file })
         }
 
         // `: A is : B`
@@ -664,6 +745,7 @@ pub fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
         | Definition { .. }
         | ExternalDefinition { .. }
         | Use { .. }
+        | FromUse { .. }
         | IsCheck { .. }
         | EmptyStatement
         => Ok((ctx, stmt)),
@@ -723,6 +805,10 @@ mod test {
     test!(outer_statement, outer_statement_use_rename: "use a as b\n" => _);
     test!(outer_statement, outer_statement_use_subdir: "use a/b/c/d/e\n" => _);
     test!(outer_statement, outer_statement_use_subdir_rename: "use a/b as c\n" => _);
+    test!(outer_statement, outer_statement_from: "from a/b use c\n" => _);
+    test!(outer_statement, outer_statement_from_many: "from b use c,d,e,f,g,h\n" => _);
+    test!(outer_statement, outer_statement_from_paren: "from / use (c\n,d\n)\n" => _);
+    test!(outer_statement, outer_statement_from_paren_one: "from / use (c)\n" => _);
     test!(outer_statement, outer_statement_empty: "\n" => _);
 
     test!(outer_statement, outer_statement_enum: "A :: enum A, B end\n" => _);
@@ -736,6 +822,8 @@ mod test {
     fail!(statement, statement_assign_self_const: "self :: 1" => _);
     fail!(statement, statement_assign_self_var: "self := 1" => _);
     fail!(statement, statement_assign_self_type: "self: int = 1" => _);
+    fail!(statement, outer_statement_from_invalid: "from b use a!" => _);
+    fail!(statement, outer_statement_from_alias_invalid: "from b use a as !" => _);
 }
 
 impl Display for NameIdentifier {

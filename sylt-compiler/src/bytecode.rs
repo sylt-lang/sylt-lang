@@ -483,7 +483,12 @@ impl<'t> BytecodeCompiler<'t> {
         self.compiler.panic = false;
 
         match &statement.kind {
-            Use { .. } | Enum { .. } | Blob { .. } | IsCheck { .. } | EmptyStatement => {}
+            Use { .. }
+            | Enum { .. }
+            | FromUse { .. }
+            | Blob { .. }
+            | IsCheck { .. }
+            | EmptyStatement => {}
 
             #[rustfmt::skip]
             Definition { ident, kind, value, .. } => {
@@ -742,6 +747,7 @@ fn all_paths_return(statement: &Statement) -> bool {
         | StatementKind::IsCheck { .. }
         | StatementKind::StatementExpression { .. }
         | StatementKind::Unreachable
+        | StatementKind::FromUse { .. }
         | StatementKind::Use { .. } => false,
 
         StatementKind::If { pass, fail, .. } => all_paths_return(pass) && all_paths_return(fail),

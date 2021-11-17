@@ -390,6 +390,7 @@ impl Compiler {
             .collect();
 
         let mut num_constants = 0;
+        let mut from_statements = Vec::new();
         // Find all globals in all files and declare them. The globals are
         // initialized at a later stage.
         for (path, module) in tree.modules.iter() {
@@ -407,6 +408,12 @@ impl Compiler {
                         } else {
                             unreachable!()
                         }
+                    }
+                    FromUse { .. } => {
+                        // We cannot resolve this here since the namespace
+                        // might not be loaded yet. We process these after.
+                        from_statements.push(statement.clone());
+                        continue;
                     }
                     Enum { name, .. } => {
                         let enum_ = Type::Enum(name.clone(), Default::default());
@@ -444,7 +451,6 @@ impl Compiler {
                         continue;
                     }
                 };
-
                 match namespace.entry(ident_name.to_owned()) {
                     Entry::Vacant(vac) => {
                         vac.insert(name);
@@ -458,6 +464,42 @@ impl Compiler {
                 }
             }
             self.namespaces[slot] = namespace;
+        }
+
+        for from_stmt in from_statements.into_iter() {
+            let slot = from_stmt.span.file_id;
+            match from_stmt.kind {
+                StatementKind::FromUse { imports, file, .. } => {
+                    let from_slot = path_to_namespace_id[&file];
+                    for (ident, alias) in imports.iter() {
+                        let name = match self.namespaces[from_slot].get(&ident.name) {
+                            Some(name) => *name,
+                            None => {
+                                error!(
+                                    self,
+                                    ident.span, "Nothing named '{}' in '{:?}'", ident.name, file
+                                );
+                                continue;
+                            }
+                        };
+                        let real_ident = alias.as_ref().unwrap_or(ident);
+                        match self.namespaces[slot].entry(real_ident.name.clone()) {
+                            Entry::Vacant(vac) => {
+                                vac.insert(name);
+                            }
+                            Entry::Occupied(_) => {
+                                error!(
+                                    self,
+                                    real_ident.span,
+                                    "A global variable with the name '{}' already exists",
+                                    real_ident.name
+                                );
+                            }
+                        }
+                    }
+                }
+                _ => unreachable!(),
+            }
         }
         num_constants
     }

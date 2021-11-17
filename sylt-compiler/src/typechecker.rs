@@ -595,6 +595,7 @@ impl TypeChecker {
             StatementKind::EmptyStatement => Ok(None),
 
             StatementKind::Use { .. }
+            | StatementKind::FromUse { .. }
             | StatementKind::Blob { .. }
             | StatementKind::Enum { .. }
             | StatementKind::IsCheck { .. }
@@ -620,6 +621,28 @@ impl TypeChecker {
                     .insert((ctx.namespace, ident.name.clone()), Name::Namespace(other));
             }
 
+            StatementKind::FromUse { imports, file, .. } => {
+                // TODO(ed): This shouldn't be nessecary since the namespace
+                // should be set up correctly already.
+                let other = self.file_to_namespace[file];
+                for (ident, alias) in imports.iter() {
+                    let other_var = match &self.globals[&(other, ident.name.clone())] {
+                        Name::Global(var) => var.clone(),
+                        Name::Blob(_) | Name::Enum(_) | Name::Namespace(_) => continue,
+                    };
+                    let var = Variable {
+                        ident: alias.as_ref().unwrap_or(ident).clone(),
+                        ty: self.push_type(Type::Unknown),
+                        kind: VarKind::Const,
+                        span,
+                    };
+                    self.unify(span, ctx, var.ty, other_var.ty)?;
+                    self.globals.insert(
+                        (ctx.namespace, alias.as_ref().unwrap_or(ident).name.clone()),
+                        Name::Global(var),
+                    );
+                }
+            }
             StatementKind::Enum { name, variants } => {
                 let mut resolved_variants = BTreeMap::new();
                 let mut seen = HashMap::new();

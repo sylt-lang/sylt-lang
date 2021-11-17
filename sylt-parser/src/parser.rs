@@ -957,8 +957,8 @@ fn module(
         ctx = match outer_statement(ctx) {
             Ok((ctx, statement)) => {
                 use StatementKind::*;
-                // Yank `use`s and add it to the used-files list.
-                if let Use { file, .. } = &statement.kind {
+                // Get the used files from 'use' and 'from' statements.
+                if let Use { file, .. } | FromUse { file, .. } = &statement.kind {
                     use_files.push(file.clone());
                 }
                 statements.push(statement);
@@ -1231,6 +1231,16 @@ impl PrettyPrint for Statement {
             SK::Use { path, name, file } => {
                 write!(f, "<Use> {} {}", path.name, name)?;
                 write!(f, " {:?}", file)?;
+            }
+            SK::FromUse { path, imports, .. } => {
+                write!(f, "<FromUse> {}\n", path.name)?;
+                for (ident, alias) in imports.iter() {
+                    write!(f, "  {}", ident.name)?;
+                    if let Some(ident) = alias {
+                        write!(f, " as {}", ident.name)?;
+                    }
+                    write!(f, "\n")?;
+                }
             }
             SK::Enum { name, variants } => {
                 write!(f, "<Enum> {} {{ ", name)?;
