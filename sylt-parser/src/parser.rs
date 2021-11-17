@@ -829,7 +829,9 @@ fn assignable_variant<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult
         AssignableKind::Call(_, _) | AssignableKind::ArrowCall(_, _, _) => {
             raise_syntax_error!(ctx, "A function call cannot lead into enum-variant");
         }
-        AssignableKind::Expression(_) | AssignableKind::Variant { .. } => unreachable!(),
+        AssignableKind::Expression(_) | AssignableKind::Variant { .. } => {
+            raise_syntax_error!(ctx, "Expressions cannot lead into enum-variant");
+        }
     };
     if !is_capitalized(&enum_name.name) {
         raise_syntax_error!(ctx, "Enums have to start with a capital letter");

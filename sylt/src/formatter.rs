@@ -178,8 +178,10 @@ fn write_type_assignable<W: Write>(
 
 fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: Assignable) -> fmt::Result {
     match assignable.kind {
-        AssignableKind::Variant { .. } => {
-            todo!();
+        AssignableKind::Variant { enum_ass, variant, value } => {
+            write_assignable(dest, indent, *enum_ass)?;
+            write!(dest, " {} ", variant.name)?;
+            write_expression(dest, indent, *value)
         }
         AssignableKind::Read(identifier) => write_identifier(dest, identifier),
         AssignableKind::Call(callable, args) => {
