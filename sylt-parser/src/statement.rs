@@ -410,7 +410,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             )
         }
 
-        // Blob declaration: `Abc :: enum A, B, C end`
+        // Enum declaration: `Abc :: enum A, B, C end`
         [T::Identifier(name), T::ColonColon, T::Enum, ..] => {
             if !is_capitalized(name) {
                 raise_syntax_error!(
