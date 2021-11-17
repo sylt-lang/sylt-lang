@@ -788,7 +788,11 @@ impl TypeChecker {
                                 TypeError::UnresolvedName(ident.name.clone())
                             ),
                         },
-                        _ => panic!("Not a variable!"),
+                        _ => err_type_error!(
+                            self,
+                            span,
+                            TypeError::UnresolvedName(ident.name.clone())
+                        ),
                     }
                 }
             }
