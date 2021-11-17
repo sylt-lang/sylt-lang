@@ -622,8 +622,10 @@ impl TypeChecker {
 
             StatementKind::Enum { name, variants } => {
                 let mut resolved_variants = BTreeMap::new();
+                let mut seen = HashMap::new();
                 for (k, t) in variants.iter() {
-                    resolved_variants.insert(k.clone(), self.resolve_type(span, ctx, t)?);
+                    resolved_variants
+                        .insert(k.clone(), self.inner_resolve_type(span, ctx, t, &mut seen)?);
                 }
                 let ty = Type::Enum(name.clone(), resolved_variants);
                 self.globals
@@ -632,8 +634,10 @@ impl TypeChecker {
 
             StatementKind::Blob { name, fields } => {
                 let mut resolved_fields = BTreeMap::new();
+                let mut seen = HashMap::new();
                 for (k, t) in fields.iter() {
-                    resolved_fields.insert(k.clone(), self.resolve_type(span, ctx, t)?);
+                    resolved_fields
+                        .insert(k.clone(), self.inner_resolve_type(span, ctx, t, &mut seen)?);
                 }
                 let ty = Type::Blob(name.clone(), resolved_fields);
                 self.globals
