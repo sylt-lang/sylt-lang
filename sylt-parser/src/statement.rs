@@ -535,7 +535,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         // Implied type declaration, e.g. `a :: 1` or `a := 1`.
         [T::Identifier(name), T::ColonColon | T::ColonEqual, ..] => {
             if is_capitalized(name) {
-                raise_syntax_error!(ctx, "Variables have to start with a lowercase letter");
+                // raise_syntax_error!(ctx, "Variables have to start with a lowercase letter");
             }
             if name == "self" {
                 raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
@@ -568,7 +568,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         // Variable declaration with specified type, e.g. `c : int = 3` or `b : int | bool : false`.
         [T::Identifier(name), T::Colon, ..] => {
             if is_capitalized(name) {
-                raise_syntax_error!(ctx, "Variables have to start with a lowercase letter");
+                // raise_syntax_error!(ctx, "Variables have to start with a lowercase letter");
             }
             if name == "self" {
                 raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
