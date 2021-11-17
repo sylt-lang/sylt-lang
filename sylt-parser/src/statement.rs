@@ -11,6 +11,13 @@ pub enum NameIdentifier {
 
 type Alias = Identifier;
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CaseBranch {
+    pub pattern: Identifier,
+    pub variable: Option<Identifier>,
+    pub body: Statement,
+}
+
 /// The different kinds of [Statement]s.
 ///
 /// There are both shorter statements like `a = b + 1` as well as longer
@@ -101,6 +108,15 @@ pub enum StatementKind {
         condition: Expression,
         pass: Box<Statement>,
         fail: Box<Statement>,
+    },
+
+    /// A super branchy branch.
+    ///
+    /// `case <expression> do <statement> [else <statement>] end`.
+    Case {
+        to_match: Expression,
+        branches: Vec<CaseBranch>,
+        fall_through: Box<Statement>,
     },
 
     /// Do something as long as something else evaluates to true.

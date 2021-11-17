@@ -490,6 +490,9 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write_expression(dest, indent, value)?;
         }
         StatementKind::EmptyStatement => (),
+        StatementKind::Case { .. } => {
+            todo!();
+        }
         StatementKind::If { condition, pass, fail } => {
             if matches!(fail.kind, StatementKind::EmptyStatement) {
                 for comment in &fail.comments {

@@ -533,6 +533,10 @@ impl TypeChecker {
                 Ok(None)
             }
 
+            StatementKind::Case { .. } => {
+                todo!();
+            }
+
             StatementKind::If { condition, pass, fail } => {
                 let condition = self.expression(condition, ctx)?;
                 let boolean = self.push_type(Type::Bool);
@@ -690,6 +694,7 @@ impl TypeChecker {
             | StatementKind::Continue
             | StatementKind::Ret { .. }
             | StatementKind::If { .. }
+            | StatementKind::Case { .. }
             | StatementKind::Block { .. }
             | StatementKind::StatementExpression { .. }
             | StatementKind::Unreachable

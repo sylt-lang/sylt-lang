@@ -570,6 +570,10 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ";");
             }
 
+            Case { .. } => {
+                todo!();
+            }
+
             If { condition, pass, fail } => {
                 write!(self, "if");
                 self.expression(condition, ctx);

@@ -192,6 +192,10 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
         .cloned()
         .collect(),
 
+        Case { .. } => {
+            todo!();
+        }
+
         Loop { condition, body } => dependencies(ctx, condition)
             .union(&statement_dependencies(ctx, body))
             .cloned()

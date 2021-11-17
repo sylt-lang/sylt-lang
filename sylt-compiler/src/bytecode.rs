@@ -643,7 +643,10 @@ impl<'t> BytecodeCompiler<'t> {
                 self.patch(ctx, break_from, Op::Jmp(out));
             }
 
-            #[rustfmt::skip]
+            Case { .. } => {
+                todo!();
+            }
+
             If { condition, pass, fail } => {
                 self.expression(condition, ctx);
 
@@ -751,6 +754,10 @@ fn all_paths_return(statement: &Statement) -> bool {
         | StatementKind::Use { .. } => false,
 
         StatementKind::If { pass, fail, .. } => all_paths_return(pass) && all_paths_return(fail),
+
+        StatementKind::Case { branches, fall_through, .. } => {
+            branches.iter().all(|b| all_paths_return(&b.body)) && all_paths_return(fall_through)
+        }
 
         StatementKind::Loop { body, .. } => all_paths_return(body),
         StatementKind::Block { statements } => statements.iter().any(all_paths_return),

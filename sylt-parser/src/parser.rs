@@ -10,7 +10,7 @@ use sylt_tokenizer::{string_to_tokens, PlacedToken, Token};
 pub mod expression;
 pub mod statement;
 pub use self::expression::{Expression, ExpressionKind};
-pub use self::statement::{Statement, StatementKind};
+pub use self::statement::{CaseBranch, Statement, StatementKind};
 
 pub use sylt_tokenizer::Span;
 
@@ -1275,6 +1275,24 @@ impl PrettyPrint for Statement {
                 write!(f, "<Ass> {:?}\n", kind)?;
                 target.pretty_print(f, indent + 1)?;
                 value.pretty_print(f, indent + 1)?;
+                return Ok(());
+            }
+            SK::Case { to_match, branches, fall_through } => {
+                write!(f, "<Case>\n")?;
+                to_match.pretty_print(f, indent + 1)?;
+                for CaseBranch { pattern, variable, body } in branches.iter() {
+                    write_indent(f, indent + 1)?;
+                    write!(
+                        f,
+                        "{} {:?}\n",
+                        pattern.name,
+                        variable.as_ref().map(|x| &x.name)
+                    )?;
+                    body.pretty_print(f, indent + 2)?;
+                }
+                write_indent(f, indent + 1)?;
+                write!(f, "else")?;
+                fall_through.pretty_print(f, indent + 2)?;
                 return Ok(());
             }
             SK::If { condition, pass, fail } => {
