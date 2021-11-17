@@ -119,7 +119,7 @@ impl PartialEq for Identifier {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AssignableKind {
     Read(Identifier),
-    /// Instance of an Enum variant `Abc.A(1, 2, 3)`
+    /// Instance of an Enum variant `Abc.A (1, 2, 3)`
     Variant {
         enum_ass: Box<Assignable>,
         variant: Identifier,
