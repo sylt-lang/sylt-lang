@@ -399,12 +399,12 @@ impl Compiler {
             let mut namespace = Namespace::new();
             for statement in module.statements.iter() {
                 use StatementKind::*;
-                let new_globals = match &statement.kind {
+                let (name, ident_name, span) = match &statement.kind {
                     Blob { name, .. } => {
                         let blob =
                             self.constant(Value::Ty(Type::Blob(name.clone(), Default::default())));
                         if let Op::Constant(slot) = blob {
-                            vec![(Name::Blob(slot), name.clone(), statement.span)]
+                            (Name::Blob(slot), name.clone(), statement.span)
                         } else {
                             unreachable!()
                         }
@@ -413,14 +413,12 @@ impl Compiler {
                         // We cannot resolve this here since the namespace
                         // might not be loaded yet. We process these after.
                         from_statements.push(statement.clone());
-                        Vec::new()
+                        continue;
                     }
                     Enum { name, .. } => {
                         let enum_ = Type::Enum(name.clone(), Default::default());
                         match self.constant(Value::Ty(enum_)) {
-                            Op::Constant(slot) => {
-                                vec![(Name::Enum(slot), name.clone(), statement.span)]
-                            }
+                            Op::Constant(slot) => (Name::Enum(slot), name.clone(), statement.span),
                             _ => unreachable!(),
                         }
                     }
@@ -430,19 +428,19 @@ impl Compiler {
                             NameIdentifier::Alias(ident) => ident,
                         };
                         let other = path_to_namespace_id[file];
-                        vec![(Name::Namespace(other), ident.name.clone(), ident.span)]
+                        (Name::Namespace(other), ident.name.clone(), ident.span)
                     }
                     Definition { ident: Identifier { name, .. }, kind, .. } => {
                         let var = self.define(name, *kind, statement.span);
                         self.activate(var);
                         num_constants += 1;
-                        vec![(Name::Global(var), name.clone(), statement.span)]
+                        (Name::Global(var), name.clone(), statement.span)
                     }
                     ExternalDefinition { ident: Identifier { name, .. }, kind, .. } => {
                         let var = self.define(name, *kind, statement.span);
                         self.activate(var);
                         num_constants += 1;
-                        vec![(Name::External(*kind), name.clone(), statement.span)]
+                        (Name::External(*kind), name.clone(), statement.span)
                     }
 
                     // Handled later since we need type information.
@@ -453,19 +451,15 @@ impl Compiler {
                         continue;
                     }
                 };
-                for (name, ident_name, span) in new_globals {
-                    match namespace.entry(ident_name.to_owned()) {
-                        Entry::Vacant(vac) => {
-                            vac.insert(name);
-                        }
-                        Entry::Occupied(_) => {
-                            error!(
-                                self,
-                                span,
-                                "A global variable with the name '{}' already exists",
-                                ident_name
-                            );
-                        }
+                match namespace.entry(ident_name.to_owned()) {
+                    Entry::Vacant(vac) => {
+                        vac.insert(name);
+                    }
+                    Entry::Occupied(_) => {
+                        error!(
+                            self,
+                            span, "A global variable with the name '{}' already exists", ident_name
+                        );
                     }
                 }
             }
