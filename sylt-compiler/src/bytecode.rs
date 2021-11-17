@@ -717,10 +717,7 @@ impl<'t> BytecodeCompiler<'t> {
             scope: 0,
         };
 
-        self.compiler.panic = true;
         self.read_identifier("start", Span::zero(0), ctx, 0);
-        self.compiler.panic = false;
-
         self.add_op(ctx, Span::zero(0), Op::Call(0));
 
         let nil = self.compiler.constant(Value::Nil);
