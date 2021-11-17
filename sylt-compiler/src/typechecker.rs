@@ -777,10 +777,7 @@ impl TypeChecker {
                 };
                 let ty = match self.globals.get(&(ctx.namespace, enum_name.name.clone())) {
                     // TODO(ed): Is this correct?
-                    Some(Name::Enum(ty)) => {
-                        let ty = ty.clone();
-                        self.push_type(ty)
-                    }
+                    Some(Name::Enum(ty)) => self.push_type(ty.clone()),
                     _ => {
                         return err_type_error!(
                             self,
@@ -802,8 +799,10 @@ impl TypeChecker {
                         )
                     }
                 };
-                let var_ty = match variants.get(&variant.name) {
-                    Some(ty) => *ty,
+                // Only unify this variant with the expression
+                let expr_ty = self.expression(value, ctx)?;
+                match variants.get(&variant.name) {
+                    Some(field_ty) => self.unify(variant.span, ctx, *field_ty, expr_ty)?,
                     None => {
                         return err_type_error!(
                             self,
@@ -812,8 +811,7 @@ impl TypeChecker {
                         )
                     }
                 };
-                let expr_ty = self.expression(value, ctx)?;
-                self.unify(variant.span, ctx, var_ty, expr_ty)
+                Ok(ty)
             }
 
             AssignableKind::Read(ident) => {
