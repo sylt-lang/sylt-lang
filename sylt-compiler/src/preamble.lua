@@ -66,6 +66,20 @@ __ADD = function(a, b)
     return a + b
 end
 
+__VARIANT_META = { _type = "variant" }
+__VARIANT_META.__newindex = function()
+    assert(false, "Variants are immutable")
+end
+__VARIANT_META.__eq = function(a, b)
+    return a[1] == b[1] and a[2] == b[2]
+end
+__VARIANT_META.__tostring = function(a)
+    return tostring(a[1]) .. " " .. tostring(a[2])
+end
+function __VARIANT(obj)
+    return setmetatable(obj, __VARIANT_META)
+end
+
 __TUPLE_META = { _type = "tuple" }
 __TUPLE_META.__newindex = function()
     assert(false, "Tuples are immutable")

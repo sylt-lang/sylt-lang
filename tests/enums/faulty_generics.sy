@@ -1,0 +1,12 @@
+Maybe :: enum
+    Just *a,
+    Other *a,
+    Nothing,
+end
+
+start :: fn do
+    a := Maybe.Just 1
+    a = Maybe.Other "abc"
+end
+
+// error: $Mismatch { .. }

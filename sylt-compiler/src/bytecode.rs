@@ -113,6 +113,14 @@ impl<'t> BytecodeCompiler<'t> {
             Read(ident) => {
                 return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
             }
+            Variant { variant, value, .. } => {
+                let variant = self
+                    .compiler
+                    .constant(Value::String(Rc::new(variant.name.clone())));
+                self.add_op(ctx, ass.span, variant);
+                self.expression(value, ctx);
+                self.add_op(ctx, ass.span, Op::Tag);
+            }
             Call(f, expr) => {
                 self.assignable(f, ctx);
                 for expr in expr.iter() {
@@ -407,6 +415,10 @@ impl<'t> BytecodeCompiler<'t> {
                     let op = Op::Constant(*blob);
                     self.add_op(ctx, span, op);
                 }
+                Some(Name::Enum(enum_)) => {
+                    let op = Op::Constant(*enum_);
+                    self.add_op(ctx, span, op);
+                }
                 Some(Name::Namespace(new_namespace)) => return Some(*new_namespace),
                 None => {
                     if let Some((slot, _, _)) = self.compiler.functions.get(name) {
@@ -471,7 +483,7 @@ impl<'t> BytecodeCompiler<'t> {
         self.compiler.panic = false;
 
         match &statement.kind {
-            Use { .. } | Blob { .. } | IsCheck { .. } | EmptyStatement => {}
+            Use { .. } | Enum { .. } | Blob { .. } | IsCheck { .. } | EmptyStatement => {}
 
             #[rustfmt::skip]
             Definition { ident, kind, value, .. } => {
@@ -526,6 +538,12 @@ impl<'t> BytecodeCompiler<'t> {
                         write_mutator_op(self, ctx, *kind);
 
                         self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
+                    }
+                    Variant { .. } => {
+                        error!(
+                            self.compiler,
+                            statement.span, "Cannot assign to enum-variant"
+                        );
                     }
                     ArrowCall(..) | Call(..) => {
                         error!(
@@ -699,11 +717,7 @@ impl<'t> BytecodeCompiler<'t> {
             scope: 0,
         };
 
-        // TODO(ed): Real ugly hack until we can run the typechecker before the compiler.
-        self.compiler.panic = true;
         self.read_identifier("start", Span::zero(0), ctx, 0);
-        self.compiler.panic = false;
-
         self.add_op(ctx, Span::zero(0), Op::Call(0));
 
         let nil = self.compiler.constant(Value::Nil);
@@ -719,6 +733,7 @@ fn all_paths_return(statement: &Statement) -> bool {
     match &statement.kind {
         StatementKind::Assignment { .. }
         | StatementKind::Blob { .. }
+        | StatementKind::Enum { .. }
         | StatementKind::Break
         | StatementKind::Continue
         | StatementKind::Definition { .. }

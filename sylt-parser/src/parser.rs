@@ -119,6 +119,12 @@ impl PartialEq for Identifier {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AssignableKind {
     Read(Identifier),
+    /// Instance of an Enum variant `Abc.A (1, 2, 3)`
+    Variant {
+        enum_ass: Box<Assignable>,
+        variant: Identifier,
+        value: Box<Expression>,
+    },
     /// A function call.
     Call(Box<Assignable>, Vec<Expression>),
     /// An arrow function call. `a -> f' b`
@@ -797,7 +803,73 @@ fn assignable_index<'t>(ctx: Context<'t>, indexed: Assignable) -> ParseResult<'t
     sub_assignable(ctx, result)
 }
 
-/// Parse an [AssignableKind::Access].
+/// Parse an [AssignableKind::Access] or [AssignableKind::Variant].
+fn assignable_dot_or_variant<'t>(
+    ctx: Context<'t>,
+    accessed: Assignable,
+) -> ParseResult<'t, Assignable> {
+    // TODO(ed): It might be possible to remove this branch?
+    // TODO(ed): We throw away error information here...
+    match assignable_variant(ctx, accessed.clone()) {
+        Ok(variant) => Ok(variant),
+        Err(_) => assignable_dot(ctx, accessed),
+    }
+}
+
+/// Parse an [AssignableKind::Variant].
+fn assignable_variant<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t, Assignable> {
+    let span = ctx.span();
+    // TODO(ed): We shouldn't have to look at the previous assignables to know if this is valid -
+    // but I guess it's okay since we depend on it anyways?
+    let enum_name = match &accessed.kind {
+        AssignableKind::Read(enum_name) => enum_name,
+        AssignableKind::Access(_, enum_name) => enum_name,
+        AssignableKind::Index(_, _) => {
+            raise_syntax_error!(ctx, "Indexing cannot lead into enum-variant");
+        }
+        AssignableKind::Call(_, _) | AssignableKind::ArrowCall(_, _, _) => {
+            raise_syntax_error!(ctx, "A function call cannot lead into enum-variant");
+        }
+        AssignableKind::Expression(_) | AssignableKind::Variant { .. } => {
+            raise_syntax_error!(ctx, "Expressions cannot lead into enum-variant");
+        }
+    };
+    if !is_capitalized(&enum_name.name) {
+        raise_syntax_error!(ctx, "Enums have to start with a capital letter");
+    }
+    drop(enum_name);
+
+    let ctx = expect!(ctx, T::Dot, "Expected '.' after variant name");
+
+    let (ctx, variant) = if let (T::Identifier(name), span, ctx) = ctx.eat() {
+        if !is_capitalized(name) {
+            raise_syntax_error!(ctx, "Enum variants have to start with a capital letter");
+        }
+        (ctx, Identifier { name: name.clone(), span })
+    } else {
+        raise_syntax_error!(ctx, "Expected an identifier after '.' in variant");
+    };
+
+    let (ctx, value) = match expression(ctx) {
+        Ok(res) => res,
+        Err(_) => (ctx, Expression { span, kind: ExpressionKind::Nil }),
+    };
+
+    use AssignableKind::Variant;
+    Ok((
+        ctx,
+        Assignable {
+            span,
+            kind: Variant {
+                enum_ass: Box::new(accessed),
+                variant,
+                value: Box::new(value),
+            },
+        },
+    ))
+}
+
+/// Parse an [AssignableKind::Access]
 fn assignable_dot<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t, Assignable> {
     use AssignableKind::Access;
     let (ctx, ident) = if let (T::Identifier(name), span, ctx) = ctx.skip(1).eat() {
@@ -821,7 +893,7 @@ fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'
     match ctx.token() {
         T::Prime | T::LeftParen => assignable_call(ctx, assignable),
         T::LeftBracket => assignable_index(ctx, assignable),
-        T::Dot => assignable_dot(ctx, assignable),
+        T::Dot => assignable_dot_or_variant(ctx, assignable),
         _ => Ok((ctx, assignable)),
     }
 }
@@ -841,10 +913,8 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
 
     // Get the identifier.
     let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
-        Assignable {
-            span: outer_span,
-            kind: Read(Identifier { span, name: name.clone() }),
-        }
+        let ident = Identifier { span, name: name.clone() };
+        Assignable { span: outer_span, kind: Read(ident) }
     } else {
         raise_syntax_error!(
             ctx,
@@ -1154,12 +1224,23 @@ impl PrettyPrint for Module {
 impl PrettyPrint for Statement {
     fn pretty_print(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
         use StatementKind as SK;
+
         write_indent(f, indent)?;
         write!(f, "{} ", self.span.line_start)?;
         match &self.kind {
             SK::Use { path, name, file } => {
                 write!(f, "<Use> {} {}", path.name, name)?;
                 write!(f, " {:?}", file)?;
+            }
+            SK::Enum { name, variants } => {
+                write!(f, "<Enum> {} {{ ", name)?;
+                for (i, (name, ty)) in variants.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "<{} {}>", name, ty)?;
+                }
+                write!(f, " }}")?;
             }
             SK::Blob { name, fields } => {
                 write!(f, "<Blob> {} {{ ", name)?;
@@ -1323,6 +1404,11 @@ impl PrettyPrint for Assignable {
                     arg.pretty_print(f, indent + 1)?;
                 }
             }
+            AssignableKind::Variant { enum_ass, variant, value } => {
+                enum_ass.pretty_print(f, indent)?;
+                write!(f, "[Variant] {}", variant.name)?;
+                value.pretty_print(f, indent + 1)?;
+            }
             AssignableKind::ArrowCall(func, add, args) => {
                 write!(f, "[ArrowCall] ")?;
                 func.pretty_print(f, indent)?;
@@ -1335,8 +1421,8 @@ impl PrettyPrint for Assignable {
                 }
             }
             AssignableKind::Access(a, ident) => {
-                write!(f, "[Access] {}", ident.name)?;
                 a.pretty_print(f, indent)?;
+                write!(f, "[Access] {}", ident.name)?;
             }
             AssignableKind::Index(a, expr) => {
                 write!(f, "[Index]")?;

@@ -86,6 +86,34 @@ fn write_blob_fields<T, W: Write>(
     Ok(())
 }
 
+fn write_enum_variants<W: Write>(
+    dest: &mut W,
+    indent: u32,
+    mut variants: Vec<(String, Type)>,
+) -> fmt::Result {
+    match variants.len() {
+        0 => {}
+        1 => {
+            let (var, ty) = variants.pop().unwrap();
+            write!(dest, " {} ", var)?;
+            write_type(dest, indent, ty)?;
+            write!(dest, " ")?;
+        }
+        _ => {
+            write!(dest, "\n")?;
+            for (var, ty) in variants {
+                write_indents(dest, indent)?;
+                write!(dest, "{} ", var)?;
+                write_type(dest, indent, ty)?;
+                write!(dest, ",\n")?;
+            }
+            write_indents(dest, indent - 1)?;
+        }
+    }
+    write!(dest, "end")?;
+    Ok(())
+}
+
 fn write_constraint<W: Write>(
     dest: &mut W,
     _indent: u32,
@@ -178,6 +206,11 @@ fn write_type_assignable<W: Write>(
 
 fn write_assignable<W: Write>(dest: &mut W, indent: u32, assignable: Assignable) -> fmt::Result {
     match assignable.kind {
+        AssignableKind::Variant { enum_ass, variant, value } => {
+            write_assignable(dest, indent, *enum_ass)?;
+            write!(dest, ".{} ", variant.name)?;
+            write_expression(dest, indent, *value)
+        }
         AssignableKind::Read(identifier) => write_identifier(dest, identifier),
         AssignableKind::Call(callable, args) => {
             write_assignable(dest, indent, *callable)?;
@@ -393,6 +426,12 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write!(dest, "{} :: blob", name)?;
             let fields_as_tuples = fields.into_iter().collect();
             write_blob_fields(dest, indent + 1, fields_as_tuples, write_type)?;
+        }
+        StatementKind::Enum { name, variants } => {
+            write_indents(dest, indent)?;
+            write!(dest, "{} :: enum", name)?;
+            let variants_as_tuples = variants.into_iter().collect();
+            write_enum_variants(dest, indent + 1, variants_as_tuples)?;
         }
         StatementKind::Block { statements } => {
             write_indents(dest, indent)?;

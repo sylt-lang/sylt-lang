@@ -68,6 +68,7 @@ impl FlatValue {
                     .map(|(field, value)| (field.clone(), Self::pack_inner(value, pack, seen)))
                     .collect(),
             ),
+            Value::Variant(..) => todo!("Skipping for now"),
             Value::Tuple(values) => FlatValue::Tuple(
                 values
                     .iter()

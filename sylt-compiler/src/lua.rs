@@ -50,6 +50,11 @@ impl<'t> LuaCompiler<'t> {
             Read(ident) => {
                 return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
             }
+            Variant { variant, value, .. } => {
+                write!(self, "__VARIANT({{\"{}\", ", variant.name);
+                self.expression(value, ctx);
+                write!(self, "})");
+            }
             Call(f, expr) => {
                 self.assignable(f, ctx);
                 write!(self, "(");
@@ -315,6 +320,9 @@ impl<'t> LuaCompiler<'t> {
                 Some(Name::Blob(blob)) => {
                     self.write_global(blob);
                 }
+                Some(Name::Enum(enum_)) => {
+                    self.write_global(enum_);
+                }
                 Some(Name::External(_)) => {
                     write!(self, "{}", name);
                 }
@@ -373,6 +381,7 @@ impl<'t> LuaCompiler<'t> {
         match &statement.kind {
             Use { .. }
             | Blob { .. }
+            | Enum { .. }
             | IsCheck { .. }
             | EmptyStatement
             | ExternalDefinition { .. } => return,
@@ -401,7 +410,7 @@ impl<'t> LuaCompiler<'t> {
         self.compiler.panic = false;
 
         match &statement.kind {
-            Use { .. } | Blob { .. } | EmptyStatement => return,
+            Use { .. } | Enum { .. } | Blob { .. } | EmptyStatement => return,
 
             IsCheck { .. } => {
                 error!(

@@ -20,4 +20,5 @@ pub enum Type {
     Dict(usize, usize),
     Function(Vec<usize>, usize),
     Blob(String, BTreeMap<String, usize>),
+    Enum(String, BTreeMap<String, usize>),
 }

@@ -31,6 +31,10 @@ fn assignable_dependencies(
 ) -> BTreeSet<(String, usize)> {
     use AssignableKind::*;
     match &assignable.kind {
+        Variant { enum_ass, value, .. } => assignable_dependencies(ctx, enum_ass)
+            .union(&dependencies(ctx, value))
+            .cloned()
+            .collect(),
         Read(ident) => match ctx.compiler.namespaces[ctx.namespace].get(&ident.name) {
             Some(_) if !ctx.shadowed(&ident.name) => [(ident.name.clone(), ctx.namespace)]
                 .iter()
@@ -212,9 +216,9 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
 
         ExternalDefinition { ty, .. } => type_dependencies(ctx, ty),
 
-        Blob { name, fields } => {
+        Blob { name, fields: sub_types } | Enum { name, variants: sub_types } => {
             ctx.shadow(&name);
-            fields
+            sub_types
                 .values()
                 .map(|t| type_dependencies(ctx, t))
                 .flatten()
@@ -314,9 +318,10 @@ fn order(
             }
         };
 
-        let (deps, statement) = to_order
-            .get(&global)
-            .expect("Trying to find an identifier that does not exist");
+        let (deps, statement) = to_order.get(&global).expect(&format!(
+            "Trying to find an identifier that does not exist ({:?})",
+            global.0
+        ));
         for dep in deps {
             recurse(dep, to_order, inserted, ordered).map_err(|mut cycle| {
                 cycle.push(*statement);
@@ -355,6 +360,7 @@ pub(crate) fn initialization_order<'a>(
             use StatementKind::*;
             match &statement.kind {
                 Blob { name, .. }
+                | Enum { name, .. }
                 | Use {
                     name: NameIdentifier::Implicit(Identifier { name, .. }),
                     ..

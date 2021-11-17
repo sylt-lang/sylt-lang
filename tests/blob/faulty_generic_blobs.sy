@@ -1,0 +1,11 @@
+A :: blob {
+    a: *a,
+    b: *a,
+}
+
+start :: fn do
+    A { a: 1, b: 1 }
+    A { a: 1, b: "str" }
+end
+
+// error: $Mismatch { .. }

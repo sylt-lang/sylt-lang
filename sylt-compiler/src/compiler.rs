@@ -100,6 +100,7 @@ enum Name {
     External(VarKind),
     Global(ConstantID),
     Blob(BlobID),
+    Enum(BlobID),
     Namespace(NamespaceID),
 }
 
@@ -405,6 +406,13 @@ impl Compiler {
                             (Name::Blob(slot), name.clone(), statement.span)
                         } else {
                             unreachable!()
+                        }
+                    }
+                    Enum { name, .. } => {
+                        let enum_ = Type::Enum(name.clone(), Default::default());
+                        match self.constant(Value::Ty(enum_)) {
+                            Op::Constant(slot) => (Name::Enum(slot), name.clone(), statement.span),
+                            _ => unreachable!(),
                         }
                     }
                     Use { name, file, .. } => {
