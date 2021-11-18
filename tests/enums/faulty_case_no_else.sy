@@ -1,0 +1,13 @@
+f :: fn a do
+    case a do
+        X do
+            out += "X"
+        end
+        Y x do
+            out += "Y"
+            x <=> 2
+        end
+    end
+end
+
+// error: @10

@@ -1,0 +1,25 @@
+A :: enum
+    X *,
+    Y *,
+end
+
+f :: fn a do
+    case a do
+        X x do
+            x + 1
+        end
+        Y x do
+            x + "a"
+        end
+        else do <!> end
+    end
+end
+
+start :: fn do
+    f' A.X 2
+    f' A.Y 2
+end
+
+// error: $BinOp { .. }
+
+
