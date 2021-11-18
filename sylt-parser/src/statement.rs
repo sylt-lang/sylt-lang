@@ -112,7 +112,7 @@ pub enum StatementKind {
 
     /// A super branchy branch.
     ///
-    /// `case <expression> do <statement> [else <statement>] end`.
+    /// `case <expression> do (<pattern> [<variable] <statement>)* [else <statement>] end`.
     Case {
         to_match: Expression,
         branches: Vec<CaseBranch>,
@@ -236,6 +236,23 @@ pub fn use_path<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, PathBuf)> 
     };
 
     Ok((ctx, (path_ident, file)))
+}
+
+fn statement_or_block<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
+    if matches!(
+        ctx.token(),
+        T::Do | T::If | T::Loop | T::Break | T::Continue | T::Ret
+    ) {
+        Ok(statement(ctx)?)
+    } else {
+        let err_ctx = skip_until!(ctx, T::End);
+        let err = syntax_error!(
+            ctx,
+            "Expected \"do\" or a statement keyword, but found {:?}",
+            ctx.token()
+        );
+        Err((err_ctx, vec![err]))
+    }
 }
 
 pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
@@ -458,28 +475,81 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx.prev(), Loop { condition, body: Box::new(body) })
         }
 
+        // `case <expression> do (<branch>)* [else <statement> end] end`
+        [T::Case, ..] => {
+            let (ctx, skip_newlines) = ctx.push_skip_newlines(true);
+            let (ctx, to_match) = expression(ctx.skip(1))?;
+            let mut ctx = expect!(ctx, T::Do);
+
+            let mut branches = Vec::new();
+            loop {
+                match ctx.token() {
+                    T::EOF | T::Else => {
+                        break;
+                    }
+
+                    T::Identifier(pattern) if is_capitalized(pattern) => {
+                        let pattern = Identifier { name: pattern.clone(), span: ctx.span() };
+                        ctx = ctx.skip(1);
+                        let (ctx_, variable) = match ctx.token() {
+                            T::Identifier(capture) if !is_capitalized(capture) => (
+                                ctx.skip(1),
+                                Some(Identifier { name: capture.clone(), span: ctx.span() }),
+                            ),
+                            T::Identifier(_) => {
+                                raise_syntax_error!(
+                                    ctx,
+                                    "Variables have to start with a lowercase letter"
+                                );
+                            }
+                            T::Do => (ctx, None),
+                            _ => {
+                                raise_syntax_error!(ctx, "Failed to parse case match arm");
+                            }
+                        };
+                        let (ctx_, body) = statement_or_block(ctx_)?;
+                        ctx = ctx_;
+
+                        branches.push(CaseBranch { pattern, variable, body });
+                    }
+
+                    T::Identifier(_) => {
+                        raise_syntax_error!(
+                            ctx,
+                            "Enum variants have to start with a captial letter"
+                        );
+                    }
+
+                    _ => {
+                        raise_syntax_error!(
+                            ctx,
+                            "Expected a branch - but a branch cannot start with {:?}",
+                            ctx.token()
+                        );
+                    }
+                }
+            }
+            let ctx = expect!(ctx, T::Else, "Expected - else on case-statement");
+            let (ctx, fall_through) = statement_or_block(ctx)?;
+
+            let ctx = ctx.pop_skip_newlines(skip_newlines);
+            let ctx = expect!(ctx, T::End, "Expected 'end' to finish of case-statement");
+
+            (
+                ctx,
+                Case {
+                    to_match,
+                    branches,
+                    fall_through: Box::new(fall_through),
+                },
+            )
+        }
+
         // `if <expression> <statement> [else <statement>]`. Note that the else is optional.
         [T::If, ..] => {
             let (ctx, skip_newlines) = ctx.push_skip_newlines(true);
             let (ctx, condition) = expression(ctx.skip(1))?;
             let ctx = ctx.pop_skip_newlines(skip_newlines);
-
-            fn statement_or_block<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
-                if matches!(
-                    ctx.token(),
-                    T::Do | T::If | T::Loop | T::Break | T::Continue | T::Ret
-                ) {
-                    Ok(statement(ctx)?)
-                } else {
-                    let err_ctx = skip_until!(ctx, T::End);
-                    let err = syntax_error!(
-                        ctx,
-                        "Expected \"do\" or a statement keyword, but found {:?}",
-                        ctx.token()
-                    );
-                    Err((err_ctx, vec![err]))
-                }
-            }
 
             let (ctx, pass) = statement_or_block(ctx)?;
             // else?

@@ -32,6 +32,8 @@ pub enum Token {
 
     #[token("if")]
     If,
+    #[token("case")]
+    Case,
     #[token("is")]
     Is,
     #[token("else")]
