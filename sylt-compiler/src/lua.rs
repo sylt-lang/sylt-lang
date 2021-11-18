@@ -522,7 +522,6 @@ impl<'t> LuaCompiler<'t> {
                             write!(self, "end");
                         }
                         _ => {
-                            println!("{:?}", target.kind);
                             self.assignable(target, ctx);
                             write!(self, "=");
                             self.assignable(target, ctx);
