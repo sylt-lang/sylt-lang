@@ -126,6 +126,9 @@ enum Constraint {
     SameContainer(usize),
     Contains(usize),
     IsContainedIn(usize),
+
+    Enum,
+    Variant(String, usize),
 }
 
 struct TypeChecker {
@@ -533,8 +536,32 @@ impl TypeChecker {
                 Ok(None)
             }
 
-            StatementKind::Case { .. } => {
-                todo!();
+            StatementKind::Case { to_match, branches, fall_through } => {
+                let to_match = self.expression(to_match, ctx)?;
+                self.add_constraint(to_match, span, Constraint::Enum);
+
+                let ss = self.stack.len();
+                for branch in branches.iter() {
+                    if let Some(var) = &branch.variable {
+                        let var = Variable {
+                            ident: var.clone(),
+                            ty: self.push_type(Type::Unknown),
+                            kind: VarKind::Const,
+                            span,
+                        };
+                        self.add_constraint(
+                            to_match,
+                            span,
+                            Constraint::Variant(branch.pattern.name.clone(), var.ty),
+                        );
+                        self.stack.push(var);
+                    }
+                    self.statement(&branch.body, ctx)?;
+                    self.stack.truncate(ss);
+                }
+
+                self.statement(fall_through, ctx)?;
+                Ok(None)
             }
 
             StatementKind::If { condition, pass, fail } => {
@@ -1368,6 +1395,40 @@ impl TypeChecker {
 
                 Constraint::Contains(b) => self.contains(span, ctx, a, *b),
                 Constraint::IsContainedIn(b) => self.contains(span, ctx, *b, a),
+
+                Constraint::Enum => match self.find_type(a) {
+                    Type::Unknown | Type::Enum(..) => Ok(()),
+
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        TypeError::Violating(self.bake_type(a)),
+                        "Expected this to be an enum"
+                    ),
+                },
+
+                Constraint::Variant(var, v_b) => match self.find_type(a) {
+                    Type::Unknown => Ok(()),
+
+                    Type::Enum(enum_name, vars) => match vars.get(var) {
+                        Some(v_a) => self.unify(span, ctx, *v_a, *v_b).map(|_| ()),
+                        None => {
+                            err_type_error!(
+                                self,
+                                span,
+                                TypeError::UnknownVariant(enum_name, var.clone())
+                            )
+                        }
+                    },
+
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        TypeError::Violating(self.bake_type(a)),
+                        "Expected this to be an enum with a variant '{}'",
+                        var
+                    ),
+                },
             }
             .help(self, *original_span, "Requirement came from".to_string())?
         }
