@@ -490,8 +490,26 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write_expression(dest, indent, value)?;
         }
         StatementKind::EmptyStatement => (),
-        StatementKind::Case { .. } => {
-            todo!();
+        StatementKind::Case { to_match, branches, fall_through } => {
+            write_indents(dest, indent)?;
+            write!(dest, "case ")?;
+            write_expression(dest, indent, to_match)?;
+            write!(dest, " do\n")?;
+            for branch in branches {
+                write_indents(dest, indent + 1)?;
+                write_identifier(dest, branch.pattern)?;
+                if let Some(var) = branch.variable {
+                    write!(dest, " ")?;
+                    write_identifier(dest, var)?;
+                }
+                write!(dest, " ")?;
+                write_statement(dest, indent + 1, branch.body)?;
+            }
+            write_indents(dest, indent + 1)?;
+            write!(dest, "else ")?;
+            write_statement(dest, indent + 1, *fall_through)?;
+            write_indents(dest, indent)?;
+            write!(dest, "end\n")?;
         }
         StatementKind::If { condition, pass, fail } => {
             if matches!(fail.kind, StatementKind::EmptyStatement) {
