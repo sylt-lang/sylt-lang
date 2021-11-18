@@ -502,11 +502,11 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
                     write!(dest, " ")?;
                     write_identifier(dest, var)?;
                 }
-                write!(dest, " ")?;
+                write!(dest, "\n")?;
                 write_statement(dest, indent + 1, branch.body)?;
             }
             write_indents(dest, indent + 1)?;
-            write!(dest, "else ")?;
+            write!(dest, "else\n")?;
             write_statement(dest, indent + 1, *fall_through)?;
             write_indents(dest, indent)?;
             write!(dest, "end\n")?;
