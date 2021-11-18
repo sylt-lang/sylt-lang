@@ -3,8 +3,8 @@ use sylt_common::error::Error;
 use sylt_common::{Block, Op, Value};
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
-    Assignable, AssignableKind, Expression, ExpressionKind, Op as ParserOp, Span, Statement,
-    StatementKind, TypeAssignable, TypeAssignableKind, VarKind,
+    Assignable, AssignableKind, CaseBranch, Expression, ExpressionKind, Op as ParserOp, Span,
+    Statement, StatementKind, TypeAssignable, TypeAssignableKind, VarKind,
 };
 
 use crate::*;
@@ -114,11 +114,11 @@ impl<'t> BytecodeCompiler<'t> {
                 return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
             }
             Variant { variant, value, .. } => {
+                self.expression(value, ctx);
                 let variant = self
                     .compiler
                     .constant(Value::String(Rc::new(variant.name.clone())));
                 self.add_op(ctx, ass.span, variant);
-                self.expression(value, ctx);
                 self.add_op(ctx, ass.span, Op::Tag);
             }
             Call(f, expr) => {
@@ -643,8 +643,45 @@ impl<'t> BytecodeCompiler<'t> {
                 self.patch(ctx, break_from, Op::Jmp(out));
             }
 
-            Case { .. } => {
-                todo!();
+            Case { to_match, branches, fall_through } => {
+                self.expression(to_match, ctx);
+                self.add_op(ctx, to_match.span, Op::TagSplit);
+
+                let mut out_jumps = Vec::new();
+                for CaseBranch { pattern: Identifier { name, span }, variable, body } in
+                    branches.iter()
+                {
+                    let tag = self.compiler.constant(name.as_str().into());
+                    self.add_op(ctx, *span, Op::Copy(1));
+                    self.add_op(ctx, *span, tag);
+                    self.add_op(ctx, *span, Op::Equal);
+                    let next_jump = self.add_op(ctx, *span, Op::Illegal);
+                    // Pop original tag
+                    self.add_op(ctx, *span, Op::Pop);
+                    if let Some(variable) = variable {
+                        let slot =
+                            self.compiler
+                                .define(&variable.name, VarKind::Const, variable.span);
+                        self.compiler.activate(slot);
+
+                        self.statement(body, ctx);
+
+                        self.compiler.frames.last_mut().unwrap().variables.pop();
+                    } else {
+                        self.statement(body, ctx);
+                    }
+                    // Pop value
+                    self.add_op(ctx, *span, Op::Pop);
+                    out_jumps.push(self.add_op(ctx, *span, Op::Illegal));
+                    let next = self.next_ip(ctx);
+                    self.patch(ctx, next_jump, Op::JmpFalse(next));
+                }
+                self.statement(fall_through, ctx);
+
+                let out = self.next_ip(ctx);
+                for jmp in out_jumps {
+                    self.patch(ctx, jmp, Op::Jmp(out));
+                }
             }
 
             If { condition, pass, fail } => {

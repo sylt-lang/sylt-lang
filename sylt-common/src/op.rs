@@ -54,9 +54,14 @@ pub enum Op {
     /// {A, B, C, D, A, E} - Dict(6) - {D(A:E, C:D)}
     Dict(usize),
     /// Creates a new [Value::Variant] with the tag and value as given by the stack.
+    /// Note that the tag should be pushed after the value.
     ///
-    /// {"A", B} - Tag - {"A" B}
+    /// {B, "A"} - Tag - {"A" B}
     Tag,
+    /// Splits a tagged value into a tag and a value - note that the tag is placed ontop.
+    ///
+    /// {"A" B} - Tag - {B, "A"}
+    TagSplit,
 
     /// Indexes something indexable,
     /// and adds that element to the stack.

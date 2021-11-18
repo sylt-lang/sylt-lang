@@ -338,8 +338,17 @@ impl Machine for VM {
             }
 
             Op::Tag => {
-                if let (Value::String(tag), value) = self.poppop() {
+                if let (value, Value::String(tag)) = self.poppop() {
                     self.stack.push(Value::Variant(tag, Box::new(value)));
+                } else {
+                    unreachable!("Tag failed - tag has to be a string");
+                }
+            }
+
+            Op::TagSplit => {
+                if let Value::Variant(tag, value) = self.pop() {
+                    self.stack.push(*value);
+                    self.stack.push(Value::String(tag));
                 } else {
                     unreachable!("Tag failed - tag has to be a string");
                 }

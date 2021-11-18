@@ -20,9 +20,11 @@ type VarSlot = usize;
 #[derive(Debug, Clone)]
 struct Variable {
     name: String,
+    // TODO(ed): This field isn't needed
     ty: Type,
     slot: usize,
     span: Span,
+    // TODO(ed): This field isn't needed
     kind: VarKind,
 
     captured: bool,
