@@ -1,7 +1,8 @@
 use std::io::Write;
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
-    Assignable, AssignableKind, Expression, ExpressionKind, Op, Span, Statement, StatementKind,
+    Assignable, AssignableKind, CaseBranch, Expression, ExpressionKind, Op, Span, Statement,
+    StatementKind,
 };
 
 use crate::*;
@@ -570,8 +571,41 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ";");
             }
 
-            Case { .. } => {
-                todo!();
+            Case { to_match, branches, fall_through } => {
+                // TODO(ed): This code cannot really be made better... Lua has no
+                // switch-statements.
+                write!(self, "local __case_tmp =");
+                self.expression(to_match, ctx);
+                // Solves the 0-branches case.
+                write!(self, "if false then");
+                write!(self, ";");
+                for CaseBranch { pattern: Identifier { name, .. }, variable, body } in
+                    branches.iter()
+                {
+                    write!(self, "elseif \"{}\" == __case_tmp[1] then", name);
+                    write!(self, ";");
+                    let ss = self.compiler.frames.last().unwrap().variables.len();
+                    if let Some(Identifier { name, span }) = &variable {
+                        let slot = self.compiler.define(name, VarKind::Const, *span);
+                        self.compiler.activate(slot);
+                        write!(self, "local");
+                        self.write_slot(slot);
+                        write!(self, "= __case_tmp[2]");
+                        write!(self, ";");
+                    }
+                    self.statement(body, ctx);
+                    self.compiler
+                        .frames
+                        .last_mut()
+                        .unwrap()
+                        .variables
+                        .truncate(ss);
+                }
+                write!(self, "else");
+                self.statement(fall_through, ctx);
+                write!(self, ";");
+                write!(self, "end");
+                write!(self, ";");
             }
 
             If { condition, pass, fail } => {

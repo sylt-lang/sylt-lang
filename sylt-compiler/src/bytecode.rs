@@ -658,10 +658,8 @@ impl<'t> BytecodeCompiler<'t> {
                     let next_jump = self.add_op(ctx, *span, Op::Illegal);
                     // Pop original tag
                     self.add_op(ctx, *span, Op::Pop);
-                    if let Some(variable) = variable {
-                        let slot =
-                            self.compiler
-                                .define(&variable.name, VarKind::Const, variable.span);
+                    if let Some(Identifier { name, span }) = &variable {
+                        let slot = self.compiler.define(name, VarKind::Const, *span);
                         self.compiler.activate(slot);
 
                         self.statement(body, ctx);
