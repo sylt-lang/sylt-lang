@@ -1,3 +1,4 @@
+// https://love2d.org/wiki/Main_Page
 LoveDrawable :: blob {
     setParticleLifetime: fn *, float, float -> void,
     setEmissionRate: fn *, int -> void,
@@ -13,9 +14,12 @@ LoveGraphics :: blob {
 }
 
 Love :: blob {
+    init: fn -> void,
     draw: fn -> void,
     update: fn float -> void,
     graphics: LoveGraphics,
+    keypressed: fn str, str, bool -> void,
+    keyreleased: fn str, str -> void,
 }
 
 love: Love : external
