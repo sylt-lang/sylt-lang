@@ -9,6 +9,11 @@ LoveDrawable :: blob {
 LoveGraphics :: blob {
     print: fn str, int, int -> void,
     draw: fn LoveDrawable, float, float, float, float, float, float, float -> void,
+    rectangle: fn str, float, float, float, float -> void,
+    circle: fn str, float, float, float -> void,
+    arc: fn str, float, float, float -> void,
+    // Has to be an even length of the list.
+    points: fn [float] -> void,
     newImage: fn str -> LoveDrawable,
     newParticleSystem: fn LoveDrawable -> LoveDrawable,
 }

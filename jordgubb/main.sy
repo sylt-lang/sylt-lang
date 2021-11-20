@@ -1,0 +1,32 @@
+from love use love
+
+start :: fn do
+
+    sylt := love.graphics.newImage("res/sylt.png")
+
+    ps := love.graphics.newParticleSystem(sylt)
+    ps.setParticleLifetime(ps, 10., 10.)
+    ps.setEmissionRate(ps, 5)
+    ps.setLinearAcceleration(ps, -40., -40., 40., 40.)
+
+    r := 0.
+
+    updates := []
+    updates -> push' fn delta do r += delta end
+    updates -> push' fn delta do ps.update(ps, delta) end
+
+    love.update = fn delta do
+        updates -> for_each' fn u: fn * -> do u(delta) end
+    end
+
+    love.draw = fn do
+        love.graphics.draw(sylt, 200., 200., r, 1., 1., 50., 50.)
+        love.graphics.draw(ps, 600., 400., 0., 1., 1., 0., 0.)
+    end
+
+    love.keypressed = fn key, scancode, repeat do
+    end
+
+    love.keyreleased = fn key, scancode do
+    end
+end
