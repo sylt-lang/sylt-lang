@@ -28,10 +28,10 @@ impl<'t> LuaCompiler<'t> {
     }
 
     fn write(&mut self, msg: String) {
-        let _ = self.file.write_all(msg.as_ref());
         if msg == ";" {
             let _ = self.file.write_all(b"\n");
         } else {
+            let _ = self.file.write_all(msg.as_ref());
             let _ = self.file.write_all(b" ");
         }
     }
