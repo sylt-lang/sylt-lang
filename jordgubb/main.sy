@@ -4,7 +4,7 @@ start :: fn do
 
     sylt := love.graphics.newImage("res/sylt.png")
 
-    ps := love.graphics.newParticleSystem(sylt)
+    ps := love.graphics.newParticleSystem(sylt, 1000)
     ps.setParticleLifetime(ps, 10., 10.)
     ps.setEmissionRate(ps, 5)
     ps.setLinearAcceleration(ps, -40., -40., 40., 40.)
