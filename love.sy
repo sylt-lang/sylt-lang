@@ -1,0 +1,21 @@
+LoveDrawable :: blob {
+    setParticleLifetime: fn *, float, float -> void,
+    setEmissionRate: fn *, int -> void,
+    setLinearAcceleration: fn *, float, float, float, float -> void,
+    update: fn *, float -> void,
+}
+
+LoveGraphics :: blob {
+    print: fn str, int, int -> void,
+    draw: fn LoveDrawable, float, float, float, float, float, float, float -> void,
+    newImage: fn str -> LoveDrawable,
+    newParticleSystem: fn LoveDrawable -> LoveDrawable,
+}
+
+Love :: blob {
+    draw: fn -> void,
+    update: fn float -> void,
+    graphics: LoveGraphics,
+}
+
+love: Love : external
