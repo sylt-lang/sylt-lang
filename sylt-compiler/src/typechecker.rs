@@ -912,7 +912,11 @@ impl TypeChecker {
                     let ret = self.push_type(Type::Unknown);
                     self.add_constraint(outer, span, Constraint::Field(ident.name.clone(), ret));
                     self.check_constraints(span, ctx, outer)?;
-                    Ok(ret)
+                    // We copy functions
+                    match self.find_type(outer) {
+                        Type::Function(_, _) => Ok(self.copy(ret)),
+                        _ => Ok(ret),
+                    }
                 }
             },
 
