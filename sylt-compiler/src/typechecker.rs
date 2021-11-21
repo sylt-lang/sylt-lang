@@ -1859,19 +1859,18 @@ impl TypeChecker {
             }
 
             // TODO(ed): This isn't actually implemented in the runtime.
-            (Type::Tuple(a), Type::Float) | (Type::Tuple(a), Type::Int) => {
-                for a in a.iter() {
-                    self.mul(span, ctx, *a, b)?;
-                }
-                Ok(())
-            }
-            (Type::Float, Type::Tuple(b)) | (Type::Int, Type::Tuple(b)) => {
-                for b in b.iter() {
-                    self.mul(span, ctx, a, *b)?;
-                }
-                Ok(())
-            }
-
+            // (Type::Tuple(a), Type::Float) | (Type::Tuple(a), Type::Int) => {
+            //     for a in a.iter() {
+            //         self.mul(span, ctx, *a, b)?;
+            //     }
+            //     Ok(())
+            // }
+            // (Type::Float, Type::Tuple(b)) | (Type::Int, Type::Tuple(b)) => {
+            //     for b in b.iter() {
+            //         self.mul(span, ctx, a, *b)?;
+            //     }
+            //     Ok(())
+            // }
             _ => err_type_error!(
                 self,
                 span,
@@ -1900,19 +1899,18 @@ impl TypeChecker {
             }
 
             // TODO(ed): This isn't actually implemented in the runtime.
-            (Type::Tuple(a), Type::Float) | (Type::Tuple(a), Type::Int) => {
-                for a in a.iter() {
-                    self.div(span, ctx, *a, b)?;
-                }
-                Ok(())
-            }
-            (Type::Float, Type::Tuple(b)) | (Type::Int, Type::Tuple(b)) => {
-                for b in b.iter() {
-                    self.div(span, ctx, a, *b)?;
-                }
-                Ok(())
-            }
-
+            // (Type::Tuple(a), Type::Float) | (Type::Tuple(a), Type::Int) => {
+            //     for a in a.iter() {
+            //         self.div(span, ctx, *a, b)?;
+            //     }
+            //     Ok(())
+            // }
+            // (Type::Float, Type::Tuple(b)) | (Type::Int, Type::Tuple(b)) => {
+            //     for b in b.iter() {
+            //         self.div(span, ctx, a, *b)?;
+            //     }
+            //     Ok(())
+            // }
             _ => err_type_error!(
                 self,
                 span,
