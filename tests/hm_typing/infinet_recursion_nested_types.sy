@@ -1,0 +1,11 @@
+A :: blob {
+    a: fn * -> void,
+}
+
+f :: fn o: A do end
+
+main :: fn do
+    o :: A { a: fn x do end }
+    aa :: fn do o.a' o end
+    ff :: fn do f' o end
+end
