@@ -21,6 +21,7 @@ start :: fn do
         updates -> for_each' fn u: fn * -> do u(delta) end
     end
 
+    aFont :: gfx.aFont()
     love.draw = fn do
         // Work around for bug in typesystem, we don't copy
         // functions if they're fields.
@@ -39,6 +40,11 @@ start :: fn do
 
         gfx.drawRectOutline' rcol(5.), (200., 200.), (50., 50.)
         gfx.drawRectCenteredOutline' rcol(6.), (200., 200.), (50., 50.)
+
+        aFont.drawText' rcol(8.), "Hello world!", (200., 200.)
+        aFont.drawTextT' rcol(9.), "Hello world!", (200., 250.), 1., 2.
+        aFont.drawTextF' rcol(10.), "Hello world!", (200., 250.), gfx.Alignment.Right, 50.
+        aFont.drawTextFT' rcol(11.), "Hello world!", (200., 250.), gfx.Alignment.Right, 50., -1., 2.
     end
 
     love.keypressed = fn key, scancode, repeat do

@@ -35,13 +35,16 @@ LoveGraphics :: blob {
     arc: fn str, float, float, float -> void,
 
     // Has to be an even length of the list.
-    points: fn [float] -> void,
-    print: fn str, int, int -> void,
+    points: fn [(float, float)] -> void,
 
     setColor: fn (float, float, float, float) -> void,
     getColor: fn -> (float, float, float, float),
 
+    print: fn str, float, float, float, float, float -> void,
+    printf: fn str, float, float, float, str, float, float, float -> void,
+
     getFont: fn -> Font,
+    setFont: fn Font -> void,
 
     newImage: fn str -> ImageData,
     // Accepts an image or a texture

@@ -26,35 +26,92 @@ setColor :: fn color do
     love.graphics.setColor' (color.red, color.green, color.blue, color.alpha)
 end
 
-drawLine :: fn color, a: (float, float), b: (float, float) do
+drawLine :: fn color, a, b do
     setColor' color
     love.graphics.line' a[0], a[1], b[0], b[1]
 end
 
-drawCircle :: fn color, p: (float, float), r: float do
+drawCircle :: fn color, p, r do
     setColor' color
     love.graphics.circle' "fill", p[0], p[1], r
 end
 
-drawCircleOutline :: fn color, p: (float, float), r: float do
+drawCircleOutline :: fn color, p, r do
     setColor' color
     love.graphics.circle' "line", p[0], p[1], r
 end
 
-drawRect :: fn color, p: (float, float), dim: (float, float) do
+drawRect :: fn color, p, dim do
     setColor' color
     love.graphics.rectangle' "fill", p[0], p[1], dim[0], dim[1]
 end
 
-drawRectCentered :: fn color, p: (float, float), dim: (float, float) do
+drawRectCentered :: fn color, p, dim do
     drawRect' color, p - dim / (2., 2.), dim
 end
 
-drawRectOutline :: fn color, p: (float, float), dim: (float, float) do
+drawRectOutline :: fn color, p, dim do
     setColor' color
     love.graphics.rectangle' "line", p[0], p[1], dim[0], dim[1]
 end
 
-drawRectCenteredOutline :: fn color, p: (float, float), dim: (float, float) do
+drawRectCenteredOutline :: fn color, p, dim do
     drawRectOutline' color, p - dim / (2., 2.), dim
+end
+
+Alignment :: enum
+    Center,
+    Left,
+    Right
+end
+
+alignmentToStr :: fn a ->
+    case a do
+        Center ret "center"
+        Left ret "left"
+        Right ret "right"
+        else do <!> end
+    end
+    ret ""
+end
+
+Font :: blob {
+    // Not really happy with this...
+    drawText: fn Color, str, (float, float) -> void,
+    drawTextT: fn Color, str, (float, float), float, float -> void,
+    drawTextF: fn Color, str, (float, float), Alignment, float -> void,
+    drawTextFT: fn Color, str, (float, float), Alignment, float, float, float -> void,
+}
+
+drawText :: fn color, text, pos, r, s do
+    setColor' color
+    love.graphics.print' text, pos[0], pos[1], r, s, s
+end
+
+drawTextFT :: fn color, text, pos, alignment, maxWidth, r, s do
+    setColor' color
+    love.graphics.printf' text, pos[0], pos[1], maxWidth, alignmentToStr(alignment), r, s, s
+end
+
+// Returns a font that can be used
+aFont :: fn -> Font
+    f :: love.graphics.getFont()
+    Font {
+        drawText: fn color, text, pos do
+            love.graphics.setFont' f
+            drawText' color, text, pos, 0., 1.
+        end,
+        drawTextT: fn color, text, pos, r, s do
+            love.graphics.setFont' f
+            drawText' color, text, pos, r, s
+        end,
+        drawTextF: fn color, text, pos: (float, float), alignemnt, maxWidth do
+            love.graphics.setFont' f
+            drawTextFT' color, text, pos, alignemnt, maxWidth, 0., 1.
+        end,
+        drawTextFT: fn color, text, pos, alignemnt, maxWidth, r, s do
+            love.graphics.setFont' f
+            drawTextFT' color, text, pos, alignemnt, maxWidth, r, s
+        end,
+    }
 end
