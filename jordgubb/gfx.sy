@@ -190,14 +190,11 @@ newImplicitSpriteSheet :: fn img: Image, spriteDim: (int, int) ->
     quads :: []
     // TODO(ed): Maybe remove the remained so we only get full tiles?
     // TODO(ed): Maybe add a divisibility test here?
-    for_range' 0, as_int(img.getWidth()), w, print
-
     for_range' 0, as_int(img.getWidth()), w, fn x -> do
         for_range' 0, as_int(img.getHeight()), h, fn y -> do
             quads -> push' ((x, y), (w, h))
         end
     end
-    print' quads
     newSpriteSheetFromQuads' img, quads
 end
 
