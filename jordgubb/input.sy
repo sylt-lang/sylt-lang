@@ -1,3 +1,4 @@
+from love use love
 // NOTE(ed):
 // This input wrapper is severly limited - it doesn't know what
 // has been pressed and when, so we can only get "is-down".
@@ -80,7 +81,7 @@ keyToStr :: fn k ->
 end
 
 isKeyDown :: fn key ->
-    love.keyboard.isDown' keyToStr(button)
+    love.keyboard.isScancodeDown' keyToStr(key)
 end
 
 MouseButton :: enum Left, Right, Middle end
@@ -101,9 +102,11 @@ end
 
 
 mousePos :: fn ->
-    love.mouse.getPosition'
+    x :: love.mouse.getX'
+    y :: love.mouse.getY'
+    (x, y)
 end
 
 placeMouse :: fn pos ->
-    love.mouse.setPosition' pos
+    love.mouse.setPosition' pos[0], pos[1]
 end

@@ -68,8 +68,9 @@ LoveKeyboard :: blob {
 LoveMouse :: blob {
     // There's a relativeMode here - which I've ignored
     isDown: fn int -> bool,
-    getPosition: fn -> (float, float),
-    setPosition: fn (float, float) -> void,
+    getX: fn -> float,
+    getY: fn -> float,
+    setPosition: fn float, float -> void,
 }
 
 LoveTimer :: blob {

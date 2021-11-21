@@ -7,9 +7,6 @@ use input
 start :: fn do
     r := 0.
 
-    print' input.Key.Return
-    print' input.keyToStr(input.Key.Return)
-
     aFont :: gfx.aFont()
     img :: gfx.newImage' "res/sylt.png"
     ps :: gfx.newParticles' img
@@ -20,9 +17,15 @@ start :: fn do
     ss :: gfx.newImplicitSpriteSheet' img, (55, 55)
 
     updates := []
-    updates -> push' fn delta do r += delta end
     updates -> push' fn delta do
-        ps.setPosition' (cos(r) * 300., sin(r) * 100.) + (300., 100.)
+        if not input.isKeyDown' input.Key.A do
+            r += delta
+        end
+    end
+    updates -> push' fn delta do
+        pos :: input.mousePos'
+        print' pos
+        ps.setPosition' (cos(r) * 300., sin(r) * 100.) + pos
         ps.update(delta)
     end
 
