@@ -12,10 +12,14 @@ Color :: blob {
 rgb :: fn r, g, b -> Color
     Color { red: r, green: g, blue: b, alpha: 1. }
 end
-
-
 rgba :: fn r, g, b, a -> Color
     Color { red: r, green: g, blue: b, alpha: a }
+end
+stableRandomColor :: fn i: float -> Color
+    r :: rem' 0.3 + i * 3.33, 1.
+    g :: rem' 0.2 + i * 7.77, 1.
+    b :: rem' 0.7 + i * 5.55, 1.
+    rgb' r, g, b
 end
 
 setColor :: fn color do
@@ -30,4 +34,18 @@ end
 drawCircle :: fn color, p: (float, float), r: float do
     setColor' color
     love.graphics.circle' "fill", p[0], p[1], r
+end
+
+drawCircleOutline :: fn color, p: (float, float), r: float do
+    setColor' color
+    love.graphics.circle' "line", p[0], p[1], r
+end
+
+drawRect :: fn color, p: (float, float), dim: (float, float) do
+    setColor' color
+    love.graphics.rectangle' "fill", p[0], p[1], dim[0], dim[1]
+end
+
+drawRectCentered :: fn color, p: (float, float), dim: (float, float) do
+    drawRect' color, p - dim / (2., 2.), dim
 end

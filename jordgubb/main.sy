@@ -1,5 +1,6 @@
 from love use love
 use gfx
+from gfx use (stableRandomColor as rcol)
 
 start :: fn do
 
@@ -28,9 +29,13 @@ start :: fn do
         x :: love.graphics.draw
         x(ps, 600., 400., 0., 1., 1., 0., 0.)
 
-        gfx.drawLine' gfx.rgb(1., r, 1.), (0., 0.), (100., 100.)
+        gfx.drawLine' rcol(1.), (0., 0.), (100., 100.)
 
-        gfx.drawCircle' gfx.rgb(1., rem(r, 1.), 1.), (200., 100.), 50.
+        gfx.drawCircle' rcol(2.), (200., 100.), 50.
+        gfx.drawCircleOutline' rcol(3.), (200., 100.), 50.
+
+        gfx.drawRect' rcol(4.), (200., 200.), (50., 50.)
+        gfx.drawRectCentered' rcol(5.), (200., 200.), (50., 50.)
     end
 
     love.keypressed = fn key, scancode, repeat do
