@@ -22,13 +22,14 @@ start :: fn do
     end
 
     aFont :: gfx.aFont()
+    img :: gfx.newImage' "res/sylt.png"
     love.draw = fn do
         // Work around for bug in typesystem, we don't copy
         // functions if they're fields.
-        x :: love.graphics.draw
-        x(sylt, 200., 200., r, 1., 1., 50., 50.)
-        x :: love.graphics.draw
-        x(ps, 600., 400., 0., 1., 1., 0., 0.)
+        // x :: love.graphics.draw
+        // x(sylt, 200., 200., r, 1., 1., 50., 50., 0.)
+        // x :: love.graphics.draw
+        // x(ps, 600., 400., 0., 1., 1., 0., 0., 0.)
 
         gfx.drawLine' rcol(1.), (0., 0.), (100., 100.)
 
@@ -45,6 +46,10 @@ start :: fn do
         aFont.drawTextT' rcol(9.), "Hello world!", (200., 250.), 1., 2.
         aFont.drawTextF' rcol(10.), "Hello world!", (200., 250.), gfx.Alignment.Right, 50.
         aFont.drawTextFT' rcol(11.), "Hello world!", (200., 250.), gfx.Alignment.Right, 50., -1., 2.
+
+        img.draw' (100., 200.), r, (1., 1.)
+        img.drawCenterd' (100., 200.), r, (1., 1.)
+        img.drawTintedCentered' rcol(12.), (100., 200.), r + 1., (1., 1.)
     end
 
     love.keypressed = fn key, scancode, repeat do

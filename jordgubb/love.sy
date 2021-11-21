@@ -14,7 +14,12 @@ ParticleSystem :: blob {
 }
 
 // Place holder before we get `newtype`
-ImageData :: blob { _001_unique_type: int, }
+ImageData :: blob {
+    _001_unique_type: int,
+    // Uncomment for crash
+    getWidth: fn * -> float,
+    getHeight: fn * -> float,
+}
 Quad :: blob { _003_unique_type: int, }
 Font :: blob { _004_unique_type: int, }
 
@@ -27,7 +32,7 @@ LoveGraphics :: blob {
     // : texture, quad, x, y, r, sx, sy, ox, oy, kx, ky -> void
     //
     // There's also a `Transform` object that might be usefull?
-    draw: fn *, *, float, float, float, float, float, float -> void,
+    draw: fn *, float, float, float, float, float, float, float, float -> void,
 
     line: fn float, float, float, float -> void,
     rectangle: fn str, float, float, float, float -> void,
@@ -46,11 +51,11 @@ LoveGraphics :: blob {
     getFont: fn -> Font,
     setFont: fn Font -> void,
 
-    newImage: fn str -> ImageData,
+    newImage: fn str -> *,
     // Accepts an image or a texture
     newParticleSystem: fn *, int -> ParticleSystem,
     newFont: fn str, int, str -> Font,
-    newQuad: fn int, int, int, int, ImageData -> Quad,
+    // newQuad: fn int, int, int, int, ImageData -> Quad,
 }
 
 LoveKeyboard :: blob {
@@ -90,7 +95,7 @@ WindowMode :: blob {
 
 LoveWindow :: blob {
     setMode: fn int, int, WindowFlags -> bool,
-    setIcon: fn ImageData -> bool,
+    setIcon: fn * -> bool,
     setTitle: fn str -> void,
     setFullscreen: fn bool -> float,
 
