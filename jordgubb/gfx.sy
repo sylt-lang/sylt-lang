@@ -117,6 +117,7 @@ aFont :: fn -> Font
 end
 
 Image :: blob {
+    img: *,
     getWidth: fn -> float,
     getHeight: fn -> float,
     draw: fn (float, float), float, (float, float) -> void,
@@ -145,6 +146,7 @@ end
 newImage :: fn filepath: str -> Image
     img : l.ImageData : love.graphics.newImage' filepath
     Image {
+        img: img,
         getWidth: fn -> img.getWidth' img end,
         getHeight: fn -> img.getHeight' img end,
         draw: fn pos, rot, scale do
