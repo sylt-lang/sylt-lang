@@ -48,6 +48,7 @@ start :: fn do
         aFont.drawTextFT' rcol(11.), "Hello world!", (200., 250.), gfx.Alignment.Right, 50., -1., 2.
 
         img.draw' (100., 200.), r, (1., 1.)
+        img.drawTinted' rcol(12.), (100., 200.), r + 1., (1., 1.)
         img.drawCenterd' (100., 200.), r, (1., 1.)
         img.drawTintedCentered' rcol(12.), (100., 200.), r + 1., (1., 1.)
     end

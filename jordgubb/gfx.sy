@@ -125,15 +125,17 @@ Image :: blob {
     drawTintedCentered: fn Color, (float, float), float, (float, float) -> void,
 }
 
-drawImage :: fn img: l.ImageData, pos, rot, scale do
+drawImage :: fn tint, img: l.ImageData, pos, rot, scale do
+    setColor' tint
     x :: love.graphics.draw
     x' img, pos[0], pos[1], rot, scale[0], scale[1], 0., 0., 0.
 end
 
-drawImageCentered :: fn img: l.ImageData, pos, rot, scale do
+drawImageCentered :: fn tint, img: l.ImageData, pos, rot, scale do
     x :: love.graphics.draw
     w :: img.getWidth' img
     h :: img.getHeight' img
+    setColor' tint
     x' img, pos[0], pos[1], rot, scale[0], scale[1], w / 2., h / 2., 0.
 end
 
@@ -143,18 +145,16 @@ newImage :: fn filepath: str -> Image
         getWidth: fn -> img.getWidth' img end,
         getHeight: fn -> img.getHeight' img end,
         draw: fn pos, rot, scale do
-            drawImage' img, pos, rot, scale
+            drawImage' rgb(1., 1., 1.), img, pos, rot, scale
         end,
         drawTinted: fn tint, pos, rot, scale do
-            setColor' tint
-            drawImage' img, pos, rot, scale
+            drawImage' tint, img, pos, rot, scale
         end,
         drawCenterd: fn pos, rot, scale do
-            drawImageCentered' img, pos, rot, scale
+            drawImageCentered' rgb(1., 1., 1.), img, pos, rot, scale
         end,
         drawTintedCentered: fn tint, pos, rot, scale do
-            setColor' tint
-            drawImageCentered' img, pos, rot, scale
+            drawImageCentered' tint, img, pos, rot, scale
         end,
     }
 end
