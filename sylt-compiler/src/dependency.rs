@@ -192,6 +192,21 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
         .cloned()
         .collect(),
 
+        Case { to_match, branches, fall_through } => [
+            dependencies(ctx, to_match),
+            statement_dependencies(ctx, fall_through),
+        ]
+        .iter()
+        .cloned()
+        .chain(
+            branches
+                .iter()
+                .map(|branch| statement_dependencies(ctx, &branch.body))
+                .collect::<BTreeSet<_>>(),
+        )
+        .flatten()
+        .collect(),
+
         Loop { condition, body } => dependencies(ctx, condition)
             .union(&statement_dependencies(ctx, body))
             .cloned()

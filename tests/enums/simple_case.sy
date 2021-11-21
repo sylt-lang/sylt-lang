@@ -1,0 +1,31 @@
+A :: enum
+    X int,
+    Y int,
+    Z,
+end
+
+out := ""
+
+f :: fn a do
+    case a do
+        X do
+            out = out + "X"
+        end
+        Y x do
+            out = out + "Y"
+            x <=> 2
+        end
+        else do
+            out = out + "?"
+        end
+    end
+end
+
+start :: fn do
+    f' A.X 2
+    f' A.Y 2
+    f' A.Z
+    out <=> "XY?"
+end
+
+

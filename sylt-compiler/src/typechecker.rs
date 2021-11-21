@@ -126,6 +126,9 @@ enum Constraint {
     SameContainer(usize),
     Contains(usize),
     IsContainedIn(usize),
+
+    Enum,
+    Variant(String, usize),
 }
 
 struct TypeChecker {
@@ -533,6 +536,34 @@ impl TypeChecker {
                 Ok(None)
             }
 
+            StatementKind::Case { to_match, branches, fall_through } => {
+                let to_match = self.expression(to_match, ctx)?;
+                self.add_constraint(to_match, span, Constraint::Enum);
+
+                let ss = self.stack.len();
+                for branch in branches.iter() {
+                    if let Some(var) = &branch.variable {
+                        let var = Variable {
+                            ident: var.clone(),
+                            ty: self.push_type(Type::Unknown),
+                            kind: VarKind::Const,
+                            span,
+                        };
+                        self.add_constraint(
+                            to_match,
+                            span,
+                            Constraint::Variant(branch.pattern.name.clone(), var.ty),
+                        );
+                        self.stack.push(var);
+                    }
+                    self.statement(&branch.body, ctx)?;
+                    self.stack.truncate(ss);
+                }
+
+                self.statement(fall_through, ctx)?;
+                Ok(None)
+            }
+
             StatementKind::If { condition, pass, fail } => {
                 let condition = self.expression(condition, ctx)?;
                 let boolean = self.push_type(Type::Bool);
@@ -690,6 +721,7 @@ impl TypeChecker {
             | StatementKind::Continue
             | StatementKind::Ret { .. }
             | StatementKind::If { .. }
+            | StatementKind::Case { .. }
             | StatementKind::Block { .. }
             | StatementKind::StatementExpression { .. }
             | StatementKind::Unreachable
@@ -1363,6 +1395,40 @@ impl TypeChecker {
 
                 Constraint::Contains(b) => self.contains(span, ctx, a, *b),
                 Constraint::IsContainedIn(b) => self.contains(span, ctx, *b, a),
+
+                Constraint::Enum => match self.find_type(a) {
+                    Type::Unknown | Type::Enum(..) => Ok(()),
+
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        TypeError::Violating(self.bake_type(a)),
+                        "Expected this to be an enum"
+                    ),
+                },
+
+                Constraint::Variant(var, v_b) => match self.find_type(a) {
+                    Type::Unknown => Ok(()),
+
+                    Type::Enum(enum_name, vars) => match vars.get(var) {
+                        Some(v_a) => self.unify(span, ctx, *v_a, *v_b).map(|_| ()),
+                        None => {
+                            err_type_error!(
+                                self,
+                                span,
+                                TypeError::UnknownVariant(enum_name, var.clone())
+                            )
+                        }
+                    },
+
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        TypeError::Violating(self.bake_type(a)),
+                        "Expected this to be an enum with a variant '{}'",
+                        var
+                    ),
+                },
             }
             .help(self, *original_span, "Requirement came from".to_string())?
         }
@@ -1550,6 +1616,7 @@ impl TypeChecker {
         let new_ty = self.push_type(Type::Unknown);
         seen.insert(old_ty, new_ty);
 
+        use Constraint as C;
         self.find_node_mut(new_ty).constraints = self
             .find_node(old_ty)
             .constraints
@@ -1558,39 +1625,27 @@ impl TypeChecker {
             .map(|(con, span)| {
                 (
                     match &con {
-                        Constraint::Add(x) => Constraint::Add(self.inner_copy(*x, seen)),
-                        Constraint::Sub(x) => Constraint::Sub(self.inner_copy(*x, seen)),
-                        Constraint::Mul(x) => Constraint::Mul(self.inner_copy(*x, seen)),
-                        Constraint::Div(x) => Constraint::Div(self.inner_copy(*x, seen)),
-                        Constraint::Equ(x) => Constraint::Equ(self.inner_copy(*x, seen)),
-                        Constraint::Cmp(x) => Constraint::Cmp(self.inner_copy(*x, seen)),
-                        Constraint::CmpEqu(x) => Constraint::CmpEqu(self.inner_copy(*x, seen)),
-                        Constraint::Neg => Constraint::Neg,
-                        Constraint::Indexes(x) => Constraint::Indexes(self.inner_copy(*x, seen)),
-                        Constraint::IndexedBy(x) => {
-                            Constraint::IndexedBy(self.inner_copy(*x, seen))
-                        }
-                        Constraint::IndexingGives(x) => {
-                            Constraint::IndexingGives(self.inner_copy(*x, seen))
-                        }
-                        Constraint::GivenByIndex(x) => {
-                            Constraint::GivenByIndex(self.inner_copy(*x, seen))
-                        }
-                        Constraint::ConstantIndex(i, x) => {
-                            Constraint::ConstantIndex(*i, self.inner_copy(*x, seen))
-                        }
-                        Constraint::Field(f, x) => {
-                            Constraint::Field(f.clone(), self.inner_copy(*x, seen))
-                        }
-                        Constraint::Num => Constraint::Num,
-                        Constraint::Container => Constraint::Container,
-                        Constraint::SameContainer(x) => {
-                            Constraint::SameContainer(self.inner_copy(*x, seen))
-                        }
-                        Constraint::Contains(x) => Constraint::Contains(self.inner_copy(*x, seen)),
-                        Constraint::IsContainedIn(x) => {
-                            Constraint::IsContainedIn(self.inner_copy(*x, seen))
-                        }
+                        C::Add(x) => C::Add(self.inner_copy(*x, seen)),
+                        C::Sub(x) => C::Sub(self.inner_copy(*x, seen)),
+                        C::Mul(x) => C::Mul(self.inner_copy(*x, seen)),
+                        C::Div(x) => C::Div(self.inner_copy(*x, seen)),
+                        C::Equ(x) => C::Equ(self.inner_copy(*x, seen)),
+                        C::Cmp(x) => C::Cmp(self.inner_copy(*x, seen)),
+                        C::CmpEqu(x) => C::CmpEqu(self.inner_copy(*x, seen)),
+                        C::Neg => C::Neg,
+                        C::Indexes(x) => C::Indexes(self.inner_copy(*x, seen)),
+                        C::IndexedBy(x) => C::IndexedBy(self.inner_copy(*x, seen)),
+                        C::IndexingGives(x) => C::IndexingGives(self.inner_copy(*x, seen)),
+                        C::GivenByIndex(x) => C::GivenByIndex(self.inner_copy(*x, seen)),
+                        C::ConstantIndex(i, x) => C::ConstantIndex(*i, self.inner_copy(*x, seen)),
+                        C::Field(f, x) => C::Field(f.clone(), self.inner_copy(*x, seen)),
+                        C::Num => C::Num,
+                        C::Container => C::Container,
+                        C::SameContainer(x) => C::SameContainer(self.inner_copy(*x, seen)),
+                        C::Contains(x) => C::Contains(self.inner_copy(*x, seen)),
+                        C::IsContainedIn(x) => C::IsContainedIn(self.inner_copy(*x, seen)),
+                        C::Enum => C::Enum,
+                        C::Variant(v, x) => C::Variant(v.clone(), *x),
                     },
                     *span,
                 )

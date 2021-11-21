@@ -1,0 +1,10 @@
+A :: enum
+    X,
+end
+
+start :: fn do
+    case A.X do
+        else do end
+    end
+end
+
