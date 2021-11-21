@@ -132,10 +132,13 @@ drawImage :: fn tint, img: l.ImageData, pos, rot, scale do
 end
 
 drawImageCentered :: fn tint, img: l.ImageData, pos, rot, scale do
-    x :: love.graphics.draw
     w :: img.getWidth' img
     h :: img.getHeight' img
     setColor' tint
+
+    // Work around for bug in typesystem, we don't copy
+    // functions if they're fields.
+    x :: love.graphics.draw
     x' img, pos[0], pos[1], rot, scale[0], scale[1], w / 2., h / 2., 0.
 end
 

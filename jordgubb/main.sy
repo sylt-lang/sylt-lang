@@ -24,13 +24,6 @@ start :: fn do
     aFont :: gfx.aFont()
     img :: gfx.newImage' "res/sylt.png"
     love.draw = fn do
-        // Work around for bug in typesystem, we don't copy
-        // functions if they're fields.
-        // x :: love.graphics.draw
-        // x(sylt, 200., 200., r, 1., 1., 50., 50., 0.)
-        // x :: love.graphics.draw
-        // x(ps, 600., 400., 0., 1., 1., 0., 0., 0.)
-
         gfx.drawLine' rcol(1.), (0., 0.), (100., 100.)
 
         gfx.drawCircle' rcol(2.), (200., 100.), 50.
