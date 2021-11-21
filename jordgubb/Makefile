@@ -8,5 +8,5 @@ sylt:
 	cd .. && cargo b
 
 clean:
-	rm main.lua
+	rm -rf main.lua
 
