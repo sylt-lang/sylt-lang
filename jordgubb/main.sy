@@ -12,6 +12,8 @@ start :: fn do
     ps.setEmissionRate(5)
     ps.setLinearAcceleration((-40., -40.), (40., 40.))
 
+    ss :: gfx.newImplicitSpriteSheet' img, (55, 55)
+
     updates := []
     updates -> push' fn delta do r += delta end
     updates -> push' fn delta do
@@ -46,6 +48,9 @@ start :: fn do
         img.drawTintedCentered' rcol(12.), (100., 200.), r + 1., (1., 1.)
 
         ps.draw' gfx.rgb(1., 1., 1.)
+
+        ss.draw' rcol(12.), as_int(rem(r, 4.)), (100., 100.), r, (1., 1.)
+        ss.drawCenterd' rcol(13.), as_int(rem(r, 4.)), (100., 100.), r, (1., 1.)
     end
 
     love.keypressed = fn key, scancode, repeat do
