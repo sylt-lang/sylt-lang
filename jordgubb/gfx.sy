@@ -169,6 +169,12 @@ Particles :: blob {
     setParticleLifetime: fn float, float -> void,
     setEmissionRate: fn int -> void,
     setLinearAcceleration: fn (float, float), (float, float) -> void,
+    // set EmitterPosition
+    setPosition: fn (float, float) -> void,
+
+    // NOTE(ed): There are a lot more settings to be added here,
+    // so feel free to add them if you need them:
+    // https://love2d.org/wiki/ParticleSystem
 
     update: fn float -> void,
     draw: fn Color -> void,
@@ -194,6 +200,10 @@ newParticles :: fn image: Image ->
         end,
         setLinearAcceleration: fn lo, hi do
             particles.setLinearAcceleration' particles, lo[0], lo[1], hi[0], hi[1]
+        end,
+        setPosition: fn pos do
+            print' pos
+            particles.setPosition' particles, pos[0], pos[1]
         end,
 
         update: fn delta do

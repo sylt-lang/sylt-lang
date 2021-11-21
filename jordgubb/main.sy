@@ -14,7 +14,10 @@ start :: fn do
 
     updates := []
     updates -> push' fn delta do r += delta end
-    updates -> push' fn delta do ps.update(delta) end
+    updates -> push' fn delta do
+        ps.setPosition' (cos(r) * 300., sin(r) * 100.) + (300., 100.)
+        ps.update(delta)
+    end
 
     love.update = fn delta do
         updates -> for_each' fn u: fn * -> do u(delta) end
