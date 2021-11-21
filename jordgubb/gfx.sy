@@ -1,0 +1,33 @@
+use love as l
+from love use love
+
+Color :: blob {
+    red: float,
+    green: float,
+    blue: float,
+    alpha: float,
+}
+
+// NOTE(ed): Might be nice to convert HSL to RGB?
+rgb :: fn r, g, b -> Color
+    Color { red: r, green: g, blue: b, alpha: 1. }
+end
+
+
+rgba :: fn r, g, b, a -> Color
+    Color { red: r, green: g, blue: b, alpha: a }
+end
+
+setColor :: fn color do
+    love.graphics.setColor' (color.red, color.green, color.blue, color.alpha)
+end
+
+drawLine :: fn color, a: (float, float), b: (float, float) do
+    setColor' color
+    love.graphics.line' a[0], a[1], b[0], b[1]
+end
+
+drawCircle :: fn color, p: (float, float), r: float do
+    setColor' color
+    love.graphics.circle' "fill", p[0], p[1], r
+end

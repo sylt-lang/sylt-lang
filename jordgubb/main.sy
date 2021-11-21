@@ -1,4 +1,5 @@
 from love use love
+use gfx
 
 start :: fn do
 
@@ -26,6 +27,10 @@ start :: fn do
         x(sylt, 200., 200., r, 1., 1., 50., 50.)
         x :: love.graphics.draw
         x(ps, 600., 400., 0., 1., 1., 0., 0.)
+
+        gfx.drawLine' gfx.rgb(1., r, 1.), (0., 0.), (100., 100.)
+
+        gfx.drawCircle' gfx.rgb(1., rem(r, 1.), 1.), (200., 100.), 50.
     end
 
     love.keypressed = fn key, scancode, repeat do
