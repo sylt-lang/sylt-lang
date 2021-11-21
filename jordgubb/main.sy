@@ -2,8 +2,13 @@ from love use love
 use gfx
 from gfx use (stableRandomColor as rcol)
 
+use input
+
 start :: fn do
     r := 0.
+
+    print' input.Key.Return
+    print' input.keyToStr(input.Key.Return)
 
     aFont :: gfx.aFont()
     img :: gfx.newImage' "res/sylt.png"
