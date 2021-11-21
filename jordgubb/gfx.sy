@@ -163,3 +163,51 @@ newImage :: fn filepath: str -> Image
         end,
     }
 end
+
+Particles :: blob {
+    particles: l.ParticleSystem,
+    setLifetime: fn float, float -> void,
+    setEmissionRate: fn int -> void,
+    setLinearAcceleration: fn (float, float), (float, float) -> void,
+
+    update: fn float -> void,
+    draw: fn Color -> void,
+    drawAt: fn Color, (float, float) -> void,
+}
+
+drawParticlesAt :: fn tint, particles: Particles, pos do
+end
+
+updateParticles :: fn particles: Particles, delta do
+    particles.update(delta)
+end
+
+newParticles :: fn image: Image ->
+    particles :: love.graphics.newParticleSystem' image.img, 1000
+    Particles {
+        particles: particles,
+        setLifetime: fn lo, hi do
+            particles.setParticleLifetime' particles, lo, hi
+        end,
+        setEmissionRate: fn rate do
+            particles.setEmissionRate' particles, rate
+        end,
+        setLinearAcceleration: fn lo, hi do
+            particles.setLinearAcceleration' particles, lo[0], lo[1], hi[0], hi[1]
+        end,
+
+        update: fn delta do
+            particles.update' particles, delta
+        end,
+        draw: fn tint do
+            setColor' tint
+            x :: love.graphics.draw
+            x' particles, 0., 0., 0., 1., 1., 0., 0., 0.
+        end,
+        drawAt: fn tint, pos do
+            setColor' tint
+            x :: love.graphics.draw
+            x' particles, pos[0], pos[1], 0., 1., 1., 0., 0., 0.
+        end,
+    }
+end

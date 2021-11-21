@@ -3,26 +3,23 @@ use gfx
 from gfx use (stableRandomColor as rcol)
 
 start :: fn do
-
-    sylt := love.graphics.newImage("res/sylt.png")
-
-    ps := love.graphics.newParticleSystem(sylt, 1000)
-    ps.setParticleLifetime(ps, 10., 10.)
-    ps.setEmissionRate(ps, 5)
-    ps.setLinearAcceleration(ps, -40., -40., 40., 40.)
-
     r := 0.
+
+    aFont :: gfx.aFont()
+    img :: gfx.newImage' "res/sylt.png"
+    ps :: gfx.newParticles' img
+    ps.setLifetime(10., 10.)
+    ps.setEmissionRate(5)
+    ps.setLinearAcceleration((-40., -40.), (40., 40.))
 
     updates := []
     updates -> push' fn delta do r += delta end
-    updates -> push' fn delta do ps.update(ps, delta) end
+    updates -> push' fn delta do ps.update(delta) end
 
     love.update = fn delta do
         updates -> for_each' fn u: fn * -> do u(delta) end
     end
 
-    aFont :: gfx.aFont()
-    img :: gfx.newImage' "res/sylt.png"
     love.draw = fn do
         gfx.drawLine' rcol(1.), (0., 0.), (100., 100.)
 
@@ -44,6 +41,8 @@ start :: fn do
         img.drawTinted' rcol(12.), (100., 200.), r + 1., (1., 1.)
         img.drawCenterd' (100., 200.), r, (1., 1.)
         img.drawTintedCentered' rcol(12.), (100., 200.), r + 1., (1., 1.)
+
+        ps.draw' gfx.rgb(1., 1., 1.)
     end
 
     love.keypressed = fn key, scancode, repeat do

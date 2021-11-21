@@ -10,6 +10,9 @@ ParticleSystem :: blob {
     setParticleLifetime: fn *, float, float -> void,
     setEmissionRate: fn *, int -> void,
     setLinearAcceleration: fn *, float, float, float, float -> void,
+
+    setPosition: fn *, float, float -> void,
+
     update: fn *, float -> void,
 }
 
