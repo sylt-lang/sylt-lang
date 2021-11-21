@@ -1,3 +1,8 @@
+// NOTE(ed):
+// This input wrapper is severly limited - it doesn't know what
+// has been pressed and when, so we can only get "is-down".
+// It also doesn't handle gamepads. :<
+
 // Based on scancodes
 Key :: enum
     A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
@@ -72,4 +77,33 @@ keyToStr :: fn k ->
         else do <!> end
     end
     ret ""
+end
+
+isKeyDown :: fn key ->
+    love.keyboard.isDown' keyToStr(button)
+end
+
+MouseButton :: enum Left, Right, Middle end
+
+mouseButtonToInt :: fn m ->
+    case m do
+        Left ret 0
+        Right ret 1
+        Middle ret 2
+        else do <!> end
+    end
+    ret 0
+end
+
+mouseButtonDown :: fn button ->
+    love.mouse.isDown' mouseButtonToInt(button)
+end
+
+
+mousePos :: fn ->
+    love.mouse.getPosition'
+end
+
+placeMouse :: fn pos ->
+    love.mouse.setPosition' pos
 end
