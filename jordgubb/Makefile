@@ -7,4 +7,6 @@ main.lua: main.sy *.sy | sylt
 sylt:
 	cd .. && cargo b
 
+clean:
+	rm main.lua
 
