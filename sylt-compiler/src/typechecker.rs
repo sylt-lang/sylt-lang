@@ -2033,6 +2033,7 @@ impl TypeChecker {
         ret: usize,
     ) -> TypeResult<()> {
         match self.find_type(a) {
+            Type::Unknown => Ok(()),
             Type::Tuple(tys) => match tys.get(index as usize) {
                 Some(ty) => self.unify(span, ctx, *ty, ret).map(|_| ()),
                 None => err_type_error!(
@@ -2052,7 +2053,8 @@ impl TypeChecker {
                 self,
                 span,
                 TypeError::Violating(self.bake_type(a)),
-                "This type cannot be indexed"
+                "This type cannot be indexed with the constant index {}",
+                index
             ),
         }
     }
