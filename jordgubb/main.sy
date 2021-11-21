@@ -36,6 +36,9 @@ start :: fn do
 
         gfx.drawRect' rcol(4.), (200., 200.), (50., 50.)
         gfx.drawRectCentered' rcol(5.), (200., 200.), (50., 50.)
+
+        gfx.drawRectOutline' rcol(5.), (200., 200.), (50., 50.)
+        gfx.drawRectCenteredOutline' rcol(6.), (200., 200.), (50., 50.)
     end
 
     love.keypressed = fn key, scancode, repeat do

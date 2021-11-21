@@ -49,3 +49,12 @@ end
 drawRectCentered :: fn color, p: (float, float), dim: (float, float) do
     drawRect' color, p - dim / (2., 2.), dim
 end
+
+drawRectOutline :: fn color, p: (float, float), dim: (float, float) do
+    setColor' color
+    love.graphics.rectangle' "line", p[0], p[1], dim[0], dim[1]
+end
+
+drawRectCenteredOutline :: fn color, p: (float, float), dim: (float, float) do
+    drawRectOutline' color, p - dim / (2., 2.), dim
+end
