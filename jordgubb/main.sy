@@ -8,7 +8,7 @@ start :: fn do
     aFont :: gfx.aFont()
     img :: gfx.newImage' "res/sylt.png"
     ps :: gfx.newParticles' img
-    ps.setLifetime(10., 10.)
+    ps.setParticleLifetime(10., 10.)
     ps.setEmissionRate(5)
     ps.setLinearAcceleration((-40., -40.), (40., 40.))
 

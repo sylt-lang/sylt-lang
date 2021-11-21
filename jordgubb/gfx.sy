@@ -166,7 +166,7 @@ end
 
 Particles :: blob {
     particles: l.ParticleSystem,
-    setLifetime: fn float, float -> void,
+    setParticleLifetime: fn float, float -> void,
     setEmissionRate: fn int -> void,
     setLinearAcceleration: fn (float, float), (float, float) -> void,
 
@@ -186,7 +186,7 @@ newParticles :: fn image: Image ->
     particles :: love.graphics.newParticleSystem' image.img, 1000
     Particles {
         particles: particles,
-        setLifetime: fn lo, hi do
+        setParticleLifetime: fn lo, hi do
             particles.setParticleLifetime' particles, lo, hi
         end,
         setEmissionRate: fn rate do
