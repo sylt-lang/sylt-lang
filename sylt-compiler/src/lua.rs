@@ -28,6 +28,7 @@ impl<'t> LuaCompiler<'t> {
     }
 
     fn write(&mut self, msg: String) {
+        // We specifically ignore writing ';' to make Love happy
         if msg == ";" {
             let _ = self.file.write_all(b"\n");
         } else {
