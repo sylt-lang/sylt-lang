@@ -1,0 +1,112 @@
+from love use love
+// NOTE(ed):
+// This input wrapper is severly limited - it doesn't know what
+// has been pressed and when, so we can only get "is-down".
+// It also doesn't handle gamepads. :<
+
+// Based on scancodes
+Key :: enum
+    A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
+    N1, N2, N3, N4, N5, N6, N7, N8, N9, N0,
+    Return, Escape, Backspace, Tab, Space,
+    LCtrl, LShift, LAlt, LGui,
+    RCtrl, RShift, RAlt, RGui,
+    Up, Down, Left, Right,
+end
+
+keyToStr :: fn k ->
+    case k do
+        A ret "a"
+        B ret "b"
+        C ret "c"
+        D ret "d"
+        E ret "e"
+        F ret "f"
+        G ret "g"
+        H ret "h"
+        I ret "i"
+        J ret "j"
+        K ret "k"
+        L ret "l"
+        M ret "m"
+        N ret "n"
+        O ret "o"
+        P ret "p"
+        Q ret "q"
+        R ret "r"
+        S ret "s"
+        T ret "t"
+        U ret "u"
+        V ret "v"
+        W ret "w"
+        X ret "x"
+        Y ret "y"
+        Z ret "z"
+
+        N1 ret "1"
+        N2 ret "2"
+        N3 ret "3"
+        N4 ret "4"
+        N5 ret "5"
+        N6 ret "6"
+        N7 ret "7"
+        N8 ret "8"
+        N9 ret "9"
+        N0 ret "0"
+
+        Return ret "return"
+        Escape ret "escape"
+        Backspace ret "backspace"
+        Tab ret "tab"
+        Space ret "space"
+
+        LCtrl ret "lctrl"
+        LShift ret "lshift"
+        LAlt ret "lalt"
+        LGui ret "lgui"
+
+        RCtrl ret "rctrl"
+        RShift ret "rshift"
+        RAlt ret "ralt"
+        RGui ret "rgui"
+
+        Up ret "up"
+        Down ret "down"
+        Left ret "left"
+        Right ret "right"
+
+        else do <!> end
+    end
+    ret ""
+end
+
+isKeyDown :: fn key ->
+    love.keyboard.isScancodeDown' keyToStr(key)
+end
+
+MouseButton :: enum Left, Right, Middle end
+
+mouseButtonToInt :: fn m ->
+    case m do
+        Left ret 0
+        Right ret 1
+        Middle ret 2
+        else do <!> end
+    end
+    ret 0
+end
+
+mouseButtonDown :: fn button ->
+    love.mouse.isDown' mouseButtonToInt(button)
+end
+
+
+mousePos :: fn ->
+    x :: love.mouse.getX'
+    y :: love.mouse.getY'
+    (x, y)
+end
+
+placeMouse :: fn pos ->
+    love.mouse.setPosition' pos[0], pos[1]
+end

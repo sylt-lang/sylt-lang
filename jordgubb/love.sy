@@ -10,21 +10,21 @@ ParticleSystem :: blob {
     setParticleLifetime: fn *, float, float -> void,
     setEmissionRate: fn *, int -> void,
     setLinearAcceleration: fn *, float, float, float, float -> void,
+
+    setPosition: fn *, float, float -> void,
+
     update: fn *, float -> void,
 }
 
 // Place holder before we get `newtype`
-ImageData :: blob { _001_unique_type: int, }
+ImageData :: blob {
+    _001_unique_type: int,
+    // Uncomment for crash
+    getWidth: fn * -> float,
+    getHeight: fn * -> float,
+}
 Quad :: blob { _003_unique_type: int, }
 Font :: blob { _004_unique_type: int, }
-
-Color :: blob {
-    // 0 - 1
-    r: float,
-    g: float,
-    b: float,
-    a: float
-}
 
 LoveGraphics :: blob {
     // We need to accept multiple overloads
@@ -35,25 +35,28 @@ LoveGraphics :: blob {
     // : texture, quad, x, y, r, sx, sy, ox, oy, kx, ky -> void
     //
     // There's also a `Transform` object that might be usefull?
-    draw: fn *, *, float, float, float, float, float, float -> void,
+    draw: fn *, float, float, float, float, float, float, float, float -> void,
 
+    line: fn float, float, float, float -> void,
     rectangle: fn str, float, float, float, float -> void,
     circle: fn str, float, float, float -> void,
     arc: fn str, float, float, float -> void,
 
     // Has to be an even length of the list.
-    points: fn [float] -> void,
-    print: fn str, int, int -> void,
+    points: fn [(float, float)] -> void,
 
-    setColor: fn Color -> void,
-    getColor: fn -> Color,
+    setColor: fn (float, float, float, float) -> void,
+    getColor: fn -> (float, float, float, float),
+
+    print: fn str, float, float, float, float, float -> void,
+    printf: fn str, float, float, float, str, float, float, float -> void,
 
     getFont: fn -> Font,
+    setFont: fn Font -> void,
 
-    newImage: fn str -> ImageData,
-    // Accepts an image or a texture
-    newParticleSystem: fn *, int -> ParticleSystem,
+    newImage: fn str -> *,
     newFont: fn str, int, str -> Font,
+    newParticleSystem: fn *, int -> ParticleSystem,
     newQuad: fn int, int, int, int, ImageData -> Quad,
 }
 
@@ -65,8 +68,9 @@ LoveKeyboard :: blob {
 LoveMouse :: blob {
     // There's a relativeMode here - which I've ignored
     isDown: fn int -> bool,
-    getPosition: fn -> (float, float),
-    setPosition: fn (float, float) -> void,
+    getX: fn -> float,
+    getY: fn -> float,
+    setPosition: fn float, float -> void,
 }
 
 LoveTimer :: blob {
@@ -94,7 +98,7 @@ WindowMode :: blob {
 
 LoveWindow :: blob {
     setMode: fn int, int, WindowFlags -> bool,
-    setIcon: fn ImageData -> bool,
+    setIcon: fn * -> bool,
     setTitle: fn str -> void,
     setFullscreen: fn bool -> float,
 
