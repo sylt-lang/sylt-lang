@@ -4,7 +4,7 @@ A :: blob {
 
 f :: fn o: A do end
 
-main :: fn do
+start :: fn do
     o :: A { a: fn x do end }
     aa :: fn do o.a' o end
     ff :: fn do f' o end
