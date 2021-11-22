@@ -1,8 +1,8 @@
 from love use love
 use gfx
 from gfx use (stableRandomColor as rcol)
-
 use input
+use sfx
 
 start :: fn do
     r := 0.
@@ -16,15 +16,19 @@ start :: fn do
 
     ss :: gfx.newImplicitSpriteSheet' img, (55, 55)
 
+    s :: sfx.newSound' "res/bloop.wav", false, sfx.SoundType.Static
+
     updates := []
     updates -> push' fn delta do
         if not input.isKeyDown' input.Key.A do
             r += delta
         end
+        if input.isKeyDown' input.Key.B do
+            sfx.cloneSound(s).playp' (1.0, 0.8), (1.0, 0.8)
+        end
     end
     updates -> push' fn delta do
         pos :: input.mousePos'
-        print' pos
         ps.setPosition' (cos(r) * 300., sin(r) * 100.) + pos
         ps.update(delta)
     end

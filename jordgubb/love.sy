@@ -113,6 +113,11 @@ LoveWindow :: blob {
 Source :: blob {
     _002_unique_type: int,
     setEffect: fn *, str, bool -> bool,
+    setPosition: fn *, float, float, float -> void,
+    setVolume: fn *, float -> void,
+    setPitch: fn *, float -> void,
+    setLooping: fn *, bool -> void,
+    clone: fn * -> *,
 }
 
 LoveAudio :: blob {
@@ -127,18 +132,16 @@ LoveAudio :: blob {
 
     // Allows creation of effects, see: https://love2d.org/wiki/EffectType
     setEffect: fn str, * -> bool,
-    setPosition: fn float, float, float -> void,
-    setVolume: fn float -> void,
 }
-
-// We don't have methods, so this will do for now.
-setEffectToSource :: fn s: Source, effect_name: str, state: bool do
-    s.setEffect' s, effect_name, state
-end
 
 LoveEvent :: blob {
     quit: fn int -> void,
 }
+
+LoveMath :: blob {
+    random: fn float, float -> float,
+}
+
 
 Love :: blob {
     init: fn -> void,
@@ -148,8 +151,10 @@ Love :: blob {
     keyreleased: fn str, str -> void,
     resize: fn int, int -> void,
 
+    audio: LoveAudio,
     graphics: LoveGraphics,
     keyboard: LoveKeyboard,
+    math: LoveMath,
     // NOTE(ed): Deliberately skipping gamepads since it's kinda messy
     mouse: LoveMouse,
     timer: LoveTimer,
