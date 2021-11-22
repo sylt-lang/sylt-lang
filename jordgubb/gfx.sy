@@ -241,9 +241,6 @@ Particles :: blob {
     drawAt: fn Color, (float, float) -> void,
 }
 
-drawParticlesAt :: fn tint, particles: Particles, pos do
-end
-
 updateParticles :: fn particles: Particles, delta do
     particles.update(delta)
 end

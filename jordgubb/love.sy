@@ -19,7 +19,6 @@ ParticleSystem :: blob {
 // Place holder before we get `newtype`
 ImageData :: blob {
     _001_unique_type: int,
-    // Uncomment for crash
     getWidth: fn * -> float,
     getHeight: fn * -> float,
 }
