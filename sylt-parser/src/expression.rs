@@ -512,12 +512,9 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 is_tuple |= matches!(ctx.token(), T::Comma);
                 if is_tuple {
                     if matches!(ctx.token(), T::Comma | T::RightParen) {
-                        ctx= ctx.skip_if(T::Comma);
+                        ctx = ctx.skip_if(T::Comma);
                     } else {
-                        raise_syntax_error!(
-                            ctx,
-                            "Expected a ',' or ')' to end tuple argument"
-                        );
+                        raise_syntax_error!(ctx, "Expected a ',' or ')' to end tuple argument");
                     }
                 } else {
                     break;
