@@ -449,8 +449,14 @@ reflect = __CRASH("reflect is not implemented")
 debug_assertions = __CRASH("debug_assertions is not implemented")
 thread_sleep = __CRASH("thread_sleep is not implemented")
 
-pop = __CRASH("pop is not implemented")
-last = __CRASH("las is not implemented")
+function pop(l)
+    local popped = l[#l]
+    l[#l] = nil
+    return popped
+end
+function last(l)
+    return l[#l]
+end
 
 as_str = tostring
 print = print

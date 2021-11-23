@@ -57,6 +57,9 @@ LoveGraphics :: blob {
     newFont: fn str, int, str -> Font,
     newParticleSystem: fn *, int -> ParticleSystem,
     newQuad: fn int, int, int, int, ImageData -> Quad,
+
+    getWidth: fn -> int,
+    getHeight: fn -> int,
 }
 
 LoveKeyboard :: blob {
@@ -104,9 +107,6 @@ LoveWindow :: blob {
     getFullscreenModes: fn int -> [WindowMode],
     requestAttention: fn bool -> void,
     getDisplayCount: fn -> int,
-
-    getWidth: fn -> int,
-    getHeight: fn -> int,
 }
 
 Source :: blob {
@@ -138,7 +138,7 @@ LoveEvent :: blob {
 }
 
 LoveMath :: blob {
-    random: fn float, float -> float,
+    random: fn int, int -> int,
 }
 
 
