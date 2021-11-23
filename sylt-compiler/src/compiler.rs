@@ -7,7 +7,7 @@ use sylt_common::error::Error;
 use sylt_common::prog::{BytecodeProg, Prog};
 use sylt_common::{Op, RustFunction, Type, Value};
 use sylt_parser::statement::NameIdentifier;
-use sylt_parser::{Identifier, Span, StatementKind, Type as ParserType, VarKind, AST};
+use sylt_parser::{Identifier, Span, StatementKind, Type as ParserType, AST};
 
 mod bytecode;
 mod dependency;
@@ -20,24 +20,18 @@ type VarSlot = usize;
 #[derive(Debug, Clone)]
 struct Variable {
     name: String,
-    // TODO(ed): This field isn't needed
-    ty: Type,
     slot: usize,
     span: Span,
-    // TODO(ed): This field isn't needed
-    kind: VarKind,
 
     captured: bool,
     active: bool,
 }
 
 impl Variable {
-    fn new(name: String, kind: VarKind, ty: Type, slot: usize, span: Span) -> Self {
+    fn new(name: String, slot: usize, span: Span) -> Self {
         Self {
             name,
-            ty,
             slot,
-            kind,
             span,
             captured: false,
             active: false,
@@ -51,10 +45,8 @@ struct Upvalue {
     upupvalue: bool,
 
     name: String,
-    ty: Type,
     slot: usize,
     span: Span,
-    kind: VarKind,
 }
 
 enum Lookup {
@@ -69,10 +61,8 @@ impl Upvalue {
             upupvalue: false,
 
             name: var.name.clone(),
-            ty: var.ty.clone(),
             slot: 0,
             span: var.span,
-            kind: var.kind,
         }
     }
 
@@ -99,7 +89,7 @@ type BlobID = usize;
 type BlockID = usize;
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 enum Name {
-    External(VarKind),
+    External,
     Global(ConstantID),
     Blob(BlobID),
     Enum(BlobID),
@@ -125,8 +115,6 @@ impl Frame {
     fn new(name: &str, span: Span) -> Self {
         let variables = vec![Variable::new(
             name.to_string(),
-            VarKind::Const,
-            Type::Void,
             0,
             span,
         )];
@@ -264,10 +252,10 @@ impl Compiler {
         Ok(Lookup::Upvalue(up))
     }
 
-    fn define(&mut self, name: &str, kind: VarKind, span: Span) -> VarSlot {
+    fn define(&mut self, name: &str, span: Span) -> VarSlot {
         let frame = &mut self.frames.last_mut().unwrap().variables;
         let slot = frame.len();
-        let var = Variable::new(name.to_string(), kind, Type::Unknown, slot, span);
+        let var = Variable::new(name.to_string(), slot, span);
         frame.push(var);
         slot
     }
@@ -432,17 +420,17 @@ impl Compiler {
                         let other = path_to_namespace_id[file];
                         (Name::Namespace(other), ident.name.clone(), ident.span)
                     }
-                    Definition { ident: Identifier { name, .. }, kind, .. } => {
-                        let var = self.define(name, *kind, statement.span);
+                    Definition { ident: Identifier { name, .. }, .. } => {
+                        let var = self.define(name, statement.span);
                         self.activate(var);
                         num_constants += 1;
                         (Name::Global(var), name.clone(), statement.span)
                     }
-                    ExternalDefinition { ident: Identifier { name, .. }, kind, .. } => {
-                        let var = self.define(name, *kind, statement.span);
+                    ExternalDefinition { ident: Identifier { name, .. }, .. } => {
+                        let var = self.define(name, statement.span);
                         self.activate(var);
                         num_constants += 1;
-                        (Name::External(*kind), name.clone(), statement.span)
+                        (Name::External, name.clone(), statement.span)
                     }
 
                     // Handled later since we need type information.

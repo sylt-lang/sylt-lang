@@ -4,7 +4,7 @@ use sylt_common::{Block, Op, Value};
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::{
     Assignable, AssignableKind, CaseBranch, Expression, ExpressionKind, Op as ParserOp, Span,
-    Statement, StatementKind, TypeAssignable, TypeAssignableKind, VarKind,
+    Statement, StatementKind, TypeAssignable, TypeAssignableKind,
 };
 
 use crate::*;
@@ -287,7 +287,7 @@ impl<'t> BytecodeCompiler<'t> {
                 for (ident, _) in params.iter() {
                     let param = self
                         .compiler
-                        .define(&ident.name, VarKind::Const, ident.span);
+                        .define(&ident.name, ident.span);
                     self.compiler.activate(param);
                 }
 
@@ -304,7 +304,7 @@ impl<'t> BytecodeCompiler<'t> {
                     .pop_frame(inner_ctx.into())
                     .upvalues
                     .into_iter()
-                    .map(|u| (u.parent, u.upupvalue, u.ty))
+                    .map(|u| (u.parent, u.upupvalue))
                     .collect();
                 let function = Value::Function(Rc::new(Vec::new()), inner_ctx.block_slot);
                 // === Frame end ===
@@ -325,7 +325,7 @@ impl<'t> BytecodeCompiler<'t> {
                 self.push(Value::Nil, expression.span, inner_ctx);
                 let slot = self
                     .compiler
-                    .define("self", VarKind::Mutable, expression.span);
+                    .define("self", expression.span);
                 self.compiler.activate(slot);
 
                 // Initialize the blob. This may capture self.
@@ -347,7 +347,7 @@ impl<'t> BytecodeCompiler<'t> {
                     .pop_frame(inner_ctx.into())
                     .upvalues
                     .into_iter()
-                    .map(|u| (u.parent, u.upupvalue, u.ty))
+                    .map(|u| (u.parent, u.upupvalue))
                     .collect();
                 let function = Value::Function(Rc::new(Vec::new()), inner_ctx.block_slot);
 
@@ -405,7 +405,7 @@ impl<'t> BytecodeCompiler<'t> {
                     let op = Op::ReadGlobal(*slot);
                     self.add_op(ctx, span, op);
                 }
-                Some(Name::External(_)) => {
+                Some(Name::External) => {
                     error!(
                         self.compiler,
                         span, "External values aren't allowed when compiling to byte-code "
@@ -457,12 +457,8 @@ impl<'t> BytecodeCompiler<'t> {
             Err(()) => match self.compiler.namespaces[namespace].get(name) {
                 Some(Name::Global(slot)) => {
                     let var = &self.compiler.frames[0].variables[*slot];
-                    if var.kind.immutable() && ctx.frame != 0 {
-                        error!(self.compiler, span, "Cannot mutate constant '{}'", name);
-                    } else {
-                        let op = Op::AssignGlobal(var.slot);
-                        self.add_op(ctx, span, op);
-                    }
+                    let op = Op::AssignGlobal(var.slot);
+                    self.add_op(ctx, span, op);
                 }
 
                 _ => {
@@ -491,8 +487,7 @@ impl<'t> BytecodeCompiler<'t> {
             | EmptyStatement => {}
 
             #[rustfmt::skip]
-            Definition { ident, kind, value, .. } => {
-                // TODO(ed): Don't use type here - type check the tree first.
+            Definition { ident, value, .. } => {
                 self.expression(value, ctx);
 
                 if ctx.frame == 0 {
@@ -500,7 +495,7 @@ impl<'t> BytecodeCompiler<'t> {
                     self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
                 } else {
                     // Local variable
-                    let slot = self.compiler.define(&ident.name, *kind, statement.span);
+                    let slot = self.compiler.define(&ident.name, statement.span);
                     self.compiler.activate(slot);
                 }
             }
@@ -659,7 +654,7 @@ impl<'t> BytecodeCompiler<'t> {
                     // Pop original tag
                     self.add_op(ctx, *span, Op::Pop);
                     if let Some(Identifier { name, span }) = &variable {
-                        let slot = self.compiler.define(name, VarKind::Const, *span);
+                        let slot = self.compiler.define(name, *span);
                         self.compiler.activate(slot);
 
                         self.statement(body, ctx);

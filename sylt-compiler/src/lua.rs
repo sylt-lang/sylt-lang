@@ -202,7 +202,7 @@ impl<'t> LuaCompiler<'t> {
                     }
                     let slot = self
                         .compiler
-                        .define(&e.0.name, VarKind::Const, expression.span);
+                        .define(&e.0.name, expression.span);
                     self.compiler.activate(slot);
                     self.write_slot(slot);
                 }
@@ -263,7 +263,7 @@ impl<'t> LuaCompiler<'t> {
                 // TODO(ed): Know which blob something is?
                 let self_slot = self
                     .compiler
-                    .define("self", VarKind::Mutable, expression.span);
+                    .define("self", expression.span);
                 self.compiler.activate(self_slot);
 
                 // Set up closure for the self variable. The typechecker takes
@@ -325,7 +325,7 @@ impl<'t> LuaCompiler<'t> {
                 Some(Name::Enum(enum_)) => {
                     self.write_global(enum_);
                 }
-                Some(Name::External(_)) => {
+                Some(Name::External) => {
                     write!(self, "{}", name);
                 }
                 Some(Name::Namespace(new_namespace)) => {
@@ -356,12 +356,7 @@ impl<'t> LuaCompiler<'t> {
 
             Err(()) => match self.compiler.namespaces[namespace].get(name).cloned() {
                 Some(Name::Global(slot)) => {
-                    let var = &self.compiler.frames[0].variables[slot];
-                    if var.kind.immutable() && ctx.frame != 0 {
-                        error!(self.compiler, span, "Cannot mutate constant '{}'", name);
-                    } else {
-                        self.write_global(slot);
-                    }
+                    self.write_global(slot);
                 }
                 _ => {
                     error!(
@@ -423,8 +418,8 @@ impl<'t> LuaCompiler<'t> {
             }
 
             #[rustfmt::skip]
-            Definition { ident, kind, value, .. } => {
-                let slot = self.compiler.define(&ident.name, *kind, statement.span);
+            Definition { ident, value, .. } => {
+                let slot = self.compiler.define(&ident.name, statement.span);
                 write!(self, "local");
                 self.write_slot(slot);
                 write!(self, "=");
@@ -586,7 +581,7 @@ impl<'t> LuaCompiler<'t> {
                     write!(self, ";");
                     let ss = self.compiler.frames.last().unwrap().variables.len();
                     if let Some(Identifier { name, span }) = &variable {
-                        let slot = self.compiler.define(name, VarKind::Const, *span);
+                        let slot = self.compiler.define(name, *span);
                         self.compiler.activate(slot);
                         write!(self, "local");
                         self.write_slot(slot);
