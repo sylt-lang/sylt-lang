@@ -798,6 +798,9 @@ mod test {
     test!(expression, fn_invalid_empty_tuple: "fn -> () end" => _);
 
     fail!(expression, fn_self_arg: "fn self: int do 1 end" => _);
+
+    test!(expression, fn_call_multiple_lines_prime: "a' a \n   ,\n a,\n a\n" => _);
+    test!(expression, fn_call_multiple_lines_paren: "a(\na\n,\n\na, \n  \na\n\n\n)" => _);
 }
 
 impl PrettyPrint for Expression {

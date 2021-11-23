@@ -742,13 +742,20 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
 fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, Assignable> {
     let span = ctx.span();
     let primer = matches!(ctx.token(), T::Prime); // `f' 1, 2`
-    let mut ctx = expect!(
+    let ctx = expect!(
         ctx,
         T::Prime | T::LeftParen,
         "Expected '(' or ' when calling function"
     );
     let mut args = Vec::new();
 
+    let (ctx, newlines) = if primer {
+        ctx.push_skip_newlines(ctx.skip_newlines)
+    } else {
+        ctx.push_skip_newlines(true)
+    };
+
+    let mut ctx = ctx;
     // Arguments
     loop {
         match (ctx.token(), primer) {
@@ -760,9 +767,7 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
             | (T::Do, true)
             | (T::End, true)
             | (T::Newline, true)
-            | (T::Arrow, true) => {
-                break;
-            }
+            | (T::Arrow, true) => break,
 
             // Parse a single argument.
             _ => {
@@ -770,11 +775,17 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
                 ctx = _ctx; // assign to outer
                 args.push(expr);
 
-                ctx = ctx.skip_if(T::Comma);
+                ctx = match ctx.tokens_lookahead::<2>() {
+                    [T::Newline, T::Comma] => ctx.skip(2),
+                    [T::Comma, T::Newline] => ctx.skip(2),
+                    [T::Comma, ..] => ctx.skip(1),
+                    _ => ctx,
+                };
             }
         }
     }
 
+    ctx = ctx.pop_skip_newlines(newlines);
     let ctx = if !primer {
         expect!(ctx, T::RightParen, "Expected ')' after calling function")
     } else {
