@@ -510,6 +510,18 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
                 // Not a tuple, until it is.
                 is_tuple |= matches!(ctx.token(), T::Comma);
+                if is_tuple {
+                    if matches!(ctx.token(), T::Comma | T::RightParen) {
+                        ctx= ctx.skip_if(T::Comma);
+                    } else {
+                        raise_syntax_error!(
+                            ctx,
+                            "Expected a ',' or ')' to end tuple argument"
+                        );
+                    }
+                } else {
+                    break;
+                };
             }
         }
     }
@@ -799,8 +811,11 @@ mod test {
 
     fail!(expression, fn_self_arg: "fn self: int do 1 end" => _);
 
-    test!(expression, fn_call_multiple_lines_prime: "a' a \n   ,\n a,\n a\n" => _);
+    test!(expression, fn_call_multiple_lines_prime: "a' a ,\n a,\n a" => _);
     test!(expression, fn_call_multiple_lines_paren: "a(\na\n,\n\na, \n  \na\n\n\n)" => _);
+    test!(expression, tuple_line_breaks: "(\na\n,\n\na, \n  \na\n\n\n)" => _);
+
+    fail!(expression, faulty_tuples: "(a a)" => _);
 }
 
 impl PrettyPrint for Expression {
