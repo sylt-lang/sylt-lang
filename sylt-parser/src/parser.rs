@@ -1129,7 +1129,6 @@ mod test {
                     result.unwrap_err().1
                 );
                 let (ctx, result) = result.unwrap();
-                println!("Tree: {:?}", result);
                 assert!(
                     matches!(result.kind, $ans),
                     "\nExpected: {}, but got: {:?}",
