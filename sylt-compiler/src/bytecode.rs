@@ -285,9 +285,7 @@ impl<'t> BytecodeCompiler<'t> {
                 // === Frame begin ===
                 let inner_ctx = self.push_frame_and_block(ctx, &name, expression.span);
                 for (ident, _) in params.iter() {
-                    let param = self
-                        .compiler
-                        .define(&ident.name, ident.span);
+                    let param = self.compiler.define(&ident.name, ident.span);
                     self.compiler.activate(param);
                 }
 
@@ -323,9 +321,7 @@ impl<'t> BytecodeCompiler<'t> {
 
                 // Set self to nil so that we can capture it.
                 self.push(Value::Nil, expression.span, inner_ctx);
-                let slot = self
-                    .compiler
-                    .define("self", expression.span);
+                let slot = self.compiler.define("self", expression.span);
                 self.compiler.activate(slot);
 
                 // Initialize the blob. This may capture self.

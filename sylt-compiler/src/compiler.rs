@@ -29,13 +29,7 @@ struct Variable {
 
 impl Variable {
     fn new(name: String, slot: usize, span: Span) -> Self {
-        Self {
-            name,
-            slot,
-            span,
-            captured: false,
-            active: false,
-        }
+        Self { name, slot, span, captured: false, active: false }
     }
 }
 
@@ -113,11 +107,7 @@ struct Frame {
 
 impl Frame {
     fn new(name: &str, span: Span) -> Self {
-        let variables = vec![Variable::new(
-            name.to_string(),
-            0,
-            span,
-        )];
+        let variables = vec![Variable::new(name.to_string(), 0, span)];
         Self { variables, upvalues: Vec::new() }
     }
 }

@@ -200,9 +200,7 @@ impl<'t> LuaCompiler<'t> {
                     if i != 0 {
                         write!(self, ",");
                     }
-                    let slot = self
-                        .compiler
-                        .define(&e.0.name, expression.span);
+                    let slot = self.compiler.define(&e.0.name, expression.span);
                     self.compiler.activate(slot);
                     self.write_slot(slot);
                 }
@@ -261,9 +259,7 @@ impl<'t> LuaCompiler<'t> {
 
             Blob { blob: _, fields } => {
                 // TODO(ed): Know which blob something is?
-                let self_slot = self
-                    .compiler
-                    .define("self", expression.span);
+                let self_slot = self.compiler.define("self", expression.span);
                 self.compiler.activate(self_slot);
 
                 // Set up closure for the self variable. The typechecker takes
