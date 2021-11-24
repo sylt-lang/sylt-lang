@@ -1503,19 +1503,24 @@ impl TypeChecker {
                 (Type::Str, Type::Str) => {}
 
                 (Type::List(a), Type::List(b)) => {
-                    self.unify(span, ctx, a, b)?;
+                    self.unify(span, ctx, a, b)
+                        .help_no_span("While checking list".into())?;
                 }
                 (Type::Set(a), Type::Set(b)) => {
-                    self.unify(span, ctx, a, b)?;
+                    self.unify(span, ctx, a, b)
+                        .help_no_span("While checking set".into())?;
                 }
                 (Type::Dict(a_k, a_v), Type::Dict(b_k, b_v)) => {
-                    self.unify(span, ctx, a_k, b_k)?;
-                    self.unify(span, ctx, a_v, b_v)?;
+                    self.unify(span, ctx, a_k, b_k)
+                        .help_no_span("While checking dictionary key".into())?;
+                    self.unify(span, ctx, a_v, b_v)
+                        .help_no_span("While checking dictionary value".into())?;
                 }
 
                 (Type::Tuple(a), Type::Tuple(b)) => {
-                    for (a, b) in a.iter().zip(b.iter()) {
-                        self.unify(span, ctx, *a, *b)?;
+                    for (i, (a, b)) in a.iter().zip(b.iter()).enumerate() {
+                        self.unify(span, ctx, *a, *b)
+                            .help_no_span(format!("While checking index #{}", i))?;
                     }
                 }
 
@@ -1528,42 +1533,43 @@ impl TypeChecker {
                             TypeError::WrongArity { got: a_args.len(), expected: b_args.len() }
                         );
                     }
-                    for (a, b) in a_args.iter().zip(b_args.iter()) {
-                        self.unify(span, ctx, *a, *b)?;
+                    for (i, (a, b)) in a_args.iter().zip(b_args.iter()).enumerate() {
+                        self.unify(span, ctx, *a, *b)
+                            .help_no_span(format!("While checking argument #{}", i))?;
                     }
                     self.unify(span, ctx, a_ret, b_ret)?;
                 }
 
-                (Type::Blob(_a_blob, a_fields), Type::Blob(b_blob, b_fields)) => {
-                    // TODO(ed): This should give information about the violating fields.
-                    if a_fields.len() != b_fields.len() {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::Mismatch {
-                                got: self.bake_type(a),
-                                expected: self.bake_type(b)
-                            },
-                            "Blobs have different number of fields"
-                        );
+                (Type::Blob(a_blob, a_fields), Type::Blob(b_blob, b_fields)) => {
+                    for (a_field, _) in a_fields.iter() {
+                        if !b_fields.contains_key(a_field) {
+                            return err_type_error!(
+                                self,
+                                span,
+                                TypeError::MissingField {
+                                    blob: b_blob.clone(),
+                                    field: a_field.clone()
+                                }
+                            )
+                        };
                     }
 
-                    for (a_field, a_ty) in a_fields.iter() {
-                        let b_ty = match b_fields.get(a_field) {
+                    for (b_field, b_ty) in b_fields.iter() {
+                        let a_ty = match a_fields.get(b_field) {
                             Some(b_ty) => *b_ty,
                             None => {
                                 return err_type_error!(
                                     self,
                                     span,
                                     TypeError::MissingField {
-                                        blob: b_blob.clone(),
-                                        field: a_field.clone()
+                                        blob: a_blob.clone(),
+                                        field: b_field.clone()
                                     }
                                 )
                             }
                         };
-                        self.unify(span, ctx, *a_ty, b_ty)
-                            .help_no_span(format!("While checking field .{}", a_field))?;
+                        self.unify(span, ctx, *b_ty, a_ty)
+                            .help_no_span(format!("While checking field .{}", b_field))?;
                     }
                 }
 
@@ -1588,7 +1594,8 @@ impl TypeChecker {
                                 )
                             }
                         };
-                        self.unify(span, ctx, a_ty, *b_ty)?;
+                        self.unify(span, ctx, a_ty, *b_ty)
+                            .help_no_span(format!("While checking variant {}", b_var))?;
                     }
                 }
 
