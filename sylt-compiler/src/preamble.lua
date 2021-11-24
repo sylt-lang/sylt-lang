@@ -23,7 +23,7 @@ __INDEX = function(o, i)
     end
     local e = o[i]
     if m._type == "blob" then
-        assert(e, "Accessing fields \"" .. i .. "\" - which doesn't exist")
+        assert(e ~= nil, "Accessing fields \"" .. i .. "\" - which doesn't exist")
         return e
     end
     if e ~= nil then

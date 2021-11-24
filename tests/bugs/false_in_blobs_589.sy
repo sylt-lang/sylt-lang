@@ -1,0 +1,8 @@
+A :: blob {
+    a: bool
+}
+
+start :: fn do
+    q :: A { a: false }
+    q.a <=> false
+end
