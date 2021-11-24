@@ -35,22 +35,11 @@ end
 
 dir_tup :: fn dir: Direction -> (int, int) do
     case dir do
-        Up do
-            ret ( 0, -1)
-        end
-
-        Down do
-            ret ( 0,  1)
-        end
-
-        Left do
-            ret (-1,  0)
-        end
-
-        Right do
-            ret ( 1,  0)
-        end
-        else do ret (0, 0) end
+        Up ret ( 0, -1)
+        Down ret ( 0,  1)
+        Left ret (-1,  0)
+        Right ret ( 1,  0)
+        else do end
     end
 
     ret (0, 0)
@@ -123,11 +112,9 @@ sylt_consoom :: sfx.newSound' "res/bloop.wav", false, sfx.SoundType.Static
 update_board :: fn board: Board do
     case board.snake_dir do
         None do end
-        else do
-            if board.snake_queued_grows > 0 do
-                board.snake_queued_grows -= 1
-                add_snake_segment' board.snake
-            end
+        else if board.snake_queued_grows > 0 do
+            board.snake_queued_grows -= 1
+            add_snake_segment' board.snake
         end
     end
 
@@ -158,10 +145,7 @@ snake_contains_pos :: fn seg: Segment, pos: (int, int) -> bool do
         ret true
     else do
         case seg.child do
-            Just c do
-                ret snake_contains_pos' c, pos
-            end
-
+            Just c ret snake_contains_pos' c, pos
             else do end
         end
     end
@@ -171,10 +155,7 @@ end
 
 snake_last_seg :: fn snake: Segment -> Segment do
     case snake.child do
-        Just c do
-            ret snake_last_seg' c
-        end
-
+        Just c ret snake_last_seg' c
         else do end
     end
 
