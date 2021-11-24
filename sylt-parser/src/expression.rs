@@ -566,11 +566,7 @@ fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 ctx = ctx_; // assign to outer
 
                 if !matches!(ctx.token(), T::Comma | T::RightBrace) {
-                    raise_syntax_error!(
-                        ctx,
-                        "Expected a field delimiter ',' - but got {:?}",
-                        ctx.token()
-                    );
+                    raise_syntax_error!(ctx, "Expected a ',' between blob fields");
                 }
                 ctx = ctx.skip_if(T::Comma);
 
