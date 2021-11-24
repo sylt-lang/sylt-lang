@@ -806,6 +806,7 @@ mod test {
     fail!(expression, list_funky: "[1 2]" => _);
     fail!(expression, set_funky: "{1 2}" => _);
     fail!(expression, dict_funky: "{1: 2 3: 4}" => _);
+    fail!(expression, tuple_funky: "(1 2 3 4}" => _);
 }
 
 impl PrettyPrint for Expression {
