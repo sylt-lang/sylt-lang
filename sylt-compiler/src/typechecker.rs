@@ -1568,7 +1568,7 @@ impl TypeChecker {
                                 )
                             }
                         };
-                        self.unify(span, ctx, *b_ty, a_ty)
+                        self.unify(span, ctx, a_ty, *b_ty)
                             .help_no_span(format!("While checking field .{}", b_field))?;
                     }
                 }
