@@ -771,7 +771,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             }
         }
 
-        // Expression or assignment. We try assignment first.
+        // Expression or assignment. We probe to find out which.
         _ => {
             /// `a = 5`.
             fn assignment<'t>(ctx: Context<'t>) -> ParseResult<'t, StatementKind> {
@@ -793,21 +793,21 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 Ok((ctx, Assignment { kind, target, value }))
             }
 
-            match (assignment(ctx), expression(ctx)) {
-                (Ok((ctx, kind)), _) => (ctx, kind),
-                (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
-                (Err((ass_ctx, mut ass_errs)), Err((expr_ctx, mut expr_errs))) => {
-                    ass_errs.append(&mut expr_errs);
-                    ass_errs.push(syntax_error!(ctx, "Neither an assignment or an expression"));
-                    // Choose the context that went the furthest to avoid
-                    // unneccesary errors.
-                    let ctx = if ass_ctx.curr > expr_ctx.curr {
-                        ass_ctx
-                    } else {
-                        expr_ctx
-                    };
-                    return Err((ctx, ass_errs));
-                }
+            // Probe if we should actually parse a assignable here.
+            // If not, we parse an expression.
+            let is_assignment = match assignable(ctx) {
+                Ok((ctx, _)) => matches!(
+                    ctx.token(),
+                    T::PlusEqual | T::MinusEqual | T::StarEqual | T::SlashEqual | T::Equal
+                ),
+                _ => false,
+            };
+
+            if is_assignment {
+                assignment(ctx)?
+            } else {
+                let (ctx, value) = expression(ctx)?;
+                (ctx, StatementExpression { value })
             }
         }
     };
