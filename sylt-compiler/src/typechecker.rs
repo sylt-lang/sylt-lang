@@ -16,6 +16,7 @@ type TypeResult<T> = Result<T, Vec<Error>>;
 
 trait Help {
     fn help(self, typechecker: &TypeChecker, span: Span, message: String) -> Self;
+    fn help_no_span(self, message: String) -> Self;
 }
 
 impl<T> Help for TypeResult<T> {
@@ -24,7 +25,23 @@ impl<T> Help for TypeResult<T> {
             Ok(_) => {}
             Err(errs) => match &mut errs.last_mut() {
                 Some(Error::TypeError { helpers, .. }) => {
-                    helpers.push(Helper { file: typechecker.span_file(&span), span, message });
+                    helpers.push(Helper {
+                        at: Some((typechecker.span_file(&span), span)),
+                        message,
+                    });
+                }
+                _ => panic!("Cannot help on this error"),
+            },
+        }
+        self
+    }
+
+    fn help_no_span(mut self, message: String) -> Self {
+        match &mut self {
+            Ok(_) => {}
+            Err(errs) => match &mut errs.last_mut() {
+                Some(Error::TypeError { helpers, .. }) => {
+                    helpers.push(Helper { at: None, message });
                 }
                 _ => panic!("Cannot help on this error"),
             },
@@ -1051,7 +1068,9 @@ impl TypeChecker {
 
                 let given_fields: BTreeMap<_, _> = fields
                     .iter()
-                    .map(|(key, _)| Ok((key.clone(), self.push_type(Type::Unknown))))
+                    .map(|(key, expr)| {
+                        Ok((key.clone(), (expr.span, self.push_type(Type::Unknown))))
+                    })
                     .collect::<TypeResult<_>>()?;
 
                 let mut errors = Vec::new();
@@ -1068,11 +1087,11 @@ impl TypeChecker {
                     }
                 }
 
-                for (field, _) in given_fields.iter() {
+                for (field, (span, _)) in given_fields.iter() {
                     if !blob_fields.contains_key(field) {
                         errors.push(type_error!(
                             self,
-                            span,
+                            *span,
                             TypeError::UnknownField {
                                 blob: blob_name.clone(),
                                 field: field.clone(),
@@ -1085,8 +1104,12 @@ impl TypeChecker {
                     return Err(errors);
                 }
 
+                let fields_and_types = given_fields
+                    .iter()
+                    .map(|(a, (_, x))| (a.clone(), x.clone()))
+                    .collect::<BTreeMap<_, _>>();
                 let given_blob =
-                    self.push_type(Type::Blob(blob_name.clone(), given_fields.clone()));
+                    self.push_type(Type::Blob(blob_name.clone(), fields_and_types.clone()));
 
                 // Unify the fields with their real types
                 let ss = self.stack.len();
@@ -1100,7 +1123,7 @@ impl TypeChecker {
                         });
                     }
                     let expr_ty = self.expression(expr, ctx)?;
-                    self.unify(span, ctx, expr_ty, given_fields[key])?;
+                    self.unify(expr.span, ctx, expr_ty, fields_and_types[key])?;
                     self.stack.truncate(ss);
                 }
 
@@ -1539,7 +1562,8 @@ impl TypeChecker {
                                 )
                             }
                         };
-                        self.unify(span, ctx, *a_ty, b_ty)?;
+                        self.unify(span, ctx, *a_ty, b_ty)
+                            .help_no_span(format!("While checking field .{}", a_field))?;
                     }
                 }
 
