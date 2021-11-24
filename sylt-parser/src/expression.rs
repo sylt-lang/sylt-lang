@@ -528,7 +528,7 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     }
 
     let ctx = ctx.pop_skip_newlines(skip_newlines);
-    let ctx = expect!(ctx, T::RightParen, "Expected ')'");
+    let ctx = expect!(ctx, T::RightParen, "Expected ',' or ')'");
 
     use ExpressionKind::{Parenthesis, Tuple};
     let result = if is_tuple {
