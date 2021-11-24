@@ -1,0 +1,6 @@
+start :: fn do
+    (1 2 3)
+end
+
+// error: @2
+// error: @2
