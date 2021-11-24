@@ -281,17 +281,21 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
         T::Identifier(_) => {
             let span = ctx.span();
-            match (blob(ctx), assignable(ctx)) {
-                (Ok(result), _) => Ok(result),
-                (_, Ok((ctx, assign))) => Ok((ctx, Expression { span, kind: Get(assign) })),
-                (Err((_, mut blob_errs)), Err((_, mut ass_errs))) => {
-                    let errs = vec![
-                        syntax_error!(ctx, "Neither a blob instantiation or an identifier - check the two errors below"),
-                        blob_errs.remove(0),
-                        ass_errs.remove(0),
-                    ];
-                    return Err((ctx, errs));
+
+            // Do some probing
+            let is_blob = match type_assignable(ctx) {
+                Ok((ctx, _)) => matches!(ctx.token(), T::LeftBrace),
+                _ => false,
+            };
+
+            if is_blob {
+                match blob(ctx) {
+                    Ok(x) => Ok(x),
+                    Err((ctx, errs)) => Err((skip_until!(ctx, T::RightBrace), errs)),
                 }
+            } else {
+                let (ctx, assign) = assignable(ctx)?;
+                Ok((ctx, Expression { span, kind: Get(assign) }))
             }
         }
 

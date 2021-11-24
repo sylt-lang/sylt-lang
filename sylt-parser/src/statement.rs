@@ -796,9 +796,16 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             match (assignment(ctx), expression(ctx)) {
                 (Ok((ctx, kind)), _) => (ctx, kind),
                 (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
-                (Err((_, mut ass_errs)), Err((_, mut expr_errs))) => {
+                (Err((ass_ctx, mut ass_errs)), Err((expr_ctx, mut expr_errs))) => {
                     ass_errs.append(&mut expr_errs);
                     ass_errs.push(syntax_error!(ctx, "Neither an assignment or an expression"));
+                    // Choose the context that went the furthest to avoid
+                    // unneccesary errors.
+                    let ctx = if ass_ctx.curr > expr_ctx.curr {
+                        ass_ctx
+                    } else {
+                        expr_ctx
+                    };
                     return Err((ctx, ass_errs));
                 }
             }
