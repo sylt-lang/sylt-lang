@@ -1550,7 +1550,7 @@ impl TypeChecker {
                                     blob: b_blob.clone(),
                                     field: a_field.clone()
                                 }
-                            )
+                            );
                         };
                     }
 
