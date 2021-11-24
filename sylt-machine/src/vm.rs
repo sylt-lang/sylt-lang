@@ -381,7 +381,7 @@ impl Machine for VM {
                             Value::Function(ups, block)
                         } else {
                             let mut ups = Vec::new();
-                            for (slot, is_up, _) in inner.borrow().upvalues.iter() {
+                            for (slot, is_up) in inner.borrow().upvalues.iter() {
                                 self.frame_mut().contains_upvalues = true;
                                 let up = if *is_up {
                                     if let Value::Function(local_ups, _) = &self.stack[offset] {
@@ -410,7 +410,7 @@ impl Machine for VM {
                     Value::Function(_, block) => {
                         let inner = Rc::clone(&self.blocks[block]);
                         let mut ups = Vec::new();
-                        for (slot, is_up, _) in inner.borrow().upvalues.iter() {
+                        for (slot, is_up) in inner.borrow().upvalues.iter() {
                             let up = if *is_up {
                                 if let Value::Function(local_ups, _) = &self.stack[offset] {
                                     Rc::clone(&local_ups[*slot])

@@ -2,7 +2,7 @@ use colored::Colorize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::{Op, Type, Value};
+use crate::{Op, Value};
 
 #[derive(Debug)]
 pub enum BlockLinkState {
@@ -12,7 +12,7 @@ pub enum BlockLinkState {
 
 #[derive(Debug)]
 pub struct Block {
-    pub upvalues: Vec<(usize, bool, Type)>,
+    pub upvalues: Vec<(usize, bool)>,
     pub linking: BlockLinkState,
 
     pub namespace: usize,
