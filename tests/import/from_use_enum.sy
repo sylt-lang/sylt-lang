@@ -1,0 +1,5 @@
+from _enum use Maybe
+
+start :: fn do
+    just_one := Maybe.Just 1
+end

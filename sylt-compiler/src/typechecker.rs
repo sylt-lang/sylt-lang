@@ -691,10 +691,12 @@ impl TypeChecker {
                                 .insert((namespace, identifier.name.clone()), Name::Global(var));
                         }
 
-                        Name::Type(_) | Name::Namespace(_) => {
+                        Name::Type(_) => {
                             self.globals
                                 .insert((namespace, identifier.name.clone()), name.clone());
                         }
+
+                        Name::Namespace(_) => continue,
                     }
                 }
             }

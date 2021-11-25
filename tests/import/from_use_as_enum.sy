@@ -1,0 +1,6 @@
+from _enum use Maybe as Will
+
+start :: fn do
+    stygg_alfons := Will.Just "leka med sågen"
+    duktig_alfons :: Will.Nothing
+end

@@ -1,0 +1,6 @@
+Maybe :: enum
+    Just *,
+    Nothing,
+end
+
+just_true := Maybe.Just true
