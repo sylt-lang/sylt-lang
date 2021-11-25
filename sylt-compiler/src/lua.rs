@@ -467,9 +467,10 @@ impl<'t> LuaCompiler<'t> {
                         }
                     }
                 } else {
+                    // TODO(ed): This code is really ugly... :(
                     let op = match kind {
                         Op::Nop => unreachable!(),
-                        Op::Add => "+",
+                        Op::Add => ",",
                         Op::Sub => "-",
                         Op::Mul => "*",
                         Op::Div => "/",
@@ -484,16 +485,29 @@ impl<'t> LuaCompiler<'t> {
                                 write!(self, "nil ; end ;");
                                 self.read_identifier(&field.name, statement.span, ctx, namespace);
                                 write!(self, "=");
+                                if kind == &Op::Add {
+                                    write!(self, "__ADD(");
+                                }
                                 self.read_identifier(&field.name, statement.span, ctx, namespace);
                                 write!(self, "{}", op);
                                 self.expression(value, ctx);
+                                if kind == &Op::Add {
+                                    write!(self, ")");
+                                }
                             } else {
                                 write!(self, ";");
-                                write!(self, "__ASSIGN_INDEX( tmp_ass, \"{}\", __INDEX( tmp_ass, \"{}\" ) {}", field.name, field.name, op);
+                                write!(self, "__ASSIGN_INDEX( tmp_ass, \"{}\",", field.name);
+                                if kind == &Op::Add {
+                                    write!(self, "__ADD(");
+                                }
+                                write!(self, "__INDEX( tmp_ass, \"{}\" ) {}", field.name, op);
                                 write!(self, "(");
                                 self.expression(value, ctx);
                                 write!(self, ")");
                                 write!(self, ")");
+                                if kind == &Op::Add {
+                                    write!(self, ")");
+                                }
                                 write!(self, ";");
                                 write!(self, "end");
                             }
@@ -505,20 +519,33 @@ impl<'t> LuaCompiler<'t> {
                             write!(self, "local tmp_expr =");
                             self.expression(index, ctx);
                             write!(self, ";");
-                            write!(self, "__ASSIGN_INDEX( tmp_ass, tmp_expr, __INDEX( tmp_ass, tmp_expr ) {}", op);
+                            write!(self, "__ASSIGN_INDEX( tmp_ass, tmp_expr,");
+                            if kind == &Op::Add {
+                                write!(self, "__ADD(");
+                            }
+                            write!(self, "__INDEX( tmp_ass, tmp_expr ) {}", op);
                             write!(self, "(");
                             self.expression(value, ctx);
                             write!(self, ")");
                             write!(self, ")");
+                            if kind == &Op::Add {
+                                write!(self, ")");
+                            }
                             write!(self, ";");
                             write!(self, "end");
                         }
                         _ => {
                             self.assignable(target, ctx);
                             write!(self, "=");
+                            if kind == &Op::Add {
+                                write!(self, "__ADD(");
+                            }
                             self.assignable(target, ctx);
                             write!(self, op);
                             self.expression(value, ctx);
+                            if kind == &Op::Add {
+                                write!(self, ")");
+                            }
                         }
                     }
                 }
