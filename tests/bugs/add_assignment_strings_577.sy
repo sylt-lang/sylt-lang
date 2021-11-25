@@ -1,0 +1,15 @@
+A :: blob { a: str }
+
+start :: fn do
+    a := "abc"
+    a += "abc"
+    a <=> "abcabc"
+
+    b :: ["abc"]
+    b[0] += "abc"
+    b[0] <=> "abcabc"
+
+    c :: A { a: "abc" }
+    c.a += "abc"
+    c.a <=> "abcabc"
+end
