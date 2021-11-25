@@ -829,18 +829,14 @@ impl TypeChecker {
                     .rfind(|v| v.ident.name == ident.name)
                     .cloned()
                 {
-                    match self.find_type(var.ty) {
-                        _ => Ok(var.ty),
-                    }
+                    Ok(var.ty)
                 } else {
                     match self
                         .globals
                         .get(&(ctx.namespace, ident.name.clone()))
                         .cloned()
                     {
-                        Some(Name::Global(var)) => match self.find_type(var.ty) {
-                            _ => Ok(var.ty),
-                        },
+                        Some(Name::Global(var)) => Ok(var.ty),
                         None => match self.functions.get(&ident.name).cloned() {
                             Some(f) => Ok(f),
                             None => err_type_error!(
