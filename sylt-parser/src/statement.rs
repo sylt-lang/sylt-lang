@@ -488,6 +488,10 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         break;
                     }
 
+                    T::Newline => {
+                        ctx = ctx.skip(1);
+                    }
+
                     T::Identifier(pattern) if is_capitalized(pattern) => {
                         let pattern = Identifier { name: pattern.clone(), span: ctx.span() };
                         ctx = ctx.skip(1);
@@ -502,10 +506,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                                     "Variables have to start with a lowercase letter"
                                 );
                             }
-                            T::Do => (ctx, None),
-                            _ => {
-                                raise_syntax_error!(ctx, "Failed to parse case match arm");
-                            }
+                            _ => (ctx, None),
                         };
                         let (ctx_, body) = statement_or_block(ctx_)?;
                         ctx = ctx_;

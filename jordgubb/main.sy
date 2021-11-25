@@ -1,0 +1,73 @@
+from love use love
+use gfx
+from gfx use (stableRandomColor as rcol)
+use input
+use sfx
+
+start :: fn do
+    r := 0.
+
+    aFont :: gfx.aFont()
+    img :: gfx.newImage' "res/sylt.png"
+    ps :: gfx.newParticles' img
+    ps.setParticleLifetime(10., 10.)
+    ps.setEmissionRate(5)
+    ps.setLinearAcceleration((-40., -40.), (40., 40.))
+
+    ss :: gfx.newImplicitSpriteSheet' img, (55, 55)
+
+    s :: sfx.newSound' "res/bloop.wav", false, sfx.SoundType.Static
+
+    updates := []
+    updates -> push' fn delta do
+        if not input.isKeyDown' input.Key.A do
+            r += delta
+        end
+        if input.isKeyDown' input.Key.B do
+            sfx.cloneSound(s).playp' (1.0, 0.8), (1.0, 0.8)
+        end
+    end
+    updates -> push' fn delta do
+        pos :: input.mousePos'
+        ps.setPosition' (cos(r) * 300., sin(r) * 100.) + pos
+        ps.update(delta)
+    end
+
+    love.update = fn delta do
+        updates -> for_each' fn u: fn * -> do u(delta) end
+    end
+
+    love.draw = fn do
+        gfx.drawLine' rcol(1.), (0., 0.), (100., 100.)
+
+        gfx.drawCircle' rcol(2.), (200., 100.), 50.
+        gfx.drawCircleOutline' rcol(3.), (200., 100.), 50.
+
+        gfx.drawRect' rcol(4.), (200., 200.), (50., 50.)
+        gfx.drawRectCentered' rcol(5.), (200., 200.), (50., 50.)
+
+        gfx.drawRectOutline' rcol(5.), (200., 200.), (50., 50.)
+        gfx.drawRectCenteredOutline' rcol(6.), (200., 200.), (50., 50.)
+
+        aFont.drawText' rcol(8.), "Hello world!", (200., 200.)
+        aFont.drawTextT' rcol(9.), "Hello world!", (200., 250.), 1., 2.
+        aFont.drawTextF' rcol(10.), "Hello world!", (200., 250.), gfx.Alignment.Right, 50.
+        aFont.drawTextFT' rcol(11.), "Hello world!", (200., 250.), gfx.Alignment.Right, 50., -1., 2.
+
+        img.draw' (100., 200.), r, (1., 1.)
+        img.drawTinted' rcol(12.), (100., 200.), r + 1., (1., 1.)
+        img.drawCenterd' (100., 200.), r, (1., 1.)
+        img.drawTintedCentered' rcol(12.), (100., 200.), r + 1., (1., 1.)
+
+        ps.draw' gfx.rgb(1., 1., 1.)
+
+        ss.draw' rcol(12.), as_int(rem(r, 4.)), (100., 100.), r, (1., 1.)
+        ss.drawCenterd' rcol(13.), as_int(rem(r, 4.)), (100., 100.), r, (1., 1.)
+    end
+
+    love.keypressed = fn key, scancode, repeat do
+    end
+
+    love.keyreleased = fn key, scancode do
+    end
+end

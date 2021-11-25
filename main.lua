@@ -23,7 +23,7 @@ __INDEX = function(o, i)
     end
     local e = o[i]
     if m._type == "blob" then
-        assert(e ~= nil, "Accessing fields \"" .. i .. "\" - which doesn't exist")
+        assert(e, "Accessing fields \"" .. i .. "\" - which doesn't exist")
         return e
     end
     if e ~= nil then
@@ -449,14 +449,8 @@ reflect = __CRASH("reflect is not implemented")
 debug_assertions = __CRASH("debug_assertions is not implemented")
 thread_sleep = __CRASH("thread_sleep is not implemented")
 
-function pop(l)
-    local popped = l[#l]
-    l[#l] = nil
-    return popped
-end
-function last(l)
-    return l[#l]
-end
+pop = __CRASH("pop is not implemented")
+last = __CRASH("las is not implemented")
 
 as_str = tostring
 print = print
@@ -487,3 +481,32 @@ function __CONTAINS(a, b)
 end
 
 -- End Sylt preamble
+ GLOBAL_1 = ( function ( ) do local local_1 = ( __INDEX( __INDEX( love , "graphics" ) , "newImage" ) ( ( "res/sylt.png" ) ) ) ;
+local local_2 = ( __INDEX( __INDEX( love , "graphics" ) , "newParticleSystem" ) ( ( local_1 ) ) ) ;
+__IDENTITY( ( __INDEX( local_2 , "setParticleLifetime" ) ( ( local_2 ) , ( 10.0 ) , ( 10.0 ) ) ) ) ;
+__IDENTITY( ( __INDEX( local_2 , "setEmissionRate" ) ( ( local_2 ) , ( 5 ) ) ) ) ;
+__IDENTITY( ( __INDEX( local_2 , "setLinearAcceleration" ) ( ( local_2 ) , ( - ( 40.0 ) ) , ( - ( 40.0 ) ) , ( 40.0 ) , ( 40.0 ) ) ) ) ;
+local local_3 = ( 0.0 ) ;
+local local_4 = ( __LIST {  } ) ;
+__IDENTITY( ( push ( ( local_4 ) , ( function ( local_5 ) do local_3 = local_3 + ( local_5 ) ;
+end ;
+end ) ) ) ) ;
+__IDENTITY( ( push ( ( local_4 ) , ( function ( local_5 ) do __IDENTITY( ( __INDEX( local_2 , "update" ) ( ( local_2 ) , ( local_5 ) ) ) ) ;
+end ;
+end ) ) ) ) ;
+__ASSIGN_INDEX( love , "update" , ( function ( local_5 ) do __IDENTITY( ( for_each ( ( local_4 ) , ( function ( local_6 ) do __IDENTITY( ( local_6 ( ( local_5 ) ) ) ) ;
+end ;
+end ) ) ) ) ;
+end ;
+end ) ) ;
+__ASSIGN_INDEX( love , "draw" , ( function ( ) do __IDENTITY( ( __INDEX( __INDEX( love , "graphics" ) , "draw" ) ( ( local_1 ) , ( 200.0 ) , ( 200.0 ) , ( local_3 ) , ( 1.0 ) , ( 1.0 ) , ( 50.0 ) , ( 50.0 ) ) ) ) ;
+__IDENTITY( ( __INDEX( __INDEX( love , "graphics" ) , "draw" ) ( ( local_2 ) , ( 600.0 ) , ( 400.0 ) , ( 0.0 ) , ( 1.0 ) , ( 1.0 ) , ( 0.0 ) , ( 0.0 ) ) ) ) ;
+end ;
+end ) ) ;
+__ASSIGN_INDEX( love , "keypressed" , ( function ( local_5 , local_6 , local_7 ) do end ;
+end ) ) ;
+__ASSIGN_INDEX( love , "keyreleased" , ( function ( local_5 , local_6 ) do end ;
+end ) ) ;
+end ;
+end ) ;
+GLOBAL_1 () ;

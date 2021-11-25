@@ -1,0 +1,163 @@
+// https://love2d.org/wiki/Main_Page
+
+// NOTE(ed): All of this is untested - I've just marked up what is of interest so
+// we don't duplicate work with bindings.
+//
+// i.e. this is a subset of the full Love API.
+
+ParticleSystem :: blob {
+    // TODO(ed): Cycles here - since we take ourselves sas the first argument.
+    setParticleLifetime: fn *, float, float -> void,
+    setEmissionRate: fn *, int -> void,
+    setLinearAcceleration: fn *, float, float, float, float -> void,
+
+    setPosition: fn *, float, float -> void,
+
+    update: fn *, float -> void,
+}
+
+// Place holder before we get `newtype`
+ImageData :: blob {
+    _001_unique_type: int,
+    getWidth: fn * -> float,
+    getHeight: fn * -> float,
+}
+Quad :: blob { _003_unique_type: int, }
+Font :: blob { _004_unique_type: int, }
+
+LoveGraphics :: blob {
+    // We need to accept multiple overloads
+    // This function has 2 overloads, add 0's to the end to call it
+    // safely since it's the default arguments.
+    // https://love2d.org/wiki/love.graphics.draw
+    // : fn drawable, x, y, r, sx, sy, ox, oy, kx, ky -> void
+    // : texture, quad, x, y, r, sx, sy, ox, oy, kx, ky -> void
+    //
+    // There's also a `Transform` object that might be usefull?
+    draw: fn *, float, float, float, float, float, float, float, float -> void,
+
+    line: fn float, float, float, float -> void,
+    rectangle: fn str, float, float, float, float -> void,
+    circle: fn str, float, float, float -> void,
+    arc: fn str, float, float, float -> void,
+
+    // Has to be an even length of the list.
+    points: fn [(float, float)] -> void,
+
+    setColor: fn (float, float, float, float) -> void,
+    getColor: fn -> (float, float, float, float),
+
+    print: fn str, float, float, float, float, float -> void,
+    printf: fn str, float, float, float, str, float, float, float -> void,
+
+    getFont: fn -> Font,
+    setFont: fn Font -> void,
+
+    newImage: fn str -> *,
+    newFont: fn str, int, str -> Font,
+    newParticleSystem: fn *, int -> ParticleSystem,
+    newQuad: fn int, int, int, int, ImageData -> Quad,
+
+    getWidth: fn -> int,
+    getHeight: fn -> int,
+}
+
+LoveKeyboard :: blob {
+    isDown: fn str -> bool,
+    isScancodeDown: fn str -> bool,
+}
+
+LoveMouse :: blob {
+    // There's a relativeMode here - which I've ignored
+    isDown: fn int -> bool,
+    getX: fn -> float,
+    getY: fn -> float,
+    setPosition: fn float, float -> void,
+}
+
+LoveTimer :: blob {
+    getTime: fn -> float,
+    getDelta: fn -> float,
+}
+
+WindowFlags :: blob {
+    fullscreen: bool,
+    fullscreentype: str, // "desktop" or "normal"
+    vsync: int, // 1 - on, 0 - off, -1 - adaptive (:wat:?)
+    msaa: int,
+    resizable: bool,
+    borderless: bool,
+    centered: bool,
+    display: int,
+    minwidth: int,
+    minheight: int,
+}
+
+WindowMode :: blob {
+    width: int,
+    height: int,
+}
+
+LoveWindow :: blob {
+    setMode: fn int, int, WindowFlags -> bool,
+    setIcon: fn * -> bool,
+    setTitle: fn str -> void,
+    setFullscreen: fn bool -> float,
+
+    getFullscreenModes: fn int -> [WindowMode],
+    requestAttention: fn bool -> void,
+    getDisplayCount: fn -> int,
+}
+
+Source :: blob {
+    _002_unique_type: int,
+    setEffect: fn *, str, bool -> bool,
+    setPosition: fn *, float, float, float -> void,
+    setVolume: fn *, float -> void,
+    setPitch: fn *, float -> void,
+    setLooping: fn *, bool -> void,
+    clone: fn * -> *,
+}
+
+LoveAudio :: blob {
+    // file, "static"/"dynamic"
+    newSource: fn str, str -> Source,
+
+    play: fn Source -> void,
+    pause: fn Source -> void,
+    stop: fn Source -> void,
+    rewind: fn Source -> void,
+    resume: fn Source -> void,
+
+    // Allows creation of effects, see: https://love2d.org/wiki/EffectType
+    setEffect: fn str, * -> bool,
+}
+
+LoveEvent :: blob {
+    quit: fn int -> void,
+}
+
+LoveMath :: blob {
+    random: fn int, int -> int,
+}
+
+
+Love :: blob {
+    init: fn -> void,
+    draw: fn -> void,
+    update: fn float -> void,
+    keypressed: fn str, str, bool -> void,
+    keyreleased: fn str, str -> void,
+    resize: fn int, int -> void,
+
+    audio: LoveAudio,
+    graphics: LoveGraphics,
+    keyboard: LoveKeyboard,
+    math: LoveMath,
+    // NOTE(ed): Deliberately skipping gamepads since it's kinda messy
+    mouse: LoveMouse,
+    timer: LoveTimer,
+    window: LoveWindow,
+}
+
+love: Love : external

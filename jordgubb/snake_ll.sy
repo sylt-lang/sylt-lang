@@ -1,0 +1,240 @@
+from love use love
+use gfx
+use sfx
+use input
+
+MaybeSegment :: enum
+    Just Segment,
+    None,
+end
+
+Segment :: blob {
+    position: (int, int),
+    child: *,
+}
+
+Board :: blob {
+    width: int,
+    height: int,
+
+    snake: Segment,
+    snake_dir: Direction,
+    snake_queued_grows: int,
+
+    is_running: bool,
+    fruit: (int, int),
+}
+
+Direction :: enum
+    Up,
+    Down,
+    Left,
+    Right,
+    None,
+end
+
+dir_tup :: fn dir: Direction -> (int, int) do
+    case dir do
+        Up ret ( 0, -1)
+        Down ret ( 0,  1)
+        Left ret (-1,  0)
+        Right ret ( 1,  0)
+        else do end
+    end
+
+    ret (0, 0)
+end
+
+make_segment :: fn x: int, y: int -> Segment do
+    seg := Segment {
+        position: (x, y),
+        child: MaybeSegment.None,
+    }
+
+    ret seg
+end
+
+make_board :: fn width: int, height: int -> Board do
+    snake := make_segment' width/2, height/2
+    fruit := random_position' 1, width-2, 1, height-2
+
+    board := Board {
+        width: width,
+        height: height,
+
+        snake: snake,
+        snake_dir: Direction.None,
+        snake_queued_grows: 2,
+
+        is_running: true,
+        fruit: fruit,
+    }
+
+    ret board
+end
+
+update_snake :: fn snake: Segment, position: (int, int) do
+    old_pos := snake.position
+    snake.position = position
+
+    case snake.child do
+        Just c do
+            update_snake' c, old_pos
+        end
+
+        else do end
+    end
+end
+
+snake_is_dead :: fn snake: Segment, board: Board -> bool do
+    if (not (snake.position[0] < board.width
+        and snake.position[0] >= 0
+        and snake.position[1] < board.height
+        and snake.position[1] >= 0)) do
+
+        ret true
+    end
+
+    case snake.child do
+        Just c do
+            if snake_contains_pos' c, snake.position do
+                ret true
+            end
+        end
+        else do end
+    end
+
+    ret false
+end
+
+sylt_consoom :: sfx.newSound' "res/bloop.wav", false, sfx.SoundType.Static
+
+update_board :: fn board: Board do
+    case board.snake_dir do
+        None do end
+        else if board.snake_queued_grows > 0 do
+            board.snake_queued_grows -= 1
+            add_snake_segment' board.snake
+        end
+    end
+
+    update_snake' board.snake, board.snake.position + dir_tup' board.snake_dir
+
+    if snake_contains_pos' board.snake, board.fruit do
+        sfx.cloneSound(sylt_consoom).playp' (.5, 0.), (1.0, 0.2)
+        board.fruit = random_position' 1, board.width-2, 1, board.height-2
+        board.snake_queued_grows += 1
+    end
+
+    input_dir := get_input_dir'
+
+    case input_dir do
+        None do end
+        else do
+            board.snake_dir = input_dir
+        end
+    end
+
+    if snake_is_dead' board.snake, board do
+        board.is_running = false
+    end
+end
+
+snake_contains_pos :: fn seg: Segment, pos: (int, int) -> bool do
+    if seg.position == pos do
+        ret true
+    else do
+        case seg.child do
+            Just c ret snake_contains_pos' c, pos
+            else do end
+        end
+    end
+
+    ret false
+end
+
+snake_last_seg :: fn snake: Segment -> Segment do
+    case snake.child do
+        Just c ret snake_last_seg' c
+        else do end
+    end
+
+    ret snake
+end
+
+add_snake_segment :: fn snake: Segment do
+    last_seg := snake_last_seg' snake
+    last_seg.child = MaybeSegment.Just (make_segment' last_seg.position[0], last_seg.position[1])
+end
+
+draw_snake :: fn seg: Segment, board: Board do
+    rect_width := love.graphics.getWidth() / board.width
+    rect_height := love.graphics.getHeight() / board.height
+
+    draw_pos : (float, float) = (as_float(seg.position[0] * rect_width), as_float(seg.position[1] * rect_height))
+    draw_size : (float, float) = (as_float(rect_width), as_float(rect_height))
+    gfx.drawRect' gfx.rgb(0.4, 0.7, 0.2), draw_pos, draw_size
+
+    case seg.child do
+        Just c do
+            draw_snake' c, board
+        end
+        else do end
+    end
+end
+
+random_position :: fn min_x: int, max_x: int, min_y: int, max_y: int -> (int, int) do
+    x := love.math.random' min_x, max_x
+    y := love.math.random' min_y, max_y
+
+    ret (x, y)
+end
+
+sylt_image :: gfx.newImage' "res/sylt.png"
+
+draw_fruit :: fn fruit: (int, int), board: Board do
+    rect_width := love.graphics.getWidth() / board.width
+    rect_height := love.graphics.getHeight() / board.height
+
+    draw_pos: (float, float) = (as_float(fruit[0] * rect_width), as_float(fruit[1] * rect_height))
+    draw_size : (float, float) = (as_float(rect_width), as_float(rect_height))
+    draw_scale: (float, float) = (draw_size[0]/sylt_image.getWidth(), draw_size[1]/sylt_image.getHeight())
+
+    gfx.drawImage' gfx.rgb(1., 1., 1.), sylt_image.img, draw_pos, 0., draw_scale
+end
+
+get_input_dir :: fn -> Direction do
+    if      input.isKeyDown' input.Key.Up    do
+        ret Direction.Up
+    else if input.isKeyDown' input.Key.Down  do
+        ret Direction.Down
+    else if input.isKeyDown' input.Key.Left  do
+        ret Direction.Left
+    else if input.isKeyDown' input.Key.Right do
+        ret Direction.Right
+    end
+    ret Direction.None
+end
+
+start :: fn do
+    board := make_board' 40, 30
+
+    time: float = 0.
+    interval :: 0.1
+
+    love.update = fn delta do
+        time += delta
+
+        if time > interval do
+            time -= interval
+            if board.is_running do
+                update_board' board
+            end
+        end
+    end
+
+    love.draw = fn do
+        draw_snake' board.snake, board
+        draw_fruit' board.fruit, board
+    end
+end

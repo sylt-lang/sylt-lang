@@ -610,6 +610,11 @@ fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 let (ctx_, expr) = expression(ctx)?;
                 exprs.push(expr);
                 ctx = ctx_; // assign to outer
+                expect!(
+                    ctx,
+                    T::Comma | T::RightBracket,
+                    "Expected ',' or ']' after element"
+                );
                 ctx = ctx.skip_if(T::Comma);
             }
         }
@@ -813,6 +818,10 @@ mod test {
     test!(expression, tuple_line_breaks: "(\na\n,\n\na, \n  \na\n\n\n)" => _);
 
     fail!(expression, faulty_tuples: "(a a)" => _);
+    fail!(expression, list_funky: "[1 2]" => _);
+    fail!(expression, set_funky: "{1 2}" => _);
+    fail!(expression, dict_funky: "{1: 2 3: 4}" => _);
+    fail!(expression, tuple_funky: "(1 2 3 4}" => _);
 }
 
 impl PrettyPrint for Expression {

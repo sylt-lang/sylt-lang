@@ -924,7 +924,11 @@ impl TypeChecker {
                     let ret = self.push_type(Type::Unknown);
                     self.add_constraint(outer, span, Constraint::Field(ident.name.clone(), ret));
                     self.check_constraints(span, ctx, outer)?;
-                    Ok(ret)
+                    // We copy functions
+                    match self.find_type(outer) {
+                        Type::Function(_, _) => Ok(self.copy(ret)),
+                        _ => Ok(ret),
+                    }
                 }
             },
 
@@ -1481,12 +1485,30 @@ impl TypeChecker {
     }
 
     fn unify(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<usize> {
+        // TODO(ed): Is this worth doing? Or can we eagerly union types?
+        // I tried some and it didn't work great, but I might have missed something.
+        let mut seen = BTreeSet::new();
+        self.sub_unify(span, ctx, a, b, &mut seen)
+    }
+
+    fn sub_unify(
+        &mut self,
+        span: Span,
+        ctx: TypeCtx,
+        a: usize,
+        b: usize,
+        seen: &mut BTreeSet<(usize, usize)>,
+    ) -> TypeResult<usize> {
         let a = self.find(a);
         let b = self.find(b);
 
-        if a == b {
+        if a == b || seen.contains(&(a, b)) {
             return Ok(a);
         }
+
+        // Equivalence is symetrical!
+        seen.insert((a, b));
+        seen.insert((b, a));
 
         match (self.find_type(a), self.find_type(b)) {
             (_, Type::Unknown) => self.find_node_mut(b).ty = self.find_type(a),
@@ -1502,23 +1524,23 @@ impl TypeChecker {
                 (Type::Str, Type::Str) => {}
 
                 (Type::List(a), Type::List(b)) => {
-                    self.unify(span, ctx, a, b)
+                    self.sub_unify(span, ctx, a, b, seen)
                         .help_no_span("While checking list".into())?;
                 }
                 (Type::Set(a), Type::Set(b)) => {
-                    self.unify(span, ctx, a, b)
+                    self.sub_unify(span, ctx, a, b, seen)
                         .help_no_span("While checking set".into())?;
                 }
                 (Type::Dict(a_k, a_v), Type::Dict(b_k, b_v)) => {
-                    self.unify(span, ctx, a_k, b_k)
+                    self.sub_unify(span, ctx, a_k, b_k, seen)
                         .help_no_span("While checking dictionary key".into())?;
-                    self.unify(span, ctx, a_v, b_v)
+                    self.sub_unify(span, ctx, a_v, b_v, seen)
                         .help_no_span("While checking dictionary value".into())?;
                 }
 
                 (Type::Tuple(a), Type::Tuple(b)) => {
                     for (i, (a, b)) in a.iter().zip(b.iter()).enumerate() {
-                        self.unify(span, ctx, *a, *b)
+                        self.sub_unify(span, ctx, *a, *b, seen)
                             .help_no_span(format!("While checking index #{}", i))?;
                     }
                 }
@@ -1533,10 +1555,10 @@ impl TypeChecker {
                         );
                     }
                     for (i, (a, b)) in a_args.iter().zip(b_args.iter()).enumerate() {
-                        self.unify(span, ctx, *a, *b)
+                        self.sub_unify(span, ctx, *a, *b, seen)
                             .help_no_span(format!("While checking argument #{}", i))?;
                     }
-                    self.unify(span, ctx, a_ret, b_ret)?;
+                    self.sub_unify(span, ctx, a_ret, b_ret, seen)?;
                 }
 
                 (Type::Blob(a_blob, a_fields), Type::Blob(b_blob, b_fields)) => {
@@ -1567,7 +1589,7 @@ impl TypeChecker {
                                 )
                             }
                         };
-                        self.unify(span, ctx, a_ty, *b_ty)
+                        self.sub_unify(span, ctx, a_ty, *b_ty, seen)
                             .help_no_span(format!("While checking field .{}", b_field))?;
                     }
                 }
@@ -1593,7 +1615,7 @@ impl TypeChecker {
                                 )
                             }
                         };
-                        self.unify(span, ctx, a_ty, *b_ty)
+                        self.sub_unify(span, ctx, a_ty, *b_ty, seen)
                             .help_no_span(format!("While checking variant {}", b_var))?;
                     }
                 }
@@ -1884,20 +1906,6 @@ impl TypeChecker {
                 Ok(())
             }
 
-            // TODO(ed): This isn't actually implemented in the runtime.
-            (Type::Tuple(a), Type::Float) | (Type::Tuple(a), Type::Int) => {
-                for a in a.iter() {
-                    self.mul(span, ctx, *a, b)?;
-                }
-                Ok(())
-            }
-            (Type::Float, Type::Tuple(b)) | (Type::Int, Type::Tuple(b)) => {
-                for b in b.iter() {
-                    self.mul(span, ctx, a, *b)?;
-                }
-                Ok(())
-            }
-
             _ => err_type_error!(
                 self,
                 span,
@@ -1921,20 +1929,6 @@ impl TypeChecker {
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
                 for (a, b) in a.iter().zip(b.iter()) {
                     self.div(span, ctx, *a, *b)?;
-                }
-                Ok(())
-            }
-
-            // TODO(ed): This isn't actually implemented in the runtime.
-            (Type::Tuple(a), Type::Float) | (Type::Tuple(a), Type::Int) => {
-                for a in a.iter() {
-                    self.div(span, ctx, *a, b)?;
-                }
-                Ok(())
-            }
-            (Type::Float, Type::Tuple(b)) | (Type::Int, Type::Tuple(b)) => {
-                for b in b.iter() {
-                    self.div(span, ctx, a, *b)?;
                 }
                 Ok(())
             }
@@ -2061,6 +2055,7 @@ impl TypeChecker {
         ret: usize,
     ) -> TypeResult<()> {
         match self.find_type(a) {
+            Type::Unknown => Ok(()),
             Type::Tuple(tys) => match tys.get(index as usize) {
                 Some(ty) => self.unify(span, ctx, *ty, ret).map(|_| ()),
                 None => err_type_error!(
@@ -2080,7 +2075,8 @@ impl TypeChecker {
                 self,
                 span,
                 TypeError::Violating(self.bake_type(a)),
-                "This type cannot be indexed"
+                "This type cannot be indexed with the constant index {}",
+                index
             ),
         }
     }

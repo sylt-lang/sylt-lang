@@ -1,0 +1,114 @@
+from love use love
+use gfx
+from gfx use (stableRandomColor as rcol)
+use input
+use sfx
+
+Dir :: enum
+    Up,
+    Down,
+    Left,
+    Right
+end
+
+Snake :: blob {
+    segments: [(int, int)],
+    dir: Dir,
+    update: fn -> void,
+    draw: fn -> void,
+}
+
+start :: fn do
+    img :: gfx.newImage' "res/sylt.png"
+
+    ss :: gfx.newImplicitSpriteSheet' img, (55, 55)
+    s :: sfx.newSound' "res/bloop.wav", false, sfx.SoundType.Static
+
+    SEGMENT_SIZE :: 50
+
+    apple := (0, 0)
+
+    new_apple := fn do
+        a : int : 0
+        b : int : (love.graphics.getWidth() - SEGMENT_SIZE) / SEGMENT_SIZE
+        c : int : (love.graphics.getHeight() - SEGMENT_SIZE) / SEGMENT_SIZE
+        x : int : love.math.random' a, b
+        y : int : love.math.random' a, c
+        apple = (x, y)
+    end
+
+    new_apple()
+
+    snake := Snake {
+        segments: [(0, 0)],
+        dir: Dir.Down,
+        update: fn do
+            if apple == self.segments[0] do
+                new_apple'
+                self.segments -> push' last(self.segments)
+            end
+            new_head := (0, 0)
+            case self.dir do
+                Up do
+                    new_head = self.segments[0] + (0, -1)
+                end
+                Down do
+                    new_head = self.segments[0] + (0, 1)
+                end
+                Left do
+                    new_head = self.segments[0] + (-1, 0)
+                end
+                Right do
+                    new_head = self.segments[0] + (1, 0)
+                end
+                else do <!> end
+            end
+
+            // Wrapping
+            new_head = (rem(new_head[0], love.graphics.getWidth()), rem(new_head[1], love.graphics.getHeight()))
+
+            self.segments -> pop'
+            self.segments -> prepend' new_head
+        end,
+        draw: fn do
+            self.segments -> for_each' fn p do
+                gfx.drawRect' gfx.rgb(1.0, 1.0, 1.0), (as_float(p[0] * SEGMENT_SIZE), as_float(p[1] * SEGMENT_SIZE)), (as_float(SEGMENT_SIZE), as_float(SEGMENT_SIZE))
+            end
+        end
+    }
+
+
+    time := 0.0
+    interval :: fn -> 0.5 / as_float(len(snake.segments)) end
+
+    love.update = fn delta do
+        time += delta
+        if time > interval() do
+            snake.update()
+            time -= interval()
+        end
+    end
+
+    love.draw = fn do
+        snake.draw()
+        gfx.drawRect' gfx.rgb(1.0, 0.0, 0.0), (as_float(apple[0] * SEGMENT_SIZE + 5), as_float(apple[1] * SEGMENT_SIZE + 5)), (as_float(SEGMENT_SIZE) - 10.0, as_float(SEGMENT_SIZE) - 10.0)
+    end
+
+    love.keypressed = fn key, scancode, repeat do
+        if input.isKeyDown(input.Key.Up) do
+            snake.dir = Dir.Up
+        end
+        if input.isKeyDown(input.Key.Down) do
+            snake.dir = Dir.Down
+        end
+        if input.isKeyDown(input.Key.Left) do
+            snake.dir = Dir.Left
+        end
+        if input.isKeyDown(input.Key.Right) do
+            snake.dir = Dir.Right
+        end
+    end
+
+    love.keyreleased = fn key, scancode do
+    end
+end
