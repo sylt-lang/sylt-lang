@@ -873,6 +873,7 @@ impl TypeChecker {
                         }
                         // TODO(ed): Annotate the errors?
                         for (a, p) in args.iter().zip(params.iter()) {
+                            let span = a.span;
                             let a = self.expression(a, ctx)?;
                             self.unify(span, ctx, *p, a)?;
                         }
