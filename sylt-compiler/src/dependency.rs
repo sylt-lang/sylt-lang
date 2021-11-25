@@ -237,10 +237,12 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
 
         Blob { name, fields: sub_types } | Enum { name, variants: sub_types } => {
             ctx.shadow(&name);
+            let namespace = ctx.namespace;
             sub_types
                 .values()
                 .map(|t| type_dependencies(ctx, t))
                 .flatten()
+                .filter(|(n, s)| !(n == name && *s == namespace))
                 .collect()
         }
 
