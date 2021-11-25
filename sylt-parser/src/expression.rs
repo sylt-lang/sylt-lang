@@ -281,17 +281,21 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
         T::Identifier(_) => {
             let span = ctx.span();
-            match (blob(ctx), assignable(ctx)) {
-                (Ok(result), _) => Ok(result),
-                (_, Ok((ctx, assign))) => Ok((ctx, Expression { span, kind: Get(assign) })),
-                (Err((_, mut blob_errs)), Err((_, mut ass_errs))) => {
-                    let errs = vec![
-                        syntax_error!(ctx, "Neither a blob instantiation or an identifier - check the two errors below"),
-                        blob_errs.remove(0),
-                        ass_errs.remove(0),
-                    ];
-                    return Err((ctx, errs));
+
+            // Do some probing
+            let is_blob = match type_assignable(ctx) {
+                Ok((ctx, _)) => matches!(ctx.token(), T::LeftBrace),
+                _ => false,
+            };
+
+            if is_blob {
+                match blob(ctx) {
+                    Ok(x) => Ok(x),
+                    Err((ctx, errs)) => Err((skip_until!(ctx, T::RightBrace), errs)),
                 }
+            } else {
+                let (ctx, assign) = assignable(ctx)?;
+                Ok((ctx, Expression { span, kind: Get(assign) }))
             }
         }
 
@@ -524,7 +528,7 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     }
 
     let ctx = ctx.pop_skip_newlines(skip_newlines);
-    let ctx = expect!(ctx, T::RightParen, "Expected ')'");
+    let ctx = expect!(ctx, T::RightParen, "Expected ',' or ')'");
 
     use ExpressionKind::{Parenthesis, Tuple};
     let result = if is_tuple {
@@ -562,11 +566,7 @@ fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 ctx = ctx_; // assign to outer
 
                 if !matches!(ctx.token(), T::Comma | T::RightBrace) {
-                    raise_syntax_error!(
-                        ctx,
-                        "Expected a field delimiter ',' - but got {:?}",
-                        ctx.token()
-                    );
+                    raise_syntax_error!(ctx, "Expected a ',' between blob fields");
                 }
                 ctx = ctx.skip_if(T::Comma);
 

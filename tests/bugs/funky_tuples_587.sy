@@ -3,4 +3,3 @@ start :: fn do
 end
 
 // error: @2
-// error: @2
