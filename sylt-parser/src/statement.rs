@@ -793,7 +793,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 Ok((ctx, Assignment { kind, target, value }))
             }
 
-            // Probe if we should actually parse a assignable here.
+            // Probe if we should parse an assignable here.
             // If not, we parse an expression.
             let is_assignment = match assignable(ctx) {
                 Ok((ctx, _)) => matches!(
