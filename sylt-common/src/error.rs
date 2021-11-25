@@ -77,8 +77,7 @@ pub enum RuntimeError {
 
 #[derive(Debug, Clone)]
 pub struct Helper {
-    pub file: PathBuf,
-    pub span: Span,
+    pub at: Option<(PathBuf, Span)>,
     pub message: String,
 }
 
@@ -272,9 +271,12 @@ impl fmt::Display for Error {
                 if !helpers.is_empty() {
                     // TODO(ed): Might be helpfull to not write all the errors?
                     write!(f, "{}\n", "help:".yellow())?;
-                    for Helper { message, file, span } in helpers.iter() {
+                    for Helper { message, at } in helpers.iter() {
                         write!(f, "{}{}\n", INDENT, message)?;
-                        write_source_span_at(f, file, *span)?;
+                        match at {
+                            Some((file, span)) => write_source_span_at(f, file, *span)?,
+                            None => {}
+                        }
                     }
                 }
                 Ok(())
