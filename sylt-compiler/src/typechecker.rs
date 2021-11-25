@@ -30,7 +30,7 @@ impl<T> Help for TypeResult<T> {
                         message,
                     });
                 }
-                _ => panic!("Cannot help on this error"),
+                _ => panic!("Cannot help on this error since the error is empty"),
             },
         }
         self
@@ -43,7 +43,7 @@ impl<T> Help for TypeResult<T> {
                 Some(Error::TypeError { helpers, .. }) => {
                     helpers.push(Helper { at: None, message });
                 }
-                _ => panic!("Cannot help on this error"),
+                _ => panic!("Cannot help on this error since the error is empty"),
             },
         }
         self
