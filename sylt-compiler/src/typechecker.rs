@@ -739,7 +739,10 @@ impl TypeChecker {
 
     fn assignable(&mut self, assignable: &Assignable, ctx: TypeCtx) -> TypeResult<usize> {
         let span = assignable.span;
-        match &assignable.kind {
+        // FIXME: Functions are copied since they may be specialized
+        // several times, this does not work properly when functions are
+        // passed to an unknown function parameter.
+        let ty = match &assignable.kind {
             AssignableKind::Variant { enum_ass, variant, value } => {
                 let (ctx, enum_name) = match &enum_ass.kind {
                     AssignableKind::Read(enum_name) => (ctx, enum_name),
@@ -819,9 +822,6 @@ impl TypeChecker {
                 Ok(ty)
             }
 
-            // FIXME: Functions are copied since they may be specialized
-            // several times, this does not work properly when functions are
-            // passed to an unknown function parameter.
             AssignableKind::Read(ident) => {
                 if let Some(var) = self
                     .stack
@@ -830,7 +830,6 @@ impl TypeChecker {
                     .cloned()
                 {
                     match self.find_type(var.ty) {
-                        Type::Function(..) => Ok(self.copy(var.ty)),
                         _ => Ok(var.ty),
                     }
                 } else {
@@ -840,11 +839,10 @@ impl TypeChecker {
                         .cloned()
                     {
                         Some(Name::Global(var)) => match self.find_type(var.ty) {
-                            Type::Function(..) => Ok(self.copy(var.ty)),
                             _ => Ok(var.ty),
                         },
                         None => match self.functions.get(&ident.name).cloned() {
-                            Some(f) => Ok(self.copy(f)),
+                            Some(f) => Ok(f),
                             None => err_type_error!(
                                 self,
                                 span,
@@ -938,6 +936,10 @@ impl TypeChecker {
             }
 
             AssignableKind::Expression(expression) => self.expression(expression, ctx),
+        }?;
+        match self.find_type(ty) {
+            Type::Function(..) => Ok(self.copy(ty)),
+            _ => Ok(ty),
         }
     }
 
