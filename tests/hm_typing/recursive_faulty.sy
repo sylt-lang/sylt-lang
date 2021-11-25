@@ -1,0 +1,11 @@
+A :: enum
+    Q A
+    Z
+end
+
+start :: fn do
+    a :: A.Q 1
+    print' a
+end
+
+// error: $Mismatch { .. }

@@ -165,8 +165,7 @@ struct TypeCtx {
 
 #[derive(Debug, Clone)]
 enum Name {
-    Blob(Type),
-    Enum(Type),
+    Type(usize),
     Global(Variable),
     Namespace(usize),
 }
@@ -317,7 +316,8 @@ impl TypeChecker {
                 .get(&(ctx.namespace, ident.name.clone()))
                 .cloned()
             {
-                Some(Name::Blob(ty)) | Some(Name::Enum(ty)) => Ok(self.push_type(ty.clone())),
+                Some(Name::Type(ty)) if matches!(self.find_type(ty), Type::Unknown) => Ok(ty),
+                Some(Name::Type(ty)) => Ok(self.copy(ty)),
                 None => {
                     err_type_error!(
                         self,
@@ -344,7 +344,8 @@ impl TypeChecker {
                     .get(&(ctx.namespace, ident.name.clone()))
                     .cloned()
                 {
-                    Some(Name::Blob(ty)) | Some(Name::Enum(ty)) => Ok(self.push_type(ty.clone())),
+                    Some(Name::Type(ty)) if matches!(self.find_type(ty), Type::Unknown) => Ok(ty),
+                    Some(Name::Type(ty)) => Ok(self.copy(ty)),
                     None => {
                         err_type_error!(
                             self,
@@ -676,7 +677,7 @@ impl TypeChecker {
                 for (ident, alias) in imports.iter() {
                     let other_var = match &self.globals[&(other, ident.name.clone())] {
                         Name::Global(var) => var.clone(),
-                        Name::Blob(_) | Name::Enum(_) | Name::Namespace(_) => continue,
+                        Name::Type(_) | Name::Namespace(_) => continue,
                     };
                     let var = Variable {
                         ident: alias.as_ref().unwrap_or(ident).clone(),
@@ -692,27 +693,31 @@ impl TypeChecker {
                 }
             }
             StatementKind::Enum { name, variants } => {
+                let enum_ty = self.push_type(Type::Unknown);
+                self.globals
+                    .insert((ctx.namespace, name.clone()), Name::Type(enum_ty));
                 let mut resolved_variants = BTreeMap::new();
                 let mut seen = HashMap::new();
                 for (k, t) in variants.iter() {
                     resolved_variants
                         .insert(k.clone(), self.inner_resolve_type(span, ctx, t, &mut seen)?);
                 }
-                let ty = Type::Enum(name.clone(), resolved_variants);
-                self.globals
-                    .insert((ctx.namespace, name.clone()), Name::Enum(ty));
+                let ty = self.push_type(Type::Enum(name.clone(), resolved_variants));
+                self.unify(span, ctx, ty, enum_ty)?;
             }
 
             StatementKind::Blob { name, fields } => {
+                let blob_ty = self.push_type(Type::Unknown);
+                self.globals
+                    .insert((ctx.namespace, name.clone()), Name::Type(blob_ty));
                 let mut resolved_fields = BTreeMap::new();
                 let mut seen = HashMap::new();
                 for (k, t) in fields.iter() {
                     resolved_fields
                         .insert(k.clone(), self.inner_resolve_type(span, ctx, t, &mut seen)?);
                 }
-                let ty = Type::Blob(name.clone(), resolved_fields);
-                self.globals
-                    .insert((ctx.namespace, name.clone()), Name::Blob(ty));
+                let ty = self.push_type(Type::Blob(name.clone(), resolved_fields));
+                self.unify(span, ctx, ty, blob_ty)?;
             }
 
             StatementKind::Definition { .. } => {
@@ -797,10 +802,10 @@ impl TypeChecker {
                     None => {}
                 };
                 let ty = match self.globals.get(&(ctx.namespace, enum_name.name.clone())) {
-                    Some(Name::Enum(ty)) => {
-                        // NOTE(ed): This allows enumerations to be generic, which is always fun!
-                        let ty = ty.clone();
-                        let ty = self.push_type(ty);
+                    Some(Name::Type(ty)) => {
+                        // NOTE(ed): This allows generics, which is always fun!
+                        let ty = *ty;
+                        let ty = self.copy(ty);
                         self.copy(ty)
                     }
                     _ => {
