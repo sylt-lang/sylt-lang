@@ -675,21 +675,36 @@ impl TypeChecker {
                 // should be set up correctly already.
                 let other = self.file_to_namespace[file];
                 for (ident, alias) in imports.iter() {
-                    let other_var = match &self.globals[&(other, ident.name.clone())] {
-                        Name::Global(var) => var.clone(),
-                        Name::Type(_) | Name::Namespace(_) => continue,
-                    };
-                    let var = Variable {
-                        ident: alias.as_ref().unwrap_or(ident).clone(),
-                        ty: self.push_type(Type::Unknown),
-                        kind: VarKind::Const,
-                        span,
-                    };
-                    self.unify(span, ctx, var.ty, other_var.ty)?;
-                    self.globals.insert(
-                        (ctx.namespace, alias.as_ref().unwrap_or(ident).name.clone()),
-                        Name::Global(var),
-                    );
+                    let name = self.globals[&(other, ident.name.clone())].clone();
+                    let ident_name = &alias.as_ref().unwrap_or(ident).name;
+
+                    match name {
+                        Name::Global(other_var) => {
+                            let var = Variable {
+                                ident: alias.as_ref().unwrap_or(ident).clone(),
+                                ty: self.push_type(Type::Unknown),
+                                kind: VarKind::Const,
+                                span,
+                            };
+                            self.unify(span, ctx, var.ty, other_var.ty)?;
+                            self.globals
+                                .insert((ctx.namespace, ident_name.clone()), Name::Global(var));
+                        }
+
+                        Name::Type(_) => {
+                            self.globals
+                                .insert((ctx.namespace, ident_name.clone()), name.clone());
+                        }
+
+                        Name::Namespace(_) => {
+                            return err_type_error!(
+                                self,
+                                span,
+                                TypeError::Exotic,
+                                "From import of namespaces is not implemented"
+                            );
+                        }
+                    }
                 }
             }
             StatementKind::Enum { name, variants } => {

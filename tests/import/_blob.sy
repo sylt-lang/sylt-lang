@@ -1,0 +1,3 @@
+Bob :: blob {
+    builder: bool,
+}
