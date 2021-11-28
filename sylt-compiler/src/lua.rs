@@ -620,7 +620,15 @@ impl<'t> LuaCompiler<'t> {
                         .truncate(ss);
                 }
                 write!(self, "else");
-                self.statement(fall_through, ctx);
+                if let Some(fall_through) = fall_through {
+                    self.statement(fall_through, ctx);
+                } else {
+                    write!(
+                        self,
+                        "assert(false, \"Reached end of unreachable l{}\")",
+                        statement.span.line_start
+                    )
+                }
                 write!(self, ";");
                 write!(self, "end");
                 write!(self, ";");

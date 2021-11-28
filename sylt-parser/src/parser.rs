@@ -1302,8 +1302,10 @@ impl PrettyPrint for Statement {
                     body.pretty_print(f, indent + 2)?;
                 }
                 write_indent(f, indent + 1)?;
-                write!(f, "else")?;
-                fall_through.pretty_print(f, indent + 2)?;
+                if let Some(fall_through) = fall_through {
+                    write!(f, "else")?;
+                    fall_through.pretty_print(f, indent + 2)?;
+                }
                 return Ok(());
             }
             SK::If { condition, pass, fail } => {

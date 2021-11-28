@@ -116,7 +116,7 @@ pub enum StatementKind {
     Case {
         to_match: Expression,
         branches: Vec<CaseBranch>,
-        fall_through: Box<Statement>,
+        fall_through: Option<Box<Statement>>,
     },
 
     /// Do something as long as something else evaluates to true.
@@ -484,7 +484,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let mut branches = Vec::new();
             loop {
                 match ctx.token() {
-                    T::EOF | T::Else => {
+                    T::EOF | T::Else | T::End => {
                         break;
                     }
 
@@ -530,8 +530,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     }
                 }
             }
-            let ctx = expect!(ctx, T::Else, "Expected - else on case-statement");
-            let (ctx, fall_through) = statement_or_block(ctx)?;
+            let (ctx, fall_through) = if matches!(ctx.token(), T::Else) {
+                let ctx = expect!(ctx, T::Else, "Expected - else on case-statement");
+                let (ctx, fall_through) = statement_or_block(ctx)?;
+                (ctx, Some(Box::new(fall_through)))
+            } else {
+                (ctx, None)
+            };
 
             let ctx = ctx.pop_skip_newlines(skip_newlines);
             let ctx = expect!(ctx, T::End, "Expected 'end' to finish of case-statement");
@@ -541,7 +546,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 Case {
                     to_match,
                     branches,
-                    fall_through: Box::new(fall_through),
+                    fall_through,
                 },
             )
         }
