@@ -541,14 +541,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let ctx = ctx.pop_skip_newlines(skip_newlines);
             let ctx = expect!(ctx, T::End, "Expected 'end' to finish of case-statement");
 
-            (
-                ctx,
-                Case {
-                    to_match,
-                    branches,
-                    fall_through,
-                },
-            )
+            (ctx, Case { to_match, branches, fall_through })
         }
 
         // `if <expression> <statement> [else <statement>]`. Note that the else is optional.

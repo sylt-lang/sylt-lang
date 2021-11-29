@@ -786,7 +786,11 @@ fn all_paths_return(statement: &Statement) -> bool {
         StatementKind::If { pass, fail, .. } => all_paths_return(pass) && all_paths_return(fail),
 
         StatementKind::Case { branches, fall_through, .. } => {
-            branches.iter().all(|b| all_paths_return(&b.body)) && fall_through.as_ref().map(|f| all_paths_return(f)).unwrap_or(true)
+            branches.iter().all(|b| all_paths_return(&b.body))
+                && fall_through
+                    .as_ref()
+                    .map(|f| all_paths_return(f))
+                    .unwrap_or(true)
         }
 
         StatementKind::Loop { body, .. } => all_paths_return(body),

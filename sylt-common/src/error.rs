@@ -448,11 +448,7 @@ impl fmt::Display for TypeError {
             }
 
             TypeError::MissingVariants(enum_name, vars) => {
-                write!(
-                    f,
-                    "Enum '{}' lacks these variants:\n",
-                    enum_name
-                )?;
+                write!(f, "Enum '{}' lacks these variants:\n", enum_name)?;
                 for var in vars.iter() {
                     write!(f, "{} - {}\n", INDENT, var)?;
                 }
@@ -460,11 +456,7 @@ impl fmt::Display for TypeError {
             }
 
             TypeError::ExtraVariants(enum_name, vars) => {
-                write!(
-                    f,
-                    "Enum '{}' has these extra variants:\n",
-                    enum_name
-                )?;
+                write!(f, "Enum '{}' has these extra variants:\n", enum_name)?;
                 for var in vars.iter() {
                     write!(f, "{} + {}\n", INDENT, var)?;
                 }

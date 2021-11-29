@@ -197,7 +197,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             match fall_through {
                 Some(f) => statement_dependencies(ctx, f),
                 None => BTreeSet::new(),
-            }
+            },
         ]
         .iter()
         .cloned()

@@ -1517,7 +1517,7 @@ impl TypeChecker {
                                 Ok(())
                             }
                         }
-                    },
+                    }
 
                     _ => err_type_error!(
                         self,
