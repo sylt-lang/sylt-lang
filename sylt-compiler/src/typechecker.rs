@@ -574,6 +574,7 @@ impl TypeChecker {
                         );
                         self.stack.push(var);
                     }
+                    self.check_constraints(span, ctx, to_match)?;
                     self.statement(&branch.body, ctx)?;
                     self.stack.truncate(ss);
                 }
