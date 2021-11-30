@@ -692,12 +692,7 @@ impl<'t> BytecodeCompiler<'t> {
                     self.emit_pop_until_size(ctx, statement.span, stack_size);
                     self.add_op(ctx, statement.span, Op::Jmp(continue_addr));
                 }
-                None => {
-                    error!(
-                        self.compiler,
-                        statement.span, "`continue` statement not in a loop"
-                    );
-                }
+                None => unreachable!("Continue outside loop"),
             },
 
             Break {} => match self.loops.last().cloned() {
@@ -705,12 +700,7 @@ impl<'t> BytecodeCompiler<'t> {
                     self.emit_pop_until_size(ctx, statement.span, stack_size);
                     self.add_op(ctx, statement.span, Op::Jmp(break_addr));
                 }
-                None => {
-                    error!(
-                        self.compiler,
-                        statement.span, "`continue` statement not in a loop"
-                    );
-                }
+                None => unreachable!("Break outside loop"),
             },
 
             Unreachable {} => {

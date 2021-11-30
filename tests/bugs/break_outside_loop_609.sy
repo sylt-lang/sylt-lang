@@ -1,0 +1,5 @@
+start :: fn do
+    continue
+end
+
+// error: $Exotic

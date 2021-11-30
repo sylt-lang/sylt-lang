@@ -160,7 +160,21 @@ struct TypeChecker {
 
 #[derive(Clone, Debug, Copy)]
 struct TypeCtx {
+    inside_loop: bool,
     namespace: usize,
+}
+
+impl TypeCtx {
+    fn namespace(namespace: usize) -> Self {
+        Self { inside_loop: false, namespace }
+    }
+
+    fn enter_loop(self) -> Self {
+        Self {
+            inside_loop: true,
+            ..self
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -191,7 +205,7 @@ impl TypeChecker {
             .map(|(name, (_, _, ty))| {
                 (
                     name.clone(),
-                    res.resolve_type(Span::zero(0), TypeCtx { namespace: 0 }, ty)
+                    res.resolve_type(Span::zero(0), TypeCtx::namespace(0), ty)
                         // NOTE(ed): This is a special error - that a user should never see.
                         .map_err(|err| panic!("Failed to parse type for {:?}\n{}", name, err[0]))
                         .unwrap(),
@@ -634,11 +648,29 @@ impl TypeChecker {
                 let boolean = self.push_type(Type::Bool);
                 self.unify(span, ctx, boolean, condition)?;
 
-                self.statement(body, ctx)
+                self.statement(body, ctx.enter_loop())
             }
 
-            StatementKind::Break => Ok(None),
-            StatementKind::Continue => Ok(None),
+            StatementKind::Break => if !ctx.inside_loop {
+                err_type_error!(
+                    self,
+                    span,
+                    TypeError::Exotic,
+                    "`break` only work in a loop"
+                )
+            } else {
+                Ok(None)
+            }
+            StatementKind::Continue => if !ctx.inside_loop {
+                err_type_error!(
+                    self,
+                    span,
+                    TypeError::Exotic,
+                    "`continue` only work in a loop"
+                )
+            } else {
+                Ok(None)
+            }
 
             StatementKind::Unreachable => Ok(None),
             StatementKind::EmptyStatement => Ok(None),
@@ -2138,18 +2170,18 @@ impl TypeChecker {
         // Initialize the namespaces first.
         for (statement, namespace) in statements.iter() {
             if matches!(statement.kind, StatementKind::Use { .. }) {
-                self.outer_statement(statement, TypeCtx { namespace: *namespace })?;
+                self.outer_statement(statement, TypeCtx::namespace(*namespace))?;
             }
         }
 
         // Then the rest.
         for (statement, namespace) in statements.iter() {
             if !matches!(statement.kind, StatementKind::Use { .. }) {
-                self.outer_statement(statement, TypeCtx { namespace: *namespace })?;
+                self.outer_statement(statement, TypeCtx::namespace(*namespace))?;
             }
         }
 
-        let ctx = TypeCtx { namespace: 0 };
+        let ctx = TypeCtx::namespace(0);
         match self.globals.get(&(0, "start".to_string())).cloned() {
             Some(Name::Global(var)) => {
                 let void = self.push_type(Type::Void);
