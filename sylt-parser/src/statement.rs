@@ -531,8 +531,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 }
             }
             let (ctx, fall_through) = if matches!(ctx.token(), T::Else) {
-                let ctx = expect!(ctx, T::Else, "Expected - else on case-statement");
-                let (ctx, fall_through) = statement_or_block(ctx)?;
+                let (ctx, fall_through) = statement_or_block(ctx.skip(1))?;
                 (ctx, Some(Box::new(fall_through)))
             } else {
                 (ctx, None)
