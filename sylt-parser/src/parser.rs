@@ -758,20 +758,17 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
     let mut ctx = ctx;
     // Arguments
     loop {
-        match (ctx.token(), primer) {
+        match ctx.token() {
             // Done with arguments.
-            (T::EOF, _)
-            | (T::RightParen, _)
-            | (T::Else, true)
-            | (T::Dot, true)
-            | (T::Do, true)
-            | (T::End, true)
-            | (T::Newline, true)
-            | (T::Arrow, true) => break,
+            T::EOF | T::RightParen => break,
 
             // Parse a single argument.
             _ => {
-                let (_ctx, expr) = expression(ctx)?;
+                let (_ctx, expr) = match (expression(ctx), primer) {
+                    (Err(_), true) => break,
+                    (Ok(res), _) => res,
+                    (Err(errs), _) => return Err(errs),
+                };
                 ctx = _ctx; // assign to outer
                 args.push(expr);
 
