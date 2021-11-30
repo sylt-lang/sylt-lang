@@ -170,10 +170,7 @@ impl TypeCtx {
     }
 
     fn enter_loop(self) -> Self {
-        Self {
-            inside_loop: true,
-            ..self
-        }
+        Self { inside_loop: true, ..self }
     }
 }
 
@@ -651,25 +648,24 @@ impl TypeChecker {
                 self.statement(body, ctx.enter_loop())
             }
 
-            StatementKind::Break => if !ctx.inside_loop {
-                err_type_error!(
-                    self,
-                    span,
-                    TypeError::Exotic,
-                    "`break` only work in a loop"
-                )
-            } else {
-                Ok(None)
+            StatementKind::Break => {
+                if !ctx.inside_loop {
+                    err_type_error!(self, span, TypeError::Exotic, "`break` only work in a loop")
+                } else {
+                    Ok(None)
+                }
             }
-            StatementKind::Continue => if !ctx.inside_loop {
-                err_type_error!(
-                    self,
-                    span,
-                    TypeError::Exotic,
-                    "`continue` only work in a loop"
-                )
-            } else {
-                Ok(None)
+            StatementKind::Continue => {
+                if !ctx.inside_loop {
+                    err_type_error!(
+                        self,
+                        span,
+                        TypeError::Exotic,
+                        "`continue` only work in a loop"
+                    )
+                } else {
+                    Ok(None)
+                }
             }
 
             StatementKind::Unreachable => Ok(None),
