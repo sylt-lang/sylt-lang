@@ -145,6 +145,11 @@ pub enum TypeError {
         length: usize,
     },
 
+    TupleLengthMismatch {
+        got: usize,
+        length: usize,
+    },
+
     UnresolvedName(String),
 
     WrongConstraintArity {
@@ -415,6 +420,14 @@ impl fmt::Display for TypeError {
 
             TypeError::TupleIndexOutOfRange { length, got } => {
                 write!(f, "A tuple of length {} has no element {}", length, got)
+            }
+
+            TypeError::TupleLengthMismatch { length, got } => {
+                write!(
+                    f,
+                    "Tuple lengths don't match '{}'!='{}'",
+                    length, got
+                )
             }
 
             TypeError::UnresolvedName(name) => {
