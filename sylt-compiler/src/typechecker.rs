@@ -1488,12 +1488,11 @@ impl TypeChecker {
                     Type::Unknown => Ok(()),
 
                     Type::Enum(enum_name, enum_vars) => {
-                        let mut missing = Vec::new();
-                        for var in vars.iter() {
-                            if !enum_vars.contains_key(var) {
-                                missing.push(var.clone());
-                            }
-                        }
+                        let missing = vars
+                            .iter()
+                            .cloned()
+                            .filter(|var| !enum_vars.contains_key(var))
+                            .collect::<Vec<_>>();
                         if !missing.is_empty() {
                             err_type_error!(
                                 self,
@@ -1501,12 +1500,11 @@ impl TypeChecker {
                                 TypeError::MissingVariants(enum_name.clone(), missing)
                             )
                         } else {
-                            let mut extra = Vec::new();
-                            for (var, _) in enum_vars.iter() {
-                                if !vars.contains(var) {
-                                    extra.push(var.clone());
-                                }
-                            }
+                            let extra = enum_vars
+                                .iter()
+                                .map(|(var, _)| var.clone())
+                                .filter(|var| !vars.contains(var))
+                                .collect::<Vec<_>>();
                             if !extra.is_empty() {
                                 err_type_error!(
                                     self,
