@@ -146,6 +146,7 @@ enum Constraint {
 
     Enum,
     Variant(String, usize),
+    TotalEnum(BTreeSet<String>),
 }
 
 struct TypeChecker {
@@ -558,6 +559,7 @@ impl TypeChecker {
                 let to_match = self.expression(to_match, ctx)?;
                 self.add_constraint(to_match, span, Constraint::Enum);
 
+                let mut branch_names = BTreeSet::new();
                 let ss = self.stack.len();
                 for branch in branches.iter() {
                     if let Some(var) = &branch.variable {
@@ -569,16 +571,22 @@ impl TypeChecker {
                         };
                         self.add_constraint(
                             to_match,
-                            span,
+                            var.span,
                             Constraint::Variant(branch.pattern.name.clone(), var.ty),
                         );
                         self.stack.push(var);
                     }
                     self.statement(&branch.body, ctx)?;
                     self.stack.truncate(ss);
+                    branch_names.insert(branch.pattern.name.clone());
                 }
 
-                self.statement(fall_through, ctx)?;
+                if let Some(fall_through) = fall_through {
+                    self.statement(fall_through, ctx)?;
+                } else {
+                    self.add_constraint(to_match, span, Constraint::TotalEnum(branch_names));
+                    self.check_constraints(span, ctx, to_match)?;
+                }
                 Ok(None)
             }
 
@@ -1475,6 +1483,48 @@ impl TypeChecker {
                         var
                     ),
                 },
+
+                Constraint::TotalEnum(vars) => match self.find_type(a) {
+                    Type::Unknown => Ok(()),
+
+                    Type::Enum(enum_name, enum_vars) => {
+                        let missing = vars
+                            .iter()
+                            .cloned()
+                            .filter(|var| !enum_vars.contains_key(var))
+                            .collect::<Vec<_>>();
+                        if !missing.is_empty() {
+                            err_type_error!(
+                                self,
+                                span,
+                                TypeError::MissingVariants(enum_name.clone(), missing)
+                            )
+                        } else {
+                            let extra = enum_vars
+                                .iter()
+                                .map(|(var, _)| var.clone())
+                                .filter(|var| !vars.contains(var))
+                                .collect::<Vec<_>>();
+                            if !extra.is_empty() {
+                                err_type_error!(
+                                    self,
+                                    span,
+                                    TypeError::ExtraVariants(enum_name.clone(), extra)
+                                )
+                            } else {
+                                Ok(())
+                            }
+                        }
+                    }
+
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        TypeError::Violating(self.bake_type(a)),
+                        "Expected this to be an enum with the variants '{:?}'",
+                        vars
+                    ),
+                },
             }
             .help(self, *original_span, "Requirement came from".to_string())?
         }
@@ -1718,6 +1768,7 @@ impl TypeChecker {
                         C::IsContainedIn(x) => C::IsContainedIn(self.inner_copy(*x, seen)),
                         C::Enum => C::Enum,
                         C::Variant(v, x) => C::Variant(v.clone(), *x),
+                        C::TotalEnum(x) => C::TotalEnum(x.clone()),
                     },
                     *span,
                 )

@@ -157,6 +157,8 @@ pub enum TypeError {
     UnknownConstraintArgument(String),
 
     UnknownVariant(String, String),
+    MissingVariants(String, Vec<String>),
+    ExtraVariants(String, Vec<String>),
 }
 
 // TODO(ed): Switch to spans for the whole compiler?
@@ -443,6 +445,22 @@ impl fmt::Display for TypeError {
                     "Enum '{}' doesn't have variant '{}'",
                     enum_name, var_name
                 )
+            }
+
+            TypeError::MissingVariants(enum_name, vars) => {
+                write!(f, "Enum '{}' lacks these variants:\n", enum_name)?;
+                for var in vars.iter() {
+                    write!(f, "{} - {}\n", INDENT, var)?;
+                }
+                Ok(())
+            }
+
+            TypeError::ExtraVariants(enum_name, vars) => {
+                write!(f, "Enum '{}' has these extra variants:\n", enum_name)?;
+                for var in vars.iter() {
+                    write!(f, "{} + {}\n", INDENT, var)?;
+                }
+                Ok(())
             }
         }
     }

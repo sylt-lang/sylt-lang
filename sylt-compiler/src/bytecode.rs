@@ -665,7 +665,11 @@ impl<'t> BytecodeCompiler<'t> {
                     let next = self.next_ip(ctx);
                     self.patch(ctx, next_jump, Op::JmpFalse(next));
                 }
-                self.statement(fall_through, ctx);
+                if let Some(fall_through) = fall_through {
+                    self.statement(fall_through, ctx);
+                } else {
+                    self.add_op(ctx, statement.span, Op::Illegal);
+                }
 
                 let out = self.next_ip(ctx);
                 for jmp in out_jumps {
@@ -782,7 +786,11 @@ fn all_paths_return(statement: &Statement) -> bool {
         StatementKind::If { pass, fail, .. } => all_paths_return(pass) && all_paths_return(fail),
 
         StatementKind::Case { branches, fall_through, .. } => {
-            branches.iter().all(|b| all_paths_return(&b.body)) && all_paths_return(fall_through)
+            branches.iter().all(|b| all_paths_return(&b.body))
+                && fall_through
+                    .as_ref()
+                    .map(|f| all_paths_return(f))
+                    .unwrap_or(true)
         }
 
         StatementKind::Loop { body, .. } => all_paths_return(body),
