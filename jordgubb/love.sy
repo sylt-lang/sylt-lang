@@ -7,11 +7,19 @@
 
 ParticleSystem :: blob {
     // TODO(ed): Cycles here - since we take ourselves sas the first argument.
+    emit: fn *, int -> void,
     setParticleLifetime: fn *, float, float -> void,
     setEmissionRate: fn *, int -> void,
     setLinearAcceleration: fn *, float, float, float, float -> void,
+    setLinearDamping: fn *, float, float -> void,
 
     setPosition: fn *, float, float -> void,
+    setDirection: fn *, float -> void,
+    setSizes: fn *, float, float -> void,
+    setSpeed: fn *, float, float -> void,
+    setSpread: fn *, float -> void,
+
+    setColors: fn *, float, float, float, float, float, float, float, float -> void, // yikes
 
     update: fn *, float -> void,
 }
@@ -24,6 +32,12 @@ ImageData :: blob {
 }
 Quad :: blob { _003_unique_type: int, }
 Font :: blob { _004_unique_type: int, }
+
+Shader :: blob {
+    _005_unique_type: int,
+    // Vararg
+    send: fn [*] -> void,
+}
 
 LoveGraphics :: blob {
     // We need to accept multiple overloads
@@ -44,6 +58,7 @@ LoveGraphics :: blob {
     // Has to be an even length of the list.
     points: fn [(float, float)] -> void,
 
+    setLineWidth: fn float -> void,
     setColor: fn (float, float, float, float) -> void,
     getColor: fn -> (float, float, float, float),
 
@@ -54,12 +69,19 @@ LoveGraphics :: blob {
     setFont: fn Font -> void,
 
     newImage: fn str -> *,
-    newFont: fn str, int, str -> Font,
+    newFont: fn str, int -> Font,
     newParticleSystem: fn *, int -> ParticleSystem,
     newQuad: fn int, int, int, int, ImageData -> Quad,
+    newShader: fn str -> Shader,
+
+    setShader: fn Shader -> void,
 
     getWidth: fn -> int,
     getHeight: fn -> int,
+
+    origin: fn -> void,
+    translate: fn float, float -> void,
+    scale: fn float, float -> void,
 }
 
 LoveKeyboard :: blob {
@@ -150,6 +172,10 @@ Love :: blob {
     keyreleased: fn str, str -> void,
     resize: fn int, int -> void,
 
+    gamepadaxis: fn LoveJoystick, str, float -> void,
+    gamepadpressed: fn LoveJoystick, str -> void,
+    gamepadreleased: fn LoveJoystick, str -> void,
+
     audio: LoveAudio,
     graphics: LoveGraphics,
     keyboard: LoveKeyboard,
@@ -158,6 +184,12 @@ Love :: blob {
     mouse: LoveMouse,
     timer: LoveTimer,
     window: LoveWindow,
+    event: LoveEvent,
+}
+
+LoveJoystick :: blob {
+    _178_unique_type: int,
+    getID: fn * -> int, // * == Self
 }
 
 love: Love : external

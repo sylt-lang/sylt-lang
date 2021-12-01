@@ -576,6 +576,7 @@ impl TypeChecker {
                         );
                         self.stack.push(var);
                     }
+                    self.check_constraints(span, ctx, to_match)?;
                     self.statement(&branch.body, ctx)?;
                     self.stack.truncate(ss);
                     branch_names.insert(branch.pattern.name.clone());

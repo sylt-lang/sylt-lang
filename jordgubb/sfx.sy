@@ -8,17 +8,18 @@ Sound :: blob {
     playp: fn (float, float), (float, float) -> void,
     pause: fn -> void,
     stop: fn -> void,
+    setLooping: fn bool -> void,
 }
 
 SoundType :: enum
     Static,
-    Dynamic,
+    Stream,
 end
 
 soundTypeToStr :: fn ty: SoundType -> str
     case ty do
         Static ret "static"
-        Dynamic ret "dynamic"
+        Stream ret "stream"
         else do <!> end
     end
     ret ""
@@ -48,6 +49,9 @@ soundFromSource :: fn source ->
         stop: fn do
             love.audio.stop' source
         end,
+        setLooping: fn looping do
+            source.setLooping(source, looping)
+        end
     }
 end
 

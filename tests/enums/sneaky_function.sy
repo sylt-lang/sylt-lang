@@ -1,0 +1,16 @@
+M :: enum
+    J fn -> void,
+end
+
+f :: fn a: M do
+    case a do
+        J x do
+            x()
+        end
+        else do end
+    end
+end
+
+start :: fn do
+    f(M.J fn do end)
+end

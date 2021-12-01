@@ -7,7 +7,7 @@ use sfx
 start :: fn do
     r := 0.
 
-    aFont :: gfx.aFont()
+    aFont :: gfx.createFont(love.graphics.getFont())
     img :: gfx.newImage' "res/sylt.png"
     ps :: gfx.newParticles' img
     ps.setParticleLifetime(10., 10.)
@@ -56,7 +56,7 @@ start :: fn do
 
         img.draw' (100., 200.), r, (1., 1.)
         img.drawTinted' rcol(12.), (100., 200.), r + 1., (1., 1.)
-        img.drawCenterd' (100., 200.), r, (1., 1.)
+        img.drawCentered' (100., 200.), r, (1., 1.)
         img.drawTintedCentered' rcol(12.), (100., 200.), r + 1., (1., 1.)
 
         ps.draw' gfx.rgb(1., 1., 1.)

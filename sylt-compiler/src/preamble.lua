@@ -50,7 +50,7 @@ __ASSIGN_INDEX = function(o, i, v)
     end
     if m._type == "blob" then
         local e = o[i]
-        assert(e, "Accessing fields \"" .. i .. "\" - which doesn't exist")
+        assert(e ~= nil, "Accessing fields \"" .. i .. "\" - which doesn't exist")
         o[i] = v
         return
     end
@@ -282,13 +282,13 @@ end
 
 __BLOB_META = { _type = "blob" }
 __BLOB_META.__eq = function(a, b)
-    for k, _ in pairs(a) do
-        if not b[k] then
+    for k, v in pairs(a) do
+        if v ~= b[k] then
             return false
         end
     end
     for k, _ in pairs(b) do
-        if not a[k] then
+        if a[k] == nil then
             return false
         end
     end
@@ -321,6 +321,12 @@ end
 function atan2(x, y) return math.atan2(y, x) end
 function dbg(x) print(x); return x end
 function random_choice(l) return l[math.random(1, #l)] end
+
+function varargs(f)
+    return function(xs)
+        return f(unpack(xs))
+    end
+end
 
 function for_each(l, f)
     for _, v in pairs(l) do
@@ -439,7 +445,11 @@ function angle(v)
 end
 
 function dot(a, b)
-    return a[1] * b[1] + a[2] * b[2]
+    local out = 0
+    for x = 1, #a, 1 do
+        out = out + a[x] * b[x]
+    end
+    return out
 end
 
 function magnitude_squared(a)
@@ -454,7 +464,14 @@ function __CRASH(msg)
     return function() assert(false, "crash" .. (msg or "")) end
 end
 
-normalize = __CRASH("normalize is not implemented")
+function normalize(a)
+    local mag = magnitude(a)
+    local out = {}
+    for x = 1, #a, 1 do
+        out[x] = a[x] / mag
+    end
+    return __TUPLE(out)
+end
 reflect = __CRASH("reflect is not implemented")
 debug_assertions = __CRASH("debug_assertions is not implemented")
 thread_sleep = __CRASH("thread_sleep is not implemented")
