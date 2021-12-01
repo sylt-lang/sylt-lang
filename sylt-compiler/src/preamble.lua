@@ -401,7 +401,17 @@ end
 floor = math.floor
 as_char = string.byte
 function as_chars(s)
-    return __LIST(string.byte(s, 1, string.len(s)))
+    local chars = table.pack(string.byte(s, 1, string.len(s)))
+    chars.n = nil
+    return __LIST(chars)
+end
+
+function split(s)
+    local t={}
+    for str in string.gmatch(s, "([^%s]+)") do
+        table.insert(t, str)
+    end
+    return __LIST(t)
 end
 
 sqrt = math.sqrt

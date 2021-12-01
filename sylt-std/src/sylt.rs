@@ -287,7 +287,7 @@ sylt_macro::extern_function!(
     "sylt_std::sylt",
     as_chars,
     ? "Converts an ASCII string into a list of chars. Non-ASCII is converted to '?'.",
-    -> "str -> [int]",
+    -> "fn str -> [int]",
     [Value::String(s)] => {
         let chars = s
             .chars()
@@ -307,6 +307,19 @@ sylt_macro::extern_function!(
 
         Ok(List(Rc::new(RefCell::new(chars))))
     },
+);
+
+sylt_macro::extern_function!(
+    "sylt_std::sylt",
+    split,
+    ? "Splits a string at whitespace",
+    -> "fn str -> [str]",
+    [Value::String(s)] => {
+        let strings = s.split_whitespace()
+            .map(|s| String(Rc::new(s.to_string())))
+            .collect();
+        Ok(Value::List(Rc::new(RefCell::new(strings))))
+    }
 );
 
 sylt_macro::extern_function!(
