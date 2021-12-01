@@ -1,0 +1,8 @@
+start :: fn do
+    // TODO: Newlines, tabs, other whitespace.
+    split("") <=> []
+    split(" ") <=> []
+    split("hello ") <=> ["hello"]
+    split("hello there") <=> ["hello", "there"]
+    split("Hello there. General Kenobi") <=> ["Hello", "there.", "General", "Kenobi"]
+end
