@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
-use sylt_common::prog::{BytecodeProg, Prog};
+use sylt_common::prog::Prog;
 use sylt_common::RustFunction;
 
 pub mod formatter;
@@ -57,8 +57,8 @@ pub fn run_file_with_reader<R>(
 where
     R: Fn(&Path) -> Result<String, Error>,
 {
-    match (&args.lua_run, &args.lua_compile) {
-        (true, _) => {
+    match &args.compile {
+        None => {
             use std::process::{Command, Stdio};
             let mut child = Command::new("lua")
                 .stdin(Stdio::piped())
@@ -81,26 +81,19 @@ where
             };
         }
 
-        (false, Some(s)) if s == "%" => {
+        Some(s) if s == "-" => {
             use std::io;
             // NOTE(ed): Lack of running
             compile_with_reader_to_writer(args, functions, reader, Some(Box::new(io::stdout())))?;
         }
 
-        (false, Some(s)) => {
+        Some(s) => {
             use std::fs::File;
             let file =
                 File::create(PathBuf::from(s)).expect(&format!("Failed to create file: {}", s));
             let writer: Option<Box<dyn Write>> = Some(Box::new(file));
             // NOTE(ed): Lack of running
             compile_with_reader_to_writer(args, functions, reader, writer)?;
-        }
-
-        (_, _) => {
-            match compile_with_reader_to_writer(args, functions, reader, None)? {
-                Prog::Bytecode(prog) => run(&prog, &args)?,
-                Prog::Lua => unreachable!(),
-            };
         }
     };
     Ok(())
@@ -110,18 +103,6 @@ where
 /// external functions.
 pub fn run_file(args: &Args, functions: ExternFunctionList) -> Result<(), Vec<Error>> {
     run_file_with_reader(args, functions, read_file)
-}
-
-pub fn run(prog: &BytecodeProg, args: &Args) -> Result<(), Vec<Error>> {
-    let mut vm = sylt_machine::VM::new();
-    vm.print_bytecode = args.verbosity >= 1;
-    vm.print_exec = args.verbosity >= 2;
-    vm.init(&prog, &args.args);
-    if let Err(e) = vm.run() {
-        Err(vec![e])
-    } else {
-        Ok(())
-    }
 }
 
 #[derive(Default, Debug, Options)]
@@ -136,15 +117,12 @@ pub struct Args {
     #[options(long = "dump-tree", no_short, help = "Writes the tree to stdout")]
     pub dump_tree: bool,
 
-    #[options(short = "l", long = "lua", help = "Run using lua")]
-    pub lua_run: bool,
-
     #[options(
         short = "c",
         long = "compile",
-        help = "Compile to a lua file - % for stdout"
+        help = "Compile to a lua file - for stdout"
     )]
-    pub lua_compile: Option<String>,
+    pub compile: Option<String>,
 
     #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
     pub verbosity: u32,

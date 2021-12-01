@@ -908,7 +908,6 @@ dependencies = [
  "gumdrop",
  "sylt-common",
  "sylt-compiler",
- "sylt-machine",
  "sylt-macro",
  "sylt-parser",
  "sylt-std",
@@ -933,14 +932,6 @@ dependencies = [
  "sylt-common",
  "sylt-parser",
  "sylt-tokenizer",
-]
-
-[[package]]
-name = "sylt-machine"
-version = "0.2.0"
-dependencies = [
- "colored",
- "sylt-common",
 ]
 
 [[package]]
