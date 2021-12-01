@@ -106,11 +106,13 @@ pub enum TypeError {
         op: String,
     },
 
+    // TODO(ed): got and expected doesn't make sense - we don't know what we expect!
     Mismatch {
         got: Type,
         expected: Type,
     },
 
+    // TODO(ed): got and expected doesn't make sense - we don't know what we expect!
     MismatchAssign {
         got: Type,
         expected: Type,
@@ -118,6 +120,7 @@ pub enum TypeError {
 
     Assignability,
 
+    // TODO(ed): got and expected doesn't make sense - we don't know what we expect!
     ExcessiveForce {
         got: Type,
         expected: Type,
@@ -125,6 +128,7 @@ pub enum TypeError {
 
     NamespaceNotExpression,
 
+    // TODO(ed): got and expected doesn't make sense - we don't know what we expect!
     WrongArity {
         got: usize,
         expected: usize,
@@ -135,14 +139,21 @@ pub enum TypeError {
         field: String,
     },
 
+    // TODO(ed): got and expected doesn't make sense - we don't know what we expect!
     MissingField {
         blob: String,
         field: String,
     },
 
+    // TODO(ed): got and expected doesn't make sense - we don't know what we expect!
     TupleIndexOutOfRange {
         got: i64,
         length: usize,
+    },
+
+    TupleLengthMismatch {
+        lhs: usize,
+        rhs: usize,
     },
 
     UnresolvedName(String),
@@ -417,6 +428,10 @@ impl fmt::Display for TypeError {
 
             TypeError::TupleIndexOutOfRange { length, got } => {
                 write!(f, "A tuple of length {} has no element {}", length, got)
+            }
+
+            TypeError::TupleLengthMismatch { lhs, rhs } => {
+                write!(f, "Tuple lengths don't match '{}'!='{}'", lhs, rhs)
             }
 
             TypeError::UnresolvedName(name) => {

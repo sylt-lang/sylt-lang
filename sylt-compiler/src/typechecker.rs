@@ -1638,6 +1638,13 @@ impl TypeChecker {
                 }
 
                 (Type::Tuple(a), Type::Tuple(b)) => {
+                    if a.len() != b.len() {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::TupleLengthMismatch { lhs: a.len(), rhs: b.len() }
+                        );
+                    }
                     for (i, (a, b)) in a.iter().zip(b.iter()).enumerate() {
                         self.sub_unify(span, ctx, *a, *b, seen)
                             .help_no_span(format!("While checking index #{}", i))?;
