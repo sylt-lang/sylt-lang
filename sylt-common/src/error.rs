@@ -244,6 +244,13 @@ pub enum Error {
         message: Option<String>,
     },
 
+    RuntimeError {
+        kind: RuntimeError,
+        file: PathBuf,
+        line: usize,
+        message: Option<String>,
+    },
+
     LuaError(String),
 }
 
@@ -272,6 +279,16 @@ impl fmt::Display for Error {
                 )?;
 
                 write_source_span_at(f, file, *span)
+            }
+            Error::RuntimeError { kind, message, .. } => {
+                write!(f, "{}:\n", "Runtime error".red())?;
+                write!(f, "{}{}\n", INDENT, kind)?;
+                if let Some(message) = message {
+                    for line in message.split('\n') {
+                        write!(f, "{}{}\n", INDENT, line)?;
+                    }
+                }
+                Ok(())
             }
             Error::SyntaxError { file, span, message } => {
                 write!(f, "{}: ", "syntax error".red())?;
