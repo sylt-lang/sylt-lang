@@ -650,7 +650,7 @@ impl TypeChecker {
 
             StatementKind::Break => {
                 if !ctx.inside_loop {
-                    err_type_error!(self, span, TypeError::Exotic, "`break` only work in a loop")
+                    err_type_error!(self, span, TypeError::Exotic, "`break` only works in loops")
                 } else {
                     Ok(None)
                 }
@@ -661,7 +661,7 @@ impl TypeChecker {
                         self,
                         span,
                         TypeError::Exotic,
-                        "`continue` only work in a loop"
+                        "`continue` only works in loops"
                     )
                 } else {
                     Ok(None)
