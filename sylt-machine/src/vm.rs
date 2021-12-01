@@ -899,6 +899,16 @@ mod op {
             (Value::List(a), Value::List(b)) => Value::Bool(a == b),
             (Value::Set(a), Value::Set(b)) => Value::Bool(a == b),
             (Value::Dict(a), Value::Dict(b)) => Value::Bool(a == b),
+            (Value::Blob(a), Value::Blob(b)) => Value::Bool(
+                a.borrow().keys().all(|k| b.borrow().contains_key(k))
+                    && b.borrow().keys().all(|k| a.borrow().contains_key(k))
+                    && a.borrow()
+                        .iter()
+                        .all(|(ak, av)| match eq(av, &b.borrow()[ak]) {
+                            Value::Bool(v) => v,
+                            _ => false,
+                        }),
+            ),
             _ => Value::Nil,
         }
     }
