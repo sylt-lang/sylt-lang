@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use sylt_common::error::Error;
 use sylt_common::prog::{BytecodeProg, Prog};
-use sylt_common::{Op, RustFunction, Type, Value};
+use sylt_common::{Op, Type, Value};
 use sylt_parser::statement::NameIdentifier;
-use sylt_parser::{Identifier, Span, StatementKind, Type as ParserType, AST};
+use sylt_parser::{Identifier, Span, StatementKind, AST};
 
 mod bytecode;
 mod dependency;
@@ -118,7 +118,6 @@ struct Compiler {
     namespaces: Vec<Namespace>,
 
     frames: Vec<Frame>,
-    functions: HashMap<String, (usize, RustFunction, ParserType)>,
 
     panic: bool,
     errors: Vec<Error>,
@@ -161,7 +160,6 @@ impl Compiler {
             namespaces: Vec::new(),
 
             frames: Vec::new(),
-            functions: HashMap::new(),
 
             panic: false,
             errors: Vec::new(),
@@ -267,7 +265,6 @@ impl Compiler {
         typecheck: bool,
         lua_file: Option<Box<dyn Write>>,
         tree: AST,
-        functions: &[(String, RustFunction, String)],
     ) -> Result<Prog, Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
         let name = "/preamble/";
@@ -275,21 +272,6 @@ impl Compiler {
         self.frames.push(Frame::new(name, start_span));
 
         let num_constants = self.extract_globals(&tree);
-
-        let num_functions = functions.len();
-        self.functions = functions
-            .to_vec()
-            .into_iter()
-            .enumerate()
-            .map(|(i, (s, f, sig))| (s.clone(), (i, f, parse_signature(&s, &sig))))
-            .collect();
-        assert_eq!(
-            num_functions,
-            self.functions.len(),
-            "There are {} names and {} extern functions - some extern functions share name",
-            self.functions.len(),
-            num_functions
-        );
 
         let statements = match dependency::initialization_order(&tree, &self) {
             Ok(statements) => statements,
@@ -305,7 +287,7 @@ impl Compiler {
         }
 
         if typecheck {
-            typechecker::solve(&statements, &self.namespace_id_to_path, &self.functions)?;
+            typechecker::solve(&statements, &self.namespace_id_to_path)?;
         }
 
         if let Some(lua_file) = lua_file {
@@ -344,7 +326,6 @@ impl Compiler {
                     .into_iter()
                     .map(|x| Rc::new(RefCell::new(x)))
                     .collect(),
-                functions: functions.iter().map(|(_, f, _)| *f).collect(),
                 constants: self.constants,
                 strings: self.strings,
             }))
@@ -485,28 +466,10 @@ impl Compiler {
     }
 }
 
-fn parse_signature(func_name: &str, sig: &str) -> ParserType {
-    let token_stream = sylt_tokenizer::string_to_tokens(0, sig);
-    let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
-    let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
-    let path = PathBuf::from(func_name);
-    let ctx = sylt_parser::Context::new(&tokens, &spans, &path, 0, &path);
-    match sylt_parser::parse_type(ctx) {
-        Ok((_, ty)) => ty,
-        Err((_, errs)) => {
-            for err in errs {
-                eprintln!("{}", err);
-            }
-            panic!("Error parsing function signature for {}", func_name);
-        }
-    }
-}
-
 pub fn compile(
     typecheck: bool,
     lua_file: Option<Box<dyn Write>>,
     prog: AST,
-    functions: &[(String, RustFunction, String)],
 ) -> Result<Prog, Vec<Error>> {
-    Compiler::new().compile(typecheck, lua_file, prog, functions)
+    Compiler::new().compile(typecheck, lua_file, prog)
 }

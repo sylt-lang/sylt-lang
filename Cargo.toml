@@ -5,7 +5,6 @@ members = [
     "sylt-common",
     "sylt-compiler",
     "sylt-parser",
-    "sylt-std",
     "sylt-tokenizer",
 ]
 

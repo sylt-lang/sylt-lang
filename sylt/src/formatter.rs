@@ -662,7 +662,7 @@ macro_rules! test_formatter_on_file {
             // Run the file before the formatter.
             let mut args = $crate::Args::default();
             args.args = vec![path.clone()];
-            let before = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
+            let before = $crate::run_file(&args);
             // If the test fails here, we already have / will have prettified output.
             assert!(
                 matches!(before.err().unwrap_or(Vec::new()).as_slice(), $errs),
@@ -686,7 +686,6 @@ macro_rules! test_formatter_on_file {
                     // Try to run the file again, this time with pretty "got/expected"-output.
                     let after = $crate::run_file_with_reader(
                         &args,
-                        ::sylt_std::sylt::_sylt_link(),
                         read_formatted_or_file,
                     );
                     eprintln!("The test output changed between before and after formatting");

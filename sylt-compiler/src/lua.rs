@@ -328,12 +328,7 @@ impl<'t> LuaCompiler<'t> {
                     return Some(new_namespace);
                 }
                 None => {
-                    if self.compiler.functions.get(name).is_some() {
-                        // Same as external - but defined from sylt-std
-                        write!(self, "{}", name);
-                    } else {
-                        error!(self.compiler, span, "No identifier found named: '{}'", name);
-                    }
+                    error!(self.compiler, span, "No identifier found named: '{}'", name);
                 }
             },
         }

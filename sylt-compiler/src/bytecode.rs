@@ -417,19 +417,13 @@ impl<'t> BytecodeCompiler<'t> {
                 }
                 Some(Name::Namespace(new_namespace)) => return Some(*new_namespace),
                 None => {
-                    if let Some((slot, _, _)) = self.compiler.functions.get(name) {
-                        let slot = *slot;
-                        let op = self.compiler.constant(Value::ExternFunction(slot));
-                        self.add_op(ctx, span, op);
-                    } else {
-                        error!(
-                            self.compiler,
-                            span,
-                            "Cannot read '{}' in '{}'",
-                            name,
-                            self.compiler.file_from_namespace(namespace).display()
-                        );
-                    }
+                    error!(
+                        self.compiler,
+                        span,
+                        "Cannot read '{}' in '{}'",
+                        name,
+                        self.compiler.file_from_namespace(namespace).display()
+                    );
                 }
             },
         }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use sylt_common::error::{Error, Helper, TypeError};
-use sylt_common::{RustFunction, Type as RuntimeType};
+use sylt_common::{Type as RuntimeType};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     expression::ComparisonKind, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
@@ -156,7 +156,6 @@ struct TypeChecker {
     namespace_to_file: HashMap<usize, PathBuf>,
     // TODO(ed): This can probably be removed via some trickery
     file_to_namespace: HashMap<PathBuf, usize>,
-    functions: HashMap<String, usize>,
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -185,9 +184,8 @@ enum Name {
 impl TypeChecker {
     fn new(
         namespace_to_file: &HashMap<usize, PathBuf>,
-        functions: &HashMap<String, (usize, RustFunction, ParserType)>,
     ) -> Self {
-        let mut res = Self {
+        let res = Self {
             globals: HashMap::new(),
             stack: Vec::new(),
             types: Vec::new(),
@@ -196,20 +194,7 @@ impl TypeChecker {
                 .iter()
                 .map(|(a, b)| (b.clone(), a.clone()))
                 .collect(),
-            functions: HashMap::new(),
         };
-        res.functions = functions
-            .iter()
-            .map(|(name, (_, _, ty))| {
-                (
-                    name.clone(),
-                    res.resolve_type(Span::zero(0), TypeCtx::namespace(0), ty)
-                        // NOTE(ed): This is a special error - that a user should never see.
-                        .map_err(|err| panic!("Failed to parse type for {:?}\n{}", name, err[0]))
-                        .unwrap(),
-                )
-            })
-            .collect();
         res
     }
 
@@ -911,14 +896,6 @@ impl TypeChecker {
                         .cloned()
                     {
                         Some(Name::Global(var)) => Ok(var.ty),
-                        None => match self.functions.get(&ident.name).cloned() {
-                            Some(f) => Ok(f),
-                            None => err_type_error!(
-                                self,
-                                span,
-                                TypeError::UnresolvedName(ident.name.clone())
-                            ),
-                        },
                         _ => err_type_error!(
                             self,
                             span,
@@ -2282,7 +2259,6 @@ impl TypeChecker {
 pub(crate) fn solve(
     statements: &Vec<(&Statement, usize)>,
     namespace_to_file: &HashMap<usize, PathBuf>,
-    functions: &HashMap<String, (usize, RustFunction, ParserType)>,
 ) -> TypeResult<()> {
-    TypeChecker::new(namespace_to_file, functions).solve(statements)
+    TypeChecker::new(namespace_to_file).solve(statements)
 }

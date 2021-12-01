@@ -25,7 +25,6 @@ sylt-common = { version = "0.2.0", path = "../sylt-common" }
 sylt-compiler = { version = "0.2.0", path = "../sylt-compiler" }
 sylt-macro = { version = "0.2.0", path = "../sylt-macro" }
 sylt-parser = { version = "0.2.0", path = "../sylt-parser" }
-sylt-std = { version = "0.2.0", path = "../sylt-std", default-features = false }
 sylt-tokenizer = { version = "0.2.0", path = "../sylt-tokenizer" }
 
 colored = "2"
@@ -34,10 +33,6 @@ gumdrop = "0.8"
 criterion = { version = "0.3", optional = true }
 
 [features]
-# TODO(ed): Re-enable "lingon"
-lingon = [ "sylt-std/lingon" ]
-network = [ "sylt-std/network" ]
-default = [ "network" ]
 
 #[[bench]]
 #name = "sylt_benchmark"

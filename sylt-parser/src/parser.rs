@@ -934,6 +934,12 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
     sub_assignable(ctx.skip(1), ident)
 }
 
+#[derive(Hash, Eq, PartialEq, PartialOrd, Clone, Debug)]
+enum FileOrLib {
+    File(PathBuf),
+    Lib(&'static str),
+}
+
 /// Parses a file's tokens. Returns a list of files it refers to (via `use`s) and
 /// the parsed statements.
 ///
@@ -947,7 +953,7 @@ fn module(
     file_id: usize,
     root: &Path,
     token_stream: &[PlacedToken],
-) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
+) -> (Vec<FileOrLib>, Result<Module, Vec<Error>>) {
     let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
     let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
     let mut errors = Vec::new();
@@ -966,8 +972,20 @@ fn module(
             Ok((ctx, statement)) => {
                 use StatementKind::*;
                 // Get the used files from 'use' and 'from' statements.
-                if let Use { file, .. } | FromUse { file, .. } = &statement.kind {
-                    use_files.push(file.clone());
+                match &statement.kind {
+                    Use { path: Identifier { name, .. }, .. }
+                    | FromUse { path: Identifier { name, .. }, .. }
+                        if STD_LIB_FILES.iter().find(|(x, _)| x == &name.as_str()).is_some() =>
+                    {
+                        let (_, source) = STD_LIB_FILES.iter().find(|(x, _)| x == &name.as_str()).unwrap();
+                        use_files.push(FileOrLib::Lib(source));
+                    }
+
+                    Use { file, .. } | FromUse { file, .. } => {
+                        use_files.push(FileOrLib::File(file.clone()))
+                    }
+
+                    _ => {}
                 }
                 statements.push(statement);
                 ctx
@@ -1034,6 +1052,8 @@ pub fn find_conflict_markers(file: &Path, file_id: usize, source: &str) -> Vec<E
     errs
 }
 
+const STD_LIB_FILES: &[(&str, &str)] = &[("std", include_str!("../../std/std.sy"))];
+
 /// Parses the contents of a file as well as all files this file refers to and so
 /// on.
 ///
@@ -1052,40 +1072,43 @@ where
     // Files we want to parse but haven't yet.
     let mut to_visit = Vec::new();
     let root = path.parent().unwrap();
-    to_visit.push(PathBuf::from(path));
+    to_visit.push(FileOrLib::File(PathBuf::from(path)));
 
     let mut modules = Vec::new();
     let mut errors = Vec::new();
-    while let Some(file) = to_visit.pop() {
-        if visited.contains(&file) {
+    while let Some(include) = to_visit.pop() {
+        if visited.contains(&include) {
             continue;
         }
         let file_id = visited.len();
-        visited.insert(file.clone());
+        visited.insert(include.clone());
 
-        // Lex into tokens.
-        match reader(&file) {
-            Ok(source) => {
-                // Look for conflict markers
-                let mut conflict_errors = find_conflict_markers(&file, file_id, &source);
-                if !conflict_errors.is_empty() {
-                    errors.append(&mut conflict_errors);
+        let (source, file) = match include {
+            FileOrLib::Lib(source) => (source.to_string(), PathBuf::from(source)),
+            FileOrLib::File(file) => match reader(&file) {
+                Ok(source) => (source, file),
+                Err(_) => {
+                    errors.push(Error::FileNotFound(file.clone()));
                     continue;
                 }
+            },
+        };
 
-                let tokens = string_to_tokens(file_id, &source);
-                // Parse the module.
-                let (mut next, result) = module(&file, file_id, &root, &tokens);
-                match result {
-                    Ok(module) => modules.push((file.clone(), module)),
-                    Err(mut errs) => errors.append(&mut errs),
-                }
-                to_visit.append(&mut next);
-            }
-            Err(_) => {
-                errors.push(Error::FileNotFound(file.clone()));
-            }
+        // Look for conflict markers
+        let mut conflict_errors = find_conflict_markers(&file, file_id, &source);
+        if !conflict_errors.is_empty() {
+            errors.append(&mut conflict_errors);
+            continue;
         }
+
+        let tokens = string_to_tokens(file_id, &source);
+        // Parse the module.
+        let (mut next, result) = module(&file, file_id, &root, &tokens);
+        match result {
+            Ok(module) => modules.push((file.clone(), module)),
+            Err(mut errs) => errors.append(&mut errs),
+        }
+        to_visit.append(&mut next);
     }
 
     if errors.is_empty() {

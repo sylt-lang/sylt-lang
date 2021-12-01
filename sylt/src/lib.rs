@@ -6,20 +6,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
 use sylt_common::prog::Prog;
-use sylt_common::RustFunction;
 
 pub mod formatter;
-
-type ExternFunctionList = Vec<(String, RustFunction, String)>;
-
-/// Generates the linking for the standard library, and lingon if it's active.
-pub fn lib_bindings() -> ExternFunctionList {
-    let mut lib = Vec::new();
-
-    lib.append(&mut sylt_std::sylt::_sylt_link());
-
-    lib
-}
 
 pub fn read_file(path: &Path) -> Result<String, Error> {
     std::fs::read_to_string(path).map_err(|_| Error::FileNotFound(path.to_path_buf()))
@@ -27,7 +15,6 @@ pub fn read_file(path: &Path) -> Result<String, Error> {
 
 pub fn compile_with_reader_to_writer<R>(
     args: &Args,
-    functions: ExternFunctionList,
     reader: R,
     write_file: Option<Box<dyn Write>>,
 ) -> Result<Prog, Vec<Error>>
@@ -39,13 +26,12 @@ where
     if args.dump_tree {
         println!("{}", tree);
     }
-    sylt_compiler::compile(!args.skip_typecheck, write_file, tree, &functions)
+    sylt_compiler::compile(!args.skip_typecheck, write_file, tree)
 }
 
 // TODO(ed): This name isn't true anymore - since it can compile
 pub fn run_file_with_reader<R>(
     args: &Args,
-    functions: ExternFunctionList,
     reader: R,
 ) -> Result<(), Vec<Error>>
 where
@@ -60,7 +46,7 @@ where
                 .spawn()
                 .expect("Failed to start lua - make sure it's installed correctly");
             let stdin = child.stdin.take().unwrap();
-            match compile_with_reader_to_writer(args, functions, reader, Some(Box::new(stdin)))? {
+            match compile_with_reader_to_writer(args, reader, Some(Box::new(stdin)))? {
                 Prog::Lua => {
                     let output = child.wait_with_output().unwrap();
                     // NOTE(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
@@ -78,7 +64,7 @@ where
         Some(s) if s == "-" => {
             use std::io;
             // NOTE(ed): Lack of running
-            compile_with_reader_to_writer(args, functions, reader, Some(Box::new(io::stdout())))?;
+            compile_with_reader_to_writer(args, reader, Some(Box::new(io::stdout())))?;
         }
 
         Some(s) => {
@@ -87,16 +73,15 @@ where
                 File::create(PathBuf::from(s)).expect(&format!("Failed to create file: {}", s));
             let writer: Option<Box<dyn Write>> = Some(Box::new(file));
             // NOTE(ed): Lack of running
-            compile_with_reader_to_writer(args, functions, reader, writer)?;
+            compile_with_reader_to_writer(args, reader, writer)?;
         }
     };
     Ok(())
 }
 
-/// Compiles, links and runs the given file. The supplied functions are callable
-/// external functions.
-pub fn run_file(args: &Args, functions: ExternFunctionList) -> Result<(), Vec<Error>> {
-    run_file_with_reader(args, functions, read_file)
+/// Compiles, and runs the given file.
+pub fn run_file(args: &Args) -> Result<(), Vec<Error>> {
+    run_file_with_reader(args, read_file)
 }
 
 #[derive(Default, Debug, Options)]
@@ -186,7 +171,7 @@ mod bytecode {
                 let mut args = $crate::Args::default();
                 args.args = vec![format!("../{}", $path)];
                 args.verbosity = if $print { 1 } else { 0 };
-                let res = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
+                let res = $crate::run_file(&args);
                 $crate::assert_errs!(res, $errs);
             }
         };
@@ -227,7 +212,6 @@ mod lua {
                 let writer: Option<Box<dyn Write>> = Some(Box::new(stdin));
                 let res = $crate::compile_with_reader_to_writer(
                     &args,
-                    ::sylt_std::sylt::_sylt_link(),
                     $crate::read_file,
                     writer,
                 );
