@@ -18,12 +18,6 @@ pub fn lib_bindings() -> ExternFunctionList {
 
     lib.append(&mut sylt_std::sylt::_sylt_link());
 
-    #[cfg(feature = "lingon")]
-    lib.append(&mut sylt_std::lingon::_sylt_link());
-
-    #[cfg(feature = "network")]
-    lib.append(&mut sylt_std::network::_sylt_link());
-
     lib
 }
 
