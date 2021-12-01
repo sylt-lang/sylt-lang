@@ -1,4 +1,4 @@
-use crate::{Op, Type, Value};
+use crate::{Op, Type, Value, FileOrLib, library_source};
 
 use colored::Colorize;
 use std::fmt;
@@ -10,7 +10,7 @@ use sylt_tokenizer::Span;
 
 static INDENT: &'static str = "      ";
 
-fn write_source_line_at(f: &mut fmt::Formatter<'_>, file: &Path, line: usize) -> fmt::Result {
+fn write_source_line_from_file_at(f: &mut fmt::Formatter<'_>, file: &Path, line: usize) -> fmt::Result {
     let file = if let Ok(file) = File::open(file) {
         file
     } else {
@@ -36,23 +36,63 @@ fn write_source_line_at(f: &mut fmt::Formatter<'_>, file: &Path, line: usize) ->
     Ok(())
 }
 
+fn write_source_line_from_stdlib(f: &mut fmt::Formatter<'_>, lib: &str, line: usize) -> fmt::Result {
+    let content = if let Some(content) = library_source(lib) {
+        content
+    } else {
+        writeln!( f, " failed to read library file: {:?}", lib)?;
+        return Ok(());
+    };
+
+    let start_line = (line.saturating_sub(2)).max(1);
+    let lines = line + 1 - start_line;
+
+    for (line_num, line) in content
+        .lines()
+        .enumerate()
+        .skip(start_line - 1)
+        .take(lines)
+    {
+        writeln!(
+            f,
+            " {:>3} | {}",
+            (line_num + 1).to_string().blue(),
+            line
+        )?;
+    }
+    Ok(())
+}
+
 fn underline(f: &mut fmt::Formatter<'_>, col_start: usize, len: usize) -> fmt::Result {
     write!(f, "{: <1$}", "", col_start)?;
     writeln!(f, "{:^<1$}", "", len,)
 }
 
-fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &Path, span: Span) -> fmt::Result {
-    write_source_line_at(f, file, span.line_start)?;
+fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &FileOrLib, span: Span) -> fmt::Result {
+
+    match file {
+        FileOrLib::File(file) => write_source_line_from_file_at(f, file, span.line_start)?,
+        FileOrLib::Lib(lib) => write_source_line_from_stdlib(f, lib, span.line_start)?,
+    }
     write!(f, "{}", INDENT)?;
     underline(f, span.col_start, span.col_end - span.col_start)
 }
 
-fn file_line_display(file: &Path, line: usize) -> String {
-    format!(
-        "{}:{}",
-        file.display().to_string().blue(),
-        line.to_string().blue(),
-    )
+fn file_line_display(file: &FileOrLib, line: usize) -> String {
+    match file {
+        FileOrLib::File(file) =>
+            format!(
+                "{}:{}",
+                file.display().to_string().blue(),
+                line.to_string().blue(),
+            ),
+        FileOrLib::Lib(lib) =>
+            format!(
+                "sylt standard library {}:{}",
+                lib,
+                line.to_string().blue(),
+            ),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -77,7 +117,7 @@ pub enum RuntimeError {
 
 #[derive(Debug, Clone)]
 pub struct Helper {
-    pub at: Option<(PathBuf, Span)>,
+    pub at: Option<(FileOrLib, Span)>,
     pub message: String,
 }
 
@@ -179,34 +219,28 @@ pub enum Error {
     FileNotFound(PathBuf),
     IOError(Rc<std::io::Error>),
     GitConflictError {
-        file: PathBuf,
+        file: FileOrLib,
         span: Span,
     },
 
     SyntaxError {
-        file: PathBuf,
+        file: FileOrLib,
         span: Span,
         message: String,
     },
 
     TypeError {
         kind: TypeError,
-        file: PathBuf,
+        file: FileOrLib,
         span: Span,
         message: Option<String>,
         helpers: Vec<Helper>,
     },
 
+    // TODO(ed): Remove this! They should be panics, and be caught in the type-checker.
     CompileError {
-        file: PathBuf,
+        file: FileOrLib,
         span: Span,
-        message: Option<String>,
-    },
-
-    RuntimeError {
-        kind: RuntimeError,
-        file: PathBuf,
-        line: usize,
         message: Option<String>,
     },
 
@@ -238,19 +272,6 @@ impl fmt::Display for Error {
                 )?;
 
                 write_source_span_at(f, file, *span)
-            }
-            #[rustfmt::skip]
-            Error::RuntimeError { kind, file, line, message } => {
-                write!(f, "{}: ", "Runtime error".red())?;
-                write!(f, "{}\n", file_line_display(file, *line))?;
-                write!(f, "{}{}\n", INDENT, kind)?;
-                if let Some(message) = message {
-                    for line in message.split('\n') {
-                        write!(f, "{}{}\n", INDENT, line)?;
-                    }
-                }
-
-                write_source_line_at(f, file, *line)
             }
             Error::SyntaxError { file, span, message } => {
                 write!(f, "{}: ", "syntax error".red())?;

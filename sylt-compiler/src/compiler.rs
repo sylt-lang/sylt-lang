@@ -1,11 +1,10 @@
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::io::Write;
-use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use sylt_common::error::Error;
 use sylt_common::prog::{BytecodeProg, Prog};
-use sylt_common::{Op, Type, Value};
+use sylt_common::{Op, Type, Value, FileOrLib};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{Identifier, Span, StatementKind, AST};
 
@@ -113,7 +112,7 @@ impl Frame {
 }
 
 struct Compiler {
-    namespace_id_to_path: HashMap<NamespaceID, PathBuf>,
+    namespace_id_to_file: HashMap<NamespaceID, FileOrLib>,
 
     namespaces: Vec<Namespace>,
 
@@ -136,7 +135,7 @@ macro_rules! error {
 
             let msg = format!($( $msg ),*).into();
             let err = Error::CompileError {
-                file: $compiler.file_from_namespace($span.file_id).into(),
+                file: $compiler.file_from_namespace($span.file_id).clone(),
                 span: $span,
                 message: Some(msg),
             };
@@ -156,7 +155,7 @@ macro_rules! error_no_panic {
 impl Compiler {
     fn new() -> Self {
         Self {
-            namespace_id_to_path: HashMap::new(),
+            namespace_id_to_file: HashMap::new(),
             namespaces: Vec::new(),
 
             frames: Vec::new(),
@@ -180,8 +179,8 @@ impl Compiler {
         self.frames.pop().unwrap()
     }
 
-    fn file_from_namespace(&self, namespace: usize) -> &Path {
-        self.namespace_id_to_path.get(&namespace).unwrap()
+    fn file_from_namespace(&self, namespace: usize) -> &FileOrLib {
+        self.namespace_id_to_file.get(&namespace).unwrap()
     }
 
     fn string(&mut self, string: &str) -> usize {
@@ -287,7 +286,7 @@ impl Compiler {
         }
 
         if typecheck {
-            typechecker::solve(&statements, &self.namespace_id_to_path)?;
+            typechecker::solve(&statements, &self.namespace_id_to_file)?;
         }
 
         if let Some(lua_file) = lua_file {
@@ -334,20 +333,20 @@ impl Compiler {
 
     fn extract_globals(&mut self, tree: &AST) -> usize {
         // Find all files and map them to their namespace
-        let mut path_to_namespace_id = HashMap::<PathBuf, usize>::new();
+        let mut include_to_namespace = HashMap::new();
         for (path, _) in tree.modules.iter() {
             let slot = self.namespaces.len();
             self.namespaces.push(Namespace::new());
 
-            if path_to_namespace_id.insert(path.into(), slot).is_some() {
+            if include_to_namespace.insert(path.clone(), slot).is_some() {
                 unreachable!("File was read twice!?");
             }
         }
 
         // Reversed map
-        self.namespace_id_to_path = path_to_namespace_id
+        self.namespace_id_to_file = include_to_namespace
             .iter()
-            .map(|(a, b)| (*b, (*a).clone()))
+            .map(|(a, b): (&FileOrLib, &usize)| (*b, (*a).clone()))
             .collect();
 
         let mut num_constants = 0;
@@ -355,7 +354,7 @@ impl Compiler {
         // Find all globals in all files and declare them. The globals are
         // initialized at a later stage.
         for (path, module) in tree.modules.iter() {
-            let slot = path_to_namespace_id[path];
+            let slot = include_to_namespace[path];
 
             let mut namespace = Namespace::new();
             for statement in module.statements.iter() {
@@ -388,7 +387,7 @@ impl Compiler {
                             NameIdentifier::Implicit(ident) => ident,
                             NameIdentifier::Alias(ident) => ident,
                         };
-                        let other = path_to_namespace_id[file];
+                        let other = include_to_namespace[file];
                         (Name::Namespace(other), ident.name.clone(), ident.span)
                     }
                     Definition { ident: Identifier { name, .. }, .. } => {
@@ -431,7 +430,7 @@ impl Compiler {
             let slot = from_stmt.span.file_id;
             match from_stmt.kind {
                 StatementKind::FromUse { imports, file, .. } => {
-                    let from_slot = path_to_namespace_id[&file];
+                    let from_slot = include_to_namespace[&file];
                     for (ident, alias) in imports.iter() {
                         let name = match self.namespaces[from_slot].get(&ident.name) {
                             Some(name) => *name,

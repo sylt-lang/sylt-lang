@@ -37,8 +37,8 @@ reflect: fn (float, float), (float, float) -> (float, float) : external
 
 dot: fn (float, float), (float, float) -> float : external
 
-pop: fn [*ITEM] -> *ITEM? : external
-last: fn [*ITEM] -> *ITEM? : external
+pop: fn [*ITEM] -> *ITEM : external
+last: fn [*ITEM] -> *ITEM : external
 thread_sleep: fn float -> void : external
 as_str: fn *X -> str : external
 print: fn *X -> void : external

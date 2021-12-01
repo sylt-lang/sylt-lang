@@ -353,9 +353,9 @@ impl<'t> LuaCompiler<'t> {
                     error!(
                         self.compiler,
                         span,
-                        "Cannot assign '{}' in '{}'",
+                        "Cannot assign '{}' in '{:?}'",
                         name,
-                        self.compiler.file_from_namespace(namespace).display()
+                        self.compiler.file_from_namespace(namespace)
                     );
                 }
             },

@@ -39,7 +39,7 @@ pub enum StatementKind {
     Use {
         path: Identifier,
         name: NameIdentifier,
-        file: PathBuf,
+        file: FileOrLib,
     },
 
     /// "Imports" variables from another file.
@@ -51,7 +51,7 @@ pub enum StatementKind {
     FromUse {
         path: Identifier,
         imports: Vec<(Identifier, Option<Alias>)>,
-        file: PathBuf,
+        file: FileOrLib,
     },
 
     /// Defines a new Blob.
@@ -211,7 +211,7 @@ pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
     Ok((ctx, Identifier { span, name: result }))
 }
 
-pub fn use_path<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, PathBuf)> {
+pub fn use_path<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, FileOrLib)> {
     let (ctx, path_ident) = path(ctx)?;
     let path = &path_ident.name;
     let name = path
@@ -219,20 +219,29 @@ pub fn use_path<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, PathBuf)> 
         .trim_end_matches("/")
         .to_string();
     let file = {
-        let parent = if path.starts_with("/") {
-            ctx.root
+        if let Some(name) = library_name(&name) {
+            FileOrLib::Lib(name)
         } else {
-            ctx.file.parent().unwrap()
-        };
-        // Importing a folder is the same as importing exports.sy
-        // in the folder.
-        parent.join(if path == "/" {
-            format!("exports.sy")
-        } else if path_ident.name.ends_with("/") {
-            format!("{}/exports.sy", name)
-        } else {
-            format!("{}.sy", name)
-        })
+            let file = if let FileOrLib::File(file) = ctx.file {
+                file
+            } else {
+                raise_syntax_error!(ctx, "Cannot import files from the standard library");
+            };
+            let parent = if path.starts_with("/") {
+                ctx.root
+            } else {
+                file.parent().unwrap()
+            };
+            // Importing a folder is the same as importing exports.sy
+            // in the folder.
+            FileOrLib::File(parent.join(if path == "/" {
+                format!("exports.sy")
+            } else if path_ident.name.ends_with("/") {
+                format!("{}/exports.sy", name)
+            } else {
+                format!("{}.sy", name)
+            }))
+        }
     };
 
     Ok((ctx, (path_ident, file)))

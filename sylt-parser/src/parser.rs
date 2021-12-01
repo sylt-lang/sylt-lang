@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
-use sylt_common::Type as RuntimeType;
+use sylt_common::{Type as RuntimeType, library_name, library_source, FileOrLib};
 use sylt_tokenizer::{string_to_tokens, PlacedToken, Token};
 
 pub mod expression;
@@ -27,7 +27,7 @@ pub trait Numbered {
 /// Contains modules.
 #[derive(Debug, Clone)]
 pub struct AST {
-    pub modules: Vec<(PathBuf, Module)>,
+    pub modules: Vec<(FileOrLib, Module)>,
 }
 
 /// Contains statements.
@@ -36,6 +36,7 @@ pub struct Module {
     pub span: Span,
     pub statements: Vec<Statement>,
 }
+
 
 /// The precedence of an operator.
 ///
@@ -234,7 +235,7 @@ pub struct Context<'a> {
     /// The index of the curren token in the token slice.
     curr: usize,
     /// The file we're currently parsing.
-    pub file: &'a Path,
+    pub file: &'a FileOrLib,
     /// The magical id - used later on
     pub file_id: usize,
     /// The source root - the top most folder.
@@ -245,7 +246,7 @@ impl<'a> Context<'a> {
     pub fn new(
         tokens: &'a [Token],
         spans: &'a [Span],
-        file: &'a Path,
+        file: &'a FileOrLib,
         file_id: usize,
         root: &'a Path,
     ) -> Self {
@@ -394,7 +395,7 @@ macro_rules! detail_if_error {
                         Some(Error::SyntaxError { file, span, message: prev_msg }) =>
                             Error::SyntaxError {
                                 message: format!("{} - {}", prev_msg, format!($( $msg ),*)).into(),
-                                file: file.into(),
+                                file: file.clone(),
                                 span: *span,
                             },
 
@@ -420,7 +421,7 @@ macro_rules! syntax_error {
         {
             let msg = format!($( $msg ),*).into();
             Error::SyntaxError {
-                file: $ctx.file.to_path_buf(),
+                file: $ctx.file.clone(),
                 span: $ctx.span(),
                 message: msg,
             }
@@ -934,12 +935,6 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
     sub_assignable(ctx.skip(1), ident)
 }
 
-#[derive(Hash, Eq, PartialEq, PartialOrd, Clone, Debug)]
-enum FileOrLib {
-    File(PathBuf),
-    Lib(&'static str),
-}
-
 /// Parses a file's tokens. Returns a list of files it refers to (via `use`s) and
 /// the parsed statements.
 ///
@@ -949,7 +944,7 @@ enum FileOrLib {
 /// continuation is performed, so errored statements are skipped until a newline
 /// or EOF.
 fn module(
-    path: &Path,
+    path: &FileOrLib,
     file_id: usize,
     root: &Path,
     token_stream: &[PlacedToken],
@@ -959,7 +954,7 @@ fn module(
     let mut errors = Vec::new();
     let mut use_files = Vec::new();
     let mut statements = Vec::new();
-    let mut ctx = Context::new(&tokens, &spans, path, file_id, root);
+    let mut ctx = Context::new(&tokens, &spans, &path, file_id, root);
     while !matches!(ctx.token(), T::EOF) {
         // Ignore newlines.
         if matches!(ctx.token(), T::Newline) {
@@ -973,18 +968,7 @@ fn module(
                 use StatementKind::*;
                 // Get the used files from 'use' and 'from' statements.
                 match &statement.kind {
-                    Use { path: Identifier { name, .. }, .. }
-                    | FromUse { path: Identifier { name, .. }, .. }
-                        if STD_LIB_FILES.iter().find(|(x, _)| x == &name.as_str()).is_some() =>
-                    {
-                        let (_, source) = STD_LIB_FILES.iter().find(|(x, _)| x == &name.as_str()).unwrap();
-                        use_files.push(FileOrLib::Lib(source));
-                    }
-
-                    Use { file, .. } | FromUse { file, .. } => {
-                        use_files.push(FileOrLib::File(file.clone()))
-                    }
-
+                    Use { file, .. } | FromUse { file, .. } => use_files.push(file.clone()),
                     _ => {}
                 }
                 statements.push(statement);
@@ -1030,13 +1014,13 @@ fn module(
 /// - [Error::FileNotFound] if the file couldn't be found.
 /// - [Error::GitConflictError] if conflict markers were found.
 /// - Any [Error::IOError] that occured when reading the file.
-pub fn find_conflict_markers(file: &Path, file_id: usize, source: &str) -> Vec<Error> {
+pub fn find_conflict_markers(file: &FileOrLib, file_id: usize, source: &str) -> Vec<Error> {
     let mut errs = Vec::new();
     for (i, line) in source.lines().enumerate() {
         let conflict_marker = "<<<<<<<";
         if line.starts_with(conflict_marker) {
             errs.push(Error::GitConflictError {
-                file: file.to_path_buf(),
+                file: file.clone(),
                 span: Span {
                     line_start: i + 1,
                     line_end: i + 1,
@@ -1051,8 +1035,6 @@ pub fn find_conflict_markers(file: &Path, file_id: usize, source: &str) -> Vec<E
     }
     errs
 }
-
-const STD_LIB_FILES: &[(&str, &str)] = &[("std", include_str!("../../std/std.sy"))];
 
 /// Parses the contents of a file as well as all files this file refers to and so
 /// on.
@@ -1083,10 +1065,10 @@ where
         let file_id = visited.len();
         visited.insert(include.clone());
 
-        let (source, file) = match include {
-            FileOrLib::Lib(source) => (source.to_string(), PathBuf::from(source)),
-            FileOrLib::File(file) => match reader(&file) {
-                Ok(source) => (source, file),
+        let source = match &include {
+            FileOrLib::Lib(name) => library_source(name).unwrap().to_string(),
+            FileOrLib::File(file) => match reader(file) {
+                Ok(source) => source,
                 Err(_) => {
                     errors.push(Error::FileNotFound(file.clone()));
                     continue;
@@ -1095,7 +1077,7 @@ where
         };
 
         // Look for conflict markers
-        let mut conflict_errors = find_conflict_markers(&file, file_id, &source);
+        let mut conflict_errors = find_conflict_markers(&include, file_id, &source);
         if !conflict_errors.is_empty() {
             errors.append(&mut conflict_errors);
             continue;
@@ -1103,9 +1085,9 @@ where
 
         let tokens = string_to_tokens(file_id, &source);
         // Parse the module.
-        let (mut next, result) = module(&file, file_id, &root, &tokens);
+        let (mut next, result) = module(&include, file_id, &root, &tokens);
         match result {
-            Ok(module) => modules.push((file.clone(), module)),
+            Ok(module) => modules.push((include.clone(), module)),
             Err(mut errs) => errors.append(&mut errs),
         }
         to_visit.append(&mut next);

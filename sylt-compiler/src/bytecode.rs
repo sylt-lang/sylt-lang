@@ -69,9 +69,7 @@ impl<'t> BytecodeCompiler<'t> {
         name: &str,
         span: Span,
     ) -> BytecodeContext {
-        let file_as_path = PathBuf::from(self.compiler.file_from_namespace(ctx.namespace));
-
-        let block = Block::new(&name, ctx.namespace, &file_as_path);
+        let block = Block::new(&name, ctx.namespace);
         self.blocks.push(block);
 
         self.compiler.frames.push(Frame::new(name, span));
@@ -279,8 +277,8 @@ impl<'t> BytecodeCompiler<'t> {
             }
 
             Function { name, params, ret: _, body } => {
-                let file = self.compiler.file_from_namespace(ctx.namespace).display();
-                let name = format!("fn {} {}:{}", name, file, expression.span.line_start);
+                let file = self.compiler.file_from_namespace(ctx.namespace);
+                let name = format!("fn {} {:?}:{}", name, file, expression.span.line_start);
 
                 // === Frame begin ===
                 let inner_ctx = self.push_frame_and_block(ctx, &name, expression.span);
@@ -420,9 +418,9 @@ impl<'t> BytecodeCompiler<'t> {
                     error!(
                         self.compiler,
                         span,
-                        "Cannot read '{}' in '{}'",
+                        "Cannot read '{}' in '{:?}'",
                         name,
-                        self.compiler.file_from_namespace(namespace).display()
+                        self.compiler.file_from_namespace(namespace)
                     );
                 }
             },
@@ -455,9 +453,9 @@ impl<'t> BytecodeCompiler<'t> {
                     error!(
                         self.compiler,
                         span,
-                        "Cannot assign '{}' in '{}'",
+                        "Cannot assign '{}' in '{:?}'",
                         name,
-                        self.compiler.file_from_namespace(namespace).display()
+                        self.compiler.file_from_namespace(namespace)
                     );
                 }
             },
@@ -719,7 +717,7 @@ impl<'t> BytecodeCompiler<'t> {
 
     pub fn preamble(&mut self, span: Span, num_constants: usize) {
         let name = "/preamble/";
-        let block = Block::new(name, 0, &self.compiler.namespace_id_to_path[&0]);
+        let block = Block::new(name, 0);
         self.blocks.push(block);
 
         let nil = self.compiler.constant(Value::Nil);

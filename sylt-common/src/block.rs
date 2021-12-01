@@ -1,6 +1,5 @@
 use colored::Colorize;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 
 use crate::{Op, Value};
 
@@ -18,14 +17,13 @@ pub struct Block {
     pub namespace: usize,
 
     pub name: String,
-    pub file: PathBuf,
     pub ops: Vec<Op>,
     pub last_line_offset: usize,
     pub line_offsets: HashMap<usize, usize>,
 }
 
 impl Block {
-    pub fn new(name: &str, namespace: usize, file: &Path) -> Self {
+    pub fn new(name: &str, namespace: usize) -> Self {
         Self {
             upvalues: Vec::new(),
             linking: BlockLinkState::Nothing,
@@ -33,7 +31,6 @@ impl Block {
             namespace,
 
             name: String::from(name),
-            file: file.to_owned(),
             ops: Vec::new(),
             last_line_offset: 0,
             line_offsets: HashMap::new(),

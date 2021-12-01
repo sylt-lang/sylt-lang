@@ -6,9 +6,7 @@ pub mod ty;
 pub mod upvalue;
 pub mod value;
 
-use std::borrow::Cow;
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::path::PathBuf;
 
 pub use block::{Block, BlockLinkState};
 pub use error::Error;
@@ -18,27 +16,21 @@ pub use ty::Type;
 pub use upvalue::UpValue;
 pub use value::Value;
 
-/// A linkable external function. Created either manually or using
-/// [sylt_macro::extern_function].
-pub type RustFunction = fn(RuntimeContext) -> Result<Value, error::RuntimeError>;
-
-#[derive(Debug)]
-pub struct Frame {
-    pub stack_offset: usize,
-    pub block: Rc<RefCell<Block>>,
-    pub ip: usize,
-    pub contains_upvalues: bool,
+/// Differentiates lib imports and file imports
+#[derive(Hash, Eq, PartialEq, PartialOrd, Clone, Debug)]
+pub enum FileOrLib {
+    File(PathBuf),
+    Lib(&'static str),
 }
 
-pub trait Machine {
-    fn stack_from_base(&self, base: usize) -> Cow<[Value]>;
-    fn constants(&self) -> &[Value];
-    fn eval_op(&mut self, op: Op) -> Result<OpResult, Error>;
-    fn eval_call(&mut self, callable: Value, args: &[&Value]) -> Result<Value, Error>;
-    fn args(&self) -> &[String];
+/// The standard library
+const STD_LIB_FILES: &[(&str, &str)] = &[("std", include_str!("../../std/std.sy"))];
+
+pub fn library_name(name: &str) -> Option<&'static str> {
+    STD_LIB_FILES.iter().find(|(x, _)| x == &name).map(|(p, _)| *p)
 }
 
-pub struct RuntimeContext<'m> {
-    pub stack_base: usize,
-    pub machine: &'m mut dyn Machine,
+pub fn library_source(name: &str) -> Option<&'static str> {
+    STD_LIB_FILES.iter().find(|(x, _)| x == &name).map(|(_, s)| *s)
 }
+

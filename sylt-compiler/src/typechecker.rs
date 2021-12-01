@@ -1,7 +1,6 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 use sylt_common::error::{Error, Helper, TypeError};
-use sylt_common::{Type as RuntimeType};
+use sylt_common::{Type as RuntimeType, FileOrLib};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     expression::ComparisonKind, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
@@ -153,9 +152,9 @@ struct TypeChecker {
     globals: HashMap<(usize, String), Name>,
     stack: Vec<Variable>,
     types: Vec<TypeNode>,
-    namespace_to_file: HashMap<usize, PathBuf>,
+    namespace_to_file: HashMap<usize, FileOrLib>,
     // TODO(ed): This can probably be removed via some trickery
-    file_to_namespace: HashMap<PathBuf, usize>,
+    file_to_namespace: HashMap<FileOrLib, usize>,
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -183,7 +182,7 @@ enum Name {
 
 impl TypeChecker {
     fn new(
-        namespace_to_file: &HashMap<usize, PathBuf>,
+        namespace_to_file: &HashMap<usize, FileOrLib>,
     ) -> Self {
         let res = Self {
             globals: HashMap::new(),
@@ -786,10 +785,10 @@ impl TypeChecker {
             | StatementKind::Unreachable
             | StatementKind::EmptyStatement => {
                 unreachable!(
-                    "Illegal outer statement between lines {} and {} in '{}'! Parser should have caught this",
+                    "Illegal outer statement between lines {} and {} in '{:?}'! Parser should have caught this",
                     span.line_start,
                     span.line_end,
-                    self.span_file(&span).display()
+                    self.span_file(&span)
                 )
             }
         }
@@ -2251,14 +2250,14 @@ impl TypeChecker {
         }
     }
 
-    fn span_file(&self, span: &Span) -> PathBuf {
+    fn span_file(&self, span: &Span) -> FileOrLib {
         self.namespace_to_file[&span.file_id].clone()
     }
 }
 
 pub(crate) fn solve(
     statements: &Vec<(&Statement, usize)>,
-    namespace_to_file: &HashMap<usize, PathBuf>,
+    namespace_to_file: &HashMap<usize, FileOrLib>,
 ) -> TypeResult<()> {
     TypeChecker::new(namespace_to_file).solve(statements)
 }
