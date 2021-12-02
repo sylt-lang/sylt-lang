@@ -514,6 +514,8 @@ impl fmt::Display for TypeError {
 
 #[cfg(test)]
 mod test {
+    use crate::FileOrLib;
+
     // A small hack is required to test the functions working on Formatters
     // since we can't construct new Formatters.
     //
@@ -529,7 +531,7 @@ mod test {
         }
     }
 
-    struct SourceSpanTester<'p>(&'p std::path::Path, super::Span);
+    struct SourceSpanTester<'p>(&'p FileOrLib, super::Span);
     impl<'p> std::fmt::Display for SourceSpanTester<'p> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             super::write_source_span_at(f, self.0, self.1)
@@ -550,13 +552,13 @@ mod test {
         tmp
     }
 
-    fn write_str_to_tmp(s: &str) -> std::path::PathBuf {
+    fn write_str_to_tmp(s: &str) -> FileOrLib {
         let tmp = get_tmp();
         std::fs::write(&tmp, s).expect(&format!(
             "Unable to write test string to tmp file at {}",
             tmp.display(),
         ));
-        tmp.clone()
+        FileOrLib::File(tmp.clone())
     }
 
     macro_rules! test_source_span {
