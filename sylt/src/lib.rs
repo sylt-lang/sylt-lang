@@ -155,32 +155,6 @@ macro_rules! assert_errs {
 }
 
 #[cfg(test)]
-mod bytecode {
-    #[macro_export]
-    macro_rules! test_file_run {
-        ($fn:ident, $path:literal, $print:expr, $errs:pat, $_:expr) => {
-            #[test]
-            fn $fn() {
-                #[allow(unused_imports)]
-                use sylt_common::error::RuntimeError;
-                #[allow(unused_imports)]
-                use sylt_common::error::TypeError;
-                #[allow(unused_imports)]
-                use sylt_common::Type;
-
-                let mut args = $crate::Args::default();
-                args.args = vec![format!("../{}", $path)];
-                args.verbosity = if $print { 1 } else { 0 };
-                let res = $crate::run_file(&args);
-                $crate::assert_errs!(res, $errs);
-            }
-        };
-    }
-
-    sylt_macro::find_tests!(test_file_run);
-}
-
-#[cfg(test)]
 mod lua {
     #[macro_export]
     macro_rules! test_file_lua {

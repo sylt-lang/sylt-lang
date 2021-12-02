@@ -645,9 +645,12 @@ pub fn format(args: &Args) -> Result<String, Vec<Error>> {
 
 #[cfg(test)]
 macro_rules! test_formatter_on_file {
-    ($fn:ident, $path:literal, $print:expr, $errs:pat, $_:expr) => {
+    ($fn:ident, $path:literal, $print:expr, $errs:pat, $err:expr) => {
         #[test]
         fn $fn() {
+            if $err {
+                return;
+            }
             use std::path::{Path, PathBuf};
             #[allow(unused_imports)]
             use sylt_common::{
