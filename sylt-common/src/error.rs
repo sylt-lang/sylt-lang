@@ -1,4 +1,4 @@
-use crate::{library_source, FileOrLib, Op, Type, Value};
+use crate::{library_source, FileOrLib, Type, Value};
 
 use colored::Colorize;
 use std::fmt;
@@ -95,7 +95,6 @@ pub enum RuntimeError {
     /// (External function, parameters)
     ExternArgsMismatch(String, Vec<Value>),
     ExternError(String, String),
-    ValueError(Op, Vec<Value>),
     UnknownField(String, String),
     ImmutableField(String),
     ArgumentCount(usize, usize),
@@ -356,12 +355,6 @@ impl fmt::Display for RuntimeError {
             }
             RuntimeError::ExternError(fun, msg) => {
                 write!(f, "Extern function '{}': {:?}", fun, msg)
-            }
-            RuntimeError::ValueError(op, values) => {
-                let values = values
-                    .iter()
-                    .fold(String::new(), |a, v| format!("{}{:?}, ", a, v));
-                write!(f, "Cannot apply {:?} to values {}", op, values)
             }
             RuntimeError::UnknownField(obj, field) => {
                 write!(f, "Cannot find field '{}' on blob {:?}", field, obj)

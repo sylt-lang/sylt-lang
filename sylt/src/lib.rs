@@ -5,7 +5,6 @@ use std::fmt::Debug;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
-use sylt_common::prog::Prog;
 
 pub mod formatter;
 
@@ -17,7 +16,7 @@ pub fn compile_with_reader_to_writer<R>(
     args: &Args,
     reader: R,
     write_file: Box<dyn Write>,
-) -> Result<Prog, Vec<Error>>
+) -> Result<(), Vec<Error>>
 where
     R: Fn(&Path) -> Result<String, Error>,
 {
@@ -43,19 +42,15 @@ where
                 .spawn()
                 .expect("Failed to start lua - make sure it's installed correctly");
             let stdin = child.stdin.take().unwrap();
-            match compile_with_reader_to_writer(args, reader, Box::new(stdin))? {
-                Prog::Lua => {
-                    let output = child.wait_with_output().unwrap();
-                    // NOTE(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
-                    // so we check stderr - which is a bad idea.
-                    if !output.stderr.is_empty() {
-                        return Err(vec![Error::LuaError(
-                            String::from_utf8(output.stderr).unwrap(),
-                        )]);
-                    }
-                }
-                Prog::Bytecode(_) => unreachable!(),
-            };
+            compile_with_reader_to_writer(args, reader, Box::new(stdin))?;
+            let output = child.wait_with_output().unwrap();
+            // NOTE(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
+            // so we check stderr - which is a bad idea.
+            if !output.stderr.is_empty() {
+                return Err(vec![Error::LuaError(
+                        String::from_utf8(output.stderr).unwrap(),
+                )]);
+            }
         }
 
         Some(s) if s == "-" => {
@@ -158,7 +153,6 @@ mod lua {
         ($fn:ident, $path:literal, $print:expr, $errs:pat, $any_runtime_errors:expr) => {
             #[test]
             fn $fn() {
-                use std::io::Write;
                 use std::process::{Command, Stdio};
                 #[allow(unused_imports)]
                 use sylt_common::error::RuntimeError;
@@ -180,7 +174,7 @@ mod lua {
                     .expect(concat!("Failed to start lua, testing:", $path));
 
                 let stdin = child.stdin.take().unwrap();
-                let writer: Option<Box<dyn Write>> = Some(Box::new(stdin));
+                let writer = Box::new(stdin);
                 let res = $crate::compile_with_reader_to_writer(
                     &args,
                     $crate::read_file,

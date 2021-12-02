@@ -1,17 +1,11 @@
-pub mod block;
 pub mod error;
-pub mod op;
-pub mod prog;
 pub mod ty;
 pub mod upvalue;
 pub mod value;
 
 use std::path::PathBuf;
 
-pub use block::{Block, BlockLinkState};
 pub use error::Error;
-pub use op::{Op, OpResult};
-pub use prog::BytecodeProg;
 pub use ty::Type;
 pub use upvalue::UpValue;
 pub use value::Value;

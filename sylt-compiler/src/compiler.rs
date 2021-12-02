@@ -1,8 +1,7 @@
 use std::collections::{hash_map::Entry, HashMap};
 use std::io::Write;
 use sylt_common::error::Error;
-use sylt_common::prog::Prog;
-use sylt_common::{FileOrLib, Op, Type, Value};
+use sylt_common::{FileOrLib, Type, Value};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{Identifier, Span, StatementKind, AST};
 
@@ -168,7 +167,7 @@ impl Compiler {
         self.namespace_id_to_file.get(&namespace).unwrap()
     }
 
-    fn constant(&mut self, value: Value) -> Op {
+    fn constant(&mut self, value: Value) -> usize {
         let slot = match self.values.entry(value.clone()) {
             Entry::Vacant(e) => {
                 let slot = self.constants.len();
@@ -178,7 +177,7 @@ impl Compiler {
             }
             Entry::Occupied(e) => *e.get(),
         };
-        Op::Constant(slot)
+        slot
     }
 
     fn resolve_and_capture(&mut self, name: &str, frame: usize, span: Span) -> Result<Lookup, ()> {
@@ -237,7 +236,7 @@ impl Compiler {
         typecheck: bool,
         lua_file: Box<dyn Write>,
         tree: AST,
-    ) -> Result<Prog, Vec<Error>> {
+    ) -> Result<(), Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
         let name = "/preamble/";
         let start_span = tree.modules[0].1.span;
@@ -274,7 +273,7 @@ impl Compiler {
             return Err(self.errors);
         }
 
-        Ok(Prog::Lua)
+        Ok(())
     }
 
     fn extract_globals(&mut self, tree: &AST) -> usize {
@@ -307,13 +306,9 @@ impl Compiler {
                 use StatementKind::*;
                 let (name, ident_name, span) = match &statement.kind {
                     Blob { name, .. } => {
-                        let blob =
+                        let slot =
                             self.constant(Value::Ty(Type::Blob(name.clone(), Default::default())));
-                        if let Op::Constant(slot) = blob {
-                            (Name::Blob(slot), name.clone(), statement.span)
-                        } else {
-                            unreachable!()
-                        }
+                        (Name::Blob(slot), name.clone(), statement.span)
                     }
                     FromUse { .. } => {
                         // We cannot resolve this here since the namespace
@@ -322,11 +317,8 @@ impl Compiler {
                         continue;
                     }
                     Enum { name, .. } => {
-                        let enum_ = Type::Enum(name.clone(), Default::default());
-                        match self.constant(Value::Ty(enum_)) {
-                            Op::Constant(slot) => (Name::Enum(slot), name.clone(), statement.span),
-                            _ => unreachable!(),
-                        }
+                        let slot = self.constant(Value::Ty(Type::Enum(name.clone(), Default::default())));
+                        (Name::Enum(slot), name.clone(), statement.span)
                     }
                     Use { name, file, .. } => {
                         let ident = match name {
@@ -415,6 +407,6 @@ pub fn compile(
     typecheck: bool,
     lua_file: Box<dyn Write>,
     prog: AST,
-) -> Result<Prog, Vec<Error>> {
+) -> Result<(), Vec<Error>> {
     Compiler::new().compile(typecheck, lua_file, prog)
 }
