@@ -30,8 +30,6 @@ sylt-tokenizer = { version = "0.2.0", path = "../sylt-tokenizer" }
 colored = "2"
 gumdrop = "0.8"
 
-criterion = { version = "0.3", optional = true }
-
 [features]
 
 #[[bench]]
