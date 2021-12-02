@@ -1,13 +1,11 @@
 pub mod error;
 pub mod ty;
-pub mod upvalue;
 pub mod value;
 
 use std::path::PathBuf;
 
 pub use error::Error;
 pub use ty::Type;
-pub use upvalue::UpValue;
 pub use value::Value;
 
 /// Differentiates lib imports and file imports

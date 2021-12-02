@@ -5,7 +5,7 @@ use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use crate::{ty::Type, upvalue::UpValue};
+use crate::ty::Type;
 
 #[derive(Clone, Deserialize, Serialize)]
 pub enum Value {
@@ -20,7 +20,7 @@ pub enum Value {
     Int(i64),
     Bool(bool),
     String(Rc<String>),
-    Function(Rc<Vec<Rc<RefCell<UpValue>>>>, usize),
+    Function(usize),
     ExternFunction(usize),
     Nil,
 }
@@ -103,7 +103,7 @@ impl Value {
             Value::List(v) => Rc::as_ptr(v) as usize,
             Value::Set(v) => Rc::as_ptr(v) as usize,
             Value::Dict(v) => Rc::as_ptr(v) as usize,
-            Value::Function(v, _) => Rc::as_ptr(v) as usize,
+            Value::Function(v) => v as *const _ as usize,
             Value::Tuple(v) => Rc::as_ptr(v) as usize,
             Value::Nil => 0, // TODO(ed): This is not a valid pointer - right?
             Value::ExternFunction(slot) => slot + 2,
@@ -216,7 +216,7 @@ impl Value {
                 }
                 write!(fmt, "}}")
             }
-            Value::Function(_, block) => {
+            Value::Function(block) => {
                 write!(fmt, "<fn #{}>", block)
             }
             Value::ExternFunction(slot) => write!(fmt, "<extern fn {}>", slot),
