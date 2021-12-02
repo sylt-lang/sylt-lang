@@ -1,3 +1,5 @@
+from std use (push)
+
 a :: fn b: [int] -> int do
     a: int = b[0] + b[1]
     ret a

@@ -1,3 +1,5 @@
+from std use (for_each, print)
+
 nop :: fn a: int do
     print("nop")
 end
