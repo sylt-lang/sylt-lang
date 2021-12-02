@@ -26,6 +26,7 @@ where
     if args.dump_tree {
         println!("{}", tree);
     }
+    sylt_compiler::compile(!args.skip_typecheck, None, tree.clone())?;
     sylt_compiler::compile(!args.skip_typecheck, write_file, tree)
 }
 

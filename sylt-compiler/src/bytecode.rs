@@ -400,10 +400,7 @@ impl<'t> BytecodeCompiler<'t> {
                     self.add_op(ctx, span, op);
                 }
                 Some(Name::External) => {
-                    error!(
-                        self.compiler,
-                        span, "External values aren't allowed when compiling to byte-code "
-                    );
+                    // TODO
                 }
                 Some(Name::Blob(blob)) => {
                     let op = Op::Constant(*blob);
@@ -489,11 +486,7 @@ impl<'t> BytecodeCompiler<'t> {
             }
 
             ExternalDefinition { .. } => {
-                // TODO(ed): Should they be? Is this how we should type the standard library?
-                error!(
-                    self.compiler,
-                    statement.span, "External values aren't allowed when compiling to byte-code "
-                );
+                // TODO
             }
 
             #[rustfmt::skip]
