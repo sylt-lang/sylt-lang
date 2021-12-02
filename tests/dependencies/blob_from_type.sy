@@ -8,10 +8,10 @@ X :: blob {
     b: B,
 }
 
-a: X = unsafe_force(1)
+a: X = unsafe_force' 1
 
 start :: fn do
-    a.b.b = 1
+    if false do
+        a.b.b = 1
+    end
 end
-
-// error: #ValueError(_, _)
