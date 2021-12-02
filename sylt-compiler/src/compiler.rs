@@ -28,43 +28,6 @@ impl Variable {
     }
 }
 
-#[derive(Debug, Clone)]
-struct Upvalue {
-    parent: usize,
-    upupvalue: bool,
-
-    name: String,
-    slot: usize,
-    span: Span,
-}
-
-enum Lookup {
-    Upvalue(Upvalue),
-    Variable(Variable),
-}
-
-impl Upvalue {
-    fn capture(var: &Variable) -> Self {
-        Self {
-            parent: var.slot,
-            upupvalue: false,
-
-            name: var.name.clone(),
-            slot: 0,
-            span: var.span,
-        }
-    }
-
-    fn loft(up: &Upvalue) -> Self {
-        Self {
-            parent: up.slot,
-            upupvalue: true,
-            slot: 0,
-            ..up.clone()
-        }
-    }
-}
-
 #[derive(Debug, Copy, Clone)]
 struct Context {
     namespace: NamespaceID,
@@ -91,20 +54,7 @@ struct LoopFrame {
     stack_size: usize,
 }
 
-#[derive(Debug)]
-/// Emulates the runtime stackframe.
-/// [variables] and [upvalues] are used like stacks.
-struct Frame {
-    variables: Vec<Variable>,
-    upvalues: Vec<Upvalue>,
-}
-
-impl Frame {
-    fn new(name: &str, span: Span) -> Self {
-        let variables = vec![Variable::new(name.to_string(), 0, span)];
-        Self { variables, upvalues: Vec::new() }
-    }
-}
+type Frame = Vec<Variable>;
 
 struct Compiler {
     namespace_id_to_file: HashMap<NamespaceID, FileOrLib>,
@@ -180,55 +130,31 @@ impl Compiler {
         slot
     }
 
-    fn resolve_and_capture(&mut self, name: &str, frame: usize, span: Span) -> Result<Lookup, ()> {
+    fn resolve_and_capture(&mut self, name: &str, frame: usize) -> Result<Variable, ()> {
         // Frame 0 has globals which cannot be captured.
         if frame == 0 {
             return Err(());
         }
 
-        let variables = &self.frames[frame].variables;
-        for var in variables.iter().rev() {
+        for var in self.frames[frame].iter().rev() {
             if &var.name == name && var.active {
-                return Ok(Lookup::Variable(var.clone()));
+                return Ok(var.clone());
             }
         }
 
-        let upvalues = &self.frames[frame].upvalues;
-        for up in upvalues.iter().rev() {
-            if &up.name == name {
-                return Ok(Lookup::Upvalue(up.clone()));
-            }
-        }
-
-        let up = match self.resolve_and_capture(name, frame - 1, span) {
-            Ok(Lookup::Upvalue(up)) => Upvalue::loft(&up),
-            Ok(Lookup::Variable(var)) => Upvalue::capture(&var),
-            _ => {
-                return Err(());
-            }
-        };
-        let up = self.upvalue(up, frame);
-        Ok(Lookup::Upvalue(up))
+        self.resolve_and_capture(name, frame - 1)
     }
 
     fn define(&mut self, name: &str, span: Span) -> VarSlot {
-        let frame = &mut self.frames.last_mut().unwrap().variables;
+        let frame = &mut self.frames.last_mut().unwrap();
         let slot = frame.len();
         let var = Variable::new(name.to_string(), slot, span);
         frame.push(var);
         slot
     }
 
-    fn upvalue(&mut self, mut up: Upvalue, frame: usize) -> Upvalue {
-        let ups = &mut self.frames[frame].upvalues;
-        let slot = ups.len();
-        up.slot = slot;
-        ups.push(up.clone());
-        up
-    }
-
     fn activate(&mut self, slot: VarSlot) {
-        self.frames.last_mut().unwrap().variables[slot].active = true;
+        self.frames.last_mut().unwrap()[slot].active = true;
     }
 
     fn compile(
@@ -240,7 +166,8 @@ impl Compiler {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
         let name = "/preamble/";
         let start_span = tree.modules[0].1.span;
-        self.frames.push(Frame::new(name, start_span));
+        self.frames.push(Vec::new());
+        self.define(name, start_span);
 
         self.extract_globals(&tree);
 
