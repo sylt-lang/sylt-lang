@@ -48,7 +48,7 @@ where
             // so we check stderr - which is a bad idea.
             if !output.stderr.is_empty() {
                 return Err(vec![Error::LuaError(
-                        String::from_utf8(output.stderr).unwrap(),
+                    String::from_utf8(output.stderr).unwrap(),
                 )]);
             }
         }

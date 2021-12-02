@@ -6,9 +6,7 @@ pub trait Numbered {
     fn to_number(&self) -> usize;
 }
 
-#[derive(
-    Clone, Eq, Hash, Ord, PartialEq, PartialOrd, sylt_macro::Numbered
-)]
+#[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd, sylt_macro::Numbered)]
 pub enum Type {
     Ty,
     Generic(String),

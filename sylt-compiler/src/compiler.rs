@@ -244,7 +244,8 @@ impl Compiler {
                         continue;
                     }
                     Enum { name, .. } => {
-                        let slot = self.constant(Value::Ty(Type::Enum(name.clone(), Default::default())));
+                        let slot =
+                            self.constant(Value::Ty(Type::Enum(name.clone(), Default::default())));
                         (Name::Enum(slot), name.clone(), statement.span)
                     }
                     Use { name, file, .. } => {
@@ -330,10 +331,6 @@ impl Compiler {
     }
 }
 
-pub fn compile(
-    typecheck: bool,
-    lua_file: Box<dyn Write>,
-    prog: AST,
-) -> Result<(), Vec<Error>> {
+pub fn compile(typecheck: bool, lua_file: Box<dyn Write>, prog: AST) -> Result<(), Vec<Error>> {
     Compiler::new().compile(typecheck, lua_file, prog)
 }

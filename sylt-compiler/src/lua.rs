@@ -207,11 +207,7 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ")");
                 self.statement(body, ctx);
                 write!(self, "end");
-                self.compiler
-                    .frames
-                    .last_mut()
-                    .unwrap()
-                    .truncate(s);
+                self.compiler.frames.last_mut().unwrap().truncate(s);
             }
 
             Tuple(xs) => {
@@ -552,11 +548,7 @@ impl<'t> LuaCompiler<'t> {
                     self.statement(stmt, ctx);
                 }
                 write!(self, "end");
-                self.compiler
-                    .frames
-                    .last_mut()
-                    .unwrap()
-                    .truncate(s);
+                self.compiler.frames.last_mut().unwrap().truncate(s);
             }
 
             Loop { condition, body } => {
@@ -598,11 +590,7 @@ impl<'t> LuaCompiler<'t> {
                         write!(self, ";");
                     }
                     self.statement(body, ctx);
-                    self.compiler
-                        .frames
-                        .last_mut()
-                        .unwrap()
-                        .truncate(ss);
+                    self.compiler.frames.last_mut().unwrap().truncate(ss);
                 }
                 write!(self, "else");
                 if let Some(fall_through) = fall_through {
