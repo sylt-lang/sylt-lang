@@ -511,3 +511,98 @@ impl fmt::Display for TypeError {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    // A small hack is required to test the functions working on Formatters
+    // since we can't construct new Formatters.
+    //
+    // The formatted span output is very weird to test. Feel free to move the
+    // string around and check that the ^^^ lines up correctly. Spaces matter!
+    //
+    // For some tests, color is disabled by setting the env variable NO_COLOR=1.
+
+    struct UnderlineTester(usize, usize);
+    impl std::fmt::Display for UnderlineTester {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            super::underline(f, self.0, self.1)
+        }
+    }
+
+    struct SourceSpanTester<'p>(&'p std::path::Path, super::Span);
+    impl<'p> std::fmt::Display for SourceSpanTester<'p> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            super::write_source_span_at(f, self.0, self.1)
+        }
+    }
+
+    #[test]
+    fn underline() {
+        assert_eq!(&format!("{}", UnderlineTester(1, 2)), " ^^\n");
+        assert_eq!(&format!("{}", UnderlineTester(2, 1)), "  ^\n");
+        assert_eq!(&format!("{}", UnderlineTester(0, 0)), "\n");
+        assert_eq!(&format!("{}", UnderlineTester(0, 2)), "^^\n");
+    }
+
+    fn get_tmp() -> std::path::PathBuf {
+        let mut tmp = std::env::temp_dir();
+        tmp.push(format!("test-{}.sy", sungod::Ra::default().sample::<u32>()));
+        tmp
+    }
+
+    fn write_str_to_tmp(s: &str) -> std::path::PathBuf {
+        let tmp = get_tmp();
+        std::fs::write(&tmp, s).expect(&format!(
+            "Unable to write test string to tmp file at {}",
+            tmp.display(),
+        ));
+        tmp.clone()
+    }
+
+    macro_rules! test_source_span {
+        ($fn:ident, $src:expr, (line: $line:expr, col_start: $col_start:expr, col_end: $col_end:expr), $result:expr $(,)?) => {
+            #[test]
+            fn $fn() {
+                std::env::set_var("NO_COLOR", "1");
+                let path = write_str_to_tmp($src);
+                assert_eq!(
+                    &format!(
+                        "{}",
+                        SourceSpanTester(
+                            &path,
+                            super::Span {
+                                file_id: 0,
+
+                                line_start: $line,
+                                line_end: $line,
+
+                                col_start: $col_start,
+                                col_end: $col_end,
+                            }
+                        ),
+                    ),
+                    $result,
+                );
+            }
+        };
+    }
+
+    test_source_span!(
+        write_source_span_display_simple,
+        "hello\nstart :: fn {\n",
+        (line: 2, col_start: 1, col_end: 6),
+        "   1 | hello
+   2 | start :: fn {
+       ^^^^^\n",
+    );
+
+    test_source_span!(
+        write_source_span_display_many_lines,
+        "hello\nhello\nhello\nstart :: fn {\n  abc := 123\n  def := ghi\n}\n",
+        (line: 4, col_start: 1, col_end: 6),
+        "   2 | hello
+   3 | hello
+   4 | start :: fn {
+       ^^^^^\n",
+    );
+}
