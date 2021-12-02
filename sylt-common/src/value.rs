@@ -24,12 +24,6 @@ pub enum Value {
     Nil,
 }
 
-impl From<&str> for Value {
-    fn from(s: &str) -> Self {
-        Value::String(Rc::new(s.to_string()))
-    }
-}
-
 impl Debug for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.safe_fmt(fmt, &mut HashSet::new())
@@ -104,7 +98,7 @@ impl Value {
             Value::Dict(v) => Rc::as_ptr(v) as usize,
             Value::Function(v) => v as *const _ as usize,
             Value::Tuple(v) => Rc::as_ptr(v) as usize,
-            Value::Nil => 0, // TODO(ed): This is not a valid pointer - right?
+            Value::Nil => 0,
             Value::ExternFunction(slot) => slot + 2,
         }
     }
