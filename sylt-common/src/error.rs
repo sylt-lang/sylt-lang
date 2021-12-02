@@ -1,4 +1,4 @@
-use crate::{library_source, FileOrLib, Type, Value};
+use crate::{library_source, FileOrLib, Type};
 
 use colored::Colorize;
 use std::fmt;
@@ -86,25 +86,6 @@ fn file_line_display(file: &FileOrLib, line: usize) -> String {
             format!("sylt standard library {}:{}", lib, line.to_string().blue(),)
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum RuntimeError {
-    IndexError(Value, Value),
-
-    /// (External function, parameters)
-    ExternArgsMismatch(String, Vec<Value>),
-    ExternError(String, String),
-    UnknownField(String, String),
-    ImmutableField(String),
-    ArgumentCount(usize, usize),
-
-    /// (Indexed value, length, index)
-    IndexOutOfBounds(Value, usize, usize),
-
-    AssertFailed,
-    InvalidProgram,
-    Unreachable,
 }
 
 #[derive(Debug, Clone)]
@@ -236,12 +217,7 @@ pub enum Error {
         message: Option<String>,
     },
 
-    RuntimeError {
-        kind: RuntimeError,
-        file: PathBuf,
-        line: usize,
-        message: Option<String>,
-    },
+    RuntimeError,
 
     LuaError(String),
 }
@@ -272,15 +248,8 @@ impl fmt::Display for Error {
 
                 write_source_span_at(f, file, *span)
             }
-            Error::RuntimeError { kind, message, .. } => {
-                write!(f, "{}:\n", "Runtime error".red())?;
-                write!(f, "{}{}\n", INDENT, kind)?;
-                if let Some(message) = message {
-                    for line in message.split('\n') {
-                        write!(f, "{}{}\n", INDENT, line)?;
-                    }
-                }
-                Ok(())
+            Error::RuntimeError => {
+                write!(f, "{}:\n", "Runtime error".red())
             }
             Error::SyntaxError { file, span, message } => {
                 write!(f, "{}: ", "syntax error".red())?;
@@ -335,55 +304,6 @@ impl fmt::Display for Error {
                     }
                 }
                 write_source_span_at(f, file, *span)
-            }
-        }
-    }
-}
-
-impl fmt::Display for RuntimeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            RuntimeError::IndexError(value, slot) => {
-                write!(f, "Cannot index value '{:?}' with type '{:?}'", value, slot)
-            }
-            RuntimeError::ExternArgsMismatch(name, values) => {
-                write!(
-                    f,
-                    "Extern function '{}' doesn't accept argument(s) {:?}",
-                    name, values
-                )
-            }
-            RuntimeError::ExternError(fun, msg) => {
-                write!(f, "Extern function '{}': {:?}", fun, msg)
-            }
-            RuntimeError::UnknownField(obj, field) => {
-                write!(f, "Cannot find field '{}' on blob {:?}", field, obj)
-            }
-            RuntimeError::ImmutableField(field) => {
-                write!(f, "Cannot mutate field '{}' since it is immutable", field)
-            }
-            RuntimeError::ArgumentCount(expected, given) => {
-                write!(
-                    f,
-                    "Incorrect argument count, expected {} but got {}",
-                    expected, given
-                )
-            }
-            RuntimeError::IndexOutOfBounds(value, len, slot) => {
-                write!(
-                    f,
-                    "Failed to index for {:?} - length is {} but index is {}",
-                    value, len, slot
-                )
-            }
-            RuntimeError::AssertFailed => {
-                write!(f, "Assertion failed")
-            }
-            RuntimeError::InvalidProgram => {
-                write!(f, "{}", "[!!] Invalid program [!!]".bold())
-            }
-            RuntimeError::Unreachable => {
-                write!(f, "Reached unreachable code")
             }
         }
     }

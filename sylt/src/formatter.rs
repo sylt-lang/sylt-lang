@@ -654,7 +654,7 @@ macro_rules! test_formatter_on_file {
             use std::path::{Path, PathBuf};
             #[allow(unused_imports)]
             use sylt_common::{
-                error::{Error, RuntimeError, TypeError},
+                error::{Error, TypeError},
                 Type,
             };
             #[allow(unused_imports)]

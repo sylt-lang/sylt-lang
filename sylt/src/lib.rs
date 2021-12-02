@@ -155,7 +155,6 @@ mod lua {
             fn $fn() {
                 use std::process::{Command, Stdio};
                 #[allow(unused_imports)]
-                use sylt_common::error::RuntimeError;
                 #[allow(unused_imports)]
                 use sylt_common::error::TypeError;
                 #[allow(unused_imports)]
