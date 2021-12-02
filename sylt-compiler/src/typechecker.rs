@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use sylt_common::error::{Error, Helper, TypeError};
-use sylt_common::{Type as RuntimeType, FileOrLib};
+use sylt_common::{FileOrLib, Type as RuntimeType};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     expression::ComparisonKind, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
@@ -181,9 +181,7 @@ enum Name {
 }
 
 impl TypeChecker {
-    fn new(
-        namespace_to_file: &HashMap<usize, FileOrLib>,
-    ) -> Self {
+    fn new(namespace_to_file: &HashMap<usize, FileOrLib>) -> Self {
         let res = Self {
             globals: HashMap::new(),
             stack: Vec::new(),

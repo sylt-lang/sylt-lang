@@ -27,10 +27,15 @@ pub enum FileOrLib {
 const STD_LIB_FILES: &[(&str, &str)] = &[("std", include_str!("../../std/std.sy"))];
 
 pub fn library_name(name: &str) -> Option<&'static str> {
-    STD_LIB_FILES.iter().find(|(x, _)| x == &name).map(|(p, _)| *p)
+    STD_LIB_FILES
+        .iter()
+        .find(|(x, _)| x == &name)
+        .map(|(p, _)| *p)
 }
 
 pub fn library_source(name: &str) -> Option<&'static str> {
-    STD_LIB_FILES.iter().find(|(x, _)| x == &name).map(|(_, s)| *s)
+    STD_LIB_FILES
+        .iter()
+        .find(|(x, _)| x == &name)
+        .map(|(_, s)| *s)
 }
-

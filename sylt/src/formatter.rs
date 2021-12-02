@@ -687,10 +687,7 @@ macro_rules! test_formatter_on_file {
                     };
 
                     // Try to run the file again, this time with pretty "got/expected"-output.
-                    let after = $crate::run_file_with_reader(
-                        &args,
-                        read_formatted_or_file,
-                    );
+                    let after = $crate::run_file_with_reader(&args, read_formatted_or_file);
                     eprintln!("The test output changed between before and after formatting");
                     $crate::assert_errs!(after, $errs);
                 }

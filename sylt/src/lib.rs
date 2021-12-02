@@ -30,10 +30,7 @@ where
 }
 
 // TODO(ed): This name isn't true anymore - since it can compile
-pub fn run_file_with_reader<R>(
-    args: &Args,
-    reader: R,
-) -> Result<(), Vec<Error>>
+pub fn run_file_with_reader<R>(args: &Args, reader: R) -> Result<(), Vec<Error>>
 where
     R: Fn(&Path) -> Result<String, Error>,
 {

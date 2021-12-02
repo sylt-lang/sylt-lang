@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
-use sylt_common::{Type as RuntimeType, library_name, library_source, FileOrLib};
+use sylt_common::{library_name, library_source, FileOrLib, Type as RuntimeType};
 use sylt_tokenizer::{string_to_tokens, PlacedToken, Token};
 
 pub mod expression;
@@ -36,7 +36,6 @@ pub struct Module {
     pub span: Span,
     pub statements: Vec<Statement>,
 }
-
 
 /// The precedence of an operator.
 ///

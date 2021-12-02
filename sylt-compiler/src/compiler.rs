@@ -4,7 +4,7 @@ use std::io::Write;
 use std::rc::Rc;
 use sylt_common::error::Error;
 use sylt_common::prog::{BytecodeProg, Prog};
-use sylt_common::{Op, Type, Value, FileOrLib};
+use sylt_common::{FileOrLib, Op, Type, Value};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{Identifier, Span, StatementKind, AST};
 

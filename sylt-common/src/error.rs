@@ -1,4 +1,4 @@
-use crate::{Op, Type, Value, FileOrLib, library_source};
+use crate::{library_source, FileOrLib, Op, Type, Value};
 
 use colored::Colorize;
 use std::fmt;
@@ -10,7 +10,11 @@ use sylt_tokenizer::Span;
 
 static INDENT: &'static str = "      ";
 
-fn write_source_line_from_file_at(f: &mut fmt::Formatter<'_>, file: &Path, line: usize) -> fmt::Result {
+fn write_source_line_from_file_at(
+    f: &mut fmt::Formatter<'_>,
+    file: &Path,
+    line: usize,
+) -> fmt::Result {
     let file = if let Ok(file) = File::open(file) {
         file
     } else {
@@ -36,29 +40,23 @@ fn write_source_line_from_file_at(f: &mut fmt::Formatter<'_>, file: &Path, line:
     Ok(())
 }
 
-fn write_source_line_from_stdlib(f: &mut fmt::Formatter<'_>, lib: &str, line: usize) -> fmt::Result {
+fn write_source_line_from_stdlib(
+    f: &mut fmt::Formatter<'_>,
+    lib: &str,
+    line: usize,
+) -> fmt::Result {
     let content = if let Some(content) = library_source(lib) {
         content
     } else {
-        writeln!( f, " failed to read library file: {:?}", lib)?;
+        writeln!(f, " failed to read library file: {:?}", lib)?;
         return Ok(());
     };
 
     let start_line = (line.saturating_sub(2)).max(1);
     let lines = line + 1 - start_line;
 
-    for (line_num, line) in content
-        .lines()
-        .enumerate()
-        .skip(start_line - 1)
-        .take(lines)
-    {
-        writeln!(
-            f,
-            " {:>3} | {}",
-            (line_num + 1).to_string().blue(),
-            line
-        )?;
+    for (line_num, line) in content.lines().enumerate().skip(start_line - 1).take(lines) {
+        writeln!(f, " {:>3} | {}", (line_num + 1).to_string().blue(), line)?;
     }
     Ok(())
 }
@@ -69,7 +67,6 @@ fn underline(f: &mut fmt::Formatter<'_>, col_start: usize, len: usize) -> fmt::R
 }
 
 fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &FileOrLib, span: Span) -> fmt::Result {
-
     match file {
         FileOrLib::File(file) => write_source_line_from_file_at(f, file, span.line_start)?,
         FileOrLib::Lib(lib) => write_source_line_from_stdlib(f, lib, span.line_start)?,
@@ -80,18 +77,14 @@ fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &FileOrLib, span: Span
 
 fn file_line_display(file: &FileOrLib, line: usize) -> String {
     match file {
-        FileOrLib::File(file) =>
-            format!(
-                "{}:{}",
-                file.display().to_string().blue(),
-                line.to_string().blue(),
-            ),
-        FileOrLib::Lib(lib) =>
-            format!(
-                "sylt standard library {}:{}",
-                lib,
-                line.to_string().blue(),
-            ),
+        FileOrLib::File(file) => format!(
+            "{}:{}",
+            file.display().to_string().blue(),
+            line.to_string().blue(),
+        ),
+        FileOrLib::Lib(lib) => {
+            format!("sylt standard library {}:{}", lib, line.to_string().blue(),)
+        }
     }
 }
 

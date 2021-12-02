@@ -20,9 +20,7 @@ fn main() -> Result<(), String> {
             Err(errs) => errs,
         }
     } else {
-        sylt::run_file(&args)
-            .err()
-            .unwrap_or_else(Vec::new)
+        sylt::run_file(&args).err().unwrap_or_else(Vec::new)
     };
 
     if errs.is_empty() {
