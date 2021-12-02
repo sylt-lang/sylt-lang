@@ -16,7 +16,7 @@ pub fn read_file(path: &Path) -> Result<String, Error> {
 pub fn compile_with_reader_to_writer<R>(
     args: &Args,
     reader: R,
-    write_file: Option<Box<dyn Write>>,
+    write_file: Box<dyn Write>,
 ) -> Result<Prog, Vec<Error>>
 where
     R: Fn(&Path) -> Result<String, Error>,
@@ -26,7 +26,6 @@ where
     if args.dump_tree {
         println!("{}", tree);
     }
-    sylt_compiler::compile(!args.skip_typecheck, None, tree.clone())?;
     sylt_compiler::compile(!args.skip_typecheck, write_file, tree)
 }
 
@@ -44,7 +43,7 @@ where
                 .spawn()
                 .expect("Failed to start lua - make sure it's installed correctly");
             let stdin = child.stdin.take().unwrap();
-            match compile_with_reader_to_writer(args, reader, Some(Box::new(stdin)))? {
+            match compile_with_reader_to_writer(args, reader, Box::new(stdin))? {
                 Prog::Lua => {
                     let output = child.wait_with_output().unwrap();
                     // NOTE(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
@@ -62,14 +61,14 @@ where
         Some(s) if s == "-" => {
             use std::io;
             // NOTE(ed): Lack of running
-            compile_with_reader_to_writer(args, reader, Some(Box::new(io::stdout())))?;
+            compile_with_reader_to_writer(args, reader, Box::new(io::stdout()))?;
         }
 
         Some(s) => {
             use std::fs::File;
             let file =
                 File::create(PathBuf::from(s)).expect(&format!("Failed to create file: {}", s));
-            let writer: Option<Box<dyn Write>> = Some(Box::new(file));
+            let writer = Box::new(file);
             // NOTE(ed): Lack of running
             compile_with_reader_to_writer(args, reader, writer)?;
         }

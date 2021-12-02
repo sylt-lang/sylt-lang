@@ -1,14 +1,11 @@
-use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::io::Write;
-use std::rc::Rc;
 use sylt_common::error::Error;
-use sylt_common::prog::{BytecodeProg, Prog};
+use sylt_common::prog::Prog;
 use sylt_common::{FileOrLib, Op, Type, Value};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{Identifier, Span, StatementKind, AST};
 
-mod bytecode;
 mod dependency;
 mod lua;
 mod ty;
@@ -79,7 +76,6 @@ type Namespace = HashMap<String, Name>;
 type ConstantID = usize;
 type NamespaceID = usize;
 type BlobID = usize;
-type BlockID = usize;
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 enum Name {
     External,
@@ -121,7 +117,6 @@ struct Compiler {
     panic: bool,
     errors: Vec<Error>,
 
-    strings: Vec<String>,
     constants: Vec<Value>,
 
     values: HashMap<Value, usize>,
@@ -163,36 +158,14 @@ impl Compiler {
             panic: false,
             errors: Vec::new(),
 
-            strings: Vec::new(),
             constants: Vec::new(),
 
             values: HashMap::new(),
         }
     }
 
-    fn pop_frame(&mut self, ctx: Context) -> Frame {
-        assert_eq!(
-            self.frames.len() - 1,
-            ctx.frame,
-            "Can only pop top stackframe"
-        );
-        self.frames.pop().unwrap()
-    }
-
     fn file_from_namespace(&self, namespace: usize) -> &FileOrLib {
         self.namespace_id_to_file.get(&namespace).unwrap()
-    }
-
-    fn string(&mut self, string: &str) -> usize {
-        self.strings
-            .iter()
-            .enumerate()
-            .find_map(|(i, x)| if x == string { Some(i) } else { None })
-            .unwrap_or_else(|| {
-                let slot = self.strings.len();
-                self.strings.push(string.into());
-                slot
-            })
     }
 
     fn constant(&mut self, value: Value) -> Op {
@@ -262,7 +235,7 @@ impl Compiler {
     fn compile(
         mut self,
         typecheck: bool,
-        lua_file: Option<Box<dyn Write>>,
+        lua_file: Box<dyn Write>,
         tree: AST,
     ) -> Result<Prog, Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
@@ -270,7 +243,7 @@ impl Compiler {
         let start_span = tree.modules[0].1.span;
         self.frames.push(Frame::new(name, start_span));
 
-        let num_constants = self.extract_globals(&tree);
+        self.extract_globals(&tree);
 
         let statements = match dependency::initialization_order(&tree, &self) {
             Ok(statements) => statements,
@@ -289,46 +262,19 @@ impl Compiler {
             typechecker::solve(&statements, &self.namespace_id_to_file)?;
         }
 
-        if let Some(lua_file) = lua_file {
-            let mut lua_compiler = lua::LuaCompiler::new(&mut self, Box::new(lua_file));
+        let mut lua_compiler = lua::LuaCompiler::new(&mut self, Box::new(lua_file));
 
-            lua_compiler.preamble(Span::zero(0), 0);
-            for (statement, namespace) in statements.iter() {
-                lua_compiler.compile(statement, *namespace);
-            }
-            lua_compiler.postamble(Span::zero(0));
-
-            if !self.errors.is_empty() {
-                return Err(self.errors);
-            }
-
-            Ok(Prog::Lua)
-        } else {
-            let blocks = {
-                let mut bytecode_compiler = bytecode::BytecodeCompiler::new(&mut self);
-                bytecode_compiler.preamble(start_span, num_constants);
-
-                for (statement, namespace) in statements.iter() {
-                    bytecode_compiler.compile(statement, *namespace);
-                }
-
-                bytecode_compiler.postamble(start_span);
-                bytecode_compiler.blocks
-            };
-
-            if !self.errors.is_empty() {
-                return Err(self.errors);
-            }
-
-            Ok(Prog::Bytecode(BytecodeProg {
-                blocks: blocks
-                    .into_iter()
-                    .map(|x| Rc::new(RefCell::new(x)))
-                    .collect(),
-                constants: self.constants,
-                strings: self.strings,
-            }))
+        lua_compiler.preamble(Span::zero(0), 0);
+        for (statement, namespace) in statements.iter() {
+            lua_compiler.compile(statement, *namespace);
         }
+        lua_compiler.postamble(Span::zero(0));
+
+        if !self.errors.is_empty() {
+            return Err(self.errors);
+        }
+
+        Ok(Prog::Lua)
     }
 
     fn extract_globals(&mut self, tree: &AST) -> usize {
@@ -467,7 +413,7 @@ impl Compiler {
 
 pub fn compile(
     typecheck: bool,
-    lua_file: Option<Box<dyn Write>>,
+    lua_file: Box<dyn Write>,
     prog: AST,
 ) -> Result<Prog, Vec<Error>> {
     Compiler::new().compile(typecheck, lua_file, prog)
