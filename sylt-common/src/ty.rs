@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
@@ -8,7 +7,7 @@ pub trait Numbered {
 }
 
 #[derive(
-    Clone, Eq, Hash, Ord, PartialEq, PartialOrd, sylt_macro::Numbered, Deserialize, Serialize,
+    Clone, Eq, Hash, Ord, PartialEq, PartialOrd, sylt_macro::Numbered
 )]
 pub enum Type {
     Ty,

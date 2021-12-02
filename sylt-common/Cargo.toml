@@ -16,7 +16,6 @@ sylt-tokenizer = { version = "0.2.0", path = "../sylt-tokenizer" }
 sylt-macro = { version = "0.2.0", path = "../sylt-macro" }
 
 colored = "2"
-serde = { version = "1", features = ["derive", "rc"] }
 
 [dev-dependencies]
 # For generating random file names for tests

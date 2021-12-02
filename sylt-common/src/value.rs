@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
@@ -7,7 +6,7 @@ use std::rc::Rc;
 
 use crate::ty::Type;
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone)]
 pub enum Value {
     Ty(Type),
     Blob(Rc<RefCell<HashMap<String, Value>>>),
