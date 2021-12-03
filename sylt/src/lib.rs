@@ -91,7 +91,7 @@ pub struct Args {
     #[options(
         short = "c",
         long = "compile",
-        help = "Compile to a lua file - for stdout"
+        help = "Compile to a lua file, '-' for stdout"
     )]
     pub compile: Option<String>,
 
