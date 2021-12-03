@@ -211,10 +211,7 @@ fn parse_test_settings(contents: String) -> TestSettings {
                 line = format!("Error::TypeError {{ kind: TypeError::{}, .. }}", &line[1..]);
             }
             if line.starts_with("#") {
-                line = format!(
-                    "Error::RuntimeError {{ kind: RuntimeError::{}, .. }}",
-                    &line[1..]
-                );
+                line = "Error::RuntimeError".into()
             }
             if line.starts_with("@") {
                 line = format!(

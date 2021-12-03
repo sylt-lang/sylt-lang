@@ -1,3 +1,5 @@
+from std use (for_each, print)
+
 f :: fn a:int, b:int {
     print a
     print b

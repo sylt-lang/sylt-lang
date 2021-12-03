@@ -645,13 +645,16 @@ pub fn format(args: &Args) -> Result<String, Vec<Error>> {
 
 #[cfg(test)]
 macro_rules! test_formatter_on_file {
-    ($fn:ident, $path:literal, $print:expr, $errs:pat, $_:expr) => {
+    ($fn:ident, $path:literal, $print:expr, $errs:pat, $err:expr) => {
         #[test]
         fn $fn() {
+            if $err {
+                return;
+            }
             use std::path::{Path, PathBuf};
             #[allow(unused_imports)]
             use sylt_common::{
-                error::{Error, RuntimeError, TypeError},
+                error::{Error, TypeError},
                 Type,
             };
             #[allow(unused_imports)]
@@ -662,7 +665,7 @@ macro_rules! test_formatter_on_file {
             // Run the file before the formatter.
             let mut args = $crate::Args::default();
             args.args = vec![path.clone()];
-            let before = $crate::run_file(&args, ::sylt_std::sylt::_sylt_link());
+            let before = $crate::run_file(&args);
             // If the test fails here, we already have / will have prettified output.
             assert!(
                 matches!(before.err().unwrap_or(Vec::new()).as_slice(), $errs),
@@ -684,11 +687,7 @@ macro_rules! test_formatter_on_file {
                     };
 
                     // Try to run the file again, this time with pretty "got/expected"-output.
-                    let after = $crate::run_file_with_reader(
-                        &args,
-                        ::sylt_std::sylt::_sylt_link(),
-                        read_formatted_or_file,
-                    );
+                    let after = $crate::run_file_with_reader(&args, read_formatted_or_file);
                     eprintln!("The test output changed between before and after formatting");
                     $crate::assert_errs!(after, $errs);
                 }

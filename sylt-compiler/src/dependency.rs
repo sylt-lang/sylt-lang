@@ -255,7 +255,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             let old_ns = ctx.namespace;
             ctx.namespace = ctx
                 .compiler
-                .namespace_id_to_path
+                .namespace_id_to_file
                 .iter()
                 .find_map(|(ns, path)| if path == file { Some(*ns) } else { None })
                 .unwrap();
@@ -399,7 +399,7 @@ pub(crate) fn initialization_order<'a>(
     compiler: &Compiler,
 ) -> Result<Vec<(&'a Statement, usize)>, Vec<(&'a Statement, usize)>> {
     let path_to_namespace_id: HashMap<_, _> = compiler
-        .namespace_id_to_path
+        .namespace_id_to_file
         .iter()
         .map(|(a, b)| (b.clone(), *a))
         .collect();

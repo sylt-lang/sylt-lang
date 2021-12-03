@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
-use sylt_common::Type as RuntimeType;
+use sylt_common::{library_name, library_source, FileOrLib, Type as RuntimeType};
 use sylt_tokenizer::{string_to_tokens, PlacedToken, Token};
 
 pub mod expression;
@@ -27,7 +27,7 @@ pub trait Numbered {
 /// Contains modules.
 #[derive(Debug, Clone)]
 pub struct AST {
-    pub modules: Vec<(PathBuf, Module)>,
+    pub modules: Vec<(FileOrLib, Module)>,
 }
 
 /// Contains statements.
@@ -234,7 +234,7 @@ pub struct Context<'a> {
     /// The index of the curren token in the token slice.
     curr: usize,
     /// The file we're currently parsing.
-    pub file: &'a Path,
+    pub file: &'a FileOrLib,
     /// The magical id - used later on
     pub file_id: usize,
     /// The source root - the top most folder.
@@ -245,7 +245,7 @@ impl<'a> Context<'a> {
     pub fn new(
         tokens: &'a [Token],
         spans: &'a [Span],
-        file: &'a Path,
+        file: &'a FileOrLib,
         file_id: usize,
         root: &'a Path,
     ) -> Self {
@@ -394,7 +394,7 @@ macro_rules! detail_if_error {
                         Some(Error::SyntaxError { file, span, message: prev_msg }) =>
                             Error::SyntaxError {
                                 message: format!("{} - {}", prev_msg, format!($( $msg ),*)).into(),
-                                file: file.into(),
+                                file: file.clone(),
                                 span: *span,
                             },
 
@@ -420,7 +420,7 @@ macro_rules! syntax_error {
         {
             let msg = format!($( $msg ),*).into();
             Error::SyntaxError {
-                file: $ctx.file.to_path_buf(),
+                file: $ctx.file.clone(),
                 span: $ctx.span(),
                 message: msg,
             }
@@ -943,17 +943,17 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
 /// continuation is performed, so errored statements are skipped until a newline
 /// or EOF.
 fn module(
-    path: &Path,
+    path: &FileOrLib,
     file_id: usize,
     root: &Path,
     token_stream: &[PlacedToken],
-) -> (Vec<PathBuf>, Result<Module, Vec<Error>>) {
+) -> (Vec<FileOrLib>, Result<Module, Vec<Error>>) {
     let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
     let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
     let mut errors = Vec::new();
     let mut use_files = Vec::new();
     let mut statements = Vec::new();
-    let mut ctx = Context::new(&tokens, &spans, path, file_id, root);
+    let mut ctx = Context::new(&tokens, &spans, &path, file_id, root);
     while !matches!(ctx.token(), T::EOF) {
         // Ignore newlines.
         if matches!(ctx.token(), T::Newline) {
@@ -966,8 +966,9 @@ fn module(
             Ok((ctx, statement)) => {
                 use StatementKind::*;
                 // Get the used files from 'use' and 'from' statements.
-                if let Use { file, .. } | FromUse { file, .. } = &statement.kind {
-                    use_files.push(file.clone());
+                match &statement.kind {
+                    Use { file, .. } | FromUse { file, .. } => use_files.push(file.clone()),
+                    _ => {}
                 }
                 statements.push(statement);
                 ctx
@@ -1012,13 +1013,13 @@ fn module(
 /// - [Error::FileNotFound] if the file couldn't be found.
 /// - [Error::GitConflictError] if conflict markers were found.
 /// - Any [Error::IOError] that occured when reading the file.
-pub fn find_conflict_markers(file: &Path, file_id: usize, source: &str) -> Vec<Error> {
+pub fn find_conflict_markers(file: &FileOrLib, file_id: usize, source: &str) -> Vec<Error> {
     let mut errs = Vec::new();
     for (i, line) in source.lines().enumerate() {
         let conflict_marker = "<<<<<<<";
         if line.starts_with(conflict_marker) {
             errs.push(Error::GitConflictError {
-                file: file.to_path_buf(),
+                file: file.clone(),
                 span: Span {
                     line_start: i + 1,
                     line_end: i + 1,
@@ -1052,40 +1053,43 @@ where
     // Files we want to parse but haven't yet.
     let mut to_visit = Vec::new();
     let root = path.parent().unwrap();
-    to_visit.push(PathBuf::from(path));
+    to_visit.push(FileOrLib::File(PathBuf::from(path)));
 
     let mut modules = Vec::new();
     let mut errors = Vec::new();
-    while let Some(file) = to_visit.pop() {
-        if visited.contains(&file) {
+    while let Some(include) = to_visit.pop() {
+        if visited.contains(&include) {
             continue;
         }
         let file_id = visited.len();
-        visited.insert(file.clone());
+        visited.insert(include.clone());
 
-        // Lex into tokens.
-        match reader(&file) {
-            Ok(source) => {
-                // Look for conflict markers
-                let mut conflict_errors = find_conflict_markers(&file, file_id, &source);
-                if !conflict_errors.is_empty() {
-                    errors.append(&mut conflict_errors);
+        let source = match &include {
+            FileOrLib::Lib(name) => library_source(name).unwrap().to_string(),
+            FileOrLib::File(file) => match reader(file) {
+                Ok(source) => source,
+                Err(_) => {
+                    errors.push(Error::FileNotFound(file.clone()));
                     continue;
                 }
+            },
+        };
 
-                let tokens = string_to_tokens(file_id, &source);
-                // Parse the module.
-                let (mut next, result) = module(&file, file_id, &root, &tokens);
-                match result {
-                    Ok(module) => modules.push((file.clone(), module)),
-                    Err(mut errs) => errors.append(&mut errs),
-                }
-                to_visit.append(&mut next);
-            }
-            Err(_) => {
-                errors.push(Error::FileNotFound(file.clone()));
-            }
+        // Look for conflict markers
+        let mut conflict_errors = find_conflict_markers(&include, file_id, &source);
+        if !conflict_errors.is_empty() {
+            errors.append(&mut conflict_errors);
+            continue;
         }
+
+        let tokens = string_to_tokens(file_id, &source);
+        // Parse the module.
+        let (mut next, result) = module(&include, file_id, &root, &tokens);
+        match result {
+            Ok(module) => modules.push((include.clone(), module)),
+            Err(mut errs) => errors.append(&mut errs),
+        }
+        to_visit.append(&mut next);
     }
 
     if errors.is_empty() {
@@ -1118,7 +1122,8 @@ mod test {
                 let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
                 let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
                 let path = ::std::path::PathBuf::from(stringify!($name));
-                let result = $f($crate::Context::new(&tokens, &spans, &path, 0, &path));
+                let at = ::sylt_common::FileOrLib::File(path.clone());
+                let result = $f($crate::Context::new(&tokens, &spans, &at, 0, &path));
                 assert!(
                     result.is_ok(),
                     "\nSyntax tree test didn't parse for:\n{}\nErrs: {:?}",
@@ -1151,7 +1156,8 @@ mod test {
                 let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
                 let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
                 let path = ::std::path::PathBuf::from(stringify!($name));
-                let result = $f($crate::Context::new(&tokens, &spans, &path, 0, &path));
+                let at = ::sylt_common::FileOrLib::File(path.clone());
+                let result = $f($crate::Context::new(&tokens, &spans, &at, 0, &path));
                 assert!(
                     result.is_err(),
                     "\nSyntax tree test parsed - when it should have failed - for:\n{}\n",

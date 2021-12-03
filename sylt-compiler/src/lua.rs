@@ -194,7 +194,7 @@ impl<'t> LuaCompiler<'t> {
 
             Function { name: _, params, ret: _, body } => {
                 // TODO(ed): We don't use multiple frames here...
-                let s = self.compiler.frames.last().unwrap().variables.len();
+                let s = self.compiler.frames.last().unwrap().len();
                 write!(self, "function (");
                 for (i, e) in params.iter().enumerate() {
                     if i != 0 {
@@ -207,12 +207,7 @@ impl<'t> LuaCompiler<'t> {
                 write!(self, ")");
                 self.statement(body, ctx);
                 write!(self, "end");
-                self.compiler
-                    .frames
-                    .last_mut()
-                    .unwrap()
-                    .variables
-                    .truncate(s);
+                self.compiler.frames.last_mut().unwrap().truncate(s);
             }
 
             Tuple(xs) => {
@@ -283,7 +278,7 @@ impl<'t> LuaCompiler<'t> {
                 self.write_slot(self_slot);
                 write!(self, "end)()");
 
-                self.compiler.frames.last_mut().unwrap().variables.pop();
+                self.compiler.frames.last_mut().unwrap().pop();
             }
 
             Float(a) => write!(self, "{:?}", a),
@@ -302,12 +297,8 @@ impl<'t> LuaCompiler<'t> {
         ctx: Context,
         namespace: usize,
     ) -> Option<usize> {
-        match self.compiler.resolve_and_capture(name, ctx.frame, span) {
-            Ok(Lookup::Upvalue(up)) => {
-                self.write_slot(up.slot);
-            }
-
-            Ok(Lookup::Variable(var)) => {
+        match self.compiler.resolve_and_capture(name, ctx.frame) {
+            Ok(var) => {
                 self.write_slot(var.slot);
             }
 
@@ -328,12 +319,7 @@ impl<'t> LuaCompiler<'t> {
                     return Some(new_namespace);
                 }
                 None => {
-                    if self.compiler.functions.get(name).is_some() {
-                        // Same as external - but defined from sylt-std
-                        write!(self, "{}", name);
-                    } else {
-                        error!(self.compiler, span, "No identifier found named: '{}'", name);
-                    }
+                    error!(self.compiler, span, "No identifier found named: '{}'", name);
                 }
             },
         }
@@ -341,13 +327,9 @@ impl<'t> LuaCompiler<'t> {
     }
 
     fn set_identifier(&mut self, name: &str, span: Span, ctx: Context, namespace: usize) {
-        match self.compiler.resolve_and_capture(name, ctx.frame, span) {
-            Ok(Lookup::Upvalue(up)) => {
+        match self.compiler.resolve_and_capture(name, ctx.frame) {
+            Ok(up) => {
                 self.write_slot(up.slot);
-            }
-
-            Ok(Lookup::Variable(var)) => {
-                self.write_slot(var.slot);
             }
 
             Err(()) => match self.compiler.namespaces[namespace].get(name).cloned() {
@@ -358,9 +340,9 @@ impl<'t> LuaCompiler<'t> {
                     error!(
                         self.compiler,
                         span,
-                        "Cannot assign '{}' in '{}'",
+                        "Cannot assign '{}' in '{:?}'",
                         name,
-                        self.compiler.file_from_namespace(namespace).display()
+                        self.compiler.file_from_namespace(namespace)
                     );
                 }
             },
@@ -384,7 +366,8 @@ impl<'t> LuaCompiler<'t> {
             Definition { ident, value, .. } => {
                 self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
                 write!(self, "=");
-                self.compiler.frames.push(Frame::new("/expr/", statement.span));
+                self.compiler.frames.push(Vec::new());
+                self.compiler.define("/expr/", statement.span);
                 // Only reachable form the outside so we know these frames
                 let ctx = Context { frame: self.compiler.frames.len() - 1, ..ctx };
                 self.expression(value, ctx);
@@ -559,18 +542,13 @@ impl<'t> LuaCompiler<'t> {
 
             Block { statements } => {
                 // TODO(ed): Some of these blocks are wrong - but it should still work.
-                let s = self.compiler.frames.last().unwrap().variables.len();
+                let s = self.compiler.frames.last().unwrap().len();
                 write!(self, "do");
                 for stmt in statements.iter() {
                     self.statement(stmt, ctx);
                 }
                 write!(self, "end");
-                self.compiler
-                    .frames
-                    .last_mut()
-                    .unwrap()
-                    .variables
-                    .truncate(s);
+                self.compiler.frames.last_mut().unwrap().truncate(s);
             }
 
             Loop { condition, body } => {
@@ -602,7 +580,7 @@ impl<'t> LuaCompiler<'t> {
                 {
                     write!(self, "elseif \"{}\" == __case_tmp[1] then", name);
                     write!(self, ";");
-                    let ss = self.compiler.frames.last().unwrap().variables.len();
+                    let ss = self.compiler.frames.last().unwrap().len();
                     if let Some(Identifier { name, span }) = &variable {
                         let slot = self.compiler.define(name, *span);
                         self.compiler.activate(slot);
@@ -612,12 +590,7 @@ impl<'t> LuaCompiler<'t> {
                         write!(self, ";");
                     }
                     self.statement(body, ctx);
-                    self.compiler
-                        .frames
-                        .last_mut()
-                        .unwrap()
-                        .variables
-                        .truncate(ss);
+                    self.compiler.frames.last_mut().unwrap().truncate(ss);
                 }
                 write!(self, "else");
                 if let Some(fall_through) = fall_through {

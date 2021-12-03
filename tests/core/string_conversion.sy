@@ -1,3 +1,5 @@
+from std use (as_str, print, push, add, pop)
+
 A :: blob {
     b: float,
     a: int,

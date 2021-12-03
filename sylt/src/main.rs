@@ -1,4 +1,4 @@
-use sylt::{lib_bindings, Args, Options};
+use sylt::{Args, Options};
 
 fn main() -> Result<(), String> {
     let args = Args::parse_args_default_or_exit();
@@ -20,9 +20,7 @@ fn main() -> Result<(), String> {
             Err(errs) => errs,
         }
     } else {
-        sylt::run_file(&args, lib_bindings())
-            .err()
-            .unwrap_or_else(Vec::new)
+        sylt::run_file(&args).err().unwrap_or_else(Vec::new)
     };
 
     if errs.is_empty() {

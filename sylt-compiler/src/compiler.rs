@@ -1,15 +1,10 @@
-use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use sylt_common::error::Error;
-use sylt_common::prog::{BytecodeProg, Prog};
-use sylt_common::{Op, RustFunction, Type, Value};
+use sylt_common::{FileOrLib, Type, Value};
 use sylt_parser::statement::NameIdentifier;
-use sylt_parser::{Identifier, Span, StatementKind, Type as ParserType, AST};
+use sylt_parser::{Identifier, Span, StatementKind, AST};
 
-mod bytecode;
 mod dependency;
 mod lua;
 mod ty;
@@ -33,43 +28,6 @@ impl Variable {
     }
 }
 
-#[derive(Debug, Clone)]
-struct Upvalue {
-    parent: usize,
-    upupvalue: bool,
-
-    name: String,
-    slot: usize,
-    span: Span,
-}
-
-enum Lookup {
-    Upvalue(Upvalue),
-    Variable(Variable),
-}
-
-impl Upvalue {
-    fn capture(var: &Variable) -> Self {
-        Self {
-            parent: var.slot,
-            upupvalue: false,
-
-            name: var.name.clone(),
-            slot: 0,
-            span: var.span,
-        }
-    }
-
-    fn loft(up: &Upvalue) -> Self {
-        Self {
-            parent: up.slot,
-            upupvalue: true,
-            slot: 0,
-            ..up.clone()
-        }
-    }
-}
-
 #[derive(Debug, Copy, Clone)]
 struct Context {
     namespace: NamespaceID,
@@ -80,7 +38,6 @@ type Namespace = HashMap<String, Name>;
 type ConstantID = usize;
 type NamespaceID = usize;
 type BlobID = usize;
-type BlockID = usize;
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 enum Name {
     External,
@@ -97,33 +54,18 @@ struct LoopFrame {
     stack_size: usize,
 }
 
-#[derive(Debug)]
-/// Emulates the runtime stackframe.
-/// [variables] and [upvalues] are used like stacks.
-struct Frame {
-    variables: Vec<Variable>,
-    upvalues: Vec<Upvalue>,
-}
-
-impl Frame {
-    fn new(name: &str, span: Span) -> Self {
-        let variables = vec![Variable::new(name.to_string(), 0, span)];
-        Self { variables, upvalues: Vec::new() }
-    }
-}
+type Frame = Vec<Variable>;
 
 struct Compiler {
-    namespace_id_to_path: HashMap<NamespaceID, PathBuf>,
+    namespace_id_to_file: HashMap<NamespaceID, FileOrLib>,
 
     namespaces: Vec<Namespace>,
 
     frames: Vec<Frame>,
-    functions: HashMap<String, (usize, RustFunction, ParserType)>,
 
     panic: bool,
     errors: Vec<Error>,
 
-    strings: Vec<String>,
     constants: Vec<Value>,
 
     values: HashMap<Value, usize>,
@@ -137,7 +79,7 @@ macro_rules! error {
 
             let msg = format!($( $msg ),*).into();
             let err = Error::CompileError {
-                file: $compiler.file_from_namespace($span.file_id).into(),
+                file: $compiler.file_from_namespace($span.file_id).clone(),
                 span: $span,
                 message: Some(msg),
             };
@@ -157,48 +99,25 @@ macro_rules! error_no_panic {
 impl Compiler {
     fn new() -> Self {
         Self {
-            namespace_id_to_path: HashMap::new(),
+            namespace_id_to_file: HashMap::new(),
             namespaces: Vec::new(),
 
             frames: Vec::new(),
-            functions: HashMap::new(),
 
             panic: false,
             errors: Vec::new(),
 
-            strings: Vec::new(),
             constants: Vec::new(),
 
             values: HashMap::new(),
         }
     }
 
-    fn pop_frame(&mut self, ctx: Context) -> Frame {
-        assert_eq!(
-            self.frames.len() - 1,
-            ctx.frame,
-            "Can only pop top stackframe"
-        );
-        self.frames.pop().unwrap()
+    fn file_from_namespace(&self, namespace: usize) -> &FileOrLib {
+        self.namespace_id_to_file.get(&namespace).unwrap()
     }
 
-    fn file_from_namespace(&self, namespace: usize) -> &Path {
-        self.namespace_id_to_path.get(&namespace).unwrap()
-    }
-
-    fn string(&mut self, string: &str) -> usize {
-        self.strings
-            .iter()
-            .enumerate()
-            .find_map(|(i, x)| if x == string { Some(i) } else { None })
-            .unwrap_or_else(|| {
-                let slot = self.strings.len();
-                self.strings.push(string.into());
-                slot
-            })
-    }
-
-    fn constant(&mut self, value: Value) -> Op {
+    fn constant(&mut self, value: Value) -> usize {
         let slot = match self.values.entry(value.clone()) {
             Entry::Vacant(e) => {
                 let slot = self.constants.len();
@@ -208,88 +127,49 @@ impl Compiler {
             }
             Entry::Occupied(e) => *e.get(),
         };
-        Op::Constant(slot)
+        slot
     }
 
-    fn resolve_and_capture(&mut self, name: &str, frame: usize, span: Span) -> Result<Lookup, ()> {
+    fn resolve_and_capture(&mut self, name: &str, frame: usize) -> Result<Variable, ()> {
         // Frame 0 has globals which cannot be captured.
         if frame == 0 {
             return Err(());
         }
 
-        let variables = &self.frames[frame].variables;
-        for var in variables.iter().rev() {
+        for var in self.frames[frame].iter().rev() {
             if &var.name == name && var.active {
-                return Ok(Lookup::Variable(var.clone()));
+                return Ok(var.clone());
             }
         }
 
-        let upvalues = &self.frames[frame].upvalues;
-        for up in upvalues.iter().rev() {
-            if &up.name == name {
-                return Ok(Lookup::Upvalue(up.clone()));
-            }
-        }
-
-        let up = match self.resolve_and_capture(name, frame - 1, span) {
-            Ok(Lookup::Upvalue(up)) => Upvalue::loft(&up),
-            Ok(Lookup::Variable(var)) => Upvalue::capture(&var),
-            _ => {
-                return Err(());
-            }
-        };
-        let up = self.upvalue(up, frame);
-        Ok(Lookup::Upvalue(up))
+        self.resolve_and_capture(name, frame - 1)
     }
 
     fn define(&mut self, name: &str, span: Span) -> VarSlot {
-        let frame = &mut self.frames.last_mut().unwrap().variables;
+        let frame = &mut self.frames.last_mut().unwrap();
         let slot = frame.len();
         let var = Variable::new(name.to_string(), slot, span);
         frame.push(var);
         slot
     }
 
-    fn upvalue(&mut self, mut up: Upvalue, frame: usize) -> Upvalue {
-        let ups = &mut self.frames[frame].upvalues;
-        let slot = ups.len();
-        up.slot = slot;
-        ups.push(up.clone());
-        up
-    }
-
     fn activate(&mut self, slot: VarSlot) {
-        self.frames.last_mut().unwrap().variables[slot].active = true;
+        self.frames.last_mut().unwrap()[slot].active = true;
     }
 
     fn compile(
         mut self,
         typecheck: bool,
-        lua_file: Option<Box<dyn Write>>,
+        lua_file: Box<dyn Write>,
         tree: AST,
-        functions: &[(String, RustFunction, String)],
-    ) -> Result<Prog, Vec<Error>> {
+    ) -> Result<(), Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
         let name = "/preamble/";
         let start_span = tree.modules[0].1.span;
-        self.frames.push(Frame::new(name, start_span));
+        self.frames.push(Vec::new());
+        self.define(name, start_span);
 
-        let num_constants = self.extract_globals(&tree);
-
-        let num_functions = functions.len();
-        self.functions = functions
-            .to_vec()
-            .into_iter()
-            .enumerate()
-            .map(|(i, (s, f, sig))| (s.clone(), (i, f, parse_signature(&s, &sig))))
-            .collect();
-        assert_eq!(
-            num_functions,
-            self.functions.len(),
-            "There are {} names and {} extern functions - some extern functions share name",
-            self.functions.len(),
-            num_functions
-        );
+        self.extract_globals(&tree);
 
         let statements = match dependency::initialization_order(&tree, &self) {
             Ok(statements) => statements,
@@ -305,68 +185,40 @@ impl Compiler {
         }
 
         if typecheck {
-            typechecker::solve(&statements, &self.namespace_id_to_path, &self.functions)?;
+            typechecker::solve(&statements, &self.namespace_id_to_file)?;
         }
 
-        if let Some(lua_file) = lua_file {
-            let mut lua_compiler = lua::LuaCompiler::new(&mut self, Box::new(lua_file));
+        let mut lua_compiler = lua::LuaCompiler::new(&mut self, Box::new(lua_file));
 
-            lua_compiler.preamble(Span::zero(0), 0);
-            for (statement, namespace) in statements.iter() {
-                lua_compiler.compile(statement, *namespace);
-            }
-            lua_compiler.postamble(Span::zero(0));
-
-            if !self.errors.is_empty() {
-                return Err(self.errors);
-            }
-
-            Ok(Prog::Lua)
-        } else {
-            let blocks = {
-                let mut bytecode_compiler = bytecode::BytecodeCompiler::new(&mut self);
-                bytecode_compiler.preamble(start_span, num_constants);
-
-                for (statement, namespace) in statements.iter() {
-                    bytecode_compiler.compile(statement, *namespace);
-                }
-
-                bytecode_compiler.postamble(start_span);
-                bytecode_compiler.blocks
-            };
-
-            if !self.errors.is_empty() {
-                return Err(self.errors);
-            }
-
-            Ok(Prog::Bytecode(BytecodeProg {
-                blocks: blocks
-                    .into_iter()
-                    .map(|x| Rc::new(RefCell::new(x)))
-                    .collect(),
-                functions: functions.iter().map(|(_, f, _)| *f).collect(),
-                constants: self.constants,
-                strings: self.strings,
-            }))
+        lua_compiler.preamble(Span::zero(0), 0);
+        for (statement, namespace) in statements.iter() {
+            lua_compiler.compile(statement, *namespace);
         }
+        lua_compiler.postamble(Span::zero(0));
+
+        if !self.errors.is_empty() {
+            return Err(self.errors);
+        }
+
+        Ok(())
     }
 
     fn extract_globals(&mut self, tree: &AST) -> usize {
         // Find all files and map them to their namespace
-        let mut path_to_namespace_id = HashMap::<PathBuf, usize>::new();
+        let mut include_to_namespace = HashMap::new();
         for (path, _) in tree.modules.iter() {
             let slot = self.namespaces.len();
             self.namespaces.push(Namespace::new());
 
-            if path_to_namespace_id.insert(path.into(), slot).is_some() {
+            if include_to_namespace.insert(path.clone(), slot).is_some() {
                 unreachable!("File was read twice!?");
             }
         }
 
         // Reversed map
-        self.namespace_id_to_path = path_to_namespace_id
+        self.namespace_id_to_file = include_to_namespace
             .iter()
-            .map(|(a, b)| (*b, (*a).clone()))
+            .map(|(a, b): (&FileOrLib, &usize)| (*b, (*a).clone()))
             .collect();
 
         let mut num_constants = 0;
@@ -374,20 +226,16 @@ impl Compiler {
         // Find all globals in all files and declare them. The globals are
         // initialized at a later stage.
         for (path, module) in tree.modules.iter() {
-            let slot = path_to_namespace_id[path];
+            let slot = include_to_namespace[path];
 
             let mut namespace = Namespace::new();
             for statement in module.statements.iter() {
                 use StatementKind::*;
                 let (name, ident_name, span) = match &statement.kind {
                     Blob { name, .. } => {
-                        let blob =
+                        let slot =
                             self.constant(Value::Ty(Type::Blob(name.clone(), Default::default())));
-                        if let Op::Constant(slot) = blob {
-                            (Name::Blob(slot), name.clone(), statement.span)
-                        } else {
-                            unreachable!()
-                        }
+                        (Name::Blob(slot), name.clone(), statement.span)
                     }
                     FromUse { .. } => {
                         // We cannot resolve this here since the namespace
@@ -396,18 +244,16 @@ impl Compiler {
                         continue;
                     }
                     Enum { name, .. } => {
-                        let enum_ = Type::Enum(name.clone(), Default::default());
-                        match self.constant(Value::Ty(enum_)) {
-                            Op::Constant(slot) => (Name::Enum(slot), name.clone(), statement.span),
-                            _ => unreachable!(),
-                        }
+                        let slot =
+                            self.constant(Value::Ty(Type::Enum(name.clone(), Default::default())));
+                        (Name::Enum(slot), name.clone(), statement.span)
                     }
                     Use { name, file, .. } => {
                         let ident = match name {
                             NameIdentifier::Implicit(ident) => ident,
                             NameIdentifier::Alias(ident) => ident,
                         };
-                        let other = path_to_namespace_id[file];
+                        let other = include_to_namespace[file];
                         (Name::Namespace(other), ident.name.clone(), ident.span)
                     }
                     Definition { ident: Identifier { name, .. }, .. } => {
@@ -450,7 +296,7 @@ impl Compiler {
             let slot = from_stmt.span.file_id;
             match from_stmt.kind {
                 StatementKind::FromUse { imports, file, .. } => {
-                    let from_slot = path_to_namespace_id[&file];
+                    let from_slot = include_to_namespace[&file];
                     for (ident, alias) in imports.iter() {
                         let name = match self.namespaces[from_slot].get(&ident.name) {
                             Some(name) => *name,
@@ -485,28 +331,6 @@ impl Compiler {
     }
 }
 
-fn parse_signature(func_name: &str, sig: &str) -> ParserType {
-    let token_stream = sylt_tokenizer::string_to_tokens(0, sig);
-    let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
-    let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
-    let path = PathBuf::from(func_name);
-    let ctx = sylt_parser::Context::new(&tokens, &spans, &path, 0, &path);
-    match sylt_parser::parse_type(ctx) {
-        Ok((_, ty)) => ty,
-        Err((_, errs)) => {
-            for err in errs {
-                eprintln!("{}", err);
-            }
-            panic!("Error parsing function signature for {}", func_name);
-        }
-    }
-}
-
-pub fn compile(
-    typecheck: bool,
-    lua_file: Option<Box<dyn Write>>,
-    prog: AST,
-    functions: &[(String, RustFunction, String)],
-) -> Result<Prog, Vec<Error>> {
-    Compiler::new().compile(typecheck, lua_file, prog, functions)
+pub fn compile(typecheck: bool, lua_file: Box<dyn Write>, prog: AST) -> Result<(), Vec<Error>> {
+    Compiler::new().compile(typecheck, lua_file, prog)
 }

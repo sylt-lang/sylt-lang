@@ -1,3 +1,5 @@
+from std use (clear)
+
 start :: fn do
     a := [1, 2, 3, 4]
     clear(a)
