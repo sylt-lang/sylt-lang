@@ -1208,11 +1208,8 @@ impl TypeChecker {
             ExpressionKind::Bool(_) => Ok(self.push_type(Type::Bool)),
             ExpressionKind::Nil => Ok(self.push_type(Type::Void)),
         }?;
-        let res_ty = self.find_type(res);
-        match res_ty {
-            // Type::Blob(_, _) => Ok(self.push_type(res_ty)),
-            _ => Ok(res),
-        }
+        expression.ty = Some(res);
+        Ok(res)
     }
 
     fn definition(&mut self, statement: &mut Statement, global: bool, ctx: TypeCtx) -> TypeResult<()> {
