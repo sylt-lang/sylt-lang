@@ -407,8 +407,11 @@ end
 floor = math.floor
 as_char = string.byte
 function as_chars(s)
-    local chars = table.pack(string.byte(s, 1, string.len(s)))
-    chars.n = nil
+    local chars = {}
+    local len = string.len(s)
+    for i = 1, len, 1 do
+        table.insert(chars, string.byte(s, i))
+    end
     return __LIST(chars)
 end
 
