@@ -172,7 +172,11 @@ impl Compiler {
         self.extract_globals(&tree);
 
         let mut statements = match dependency::initialization_order(&tree, &self) {
-            Ok(statements) => statements.into_iter().map(|(a, b)| (a.clone(), b)).collect(), // TODO(ed): This clone can probably be removed.
+            // TODO(ed): This clone can probably be removed.
+            Ok(statements) => statements
+                .into_iter()
+                .map(|(a, b)| (a.clone(), b))
+                .collect(),
             Err(statements) => {
                 statements.iter().for_each(|(statement, _)| {
                     error_no_panic!(self, statement.span, "Dependency cycle")
