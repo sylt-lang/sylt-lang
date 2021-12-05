@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use crate::typechecker::TyID;
+use sylt_common::TyID;
 
 #[derive(Debug, Clone)]
 pub enum Type {

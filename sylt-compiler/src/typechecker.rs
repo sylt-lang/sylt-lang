@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use sylt_common::error::{Error, Helper, TypeError};
-use sylt_common::{FileOrLib, Type as RuntimeType};
+use sylt_common::{FileOrLib, TyID, Type as RuntimeType};
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     expression::ComparisonKind, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
@@ -12,16 +12,6 @@ use crate::{ty::Type, NamespaceID};
 use std::collections::{BTreeMap, BTreeSet};
 
 type TypeResult<T> = Result<T, Vec<Error>>;
-
-#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
-pub struct TyID(usize);
-
-impl std::fmt::Display for TyID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let TyID(id) = self;
-        write!(f, "TyID({})", id)
-    }
-}
 
 trait Help {
     fn help(self, typechecker: &TypeChecker, span: Span, message: String) -> Self;
