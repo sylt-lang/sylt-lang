@@ -1212,7 +1212,12 @@ impl TypeChecker {
         Ok(res)
     }
 
-    fn definition(&mut self, statement: &mut Statement, global: bool, ctx: TypeCtx) -> TypeResult<()> {
+    fn definition(
+        &mut self,
+        statement: &mut Statement,
+        global: bool,
+        ctx: TypeCtx,
+    ) -> TypeResult<()> {
         let span = statement.span;
         match &mut statement.kind {
             StatementKind::Definition { ident, kind, ty, value } => {
