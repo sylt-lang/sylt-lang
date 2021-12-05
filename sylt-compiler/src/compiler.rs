@@ -171,13 +171,13 @@ impl Compiler {
 
         self.extract_globals(&tree);
 
-        let statements = match dependency::initialization_order(&tree, &self) {
-            Ok(statements) => statements,
+        let mut statements = match dependency::initialization_order(&tree, &self) {
+            Ok(statements) => statements.into_iter().map(|(a, b)| (a.clone(), b)).collect(), // TODO(ed): This clone can probably be removed.
             Err(statements) => {
                 statements.iter().for_each(|(statement, _)| {
                     error_no_panic!(self, statement.span, "Dependency cycle")
                 });
-                statements
+                return Err(self.errors);
             }
         };
         if !self.errors.is_empty() {
@@ -185,7 +185,7 @@ impl Compiler {
         }
 
         if typecheck {
-            typechecker::solve(&statements, &self.namespace_id_to_file)?;
+            typechecker::solve(&mut statements, &self.namespace_id_to_file)?;
         }
 
         let mut lua_compiler = lua::LuaCompiler::new(&mut self, Box::new(lua_file));

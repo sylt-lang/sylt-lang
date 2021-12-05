@@ -81,8 +81,8 @@ macro_rules! type_error {
 
 macro_rules! bin_op {
     ($self:expr, $span:expr, $ctx:expr, $a:expr, $b:expr, $con:expr) => {{
-        let a = $self.expression(&$a, $ctx)?;
-        let b = $self.expression(&$b, $ctx)?;
+        let a = $self.expression($a, $ctx)?;
+        let b = $self.expression($b, $ctx)?;
         $self.add_constraint(a, $span, $con(b));
         $self.add_constraint(b, $span, $con(a));
         $self.check_constraints($span, $ctx, a)?;
@@ -518,16 +518,16 @@ impl TypeChecker {
         Ok(self.push_type(ty))
     }
 
-    fn statement(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
+    fn statement(&mut self, statement: &mut Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
         let span = statement.span;
-        match &statement.kind {
+        match &mut statement.kind {
             StatementKind::Block { statements } => {
                 // Left this for Gustav
 
                 let ss = self.stack.len();
                 let rets = self.push_type(Type::Unknown);
                 let mut any_return = false;
-                for stmt in statements.iter() {
+                for stmt in statements.iter_mut() {
                     if let Some(ret) = self.statement(stmt, ctx)? {
                         self.unify(span, ctx, rets, ret)?;
                         any_return = true;
@@ -554,7 +554,7 @@ impl TypeChecker {
 
                 let mut branch_names = BTreeSet::new();
                 let ss = self.stack.len();
-                for branch in branches.iter() {
+                for branch in branches.iter_mut() {
                     if let Some(var) = &branch.variable {
                         let var = Variable {
                             ident: var.clone(),
@@ -570,7 +570,7 @@ impl TypeChecker {
                         self.stack.push(var);
                     }
                     self.check_constraints(span, ctx, to_match)?;
-                    self.statement(&branch.body, ctx)?;
+                    self.statement(&mut branch.body, ctx)?;
                     self.stack.truncate(ss);
                     branch_names.insert(branch.pattern.name.clone());
                 }
@@ -676,7 +676,7 @@ impl TypeChecker {
         }
     }
 
-    fn outer_statement(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<()> {
+    fn outer_statement(&mut self, statement: &mut Statement, ctx: TypeCtx) -> TypeResult<()> {
         let span = statement.span;
         match &statement.kind {
             StatementKind::Use { name, file, .. } => {
@@ -793,12 +793,12 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn assignable(&mut self, assignable: &Assignable, ctx: TypeCtx) -> TypeResult<TyID> {
+    fn assignable(&mut self, assignable: &mut Assignable, ctx: TypeCtx) -> TypeResult<TyID> {
         let span = assignable.span;
         // FIXME: Functions are copied since they may be specialized
         // several times, this does not work properly when functions are
         // passed to an unknown function parameter.
-        let ty = match &assignable.kind {
+        let ty = match &mut assignable.kind {
             AssignableKind::Variant { enum_ass, variant, value } => {
                 let (ctx, enum_name) = match &enum_ass.kind {
                     AssignableKind::Read(enum_name) => (ctx, enum_name),
@@ -914,7 +914,7 @@ impl TypeChecker {
                             );
                         }
                         // TODO(ed): Annotate the errors?
-                        for (a, p) in args.iter().zip(params.iter()) {
+                        for (a, p) in args.iter_mut().zip(params.iter()) {
                             let span = a.span;
                             let a = self.expression(a, ctx)?;
                             self.unify(span, ctx, *p, a)?;
@@ -940,14 +940,14 @@ impl TypeChecker {
             AssignableKind::ArrowCall(pre_arg, f, args) => {
                 let mut args = args.clone();
                 args.insert(0, Expression::clone(pre_arg));
-                let mapped_assignable =
+                let mut mapped_assignable =
                     Assignable { span, kind: AssignableKind::Call(f.clone(), args) };
-                self.assignable(&mapped_assignable, ctx)
+                self.assignable(&mut mapped_assignable, ctx)
             }
 
             AssignableKind::Access(outer, ident) => match self.namespace_chain(outer, ctx) {
                 Some(ctx) => self.assignable(
-                    &Assignable { span, kind: AssignableKind::Read(ident.clone()) },
+                    &mut Assignable { span, kind: AssignableKind::Read(ident.clone()) },
                     ctx,
                 ),
                 None => {
@@ -992,9 +992,9 @@ impl TypeChecker {
         }
     }
 
-    fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> TypeResult<TyID> {
+    fn expression(&mut self, expression: &mut Expression, ctx: TypeCtx) -> TypeResult<TyID> {
         let span = expression.span;
-        let res = match &expression.kind {
+        let res = match &mut expression.kind {
             ExpressionKind::Get(ass) => self.assignable(ass, ctx),
 
             ExpressionKind::Add(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Add),
@@ -1017,8 +1017,8 @@ impl TypeChecker {
                 }
 
                 ComparisonKind::In => {
-                    let a = self.expression(&a, ctx)?;
-                    let b = self.expression(&b, ctx)?;
+                    let a = self.expression(a, ctx)?;
+                    let b = self.expression(b, ctx)?;
                     self.add_constraint(a, span, Constraint::IsContainedIn(b));
                     self.add_constraint(b, span, Constraint::Contains(a));
                     self.check_constraints(span, ctx, a)?;
@@ -1166,7 +1166,7 @@ impl TypeChecker {
 
             ExpressionKind::Tuple(exprs) => {
                 let mut tys = Vec::new();
-                for expr in exprs.iter() {
+                for expr in exprs.iter_mut() {
                     tys.push(self.expression(expr, ctx)?);
                 }
                 Ok(self.push_type(Type::Tuple(tys)))
@@ -1174,7 +1174,7 @@ impl TypeChecker {
 
             ExpressionKind::List(exprs) => {
                 let inner_ty = self.push_type(Type::Unknown);
-                for expr in exprs.iter() {
+                for expr in exprs.iter_mut() {
                     let e = self.expression(expr, ctx)?;
                     self.unify(span, ctx, inner_ty, e)?;
                 }
@@ -1183,7 +1183,7 @@ impl TypeChecker {
 
             ExpressionKind::Set(exprs) => {
                 let inner_ty = self.push_type(Type::Unknown);
-                for expr in exprs.iter() {
+                for expr in exprs.iter_mut() {
                     let e = self.expression(expr, ctx)?;
                     self.unify(span, ctx, inner_ty, e)?;
                 }
@@ -1193,11 +1193,11 @@ impl TypeChecker {
             ExpressionKind::Dict(exprs) => {
                 let key_ty = self.push_type(Type::Unknown);
                 let value_ty = self.push_type(Type::Unknown);
-                for (key, value) in exprs.iter().zip(exprs.iter().skip(1)).step_by(2) {
-                    let e = self.expression(key, ctx)?;
-                    self.unify(span, ctx, key_ty, e)?;
-                    let e = self.expression(value, ctx)?;
-                    self.unify(span, ctx, value_ty, e)?;
+                for (i, x) in exprs.iter_mut().enumerate() {
+                    let e = self.expression(x, ctx)?;
+                    // Even indexes are keys, odd are the values.
+                    let ty = if i % 2 == 0 { key_ty } else { value_ty };
+                    self.unify(span, ctx, ty, e)?;
                 }
                 Ok(self.push_type(Type::Dict(key_ty, value_ty)))
             }
@@ -1215,9 +1215,9 @@ impl TypeChecker {
         }
     }
 
-    fn definition(&mut self, statement: &Statement, global: bool, ctx: TypeCtx) -> TypeResult<()> {
+    fn definition(&mut self, statement: &mut Statement, global: bool, ctx: TypeCtx) -> TypeResult<()> {
         let span = statement.span;
-        match &statement.kind {
+        match &mut statement.kind {
             StatementKind::Definition { ident, kind, ty, value } => {
                 let defined_ty = self.resolve_type(span, ctx, &ty)?;
 
@@ -2195,16 +2195,16 @@ impl TypeChecker {
         }
     }
 
-    fn solve(&mut self, statements: &Vec<(&Statement, NamespaceID)>) -> TypeResult<()> {
+    fn solve(&mut self, statements: &mut Vec<(Statement, NamespaceID)>) -> TypeResult<()> {
         // Initialize the namespaces first.
-        for (statement, namespace) in statements.iter() {
+        for (statement, namespace) in statements.iter_mut() {
             if matches!(statement.kind, StatementKind::Use { .. }) {
                 self.outer_statement(statement, TypeCtx::namespace(*namespace))?;
             }
         }
 
         // Then the rest.
-        for (statement, namespace) in statements.iter() {
+        for (statement, namespace) in statements.iter_mut() {
             if !matches!(statement.kind, StatementKind::Use { .. }) {
                 self.outer_statement(statement, TypeCtx::namespace(*namespace))?;
             }
@@ -2254,7 +2254,7 @@ impl TypeChecker {
 }
 
 pub(crate) fn solve(
-    statements: &Vec<(&Statement, NamespaceID)>,
+    statements: &mut Vec<(Statement, NamespaceID)>,
     namespace_to_file: &HashMap<NamespaceID, FileOrLib>,
 ) -> TypeResult<()> {
     TypeChecker::new(namespace_to_file).solve(statements)
