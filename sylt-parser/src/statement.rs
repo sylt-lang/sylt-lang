@@ -459,10 +459,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Ret, ..] => {
             let ctx = ctx.skip(1);
             let (ctx, value) = if matches!(ctx.token(), T::Newline) {
-                (
-                    ctx,
-                    Expression { span: ctx.span(), kind: ExpressionKind::Nil },
-                )
+                (ctx, Expression::new(ctx.span(), ExpressionKind::Nil))
             } else {
                 expression(ctx)?
             };
@@ -473,10 +470,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Loop, ..] => {
             let ctx = ctx.skip(1);
             let (ctx, condition) = if matches!(ctx.token(), T::Do) {
-                (
-                    ctx,
-                    Expression { span: ctx.span(), kind: ExpressionKind::Bool(true) },
-                )
+                (ctx, Expression::new(ctx.span(), ExpressionKind::Bool(true)))
             } else {
                 expression(ctx)?
             };
