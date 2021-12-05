@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use crate::typechecker::TyID;
 
 #[derive(Debug, Clone)]
 pub enum Type {
@@ -14,11 +15,11 @@ pub enum Type {
     Float,
     Bool,
     Str,
-    Tuple(Vec<usize>),
-    List(usize),
-    Set(usize),
-    Dict(usize, usize),
-    Function(Vec<usize>, usize),
-    Blob(String, BTreeMap<String, usize>),
-    Enum(String, BTreeMap<String, usize>),
+    Tuple(Vec<TyID>),
+    List(TyID),
+    Set(TyID),
+    Dict(TyID, TyID),
+    Function(Vec<TyID>, TyID),
+    Blob(String, BTreeMap<String, TyID>),
+    Enum(String, BTreeMap<String, TyID>),
 }

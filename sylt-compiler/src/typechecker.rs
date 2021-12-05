@@ -8,10 +8,20 @@ use sylt_parser::{
     TypeAssignableKind, TypeConstraint, TypeKind, VarKind,
 };
 
-use crate::ty::Type;
+use crate::{ty::Type, NamespaceID};
 use std::collections::{BTreeMap, BTreeSet};
 
 type TypeResult<T> = Result<T, Vec<Error>>;
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
+pub struct TyID(usize);
+
+impl std::fmt::Display for TyID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let TyID(id) = self;
+        write!(f, "TyID({})", id)
+    }
+}
 
 trait Help {
     fn help(self, typechecker: &TypeChecker, span: Span, message: String) -> Self;
@@ -87,14 +97,14 @@ macro_rules! bin_op {
         $self.add_constraint(b, $span, $con(a));
         $self.check_constraints($span, $ctx, a)?;
         $self.check_constraints($span, $ctx, b)?;
-        Ok(a) as TypeResult<usize>
+        Ok(a) as TypeResult<TyID>
     }};
 }
 
 #[derive(Clone, Debug)]
 struct Variable {
     ident: Identifier,
-    ty: usize,
+    ty: TyID,
     kind: VarKind,
     span: Span,
 }
@@ -102,7 +112,7 @@ struct Variable {
 #[derive(Clone, Debug)]
 struct TypeNode {
     ty: Type,
-    parent: Option<usize>,
+    parent: Option<TyID>,
     size: usize,
     constraints: BTreeMap<Constraint, Span>,
 }
@@ -119,52 +129,52 @@ struct TypeNode {
 /// may have constraints since they need to be checked at least once.
 #[derive(Clone, Debug, Hash, PartialOrd, Ord, PartialEq, Eq)]
 enum Constraint {
-    Add(usize),
-    Sub(usize),
-    Mul(usize),
-    Div(usize),
-    Equ(usize),
-    Cmp(usize),
-    CmpEqu(usize),
+    Add(TyID),
+    Sub(TyID),
+    Mul(TyID),
+    Div(TyID),
+    Equ(TyID),
+    Cmp(TyID),
+    CmpEqu(TyID),
 
     Neg,
 
-    Indexes(usize),
-    IndexedBy(usize),
-    IndexingGives(usize),
-    GivenByIndex(usize),
-    ConstantIndex(i64, usize),
+    Indexes(TyID),
+    IndexedBy(TyID),
+    IndexingGives(TyID),
+    GivenByIndex(TyID),
+    ConstantIndex(i64, TyID),
 
-    Field(String, usize),
+    Field(String, TyID),
 
     Num,
     Container,
-    SameContainer(usize),
-    Contains(usize),
-    IsContainedIn(usize),
+    SameContainer(TyID),
+    Contains(TyID),
+    IsContainedIn(TyID),
 
     Enum,
-    Variant(String, usize),
+    Variant(String, TyID),
     TotalEnum(BTreeSet<String>),
 }
 
 struct TypeChecker {
-    globals: HashMap<(usize, String), Name>,
+    globals: HashMap<(NamespaceID, String), Name>,
     stack: Vec<Variable>,
     types: Vec<TypeNode>,
-    namespace_to_file: HashMap<usize, FileOrLib>,
+    namespace_to_file: HashMap<NamespaceID, FileOrLib>,
     // TODO(ed): This can probably be removed via some trickery
-    file_to_namespace: HashMap<FileOrLib, usize>,
+    file_to_namespace: HashMap<FileOrLib, NamespaceID>,
 }
 
 #[derive(Clone, Debug, Copy)]
 struct TypeCtx {
     inside_loop: bool,
-    namespace: usize,
+    namespace: NamespaceID,
 }
 
 impl TypeCtx {
-    fn namespace(namespace: usize) -> Self {
+    fn namespace(namespace: NamespaceID) -> Self {
         Self { inside_loop: false, namespace }
     }
 
@@ -175,13 +185,13 @@ impl TypeCtx {
 
 #[derive(Debug, Clone)]
 enum Name {
-    Type(usize),
+    Type(TyID),
     Global(Variable),
-    Namespace(usize),
+    Namespace(NamespaceID),
 }
 
 impl TypeChecker {
-    fn new(namespace_to_file: &HashMap<usize, FileOrLib>) -> Self {
+    fn new(namespace_to_file: &HashMap<NamespaceID, FileOrLib>) -> Self {
         let res = Self {
             globals: HashMap::new(),
             stack: Vec::new(),
@@ -195,8 +205,8 @@ impl TypeChecker {
         res
     }
 
-    fn push_type(&mut self, ty: Type) -> usize {
-        let ty_id = self.types.len();
+    fn push_type(&mut self, ty: Type) -> TyID {
+        let ty_id = TyID(self.types.len());
         self.types.push(TypeNode {
             ty,
             parent: None,
@@ -303,7 +313,7 @@ impl TypeChecker {
         }
     }
 
-    fn type_assignable(&mut self, ctx: TypeCtx, assignable: &TypeAssignable) -> TypeResult<usize> {
+    fn type_assignable(&mut self, ctx: TypeCtx, assignable: &TypeAssignable) -> TypeResult<TyID> {
         match &assignable.kind {
             TypeAssignableKind::Read(ident) => match self
                 .globals
@@ -362,16 +372,16 @@ impl TypeChecker {
         }
     }
 
-    fn resolve_type(&mut self, span: Span, ctx: TypeCtx, ty: &ParserType) -> TypeResult<usize> {
+    fn resolve_type(&mut self, span: Span, ctx: TypeCtx, ty: &ParserType) -> TypeResult<TyID> {
         self.inner_resolve_type(span, ctx, ty, &mut HashMap::new())
     }
 
     fn resolve_constraint(
         &mut self,
         span: Span,
-        var: usize,
+        var: TyID,
         constraint: &TypeConstraint,
-        seen: &HashMap<String, usize>,
+        seen: &HashMap<String, TyID>,
     ) -> TypeResult<()> {
         fn check_constraint_arity(
             typechecker: &TypeChecker,
@@ -395,8 +405,8 @@ impl TypeChecker {
             typechecker: &TypeChecker,
             span: Span,
             name: &str,
-            seen: &HashMap<String, usize>,
-        ) -> TypeResult<usize> {
+            seen: &HashMap<String, TyID>,
+        ) -> TypeResult<TyID> {
             match seen.get(name) {
                 Some(x) => Ok(*x),
                 _ => {
@@ -441,8 +451,8 @@ impl TypeChecker {
         span: Span,
         ctx: TypeCtx,
         ty: &ParserType,
-        seen: &mut HashMap<String, usize>,
-    ) -> TypeResult<usize> {
+        seen: &mut HashMap<String, TyID>,
+    ) -> TypeResult<TyID> {
         use TypeKind::*;
         let ty = match &ty.kind {
             Implied => Type::Unknown,
@@ -518,7 +528,7 @@ impl TypeChecker {
         Ok(self.push_type(ty))
     }
 
-    fn statement(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<Option<usize>> {
+    fn statement(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
         let span = statement.span;
         match &statement.kind {
             StatementKind::Block { statements } => {
@@ -793,7 +803,7 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn assignable(&mut self, assignable: &Assignable, ctx: TypeCtx) -> TypeResult<usize> {
+    fn assignable(&mut self, assignable: &Assignable, ctx: TypeCtx) -> TypeResult<TyID> {
         let span = assignable.span;
         // FIXME: Functions are copied since they may be specialized
         // several times, this does not work properly when functions are
@@ -992,7 +1002,7 @@ impl TypeChecker {
         }
     }
 
-    fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> TypeResult<usize> {
+    fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> TypeResult<TyID> {
         let span = expression.span;
         let res = match &expression.kind {
             ExpressionKind::Get(ass) => self.assignable(ass, ctx),
@@ -1267,36 +1277,36 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn find(&mut self, a: usize) -> usize {
+    fn find(&mut self, TyID(a): TyID) -> TyID {
         let mut root = a;
-        while let Some(next) = self.types[root].parent {
+        while let Some(TyID(next)) = self.types[root].parent {
             root = next;
         }
 
         let mut node = a;
-        while let Some(next) = self.types[node].parent {
-            self.types[node].parent = Some(root);
+        while let Some(TyID(next)) = self.types[node].parent {
+            self.types[node].parent = Some(TyID(root));
             node = next;
         }
 
-        root
+        TyID(root)
     }
 
-    fn find_node(&mut self, a: usize) -> &TypeNode {
-        let ta = self.find(a);
+    fn find_node(&mut self, a: TyID) -> &TypeNode {
+        let TyID(ta) = self.find(a);
         &self.types[ta]
     }
 
-    fn find_node_mut(&mut self, a: usize) -> &mut TypeNode {
-        let ta = self.find(a);
+    fn find_node_mut(&mut self, a: TyID) -> &mut TypeNode {
+        let TyID(ta) = self.find(a);
         &mut self.types[ta]
     }
 
-    fn find_type(&mut self, a: usize) -> Type {
+    fn find_type(&mut self, a: TyID) -> Type {
         self.find_node(a).ty.clone()
     }
 
-    fn inner_bake_type(&mut self, a: usize, seen: &mut HashMap<usize, RuntimeType>) -> RuntimeType {
+    fn inner_bake_type(&mut self, a: TyID, seen: &mut HashMap<TyID, RuntimeType>) -> RuntimeType {
         let a = self.find(a);
         if seen.contains_key(&a) {
             return seen[&a].clone();
@@ -1351,12 +1361,12 @@ impl TypeChecker {
         res
     }
 
-    fn bake_type(&mut self, a: usize) -> RuntimeType {
+    fn bake_type(&mut self, a: TyID) -> RuntimeType {
         self.inner_bake_type(a, &mut HashMap::new())
     }
 
     // This span is wierd - is it weird?
-    fn check_constraints(&mut self, span: Span, ctx: TypeCtx, a: usize) -> TypeResult<()> {
+    fn check_constraints(&mut self, span: Span, ctx: TypeCtx, a: TyID) -> TypeResult<()> {
         for (constraint, original_span) in self.find_node(a).constraints.clone().iter() {
             match constraint {
                 // It would be nice to know from where this came from
@@ -1534,9 +1544,9 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn union(&mut self, a: usize, b: usize) {
-        let a = self.find(a);
-        let b = self.find(b);
+    fn union(&mut self, a: TyID, b: TyID) {
+        let TyID(a) = self.find(a);
+        let TyID(b) = self.find(b);
 
         if a == b {
             return;
@@ -1548,7 +1558,7 @@ impl TypeChecker {
             (a, b)
         };
 
-        self.types[b].parent = Some(a);
+        self.types[b].parent = Some(TyID(a));
         self.types[a].size += self.types[b].size;
 
         // TODO(ed): Which span should we keep? The one closest to the top? Should we combine them?
@@ -1557,7 +1567,7 @@ impl TypeChecker {
         }
     }
 
-    fn unify(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<usize> {
+    fn unify(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<TyID> {
         // TODO(ed): Is this worth doing? Or can we eagerly union types?
         // I tried some and it didn't work great, but I might have missed something.
         let mut seen = BTreeSet::new();
@@ -1568,10 +1578,10 @@ impl TypeChecker {
         &mut self,
         span: Span,
         ctx: TypeCtx,
-        a: usize,
-        b: usize,
-        seen: &mut BTreeSet<(usize, usize)>,
-    ) -> TypeResult<usize> {
+        a: TyID,
+        b: TyID,
+        seen: &mut BTreeSet<(TyID, TyID)>,
+    ) -> TypeResult<TyID> {
         let a = self.find(a);
         let b = self.find(b);
 
@@ -1722,11 +1732,11 @@ impl TypeChecker {
     }
 
     #[allow(unused)]
-    fn print_type(&mut self, ty: usize) {
+    fn print_type(&mut self, ty: TyID) {
         let ty = self.find(ty);
         let mut same = BTreeSet::new();
         for i in 0..self.types.len() {
-            if self.find(i) == ty {
+            if self.find(TyID(i)) == ty {
                 same.insert(i);
             }
         }
@@ -1739,7 +1749,7 @@ impl TypeChecker {
         );
     }
 
-    fn inner_copy(&mut self, old_ty: usize, seen: &mut HashMap<usize, usize>) -> usize {
+    fn inner_copy(&mut self, old_ty: TyID, seen: &mut HashMap<TyID, TyID>) -> TyID {
         let old_ty = self.find(old_ty);
 
         if let Some(res) = seen.get(&old_ty) {
@@ -1832,7 +1842,7 @@ impl TypeChecker {
         new_ty
     }
 
-    fn copy(&mut self, ty: usize) -> usize {
+    fn copy(&mut self, ty: TyID) -> TyID {
         let mut seen = HashMap::new();
         self.inner_copy(ty, &mut seen)
     }
@@ -1917,14 +1927,14 @@ impl TypeChecker {
         }
     }
 
-    fn add_constraint(&mut self, a: usize, span: Span, constraint: Constraint) {
+    fn add_constraint(&mut self, a: TyID, span: Span, constraint: Constraint) {
         self.find_node_mut(a)
             .constraints
             .entry(constraint)
             .or_insert_with(|| span);
     }
 
-    fn add(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+    fn add(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
 
@@ -1949,7 +1959,7 @@ impl TypeChecker {
         }
     }
 
-    fn sub(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+    fn sub(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
 
@@ -1974,7 +1984,7 @@ impl TypeChecker {
         }
     }
 
-    fn mul(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+    fn mul(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
 
@@ -1999,7 +2009,7 @@ impl TypeChecker {
         }
     }
 
-    fn div(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+    fn div(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) => Ok(()),
             (_, Type::Unknown) => Ok(()),
@@ -2026,12 +2036,12 @@ impl TypeChecker {
         }
     }
 
-    fn equ(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+    fn equ(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<()> {
         // Equal types all support equality!
         self.unify(span, ctx, a, b).map(|_| ())
     }
 
-    fn cmp(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+    fn cmp(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
 
@@ -2060,7 +2070,7 @@ impl TypeChecker {
         }
     }
 
-    fn is_indexed_by(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+    fn is_indexed_by(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) => Ok(()),
             (_, Type::Unknown) => Ok(()),
@@ -2089,8 +2099,8 @@ impl TypeChecker {
         &mut self,
         span: Span,
         ctx: TypeCtx,
-        a: usize,
-        b: usize,
+        a: TyID,
+        b: TyID,
     ) -> TypeResult<()> {
         match self.find_type(a) {
             Type::Unknown => Ok(()),
@@ -2131,9 +2141,9 @@ impl TypeChecker {
         &mut self,
         span: Span,
         ctx: TypeCtx,
-        a: usize,
+        a: TyID,
         index: i64,
-        ret: usize,
+        ret: TyID,
     ) -> TypeResult<()> {
         match self.find_type(a) {
             Type::Unknown => Ok(()),
@@ -2162,7 +2172,7 @@ impl TypeChecker {
         }
     }
 
-    fn contains(&mut self, span: Span, ctx: TypeCtx, a: usize, b: usize) -> TypeResult<()> {
+    fn contains(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
 
@@ -2195,7 +2205,7 @@ impl TypeChecker {
         }
     }
 
-    fn solve(&mut self, statements: &Vec<(&Statement, usize)>) -> TypeResult<()> {
+    fn solve(&mut self, statements: &Vec<(&Statement, NamespaceID)>) -> TypeResult<()> {
         // Initialize the namespaces first.
         for (statement, namespace) in statements.iter() {
             if matches!(statement.kind, StatementKind::Use { .. }) {
@@ -2254,8 +2264,8 @@ impl TypeChecker {
 }
 
 pub(crate) fn solve(
-    statements: &Vec<(&Statement, usize)>,
-    namespace_to_file: &HashMap<usize, FileOrLib>,
+    statements: &Vec<(&Statement, NamespaceID)>,
+    namespace_to_file: &HashMap<NamespaceID, FileOrLib>,
 ) -> TypeResult<()> {
     TypeChecker::new(namespace_to_file).solve(statements)
 }
