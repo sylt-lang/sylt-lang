@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use sylt_common::error::Error;
-use sylt_common::{library_name, library_source, FileOrLib, Type as RuntimeType};
+use sylt_common::{library_name, library_source, FileOrLib, TyID, Type as RuntimeType};
 use sylt_tokenizer::{string_to_tokens, PlacedToken, Token};
 
 pub mod expression;
@@ -860,7 +860,7 @@ fn assignable_variant<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult
 
     let (ctx, value) = match expression(ctx) {
         Ok(res) => res,
-        Err(_) => (ctx, Expression { span, kind: ExpressionKind::Nil }),
+        Err(_) => (ctx, Expression::new(span, ExpressionKind::Nil)),
     };
 
     use AssignableKind::Variant;

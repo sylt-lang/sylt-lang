@@ -90,12 +90,19 @@ pub enum ExpressionKind {
 #[derive(Debug, Clone)]
 pub struct Expression {
     pub span: Span,
+    pub ty: Option<TyID>,
     pub kind: ExpressionKind,
 }
 
 impl PartialEq for Expression {
     fn eq(&self, other: &Self) -> bool {
         self.kind == other.kind
+    }
+}
+
+impl Expression {
+    pub fn new(span: Span, kind: ExpressionKind) -> Self {
+        Self { span, ty: None, kind }
     }
 }
 
@@ -194,7 +201,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         }),
     };
 
-    Ok((ctx, Expression { span, kind: function }))
+    Ok((ctx, Expression::new(span, function)))
 }
 
 /// Parse an expression until we reach a token with higher precedence.
@@ -262,7 +269,7 @@ fn value<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Expression), (Context<'t>
             raise_syntax_error!(ctx, "Cannot parse value, '{:?}' is not a valid value", t);
         }
     };
-    Ok((ctx, Expression { span, kind }))
+    Ok((ctx, Expression::new(span, kind)))
 }
 
 /// Parse something that begins at the start of an expression.
@@ -295,7 +302,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 }
             } else {
                 let (ctx, assign) = assignable(ctx)?;
-                Ok((ctx, Expression { span, kind: Get(assign) }))
+                Ok((ctx, Expression::new(span, Get(assign))))
             }
         }
 
@@ -321,7 +328,7 @@ fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             raise_syntax_error!(ctx, "Invalid unary operator");
         }
     };
-    Ok((ctx, Expression { span, kind }))
+    Ok((ctx, Expression::new(span, kind)))
 }
 
 fn if_expression<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
@@ -342,7 +349,7 @@ fn if_expression<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expr
     let fail = Box::new(rhs);
     Ok((
         ctx,
-        Expression { span, kind: IfExpression { condition, pass, fail } },
+        Expression::new(span, IfExpression { condition, pass, fail }),
     ))
 }
 
@@ -377,7 +384,7 @@ fn arrow_call<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Express
                 raise_syntax_error!(ctx, "Expected a call-expression after '->'");
             }
         };
-        Ok((ctx, Expression { span, kind }))
+        Ok((ctx, Expression::new(span, kind)))
     }
 
     prepend_expresion(ctx, lhs.clone(), rhs)
@@ -409,7 +416,7 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
                     kind: AssignableKind::Expression(Box::new(lhs.clone())),
                 },
             )?;
-            return Ok((ctx, Expression { span: ctx.span(), kind: Get(ass) }));
+            return Ok((ctx, Expression::new(ctx.span(), Get(ass))));
         }
         _ => {}
     }
@@ -478,7 +485,7 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
         }
     };
 
-    Ok((ctx, Expression { span, kind }))
+    Ok((ctx, Expression::new(span, kind)))
 }
 
 /// Parse either a grouping parenthesis or a tuple.
@@ -532,9 +539,9 @@ fn grouping_or_tuple<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
     use ExpressionKind::{Parenthesis, Tuple};
     let result = if is_tuple {
-        Expression { span, kind: Tuple(exprs) }
+        Expression::new(span, Tuple(exprs))
     } else {
-        Expression { span, kind: Parenthesis(Box::new(exprs.remove(0))) }
+        Expression::new(span, Parenthesis(Box::new(exprs.remove(0))))
     };
     Ok((ctx, result))
 }
@@ -587,7 +594,7 @@ fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     }
 
     use ExpressionKind::Blob;
-    Ok((ctx, Expression { span, kind: Blob { blob, fields } }))
+    Ok((ctx, Expression::new(span, Blob { blob, fields })))
 }
 
 // Parse a list expression, e.g. `[1, 2, a(3)]`
@@ -623,7 +630,7 @@ fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let ctx = ctx.pop_skip_newlines(skip_newlines);
     let ctx = expect!(ctx, T::RightBracket, "Expected ']'");
     use ExpressionKind::List;
-    Ok((ctx, Expression { span, kind: List(exprs) }))
+    Ok((ctx, Expression::new(span, List(exprs))))
 }
 
 /// Parse either a set or dict expression.
@@ -700,7 +707,7 @@ fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         Set(exprs)
     };
 
-    Ok((ctx, Expression { span, kind }))
+    Ok((ctx, Expression::new(span, kind)))
 }
 
 /// Parse a single expression.

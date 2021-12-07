@@ -8,6 +8,16 @@ pub use error::Error;
 pub use ty::Type;
 pub use value::Value;
 
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
+pub struct TyID(pub usize);
+
+impl std::fmt::Display for TyID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let TyID(id) = self;
+        write!(f, "TyID({})", id)
+    }
+}
+
 /// Differentiates lib imports and file imports
 #[derive(Hash, Eq, PartialEq, PartialOrd, Clone, Debug)]
 pub enum FileOrLib {
