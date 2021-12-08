@@ -16,13 +16,13 @@ sin: fn float -> float : external
 cos: fn float -> float : external
 as_float: fn int -> float : external
 as_int: fn float -> int : external
-floor: fn float -> int : external
+floor: fn<N: Num> *N -> int : external
 
 as_char: fn str -> int : external
 as_chars: fn str -> [int] : external
 split: fn str -> [str] : external
 sqrt: fn float -> float : external
-abs: fn float -> float : external
+abs: fn<N: Num> *N -> *N : external
 sign: fn<N: Num> *N -> *N : external
 clamp: fn<N: Num> *N, *N, *N -> *N : external
 min: fn<N: Num> *N, *N -> *N : external
