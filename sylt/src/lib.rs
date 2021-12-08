@@ -26,7 +26,7 @@ where
     if args.dump_tree {
         println!("{}", tree);
     }
-    sylt_compiler::compile(!args.skip_typecheck, write_file, tree)
+    sylt_compiler::compile(write_file, tree)
 }
 
 // TODO(ed): This name isn't true anymore - since it can compile
@@ -85,13 +85,6 @@ pub fn run_file(args: &Args) -> Result<(), Vec<Error>> {
 
 #[derive(Default, Debug, Options)]
 pub struct Args {
-    #[options(
-        long = "skip-typecheck",
-        no_short,
-        help = "Does no type checking what so ever"
-    )]
-    pub skip_typecheck: bool,
-
     #[options(long = "dump-tree", no_short, help = "Write the syntax tree to stdout")]
     pub dump_tree: bool,
 
