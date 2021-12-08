@@ -34,7 +34,7 @@ pub fn run_file_with_reader<R>(args: &Args, reader: R) -> Result<(), Vec<Error>>
 where
     R: Fn(&Path) -> Result<String, Error>,
 {
-    match &args.compile {
+    match &args.output {
         None => {
             use std::process::{Command, Stdio};
             let mut child = Command::new("lua")
@@ -88,8 +88,13 @@ pub struct Args {
     #[options(long = "dump-tree", help = "Write the syntax tree to stdout")]
     pub dump_tree: bool,
 
-    #[options(long = "output", help = "Output a compiled lua file, '-' for stdout")]
-    pub compile: Option<String>,
+    #[options(
+        long = "output",
+        short = "o",
+        meta = "FILE",
+        help = "Output a compiled lua file, '-' for stdout"
+    )]
+    pub output: Option<String>,
 
     #[options(short = "v", no_long, count, help = "Increase verbosity (max 2)")]
     pub verbosity: u32,
