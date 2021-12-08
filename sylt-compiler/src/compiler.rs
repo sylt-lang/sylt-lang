@@ -6,9 +6,9 @@ use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{Identifier, Span, StatementKind, AST};
 
 mod dependency;
+mod intermediate;
 mod ty;
 mod typechecker;
-mod intermediate;
 
 type VarSlot = usize;
 
@@ -186,7 +186,6 @@ impl Compiler {
         let typechecker = typechecker::solve(&mut statements, &self.namespace_id_to_file)?;
 
         let ir = intermediate::compile(&typechecker, &statements, &self.namespace_id_to_file);
-
 
         eprintln!("----");
         for i in ir {
