@@ -18,22 +18,27 @@ fn var(Var(v): &Var, out: &mut dyn Write) {
 pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
     let mut depth = 0;
     for instruction in ir.iter() {
-        // TODO indent
-        write!(out, "local ");
+        for _ in 0..depth {
+            write!(out, "  ");
+        }
         match instruction {
             IR::Nil(t) => {
+                write!(out, "local ");
                 var(t, out);
                 write!(out, " = __NIL");
             }
             IR::Int(t, i) => {
+                write!(out, "local ");
                 var(t, out);
                 write!(out, " = {}", i);
             }
             IR::Bool(t, b) => {
+                write!(out, "local ");
                 var(t, out);
                 write!(out, " = {}", b);
             }
             IR::Add(t, a, b) => {
+                write!(out, "local ");
                 var(t, out);
                 write!(out, " = ");
                 write!(out, "__ADD(");
@@ -43,6 +48,7 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 write!(out, ")");
             }
             IR::Sub(t, a, b) => {
+                write!(out, "local ");
                 var(t, out);
                 write!(out, " = ");
                 var(a, out);
@@ -50,6 +56,7 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 var(b, out);
             }
             IR::FunctionBegin(a, params) => {
+                write!(out, "local ");
                 write!(out, "function ");
                 var(a, out);
                 write!(out, "(");
@@ -60,9 +67,11 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                     var(param, out);
                 }
                 write!(out, ")");
+                depth += 1;
             }
             IR::FunctionEnd => {
                 write!(out, "end");
+                depth -= 1;
             }
         }
         write!(out, "\n");
