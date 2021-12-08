@@ -85,7 +85,7 @@ pub fn run_file(args: &Args) -> Result<(), Vec<Error>> {
 
 #[derive(Default, Debug, Options)]
 pub struct Args {
-    #[options(long = "dump-tree", no_short, help = "Write the syntax tree to stdout")]
+    #[options(long = "dump-tree", help = "Write the syntax tree to stdout")]
     pub dump_tree: bool,
 
     #[options(long = "output", help = "Output a compiled lua file, '-' for stdout")]
