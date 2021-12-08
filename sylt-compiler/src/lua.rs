@@ -21,18 +21,50 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
         // TODO indent
         write!(out, "local ");
         match instruction {
+            IR::Nil(t) => {
+                var(t, out);
+                write!(out, " = __NIL");
+            }
             IR::Int(t, i) => {
                 var(t, out);
                 write!(out, " = {}", i);
             }
-            IR::AddInt(t, a, b) => {
+            IR::Bool(t, b) => {
+                var(t, out);
+                write!(out, " = {}", b);
+            }
+            IR::Add(t, a, b) => {
+                var(t, out);
+                write!(out, " = ");
+                write!(out, "__ADD(");
+                var(a, out);
+                write!(out, ", ");
+                var(b, out);
+                write!(out, ")");
+            }
+            IR::Sub(t, a, b) => {
                 var(t, out);
                 write!(out, " = ");
                 var(a, out);
-                write!(out, " + ");
+                write!(out, " - ");
                 var(b, out);
             }
+            IR::FunctionBegin(a, params) => {
+                write!(out, "function ");
+                var(a, out);
+                write!(out, "(");
+                for (i, param) in params.iter().enumerate() {
+                    if i != 0 {
+                        write!(out, ", ");
+                    }
+                    var(param, out);
+                }
+                write!(out, ")");
+            }
+            IR::FunctionEnd => {
+                write!(out, "end");
+            }
         }
-        out.write_all(b"\n");
+        write!(out, "\n");
     }
 }

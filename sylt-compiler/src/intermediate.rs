@@ -15,8 +15,15 @@ pub struct Var(pub usize);
 
 #[derive(Debug, Clone)]
 pub enum IR {
+    Nil(Var),
     Int(Var, i64),
-    AddInt(Var, Var, Var),
+    Bool(Var, bool),
+    Add(Var, Var, Var),
+    Sub(Var, Var, Var),
+
+    // Name?
+    FunctionBegin(Var, Vec<Var>),
+    FunctionEnd,
 }
 
 // 1 + 1
@@ -86,7 +93,6 @@ impl<'a> IRCodeGen<'a> {
     fn expression(&mut self, expr: &Expression, ctx: IRContext) -> (Vec<IR>, Var) {
         match &expr.kind {
             ExpressionKind::Get(_) => todo!(),
-            ExpressionKind::Sub(_, _) => todo!(),
             ExpressionKind::Mul(_, _) => todo!(),
             ExpressionKind::Div(_, _) => todo!(),
             ExpressionKind::Neg(_) => todo!(),
@@ -104,20 +110,73 @@ impl<'a> IRCodeGen<'a> {
             ExpressionKind::Dict(_) => todo!(),
             ExpressionKind::Float(_) => todo!(),
             ExpressionKind::Str(_) => todo!(),
-            ExpressionKind::Bool(_) => todo!(),
-            ExpressionKind::Nil => todo!(),
 
-            ExpressionKind::Function { .. } => (Vec::new(), self.var()),
+            ExpressionKind::Bool(b) => {
+                let a = self.var();
+                (vec![IR::Bool(a, *b)], a)
+            }
+
+            ExpressionKind::Function { body, params, .. } => {
+                let a = self.var();
+                let params = params.iter().map(|_| self.var()).collect();
+                let body = self.statement(body, ctx);
+                (
+                    [vec![IR::FunctionBegin(a, params)], body, vec![IR::FunctionEnd]].concat(),
+                    self.var(),
+                )
+            }
+
+            ExpressionKind::Nil => {
+                let a = self.var();
+                (vec![IR::Nil(a)], a)
+            }
+
             ExpressionKind::Int(i) => {
                 let a = self.var();
                 (vec![IR::Int(a, *i)], a)
             }
+
             ExpressionKind::Add(a, b) => {
                 let (aops, a) = self.expression(&a, ctx);
                 let (bops, b) = self.expression(&b, ctx);
                 let c = self.var();
-                ([ aops, bops, vec![IR::AddInt(c, a, b)] ].concat(), c)
+                ([aops, bops, vec![IR::Add(c, a, b)]].concat(), c)
             }
+
+            ExpressionKind::Sub(a, b) => {
+                let (aops, a) = self.expression(&a, ctx);
+                let (bops, b) = self.expression(&b, ctx);
+                let c = self.var();
+                ([aops, bops, vec![IR::Sub(c, a, b)]].concat(), c)
+            }
+        }
+    }
+
+    fn statement(&mut self, stmt: &Statement, ctx: IRContext) -> Vec<IR> {
+        match &stmt.kind {
+            StatementKind::Use { path, name, file } => todo!(),
+            StatementKind::FromUse { path, imports, file } => todo!(),
+            StatementKind::Blob { name, fields } => todo!(),
+            StatementKind::Enum { name, variants } => todo!(),
+            StatementKind::Assignment { kind, target, value } => todo!(),
+            StatementKind::Definition { ident, kind, ty, value } => todo!(),
+            StatementKind::ExternalDefinition { ident, kind, ty } => todo!(),
+            StatementKind::If { condition, pass, fail } => todo!(),
+            StatementKind::Case { to_match, branches, fall_through } => todo!(),
+            StatementKind::Loop { condition, body } => todo!(),
+            StatementKind::Break => todo!(),
+            StatementKind::Continue => todo!(),
+            StatementKind::IsCheck { lhs, rhs } => todo!(),
+            StatementKind::Ret { value } => todo!(),
+            StatementKind::Unreachable => todo!(),
+
+            StatementKind::StatementExpression { value } => self.expression(value, ctx).0,
+            StatementKind::EmptyStatement => Vec::new(),
+            StatementKind::Block { statements } => statements
+                .iter()
+                .map(|stmt| self.statement(stmt, ctx))
+                .flatten()
+                .collect(),
         }
     }
 
