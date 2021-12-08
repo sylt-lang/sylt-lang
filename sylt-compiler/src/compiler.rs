@@ -186,7 +186,13 @@ impl Compiler {
         let typechecker = typechecker::solve(&mut statements, &self.namespace_id_to_file)?;
 
         let ir = intermediate::compile(&typechecker, &statements, &self.namespace_id_to_file);
-        dbg!(&ir);
+
+
+        eprintln!("----");
+        for i in ir {
+            eprintln!("{:?}", i);
+        }
+        eprintln!("----");
 
         Ok(())
     }
