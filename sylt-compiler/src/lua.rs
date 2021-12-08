@@ -19,11 +19,11 @@ macro_rules! write {
 pub struct LuaCompiler<'t> {
     compiler: &'t mut Compiler,
     loops: Vec<usize>,
-    file: Box<dyn Write>,
+    file: &'t mut dyn Write,
 }
 
 impl<'t> LuaCompiler<'t> {
-    pub(crate) fn new(compiler: &'t mut Compiler, file: Box<dyn Write>) -> Self {
+    pub(crate) fn new(compiler: &'t mut Compiler, file: &'t mut dyn Write) -> Self {
         Self { compiler, loops: Vec::new(), file }
     }
 

@@ -160,7 +160,7 @@ impl Compiler {
     fn compile(
         mut self,
         typecheck: bool,
-        lua_file: Box<dyn Write>,
+        lua_file: &mut dyn Write,
         tree: AST,
     ) -> Result<(), Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
@@ -192,7 +192,7 @@ impl Compiler {
             typechecker::solve(&mut statements, &self.namespace_id_to_file)?;
         }
 
-        let mut lua_compiler = lua::LuaCompiler::new(&mut self, Box::new(lua_file));
+        let mut lua_compiler = lua::LuaCompiler::new(&mut self, lua_file);
 
         lua_compiler.preamble(Span::zero(0), 0);
         for (statement, namespace) in statements.iter() {
@@ -335,6 +335,6 @@ impl Compiler {
     }
 }
 
-pub fn compile(typecheck: bool, lua_file: Box<dyn Write>, prog: AST) -> Result<(), Vec<Error>> {
+pub fn compile(typecheck: bool, lua_file: &mut dyn Write, prog: AST) -> Result<(), Vec<Error>> {
     Compiler::new().compile(typecheck, lua_file, prog)
 }
