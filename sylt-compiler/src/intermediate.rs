@@ -11,7 +11,7 @@ use sylt_parser::{
 use crate::{ty::Type, typechecker::TypeChecker, NamespaceID};
 
 #[derive(Debug, Clone, Copy)]
-pub struct Var(usize);
+pub struct Var(pub usize);
 
 #[derive(Debug, Clone)]
 pub enum IR {

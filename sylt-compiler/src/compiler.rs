@@ -7,6 +7,7 @@ use sylt_parser::{Identifier, Span, StatementKind, AST};
 
 mod dependency;
 mod intermediate;
+mod lua;
 mod ty;
 mod typechecker;
 
