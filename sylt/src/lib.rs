@@ -92,22 +92,18 @@ pub struct Args {
     )]
     pub skip_typecheck: bool,
 
-    #[options(long = "dump-tree", no_short, help = "Writes the tree to stdout")]
+    #[options(long = "dump-tree", no_short, help = "Write the syntax tree to stdout")]
     pub dump_tree: bool,
 
-    #[options(
-        short = "c",
-        long = "compile",
-        help = "Compile to a lua file, '-' for stdout"
-    )]
+    #[options(long = "output", help = "Output a compiled lua file, '-' for stdout")]
     pub compile: Option<String>,
 
-    #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
+    #[options(short = "v", no_long, count, help = "Increase verbosity (max 2)")]
     pub verbosity: u32,
 
     #[options(
         long = "format",
-        help = "Run an auto formatter on the supplied file and print the result to stdout."
+        help = "Format the file and write the result to stdout"
     )]
     pub format: bool,
 
