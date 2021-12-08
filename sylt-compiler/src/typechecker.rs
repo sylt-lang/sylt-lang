@@ -148,7 +148,7 @@ enum Constraint {
     TotalEnum(BTreeSet<String>),
 }
 
-struct TypeChecker {
+pub struct TypeChecker {
     globals: HashMap<(NamespaceID, String), Name>,
     stack: Vec<Variable>,
     types: Vec<TypeNode>,
@@ -182,7 +182,7 @@ enum Name {
 
 impl TypeChecker {
     fn new(namespace_to_file: &HashMap<NamespaceID, FileOrLib>) -> Self {
-        let res = Self {
+        Self {
             globals: HashMap::new(),
             stack: Vec::new(),
             types: Vec::new(),
@@ -191,8 +191,7 @@ impl TypeChecker {
                 .iter()
                 .map(|(a, b)| (b.clone(), a.clone()))
                 .collect(),
-        };
-        res
+        }
     }
 
     fn push_type(&mut self, ty: Type) -> TyID {
@@ -2258,6 +2257,8 @@ impl TypeChecker {
 pub(crate) fn solve(
     statements: &mut Vec<(Statement, NamespaceID)>,
     namespace_to_file: &HashMap<NamespaceID, FileOrLib>,
-) -> TypeResult<()> {
-    TypeChecker::new(namespace_to_file).solve(statements)
+) -> TypeResult<TypeChecker> {
+    let mut tc = TypeChecker::new(namespace_to_file);
+    tc.solve(statements)?;
+    Ok(tc)
 }

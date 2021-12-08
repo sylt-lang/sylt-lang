@@ -6,9 +6,9 @@ use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{Identifier, Span, StatementKind, AST};
 
 mod dependency;
-mod lua;
 mod ty;
 mod typechecker;
+mod intermediate;
 
 type VarSlot = usize;
 
@@ -183,19 +183,10 @@ impl Compiler {
             return Err(self.errors);
         }
 
-        typechecker::solve(&mut statements, &self.namespace_id_to_file)?;
+        let typechecker = typechecker::solve(&mut statements, &self.namespace_id_to_file)?;
 
-        let mut lua_compiler = lua::LuaCompiler::new(&mut self, lua_file);
-
-        lua_compiler.preamble(Span::zero(0), 0);
-        for (statement, namespace) in statements.iter() {
-            lua_compiler.compile(statement, *namespace);
-        }
-        lua_compiler.postamble(Span::zero(0));
-
-        if !self.errors.is_empty() {
-            return Err(self.errors);
-        }
+        let ir = intermediate::compile(&typechecker, &statements, &self.namespace_id_to_file);
+        dbg!(&ir);
 
         Ok(())
     }
