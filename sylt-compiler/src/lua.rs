@@ -91,6 +91,13 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 write!(out, " / ");
                 var(b, out);
             }
+            IR::Neg(t, a) => {
+                write!(out, "local ");
+                var(t, out);
+                write!(out, " = ");
+                write!(out, "-");
+                var(a, out);
+            }
             IR::Copy(d, s) => {
                 write!(out, "local ");
                 var(d, out);

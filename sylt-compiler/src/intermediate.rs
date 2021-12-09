@@ -22,6 +22,7 @@ pub enum IR {
     Sub(Var, Var, Var),
     Mul(Var, Var, Var),
     Div(Var, Var, Var),
+    Neg(Var, Var),
     Copy(Var, Var),
     External(Var, String),
     Call(Var, Var, Vec<Var>),
@@ -142,7 +143,6 @@ impl<'a> IRCodeGen<'a> {
                 let dest = self.var();
                 ([code, vec![IR::Copy(dest, source)]].concat(), dest)
             }
-            ExpressionKind::Neg(_) => todo!(),
             ExpressionKind::Comparison(_, _, _) => todo!(),
             ExpressionKind::AssertEq(_, _) => todo!(),
             ExpressionKind::And(_, _) => todo!(),
@@ -214,6 +214,12 @@ impl<'a> IRCodeGen<'a> {
                 let (bops, b) = self.expression(&b, ctx);
                 let c = self.var();
                 ([aops, bops, vec![IR::Div(c, a, b)]].concat(), c)
+            }
+
+            ExpressionKind::Neg(a) => {
+                let (aops, a) = self.expression(&a, ctx);
+                let b = self.var();
+                ([aops, vec![IR::Neg(b, a)]].concat(), b)
             }
         }
     }
