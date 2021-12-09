@@ -17,6 +17,7 @@ pub struct Var(pub usize);
 pub enum IR {
     Nil(Var),
     Int(Var, i64),
+    Str(Var, String),
     Bool(Var, bool),
     Add(Var, Var, Var),
     Sub(Var, Var, Var),
@@ -26,6 +27,9 @@ pub enum IR {
     Copy(Var, Var),
     External(Var, String),
     Call(Var, Var, Vec<Var>),
+
+    Equal(Var, Var, Var),
+    Assert(Var),
 
     // Name?
     FunctionBegin(Var, Vec<Var>),
@@ -144,7 +148,6 @@ impl<'a> IRCodeGen<'a> {
                 ([code, vec![IR::Copy(dest, source)]].concat(), dest)
             }
             ExpressionKind::Comparison(_, _, _) => todo!(),
-            ExpressionKind::AssertEq(_, _) => todo!(),
             ExpressionKind::And(_, _) => todo!(),
             ExpressionKind::Or(_, _) => todo!(),
             ExpressionKind::Not(_) => todo!(),
@@ -156,7 +159,21 @@ impl<'a> IRCodeGen<'a> {
             ExpressionKind::Set(_) => todo!(),
             ExpressionKind::Dict(_) => todo!(),
             ExpressionKind::Float(_) => todo!(),
-            ExpressionKind::Str(_) => todo!(),
+
+            ExpressionKind::Str(a) => {
+                let var = self.var();
+                (vec![IR::Str(var, a.into())], var)
+            }
+
+            ExpressionKind::AssertEq(a, b) => {
+                let (aops, a) = self.expression(&a, ctx);
+                let (bops, b) = self.expression(&b, ctx);
+                let c = self.var();
+                (
+                    [aops, bops, vec![IR::Equal(c, a, b), IR::Assert(c)]].concat(),
+                    c,
+                )
+            }
 
             ExpressionKind::Bool(b) => {
                 let a = self.var();
@@ -175,7 +192,7 @@ impl<'a> IRCodeGen<'a> {
                         vec![IR::FunctionEnd],
                     ]
                     .concat(),
-                    self.var(),
+                    a,
                 )
             }
 
@@ -290,9 +307,20 @@ pub(crate) fn compile(
     namespace_to_file: &HashMap<NamespaceID, FileOrLib>,
 ) -> Vec<IR> {
     let mut gen = IRCodeGen::new(typechecker, namespace_to_file);
-    statements
+    let mut code: Vec<IR> = statements
         .iter()
         .map(|(stmt, namespace)| gen.compile(stmt, *namespace))
         .flatten()
-        .collect()
+        .collect();
+
+    let start = gen
+        .variables
+        .iter()
+        .find(|Variable { name, namespace, .. }| namespace == &0 && name == &"start")
+        .unwrap()
+        .var;
+
+    let tmp = gen.var();
+    code.push(IR::Call(tmp, start, Vec::new()));
+    code
 }

@@ -124,6 +124,24 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 }
                 write!(out, ")");
             }
+            IR::Equal(t, a, b) => {
+                write!(out, "local ");
+                var(t, out);
+                write!(out, " = ");
+                var(a, out);
+                write!(out, " == ");
+                var(b, out);
+            }
+            IR::Assert(v) => {
+                write!(out, "assert(");
+                var(v, out);
+                write!(out, ", \":(\")");
+            }
+            IR::Str(t, s) => {
+                write!(out, "local ");
+                var(t, out);
+                write!(out, " = \"{}\"", s);
+            }
         }
         write!(out, "\n");
     }
