@@ -24,6 +24,7 @@ pub enum IR {
     Div(Var, Var, Var),
     Copy(Var, Var),
     External(Var, String),
+    Call(Var, Var, Vec<Var>),
 
     // Name?
     FunctionBegin(Var, Vec<Var>),
@@ -115,7 +116,18 @@ impl<'a> IRCodeGen<'a> {
                     .var,
             ),
             AssignableKind::Variant { enum_ass, variant, value } => todo!(),
-            AssignableKind::Call(_, _) => todo!(),
+            AssignableKind::Call(ass, exprs) => {
+                let (fn_code, fn_var) = self.assignable(ass, ctx);
+                let (code, args): (Vec<_>, Vec<_>) =
+                    exprs.iter().map(|expr| self.expression(expr, ctx)).unzip();
+                let code = code.concat();
+
+                let var = self.var();
+                (
+                    [fn_code, code, vec![IR::Call(var, fn_var, args)]].concat(),
+                    var,
+                )
+            }
             AssignableKind::ArrowCall(_, _, _) => todo!(),
             AssignableKind::Access(_, _) => todo!(),
             AssignableKind::Index(_, _) => todo!(),
@@ -153,6 +165,7 @@ impl<'a> IRCodeGen<'a> {
 
             ExpressionKind::Function { body, params, .. } => {
                 let a = self.var();
+                // TODO: write the params
                 let params = params.iter().map(|_| self.var()).collect();
                 let body = self.statement(body, ctx);
                 (

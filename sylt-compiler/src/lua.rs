@@ -103,6 +103,20 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 write!(out, " = ");
                 write!(out, e);
             }
+            IR::Call(t, f, args) => {
+                write!(out, "local ");
+                var(t, out);
+                write!(out, " = ");
+                var(f, out);
+                write!(out, "(");
+                for (i, arg) in args.iter().enumerate() {
+                    if i != 0 {
+                        write!(out, ", ");
+                    }
+                    var(arg, out);
+                }
+                write!(out, ")");
+            }
         }
         write!(out, "\n");
     }
