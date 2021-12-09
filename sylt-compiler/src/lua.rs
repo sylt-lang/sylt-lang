@@ -152,6 +152,14 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 comma_sep(out, exprs);
                 write!(out, "}");
             }
+            IR::Tuple(t, exprs) => {
+                write!(out, "local ");
+                var(t, out);
+                write!(out, " = ");
+                write!(out, "__TUPLE{");
+                comma_sep(out, exprs);
+                write!(out, "}");
+            }
         }
         write!(out, "\n");
     }

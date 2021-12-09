@@ -40,6 +40,7 @@ pub enum IR {
     Assert(Var),
 
     List(Var, Vec<Var>),
+    Tuple(Var, Vec<Var>),
 
     // Name?
     FunctionBegin(Var, Vec<Var>),
@@ -177,9 +178,17 @@ impl<'a> IRCodeGen<'a> {
             ExpressionKind::Not(_) => todo!(),
             ExpressionKind::IfExpression { .. } => todo!(),
             ExpressionKind::Blob { .. } => todo!(),
-            ExpressionKind::Tuple(_) => todo!(),
             ExpressionKind::Set(_) => todo!(),
             ExpressionKind::Dict(_) => todo!(),
+
+            ExpressionKind::Tuple(exprs) => {
+                let (code, exprs): (Vec<_>, Vec<_>) =
+                    exprs.iter().map(|expr| self.expression(expr, ctx)).unzip();
+                let code = code.concat();
+                let var = self.var();
+
+                ([code, vec![IR::Tuple(var, exprs)]].concat(), var)
+            }
 
             ExpressionKind::List(exprs) => {
                 let (code, exprs): (Vec<_>, Vec<_>) =
