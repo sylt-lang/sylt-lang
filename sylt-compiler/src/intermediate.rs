@@ -29,8 +29,17 @@ pub enum IR {
     External(Var, String),
     Call(Var, Var, Vec<Var>),
 
-    Equal(Var, Var, Var),
+    Equals(Var, Var, Var),
+    NotEquals(Var, Var, Var),
+    Greater(Var, Var, Var),
+    GreaterEqual(Var, Var, Var),
+    Less(Var, Var, Var),
+    LessEqual(Var, Var, Var),
+    In(Var, Var, Var),
+
     Assert(Var),
+
+    List(Var, Vec<Var>),
 
     // Name?
     FunctionBegin(Var, Vec<Var>),
@@ -148,16 +157,38 @@ impl<'a> IRCodeGen<'a> {
                 let dest = self.var();
                 ([code, vec![IR::Copy(dest, source)]].concat(), dest)
             }
-            ExpressionKind::Comparison(_, _, _) => todo!(),
+            ExpressionKind::Comparison(a, op, b) => {
+                let (aops, a) = self.expression(&a, ctx);
+                let (bops, b) = self.expression(&b, ctx);
+                let c = self.var();
+                let op = match op {
+                    ComparisonKind::Equals => IR::Equals(c, a, b),
+                    ComparisonKind::NotEquals => IR::NotEquals(c, a, b),
+                    ComparisonKind::Greater => IR::Greater(c, a, b),
+                    ComparisonKind::GreaterEqual => IR::GreaterEqual(c, a, b),
+                    ComparisonKind::Less => IR::Less(c, a, b),
+                    ComparisonKind::LessEqual => IR::LessEqual(c, a, b),
+                    ComparisonKind::In => IR::In(c, a, b),
+                };
+                ([aops, bops, vec![op]].concat(), c)
+            }
             ExpressionKind::And(_, _) => todo!(),
             ExpressionKind::Or(_, _) => todo!(),
             ExpressionKind::Not(_) => todo!(),
             ExpressionKind::IfExpression { .. } => todo!(),
             ExpressionKind::Blob { .. } => todo!(),
             ExpressionKind::Tuple(_) => todo!(),
-            ExpressionKind::List(_) => todo!(),
             ExpressionKind::Set(_) => todo!(),
             ExpressionKind::Dict(_) => todo!(),
+
+            ExpressionKind::List(exprs) => {
+                let (code, exprs): (Vec<_>, Vec<_>) =
+                    exprs.iter().map(|expr| self.expression(expr, ctx)).unzip();
+                let code = code.concat();
+                let var = self.var();
+
+                ([code, vec![IR::List(var, exprs)]].concat(), var)
+            }
 
             ExpressionKind::Parenthesis(expr) => self.expression(expr, ctx),
 
@@ -175,7 +206,7 @@ impl<'a> IRCodeGen<'a> {
                 let (bops, b) = self.expression(&b, ctx);
                 let c = self.var();
                 (
-                    [aops, bops, vec![IR::Equal(c, a, b), IR::Assert(c)]].concat(),
+                    [aops, bops, vec![IR::Equals(c, a, b), IR::Assert(c)]].concat(),
                     c,
                 )
             }

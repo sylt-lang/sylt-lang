@@ -15,6 +15,24 @@ fn var(Var(v): &Var, out: &mut dyn Write) {
     write!(out, "V{}", v);
 }
 
+pub fn bin_op(out: &mut dyn Write, t: &Var, a: &Var, b: &Var, op: &str) {
+    write!(out, "local ");
+    var(t, out);
+    write!(out, " = ");
+    var(a, out);
+    write!(out, " {} ", op);
+    var(b, out);
+}
+
+pub fn comma_sep(out: &mut dyn Write, vars: &[Var]) {
+    for (i, v) in vars.iter().enumerate() {
+        if i != 0 {
+            write!(out, ", ");
+        }
+        var(v, out);
+    }
+}
+
 pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
     write!(out, include_str!("preamble.lua"));
 
@@ -49,47 +67,22 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 var(b, out);
                 write!(out, ")");
             }
-            IR::Sub(t, a, b) => {
-                write!(out, "local ");
-                var(t, out);
-                write!(out, " = ");
-                var(a, out);
-                write!(out, " - ");
-                var(b, out);
-            }
+            IR::Sub(t, a, b) => bin_op(out, t, a, b, "-"),
+            IR::Mul(t, a, b) => bin_op(out, t, a, b, "*"),
+            IR::Div(t, a, b) => bin_op(out, t, a, b, "/"),
+
             IR::FunctionBegin(a, params) => {
                 write!(out, "local ");
                 write!(out, "function ");
                 var(a, out);
                 write!(out, "(");
-                for (i, param) in params.iter().enumerate() {
-                    if i != 0 {
-                        write!(out, ", ");
-                    }
-                    var(param, out);
-                }
+                comma_sep(out, params);
                 write!(out, ")");
                 depth += 1;
             }
             IR::FunctionEnd => {
                 write!(out, "end");
                 depth -= 1;
-            }
-            IR::Mul(t, a, b) => {
-                write!(out, "local ");
-                var(t, out);
-                write!(out, " = ");
-                var(a, out);
-                write!(out, " * ");
-                var(b, out);
-            }
-            IR::Div(t, a, b) => {
-                write!(out, "local ");
-                var(t, out);
-                write!(out, " = ");
-                var(a, out);
-                write!(out, " / ");
-                var(b, out);
             }
             IR::Neg(t, a) => {
                 write!(out, "local ");
@@ -116,21 +109,8 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 write!(out, " = ");
                 var(f, out);
                 write!(out, "(");
-                for (i, arg) in args.iter().enumerate() {
-                    if i != 0 {
-                        write!(out, ", ");
-                    }
-                    var(arg, out);
-                }
+                comma_sep(out, args);
                 write!(out, ")");
-            }
-            IR::Equal(t, a, b) => {
-                write!(out, "local ");
-                var(t, out);
-                write!(out, " = ");
-                var(a, out);
-                write!(out, " == ");
-                var(b, out);
             }
             IR::Assert(v) => {
                 write!(out, "assert(");
@@ -142,13 +122,36 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 var(t, out);
                 write!(out, " = \"{}\"", s);
             }
-            IR::Float(t, f) =>{
+            IR::Float(t, f) => {
                 write!(out, "local ");
                 var(t, out);
                 write!(out, " = \"{}\"", f);
             }
+            IR::Equals(t, a, b) => bin_op(out, t, a, b, "=="),
+            IR::NotEquals(t, a, b) => bin_op(out, t, a, b, "~="),
+            IR::Greater(t, a, b) => bin_op(out, t, a, b, ">"),
+            IR::GreaterEqual(t, a, b) => bin_op(out, t, a, b, ">="),
+            IR::Less(t, a, b) => bin_op(out, t, a, b, "<"),
+            IR::LessEqual(t, a, b) => bin_op(out, t, a, b, "<="),
+            IR::In(t, a, b) => {
+                write!(out, "local ");
+                var(t, out);
+                write!(out, " = ");
+                write!(out, "__CONTAINS(");
+                var(a, out);
+                write!(out, ", ");
+                var(b, out);
+                write!(out, ")");
+            }
 
-
+            IR::List(t, exprs) => {
+                write!(out, "local ");
+                var(t, out);
+                write!(out, " = ");
+                write!(out, "__LIST{");
+                comma_sep(out, exprs);
+                write!(out, "}");
+            }
         }
         write!(out, "\n");
     }
