@@ -23,6 +23,7 @@ pub enum IR {
     Mul(Var, Var, Var),
     Div(Var, Var, Var),
     Copy(Var, Var),
+    External(Var, String),
 
     // Name?
     FunctionBegin(Var, Vec<Var>),
@@ -239,7 +240,15 @@ impl<'a> IRCodeGen<'a> {
             StatementKind::FromUse { .. } => todo!(),
             StatementKind::Blob { .. } => todo!(),
             StatementKind::Enum { .. } => todo!(),
-            StatementKind::ExternalDefinition { .. } => todo!(),
+            StatementKind::ExternalDefinition { ident, .. } => {
+                let var = self.var();
+                self.variables.push(Variable {
+                    name: ident.name.clone(),
+                    namespace: ctx.namespace,
+                    var,
+                });
+                vec![IR::External(var, ident.name.clone())]
+            }
 
             StatementKind::Definition { value, ident, .. } => {
                 let (code, var) = self.expression(&value, ctx);

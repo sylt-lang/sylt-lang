@@ -97,6 +97,12 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 write!(out, " = ");
                 var(s, out);
             }
+            IR::External(t, e) => {
+                write!(out, "local ");
+                var(t, out);
+                write!(out, " = ");
+                write!(out, e);
+            }
         }
         write!(out, "\n");
     }
