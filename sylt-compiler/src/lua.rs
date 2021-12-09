@@ -144,6 +144,17 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 write!(out, ")");
             }
 
+            IR::And(t, a, b) => bin_op(out, t, a, b, "and"),
+            IR::Or(t, a, b) =>  bin_op(out, t, a, b, "or"),
+            IR::Not(t, a) => {
+                write!(out, "local ");
+                var(t, out);
+                write!(out, " = ");
+                write!(out, "not ");
+                var(a, out);
+            }
+
+
             IR::List(t, exprs) => {
                 write!(out, "local ");
                 var(t, out);
@@ -152,6 +163,7 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 comma_sep(out, exprs);
                 write!(out, "}");
             }
+
             IR::Tuple(t, exprs) => {
                 write!(out, "local ");
                 var(t, out);
