@@ -188,12 +188,6 @@ impl Compiler {
 
         let ir = intermediate::compile(&typechecker, &statements, &self.namespace_id_to_file);
 
-        eprintln!("----");
-        for i in ir.iter() {
-            eprintln!("{:?}", i);
-        }
-        eprintln!("----");
-
         let gen = lua::generate(&ir, lua_file);
 
         Ok(())

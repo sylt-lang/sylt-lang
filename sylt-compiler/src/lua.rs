@@ -38,6 +38,10 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
 
     let mut depth = 0;
     for instruction in ir.iter() {
+        depth += match instruction {
+            IR::Else | IR::End => -1,
+            _ => 0,
+        };
         for _ in 0..depth {
             write!(out, "  ");
         }
@@ -79,10 +83,6 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 comma_sep(out, params);
                 write!(out, ")");
                 depth += 1;
-            }
-            IR::FunctionEnd => {
-                write!(out, "end");
-                depth -= 1;
             }
             IR::Neg(t, a) => {
                 write!(out, "local ");
@@ -145,7 +145,7 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             }
 
             IR::And(t, a, b) => bin_op(out, t, a, b, "and"),
-            IR::Or(t, a, b) =>  bin_op(out, t, a, b, "or"),
+            IR::Or(t, a, b) => bin_op(out, t, a, b, "or"),
             IR::Not(t, a) => {
                 write!(out, "local ");
                 var(t, out);
@@ -153,7 +153,6 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 write!(out, "not ");
                 var(a, out);
             }
-
 
             IR::List(t, exprs) => {
                 write!(out, "local ");
@@ -171,6 +170,31 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 write!(out, "__TUPLE{");
                 comma_sep(out, exprs);
                 write!(out, "}");
+            }
+
+            IR::Define(t) => {
+                write!(out, "local ");
+                var(t, out);
+                write!(out, " = ");
+                write!(out, "nil");
+            }
+            IR::Assign(t, a) => {
+                var(t, out);
+                write!(out, " = ");
+                var(a, out);
+            }
+            IR::If(a) => {
+                write!(out, "if ");
+                var(a, out);
+                write!(out, " then");
+                depth += 1;
+            }
+            IR::Else => {
+                write!(out, "else");
+                depth += 1;
+            }
+            IR::End => {
+                write!(out, "end");
             }
         }
         write!(out, "\n");

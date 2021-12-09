@@ -42,7 +42,6 @@ pub enum IR {
     LessEqual(Var, Var, Var),
     In(Var, Var, Var),
 
-
     Assert(Var),
 
     List(Var, Vec<Var>),
@@ -50,7 +49,12 @@ pub enum IR {
 
     // Name?
     FunctionBegin(Var, Vec<Var>),
-    FunctionEnd,
+
+    Define(Var),
+    Assign(Var, Var),
+    If(Var),
+    Else,
+    End,
 }
 
 // 1 + 1
@@ -183,20 +187,13 @@ impl<'a> IRCodeGen<'a> {
                 let (aops, a) = self.expression(&a, ctx);
                 let (bops, b) = self.expression(&b, ctx);
                 let c = self.var();
-                (
-                    [aops, bops, vec![IR::And(c, a, b)]].concat(),
-                    c,
-                )
+                ([aops, bops, vec![IR::And(c, a, b)]].concat(), c)
             }
             ExpressionKind::Or(a, b) => {
                 let (aops, a) = self.expression(&a, ctx);
                 let (bops, b) = self.expression(&b, ctx);
                 let c = self.var();
-                (
-                    [aops, bops, vec![IR::Or(c, a, b)]].concat(),
-                    c,
-                )
-
+                ([aops, bops, vec![IR::Or(c, a, b)]].concat(), c)
             }
             ExpressionKind::Not(a) => {
                 let (aops, a) = self.expression(&a, ctx);
@@ -204,7 +201,26 @@ impl<'a> IRCodeGen<'a> {
                 ([aops, vec![IR::Not(b, a)]].concat(), b)
             }
 
-            ExpressionKind::IfExpression { .. } => todo!(),
+            ExpressionKind::IfExpression { condition, pass, fail } => {
+                let (cops, c) = self.expression(&condition, ctx);
+                let (aops, a) = self.expression(&pass, ctx);
+                let (bops, b) = self.expression(&fail, ctx);
+                let var = self.var();
+
+                (
+                    [
+                        cops,
+                        vec![IR::Define(var), IR::If(c)],
+                        aops,
+                        vec![IR::Assign(var, a), IR::Else],
+                        bops,
+                        vec![IR::Assign(var, b), IR::End],
+                    ]
+                    .concat(),
+                    var,
+                )
+            }
+
             ExpressionKind::Blob { .. } => todo!(),
             ExpressionKind::Set(_) => todo!(),
             ExpressionKind::Dict(_) => todo!(),
@@ -262,7 +278,7 @@ impl<'a> IRCodeGen<'a> {
                     [
                         vec![IR::FunctionBegin(a, params)],
                         body,
-                        vec![IR::FunctionEnd],
+                        vec![IR::End],
                     ]
                     .concat(),
                     a,
