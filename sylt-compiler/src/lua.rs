@@ -142,6 +142,13 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 var(t, out);
                 write!(out, " = \"{}\"", s);
             }
+            IR::Float(t, f) =>{
+                write!(out, "local ");
+                var(t, out);
+                write!(out, " = \"{}\"", f);
+            }
+
+
         }
         write!(out, "\n");
     }

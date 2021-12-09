@@ -17,6 +17,7 @@ pub struct Var(pub usize);
 pub enum IR {
     Nil(Var),
     Int(Var, i64),
+    Float(Var, f64),
     Str(Var, String),
     Bool(Var, bool),
     Add(Var, Var, Var),
@@ -151,15 +152,19 @@ impl<'a> IRCodeGen<'a> {
             ExpressionKind::And(_, _) => todo!(),
             ExpressionKind::Or(_, _) => todo!(),
             ExpressionKind::Not(_) => todo!(),
-            ExpressionKind::Parenthesis(_) => todo!(),
             ExpressionKind::IfExpression { .. } => todo!(),
             ExpressionKind::Blob { .. } => todo!(),
             ExpressionKind::Tuple(_) => todo!(),
             ExpressionKind::List(_) => todo!(),
             ExpressionKind::Set(_) => todo!(),
             ExpressionKind::Dict(_) => todo!(),
-            ExpressionKind::Float(_) => todo!(),
 
+            ExpressionKind::Parenthesis(expr) => self.expression(expr, ctx),
+
+            ExpressionKind::Float(a) => {
+                let var = self.var();
+                (vec![IR::Float(var, *a)], var)
+            }
             ExpressionKind::Str(a) => {
                 let var = self.var();
                 (vec![IR::Str(var, a.into())], var)
