@@ -16,6 +16,8 @@ fn var(Var(v): &Var, out: &mut dyn Write) {
 }
 
 pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
+    write!(out, include_str!("preamble.lua"));
+
     let mut depth = 0;
     for instruction in ir.iter() {
         for _ in 0..depth {
@@ -72,6 +74,28 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             IR::FunctionEnd => {
                 write!(out, "end");
                 depth -= 1;
+            }
+            IR::Mul(t, a, b) => {
+                write!(out, "local ");
+                var(t, out);
+                write!(out, " = ");
+                var(a, out);
+                write!(out, " * ");
+                var(b, out);
+            }
+            IR::Div(t, a, b) => {
+                write!(out, "local ");
+                var(t, out);
+                write!(out, " = ");
+                var(a, out);
+                write!(out, " / ");
+                var(b, out);
+            }
+            IR::Copy(d, s) => {
+                write!(out, "local ");
+                var(d, out);
+                write!(out, " = ");
+                var(s, out);
             }
         }
         write!(out, "\n");

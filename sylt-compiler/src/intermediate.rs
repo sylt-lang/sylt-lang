@@ -20,6 +20,9 @@ pub enum IR {
     Bool(Var, bool),
     Add(Var, Var, Var),
     Sub(Var, Var, Var),
+    Mul(Var, Var, Var),
+    Div(Var, Var, Var),
+    Copy(Var, Var),
 
     // Name?
     FunctionBegin(Var, Vec<Var>),
@@ -60,11 +63,18 @@ impl IRContext {
     }
 }
 
+struct Variable {
+    name: String,
+    namespace: NamespaceID,
+    var: Var,
+}
+
 struct IRCodeGen<'a> {
     typechecker: &'a TypeChecker,
     namespace_to_file: HashMap<NamespaceID, FileOrLib>,
     // TODO(ed): This can probably be removed via some trickery
     file_to_namespace: HashMap<FileOrLib, NamespaceID>,
+    variables: Vec<Variable>,
     counter: usize,
 }
 
@@ -81,6 +91,7 @@ impl<'a> IRCodeGen<'a> {
                 .iter()
                 .map(|(a, b)| (b.clone(), a.clone()))
                 .collect(),
+            variables: Vec::new(),
         }
     }
 
@@ -90,11 +101,34 @@ impl<'a> IRCodeGen<'a> {
         Var(i)
     }
 
+    fn assignable(&mut self, assignable: &Assignable, ctx: IRContext) -> (Vec<IR>, Var) {
+        match &assignable.kind {
+            AssignableKind::Read(ident) => (
+                Vec::new(),
+                self.variables
+                    .iter()
+                    .rfind(|Variable { name, namespace, .. }| {
+                        namespace == &ctx.namespace && name == &ident.name
+                    })
+                    .unwrap()
+                    .var,
+            ),
+            AssignableKind::Variant { enum_ass, variant, value } => todo!(),
+            AssignableKind::Call(_, _) => todo!(),
+            AssignableKind::ArrowCall(_, _, _) => todo!(),
+            AssignableKind::Access(_, _) => todo!(),
+            AssignableKind::Index(_, _) => todo!(),
+            AssignableKind::Expression(_) => todo!(),
+        }
+    }
+
     fn expression(&mut self, expr: &Expression, ctx: IRContext) -> (Vec<IR>, Var) {
         match &expr.kind {
-            ExpressionKind::Get(_) => todo!(),
-            ExpressionKind::Mul(_, _) => todo!(),
-            ExpressionKind::Div(_, _) => todo!(),
+            ExpressionKind::Get(ass) => {
+                let (code, source) = self.assignable(ass, ctx);
+                let dest = self.var();
+                ([code, vec![IR::Copy(dest, source)]].concat(), dest)
+            }
             ExpressionKind::Neg(_) => todo!(),
             ExpressionKind::Comparison(_, _, _) => todo!(),
             ExpressionKind::AssertEq(_, _) => todo!(),
@@ -121,7 +155,12 @@ impl<'a> IRCodeGen<'a> {
                 let params = params.iter().map(|_| self.var()).collect();
                 let body = self.statement(body, ctx);
                 (
-                    [vec![IR::FunctionBegin(a, params)], body, vec![IR::FunctionEnd]].concat(),
+                    [
+                        vec![IR::FunctionBegin(a, params)],
+                        body,
+                        vec![IR::FunctionEnd],
+                    ]
+                    .concat(),
                     self.var(),
                 )
             }
@@ -148,6 +187,19 @@ impl<'a> IRCodeGen<'a> {
                 let (bops, b) = self.expression(&b, ctx);
                 let c = self.var();
                 ([aops, bops, vec![IR::Sub(c, a, b)]].concat(), c)
+            }
+
+            ExpressionKind::Mul(a, b) => {
+                let (aops, a) = self.expression(&a, ctx);
+                let (bops, b) = self.expression(&b, ctx);
+                let c = self.var();
+                ([aops, bops, vec![IR::Mul(c, a, b)]].concat(), c)
+            }
+            ExpressionKind::Div(a, b) => {
+                let (aops, a) = self.expression(&a, ctx);
+                let (bops, b) = self.expression(&b, ctx);
+                let c = self.var();
+                ([aops, bops, vec![IR::Div(c, a, b)]].concat(), c)
             }
         }
     }
@@ -189,7 +241,15 @@ impl<'a> IRCodeGen<'a> {
             StatementKind::Enum { .. } => todo!(),
             StatementKind::ExternalDefinition { .. } => todo!(),
 
-            StatementKind::Definition { value, .. } => self.expression(&value, ctx).0,
+            StatementKind::Definition { value, ident, .. } => {
+                let (code, var) = self.expression(&value, ctx);
+                self.variables.push(Variable {
+                    name: ident.name.clone(),
+                    namespace: ctx.namespace,
+                    var,
+                });
+                code
+            }
 
             _ => unreachable!("Not a valid outer statement"),
         }
