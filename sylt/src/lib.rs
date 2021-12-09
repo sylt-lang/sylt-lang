@@ -4,6 +4,7 @@ pub use gumdrop::Options;
 use std::fmt::Debug;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use sylt_common::error::Error;
 
 pub mod formatter;
@@ -15,7 +16,7 @@ pub fn read_file(path: &Path) -> Result<String, Error> {
 pub fn compile_with_reader_to_writer<R>(
     args: &Args,
     reader: R,
-    write_file: Box<dyn Write>,
+    write_file: &mut dyn Write,
 ) -> Result<(), Vec<Error>>
 where
     R: Fn(&Path) -> Result<String, Error>,
@@ -25,7 +26,7 @@ where
     if args.dump_tree {
         println!("{}", tree);
     }
-    sylt_compiler::compile(!args.skip_typecheck, write_file, tree)
+    sylt_compiler::compile(write_file, tree)
 }
 
 // TODO(ed): This name isn't true anymore - since it can compile
@@ -33,7 +34,7 @@ pub fn run_file_with_reader<R>(args: &Args, reader: R) -> Result<(), Vec<Error>>
 where
     R: Fn(&Path) -> Result<String, Error>,
 {
-    match &args.compile {
+    match &args.output {
         None => {
             use std::process::{Command, Stdio};
             let mut child = Command::new("lua")
@@ -41,8 +42,11 @@ where
                 .stderr(Stdio::piped())
                 .spawn()
                 .expect("Failed to start lua - make sure it's installed correctly");
-            let stdin = child.stdin.take().unwrap();
-            compile_with_reader_to_writer(args, reader, Box::new(stdin))?;
+            let mut stdin = child.stdin.take().unwrap();
+            compile_with_reader_to_writer(args, reader, &mut stdin)?;
+
+            drop(stdin); // Close stdin so the child can do its thing.
+
             let output = child.wait_with_output().unwrap();
             // NOTE(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
             // so we check stderr - which is a bad idea.
@@ -56,16 +60,19 @@ where
         Some(s) if s == "-" => {
             use std::io;
             // NOTE(ed): Lack of running
-            compile_with_reader_to_writer(args, reader, Box::new(io::stdout()))?;
+            compile_with_reader_to_writer(args, reader, io::stdout().by_ref())?;
         }
 
         Some(s) => {
             use std::fs::File;
-            let file =
-                File::create(PathBuf::from(s)).expect(&format!("Failed to create file: {}", s));
-            let writer = Box::new(file);
+            let mut buf = Vec::new();
             // NOTE(ed): Lack of running
-            compile_with_reader_to_writer(args, reader, writer)?;
+            compile_with_reader_to_writer(args, reader, buf.by_ref())?;
+
+            File::create(PathBuf::from(s))
+                .expect(&format!("Failed to create file: {}", s))
+                .write(&buf)
+                .map_err(|e| vec![Error::IOError(Rc::new(e))])?;
         }
     };
     Ok(())
@@ -78,29 +85,23 @@ pub fn run_file(args: &Args) -> Result<(), Vec<Error>> {
 
 #[derive(Default, Debug, Options)]
 pub struct Args {
-    #[options(
-        long = "skip-typecheck",
-        no_short,
-        help = "Does no type checking what so ever"
-    )]
-    pub skip_typecheck: bool,
-
-    #[options(long = "dump-tree", no_short, help = "Writes the tree to stdout")]
+    #[options(long = "dump-tree", help = "Write the syntax tree to stdout")]
     pub dump_tree: bool,
 
     #[options(
-        short = "c",
-        long = "compile",
-        help = "Compile to a lua file, '-' for stdout"
+        long = "output",
+        short = "o",
+        meta = "FILE",
+        help = "Output a compiled lua file, '-' for stdout"
     )]
-    pub compile: Option<String>,
+    pub output: Option<String>,
 
-    #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
+    #[options(short = "v", no_long, count, help = "Increase verbosity (max 2)")]
     pub verbosity: u32,
 
     #[options(
         long = "format",
-        help = "Run an auto formatter on the supplied file and print the result to stdout."
+        help = "Format the file and write the result to stdout"
     )]
     pub format: bool,
 
@@ -172,13 +173,14 @@ mod lua {
                     .spawn()
                     .expect(concat!("Failed to start lua, testing:", $path));
 
-                let stdin = child.stdin.take().unwrap();
-                let writer = Box::new(stdin);
+                let mut stdin = child.stdin.take().unwrap();
                 let res = $crate::compile_with_reader_to_writer(
                     &args,
                     $crate::read_file,
-                    writer,
+                    &mut stdin,
                 );
+
+                drop(stdin); // Close stdin so the child can do its thing.
 
                 println!("Expect error: {}", $any_runtime_errors);
                 println!("Got error: {:?}", res.is_err());
