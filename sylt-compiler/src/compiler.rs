@@ -186,7 +186,7 @@ impl Compiler {
 
         let typechecker = typechecker::solve(&mut statements, &self.namespace_id_to_file)?;
 
-        let ir = intermediate::compile(&typechecker, &statements, &self.namespace_id_to_file);
+        let ir = intermediate::compile(&typechecker, &statements);
 
         let gen = lua::generate(&ir, lua_file);
 
