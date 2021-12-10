@@ -348,9 +348,36 @@ impl<'a> IRCodeGen<'a> {
 
     fn statement(&mut self, stmt: &Statement, ctx: IRContext) -> Vec<IR> {
         match &stmt.kind {
-            StatementKind::Assignment { kind, target, value } => todo!(),
-            StatementKind::Definition { ident, kind, ty, value } => todo!(),
-            StatementKind::ExternalDefinition { ident, kind, ty } => todo!(),
+            StatementKind::Assignment { kind, target, value } => {
+                let (ass_code, ass_var) = self.assignable(target, ctx);
+                let (code, var) = self.expression(&value, ctx);
+                let temp = self.var();
+                [
+                    ass_code,
+                    code,
+                    vec![
+                        IR::Define(temp),
+                        match kind {
+                            ParserOp::Nop => IR::Assign(temp, var),
+                            ParserOp::Add => IR::Add(temp, ass_var, var),
+                            ParserOp::Sub => IR::Sub(temp, ass_var, var),
+                            ParserOp::Mul => IR::Mul(temp, ass_var, var),
+                            ParserOp::Div => IR::Div(temp, ass_var, var),
+                        },
+                        IR::Assign(ass_var, temp),
+                    ],
+                ]
+                .concat()
+            }
+            StatementKind::Definition { ident, value, .. } => {
+                let (code, var) = self.expression(&value, ctx);
+                self.variables.push(Variable {
+                    name: ident.name.clone(),
+                    namespace: ctx.namespace,
+                    var,
+                });
+                code
+            }
             StatementKind::If { condition, pass, fail } => {
                 let (cops, c) = self.expression(&condition, ctx);
                 let aops = self.statement(&pass, ctx);
@@ -381,12 +408,14 @@ impl<'a> IRCodeGen<'a> {
                 .flatten()
                 .collect(),
 
+            StatementKind::EmptyStatement => Vec::new(),
+
             StatementKind::Blob { .. }
-            | StatementKind::EmptyStatement
             | StatementKind::Enum { .. }
+            | StatementKind::ExternalDefinition { .. }
             | StatementKind::FromUse { .. }
             | StatementKind::IsCheck { .. }
-            | StatementKind::Use { .. } => Vec::new(),
+            | StatementKind::Use { .. } => unreachable!(),
         }
     }
 
@@ -414,6 +443,7 @@ impl<'a> IRCodeGen<'a> {
             }
 
             // Invalid statements should be caught in the typechecker
+            // TODO: Specify the unreachable things here
             _ => Vec::new(),
         }
     }
