@@ -77,29 +77,6 @@ pub enum IR {
     End,
 }
 
-// 1 + 1
-//
-// t0 = 1
-// t1 = 1
-// t2 = t0 + t1
-//
-// if 1 + 1 == 2 do ...
-//
-// t0 = 1
-// t1 = 1
-// t2 = t0 + t1
-// t3 = 2
-// t4 = t2 == t3
-// t5 = nil
-// if t4 then
-//  ...
-//  t5 = t???
-// else
-//  ...
-//  t5 = t???
-// end
-// t5
-
 #[derive(Debug, Clone, Copy)]
 struct IRContext {
     namespace: usize,
