@@ -1,5 +1,6 @@
 #![allow(unused_variables, unused_imports)]
 use std::collections::HashMap;
+use std::fmt::Display;
 use sylt_common::error::{Error, Helper, TypeError};
 use sylt_common::{FileOrLib, TyID, Type as RuntimeType};
 use sylt_parser::{
@@ -12,6 +13,13 @@ use crate::{ty::Type, typechecker::TypeChecker, NamespaceID};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Var(pub usize);
+
+impl Display for Var {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Var(n) = self;
+        write!(f, "V{}", n)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum IR {
@@ -45,6 +53,8 @@ pub enum IR {
     Assert(Var),
 
     List(Var, Vec<Var>),
+    Set(Var, Vec<Var>),
+    Dict(Var, Vec<Var>),
     Tuple(Var, Vec<Var>),
 
     // Name?
@@ -104,14 +114,8 @@ struct IRCodeGen<'a> {
 }
 
 impl<'a> IRCodeGen<'a> {
-    fn new(
-        typechecker: &'a TypeChecker,
-    ) -> Self {
-        Self {
-            counter: 0,
-            typechecker,
-            variables: Vec::new(),
-        }
+    fn new(typechecker: &'a TypeChecker) -> Self {
+        Self { counter: 0, typechecker, variables: Vec::new() }
     }
 
     fn var(&mut self) -> Var {
@@ -213,8 +217,6 @@ impl<'a> IRCodeGen<'a> {
             }
 
             ExpressionKind::Blob { .. } => todo!(),
-            ExpressionKind::Set(_) => todo!(),
-            ExpressionKind::Dict(_) => todo!(),
 
             ExpressionKind::List(exprs) => {
                 let (code, exprs): (Vec<_>, Vec<_>) =
@@ -223,6 +225,23 @@ impl<'a> IRCodeGen<'a> {
                 let var = self.var();
 
                 ([code, vec![IR::List(var, exprs)]].concat(), var)
+            }
+
+            ExpressionKind::Set(exprs) => {
+                let (code, exprs): (Vec<_>, Vec<_>) =
+                    exprs.iter().map(|expr| self.expression(expr, ctx)).unzip();
+                let code = code.concat();
+                let var = self.var();
+
+                ([code, vec![IR::Set(var, exprs)]].concat(), var)
+            }
+            ExpressionKind::Dict(exprs) => {
+                let (code, exprs): (Vec<_>, Vec<_>) =
+                    exprs.iter().map(|expr| self.expression(expr, ctx)).unzip();
+                let code = code.concat();
+                let var = self.var();
+
+                ([code, vec![IR::Dict(var, exprs)]].concat(), var)
             }
 
             ExpressionKind::Tuple(exprs) => {
@@ -266,12 +285,7 @@ impl<'a> IRCodeGen<'a> {
                 let params = params.iter().map(|_| self.var()).collect();
                 let body = self.statement(body, ctx);
                 (
-                    [
-                        vec![IR::FunctionBegin(a, params)],
-                        body,
-                        vec![IR::End],
-                    ]
-                    .concat(),
+                    [vec![IR::FunctionBegin(a, params)], body, vec![IR::End]].concat(),
                     a,
                 )
             }
@@ -341,13 +355,12 @@ impl<'a> IRCodeGen<'a> {
                 .flatten()
                 .collect(),
 
-            | StatementKind::Blob { .. }
+            StatementKind::Blob { .. }
             | StatementKind::EmptyStatement
             | StatementKind::Enum { .. }
             | StatementKind::FromUse { .. }
             | StatementKind::IsCheck { .. }
             | StatementKind::Use { .. } => Vec::new(),
-
         }
     }
 

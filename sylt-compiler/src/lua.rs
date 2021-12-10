@@ -11,17 +11,13 @@ macro_rules! write {
     };
 }
 
-fn var(Var(v): &Var, out: &mut dyn Write) {
-    write!(out, "V{}", v);
-}
-
 pub fn bin_op(out: &mut dyn Write, t: &Var, a: &Var, b: &Var, op: &str) {
     write!(out, "local ");
-    var(t, out);
+    write!(out, "{}", t);
     write!(out, " = ");
-    var(a, out);
+    write!(out, "{}", a);
     write!(out, " {} ", op);
-    var(b, out);
+    write!(out, "{}", b);
 }
 
 pub fn comma_sep(out: &mut dyn Write, vars: &[Var]) {
@@ -29,7 +25,7 @@ pub fn comma_sep(out: &mut dyn Write, vars: &[Var]) {
         if i != 0 {
             write!(out, ", ");
         }
-        var(v, out);
+        write!(out, "{}", v);
     }
 }
 
@@ -48,27 +44,27 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
         match instruction {
             IR::Nil(t) => {
                 write!(out, "local ");
-                var(t, out);
+                write!(out, "{}", t);
                 write!(out, " = __NIL");
             }
             IR::Int(t, i) => {
                 write!(out, "local ");
-                var(t, out);
+                write!(out, "{}", t);
                 write!(out, " = {}", i);
             }
             IR::Bool(t, b) => {
                 write!(out, "local ");
-                var(t, out);
+                write!(out, "{}", t);
                 write!(out, " = {}", b);
             }
             IR::Add(t, a, b) => {
                 write!(out, "local ");
-                var(t, out);
+                write!(out, "{}", t);
                 write!(out, " = ");
                 write!(out, "__ADD(");
-                var(a, out);
+                write!(out, "{}", a);
                 write!(out, ", ");
-                var(b, out);
+                write!(out, "{}", b);
                 write!(out, ")");
             }
             IR::Sub(t, a, b) => bin_op(out, t, a, b, "-"),
@@ -78,7 +74,7 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             IR::FunctionBegin(a, params) => {
                 write!(out, "local ");
                 write!(out, "function ");
-                var(a, out);
+                write!(out, "{}", a);
                 write!(out, "(");
                 comma_sep(out, params);
                 write!(out, ")");
@@ -86,45 +82,45 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             }
             IR::Neg(t, a) => {
                 write!(out, "local ");
-                var(t, out);
+                write!(out, "{}", t);
                 write!(out, " = ");
                 write!(out, "-");
-                var(a, out);
+                write!(out, "{}", a);
             }
             IR::Copy(d, s) => {
                 write!(out, "local ");
-                var(d, out);
+                write!(out, "{}", d);
                 write!(out, " = ");
-                var(s, out);
+                write!(out, "{}", s);
             }
             IR::External(t, e) => {
                 write!(out, "local ");
-                var(t, out);
+                write!(out, "{}", t);
                 write!(out, " = ");
                 write!(out, e);
             }
             IR::Call(t, f, args) => {
                 write!(out, "local ");
-                var(t, out);
+                write!(out, "{}", t);
                 write!(out, " = ");
-                var(f, out);
+                write!(out, "{}", f);
                 write!(out, "(");
                 comma_sep(out, args);
                 write!(out, ")");
             }
             IR::Assert(v) => {
                 write!(out, "assert(");
-                var(v, out);
+                write!(out, "{}", v);
                 write!(out, ", \":(\")");
             }
             IR::Str(t, s) => {
                 write!(out, "local ");
-                var(t, out);
+                write!(out, "{}", t);
                 write!(out, " = \"{}\"", s);
             }
             IR::Float(t, f) => {
                 write!(out, "local ");
-                var(t, out);
+                write!(out, "{}", t);
                 write!(out, " = \"{}\"", f);
             }
             IR::Equals(t, a, b) => bin_op(out, t, a, b, "=="),
@@ -135,12 +131,12 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             IR::LessEqual(t, a, b) => bin_op(out, t, a, b, "<="),
             IR::In(t, a, b) => {
                 write!(out, "local ");
-                var(t, out);
+                write!(out, "{}", t);
                 write!(out, " = ");
                 write!(out, "__CONTAINS(");
-                var(a, out);
+                write!(out, "{}", a);
                 write!(out, ", ");
-                var(b, out);
+                write!(out, "{}", b);
                 write!(out, ")");
             }
 
@@ -148,24 +144,64 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             IR::Or(t, a, b) => bin_op(out, t, a, b, "or"),
             IR::Not(t, a) => {
                 write!(out, "local ");
-                var(t, out);
+                write!(out, "{}", t);
                 write!(out, " = ");
                 write!(out, "not ");
-                var(a, out);
+                write!(out, "{}", a);
             }
 
             IR::List(t, exprs) => {
                 write!(out, "local ");
-                var(t, out);
+                write!(out, "{}", t);
                 write!(out, " = ");
                 write!(out, "__LIST{");
                 comma_sep(out, exprs);
                 write!(out, "}");
             }
 
+            IR::Set(t, exprs) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "__SET{");
+                write!(
+                    out,
+                    "{}",
+                    exprs
+                        .iter()
+                        .map(|v| format!("[{}] = true", v))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                write!(out, "}");
+            }
+
+            IR::Dict(t, exprs) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "__DICT{");
+                write!(
+                    out,
+                    "{}",
+                    exprs
+                        .windows(2)
+                        .step_by(2)
+                        .map(|v| match v {
+                            [k, v] => {
+                                format!("[{}] = {}", k, v)
+                            }
+                            _ => unreachable!(),
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                write!(out, "}");
+            }
+
             IR::Tuple(t, exprs) => {
                 write!(out, "local ");
-                var(t, out);
+                write!(out, "{}", t);
                 write!(out, " = ");
                 write!(out, "__TUPLE{");
                 comma_sep(out, exprs);
@@ -174,18 +210,18 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
 
             IR::Define(t) => {
                 write!(out, "local ");
-                var(t, out);
+                write!(out, "{}", t);
                 write!(out, " = ");
                 write!(out, "nil");
             }
             IR::Assign(t, a) => {
-                var(t, out);
+                write!(out, "{}", t);
                 write!(out, " = ");
-                var(a, out);
+                write!(out, "{}", a);
             }
             IR::If(a) => {
                 write!(out, "if ");
-                var(a, out);
+                write!(out, "{}", a);
                 write!(out, " then");
                 depth += 1;
             }
