@@ -71,10 +71,10 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             IR::Mul(t, a, b) => bin_op(out, t, a, b, "*"),
             IR::Div(t, a, b) => bin_op(out, t, a, b, "/"),
 
-            IR::FunctionBegin(a, params) => {
+            IR::Function(f, params) => {
                 write!(out, "local ");
                 write!(out, "function ");
-                write!(out, "{}", a);
+                write!(out, "{}", f);
                 write!(out, "(");
                 comma_sep(out, params);
                 write!(out, ")");
@@ -258,6 +258,10 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             }
             IR::Continue => {
                 write!(out, "continue");
+            }
+            IR::Return(t) => {
+                write!(out, "return ");
+                write!(out, "{}", t);
             }
         }
         write!(out, "\n");

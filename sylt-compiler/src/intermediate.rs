@@ -59,10 +59,11 @@ pub enum IR {
     Blob(Var, Vec<(String, Var)>),
 
     // Name?
-    FunctionBegin(Var, Vec<Var>),
+    Function(Var, Vec<Var>),
 
     Define(Var),
     Assign(Var, Var),
+    Return(Var),
     If(Var),
     Loop,
     Break,
@@ -294,13 +295,25 @@ impl<'a> IRCodeGen<'a> {
             }
 
             ExpressionKind::Function { body, params, .. } => {
-                let a = self.var();
-                // TODO: write the params
-                let params = params.iter().map(|_| self.var()).collect();
+                let ss = self.variables.len();
+                let params = params
+                    .iter()
+                    .map(|(name, _)| {
+                        let var = self.var();
+                        self.variables.push(Variable {
+                            name: name.name.clone(),
+                            namespace: ctx.namespace,
+                            var,
+                        });
+                        var
+                    })
+                    .collect();
+                let f = self.var();
                 let body = self.statement(body, ctx);
+                self.variables.truncate(ss);
                 (
-                    [vec![IR::FunctionBegin(a, params)], body, vec![IR::End]].concat(),
-                    a,
+                    [vec![IR::Function(f, params)], body, vec![IR::End]].concat(),
+                    f,
                 )
             }
 
@@ -403,24 +416,33 @@ impl<'a> IRCodeGen<'a> {
                 let body = self.statement(&body, ctx);
 
                 [
-                 vec![IR::Loop],
-                 cops,
-                 vec![IR::If(c), IR::Else, IR::Break, IR::End],
-                 body,
-                 vec![IR::End],
-                ].concat()
+                    vec![IR::Loop],
+                    cops,
+                    vec![IR::If(c), IR::Else, IR::Break, IR::End],
+                    body,
+                    vec![IR::End],
+                ]
+                .concat()
             }
-            StatementKind::Break => todo!(),
-            StatementKind::Continue => todo!(),
-            StatementKind::Ret { value } => todo!(),
+            StatementKind::Break => vec![IR::Break],
+            StatementKind::Continue => vec![IR::Continue],
+            StatementKind::Ret { value } => {
+                let (aops, a) = self.expression(&value, ctx);
+                [aops, vec![IR::Return(a)]].concat()
+            }
             StatementKind::Unreachable => todo!(),
 
             StatementKind::StatementExpression { value } => self.expression(value, ctx).0,
-            StatementKind::Block { statements } => statements
-                .iter()
-                .map(|stmt| self.statement(stmt, ctx))
-                .flatten()
-                .collect(),
+            StatementKind::Block { statements } => {
+                let ss = self.variables.len();
+                let code = statements
+                    .iter()
+                    .map(|stmt| self.statement(stmt, ctx))
+                    .flatten()
+                    .collect();
+                self.variables.truncate(ss);
+                code
+            }
 
             StatementKind::EmptyStatement => Vec::new(),
 
