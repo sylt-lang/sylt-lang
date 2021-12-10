@@ -124,33 +124,51 @@ impl<'a> IRCodeGen<'a> {
         Var(i)
     }
 
-    fn lookup(&self, search_name: &str, search_namespace: usize) -> Var {
+    fn lookup(&self, search_name: &str, search_namespace: usize) -> Option<Var> {
         self.variables
             .iter()
             .rfind(|Variable { name, namespace, .. }| {
                 search_namespace == *namespace && name == search_name
             })
-            .unwrap()
-            .var
+            .map(|v| v.var)
+    }
+
+    fn lookup_namespace(&self, search_name: &str, search_namespace: usize) -> Option<NamespaceID> {
+        self.namespaces
+            .iter()
+            .rfind(|Namespace { name, namespace, .. }| {
+                search_namespace == *namespace && name == search_name
+            })
+            .map(|v| v.points_to)
     }
 
     fn namespace_chain(&self, assignable: &Assignable, ctx: IRContext) -> Option<IRContext> {
         match &assignable.kind {
-            AssignableKind::Read(ident) => {
+            AssignableKind::Read(ident) => match self.lookup(&ident.name, ctx.namespace) {
+                Some(_) => None,
+                None => self
+                    .lookup_namespace(&ident.name, ctx.namespace)
+                    .map(IRContext::from_namespace),
+            },
+            AssignableKind::Access(ass, ident) => {
+                let ctx = self.namespace_chain(assignable, ctx)?;
+                self.lookup_namespace(&ident.name, ctx.namespace)
+                    .map(IRContext::from_namespace)
             }
-            AssignableKind::Access(_, _) => todo!(),
 
-            AssignableKind::Call( .. )
+            AssignableKind::Call(..)
             | AssignableKind::Variant { .. }
-            | AssignableKind::ArrowCall( .. )
-            | AssignableKind::Index( .. )
-            | AssignableKind::Expression( .. ) => None,
+            | AssignableKind::ArrowCall(..)
+            | AssignableKind::Index(..)
+            | AssignableKind::Expression(..) => None,
         }
     }
 
     fn assignable(&mut self, assignable: &Assignable, ctx: IRContext) -> (Vec<IR>, Var) {
         match &assignable.kind {
-            AssignableKind::Read(ident) => (Vec::new(), self.lookup(&ident.name, ctx.namespace)),
+            AssignableKind::Read(ident) => {
+                (Vec::new(), self.lookup(&ident.name, ctx.namespace).unwrap())
+            }
             AssignableKind::Variant { variant, value, .. } => {
                 let (xops, x) = self.expression(&value, ctx);
                 let v = self.var();
@@ -186,7 +204,11 @@ impl<'a> IRCodeGen<'a> {
                     var,
                 )
             }
-            AssignableKind::Access(_, _) => todo!(),
+            AssignableKind::Access(ass, ident) => {
+                //let ctx = self.namespace_chain(ass, ctx).unwrap_or(ctx);
+                //(Vec::new(), self.lookup(&ident.name, ctx.namespace).unwrap())
+                todo!()
+            }
             AssignableKind::Index(ass, expr) => {
                 let (aops, a) = self.assignable(&ass, ctx);
                 let (bops, b) = self.expression(&expr, ctx);
@@ -523,7 +545,7 @@ impl<'a> IRCodeGen<'a> {
 
                 imports.iter().for_each(|(other_name, maybe_rename)| {
                     // TODO(ed): From import namespaces
-                    let var = self.lookup(&other_name.name, other_namspace);
+                    let var = self.lookup(&other_name.name, other_namspace).unwrap();
                     let name = match maybe_rename {
                         Some(rename) => rename.name.clone(),
                         None => other_name.name.clone(),
