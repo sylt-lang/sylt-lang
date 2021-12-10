@@ -267,6 +267,14 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             IR::HaltAndCatchFire(msg) => {
                 write!(out, "__CRASH(\"{}\")()", msg);
             }
+            IR::Variant(t, v, a) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "__VARIANT{");
+                write!(out, "\"{}\", {}", v, a);
+                write!(out, "}");
+            }
         }
         write!(out, "\n");
     }

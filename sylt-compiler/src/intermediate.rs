@@ -57,6 +57,7 @@ pub enum IR {
     Dict(Var, Vec<Var>),
     Tuple(Var, Vec<Var>),
     Blob(Var, Vec<(String, Var)>),
+    Variant(Var, String, Var),
 
     // Name?
     Function(Var, Vec<Var>),
@@ -142,7 +143,15 @@ impl<'a> IRCodeGen<'a> {
                     .unwrap()
                     .var,
             ),
-            AssignableKind::Variant { enum_ass, variant, value } => todo!(),
+            AssignableKind::Variant { variant, value, .. } => {
+                let (xops, x) = self.expression(&value, ctx);
+                let v = self.var();
+                let out = self.var();
+                (
+                    [xops, vec![IR::Variant(out, variant.name.clone(), x)]].concat(),
+                    out,
+                )
+            }
             AssignableKind::Call(ass, exprs) => {
                 let (fn_code, fn_var) = self.assignable(ass, ctx);
                 let (code, args): (Vec<_>, Vec<_>) =
