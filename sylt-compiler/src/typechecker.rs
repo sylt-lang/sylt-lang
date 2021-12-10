@@ -154,7 +154,7 @@ pub struct TypeChecker {
     types: Vec<TypeNode>,
     namespace_to_file: HashMap<NamespaceID, FileOrLib>,
     // TODO(ed): This can probably be removed via some trickery
-    file_to_namespace: HashMap<FileOrLib, NamespaceID>,
+    pub file_to_namespace: HashMap<FileOrLib, NamespaceID>,
 }
 
 #[derive(Clone, Debug, Copy)]

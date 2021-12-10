@@ -94,15 +94,28 @@ struct Variable {
     var: Var,
 }
 
+struct Namespace {
+    name: String,
+    namespace: NamespaceID,
+    points_to: NamespaceID,
+}
+
 struct IRCodeGen<'a> {
+    #[allow(unused)]
     typechecker: &'a TypeChecker,
     variables: Vec<Variable>,
+    namespaces: Vec<Namespace>,
     counter: usize,
 }
 
 impl<'a> IRCodeGen<'a> {
     fn new(typechecker: &'a TypeChecker) -> Self {
-        Self { counter: 0, typechecker, variables: Vec::new() }
+        Self {
+            counter: 0,
+            typechecker,
+            variables: Vec::new(),
+            namespaces: Vec::new(),
+        }
     }
 
     fn var(&mut self) -> Var {
@@ -111,18 +124,19 @@ impl<'a> IRCodeGen<'a> {
         Var(i)
     }
 
+    fn lookup(&self, search_name: &str, search_namespace: usize) -> Var {
+        self.variables
+            .iter()
+            .rfind(|Variable { name, namespace, .. }| {
+                search_namespace == *namespace && name == search_name
+            })
+            .unwrap()
+            .var
+    }
+
     fn assignable(&mut self, assignable: &Assignable, ctx: IRContext) -> (Vec<IR>, Var) {
         match &assignable.kind {
-            AssignableKind::Read(ident) => (
-                Vec::new(),
-                self.variables
-                    .iter()
-                    .rfind(|Variable { name, namespace, .. }| {
-                        namespace == &ctx.namespace && name == &ident.name
-                    })
-                    .unwrap()
-                    .var,
-            ),
+            AssignableKind::Read(ident) => (Vec::new(), self.lookup(&ident.name, ctx.namespace)),
             AssignableKind::Variant { variant, value, .. } => {
                 let (xops, x) = self.expression(&value, ctx);
                 let v = self.var();
@@ -411,7 +425,7 @@ impl<'a> IRCodeGen<'a> {
                             ParserOp::Div => IR::Div(res, current, var),
                         },
                     ],
-                    post_code
+                    post_code,
                 ]
                 .concat()
             }
@@ -490,6 +504,22 @@ impl<'a> IRCodeGen<'a> {
     fn compile(&mut self, stmt: &Statement, namespace: NamespaceID) -> Vec<IR> {
         let ctx = IRContext::from_namespace(namespace);
         match &stmt.kind {
+            StatementKind::FromUse { imports, file, .. } => {
+                let other_namspace = self.typechecker.file_to_namespace[file];
+
+                imports.iter().for_each(|(other_name, maybe_rename)| {
+                    // TODO(ed): From import namespaces
+                    let var = self.lookup(&other_name.name, other_namspace);
+                    let name = match maybe_rename {
+                        Some(rename) => rename.name.clone(),
+                        None => other_name.name.clone(),
+                    };
+                    self.variables.push(Variable { name, namespace, var });
+                });
+
+                Vec::new()
+            }
+            // StatementKind::Use { .. }
             StatementKind::ExternalDefinition { ident, .. } => {
                 let var = self.var();
                 self.variables.push(Variable {
