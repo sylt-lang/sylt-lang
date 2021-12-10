@@ -134,6 +134,20 @@ impl<'a> IRCodeGen<'a> {
             .var
     }
 
+    fn namespace_chain(&self, assignable: &Assignable, ctx: IRContext) -> Option<IRContext> {
+        match &assignable.kind {
+            AssignableKind::Read(ident) => {
+            }
+            AssignableKind::Access(_, _) => todo!(),
+
+            AssignableKind::Call( .. )
+            | AssignableKind::Variant { .. }
+            | AssignableKind::ArrowCall( .. )
+            | AssignableKind::Index( .. )
+            | AssignableKind::Expression( .. ) => None,
+        }
+    }
+
     fn assignable(&mut self, assignable: &Assignable, ctx: IRContext) -> (Vec<IR>, Var) {
         match &assignable.kind {
             AssignableKind::Read(ident) => (Vec::new(), self.lookup(&ident.name, ctx.namespace)),
