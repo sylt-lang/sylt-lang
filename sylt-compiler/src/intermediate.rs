@@ -166,7 +166,7 @@ impl<'a> IRCodeGen<'a> {
             }
             AssignableKind::ArrowCall(extra, ass, exprs) => {
                 let (fn_code, fn_var) = self.assignable(ass, ctx);
-                let (extra_code, extra)  = self.expression(extra, ctx);
+                let (extra_code, extra) = self.expression(extra, ctx);
                 let (code, mut args): (Vec<_>, Vec<_>) =
                     exprs.iter().map(|expr| self.expression(expr, ctx)).unzip();
                 let code = code.concat();
@@ -180,7 +180,7 @@ impl<'a> IRCodeGen<'a> {
             }
             AssignableKind::Access(_, _) => todo!(),
             AssignableKind::Index(_, _) => todo!(),
-            AssignableKind::Expression(_) => todo!(),
+            AssignableKind::Expression(expr) => self.expression(expr, ctx),
         }
     }
 
