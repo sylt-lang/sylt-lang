@@ -65,6 +65,9 @@ pub enum IR {
     Index(Var, Var, Var),
     AssignIndex(Var, Var, Var),
 
+    Access(Var, Var, String),
+    AssignAccess(Var, String, Var),
+
     Define(Var),
     Assign(Var, Var),
     Return(Var),
@@ -204,11 +207,17 @@ impl<'a> IRCodeGen<'a> {
                     var,
                 )
             }
-            AssignableKind::Access(ass, ident) => {
-                //let ctx = self.namespace_chain(ass, ctx).unwrap_or(ctx);
-                //(Vec::new(), self.lookup(&ident.name, ctx.namespace).unwrap())
-                todo!()
-            }
+            AssignableKind::Access(ass, ident) => match self.namespace_chain(ass, ctx) {
+                Some(ctx) => (Vec::new(), self.lookup(&ident.name, ctx.namespace).unwrap()),
+                None => {
+                    let (code, a) = self.assignable(ass, ctx);
+                    let b = self.var();
+                    (
+                        [code, vec![IR::Access(b, a, ident.name.clone())]].concat(),
+                        b
+                    )
+                }
+            },
             AssignableKind::Index(ass, expr) => {
                 let (aops, a) = self.assignable(&ass, ctx);
                 let (bops, b) = self.expression(&expr, ctx);

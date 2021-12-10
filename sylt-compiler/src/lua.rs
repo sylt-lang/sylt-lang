@@ -288,6 +288,17 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 write!(out, "{}, {}, {}", t, i, a);
                 write!(out, ")");
             }
+            IR::Access(t, a, f) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "{}.{}", a, f);
+            }
+            IR::AssignAccess(t, f, c) => {
+                write!(out, "{}.{}", t, f);
+                write!(out, " = ");
+                write!(out, "{}", c);
+            }
         }
         write!(out, "\n");
     }
