@@ -519,7 +519,19 @@ impl<'a> IRCodeGen<'a> {
 
                 Vec::new()
             }
-            // StatementKind::Use { .. }
+
+            StatementKind::Use { name, file, .. } => {
+                let other_namspace = self.typechecker.file_to_namespace[file];
+
+                self.namespaces.push(Namespace {
+                    name: name.name().into(),
+                    namespace,
+                    points_to: other_namspace,
+                });
+
+                Vec::new()
+            }
+
             StatementKind::ExternalDefinition { ident, .. } => {
                 let var = self.var();
                 self.variables.push(Variable {
