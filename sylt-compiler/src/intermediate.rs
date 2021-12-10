@@ -56,6 +56,7 @@ pub enum IR {
     Set(Var, Vec<Var>),
     Dict(Var, Vec<Var>),
     Tuple(Var, Vec<Var>),
+    Blob(Var, Vec<(String, Var)>),
 
     // Name?
     FunctionBegin(Var, Vec<Var>),
@@ -216,7 +217,17 @@ impl<'a> IRCodeGen<'a> {
                 )
             }
 
-            ExpressionKind::Blob { .. } => todo!(),
+            ExpressionKind::Blob { fields, .. } => {
+                let (fields, (code, exprs)): (Vec<_>, (Vec<_>, Vec<_>)) = fields
+                    .iter()
+                    .map(|(field, expr)| (field.clone(), self.expression(expr, ctx)))
+                    .unzip();
+                let code = code.concat();
+                let fields: Vec<_> = fields.into_iter().zip(exprs.into_iter()).collect();
+                let var = self.var();
+
+                ([code, vec![IR::Blob(var, fields)]].concat(), var)
+            }
 
             ExpressionKind::List(exprs) => {
                 let (code, exprs): (Vec<_>, Vec<_>) =

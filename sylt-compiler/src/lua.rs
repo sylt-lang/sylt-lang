@@ -199,6 +199,23 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 write!(out, "}");
             }
 
+            IR::Blob(t, fields) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "__BLOB{");
+                write!(
+                    out,
+                    "{}",
+                    fields
+                        .iter()
+                        .map(|(f, v)| format!("{} = {}", f, v))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                write!(out, "}");
+            }
+
             IR::Tuple(t, exprs) => {
                 write!(out, "local ");
                 write!(out, "{}", t);
