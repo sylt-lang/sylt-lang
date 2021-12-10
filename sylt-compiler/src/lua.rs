@@ -38,6 +38,7 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             IR::Else | IR::End => -1,
             _ => 0,
         };
+
         for _ in 0..depth {
             write!(out, "  ");
         }
@@ -262,6 +263,9 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             IR::Return(t) => {
                 write!(out, "return ");
                 write!(out, "{}", t);
+            }
+            IR::HaltAndCatchFire(msg) => {
+                write!(out, "__CRASH(\"{}\")()", msg);
             }
         }
         write!(out, "\n");

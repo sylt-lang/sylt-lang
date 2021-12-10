@@ -65,6 +65,7 @@ pub enum IR {
     Assign(Var, Var),
     Return(Var),
     If(Var),
+    HaltAndCatchFire(String),
     Loop,
     Break,
     Continue,
@@ -430,7 +431,9 @@ impl<'a> IRCodeGen<'a> {
                 let (aops, a) = self.expression(&value, ctx);
                 [aops, vec![IR::Return(a)]].concat()
             }
-            StatementKind::Unreachable => todo!(),
+            StatementKind::Unreachable => {
+                vec![IR::HaltAndCatchFire("Reached unreachable code!".into())]
+            }
 
             StatementKind::StatementExpression { value } => self.expression(value, ctx).0,
             StatementKind::Block { statements } => {
