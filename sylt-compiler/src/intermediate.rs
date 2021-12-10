@@ -351,7 +351,22 @@ impl<'a> IRCodeGen<'a> {
             StatementKind::Assignment { kind, target, value } => todo!(),
             StatementKind::Definition { ident, kind, ty, value } => todo!(),
             StatementKind::ExternalDefinition { ident, kind, ty } => todo!(),
-            StatementKind::If { condition, pass, fail } => todo!(),
+            StatementKind::If { condition, pass, fail } => {
+                let (cops, c) = self.expression(&condition, ctx);
+                let aops = self.statement(&pass, ctx);
+                let bops = self.statement(&fail, ctx);
+                let var = self.var();
+
+                [
+                    cops,
+                    vec![IR::If(c)],
+                    aops,
+                    vec![IR::Else],
+                    bops,
+                    vec![IR::End],
+                ]
+                .concat()
+            }
             StatementKind::Case { to_match, branches, fall_through } => todo!(),
             StatementKind::Loop { condition, body } => todo!(),
             StatementKind::Break => todo!(),
