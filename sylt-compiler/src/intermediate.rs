@@ -64,6 +64,9 @@ pub enum IR {
     Define(Var),
     Assign(Var, Var),
     If(Var),
+    Loop,
+    Break,
+    Continue,
     Else,
     End,
 }
@@ -395,7 +398,18 @@ impl<'a> IRCodeGen<'a> {
                 .concat()
             }
             StatementKind::Case { to_match, branches, fall_through } => todo!(),
-            StatementKind::Loop { condition, body } => todo!(),
+            StatementKind::Loop { condition, body } => {
+                let (cops, c) = self.expression(&condition, ctx);
+                let body = self.statement(&body, ctx);
+
+                [
+                 vec![IR::Loop],
+                 cops,
+                 vec![IR::If(c), IR::Else, IR::Break, IR::End],
+                 body,
+                 vec![IR::End],
+                ].concat()
+            }
             StatementKind::Break => todo!(),
             StatementKind::Continue => todo!(),
             StatementKind::Ret { value } => todo!(),

@@ -249,6 +249,16 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             IR::End => {
                 write!(out, "end");
             }
+            IR::Loop => {
+                write!(out, "while true do");
+                depth += 1;
+            }
+            IR::Break => {
+                write!(out, "break");
+            }
+            IR::Continue => {
+                write!(out, "continue");
+            }
         }
         write!(out, "\n");
     }
