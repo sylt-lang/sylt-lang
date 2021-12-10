@@ -214,7 +214,7 @@ impl<'a> IRCodeGen<'a> {
                     let b = self.var();
                     (
                         [code, vec![IR::Access(b, a, ident.name.clone())]].concat(),
-                        b
+                        b,
                     )
                 }
             },
@@ -450,7 +450,21 @@ impl<'a> IRCodeGen<'a> {
                             vec![IR::AssignIndex(a, b, res)],
                         )
                     }
-                    AssignableKind::Access(_, _) => todo!(),
+                    AssignableKind::Access(ass, ident) => match self.namespace_chain(ass, ctx) {
+                        Some(ctx) => {
+                            let a = self.lookup(&ident.name, ctx.namespace).unwrap();
+                            (Vec::new(), a, vec![IR::Assign(a, res)])
+                        }
+                        None => {
+                            let (code, a) = self.assignable(ass, ctx);
+                            let b = self.var();
+                            (
+                                [code, vec![IR::Access(b, a, ident.name.clone())]].concat(),
+                                b,
+                                vec![IR::AssignAccess(a, ident.name.clone(), res)]
+                            )
+                        }
+                    },
                     AssignableKind::Expression(..)
                     | AssignableKind::Variant { .. }
                     | AssignableKind::Call(..)
