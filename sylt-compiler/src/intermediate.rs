@@ -62,6 +62,9 @@ pub enum IR {
     // Name?
     Function(Var, Vec<Var>),
 
+    Index(Var, Var, Var),
+    AssignIndex(Var, Var, Var),
+
     Define(Var),
     Assign(Var, Var),
     Return(Var),
@@ -179,7 +182,13 @@ impl<'a> IRCodeGen<'a> {
                 )
             }
             AssignableKind::Access(_, _) => todo!(),
-            AssignableKind::Index(_, _) => todo!(),
+            AssignableKind::Index(ass, expr) => {
+                let (aops, a) = self.assignable(&ass, ctx);
+                let (bops, b) = self.expression(&expr, ctx);
+                let c = self.var();
+
+                ([aops, bops, vec![IR::Index(c, a, b)]].concat(), c)
+            }
             AssignableKind::Expression(expr) => self.expression(expr, ctx),
         }
     }
@@ -388,23 +397,44 @@ impl<'a> IRCodeGen<'a> {
     fn statement(&mut self, stmt: &Statement, ctx: IRContext) -> Vec<IR> {
         match &stmt.kind {
             StatementKind::Assignment { kind, target, value } => {
-                let (ass_code, ass_var) = self.assignable(target, ctx);
+                let res = self.var();
+                let (pre_code, current, post_code) = match &target.kind {
+                    AssignableKind::Read(_) => {
+                        let (_, var) = self.assignable(target, ctx);
+                        (Vec::new(), var, vec![IR::Assign(var, res)])
+                    }
+                    AssignableKind::Index(ass, expr) => {
+                        let (aops, a) = self.assignable(ass, ctx);
+                        let (bops, b) = self.expression(expr, ctx);
+                        let c = self.var();
+
+                        (
+                            [aops, bops, vec![IR::Index(c, a, b)]].concat(),
+                            c,
+                            vec![IR::AssignIndex(a, b, res)],
+                        )
+                    }
+                    AssignableKind::Access(_, _) => todo!(),
+                    AssignableKind::Expression(..)
+                    | AssignableKind::Variant { .. }
+                    | AssignableKind::Call(..)
+                    | AssignableKind::ArrowCall(..) => unreachable!(),
+                };
                 let (code, var) = self.expression(&value, ctx);
-                let temp = self.var();
                 [
-                    ass_code,
+                    pre_code,
                     code,
                     vec![
-                        IR::Define(temp),
+                        IR::Define(res),
                         match kind {
-                            ParserOp::Nop => IR::Assign(temp, var),
-                            ParserOp::Add => IR::Add(temp, ass_var, var),
-                            ParserOp::Sub => IR::Sub(temp, ass_var, var),
-                            ParserOp::Mul => IR::Mul(temp, ass_var, var),
-                            ParserOp::Div => IR::Div(temp, ass_var, var),
+                            ParserOp::Nop => IR::Assign(res, var),
+                            ParserOp::Add => IR::Add(res, current, var),
+                            ParserOp::Sub => IR::Sub(res, current, var),
+                            ParserOp::Mul => IR::Mul(res, current, var),
+                            ParserOp::Div => IR::Div(res, current, var),
                         },
-                        IR::Assign(ass_var, temp),
                     ],
+                    post_code
                 ]
                 .concat()
             }

@@ -275,6 +275,19 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 write!(out, "\"{}\", {}", v, a);
                 write!(out, "}");
             }
+            IR::Index(t, a, i) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "__INDEX(");
+                write!(out, "{}, {}", a, i);
+                write!(out, ")");
+            }
+            IR::AssignIndex(t, i, a) => {
+                write!(out, "__ASSIGN_INDEX(");
+                write!(out, "{}, {}, {}", t, i, a);
+                write!(out, ")");
+            }
         }
         write!(out, "\n");
     }
