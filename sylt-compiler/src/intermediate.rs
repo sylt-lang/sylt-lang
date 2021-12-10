@@ -164,7 +164,20 @@ impl<'a> IRCodeGen<'a> {
                     var,
                 )
             }
-            AssignableKind::ArrowCall(_, _, _) => todo!(),
+            AssignableKind::ArrowCall(extra, ass, exprs) => {
+                let (fn_code, fn_var) = self.assignable(ass, ctx);
+                let (extra_code, extra)  = self.expression(extra, ctx);
+                let (code, mut args): (Vec<_>, Vec<_>) =
+                    exprs.iter().map(|expr| self.expression(expr, ctx)).unzip();
+                let code = code.concat();
+                args.insert(0, extra);
+
+                let var = self.var();
+                (
+                    [fn_code, extra_code, code, vec![IR::Call(var, fn_var, args)]].concat(),
+                    var,
+                )
+            }
             AssignableKind::Access(_, _) => todo!(),
             AssignableKind::Index(_, _) => todo!(),
             AssignableKind::Expression(_) => todo!(),
