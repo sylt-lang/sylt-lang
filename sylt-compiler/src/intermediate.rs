@@ -3,10 +3,9 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use sylt_common::error::{Error, Helper, TypeError};
 use sylt_common::{FileOrLib, TyID, Type as RuntimeType};
-use sylt_parser::CaseBranch;
 use sylt_parser::{
-    expression::ComparisonKind, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
-    Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeAssignable,
+    expression::ComparisonKind, Assignable, AssignableKind, CaseBranch, Expression, ExpressionKind,
+    Identifier, Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeAssignable,
     TypeAssignableKind, TypeConstraint, TypeKind, VarKind,
 };
 
