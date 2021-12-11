@@ -45,8 +45,6 @@ pub enum IR {
     Neg(Var, Var),
     Copy(Var, Var),
 
-    And(Var, Var, Var),
-    Or(Var, Var, Var),
     Not(Var, Var),
 
     External(Var, String),
@@ -275,13 +273,32 @@ impl<'a> IRCodeGen<'a> {
                 let (aops, a) = self.expression(&a, ctx);
                 let (bops, b) = self.expression(&b, ctx);
                 let c = self.var();
-                ([aops, bops, vec![IR::And(c, a, b)]].concat(), c)
+                (
+                    [
+                        aops,
+                        vec![IR::Bool(c, false), IR::If(a)],
+                        bops,
+                        vec![IR::Assign(c, b), IR::End],
+                    ]
+                    .concat(),
+                    c,
+                )
             }
             ExpressionKind::Or(a, b) => {
                 let (aops, a) = self.expression(&a, ctx);
                 let (bops, b) = self.expression(&b, ctx);
+                let neg_a = self.var();
                 let c = self.var();
-                ([aops, bops, vec![IR::Or(c, a, b)]].concat(), c)
+                (
+                    [
+                        aops,
+                        vec![IR::Bool(c, true), IR::Not(neg_a, a), IR::If(neg_a)],
+                        bops,
+                        vec![IR::Assign(c, b), IR::End],
+                    ]
+                    .concat(),
+                    c,
+                )
             }
             ExpressionKind::Not(a) => {
                 let (aops, a) = self.expression(&a, ctx);
@@ -650,7 +667,10 @@ impl<'a> IRCodeGen<'a> {
                 [aops, vec![IR::Return(a)]].concat()
             }
             StatementKind::Unreachable => {
-                vec![IR::HaltAndCatchFire("Reached unreachable code!".into())]
+                vec![IR::HaltAndCatchFire(format!(
+                    "Reached unreachable code on line {}",
+                    stmt.span.line_start
+                ))]
             }
 
             StatementKind::StatementExpression { value } => self.expression(value, ctx).0,
