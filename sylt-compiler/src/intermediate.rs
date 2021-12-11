@@ -310,6 +310,14 @@ impl<'a> IRCodeGen<'a> {
             }
 
             ExpressionKind::Blob { fields, .. } => {
+                let ss = self.variables.len();
+
+                let self_var = self.var();
+                self.variables.push(Variable {
+                    name: "self".into(),
+                    namespace: ctx.namespace,
+                    var: self_var,
+                });
                 let (fields, (code, exprs)): (Vec<_>, (Vec<_>, Vec<_>)) = fields
                     .iter()
                     .map(|(field, expr)| (field.clone(), self.expression(expr, ctx)))
@@ -318,7 +326,17 @@ impl<'a> IRCodeGen<'a> {
                 let fields: Vec<_> = fields.into_iter().zip(exprs.into_iter()).collect();
                 let var = self.var();
 
-                ([code, vec![IR::Blob(var, fields)]].concat(), var)
+                self.variables.truncate(ss);
+
+                (
+                    [
+                        vec![IR::Define(self_var)],
+                        code,
+                        vec![IR::Blob(var, fields), IR::Assign(self_var, var)],
+                    ]
+                    .concat(),
+                    var,
+                )
             }
 
             ExpressionKind::List(exprs) => {
