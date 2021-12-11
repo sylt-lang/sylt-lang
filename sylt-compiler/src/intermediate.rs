@@ -701,7 +701,10 @@ impl<'a> IRCodeGen<'a> {
 
                 imports.iter().for_each(|(other_name, maybe_rename)| {
                     // TODO(ed): From import namespaces
-                    let var = self.lookup(&other_name.name, other_namspace).unwrap();
+                    let var = match self.lookup(&other_name.name, other_namspace) {
+                        Some(var) => var,
+                        None => return, // Ignore Blobs and Enums
+                    };
                     let name = match maybe_rename {
                         Some(rename) => rename.name.clone(),
                         None => other_name.name.clone(),
