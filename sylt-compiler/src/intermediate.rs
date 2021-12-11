@@ -594,8 +594,6 @@ impl<'a> IRCodeGen<'a> {
                 let value = self.var();
                 let value_index = self.var();
 
-                assert_ne!(branches.len(), 0, "Cannot compile cases without branches");
-
                 let branches_code = branches
                     .iter()
                     .map(|CaseBranch { pattern, variable, body }| {
@@ -629,8 +627,6 @@ impl<'a> IRCodeGen<'a> {
                     .as_ref()
                     .map(|stmt| self.statement(stmt, ctx))
                     .unwrap_or_else(Vec::new);
-
-                // let body = self.statement(&body, ctx);
 
                 [
                     cops,
