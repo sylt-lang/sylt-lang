@@ -3,7 +3,7 @@ use std::io::Write;
 use sylt_common::error::Error;
 use sylt_common::{FileOrLib, Type, Value};
 use sylt_parser::statement::NameIdentifier;
-use sylt_parser::{Identifier, Span, StatementKind, AST};
+use sylt_parser::{Identifier, StatementKind, AST};
 
 mod dependency;
 mod intermediate;
@@ -15,24 +15,13 @@ type VarSlot = usize;
 
 #[derive(Debug, Clone)]
 struct Variable {
-    name: String,
-    slot: usize,
-    span: Span,
-
-    captured: bool,
     active: bool,
 }
 
 impl Variable {
-    fn new(name: String, slot: usize, span: Span) -> Self {
-        Self { name, slot, span, captured: false, active: false }
+    fn new() -> Self {
+        Self { active: false }
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-struct Context {
-    namespace: NamespaceID,
-    frame: usize,
 }
 
 type Namespace = HashMap<String, Name>;
@@ -46,13 +35,6 @@ enum Name {
     Blob(BlobID),
     Enum(BlobID),
     Namespace(NamespaceID),
-}
-
-#[derive(Debug, Copy, Clone)]
-struct LoopFrame {
-    continue_addr: usize,
-    break_addr: usize,
-    stack_size: usize,
 }
 
 type Frame = Vec<Variable>;
@@ -131,25 +113,10 @@ impl Compiler {
         slot
     }
 
-    fn resolve_and_capture(&mut self, name: &str, frame: usize) -> Result<Variable, ()> {
-        // Frame 0 has globals which cannot be captured.
-        if frame == 0 {
-            return Err(());
-        }
-
-        for var in self.frames[frame].iter().rev() {
-            if &var.name == name && var.active {
-                return Ok(var.clone());
-            }
-        }
-
-        self.resolve_and_capture(name, frame - 1)
-    }
-
-    fn define(&mut self, name: &str, span: Span) -> VarSlot {
+    fn define(&mut self) -> VarSlot {
         let frame = &mut self.frames.last_mut().unwrap();
         let slot = frame.len();
-        let var = Variable::new(name.to_string(), slot, span);
+        let var = Variable::new();
         frame.push(var);
         slot
     }
@@ -160,10 +127,8 @@ impl Compiler {
 
     fn compile(mut self, lua_file: &mut dyn Write, tree: AST) -> Result<(), Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
-        let name = "/preamble/";
-        let start_span = tree.modules[0].1.span;
         self.frames.push(Vec::new());
-        self.define(name, start_span);
+        self.define();
 
         self.extract_globals(&tree);
 
@@ -188,7 +153,7 @@ impl Compiler {
 
         let ir = intermediate::compile(&typechecker, &statements);
 
-        let gen = lua::generate(&ir, lua_file);
+        lua::generate(&ir, lua_file);
 
         Ok(())
     }
@@ -247,13 +212,13 @@ impl Compiler {
                         (Name::Namespace(other), ident.name.clone(), ident.span)
                     }
                     Definition { ident: Identifier { name, .. }, .. } => {
-                        let var = self.define(name, statement.span);
+                        let var = self.define();
                         self.activate(var);
                         num_constants += 1;
                         (Name::Global(var), name.clone(), statement.span)
                     }
                     ExternalDefinition { ident: Identifier { name, .. }, .. } => {
-                        let var = self.define(name, statement.span);
+                        let var = self.define();
                         self.activate(var);
                         num_constants += 1;
                         (Name::External, name.clone(), statement.span)

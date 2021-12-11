@@ -1,15 +1,11 @@
-#![allow(unused_variables, unused_imports)]
-use std::collections::HashMap;
 use std::fmt::Display;
-use sylt_common::error::{Error, Helper, TypeError};
-use sylt_common::{FileOrLib, TyID, Type as RuntimeType};
+
 use sylt_parser::{
     expression::ComparisonKind, Assignable, AssignableKind, CaseBranch, Expression, ExpressionKind,
-    Identifier, Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeAssignable,
-    TypeAssignableKind, TypeConstraint, TypeKind, VarKind,
+    Identifier, Op as ParserOp, Statement, StatementKind,
 };
 
-use crate::{ty::Type, typechecker::TypeChecker, NamespaceID};
+use crate::{typechecker::TypeChecker, NamespaceID};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Var(pub usize);
@@ -192,7 +188,6 @@ impl<'a> IRCodeGen<'a> {
             ),
             AssignableKind::Variant { variant, value, .. } => {
                 let (xops, x) = self.expression(&value, ctx);
-                let v = self.var();
                 let out = self.var();
                 (
                     [xops, vec![IR::Variant(out, variant.name.clone(), x)]].concat(),
@@ -574,7 +569,6 @@ impl<'a> IRCodeGen<'a> {
                 let (cops, c) = self.expression(&condition, ctx);
                 let aops = self.statement(&pass, ctx);
                 let bops = self.statement(&fail, ctx);
-                let var = self.var();
 
                 [
                     cops,
@@ -693,7 +687,6 @@ impl<'a> IRCodeGen<'a> {
     }
 
     fn globals(&mut self, stmt: &Statement, namespace: NamespaceID) {
-        let ctx = IRContext::from_namespace(namespace);
         match &stmt.kind {
             StatementKind::Use { name, file, .. } => {
                 let other_namspace = self.typechecker.file_to_namespace[file];
