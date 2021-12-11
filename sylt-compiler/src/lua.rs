@@ -122,7 +122,7 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             IR::Float(t, f) => {
                 write!(out, "local ");
                 write!(out, "{}", t);
-                write!(out, " = \"{}\"", f);
+                write!(out, " = {}", f);
             }
             IR::Equals(t, a, b) => bin_op(out, t, a, b, "=="),
             IR::NotEquals(t, a, b) => bin_op(out, t, a, b, "~="),
