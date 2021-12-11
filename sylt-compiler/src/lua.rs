@@ -257,9 +257,6 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             IR::Break => {
                 write!(out, "break");
             }
-            IR::Continue => {
-                write!(out, "continue");
-            }
             IR::Return(t) => {
                 write!(out, "return ");
                 write!(out, "{}", t);
@@ -298,6 +295,12 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 write!(out, "{}.{}", t, f);
                 write!(out, " = ");
                 write!(out, "{}", c);
+            }
+            IR::Label(l) => {
+                write!(out, "::{}::", l);
+            }
+            IR::Goto(l) => {
+                write!(out, "goto {}", l);
             }
         }
         write!(out, "\n");

@@ -21,6 +21,16 @@ impl Display for Var {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Label(pub usize);
+
+impl Display for Label {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Label(n) = self;
+        write!(f, "L{}", n)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum IR {
     Nil(Var),
@@ -68,6 +78,8 @@ pub enum IR {
     Access(Var, Var, String),
     AssignAccess(Var, String, Var),
 
+    Label(Label),
+    Goto(Label),
     Define(Var),
     Assign(Var, Var),
     Return(Var),
@@ -75,7 +87,6 @@ pub enum IR {
     HaltAndCatchFire(String),
     Loop,
     Break,
-    Continue,
     Else,
     End,
 }
@@ -83,11 +94,12 @@ pub enum IR {
 #[derive(Debug, Clone, Copy)]
 struct IRContext {
     namespace: usize,
+    closest_loop: Label,
 }
 
 impl IRContext {
     pub fn from_namespace(namespace: usize) -> Self {
-        Self { namespace }
+        Self { namespace, closest_loop: Label(0) }
     }
 }
 
@@ -126,6 +138,12 @@ impl<'a> IRCodeGen<'a> {
         let i = self.counter;
         self.counter += 1;
         Var(i)
+    }
+
+    fn label(&mut self) -> Label {
+        let i = self.counter;
+        self.counter += 1;
+        Label(i)
     }
 
     fn lookup(&self, search_name: &str, search_namespace: usize) -> Option<Var> {
@@ -595,10 +613,11 @@ impl<'a> IRCodeGen<'a> {
             }
             StatementKind::Loop { condition, body } => {
                 let (cops, c) = self.expression(&condition, ctx);
-                let body = self.statement(&body, ctx);
+                let l = self.label();
+                let body = self.statement(&body, IRContext { closest_loop: l, ..ctx });
 
                 [
-                    vec![IR::Loop],
+                    vec![IR::Loop, IR::Label(l)],
                     cops,
                     vec![IR::If(c), IR::Else, IR::Break, IR::End],
                     body,
@@ -607,7 +626,7 @@ impl<'a> IRCodeGen<'a> {
                 .concat()
             }
             StatementKind::Break => vec![IR::Break],
-            StatementKind::Continue => vec![IR::Continue],
+            StatementKind::Continue => vec![IR::Goto(ctx.closest_loop)],
             StatementKind::Ret { value } => {
                 let (aops, a) = self.expression(&value, ctx);
                 [aops, vec![IR::Return(a)]].concat()
