@@ -170,9 +170,10 @@ impl<'a> IRCodeGen<'a> {
 
     fn assignable(&mut self, assignable: &Assignable, ctx: IRContext) -> (Vec<IR>, Var) {
         match &assignable.kind {
-            AssignableKind::Read(ident) => {
-                (Vec::new(), self.lookup(&ident.name, ctx.namespace).unwrap())
-            }
+            AssignableKind::Read(ident) => (
+                Vec::new(),
+                self.lookup(&ident.name, ctx.namespace).expect(&ident.name),
+            ),
             AssignableKind::Variant { variant, value, .. } => {
                 let (xops, x) = self.expression(&value, ctx);
                 let v = self.var();
@@ -363,8 +364,14 @@ impl<'a> IRCodeGen<'a> {
                 (vec![IR::Bool(a, *b)], a)
             }
 
-            ExpressionKind::Function { body, params, .. } => {
+            ExpressionKind::Function { name, body, params, .. } => {
                 let ss = self.variables.len();
+                let f = self.var();
+                self.variables.push(Variable {
+                    name: name.clone(),
+                    namespace: ctx.namespace,
+                    var: f,
+                });
                 let params = params
                     .iter()
                     .map(|(name, _)| {
@@ -377,7 +384,6 @@ impl<'a> IRCodeGen<'a> {
                         var
                     })
                     .collect();
-                let f = self.var();
                 let body = self.statement(body, ctx);
                 self.variables.truncate(ss);
                 (
@@ -428,6 +434,27 @@ impl<'a> IRCodeGen<'a> {
                 let b = self.var();
                 ([aops, vec![IR::Neg(b, a)]].concat(), b)
             }
+        }
+    }
+
+    fn definition(&mut self, ident: &Identifier, value: &Expression, ctx: IRContext) -> Vec<IR> {
+        if matches!(value.kind, ExpressionKind::Function { .. }) {
+            let var = self.var();
+            self.variables.push(Variable {
+                name: ident.name.clone(),
+                namespace: ctx.namespace,
+                var,
+            });
+            let (code, f_var) = self.expression(&value, ctx);
+            [vec![IR::Define(var)], code, vec![IR::Assign(var, f_var)]].concat()
+        } else {
+            let (code, var) = self.expression(&value, ctx);
+            self.variables.push(Variable {
+                name: ident.name.clone(),
+                namespace: ctx.namespace,
+                var,
+            });
+            code
         }
     }
 
@@ -489,15 +516,7 @@ impl<'a> IRCodeGen<'a> {
                 ]
                 .concat()
             }
-            StatementKind::Definition { ident, value, .. } => {
-                let (code, var) = self.expression(&value, ctx);
-                self.variables.push(Variable {
-                    name: ident.name.clone(),
-                    namespace: ctx.namespace,
-                    var,
-                });
-                code
-            }
+            StatementKind::Definition { ident, value, .. } => self.definition(ident, value, ctx),
             StatementKind::If { condition, pass, fail } => {
                 let (cops, c) = self.expression(&condition, ctx);
                 let aops = self.statement(&pass, ctx);
@@ -666,15 +685,7 @@ impl<'a> IRCodeGen<'a> {
                 vec![IR::External(var, ident.name.clone())]
             }
 
-            StatementKind::Definition { value, ident, .. } => {
-                let (code, var) = self.expression(&value, ctx);
-                self.variables.push(Variable {
-                    name: ident.name.clone(),
-                    namespace: ctx.namespace,
-                    var,
-                });
-                code
-            }
+            StatementKind::Definition { value, ident, .. } => self.definition(ident, value, ctx),
 
             // Invalid statements should be caught in the typechecker
             // TODO: Specify the unreachable things here
