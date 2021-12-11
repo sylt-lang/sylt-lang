@@ -97,6 +97,7 @@ struct Variable {
     var: Var,
 }
 
+#[derive(Debug, Clone)]
 struct Namespace {
     name: String,
     namespace: NamespaceID,
@@ -154,7 +155,7 @@ impl<'a> IRCodeGen<'a> {
                     .map(IRContext::from_namespace),
             },
             AssignableKind::Access(ass, ident) => {
-                let ctx = self.namespace_chain(assignable, ctx)?;
+                let ctx = self.namespace_chain(ass, ctx)?;
                 self.lookup_namespace(&ident.name, ctx.namespace)
                     .map(IRContext::from_namespace)
             }
@@ -461,7 +462,7 @@ impl<'a> IRCodeGen<'a> {
                             (
                                 [code, vec![IR::Access(b, a, ident.name.clone())]].concat(),
                                 b,
-                                vec![IR::AssignAccess(a, ident.name.clone(), res)]
+                                vec![IR::AssignAccess(a, ident.name.clone(), res)],
                             )
                         }
                     },
@@ -560,6 +561,23 @@ impl<'a> IRCodeGen<'a> {
         }
     }
 
+    fn globals(&mut self, stmt: &Statement, namespace: NamespaceID) {
+        let ctx = IRContext::from_namespace(namespace);
+        match &stmt.kind {
+            StatementKind::Use { name, file, .. } => {
+                let other_namspace = self.typechecker.file_to_namespace[file];
+
+                self.namespaces.push(Namespace {
+                    name: name.name().into(),
+                    namespace,
+                    points_to: other_namspace,
+                });
+            }
+
+            _ => {},
+        }
+    }
+
     fn compile(&mut self, stmt: &Statement, namespace: NamespaceID) -> Vec<IR> {
         let ctx = IRContext::from_namespace(namespace);
         match &stmt.kind {
@@ -574,18 +592,6 @@ impl<'a> IRCodeGen<'a> {
                         None => other_name.name.clone(),
                     };
                     self.variables.push(Variable { name, namespace, var });
-                });
-
-                Vec::new()
-            }
-
-            StatementKind::Use { name, file, .. } => {
-                let other_namspace = self.typechecker.file_to_namespace[file];
-
-                self.namespaces.push(Namespace {
-                    name: name.name().into(),
-                    namespace,
-                    points_to: other_namspace,
                 });
 
                 Vec::new()
@@ -623,6 +629,9 @@ pub(crate) fn compile(
     statements: &Vec<(Statement, NamespaceID)>,
 ) -> Vec<IR> {
     let mut gen = IRCodeGen::new(typechecker);
+
+    statements.iter().for_each(|(stmt, namespace)| gen.globals(stmt, *namespace));
+
     let mut code: Vec<IR> = statements
         .iter()
         .map(|(stmt, namespace)| gen.compile(stmt, *namespace))
