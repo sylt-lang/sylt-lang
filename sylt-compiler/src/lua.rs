@@ -300,6 +300,13 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             IR::Goto(l) => {
                 write!(out, "goto {}", l);
             }
+            IR::Chain => {
+                write!(out, "return (function()");
+                depth += 1;
+            }
+            IR::CallChain => {
+                write!(out, ")()");
+            }
         }
         write!(out, "\n");
     }
