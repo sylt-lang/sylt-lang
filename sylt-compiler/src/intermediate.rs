@@ -27,6 +27,18 @@ impl Display for Label {
     }
 }
 
+// Helper function to allow all the variables!
+fn chunk_vec<T>(src: Vec<T>, size: usize) -> Vec<Vec<T>> {
+    let mut total = vec![Vec::new()];
+    for x in src {
+        total.last_mut().unwrap().push(x);
+        if total.last().unwrap().len() == size {
+            total.push(Vec::new());
+        }
+    }
+    total
+}
+
 #[derive(Debug, Clone)]
 pub enum IR {
     Nil(Var),
@@ -119,8 +131,6 @@ struct IRCodeGen<'a> {
     namespaces: Vec<Namespace>,
 
     counter: usize,
-    next_chain: usize,
-    num_ends: usize,
 }
 
 impl<'a> IRCodeGen<'a> {
@@ -130,8 +140,6 @@ impl<'a> IRCodeGen<'a> {
             typechecker,
             variables: Vec::new(),
             namespaces: Vec::new(),
-            num_ends: 0,
-            next_chain: 0,
         }
     }
 
@@ -145,16 +153,6 @@ impl<'a> IRCodeGen<'a> {
         let i = self.counter;
         self.counter += 1;
         Label(i)
-    }
-
-    fn maybe_emit_chain(&mut self) -> Vec<IR> {
-        if self.counter > self.next_chain {
-            self.next_chain = self.counter + 50;
-            self.num_ends += 1;
-            vec![IR::Chain]
-        } else {
-            Vec::new()
-        }
     }
 
     fn lookup(&self, search_name: &str, search_namespace: usize) -> Option<Var> {
@@ -449,25 +447,21 @@ impl<'a> IRCodeGen<'a> {
                         var
                     })
                     .collect();
-                // This code makes me sad :<
-                let tmp = self.num_ends;
-                let body = self.statement(body, ctx);
-                let num_ends = self.num_ends;
-                self.num_ends = tmp;
+                let body_chunks =chunk_vec(self.statement(body, ctx), 50);
+                let num_chunks =  body_chunks.len();
+                let body = body_chunks
+                    .into_iter()
+                    .map(|v| [vec![IR::Chain], v].concat())
+                    .flatten()
+                    .collect();
+                let ends = (0..num_chunks).map(|_| vec![IR::End, IR::CallChain]).flatten().collect();
                 self.variables.truncate(ss);
-                (
-                    [
-                        vec![IR::Function(f, params)],
-                        body,
-                        (0..num_ends)
-                            .map(|_| [IR::End, IR::CallChain])
-                            .flatten()
-                            .collect(),
-                        [IR::End].into(),
-                    ]
-                    .concat(),
-                    f,
-                )
+                ([
+                    vec![IR::Function(f, params)],
+                    body,
+                    ends,
+                    vec![IR::End],
+                ].concat(), f)
             }
 
             ExpressionKind::Nil => {
@@ -537,7 +531,7 @@ impl<'a> IRCodeGen<'a> {
     }
 
     fn statement(&mut self, stmt: &Statement, ctx: IRContext) -> Vec<IR> {
-        let code = match &stmt.kind {
+        match &stmt.kind {
             StatementKind::Assignment { kind, target, value } => {
                 let res = self.var();
                 let (pre_code, current, post_code) = match &target.kind {
@@ -713,8 +707,7 @@ impl<'a> IRCodeGen<'a> {
             | StatementKind::FromUse { .. }
             | StatementKind::IsCheck { .. }
             | StatementKind::Use { .. } => unreachable!(),
-        };
-        [code, self.maybe_emit_chain()].concat()
+        }
     }
 
     fn globals(&mut self, stmt: &Statement, namespace: NamespaceID) {
