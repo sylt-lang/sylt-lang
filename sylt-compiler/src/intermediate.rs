@@ -447,21 +447,22 @@ impl<'a> IRCodeGen<'a> {
                         var
                     })
                     .collect();
-                let body_chunks =chunk_vec(self.statement(body, ctx), 50);
-                let num_chunks =  body_chunks.len();
+                let body_chunks = chunk_vec(self.statement(body, ctx), 50);
                 let body = body_chunks
-                    .into_iter()
-                    .map(|v| [vec![IR::Chain], v].concat())
+                    .iter()
+                    .map(|v| [vec![IR::Chain], v.clone()].concat())
                     .flatten()
                     .collect();
-                let ends = (0..num_chunks).map(|_| vec![IR::EndChain]).flatten().collect();
+                let ends = body_chunks
+                    .iter()
+                    .map(|_| vec![IR::EndChain])
+                    .flatten()
+                    .collect();
                 self.variables.truncate(ss);
-                ([
-                    vec![IR::Function(f, params)],
-                    body,
-                    ends,
-                    vec![IR::End],
-                ].concat(), f)
+                (
+                    [vec![IR::Function(f, params)], body, ends, vec![IR::End]].concat(),
+                    f,
+                )
             }
 
             ExpressionKind::Nil => {
