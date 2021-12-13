@@ -302,10 +302,9 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             }
             IR::Chain => {
                 write!(out, "return (function()");
-                depth += 1;
             }
-            IR::CallChain => {
-                write!(out, ")()");
+            IR::EndChain => {
+                write!(out, "end)()");
             }
         }
         write!(out, "\n");

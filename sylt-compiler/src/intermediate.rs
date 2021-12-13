@@ -85,7 +85,7 @@ pub enum IR {
     AssignAccess(Var, String, Var),
 
     Chain,
-    CallChain,
+    EndChain,
     Label(Label),
     Goto(Label),
     Define(Var),
@@ -454,7 +454,7 @@ impl<'a> IRCodeGen<'a> {
                     .map(|v| [vec![IR::Chain], v].concat())
                     .flatten()
                     .collect();
-                let ends = (0..num_chunks).map(|_| vec![IR::End, IR::CallChain]).flatten().collect();
+                let ends = (0..num_chunks).map(|_| vec![IR::EndChain]).flatten().collect();
                 self.variables.truncate(ss);
                 ([
                     vec![IR::Function(f, params)],
