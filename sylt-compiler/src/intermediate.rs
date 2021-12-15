@@ -27,18 +27,6 @@ impl Display for Label {
     }
 }
 
-// Helper function to allow all the variables!
-fn chunk_vec<T>(src: Vec<T>, size: usize) -> Vec<Vec<T>> {
-    let mut total = vec![Vec::new()];
-    for x in src {
-        total.last_mut().unwrap().push(x);
-        if total.last().unwrap().len() == size {
-            total.push(Vec::new());
-        }
-    }
-    total
-}
-
 #[derive(Debug, Clone)]
 pub enum IR {
     Nil(Var),
@@ -84,8 +72,6 @@ pub enum IR {
     Access(Var, Var, String),
     AssignAccess(Var, String, Var),
 
-    Chain,
-    EndChain,
     Label(Label),
     Goto(Label),
     Define(Var),
@@ -447,20 +433,10 @@ impl<'a> IRCodeGen<'a> {
                         var
                     })
                     .collect();
-                let body_chunks = chunk_vec(self.statement(body, ctx), 50);
-                let body = body_chunks
-                    .iter()
-                    .map(|v| [vec![IR::Chain], v.clone()].concat())
-                    .flatten()
-                    .collect();
-                let ends = body_chunks
-                    .iter()
-                    .map(|_| vec![IR::EndChain])
-                    .flatten()
-                    .collect();
+                let body = self.statement(body, ctx);
                 self.variables.truncate(ss);
                 (
-                    [vec![IR::Function(f, params)], body, ends, vec![IR::End]].concat(),
+                    [vec![IR::Function(f, params)], body, vec![IR::End]].concat(),
                     f,
                 )
             }
