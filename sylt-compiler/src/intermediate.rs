@@ -63,8 +63,7 @@ pub enum IR {
     Blob(Var, Vec<(String, Var)>),
     Variant(Var, String, Var),
 
-    // Name?
-    Function(Var, Vec<Var>),
+    Function(Var, Vec<Var>, Vec<IR>),
 
     Index(Var, Var, Var),
     AssignIndex(Var, Var, Var),
@@ -77,11 +76,12 @@ pub enum IR {
     Define(Var),
     Assign(Var, Var),
     Return(Var),
-    If(Var),
     HaltAndCatchFire(String),
-    Loop,
     Break,
-    Else,
+
+    If(Var, Vec<IR>),
+    Loop(Vec<IR>),
+    Else(Vec<IR>),
     End,
 }
 
@@ -272,9 +272,10 @@ impl<'a> IRCodeGen<'a> {
                 (
                     [
                         aops,
-                        vec![IR::Bool(c, false), IR::If(a)],
-                        bops,
-                        vec![IR::Assign(c, b), IR::End],
+                        vec![
+                            IR::Bool(c, false),
+                            IR::If(a, [bops, vec![IR::Assign(c, b), IR::End]].concat()),
+                        ],
                     ]
                     .concat(),
                     c,
@@ -288,9 +289,12 @@ impl<'a> IRCodeGen<'a> {
                 (
                     [
                         aops,
-                        vec![IR::Bool(c, true), IR::Not(neg_a, a), IR::If(neg_a)],
-                        bops,
-                        vec![IR::Assign(c, b), IR::End],
+                        vec![
+                            IR::Bool(c, true),
+                            IR::Not(neg_a, a),
+                            IR::If(neg_a, [bops, vec![IR::Assign(c, b)]].concat()),
+                            IR::End,
+                        ],
                     ]
                     .concat(),
                     c,
@@ -311,11 +315,12 @@ impl<'a> IRCodeGen<'a> {
                 (
                     [
                         cops,
-                        vec![IR::Define(var), IR::If(c)],
-                        aops,
-                        vec![IR::Assign(var, a), IR::Else],
-                        bops,
-                        vec![IR::Assign(var, b), IR::End],
+                        vec![
+                            IR::Define(var),
+                            IR::If(c, [aops, vec![IR::Assign(var, a)]].concat()),
+                        ],
+                        vec![IR::Else([bops, vec![IR::Assign(var, b)]].concat())],
+                        vec![IR::End],
                     ]
                     .concat(),
                     var,
@@ -435,10 +440,7 @@ impl<'a> IRCodeGen<'a> {
                     .collect();
                 let body = self.statement(body, ctx);
                 self.variables.truncate(ss);
-                (
-                    [vec![IR::Function(f, params)], body, vec![IR::End]].concat(),
-                    f,
-                )
+                (vec![IR::Function(f, params, body), IR::End], f)
             }
 
             ExpressionKind::Nil => {
@@ -573,10 +575,8 @@ impl<'a> IRCodeGen<'a> {
 
                 [
                     cops,
-                    vec![IR::If(c)],
-                    aops,
-                    vec![IR::Else],
-                    bops,
+                    vec![IR::If(c, aops)],
+                    vec![IR::Else(bops)],
                     vec![IR::End],
                 ]
                 .concat()
@@ -605,15 +605,14 @@ impl<'a> IRCodeGen<'a> {
                         let exp_str = self.var();
                         let cmp = self.var();
                         [
-                            vec![
-                                IR::Str(exp_str, pattern.name.clone()),
-                                IR::Equals(cmp, exp_str, tag),
-                                IR::If(cmp),
-                            ],
-                            body,
-                            vec![IR::Else],
+                            IR::Str(exp_str, pattern.name.clone()),
+                            IR::Equals(cmp, exp_str, tag),
+                            IR::If(cmp, body),
+                            // TODO(ed): This is a sneaky way to get around parts of the
+                            // limitations - but ideally we should nest the structure here.
+                            // This would fix the generation with the ends.
+                            IR::Else(vec![]),
                         ]
-                        .concat()
                     })
                     .flatten()
                     .collect();
@@ -642,14 +641,16 @@ impl<'a> IRCodeGen<'a> {
                 let l = self.label();
                 let body = self.statement(&body, IRContext { closest_loop: l, ..ctx });
 
-                [
-                    vec![IR::Loop, IR::Label(l)],
-                    cops,
-                    vec![IR::If(c), IR::Else, IR::Break, IR::End],
-                    body,
-                    vec![IR::End],
-                ]
-                .concat()
+                [IR::Loop(
+                    [
+                        vec![IR::Label(l)],
+                        cops,
+                        vec![IR::If(c, vec![]), IR::Else(vec![IR::Break]), IR::End],
+                        body,
+                        vec![IR::End],
+                    ]
+                    .concat(),
+                )].into()
             }
             StatementKind::Break => vec![IR::Break],
             StatementKind::Continue => vec![IR::Goto(ctx.closest_loop)],

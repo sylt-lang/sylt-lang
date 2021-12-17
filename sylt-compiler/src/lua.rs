@@ -29,17 +29,18 @@ pub fn comma_sep(out: &mut dyn Write, vars: &[Var]) {
     }
 }
 
-pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
-    write!(out, include_str!("preamble.lua"));
+pub fn generate(ir: &Vec<IR>, out: &mut dyn Write, depth: i64) {
+    // TODO(ed): I dislike this
+    if depth == 0 {
+        write!(out, include_str!("preamble.lua"));
+    }
 
-    let mut depth = 0;
+    for _ in 0..depth {
+        write!(out, "  ");
+    }
+    write!(out, "(function()\n");
     for instruction in ir.iter() {
-        depth += match instruction {
-            IR::Else | IR::End => -1,
-            _ => 0,
-        };
-
-        for _ in 0..depth {
+        for _ in 0..depth+1 {
             write!(out, "  ");
         }
         match instruction {
@@ -72,14 +73,15 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
             IR::Mul(t, a, b) => bin_op(out, t, a, b, "*"),
             IR::Div(t, a, b) => bin_op(out, t, a, b, "/"),
 
-            IR::Function(f, params) => {
+            IR::Function(f, params, body) => {
                 write!(out, "local ");
                 write!(out, "function ");
                 write!(out, "{}", f);
                 write!(out, "(");
                 comma_sep(out, params);
                 write!(out, ")");
-                depth += 1;
+                write!(out, "\n");
+                generate(body, out, depth + 1);
             }
             IR::Neg(t, a) => {
                 write!(out, "local ");
@@ -235,22 +237,25 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
                 write!(out, " = ");
                 write!(out, "{}", a);
             }
-            IR::If(a) => {
+            IR::If(a, body) => {
                 write!(out, "if ");
                 write!(out, "{}", a);
                 write!(out, " then");
-                depth += 1;
+                write!(out, "\n");
+                generate(body, out, depth + 1);
             }
-            IR::Else => {
+            IR::Else(body) => {
                 write!(out, "else");
-                depth += 1;
+                write!(out, "\n");
+                generate(body, out, depth + 1);
             }
             IR::End => {
                 write!(out, "end");
             }
-            IR::Loop => {
+            IR::Loop(body) => {
                 write!(out, "while true do");
-                depth += 1;
+                write!(out, "\n");
+                generate(body, out, depth + 1);
             }
             IR::Break => {
                 write!(out, "break");
@@ -303,4 +308,8 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
         }
         write!(out, "\n");
     }
+    for _ in 0..depth {
+        write!(out, "  ");
+    }
+    write!(out, "end)()\n");
 }

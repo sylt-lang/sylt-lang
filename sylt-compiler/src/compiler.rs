@@ -94,7 +94,7 @@ impl Compiler {
 
         let ir = intermediate::compile(&typechecker, &statements);
 
-        lua::generate(&ir, lua_file);
+        lua::generate(&ir, lua_file, 0);
 
         Ok(())
     }
