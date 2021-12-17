@@ -10,6 +10,7 @@ args: fn -> {str:str} : external
 push: fn [*ITEM], *ITEM -> void : external
 prepend: fn [*ITEM], *ITEM -> void : external
 add: fn {*ITEM}, *ITEM -> void : external
+remove: fn {*ITEM}, *ITEM -> void : external
 len: fn<C: Container> *C -> int : external
 clear: fn<C: Container> *C -> void : external
 sin: fn float -> float : external

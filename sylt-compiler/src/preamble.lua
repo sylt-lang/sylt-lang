@@ -382,6 +382,10 @@ function add(s, v)
     s[v] = true
 end
 
+function remove(s, v)
+    s[v] = nil
+end
+
 function len(c)
     local s = 0
     for _ in pairs(c) do
