@@ -40,7 +40,7 @@ pub fn generate(ir: &Vec<IR>, out: &mut dyn Write, depth: i64) {
     }
     write!(out, "(function()\n");
     for instruction in ir.iter() {
-        for _ in 0..depth+1 {
+        for _ in 0..depth + 1 {
             write!(out, "  ");
         }
         match instruction {

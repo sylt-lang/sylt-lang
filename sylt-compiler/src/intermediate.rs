@@ -650,7 +650,8 @@ impl<'a> IRCodeGen<'a> {
                         vec![IR::End],
                     ]
                     .concat(),
-                )].into()
+                )]
+                .into()
             }
             StatementKind::Break => vec![IR::Break],
             StatementKind::Continue => vec![IR::Goto(ctx.closest_loop)],
