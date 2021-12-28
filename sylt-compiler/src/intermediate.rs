@@ -653,9 +653,14 @@ impl<'a> IRCodeGen<'a> {
             }
             StatementKind::Break => vec![IR::Break],
             StatementKind::Continue => vec![IR::Goto(ctx.closest_loop)],
-            StatementKind::Ret { value } => {
+            StatementKind::Ret { value: Some(value) } => {
                 let (aops, a) = self.expression(&value, ctx);
                 [aops, vec![IR::Return(a)]].concat()
+            }
+            StatementKind::Ret { value: None } => {
+                // NOTE: In the runtime, we compile void to unit - don't tell Filip!
+                let a = self.var();
+                vec![IR::Nil(a), IR::Return(a)]
             }
             StatementKind::Unreachable => {
                 vec![IR::HaltAndCatchFire(format!(

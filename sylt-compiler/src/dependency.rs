@@ -234,7 +234,8 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
                 .collect()
         }
 
-        Ret { value } | StatementExpression { value } => dependencies(ctx, value),
+        Ret { value: Some(value) } | StatementExpression { value } => dependencies(ctx, value),
+        Ret { value: None } => BTreeSet::new(),
 
         ExternalDefinition { ty, .. } => type_dependencies(ctx, ty),
 

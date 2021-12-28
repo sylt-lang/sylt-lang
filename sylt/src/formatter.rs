@@ -545,10 +545,14 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write!(dest, " ")?;
             write_statement(dest, indent, *body)?;
         }
-        StatementKind::Ret { value } => {
+        StatementKind::Ret { value: Some(value) } => {
             write_indents(dest, indent)?;
             write!(dest, "ret ")?;
             write_expression(dest, indent, value)?;
+        }
+        StatementKind::Ret { value: None } => {
+            write_indents(dest, indent)?;
+            write!(dest, "ret")?;
         }
         StatementKind::StatementExpression { value } => {
             write_indents(dest, indent)?;

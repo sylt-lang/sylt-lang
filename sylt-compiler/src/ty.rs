@@ -11,6 +11,7 @@ pub enum Type {
     Invalid,
 
     Void,
+    Nil,
     Int,
     Float,
     Bool,

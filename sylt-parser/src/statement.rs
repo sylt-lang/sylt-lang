@@ -155,9 +155,9 @@ pub enum StatementKind {
 
     /// Returns a value from a function.
     ///
-    /// `ret <expression>`.
+    /// `ret [<expression>]`.
     Ret {
-        value: Expression,
+        value: Option<Expression>,
     },
 
     /// Groups together statements that are executed after another.
@@ -466,10 +466,9 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         // `ret <expression>`
         [T::Ret, ..] => {
             let ctx = ctx.skip(1);
-            let (ctx, value) = if matches!(ctx.token(), T::Newline) {
-                (ctx, Expression::new(ctx.span(), ExpressionKind::Nil))
-            } else {
-                expression(ctx)?
+            let (ctx, value) = match expression(ctx) {
+                Ok((ctx, value)) => (ctx, Some(value)),
+                Err(_) => (ctx, None),
             };
             (ctx, Ret { value })
         }
@@ -625,7 +624,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         let (ctx_, ty) = if matches!(ctx.token(), T::End | T::Comma | T::Newline) {
                             (
                                 ctx,
-                                Type { span, kind: TypeKind::Resolved(RuntimeType::Void) },
+                                Type { span, kind: TypeKind::Resolved(RuntimeType::Nil) },
                             )
                         } else {
                             let (ctx_, ty) = parse_type(ctx)?;
