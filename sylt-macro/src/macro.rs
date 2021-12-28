@@ -1,13 +1,14 @@
 use lazy_static::lazy_static;
-use quote::{format_ident, quote};
+use quote::quote;
 use std::collections::HashMap;
-use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use syn::{
     parse::{Parse, ParseStream, Result},
     parse_macro_input, Expr, LitStr, Pat, Token,
 };
+
+// TODO(ed): We can remove the link stuff here! :D
 
 struct ExternBlock {
     pattern: Pat,
@@ -183,122 +184,7 @@ pub fn link(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     proc_macro::TokenStream::from(tokens)
 }
 
-struct TestSettings {
-    errors: String,
-    print: bool,
-    // Used to tell lua there are runtime errors - since it doesn't care about the type.
-    any_runtime_errors: bool,
-}
 
-impl Default for TestSettings {
-    fn default() -> Self {
-        Self {
-            errors: String::new(),
-            print: true,
-            any_runtime_errors: false,
-        }
-    }
-}
-
-fn parse_test_settings(contents: String) -> TestSettings {
-    let mut settings = TestSettings::default();
-
-    let mut errors = Vec::new();
-    for line in contents.split("\n") {
-        if line.starts_with("// error: ") {
-            let mut line = line.strip_prefix("// error: ").unwrap().to_string();
-            if line.starts_with("$") {
-                line = format!("Error::TypeError {{ kind: TypeError::{}, .. }}", &line[1..]);
-            }
-            if line.starts_with("#") {
-                line = "Error::RuntimeError".into()
-            }
-            if line.starts_with("@") {
-                line = format!(
-                    "Error::SyntaxError {{ span: Span {{ line_start: {}, ..}}, .. }}",
-                    &line[1..]
-                );
-            }
-            settings.any_runtime_errors |= line.contains("RuntimeError");
-            errors.push(line);
-        } else if line.starts_with("// flags: ") {
-            for flag in line.split(" ").skip(2) {
-                match flag {
-                    "no_print" => {
-                        settings.print = false;
-                    }
-                    _ => {
-                        panic!("Unknown test flag '{}'", flag);
-                    }
-                }
-            }
-        }
-    }
-
-    settings.errors = format!("[ {} ]", errors.join(", "));
-    settings
-}
-
-fn find_test_paths(directory: &Path, macro_path: &syn::Path) -> proc_macro2::TokenStream {
-    let mut tests = quote! {};
-
-    for entry in std::fs::read_dir(directory).unwrap() {
-        let path = entry.unwrap().path();
-        let file_name = path.file_name().unwrap().to_str().unwrap();
-
-        if file_name.starts_with("_") {
-            continue;
-        }
-
-        if path.is_dir() {
-            tests.extend(find_test_paths(&path, macro_path));
-        } else {
-            if !file_name.ends_with(".sy") {
-                continue;
-            }
-            assert!(
-                !path.to_str().unwrap().contains(","),
-                "You should be ashamed."
-            );
-
-            let path_string = path.to_str().unwrap();
-            let test_name = format_ident!("{}", file_name.replace(".sy", ""));
-
-            let settings = parse_test_settings(std::fs::read_to_string(path.clone()).unwrap());
-            let any_runtime_errors = settings.any_runtime_errors;
-            let print = settings.print;
-            let wanted_errs: proc_macro2::TokenStream = settings.errors.parse().unwrap();
-
-            // TODO(ed): Make a flag for skipping the test
-            let tokens = quote! {
-                #macro_path!(#test_name, #path_string, #print, #wanted_errs, #any_runtime_errors);
-            };
-
-            tests.extend(tokens);
-        }
-    }
-
-    let directory = directory
-        .file_name()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .replace("/", "");
-    let directory = format_ident!("{}", directory);
-    quote! {
-        mod #directory {
-            #tests
-        }
-    }
-}
-
-#[proc_macro]
-pub fn find_tests(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let macro_path: syn::Path = parse_macro_input!(tokens);
-
-    let tokens = find_test_paths(Path::new("tests/"), &macro_path);
-    proc_macro::TokenStream::from(tokens)
-}
 
 #[proc_macro_derive(Enumerate)]
 pub fn derive_enumerate(item: proc_macro::TokenStream) -> proc_macro::TokenStream {

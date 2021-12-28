@@ -1,5 +1,5 @@
 use std::fmt::{self, Write};
-use std::path::PathBuf;
+use std::path::Path;
 use sylt_common::{Error, Type as RuntimeType};
 use sylt_parser::expression::ComparisonKind;
 use sylt_parser::statement::NameIdentifier;
@@ -7,8 +7,6 @@ use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Module, Op, Statement,
     StatementKind, Type, TypeAssignable, TypeAssignableKind, TypeConstraint, TypeKind, VarKind,
 };
-
-use crate::Args;
 
 static INDENT: &'static str = "    ";
 
@@ -639,9 +637,9 @@ fn format_module(module: Module) -> Result<String, fmt::Error> {
     Ok(formatted)
 }
 
-pub fn format(args: &Args) -> Result<String, Vec<Error>> {
+pub fn format(file: &Path) -> Result<String, Vec<Error>> {
     let mut tree = sylt_parser::tree(
-        &PathBuf::from(args.args.first().expect("No file to run")),
+        file,
         crate::read_file,
     )?;
     Ok(format_module(tree.modules.remove(0).1).unwrap())
@@ -683,11 +681,7 @@ macro_rules! test_formatter_on_file {
                 Ok(formatted) => {
                     let formatted_path = PathBuf::from(&path).canonicalize().unwrap();
                     let read_formatted_or_file = |path: &Path| {
-                        if path.canonicalize().unwrap() == formatted_path {
-                            Ok(formatted.clone())
-                        } else {
-                            $crate::read_file(path)
-                        }
+                        Ok(formatted.clone())
                     };
 
                     // Try to run the file again, this time with pretty "got/expected"-output.
@@ -698,7 +692,7 @@ macro_rules! test_formatter_on_file {
                 Err(errs) => {
                     eprintln!("The formatter couldn't parse the file but the syntax errors");
                     eprintln!("changed between before and after formatting.");
-                    let errs: Result<(), _> = Err(errs); // TODO(gu): Result<!, _> ;)
+                    let errs: Result<!, _> = Err(errs); // TODO(gu): Result<!, _> ;)
                     $crate::assert_errs!(errs, $errs);
                 }
             }
