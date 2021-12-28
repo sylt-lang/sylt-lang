@@ -3,12 +3,14 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use sylt_common::error::Error;
 
+#[derive(Debug, Clone)]
 pub enum TestableError {
     Type(String),
     Runtime,
-    Syntax(usize),
+    Syntax(Option<usize>),
 }
 
+#[derive(Debug, Clone)]
 pub struct TestSettings {
     pub path: PathBuf,
     pub errors: Vec<TestableError>,
@@ -37,9 +39,10 @@ impl TestSettings {
 impl fmt::Display for TestableError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
-            TestableError::Type(msg) => writeln!(f, "TypeError - containing {:?}", msg),
-            TestableError::Runtime => writeln!(f, "RuntimeError"),
-            TestableError::Syntax(line) => writeln!(f, "SyntaxError - on line {}", line),
+            TestableError::Type(msg) => write!(f, "TypeError - containing {:?}", msg),
+            TestableError::Runtime => write!(f, "RuntimeError"),
+            TestableError::Syntax(Some(line)) => write!(f, "SyntaxError - on line {}", line),
+            TestableError::Syntax(None) => write!(f, "SyntaxError - somewhere"),
         }
     }
 }
@@ -52,43 +55,25 @@ pub fn compare_errors(result: &[Error], expected: &[TestableError]) -> bool {
         .iter()
         .zip(expected.iter())
         .all(|(a, b)| match (a, b) {
-            (Error::SyntaxError { span, .. }, TestableError::Syntax(line)) => {
+            (Error::SyntaxError { span, .. }, TestableError::Syntax(Some(line))) => {
                 span.line_start == *line
             }
+            (Error::SyntaxError { .. }, TestableError::Syntax(None)) => true,
             (Error::RuntimeError, TestableError::Runtime) => true,
-            (Error::TypeError { .. }, TestableError::Type(msg)) => {
-                format!("{:?}", a).contains(msg)
-            }
+            (Error::TypeError { .. }, TestableError::Type(msg)) => format!("{:?}", a).contains(msg),
             _ => false,
         })
 }
 
-pub fn write_errors(
-    f: &mut fmt::Formatter<'_>,
-    result: &[Error],
-    expected: &[TestableError],
-) -> fmt::Result {
-    writeln!(f, "=== GOT {} ERRORS ===", result.len())?;
+pub fn write_errors(result: &[Error], expected: &[TestableError]) {
+    eprintln!("=== GOT {} ERRORS ===", result.len());
     for err in result.iter() {
-        writeln!(f, "> {}", err)?;
+        eprintln!("{}", err);
     }
 
-    writeln!(f, "=== EXPECTED {} ERRORS ===", expected.len())?;
+    eprintln!("=== EXPECTED {} ERRORS ===", expected.len());
     for err in expected.iter() {
-        writeln!(f, "> {}", err)?;
-    }
-
-    Ok(())
-}
-
-pub fn check_errors(
-    f: &mut fmt::Formatter<'_>,
-    result: &[Error],
-    expected: &[TestableError]) -> fmt::Result {
-    if !compare_errors(result, expected) {
-        write_errors(f, result, expected)
-    } else {
-        Ok(())
+        eprintln!("> {}", err);
     }
 }
 
@@ -103,8 +88,7 @@ fn parse_test_settings(contents: String) -> TestSettings {
                 Some("$") => TestableError::Type(line[1..].trim().into()),
                 Some("#") => TestableError::Runtime,
                 Some("@") => TestableError::Syntax(
-                    usize::from_str(&line[1..])
-                        .expect("Failed to parse line number for syntax error"),
+                    usize::from_str(&line[1..]).ok()
                 ),
                 _ => continue,
             };
@@ -134,7 +118,9 @@ fn parse_test_settings(contents: String) -> TestSettings {
 
 fn find_and_parse_tests(directory: &Path) -> Vec<TestSettings> {
     let mut tests = Vec::new();
-    for entry in std::fs::read_dir(directory).unwrap() {
+    for entry in
+        std::fs::read_dir(directory).expect(&format!("There is no such directory: {:?}", directory))
+    {
         let path = entry.unwrap().path();
         let file_name = path.file_name().unwrap().to_str().unwrap();
 
@@ -159,16 +145,87 @@ fn run_test<R>(reader: R, settings: &TestSettings) -> bool
 where
     R: Fn(&Path) -> Result<String, Error>,
 {
-}
+    use std::process::{Command, Stdio};
 
-#[test]
-fn program_tests() {
-    let tests = find_and_parse_tests(Path::new("tests/"));
-    let mut passed = 0;
-    for test in tests.iter() {
-        if run_test(crate::read_file, test) {
-            passed += 1;
+
+    let mut args = crate::Args::default();
+    args.args = vec![settings.path.to_str().unwrap().to_string()];
+    args.verbosity = if settings.print { 1 } else { 0 };
+
+    let mut child = Command::new("lua")
+        .stdin(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect(&format!("Failed to start: {:?}", settings.path));
+
+    let mut stdin = child.stdin.take().unwrap();
+    let res = crate::compile_with_reader_to_writer(&args, reader, &mut stdin);
+
+    drop(stdin); // Close stdin so the child can do its thing.
+
+    if let Err(errs) = res {
+        if !compare_errors(errs.as_slice(), settings.errors.as_slice()) {
+            eprintln!("\n {:?} - failed in compiler", settings.path);
+            write_errors(&errs, &settings.errors);
+            return false;
         }
     }
-    eprintln!("> {}/{}", passed, tests.len());
+
+    let output = child.wait_with_output().unwrap();
+    // HACK(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
+    // so we check stderr - which is a bad idea.
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let errs = if !(output.status.success() && stderr.is_empty()) {
+        vec![Error::RuntimeError]
+    } else {
+        Vec::new()
+    };
+
+    if !compare_errors(errs.as_slice(), settings.errors.as_slice()) {
+        eprintln!("\n {:?} - failed in runtime", settings.path);
+        if !stdout.is_empty() {
+            eprintln!("= STDOUT =\n{}", stdout);
+        }
+        if !stderr.is_empty() {
+            eprintln!("= STDERR =\n{}", stderr);
+        }
+        write_errors(&errs, &settings.errors);
+        return false;
+    }
+
+    true
+}
+
+#[cfg(test)]
+#[test]
+fn program_tests() {
+    use crate::{formatter::format, read_file};
+    use std::io::Write;
+    let tests = find_and_parse_tests(Path::new("../tests/"));
+    let mut passed = 0;
+
+    writeln!(std::io::stdout().lock(), "= RUNNING {} TESTS =", tests.len()).unwrap();
+
+    for test in tests.iter() {
+        if !run_test(read_file, test) {
+            continue;
+        }
+
+        if !run_test(
+            |path| format(path).map_err(|e| e.first().unwrap().clone()),
+            test,
+        ) {
+            continue;
+        }
+        passed += 1;
+    }
+    // TODO(ed): Add time
+    // Maybe even time/test?
+    // How much overview do we want?
+    eprintln!("= SUMMARY {}/{} =", passed, tests.len());
+    if passed != tests.len() {
+        panic!("Some tests failed!");
+    }
 }
