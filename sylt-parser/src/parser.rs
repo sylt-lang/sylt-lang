@@ -567,7 +567,7 @@ pub fn type_assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeAssignable> 
 
 /// Parse a [Type] definition, e.g. `fn int, int, bool -> bool`.
 pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
-    use RuntimeType::{Bool, Float, Int, String, Unknown, Void, Nil};
+    use RuntimeType::{Bool, Float, Int, Nil, String, Unknown, Void};
     use TypeKind::*;
     let span = ctx.span();
     let (ctx, kind) = match ctx.token() {

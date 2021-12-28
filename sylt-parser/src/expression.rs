@@ -183,7 +183,11 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             comments,
         }) = last_statement
         {
-            statements.push(Statement { span, kind: StatementKind::Ret { value: Some(value) }, comments });
+            statements.push(Statement {
+                span,
+                kind: StatementKind::Ret { value: Some(value) },
+                comments,
+            });
         } else if let Some(statement) = last_statement {
             statements.push(statement);
         }

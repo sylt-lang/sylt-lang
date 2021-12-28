@@ -425,7 +425,11 @@ impl fmt::Display for TypeError {
             }
 
             TypeError::ExpectVoid(ty) => {
-                write!(f, "Only void types can unify with void - '{}' is not void", ty)
+                write!(
+                    f,
+                    "Only void types can unify with void - '{}' is not void",
+                    ty
+                )
             }
         }
     }
