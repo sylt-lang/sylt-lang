@@ -8,4 +8,4 @@ start :: fn do
     A { a: 1, b: "str" }
 end
 
-// error: $Mismatch { .. }
+// error: $Mismatch

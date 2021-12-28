@@ -8,6 +8,7 @@ pub enum TestableError {
     Type(String),
     Runtime,
     Syntax(Option<usize>),
+    Containing(String),
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +44,7 @@ impl fmt::Display for TestableError {
             TestableError::Runtime => write!(f, "RuntimeError"),
             TestableError::Syntax(Some(line)) => write!(f, "SyntaxError - on line {}", line),
             TestableError::Syntax(None) => write!(f, "SyntaxError - somewhere"),
+            TestableError::Containing(line) => write!(f, "Error containing - {:?}", line),
         }
     }
 }
@@ -60,20 +62,21 @@ pub fn compare_errors(result: &[Error], expected: &[TestableError]) -> bool {
             }
             (Error::SyntaxError { .. }, TestableError::Syntax(None)) => true,
             (Error::RuntimeError, TestableError::Runtime) => true,
-            (Error::TypeError { .. }, TestableError::Type(msg)) => format!("{:?}", a).contains(msg),
+            (Error::TypeError { .. }, TestableError::Type(msg)) => format!("{:?}", a).contains(msg) || format!("{}", a).contains(msg),
+            (_, TestableError::Containing(msg)) => format!("{:?}", a).contains(msg) || format!("{}", a).contains(msg),
             _ => false,
         })
 }
 
 pub fn write_errors(result: &[Error], expected: &[TestableError]) {
-    eprintln!("=== GOT {} ERRORS ===", result.len());
+    eprintln!("* GOT {} ERRORS", result.len());
     for err in result.iter() {
-        eprintln!("{}", err);
+        eprintln!("  {}", err);
     }
 
-    eprintln!("=== EXPECTED {} ERRORS ===", expected.len());
+    eprintln!("* EXPECTED {} ERRORS", expected.len());
     for err in expected.iter() {
-        eprintln!("> {}", err);
+        eprintln!("  {}", err);
     }
 }
 
@@ -90,7 +93,7 @@ fn parse_test_settings(contents: String) -> TestSettings {
                 Some("@") => TestableError::Syntax(
                     usize::from_str(&line[1..]).ok()
                 ),
-                _ => continue,
+                _ => TestableError::Containing(line.trim().into()),
             };
             errors.push(err);
         } else if line.starts_with("// flags:") {
@@ -164,12 +167,13 @@ where
 
     drop(stdin); // Close stdin so the child can do its thing.
 
-    if let Err(errs) = res {
-        if !compare_errors(errs.as_slice(), settings.errors.as_slice()) {
-            eprintln!("\n {:?} - failed in compiler", settings.path);
-            write_errors(&errs, &settings.errors);
-            return false;
+    if let Err(errs) = res.clone() {
+        if compare_errors(errs.as_slice(), settings.errors.as_slice()) {
+            return true;
         }
+        eprintln!("\n=== {:?} - failed in compiler", settings.path);
+        write_errors(&errs, &settings.errors);
+        return false;
     }
 
     let output = child.wait_with_output().unwrap();
@@ -184,7 +188,7 @@ where
     };
 
     if !compare_errors(errs.as_slice(), settings.errors.as_slice()) {
-        eprintln!("\n {:?} - failed in runtime", settings.path);
+        eprintln!("\n=== {:?} - failed in runtime", settings.path);
         if !stdout.is_empty() {
             eprintln!("= STDOUT =\n{}", stdout);
         }
@@ -224,7 +228,7 @@ fn program_tests() {
     // TODO(ed): Add time
     // Maybe even time/test?
     // How much overview do we want?
-    eprintln!("= SUMMARY {}/{} =", passed, tests.len());
+    eprintln!("\n\n SUMMARY {}/{}      {} failed\n", passed, tests.len(), tests.len() - passed);
     if passed != tests.len() {
         panic!("Some tests failed!");
     }

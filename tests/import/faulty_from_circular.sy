@@ -4,4 +4,4 @@ start :: fn do
      num1 <=> 200
 end
 
-// error: sylt_common::Error::CompileError {..}
+// error: Nothing named 'num2'

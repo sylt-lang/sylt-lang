@@ -5,4 +5,4 @@ start :: fn do
     a.b = a.b + 1
 end
 
-// error: $MissingField {..}
+// error: $MissingField
