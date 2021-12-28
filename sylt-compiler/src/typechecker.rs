@@ -146,6 +146,8 @@ enum Constraint {
     Enum,
     Variant(String, TyID),
     TotalEnum(BTreeSet<String>),
+
+    Variable,
 }
 
 pub struct TypeChecker {
@@ -1246,6 +1248,7 @@ impl TypeChecker {
                 };
 
                 let expression_ty = self.expression(value, ctx)?;
+                self.add_constraint(defined_ty, span, Constraint::Variable);
                 self.unify(span, ctx, expression_ty, defined_ty)?;
 
                 if !is_function {
@@ -1532,6 +1535,17 @@ impl TypeChecker {
                         vars
                     ),
                 },
+
+                Constraint::Variable => match self.find_type(a) {
+                    Type::Void => err_type_error!(
+                        self,
+                        span,
+                        TypeError::Exotic,
+                        "The `void` has no values and cannot be put in a variable"
+                    ),
+
+                    _ => Ok(()),
+                },
             }
             .help(self, *original_span, "Requirement came from".to_string())?
         }
@@ -1784,6 +1798,7 @@ impl TypeChecker {
                         C::Enum => C::Enum,
                         C::Variant(v, x) => C::Variant(v.clone(), *x),
                         C::TotalEnum(x) => C::TotalEnum(x.clone()),
+                        C::Variable => C::Variable,
                     },
                     *span,
                 )
