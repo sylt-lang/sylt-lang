@@ -62,8 +62,12 @@ pub fn compare_errors(result: &[Error], expected: &[TestableError]) -> bool {
             }
             (Error::SyntaxError { .. }, TestableError::Syntax(None)) => true,
             (Error::RuntimeError, TestableError::Runtime) => true,
-            (Error::TypeError { .. }, TestableError::Type(msg)) => format!("{:?}", a).contains(msg) || format!("{}", a).contains(msg),
-            (_, TestableError::Containing(msg)) => format!("{:?}", a).contains(msg) || format!("{}", a).contains(msg),
+            (Error::TypeError { .. }, TestableError::Type(msg)) => {
+                format!("{:?}", a).contains(msg) || format!("{}", a).contains(msg)
+            }
+            (_, TestableError::Containing(msg)) => {
+                format!("{:?}", a).contains(msg) || format!("{}", a).contains(msg)
+            }
             _ => false,
         })
 }
@@ -90,9 +94,7 @@ fn parse_test_settings(contents: String) -> TestSettings {
             let err = match line.get(0..1) {
                 Some("$") => TestableError::Type(line[1..].trim().into()),
                 Some("#") => TestableError::Runtime,
-                Some("@") => TestableError::Syntax(
-                    usize::from_str(&line[1..]).ok()
-                ),
+                Some("@") => TestableError::Syntax(usize::from_str(&line[1..]).ok()),
                 _ => TestableError::Containing(line.trim().into()),
             };
             errors.push(err);
@@ -150,7 +152,6 @@ where
 {
     use std::process::{Command, Stdio};
 
-
     let mut args = crate::Args::default();
     args.args = vec![settings.path.to_str().unwrap().to_string()];
     args.verbosity = if settings.print { 1 } else { 0 };
@@ -204,14 +205,19 @@ where
 
 #[test]
 fn program_tests() {
-    use std::env::set_current_dir;
     use crate::{formatter::format, read_file};
+    use std::env::set_current_dir;
     use std::io::Write;
     set_current_dir("../").unwrap();
     let tests = find_and_parse_tests(Path::new("tests/"));
     let mut failed = Vec::new();
 
-    writeln!(std::io::stdout().lock(), "= RUNNING {} TESTS =", tests.len()).unwrap();
+    writeln!(
+        std::io::stdout().lock(),
+        "= RUNNING {} TESTS =",
+        tests.len()
+    )
+    .unwrap();
 
     for test in tests.iter() {
         if !run_test(read_file, test) {
@@ -219,10 +225,14 @@ fn program_tests() {
             continue;
         }
 
-        if !run_test(
-            |path| format(path).map_err(|e| e.first().unwrap().clone()),
-            test,
-        ) {
+        if test.errors.is_empty()
+            && !run_test(
+                |path| {
+                    format(path).map_err(|errs| panic!("Got errors from formatter!:\n{:?}", errs))
+                },
+                test,
+            )
+        {
             failed.push(test);
             continue;
         }
@@ -240,6 +250,9 @@ fn program_tests() {
     let num_tests = tests.len();
     let num_failed = failed.len();
     let num_passed = tests.len() - failed.len();
-    eprintln!("\n SUMMARY {}/{}      {} failed\n", num_passed, num_tests, num_failed);
+    eprintln!(
+        "\n SUMMARY {}/{}      {} failed\n",
+        num_passed, num_tests, num_failed
+    );
     assert!(failed.is_empty(), "Some tests failed!");
 }
