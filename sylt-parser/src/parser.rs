@@ -1069,8 +1069,8 @@ where
             FileOrLib::Lib(name) => library_source(name).unwrap().to_string(),
             FileOrLib::File(file) => match reader(file) {
                 Ok(source) => source,
-                Err(_) => {
-                    errors.push(Error::FileNotFound(file.clone()));
+                Err(err) => {
+                    errors.push(err);
                     continue;
                 }
             },
