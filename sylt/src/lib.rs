@@ -8,6 +8,8 @@ use std::rc::Rc;
 use sylt_common::error::Error;
 
 pub mod formatter;
+
+#[cfg(test)]
 pub mod test;
 
 pub fn read_file(path: &Path) -> Result<String, Error> {
