@@ -184,8 +184,6 @@ pub fn link(tokens: proc_macro::TokenStream) -> proc_macro::TokenStream {
     proc_macro::TokenStream::from(tokens)
 }
 
-
-
 #[proc_macro_derive(Enumerate)]
 pub fn derive_enumerate(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     assert!(!item.is_empty());

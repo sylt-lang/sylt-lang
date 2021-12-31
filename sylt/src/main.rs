@@ -1,5 +1,5 @@
-use sylt::{Args, Options};
 use std::path::PathBuf;
+use sylt::{Args, Options};
 
 fn main() -> Result<(), String> {
     let args = Args::parse_args_default_or_exit();

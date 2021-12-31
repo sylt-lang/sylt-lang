@@ -128,4 +128,3 @@ pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
     res.push(format!("{}.sy", module));
     res
 }
-
