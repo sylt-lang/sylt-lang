@@ -202,18 +202,20 @@ where
     true
 }
 
-#[cfg(test)]
 #[test]
 fn program_tests() {
+    use std::env::set_current_dir;
     use crate::{formatter::format, read_file};
     use std::io::Write;
-    let tests = find_and_parse_tests(Path::new("../tests/"));
-    let mut passed = 0;
+    set_current_dir("../").unwrap();
+    let tests = find_and_parse_tests(Path::new("tests/"));
+    let mut failed = Vec::new();
 
     writeln!(std::io::stdout().lock(), "= RUNNING {} TESTS =", tests.len()).unwrap();
 
     for test in tests.iter() {
         if !run_test(read_file, test) {
+            failed.push(test);
             continue;
         }
 
@@ -221,15 +223,23 @@ fn program_tests() {
             |path| format(path).map_err(|e| e.first().unwrap().clone()),
             test,
         ) {
+            failed.push(test);
             continue;
         }
-        passed += 1;
     }
     // TODO(ed): Add time
     // Maybe even time/test?
     // How much overview do we want?
-    eprintln!("\n\n SUMMARY {}/{}      {} failed\n", passed, tests.len(), tests.len() - passed);
-    if passed != tests.len() {
-        panic!("Some tests failed!");
+    if !failed.is_empty() {
+        eprintln!("\nFailed tests:");
+        for fail in failed.iter() {
+            eprintln!(" {}", fail.path.to_str().unwrap());
+        }
     }
+
+    let num_tests = tests.len();
+    let num_failed = failed.len();
+    let num_passed = tests.len() - failed.len();
+    eprintln!("\n SUMMARY {}/{}      {} failed\n", num_passed, num_tests, num_failed);
+    assert!(failed.is_empty(), "Some tests failed!");
 }
