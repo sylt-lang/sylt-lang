@@ -1,5 +1,5 @@
 asdflökja;;;;
 123
 asd
-// error: ;;;
-// error: 123
+// error: @1
+// error: @3
