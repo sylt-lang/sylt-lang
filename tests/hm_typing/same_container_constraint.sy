@@ -8,4 +8,4 @@ start :: fn do
     f' {1, 2, 3}, ["a", "b", "c"]
 end
 
-// error: $Mismatch { .. }
+// error: $Mismatch

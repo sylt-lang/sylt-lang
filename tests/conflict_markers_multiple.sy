@@ -12,5 +12,5 @@ start :: fn do
     print extern_test(5.0)
 >>>>>>> 2
 end
-// error: GitConflictError
-// error: GitConflictError
+// error: Git conflict marker found at line 3
+// error: Git conflict marker found at line 9

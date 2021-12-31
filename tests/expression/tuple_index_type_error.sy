@@ -4,4 +4,4 @@ start :: fn do
     b :: (1, 2, 3)
     b[0] == "str"
 end
-// error: $Mismatch { .. }
+// error: $Mismatch

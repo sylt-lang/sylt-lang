@@ -8,4 +8,4 @@ start :: fn do
     (a + 1) if true else b
 end
 
-// error: $BinOp { .. }
+// error: $BinOp

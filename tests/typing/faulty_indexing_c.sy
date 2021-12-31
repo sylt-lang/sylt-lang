@@ -4,4 +4,4 @@ start :: fn do
     a["qqq"] + 123
     a[123] + 123
 end
-// error: $Mismatch { .. }
+// error: $Mismatch

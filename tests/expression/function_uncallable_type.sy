@@ -4,4 +4,4 @@ start :: fn do
     end
     f
 end
-// error: $Violating(Type::Int)
+// error: $Violating

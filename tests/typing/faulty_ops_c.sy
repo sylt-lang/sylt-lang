@@ -2,4 +2,4 @@ start :: fn do
     1 in {1, 2, 3}
     1 in {"abc", "abc"}
 end
-// error: $Mismatch { .. }
+// error: $Mismatch

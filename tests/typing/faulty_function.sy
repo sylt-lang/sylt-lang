@@ -7,4 +7,4 @@ start :: fn do
     q := 1 -> f'
     q := 1.0 -> f'
 end
-// error: $Mismatch { .. }
+// error: $Mismatch

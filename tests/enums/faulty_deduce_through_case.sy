@@ -20,6 +20,6 @@ start :: fn do
     f' A.Y 2
 end
 
-// error: $BinOp { .. }
+// error: $BinOp
 
 

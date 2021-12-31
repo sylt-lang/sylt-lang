@@ -2,4 +2,4 @@ use _import
 start :: fn do
     _import.q + 1.0
 end
-// error: $BinOp { .. }
+// error: $BinOp

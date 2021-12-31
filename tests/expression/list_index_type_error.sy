@@ -7,4 +7,4 @@ start :: fn do
     c :: [1, 0.1]
     c[0] == "str"
 end
-// error: $Mismatch { .. }
+// error: $Mismatch
