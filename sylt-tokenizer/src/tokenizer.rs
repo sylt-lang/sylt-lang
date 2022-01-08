@@ -212,4 +212,11 @@ mod tests {
         assert_eq!(lex("1// a\n2").len(), 4);
         assert_eq!(lex("1\n// a\n2").len(), 5); // newline is also a token
     }
+
+    #[test]
+    fn strings() {
+        assert_eq!(lex("\"abc\\\"abc\"").len(), 1);
+        assert_eq!(lex(" \"abc\" ").len(), 1);
+        assert_eq!(lex(" \"a\nbc\n\" ").len(), 1);
+    }
 }

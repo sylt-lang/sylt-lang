@@ -16,7 +16,7 @@ pub enum Token {
     #[token("str")]
     StrType,
 
-    #[regex(r#""[^"]*""#, |lex| { let mut s = lex.slice().to_string(); s.remove(0); s.pop(); s })]
+    #[regex(r#""(\\"|[^"])*""#, |lex| { let mut s = lex.slice().to_string(); s.remove(0); s.pop(); s })]
     String(String),
 
     #[regex(r"[\d]+\.[\d]*|[\d]*\.[\d]+", |lex| lex.slice().parse(), priority=2)]
