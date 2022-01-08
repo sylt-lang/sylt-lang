@@ -218,5 +218,7 @@ mod tests {
         assert_eq!(lex("\"abc\\\"abc\"").len(), 1);
         assert_eq!(lex(" \"abc\" ").len(), 1);
         assert_eq!(lex(" \"a\nbc\n\" ").len(), 1);
+        assert_eq!(lex(" f\"a\nbc\n\" ").len(), 1);
+        assert_eq!(lex(" f \"a\nbc\n\" ").len(), 2);
     }
 }
