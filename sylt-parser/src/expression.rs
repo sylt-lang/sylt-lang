@@ -1,3 +1,4 @@
+use regex::Regex;
 use sylt_common::error::Error;
 
 use crate::statement::block;
@@ -260,7 +261,7 @@ fn precedence(token: &T) -> Prec {
 }
 
 /// Parse a single (primitive) value.
-fn value<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Expression), (Context<'t>, Vec<Error>)> {
+fn value<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use ExpressionKind::*;
     let (token, span, ctx) = ctx.eat();
     let kind = match token.clone() {
@@ -276,6 +277,61 @@ fn value<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Expression), (Context<'t>
     Ok((ctx, Expression::new(span, kind)))
 }
 
+fn format_string<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+    use ExpressionKind::{Add, Str};
+    // TODO(ed): The spans are wrong here.
+    if let (T::FormatString(string), span, ctx) = ctx.eat() {
+        let convert_to_string = |expr: Expression| -> Expression {
+            use AssignableKind::{Call, Read};
+            use ExpressionKind::Get;
+            Expression::new(
+                span,
+                Get(Assignable {
+                    span,
+                    kind: Call(
+                        Box::new(Assignable {
+                            span,
+                            kind: Read(Identifier { span, name: "as_str".into() }),
+                        }),
+                        vec![expr],
+                    ),
+                }),
+            )
+        };
+
+        let sep = Regex::new(r"[^(?:\#)]\#").unwrap();
+        let segments = sep.split(string).collect::<Vec<_>>();
+        let mut final_expression = None;
+        for (i, pre) in segments.iter().enumerate().step_by(2) {
+            let pre = Expression::new(span, Str(pre.to_string()));
+            final_expression = Some(match final_expression {
+                Some(x) => {
+                    Expression::new(span, Add(Box::new(x), Box::new(pre)))
+                }
+                None => {
+                    pre
+                }
+            });
+            final_expression = match (final_expression, segments.get(i + 1)) {
+                (Some(x), Some(string)) => {
+                    let token_stream = sylt_tokenizer::string_to_tokens(ctx.file_id, string);
+                    let spans: Vec<_> = token_stream.iter().map(|_| span).collect();
+                    let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
+                    let inner_ctx = ctx.inner(&tokens, &spans);
+                    let (_, expr) = expression(inner_ctx).unwrap();
+                    Some(Expression::new(span, Add(Box::new(x), Box::new(convert_to_string(expr)))))
+                }
+
+                (final_expression, _) => {
+                    final_expression
+                }
+            }
+        }
+        return Ok((ctx, final_expression.unwrap()));
+    }
+    raise_syntax_error!(ctx, "Only format strings can be parsed as format strings");
+}
+
 /// Parse something that begins at the start of an expression.
 fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use ExpressionKind::Get;
@@ -288,6 +344,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         T::LeftBrace => set_or_dict(ctx),
 
         T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
+        T::FormatString(_) => format_string(ctx),
         T::Minus | T::Not => unary(ctx),
 
         T::Identifier(_) => {

@@ -261,6 +261,17 @@ impl<'a> Context<'a> {
         }
     }
 
+    pub fn inner(self, tokens: &'a [Token], spans: &'a [Span]) -> Self {
+        Self {
+            skip_newlines: false,
+            last_statement: 0,
+            tokens,
+            spans,
+            curr: 0,
+            ..self
+        }
+    }
+
     /// Get a [Span] representing the current location of the parser.
     fn span(&self) -> Span {
         self.peek().1
