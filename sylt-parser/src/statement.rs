@@ -9,6 +9,14 @@ pub enum NameIdentifier {
     Alias(Identifier),
 }
 
+impl NameIdentifier {
+    pub fn name(&self) -> &str {
+        match self {
+            NameIdentifier::Implicit(i) | NameIdentifier::Alias(i) => &i.name,
+        }
+    }
+}
+
 type Alias = Identifier;
 
 #[derive(Debug, Clone, PartialEq)]

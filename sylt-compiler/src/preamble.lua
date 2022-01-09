@@ -464,7 +464,7 @@ function magnitude(a)
 end
 
 function __CRASH(msg)
-    return function() assert(false, "crash" .. (msg or "")) end
+    return function() assert(false, "!!CRASH!!: " .. (msg or "")) end
 end
 
 function normalize(a)

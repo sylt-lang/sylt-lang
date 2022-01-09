@@ -1,12 +1,10 @@
 pub mod error;
 pub mod ty;
-pub mod value;
 
 use std::path::PathBuf;
 
 pub use error::Error;
 pub use ty::Type;
-pub use value::Value;
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
 pub struct TyID(pub usize);

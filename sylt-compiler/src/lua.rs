@@ -1,666 +1,306 @@
+use crate::intermediate::{Var, IR};
 use std::io::Write;
-use sylt_parser::expression::ComparisonKind;
-use sylt_parser::{
-    Assignable, AssignableKind, CaseBranch, Expression, ExpressionKind, Op, Span, Statement,
-    StatementKind,
-};
-
-use crate::*;
 
 macro_rules! write {
-    ($compiler:expr, $msg:expr ) => {
-        $compiler.write(String::from($msg))
+    ($out:expr, $msg:expr ) => {
+        // :3
+        let _ = $out.write($msg.as_ref());
     };
-    ($compiler:expr, $( $msg:expr ),+ ) => {
-        $compiler.write(format!($( $msg ),*))
+    ($out:expr, $( $msg:expr ),+ ) => {
+        let _ = $out.write(format!($( $msg ),*).as_ref());
     };
 }
 
-pub struct LuaCompiler<'t> {
-    compiler: &'t mut Compiler,
-    loops: Vec<usize>,
-    file: &'t mut dyn Write,
+pub fn bin_op(out: &mut dyn Write, t: &Var, a: &Var, b: &Var, op: &str) {
+    write!(out, "local ");
+    write!(out, "{}", t);
+    write!(out, " = ");
+    write!(out, "{}", a);
+    write!(out, " {} ", op);
+    write!(out, "{}", b);
 }
 
-impl<'t> LuaCompiler<'t> {
-    pub(crate) fn new(compiler: &'t mut Compiler, file: &'t mut dyn Write) -> Self {
-        Self { compiler, loops: Vec::new(), file }
-    }
-
-    fn write(&mut self, msg: String) {
-        // We specifically ignore writing ';' to make Love happy
-        if msg == ";" {
-            let _ = self.file.write_all(b"\n");
-        } else {
-            let _ = self.file.write_all(msg.as_ref());
-            let _ = self.file.write_all(b" ");
+pub fn comma_sep(out: &mut dyn Write, vars: &[Var]) {
+    for (i, v) in vars.iter().enumerate() {
+        if i != 0 {
+            write!(out, ", ");
         }
+        write!(out, "{}", v);
     }
+}
 
-    fn write_global(&mut self, slot: usize) {
-        write!(self, "GLOBAL_{}", slot);
-    }
+pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
+    write!(out, include_str!("preamble.lua"));
 
-    fn write_slot(&mut self, slot: VarSlot) {
-        write!(self, "local_{}", slot);
-    }
-
-    fn assignable(&mut self, ass: &Assignable, ctx: Context) -> Option<usize> {
-        use AssignableKind::*;
-
-        match &ass.kind {
-            Read(ident) => {
-                return self.read_identifier(&ident.name, ass.span, ctx, ctx.namespace);
-            }
-            Variant { variant, value, .. } => {
-                write!(self, "__VARIANT({{\"{}\", ", variant.name);
-                self.expression(value, ctx);
-                write!(self, "})");
-            }
-            Call(f, expr) => {
-                self.assignable(f, ctx);
-                write!(self, "(");
-                for (i, e) in expr.iter().enumerate() {
-                    if i != 0 {
-                        write!(self, ",");
-                    }
-                    self.expression(e, ctx);
-                }
-                write!(self, ")");
-            }
-            ArrowCall(pre, f, expr) => {
-                self.assignable(f, ctx);
-                write!(self, "(");
-                self.expression(pre, ctx);
-                for e in expr.iter() {
-                    write!(self, ",");
-                    self.expression(e, ctx);
-                }
-                write!(self, ")");
-            }
-            Access(a, field) => {
-                // NOTE(ed): We have to write this, but we want it to degrade into a NOP
-                // if we have a namespace. We could build the namespaces as a table.
-                write!(self, "__INDEX(");
-                if let Some(namespace) = self.assignable(a, ctx) {
-                    write!(self, "nil");
-                    write!(self, ")");
-                    write!(self, "or");
-                    let out = self.read_identifier(&field.name, field.span, ctx, namespace);
-                    return out;
-                } else {
-                    write!(self, ",");
-                    write!(self, "\"{}\"", field.name);
-                    write!(self, ")");
-                }
-            }
-            Index(a, b) => {
-                // TODO(ed): This won't work for tuples and dicts at
-                // the same time. We need to handle them differently and only
-                // the typechecker knows what is what.
-                write!(self, "__INDEX(");
-                self.assignable(a, ctx);
-                write!(self, ",");
-                self.expression(b, ctx);
-                write!(self, ")");
-            }
-            Expression(expr) => {
-                self.expression(expr, ctx);
-            }
-        }
-        None
-    }
-
-    fn bin_op(&mut self, a: &Expression, b: &Expression, op: &str, ctx: Context) {
-        self.expression(&a, ctx);
-        write!(self, op);
-        self.expression(&b, ctx);
-    }
-
-    fn expression(&mut self, expression: &Expression, ctx: Context) {
-        use ComparisonKind::*;
-        use ExpressionKind::*;
-
-        write!(self, "(");
-        match &expression.kind {
-            Parenthesis(expr) => {
-                self.expression(expr, ctx);
-            }
-
-            Get(a) => {
-                self.assignable(a, ctx);
-            }
-
-            Add(a, b) => {
-                write!(self, "__ADD(");
-                self.expression(a, ctx);
-                write!(self, ",");
-                self.expression(b, ctx);
-                write!(self, ")");
-            }
-            Sub(a, b) => self.bin_op(a, b, "-", ctx),
-            Mul(a, b) => self.bin_op(a, b, "*", ctx),
-            Div(a, b) => self.bin_op(a, b, "/", ctx),
-
-            Comparison(a, cmp, b) => match cmp {
-                Equals => self.bin_op(a, b, "==", ctx),
-                NotEquals => self.bin_op(a, b, "~=", ctx),
-                Greater => self.bin_op(a, b, ">", ctx),
-                GreaterEqual => self.bin_op(a, b, ">=", ctx),
-                Less => self.bin_op(a, b, "<", ctx),
-                LessEqual => self.bin_op(a, b, "<=", ctx),
-                In => {
-                    write!(self, "__CONTAINS(");
-                    self.expression(a, ctx);
-                    write!(self, ",");
-                    self.expression(b, ctx);
-                    write!(self, ")");
-                }
-            },
-
-            AssertEq(a, b) => {
-                write!(self, "assert(");
-                self.expression(a, ctx);
-                write!(self, "==");
-                self.expression(b, ctx);
-                write!(self, ", \"Assert failed\")");
-            }
-
-            Neg(a) => {
-                write!(self, "-");
-                self.expression(a, ctx);
-            }
-
-            And(a, b) => self.bin_op(a, b, "and", ctx),
-            Or(a, b) => self.bin_op(a, b, "or", ctx),
-            Not(a) => {
-                write!(self, "not");
-                self.expression(a, ctx);
-            }
-
-            IfExpression { condition, pass, fail } => {
-                write!(self, "(function ()");
-                write!(self, "if");
-                self.expression(condition, ctx);
-                write!(self, "then");
-                write!(self, "return");
-                self.expression(pass, ctx);
-                write!(self, "else");
-                write!(self, "return");
-                self.expression(fail, ctx);
-                write!(self, "end");
-                write!(self, "end)()");
-            }
-
-            Function { name: _, params, ret: _, body } => {
-                // TODO(ed): We don't use multiple frames here...
-                let s = self.compiler.frames.last().unwrap().len();
-                write!(self, "function (");
-                for (i, e) in params.iter().enumerate() {
-                    if i != 0 {
-                        write!(self, ",");
-                    }
-                    let slot = self.compiler.define(&e.0.name, expression.span);
-                    self.compiler.activate(slot);
-                    self.write_slot(slot);
-                }
-                write!(self, ")");
-                self.statement(body, ctx);
-                write!(self, "end");
-                self.compiler.frames.last_mut().unwrap().truncate(s);
-            }
-
-            Tuple(xs) => {
-                write!(self, "__TUPLE { ");
-                for x in xs {
-                    self.expression(x, ctx);
-                    write!(self, " , ");
-                }
-                write!(self, "}");
-            }
-
-            List(xs) => {
-                write!(self, "__LIST { ");
-                for x in xs {
-                    self.expression(x, ctx);
-                    write!(self, " , ");
-                }
-                write!(self, "}");
-            }
-
-            Set(xs) => {
-                write!(self, "__SET { ");
-                for x in xs {
-                    write!(self, "[");
-                    self.expression(x, ctx);
-                    write!(self, "]");
-                    write!(self, " = true , ");
-                }
-                write!(self, "}");
-            }
-
-            Dict(xs) => {
-                write!(self, "__DICT { ");
-                for (k, v) in xs.iter().step_by(2).zip(xs.iter().skip(1).step_by(2)) {
-                    write!(self, "[");
-                    self.expression(k, ctx);
-                    write!(self, "]");
-                    write!(self, "=");
-                    self.expression(v, ctx);
-                    write!(self, ",");
-                }
-                write!(self, "}");
-            }
-
-            Blob { blob: _, fields } => {
-                // TODO(ed): Know which blob something is?
-                let self_slot = self.compiler.define("self", expression.span);
-                self.compiler.activate(self_slot);
-
-                // Set up closure for the self variable. The typechecker takes
-                // the closure and self variable into account when solving the
-                // types.
-                write!(self, "(function() local");
-                self.write_slot(self_slot);
-                write!(self, "= nil;");
-
-                // Initialize the blob. This may capture self.
-                self.write_slot(self_slot);
-                write!(self, "= __BLOB {");
-                for (k, v) in fields.iter() {
-                    write!(self, "{} =", k);
-                    self.expression(v, ctx);
-                    write!(self, ",");
-                }
-
-                // Return self and call the closure.
-                write!(self, "}; return");
-                self.write_slot(self_slot);
-                write!(self, "end)()");
-
-                self.compiler.frames.last_mut().unwrap().pop();
-            }
-
-            Float(a) => write!(self, "{:?}", a),
-            Bool(a) => write!(self, "{}", a),
-            Int(a) => write!(self, "{}", a),
-            Str(a) => write!(self, "\"{}\"", a),
-            Nil => write!(self, "__NIL"),
-        }
-        write!(self, ")");
-    }
-
-    fn read_identifier(
-        &mut self,
-        name: &str,
-        span: Span,
-        ctx: Context,
-        namespace: usize,
-    ) -> Option<usize> {
-        match self.compiler.resolve_and_capture(name, ctx.frame) {
-            Ok(var) => {
-                self.write_slot(var.slot);
-            }
-
-            Err(()) => match self.compiler.namespaces[namespace].get(name).cloned() {
-                Some(Name::Global(slot)) => {
-                    self.write_global(slot);
-                }
-                Some(Name::Blob(blob)) => {
-                    self.write_global(blob);
-                }
-                Some(Name::Enum(enum_)) => {
-                    self.write_global(enum_);
-                }
-                Some(Name::External) => {
-                    write!(self, "{}", name);
-                }
-                Some(Name::Namespace(new_namespace)) => {
-                    return Some(new_namespace);
-                }
-                None => {
-                    error!(self.compiler, span, "No identifier found named: '{}'", name);
-                }
-            },
-        }
-        None
-    }
-
-    fn set_identifier(&mut self, name: &str, span: Span, ctx: Context, namespace: usize) {
-        match self.compiler.resolve_and_capture(name, ctx.frame) {
-            Ok(up) => {
-                self.write_slot(up.slot);
-            }
-
-            Err(()) => match self.compiler.namespaces[namespace].get(name).cloned() {
-                Some(Name::Global(slot)) => {
-                    self.write_global(slot);
-                }
-                _ => {
-                    error!(
-                        self.compiler,
-                        span,
-                        "Cannot assign '{}' in '{:?}'",
-                        name,
-                        self.compiler.file_from_namespace(namespace)
-                    );
-                }
-            },
-        }
-    }
-
-    fn outer_statement(&mut self, statement: &Statement, ctx: Context) {
-        use StatementKind::*;
-        self.compiler.panic = false;
-
-        match &statement.kind {
-            Use { .. }
-            | Blob { .. }
-            | Enum { .. }
-            | IsCheck { .. }
-            | EmptyStatement
-            | ExternalDefinition { .. }
-            | FromUse { .. } => return,
-
-            #[rustfmt::skip]
-            Definition { ident, value, .. } => {
-                self.set_identifier(&ident.name, statement.span, ctx, ctx.namespace);
-                write!(self, "=");
-                self.compiler.frames.push(Vec::new());
-                self.compiler.define("/expr/", statement.span);
-                // Only reachable form the outside so we know these frames
-                let ctx = Context { frame: self.compiler.frames.len() - 1, ..ctx };
-                self.expression(value, ctx);
-                self.compiler.frames.pop();
-            }
-
-            #[rustfmt::skip]
-            x => {
-                unreachable!("Not a valid outer statement {:?}", x)
-            }
-        }
-        write!(self, ";");
-    }
-
-    fn statement(&mut self, statement: &Statement, ctx: Context) {
-        use StatementKind::*;
-        self.compiler.panic = false;
-
-        match &statement.kind {
-            Use { .. } | Enum { .. } | FromUse { .. } | Blob { .. } | EmptyStatement => return,
-
-            IsCheck { .. } => {
-                error!(
-                    self.compiler,
-                    statement.span, "is-checks only valid in outer-scope"
-                );
-            }
-
-            #[rustfmt::skip]
-            Definition { ident, value, .. } => {
-                let slot = self.compiler.define(&ident.name, statement.span);
-                write!(self, "local");
-                self.write_slot(slot);
-                write!(self, "=");
-                self.expression(value, ctx);
-                self.compiler.activate(slot);
-            }
-
-            ExternalDefinition { .. } => {
-                error!(
-                    self.compiler,
-                    statement.span, "External definitions must lie in the outmost scope"
-                );
-            }
-
-            #[rustfmt::skip]
-            Assignment { target, value, kind } => {
-                if *kind == Op::Nop {
-                    match &target.kind {
-                        AssignableKind::Access(rest, field) => {
-                            // NOTE(ed): We have to write this, but we want it to degrade into a NOP
-                            // if we have a namespace. We could build the namespaces as a table.
-                            write!(self, "__ASSIGN_INDEX(");
-                            if let Some(namespace) = self.assignable(rest, ctx) {
-                                write!(self, ");");
-                                self.read_identifier(&field.name, statement.span, ctx, namespace);
-                                write!(self, "=");
-                                self.expression(value, ctx);
-                            } else {
-                                write!(self, ",");
-                                write!(self, "\"{}\"", field.name);
-                                write!(self, ",");
-                                self.expression(value, ctx);
-                                write!(self, ")");
-                            }
-                        }
-                        AssignableKind::Index(rest, index) => {
-                            write!(self, "__ASSIGN_INDEX(");
-                            self.assignable(rest, ctx);
-                            write!(self, ",");
-                            self.expression(index, ctx);
-                            write!(self, ",");
-                            self.expression(value, ctx);
-                            write!(self, ")");
-                        }
-                        _ => {
-                            self.assignable(target, ctx);
-                            write!(self, "=");
-                            self.expression(value, ctx);
-                        }
-                    }
-                } else {
-                    // TODO(ed): This code is really ugly... :(
-                    let op = match kind {
-                        Op::Nop => unreachable!(),
-                        Op::Add => ",",
-                        Op::Sub => "-",
-                        Op::Mul => "*",
-                        Op::Div => "/",
-                    };
-
-                    match &target.kind {
-                        AssignableKind::Access(rest, field) => {
-                            // NOTE(ed): We have to write this, but we want it to degrade into a NOP
-                            // if we have a namespace. We could build the namespaces as a table.
-                            write!(self, "do local tmp_ass =");
-                            if let Some(namespace) = self.assignable(rest, ctx) {
-                                write!(self, "nil ; end ;");
-                                self.read_identifier(&field.name, statement.span, ctx, namespace);
-                                write!(self, "=");
-                                if kind == &Op::Add {
-                                    write!(self, "__ADD(");
-                                }
-                                self.read_identifier(&field.name, statement.span, ctx, namespace);
-                                write!(self, "{}", op);
-                                self.expression(value, ctx);
-                                if kind == &Op::Add {
-                                    write!(self, ")");
-                                }
-                            } else {
-                                write!(self, ";");
-                                write!(self, "__ASSIGN_INDEX( tmp_ass, \"{}\",", field.name);
-                                if kind == &Op::Add {
-                                    write!(self, "__ADD(");
-                                }
-                                write!(self, "__INDEX( tmp_ass, \"{}\" ) {}", field.name, op);
-                                write!(self, "(");
-                                self.expression(value, ctx);
-                                write!(self, ")");
-                                write!(self, ")");
-                                if kind == &Op::Add {
-                                    write!(self, ")");
-                                }
-                                write!(self, ";");
-                                write!(self, "end");
-                            }
-                        }
-                        AssignableKind::Index(rest, index) => {
-                            write!(self, "do local tmp_ass =");
-                            self.assignable(rest, ctx);
-                            write!(self, ";");
-                            write!(self, "local tmp_expr =");
-                            self.expression(index, ctx);
-                            write!(self, ";");
-                            write!(self, "__ASSIGN_INDEX( tmp_ass, tmp_expr,");
-                            if kind == &Op::Add {
-                                write!(self, "__ADD(");
-                            }
-                            write!(self, "__INDEX( tmp_ass, tmp_expr ) {}", op);
-                            write!(self, "(");
-                            self.expression(value, ctx);
-                            write!(self, ")");
-                            write!(self, ")");
-                            if kind == &Op::Add {
-                                write!(self, ")");
-                            }
-                            write!(self, ";");
-                            write!(self, "end");
-                        }
-                        _ => {
-                            self.assignable(target, ctx);
-                            write!(self, "=");
-                            if kind == &Op::Add {
-                                write!(self, "__ADD(");
-                            }
-                            self.assignable(target, ctx);
-                            write!(self, op);
-                            self.expression(value, ctx);
-                            if kind == &Op::Add {
-                                write!(self, ")");
-                            }
-                        }
-                    }
-                }
-            }
-
-            StatementExpression { value } => {
-                write!(self, "__IDENTITY(");
-                self.expression(value, ctx);
-                write!(self, ")");
-            }
-
-            Block { statements } => {
-                // TODO(ed): Some of these blocks are wrong - but it should still work.
-                let s = self.compiler.frames.last().unwrap().len();
-                write!(self, "do");
-                for stmt in statements.iter() {
-                    self.statement(stmt, ctx);
-                }
-                write!(self, "end");
-                self.compiler.frames.last_mut().unwrap().truncate(s);
-            }
-
-            Loop { condition, body } => {
-                write!(self, "while");
-                self.expression(condition, ctx);
-                write!(self, "do");
-                self.loops.push(0);
-                write!(self, ";");
-                self.statement(body, ctx);
-                let l = self.loops.len();
-                if self.loops.pop().unwrap() > 0 {
-                    write!(self, "::CONTINUE_{}::", l);
-                    write!(self, ";");
-                }
-                write!(self, "end");
-                write!(self, ";");
-            }
-
-            Case { to_match, branches, fall_through } => {
-                // TODO(ed): This code cannot really be made better... Lua has no
-                // switch-statements.
-                write!(self, "local __case_tmp =");
-                self.expression(to_match, ctx);
-                // Solves the 0-branches case.
-                write!(self, "if false then");
-                write!(self, ";");
-                for CaseBranch { pattern: Identifier { name, .. }, variable, body } in
-                    branches.iter()
-                {
-                    write!(self, "elseif \"{}\" == __case_tmp[1] then", name);
-                    write!(self, ";");
-                    let ss = self.compiler.frames.last().unwrap().len();
-                    if let Some(Identifier { name, span }) = &variable {
-                        let slot = self.compiler.define(name, *span);
-                        self.compiler.activate(slot);
-                        write!(self, "local");
-                        self.write_slot(slot);
-                        write!(self, "= __case_tmp[2]");
-                        write!(self, ";");
-                    }
-                    self.statement(body, ctx);
-                    self.compiler.frames.last_mut().unwrap().truncate(ss);
-                }
-                write!(self, "else");
-                if let Some(fall_through) = fall_through {
-                    self.statement(fall_through, ctx);
-                } else {
-                    write!(
-                        self,
-                        "assert(false, \"Reached end of unreachable l{}\")",
-                        statement.span.line_start
-                    )
-                }
-                write!(self, ";");
-                write!(self, "end");
-                write!(self, ";");
-            }
-
-            If { condition, pass, fail } => {
-                write!(self, "if");
-                self.expression(condition, ctx);
-                write!(self, "then");
-                write!(self, ";");
-                self.statement(pass, ctx);
-                write!(self, "else");
-                write!(self, ";");
-                self.statement(fail, ctx);
-                write!(self, "end");
-                write!(self, ";");
-            }
-
-            Continue => {
-                write!(self, "goto");
-                let cont = self.loops.len();
-                *self.loops.last_mut().unwrap() += 1;
-                write!(self, "CONTINUE_{}", cont);
-                write!(self, ";");
-            }
-
-            Break => {
-                write!(self, "break");
-                write!(self, ";");
-            }
-
-            Unreachable {} => {
-                write!(self, "assert(false, \"unreachable\")");
-            }
-
-            Ret { value } => {
-                write!(self, "return");
-                self.expression(value, ctx);
-            }
-        }
-        write!(self, ";");
-    }
-
-    pub fn compile(&mut self, statement: &Statement, namespace: usize) {
-        let ctx = Context { namespace, frame: 0 };
-        self.outer_statement(&statement, ctx);
-    }
-
-    pub fn preamble(&mut self, _span: Span, _num_constants: usize) {
-        write!(self, include_str!("preamble.lua"));
-    }
-
-    pub fn postamble(&mut self, span: Span) {
-        let ctx = Context {
-            frame: self.compiler.frames.len() - 1,
-            namespace: 0,
+    let mut depth = 0;
+    for instruction in ir.iter() {
+        depth += match instruction {
+            IR::Else | IR::End => -1,
+            _ => 0,
         };
-        self.read_identifier("start", span, ctx, 0);
-        write!(self, "()");
-        write!(self, ";");
+
+        for _ in 0..depth {
+            write!(out, "  ");
+        }
+        match instruction {
+            IR::Nil(t) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = __NIL");
+            }
+            IR::Int(t, i) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = {}", i);
+            }
+            IR::Bool(t, b) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = {}", b);
+            }
+            IR::Add(t, a, b) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "__ADD(");
+                write!(out, "{}", a);
+                write!(out, ", ");
+                write!(out, "{}", b);
+                write!(out, ")");
+            }
+            IR::Sub(t, a, b) => bin_op(out, t, a, b, "-"),
+            IR::Mul(t, a, b) => bin_op(out, t, a, b, "*"),
+            IR::Div(t, a, b) => bin_op(out, t, a, b, "/"),
+
+            IR::Function(f, params) => {
+                write!(out, "local ");
+                write!(out, "function ");
+                write!(out, "{}", f);
+                write!(out, "(");
+                comma_sep(out, params);
+                write!(out, ")");
+                depth += 1;
+            }
+            IR::Neg(t, a) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "-");
+                write!(out, "{}", a);
+            }
+            IR::Copy(d, s) => {
+                write!(out, "local ");
+                write!(out, "{}", d);
+                write!(out, " = ");
+                write!(out, "{}", s);
+            }
+            IR::External(t, e) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, e);
+            }
+            IR::Call(t, f, args) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "{}", f);
+                write!(out, "(");
+                comma_sep(out, args);
+                write!(out, ")");
+            }
+            IR::Assert(v) => {
+                write!(out, "assert(");
+                write!(out, "{}", v);
+                write!(out, ", \":(\")");
+            }
+            IR::Str(t, s) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = \"{}\"", s);
+            }
+            IR::Float(t, f) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = {:?}", f);
+            }
+            IR::Equals(t, a, b) => bin_op(out, t, a, b, "=="),
+            IR::NotEquals(t, a, b) => bin_op(out, t, a, b, "~="),
+            IR::Greater(t, a, b) => bin_op(out, t, a, b, ">"),
+            IR::GreaterEqual(t, a, b) => bin_op(out, t, a, b, ">="),
+            IR::Less(t, a, b) => bin_op(out, t, a, b, "<"),
+            IR::LessEqual(t, a, b) => bin_op(out, t, a, b, "<="),
+            IR::In(t, a, b) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "__CONTAINS(");
+                write!(out, "{}", a);
+                write!(out, ", ");
+                write!(out, "{}", b);
+                write!(out, ")");
+            }
+
+            IR::Not(t, a) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "not ");
+                write!(out, "{}", a);
+            }
+
+            IR::List(t, exprs) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "__LIST{");
+                comma_sep(out, exprs);
+                write!(out, "}");
+            }
+
+            IR::Set(t, exprs) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "__SET{");
+                write!(
+                    out,
+                    "{}",
+                    exprs
+                        .iter()
+                        .map(|v| format!("[{}] = true", v))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                write!(out, "}");
+            }
+
+            IR::Dict(t, exprs) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "__DICT{");
+                write!(
+                    out,
+                    "{}",
+                    exprs
+                        .windows(2)
+                        .step_by(2)
+                        .map(|v| match v {
+                            [k, v] => {
+                                format!("[{}] = {}", k, v)
+                            }
+                            _ => unreachable!(),
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                write!(out, "}");
+            }
+
+            IR::Blob(t, fields) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "__BLOB{");
+                write!(
+                    out,
+                    "{}",
+                    fields
+                        .iter()
+                        .map(|(f, v)| format!("{} = {}", f, v))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                write!(out, "}");
+            }
+
+            IR::Tuple(t, exprs) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "__TUPLE{");
+                comma_sep(out, exprs);
+                write!(out, "}");
+            }
+
+            IR::Define(t) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "nil");
+            }
+            IR::Assign(t, a) => {
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "{}", a);
+            }
+            IR::If(a) => {
+                write!(out, "if ");
+                write!(out, "{}", a);
+                write!(out, " then");
+                depth += 1;
+            }
+            IR::Else => {
+                write!(out, "else");
+                depth += 1;
+            }
+            IR::End => {
+                write!(out, "end");
+            }
+            IR::Loop => {
+                write!(out, "while true do");
+                depth += 1;
+            }
+            IR::Break => {
+                write!(out, "break");
+            }
+            IR::Return(t) => {
+                write!(out, "return ");
+                write!(out, "{}", t);
+            }
+            IR::HaltAndCatchFire(msg) => {
+                write!(out, "__CRASH(\"{}\")()", msg);
+            }
+            IR::Variant(t, v, a) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "__VARIANT{");
+                write!(out, "\"{}\", {}", v, a);
+                write!(out, "}");
+            }
+            IR::Index(t, a, i) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "__INDEX(");
+                write!(out, "{}, {}", a, i);
+                write!(out, ")");
+            }
+            IR::AssignIndex(t, i, a) => {
+                write!(out, "__ASSIGN_INDEX(");
+                write!(out, "{}, {}, {}", t, i, a);
+                write!(out, ")");
+            }
+            IR::Access(t, a, f) => {
+                write!(out, "local ");
+                write!(out, "{}", t);
+                write!(out, " = ");
+                write!(out, "{}.{}", a, f);
+            }
+            IR::AssignAccess(t, f, c) => {
+                write!(out, "{}.{}", t, f);
+                write!(out, " = ");
+                write!(out, "{}", c);
+            }
+            IR::Label(l) => {
+                write!(out, "::{}::", l);
+            }
+            IR::Goto(l) => {
+                write!(out, "goto {}", l);
+            }
+        }
+        write!(out, "\n");
     }
 }

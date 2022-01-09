@@ -1,74 +1,31 @@
 use std::collections::{hash_map::Entry, HashMap};
 use std::io::Write;
 use sylt_common::error::Error;
-use sylt_common::{FileOrLib, Type, Value};
+use sylt_common::FileOrLib;
 use sylt_parser::statement::NameIdentifier;
-use sylt_parser::{Identifier, Span, StatementKind, AST};
+use sylt_parser::{Identifier, StatementKind, AST};
 
 mod dependency;
+mod intermediate;
 mod lua;
 mod ty;
 mod typechecker;
 
-type VarSlot = usize;
-
-#[derive(Debug, Clone)]
-struct Variable {
-    name: String,
-    slot: usize,
-    span: Span,
-
-    captured: bool,
-    active: bool,
-}
-
-impl Variable {
-    fn new(name: String, slot: usize, span: Span) -> Self {
-        Self { name, slot, span, captured: false, active: false }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-struct Context {
-    namespace: NamespaceID,
-    frame: usize,
-}
-
 type Namespace = HashMap<String, Name>;
-type ConstantID = usize;
 type NamespaceID = usize;
-type BlobID = usize;
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 enum Name {
-    External,
-    Global(ConstantID),
-    Blob(BlobID),
-    Enum(BlobID),
+    Name,
     Namespace(NamespaceID),
 }
-
-#[derive(Debug, Copy, Clone)]
-struct LoopFrame {
-    continue_addr: usize,
-    break_addr: usize,
-    stack_size: usize,
-}
-
-type Frame = Vec<Variable>;
 
 struct Compiler {
     namespace_id_to_file: HashMap<NamespaceID, FileOrLib>,
 
     namespaces: Vec<Namespace>,
 
-    frames: Vec<Frame>,
-
     panic: bool,
     errors: Vec<Error>,
-
-    constants: Vec<Value>,
-
-    values: HashMap<Value, usize>,
 }
 
 #[macro_export]
@@ -102,14 +59,8 @@ impl Compiler {
             namespace_id_to_file: HashMap::new(),
             namespaces: Vec::new(),
 
-            frames: Vec::new(),
-
             panic: false,
             errors: Vec::new(),
-
-            constants: Vec::new(),
-
-            values: HashMap::new(),
         }
     }
 
@@ -117,52 +68,8 @@ impl Compiler {
         self.namespace_id_to_file.get(&namespace).unwrap()
     }
 
-    fn constant(&mut self, value: Value) -> usize {
-        let slot = match self.values.entry(value.clone()) {
-            Entry::Vacant(e) => {
-                let slot = self.constants.len();
-                e.insert(slot);
-                self.constants.push(value);
-                slot
-            }
-            Entry::Occupied(e) => *e.get(),
-        };
-        slot
-    }
-
-    fn resolve_and_capture(&mut self, name: &str, frame: usize) -> Result<Variable, ()> {
-        // Frame 0 has globals which cannot be captured.
-        if frame == 0 {
-            return Err(());
-        }
-
-        for var in self.frames[frame].iter().rev() {
-            if &var.name == name && var.active {
-                return Ok(var.clone());
-            }
-        }
-
-        self.resolve_and_capture(name, frame - 1)
-    }
-
-    fn define(&mut self, name: &str, span: Span) -> VarSlot {
-        let frame = &mut self.frames.last_mut().unwrap();
-        let slot = frame.len();
-        let var = Variable::new(name.to_string(), slot, span);
-        frame.push(var);
-        slot
-    }
-
-    fn activate(&mut self, slot: VarSlot) {
-        self.frames.last_mut().unwrap()[slot].active = true;
-    }
-
     fn compile(mut self, lua_file: &mut dyn Write, tree: AST) -> Result<(), Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
-        let name = "/preamble/";
-        let start_span = tree.modules[0].1.span;
-        self.frames.push(Vec::new());
-        self.define(name, start_span);
 
         self.extract_globals(&tree);
 
@@ -183,24 +90,16 @@ impl Compiler {
             return Err(self.errors);
         }
 
-        typechecker::solve(&mut statements, &self.namespace_id_to_file)?;
+        let typechecker = typechecker::solve(&mut statements, &self.namespace_id_to_file)?;
 
-        let mut lua_compiler = lua::LuaCompiler::new(&mut self, lua_file);
+        let ir = intermediate::compile(&typechecker, &statements);
 
-        lua_compiler.preamble(Span::zero(0), 0);
-        for (statement, namespace) in statements.iter() {
-            lua_compiler.compile(statement, *namespace);
-        }
-        lua_compiler.postamble(Span::zero(0));
-
-        if !self.errors.is_empty() {
-            return Err(self.errors);
-        }
+        lua::generate(&ir, lua_file);
 
         Ok(())
     }
 
-    fn extract_globals(&mut self, tree: &AST) -> usize {
+    fn extract_globals(&mut self, tree: &AST) {
         // Find all files and map them to their namespace
         let mut include_to_namespace = HashMap::new();
         for (path, _) in tree.modules.iter() {
@@ -218,8 +117,8 @@ impl Compiler {
             .map(|(a, b): (&FileOrLib, &usize)| (*b, (*a).clone()))
             .collect();
 
-        let mut num_constants = 0;
         let mut from_statements = Vec::new();
+
         // Find all globals in all files and declare them. The globals are
         // initialized at a later stage.
         for (path, module) in tree.modules.iter() {
@@ -229,21 +128,11 @@ impl Compiler {
             for statement in module.statements.iter() {
                 use StatementKind::*;
                 let (name, ident_name, span) = match &statement.kind {
-                    Blob { name, .. } => {
-                        let slot =
-                            self.constant(Value::Ty(Type::Blob(name.clone(), Default::default())));
-                        (Name::Blob(slot), name.clone(), statement.span)
-                    }
                     FromUse { .. } => {
                         // We cannot resolve this here since the namespace
                         // might not be loaded yet. We process these after.
                         from_statements.push(statement.clone());
                         continue;
-                    }
-                    Enum { name, .. } => {
-                        let slot =
-                            self.constant(Value::Ty(Type::Enum(name.clone(), Default::default())));
-                        (Name::Enum(slot), name.clone(), statement.span)
                     }
                     Use { name, file, .. } => {
                         let ident = match name {
@@ -253,17 +142,11 @@ impl Compiler {
                         let other = include_to_namespace[file];
                         (Name::Namespace(other), ident.name.clone(), ident.span)
                     }
-                    Definition { ident: Identifier { name, .. }, .. } => {
-                        let var = self.define(name, statement.span);
-                        self.activate(var);
-                        num_constants += 1;
-                        (Name::Global(var), name.clone(), statement.span)
-                    }
-                    ExternalDefinition { ident: Identifier { name, .. }, .. } => {
-                        let var = self.define(name, statement.span);
-                        self.activate(var);
-                        num_constants += 1;
-                        (Name::External, name.clone(), statement.span)
+                    Enum { name, .. }
+                    | Blob { name, .. }
+                    | Definition { ident: Identifier { name, .. }, .. }
+                    | ExternalDefinition { ident: Identifier { name, .. }, .. } => {
+                        (Name::Name, name.clone(), statement.span)
                     }
 
                     // Handled later since we need type information.
@@ -324,7 +207,6 @@ impl Compiler {
                 _ => unreachable!(),
             }
         }
-        num_constants
     }
 }
 
