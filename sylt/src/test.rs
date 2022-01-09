@@ -214,7 +214,7 @@ fn program_tests() {
 
     writeln!(
         std::io::stdout().lock(),
-        "= RUNNING {} TESTS =",
+        "= RUNNING {} PROGRAM TESTS =",
         tests.len()
     )
     .unwrap();
