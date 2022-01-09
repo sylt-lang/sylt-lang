@@ -463,7 +463,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Continue, ..] => (ctx.skip(1), Continue),
         [T::Unreachable, ..] => (ctx.skip(1), Unreachable),
 
-        // `ret <expression>`
+        // `ret [<expression>]`
         [T::Ret, ..] => {
             let ctx = ctx.skip(1);
             let (ctx, value) = match expression(ctx) {
