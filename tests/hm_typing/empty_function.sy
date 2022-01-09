@@ -1,5 +1,5 @@
 f :: fn -> int do end
 
 start :: fn do end
-// error: $Mismatch { .. }
+// error: $Mismatch
 

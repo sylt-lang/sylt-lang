@@ -3,4 +3,4 @@ start :: fn do
 	b :: a[0] + 1
 	b :: a[1] + 1
 end
-// error: $BinOp { lhs: Type::String, rhs: Type::Int, .. }
+// error: $BinOp

@@ -5,5 +5,5 @@ start :: fn do
     a
 end
 
-// error: Error::CompileError { .. }
-// error: Error::CompileError { .. }
+// error: Dependency cycle
+// error: Dependency cycle

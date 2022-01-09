@@ -9,4 +9,4 @@ start :: fn do
     f' print
 end
 
-// error: $Violating(..)
+// error: $Violating

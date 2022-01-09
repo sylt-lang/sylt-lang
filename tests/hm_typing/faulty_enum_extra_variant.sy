@@ -14,4 +14,4 @@ start :: fn do
     end
 end
 
-// error: $ExtraVariants(..)
+// error: $ExtraVariants

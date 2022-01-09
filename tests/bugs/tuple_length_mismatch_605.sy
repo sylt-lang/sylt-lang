@@ -1,4 +1,4 @@
 start :: fn do
     ((1,) in {(1,2)}) <=> true
 end
-// error: $TupleLengthMismatch {..}
+// error: $TupleLengthMismatch

@@ -1,4 +1,4 @@
 start :: fn do
     f : fn -> int = fn a: int -> int do 1 end
 end
-// error: $WrongArity {..}
+// error: $WrongArity

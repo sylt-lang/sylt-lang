@@ -15,4 +15,4 @@ start :: fn do
     q = b
 end
 
-// error: $Mismatch { .. }
+// error: $Mismatch

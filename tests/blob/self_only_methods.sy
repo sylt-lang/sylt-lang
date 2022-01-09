@@ -15,4 +15,4 @@ start :: fn do
     a.f() <=> 2
 end
 
-// error: $UnresolvedName(_)
+// error: $UnresolvedName

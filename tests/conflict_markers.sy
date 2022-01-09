@@ -6,4 +6,4 @@ start :: fn do
     print extern_test(5.0)
 >>>>>>> 2
 end
-// error: Error::GitConflictError { span: Span { line_start: 3 , .. }, .. }
+// error: GitConflictError

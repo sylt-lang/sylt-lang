@@ -7,4 +7,4 @@ start :: fn do
     f' "", [1, 2, 3]
 end
 
-// error: $Mismatch { .. }
+// error: $Mismatch

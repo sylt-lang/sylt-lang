@@ -4,4 +4,4 @@ start :: fn do
     loop 1 + 1 * 2 do
     end
 end
-// error: $Mismatch { .. }
+// error: $Mismatch

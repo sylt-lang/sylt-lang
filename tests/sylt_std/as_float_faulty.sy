@@ -3,4 +3,5 @@ from std use as_float
 start :: fn do
     as_float("a")
 end
-// error: $Mismatch { .. }
+
+// error: $A 'int' cannot be a 'str'

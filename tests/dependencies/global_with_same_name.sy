@@ -1,3 +1,3 @@
 a :: 0
 a :: 0
-// error: Error::CompileError { .. }
+// error: A global variable with the name 'a' already exists

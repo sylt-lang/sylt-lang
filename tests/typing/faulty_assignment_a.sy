@@ -3,4 +3,4 @@ start :: fn do
     a = 3
     a = "abc"
 end
-// error: $Mismatch { .. }
+// error: $Mismatch

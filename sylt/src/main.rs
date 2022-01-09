@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use sylt::{Args, Options};
 
 fn main() -> Result<(), String> {
@@ -12,7 +13,7 @@ fn main() -> Result<(), String> {
     }
 
     let errs = if args.format {
-        match sylt::formatter::format(&args) {
+        match sylt::formatter::format(&PathBuf::from(args.args.first().unwrap())) {
             Ok(formatted) => {
                 print!("{}", formatted);
                 Vec::new()

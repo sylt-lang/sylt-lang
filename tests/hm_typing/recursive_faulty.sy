@@ -8,4 +8,4 @@ start :: fn do
     print' a
 end
 
-// error: $Mismatch { .. }
+// error: $Mismatch

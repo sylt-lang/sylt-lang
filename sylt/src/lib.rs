@@ -9,6 +9,9 @@ use sylt_common::error::Error;
 
 pub mod formatter;
 
+#[cfg(test)]
+pub mod test;
+
 pub fn read_file(path: &Path) -> Result<String, Error> {
     std::fs::read_to_string(path).map_err(|_| Error::FileNotFound(path.to_path_buf()))
 }
@@ -124,97 +127,4 @@ pub fn path_to_module(current_file: &Path, module: &str) -> PathBuf {
     res.pop();
     res.push(format!("{}.sy", module));
     res
-}
-
-#[macro_export]
-macro_rules! assert_errs {
-    ($result:expr, $expect:pat) => {
-        let errs = $result.err().unwrap_or(Vec::new());
-
-        #[allow(unused_imports)]
-        use sylt_common::error::Error;
-        #[allow(unused_imports)]
-        use sylt_tokenizer::Span;
-        if !matches!(errs.as_slice(), $expect) {
-            eprintln!("===== Got =====");
-            for err in errs {
-                eprint!("{}", err);
-            }
-            eprintln!("===== Expect =====");
-            eprint!("{}\n\n", stringify!($expect));
-            assert!(false);
-        }
-    };
-}
-
-#[cfg(test)]
-mod lua {
-    #[macro_export]
-    macro_rules! test_file_lua {
-        ($fn:ident, $path:literal, $print:expr, $errs:pat, $any_runtime_errors:expr) => {
-            #[test]
-            fn $fn() {
-                use std::process::{Command, Stdio};
-                #[allow(unused_imports)]
-                #[allow(unused_imports)]
-                use sylt_common::error::TypeError;
-                #[allow(unused_imports)]
-                use sylt_common::Type;
-
-                let file = format!("../{}", $path);
-                let mut args = $crate::Args::default();
-                args.args = vec![file.clone()];
-                args.verbosity = if $print { 1 } else { 0 };
-
-                let mut child = Command::new("lua")
-                    .stdin(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .spawn()
-                    .expect(concat!("Failed to start lua, testing:", $path));
-
-                let mut stdin = child.stdin.take().unwrap();
-                let res = $crate::compile_with_reader_to_writer(
-                    &args,
-                    $crate::read_file,
-                    &mut stdin,
-                );
-
-                drop(stdin); // Close stdin so the child can do its thing.
-
-                println!("Expect error: {}", $any_runtime_errors);
-                println!("Got error: {:?}", res.is_err());
-                if $any_runtime_errors {
-                    assert_errs!(res, []);
-                } else {
-                    assert_errs!(res, $errs);
-                }
-
-                let output = child.wait_with_output().unwrap();
-                // HACK(ed): Status is always 0 when piping to STDIN, atleast on my version of lua,
-                // so we check stderr - which is a bad idea.
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let success = output.status.success() && stderr.is_empty();
-                println!("Success: {}", success);
-                if $any_runtime_errors {
-                    assert!(
-                        !success,
-                        "Program ran to completion when it should crash\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
-                        stdout,
-                        stderr
-                    );
-                } else {
-                    assert!(
-                        success,
-                        "Failed when it should succeed\n:STDOUT:\n{}\n\n:STDERR:\n{}\n",
-                        stdout,
-                        stderr
-                    );
-                }
-            }
-        };
-    }
-
-    sylt_macro::find_tests!(test_file_lua);
 }

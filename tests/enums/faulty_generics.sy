@@ -9,4 +9,4 @@ start :: fn do
     a = Maybe.Other "abc"
 end
 
-// error: $Mismatch { .. }
+// error: $Mismatch

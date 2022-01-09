@@ -2,4 +2,4 @@ start :: fn do
     a :: {1, 2, 3}
     "123" in a <=> true
 end
-// error: $Mismatch { .. }
+// error: $Mismatch

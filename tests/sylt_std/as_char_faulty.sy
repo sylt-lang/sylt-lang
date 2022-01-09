@@ -3,4 +3,4 @@ from std use as_char
 start :: fn do
     as_char(0)
 end
-// error: $Mismatch { .. }
+// error: $A 'str' cannot be a 'int'
