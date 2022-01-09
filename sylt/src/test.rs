@@ -140,7 +140,7 @@ fn find_and_parse_tests(directory: &Path) -> Vec<TestSettings> {
                 continue;
             }
             let settings = parse_test_settings(std::fs::read_to_string(&path).unwrap());
-            tests.push(TestSettings { path: path, ..settings });
+            tests.push(TestSettings { path, ..settings });
         }
     }
     tests
