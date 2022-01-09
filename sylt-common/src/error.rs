@@ -183,6 +183,8 @@ pub enum TypeError {
     UnknownVariant(String, String),
     MissingVariants(String, Vec<String>),
     ExtraVariants(String, Vec<String>),
+
+    ExpectVoid(Type),
 }
 
 // TODO(ed): Switch to spans for the whole compiler?
@@ -420,6 +422,14 @@ impl fmt::Display for TypeError {
                     write!(f, "{} + {}\n", INDENT, var)?;
                 }
                 Ok(())
+            }
+
+            TypeError::ExpectVoid(ty) => {
+                write!(
+                    f,
+                    "Only void types can unify with void - '{}' is not void",
+                    ty
+                )
             }
         }
     }

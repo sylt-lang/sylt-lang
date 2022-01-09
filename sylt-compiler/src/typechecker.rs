@@ -146,6 +146,8 @@ enum Constraint {
     Enum,
     Variant(String, TyID),
     TotalEnum(BTreeSet<String>),
+
+    Variable,
 }
 
 pub struct TypeChecker {
@@ -448,6 +450,7 @@ impl TypeChecker {
 
             Resolved(ty) => match ty {
                 RuntimeType::Void => Type::Void,
+                RuntimeType::Nil => Type::Nil,
                 RuntimeType::Unknown => Type::Unknown,
                 RuntimeType::Int => Type::Int,
                 RuntimeType::Float => Type::Float,
@@ -540,7 +543,8 @@ impl TypeChecker {
                 }
             }
 
-            StatementKind::Ret { value } => Ok(Some(self.expression(value, ctx)?)),
+            StatementKind::Ret { value: Some(value) } => Ok(Some(self.expression(value, ctx)?)),
+            StatementKind::Ret { value: None } => Ok(Some(self.push_type(Type::Void))),
 
             StatementKind::StatementExpression { value } => {
                 self.expression(value, ctx)?;
@@ -1205,7 +1209,7 @@ impl TypeChecker {
             ExpressionKind::Float(_) => Ok(self.push_type(Type::Float)),
             ExpressionKind::Str(_) => Ok(self.push_type(Type::Str)),
             ExpressionKind::Bool(_) => Ok(self.push_type(Type::Bool)),
-            ExpressionKind::Nil => Ok(self.push_type(Type::Void)),
+            ExpressionKind::Nil => Ok(self.push_type(Type::Nil)),
         }?;
         expression.ty = Some(res);
         Ok(res)
@@ -1244,6 +1248,7 @@ impl TypeChecker {
                 };
 
                 let expression_ty = self.expression(value, ctx)?;
+                self.add_constraint(defined_ty, span, Constraint::Variable);
                 self.unify(span, ctx, expression_ty, defined_ty)?;
 
                 if !is_function {
@@ -1309,6 +1314,7 @@ impl TypeChecker {
             Type::Unknown => RuntimeType::Unknown,
             Type::Ty => RuntimeType::Ty,
             Type::Void => RuntimeType::Void,
+            Type::Nil => RuntimeType::Nil,
             Type::Int => RuntimeType::Int,
             Type::Float => RuntimeType::Float,
             Type::Bool => RuntimeType::Bool,
@@ -1529,6 +1535,17 @@ impl TypeChecker {
                         vars
                     ),
                 },
+
+                Constraint::Variable => match self.find_type(a) {
+                    Type::Void => err_type_error!(
+                        self,
+                        span,
+                        TypeError::Exotic,
+                        "The `void` has no values and cannot be put in a variable"
+                    ),
+
+                    _ => Ok(()),
+                },
             }
             .help(self, *original_span, "Requirement came from".to_string())?
         }
@@ -1586,12 +1603,12 @@ impl TypeChecker {
 
         match (self.find_type(a), self.find_type(b)) {
             (_, Type::Unknown) => self.find_node_mut(b).ty = self.find_type(a),
-
             (Type::Unknown, _) => self.find_node_mut(a).ty = self.find_type(b),
 
             _ => match (self.find_type(a), self.find_type(b)) {
                 (Type::Ty, Type::Ty) => {}
                 (Type::Void, Type::Void) => {}
+                (Type::Nil, Type::Nil) => {}
                 (Type::Int, Type::Int) => {}
                 (Type::Float, Type::Float) => {}
                 (Type::Bool, Type::Bool) => {}
@@ -1639,7 +1656,8 @@ impl TypeChecker {
                         self.sub_unify(span, ctx, *a, *b, seen)
                             .help_no_span(format!("While checking argument #{}", i))?;
                     }
-                    self.sub_unify(span, ctx, a_ret, b_ret, seen)?;
+                    self.sub_unify(span, ctx, a_ret, b_ret, seen)
+                        .help_no_span("While checking return type".into())?;
                 }
 
                 (Type::Blob(a_blob, a_fields), Type::Blob(b_blob, b_fields)) => {
@@ -1780,6 +1798,7 @@ impl TypeChecker {
                         C::Enum => C::Enum,
                         C::Variant(v, x) => C::Variant(v.clone(), *x),
                         C::TotalEnum(x) => C::TotalEnum(x.clone()),
+                        C::Variable => C::Variable,
                     },
                     *span,
                 )
@@ -1792,6 +1811,7 @@ impl TypeChecker {
             | Type::Unknown
             | Type::Ty
             | Type::Void
+            | Type::Nil
             | Type::Int
             | Type::Float
             | Type::Bool

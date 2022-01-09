@@ -567,11 +567,12 @@ pub fn type_assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeAssignable> 
 
 /// Parse a [Type] definition, e.g. `fn int, int, bool -> bool`.
 pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
-    use RuntimeType::{Bool, Float, Int, String, Unknown, Void};
+    use RuntimeType::{Bool, Float, Int, Nil, String, Unknown, Void};
     use TypeKind::*;
     let span = ctx.span();
     let (ctx, kind) = match ctx.token() {
         T::VoidType => (ctx.skip(1), Resolved(Void)),
+        T::Nil => (ctx.skip(1), Resolved(Nil)),
         T::IntType => (ctx.skip(1), Resolved(Int)),
         T::FloatType => (ctx.skip(1), Resolved(Float)),
         T::BoolType => (ctx.skip(1), Resolved(Bool)),
@@ -1180,6 +1181,7 @@ mod test {
         use TypeKind::*;
 
         test!(parse_type, type_void: "void" => Resolved(RT::Void));
+        test!(parse_type, type_nil: "nil" => Resolved(RT::Nil));
         test!(parse_type, type_int: "int" => Resolved(RT::Int));
         test!(parse_type, type_float: "float" => Resolved(RT::Float));
         test!(parse_type, type_str: "str" => Resolved(RT::String));
@@ -1335,7 +1337,10 @@ impl PrettyPrint for Statement {
             }
             SK::Ret { value } => {
                 write!(f, "<Ret>\n")?;
-                value.pretty_print(f, indent + 1)?;
+                match value {
+                    Some(value) => value.pretty_print(f, indent + 1)?,
+                    _ => {}
+                }
                 return Ok(());
             }
             SK::Block { statements } => {

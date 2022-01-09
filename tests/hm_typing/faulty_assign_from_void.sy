@@ -1,0 +1,6 @@
+start :: fn do
+    f :: fn do end
+    q :: f'
+end
+
+// error: $Exotic
