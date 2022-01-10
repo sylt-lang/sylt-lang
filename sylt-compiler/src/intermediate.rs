@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use sylt_parser::{
     expression::ComparisonKind, Assignable, AssignableKind, CaseBranch, Expression, ExpressionKind,
@@ -7,7 +7,7 @@ use sylt_parser::{
 
 use crate::{typechecker::TypeChecker, NamespaceID};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub struct Var(pub usize);
 
 impl Display for Var {
@@ -775,4 +775,74 @@ pub(crate) fn compile(
     let tmp = gen.var();
     code.push(IR::Call(tmp, start, Vec::new()));
     code
+}
+
+pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
+    let mut table = HashMap::new();
+    for op in ops {
+        match op {
+            IR::Nil(_)
+            | IR::Int(_, _)
+            | IR::Float(_, _)
+            | IR::Str(_, _)
+            | IR::Bool(_, _)
+            | IR::Loop
+            | IR::Break
+            | IR::Else
+            | IR::End
+            | IR::External(_, _)
+            | IR::Function(_, _)
+            | IR::Label(_)
+            | IR::Goto(_)
+            | IR::Define(_)
+            | IR::HaltAndCatchFire(_) => {}
+
+            IR::Add(_, a, b)
+            | IR::Sub(_, a, b)
+            | IR::Mul(_, a, b)
+            | IR::Div(_, a, b)
+            | IR::Equals(_, a, b)
+            | IR::NotEquals(_, a, b)
+            | IR::Greater(_, a, b)
+            | IR::GreaterEqual(_, a, b)
+            | IR::Less(_, a, b)
+            | IR::LessEqual(_, a, b)
+            | IR::Index(_, a, b)
+            | IR::In(_, a, b)
+            | IR::AssignIndex(_, a, b) => {
+                *table.entry(*a).or_insert(0) += 1;
+                *table.entry(*b).or_insert(0) += 1;
+            }
+            IR::Neg(_, a)
+            | IR::Copy(_, a)
+            | IR::Not(_, a)
+            | IR::Assert(a)
+            | IR::Variant(_, _, a)
+            | IR::Access(_, a, _)
+            | IR::AssignAccess(_, _, a)
+            | IR::Assign(_, a)
+            | IR::Return(a)
+            | IR::If(a) => {
+                *table.entry(*a).or_insert(0) += 1;
+            }
+
+            IR::Call(_, a, bs) => {
+                *table.entry(*a).or_insert(0) += 1;
+                for b in bs.iter() {
+                    *table.entry(*b).or_insert(0) += 1;
+                }
+            }
+            IR::List(_, xs) | IR::Set(_, xs) | IR::Dict(_, xs) | IR::Tuple(_, xs) => {
+                for x in xs.iter() {
+                    *table.entry(*x).or_insert(0) += 1;
+                }
+            }
+            IR::Blob(_, blob_vars) => {
+                for (_, x) in blob_vars.iter() {
+                    *table.entry(*x).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+    table
 }

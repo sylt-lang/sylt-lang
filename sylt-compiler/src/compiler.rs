@@ -94,6 +94,9 @@ impl Compiler {
 
         let ir = intermediate::compile(&typechecker, &statements);
 
+        let usage_count = intermediate::count_usages(&ir);
+        dbg!(usage_count);
+
         lua::generate(&ir, lua_file);
 
         Ok(())
