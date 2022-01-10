@@ -1,0 +1,22 @@
+use std
+
+Enum :: enum
+    A,
+end
+
+f :: fn a do
+    case a do
+        A do
+
+        end
+        B do
+
+        end
+    end
+end
+
+start :: fn do
+    f' Enum.A
+end
+
+// error: Enum 'Enum' doesn't have variant 'A'
