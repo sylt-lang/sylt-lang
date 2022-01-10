@@ -19,4 +19,4 @@ start :: fn do
     f' Enum.A
 end
 
-// error: Enum 'Enum' doesn't have variant 'A'
+// error: Enum 'Enum' doesn't have variant 'B'

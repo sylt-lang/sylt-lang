@@ -1481,9 +1481,9 @@ impl TypeChecker {
                     Type::Unknown => Ok(()),
 
                     Type::Enum(enum_name, variants) => match (variants.get(var), maybe_v_b) {
-                        (Some(v_b), Some(v_a)) => self.unify(span, ctx, *v_a, *v_b).map(|_| ()),
-                        (None, Some(_)) => Ok(()),
-                        (_, None) => {
+                        (Some(_), None) => Ok(()),
+                        (Some(v_a), Some(v_b)) => self.unify(span, ctx, *v_a, *v_b).map(|_| ()),
+                        (None, _) => {
                             err_type_error!(
                                 self,
                                 span,
