@@ -93,11 +93,9 @@ impl Compiler {
         let typechecker = typechecker::solve(&mut statements, &self.namespace_id_to_file)?;
 
         let ir = intermediate::compile(&typechecker, &statements);
-
         let usage_count = intermediate::count_usages(&ir);
-        dbg!(usage_count);
 
-        lua::generate(&ir, lua_file);
+        lua::generate(&ir, &usage_count, lua_file);
 
         Ok(())
     }

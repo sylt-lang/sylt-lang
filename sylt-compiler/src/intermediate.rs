@@ -39,7 +39,6 @@ pub enum IR {
     Mul(Var, Var, Var),
     Div(Var, Var, Var),
     Neg(Var, Var),
-    Copy(Var, Var),
 
     Not(Var, Var),
 
@@ -248,7 +247,7 @@ impl<'a> IRCodeGen<'a> {
             ExpressionKind::Get(ass) => {
                 let (code, source) = self.assignable(ass, ctx);
                 let dest = self.var();
-                ([code, vec![IR::Copy(dest, source)]].concat(), dest)
+                ([code, vec![IR::Assign(dest, source)]].concat(), dest)
             }
             ExpressionKind::Comparison(a, op, b) => {
                 let (aops, a) = self.expression(&a, ctx);
@@ -814,7 +813,6 @@ pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
                 *table.entry(*b).or_insert(0) += 1;
             }
             IR::Neg(_, a)
-            | IR::Copy(_, a)
             | IR::Not(_, a)
             | IR::Assert(a)
             | IR::Variant(_, _, a)
