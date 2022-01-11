@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use sylt_common::error::{Error, Helper, TypeError};
 use sylt_common::{FileOrLib, TyID, Type as RuntimeType};
-use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     expression::ComparisonKind, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
     Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeAssignable,
@@ -689,10 +688,7 @@ impl TypeChecker {
         let span = statement.span;
         match &statement.kind {
             StatementKind::Use { name, file, .. } => {
-                let ident = match name {
-                    NameIdentifier::Implicit(ident) => ident,
-                    NameIdentifier::Alias(ident) => ident,
-                };
+                let ident = name.ident();
                 let other = self.file_to_namespace[file];
                 self.globals
                     .insert((ctx.namespace, ident.name.clone()), Name::Namespace(other));
