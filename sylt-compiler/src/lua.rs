@@ -32,7 +32,7 @@ macro_rules! iis {
                 0 => {},
                 1 => $self.define(*var, value),
                 _ => {
-                    write!($self.out, "local {} = {}", var, value);
+                    write!($self.out, "local {} = {}", var.format(), value);
                 }
             }
         }
@@ -45,7 +45,7 @@ macro_rules! iis {
                 0 => {},
                 1 => $self.define(*var, value),
                 _ => {
-                    write!($self.out, "local {} = {}", var, value);
+                    write!($self.out, "local {} = {}", var.format(), value);
                 }
             }
         }
@@ -73,7 +73,7 @@ impl<'a, 'b> Generator<'a, 'b> {
     fn expand(&mut self, var: &Var) -> String {
         match self.lut.get(var) {
             Some(var) => var.into(),
-            None => var.to_string(),
+            None => var.format(),
         }
     }
 
@@ -127,7 +127,7 @@ impl<'a, 'b> Generator<'a, 'b> {
                     "__SET{{ {} }}",
                     exprs
                         .iter()
-                        .map(|v| format!("[{}] = true", v))
+                        .map(|v| format!("[{}] = true", self.expand(v)))
                         .collect::<Vec<_>>()
                         .join(", ")
                 ),
@@ -173,6 +173,7 @@ impl<'a, 'b> Generator<'a, 'b> {
                 IR::Function(f, params) => {
                     write!(self.out, "local ");
                     write!(self.out, "function ");
+                    let f = self.expand(f);
                     write!(self.out, "{}", f);
                     write!(self.out, "(");
                     write!(
@@ -180,7 +181,7 @@ impl<'a, 'b> Generator<'a, 'b> {
                         "{}",
                         params
                             .iter()
-                            .map(|v| format!("{}", v))
+                            .map(|v| v.format())
                             .collect::<Vec<_>>()
                             .join(", ")
                     );
@@ -189,6 +190,7 @@ impl<'a, 'b> Generator<'a, 'b> {
                 }
 
                 IR::External(t, e) => {
+                    let t = self.expand(t);
                     write!(self.out, "{}", t);
                     write!(self.out, " = ");
                     write!(self.out, e);
@@ -196,8 +198,10 @@ impl<'a, 'b> Generator<'a, 'b> {
 
                 IR::Call(t, f, args) => {
                     write!(self.out, "local ");
+                    let t = self.expand(t);
                     write!(self.out, "{}", t);
                     write!(self.out, " = ");
+                    let f = self.expand(f);
                     write!(self.out, "{}", f);
                     let args = self.comma_sep(args).to_string();
                     write!(self.out, "({})", args);
@@ -211,6 +215,7 @@ impl<'a, 'b> Generator<'a, 'b> {
                 IR::Define(t) => {
                     if self.usage_count.get(t).unwrap_or(&0) > &0 {
                         write!(self.out, "local ");
+                        let t = self.expand(t);
                         write!(self.out, "{}", t);
                         write!(self.out, " = ");
                         write!(self.out, "nil");
@@ -251,6 +256,7 @@ impl<'a, 'b> Generator<'a, 'b> {
 
                 IR::Copy(t, a) => {
                     if self.usage_count.get(t).unwrap_or(&0) > &0 {
+                        let t = self.expand(t);
                         let a = self.expand(a);
                         write!(self.out, "local {} = {}", t, a);
                     }
@@ -260,20 +266,23 @@ impl<'a, 'b> Generator<'a, 'b> {
                 IR::Assign(t, a) => {
                     if self.usage_count.get(t).unwrap_or(&0) > &0 {
                         let a = self.expand(a);
+                        let t = self.expand(t);
                         write!(self.out, "{} = {}", t, a);
                     }
                 }
                 IR::AssignIndex(t, i, a) => {
                     if self.usage_count.get(t).unwrap_or(&0) > &0 {
+                        let a = self.expand(a);
+                        let i = self.expand(i);
+                        let t = self.expand(t);
                         write!(self.out, "__ASSIGN_INDEX({}, {}, {})", t, i, a);
                     }
                 }
                 IR::AssignAccess(t, f, c) => {
                     if self.usage_count.get(t).unwrap_or(&0) > &0 {
-                        let t = self.expand(t).to_string();
-                        write!(self.out, "{}.{}", t, f);
-                        write!(self.out, " = ");
-                        write!(self.out, "{}", c);
+                        let t = self.expand(t);
+                        let c = self.expand(c);
+                        write!(self.out, "{}.{} = {}", t, f, c);
                     }
                 }
 

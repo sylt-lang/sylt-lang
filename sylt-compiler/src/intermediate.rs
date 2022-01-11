@@ -10,11 +10,11 @@ use crate::{typechecker::TypeChecker, NamespaceID};
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub struct Var(pub usize);
 
-impl Display for Var {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Var(n) = self;
-        write!(f, "V{}", n)
+impl Var {
+    pub fn format(self) -> String {
+        format!("V{}", self.0)
     }
+
 }
 
 #[derive(Debug, Clone, Copy)]
