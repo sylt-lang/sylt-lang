@@ -782,6 +782,9 @@ pub(crate) fn compile(
     code
 }
 
+// TODO(ed): We could remove more dead-code if we built a dependency-graph
+// and removed all paths without side-effects, since they don't have
+// an observable effect.
 pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
     let mut table = HashMap::new();
     for op in ops {
