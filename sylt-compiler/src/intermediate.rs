@@ -494,8 +494,14 @@ impl<'a> IRCodeGen<'a> {
                 namespace: ctx.namespace,
                 var,
             });
-            let (code, f_var) = self.expression(&value, ctx);
-            [vec![IR::Define(var)], code, vec![IR::Assign(var, f_var)]].concat()
+            let (mut code, _) = self.expression(&value, ctx);
+            if let IR::Function(_, args) = &code[0] {
+                code[0] = IR::Function(var, args.clone());
+            } else {
+                unreachable!();
+            }
+
+            code
         } else {
             let (code, var) = self.expression(&value, ctx);
             self.variables.push(Variable {
@@ -790,13 +796,13 @@ pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
             | IR::Else
             | IR::End
             | IR::External(_, _)
-            | IR::Function(_, _)
             | IR::Label(_)
             | IR::Goto(_)
             | IR::HaltAndCatchFire(_) => {}
 
             // We cannot optimize things that are defined.
-            IR::Define(a) => {
+            IR::Function(a, _)
+            | IR::Define(a) => {
                 *table.entry(*a).or_insert(0) += 2;
             }
 
