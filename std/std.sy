@@ -28,6 +28,7 @@ clamp: fn<N: Num> *N, *N, *N -> *N : external
 min: fn<N: Num> *N, *N -> *N : external
 max: fn<N: Num> *N, *N -> *N : external
 rem: fn<N: Num> *N, *N -> *N : external
+div: fn int, int -> int : external
 pow: fn float, float -> float : external
 angle: fn (float, float) -> float : external
 magnitude_squared: fn (float, float) -> float : external

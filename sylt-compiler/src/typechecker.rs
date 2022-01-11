@@ -628,7 +628,7 @@ impl TypeChecker {
                     }
                     ParserOp::Div => {
                         let float_ty = self.push_type(Type::Float);
-                        self.unify(span, ctx, target_ty, float_ty);
+                        self.unify(span, ctx, target_ty, float_ty)?;
                         self.add_constraint(expression_ty, span, Constraint::Div(target_ty));
                         self.add_constraint(target_ty, span, Constraint::Div(expression_ty));
                     }
