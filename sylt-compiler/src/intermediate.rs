@@ -73,6 +73,7 @@ pub enum IR {
 
     Label(Label),
     Goto(Label),
+    Copy(Var, Var),
     Define(Var),
     Assign(Var, Var),
     Return(Var),
@@ -247,7 +248,7 @@ impl<'a> IRCodeGen<'a> {
             ExpressionKind::Get(ass) => {
                 let (code, source) = self.assignable(ass, ctx);
                 let dest = self.var();
-                ([code, vec![IR::Assign(dest, source)]].concat(), dest)
+                ([code, vec![IR::Copy(dest, source)]].concat(), dest)
             }
             ExpressionKind::Comparison(a, op, b) => {
                 let (aops, a) = self.expression(&a, ctx);
@@ -551,7 +552,6 @@ impl<'a> IRCodeGen<'a> {
                     pre_code,
                     code,
                     vec![
-                        IR::Define(res),
                         match kind {
                             ParserOp::Nop => IR::Assign(res, var),
                             ParserOp::Add => IR::Add(res, current, var),
@@ -819,6 +819,7 @@ pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
             | IR::Access(_, a, _)
             | IR::AssignAccess(_, _, a)
             | IR::Assign(_, a)
+            | IR::Copy(_, a)
             | IR::Return(a)
             | IR::If(a) => {
                 *table.entry(*a).or_insert(0) += 1;

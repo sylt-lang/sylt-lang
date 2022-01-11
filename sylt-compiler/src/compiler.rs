@@ -95,6 +95,9 @@ impl Compiler {
         let ir = intermediate::compile(&typechecker, &statements);
         let usage_count = intermediate::count_usages(&ir);
 
+        for i in ir.iter() {
+            eprintln!("> {:?}", i);
+        }
         lua::generate(&ir, &usage_count, lua_file);
 
         Ok(())

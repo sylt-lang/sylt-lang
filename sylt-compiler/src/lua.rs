@@ -25,10 +25,30 @@ macro_rules! ii {
 
 macro_rules! iis {
     ( $self:expr, $var:expr, $fmt:literal, $( $dep:expr ),* ) => {
-        Some(($var, format!($fmt, $( $dep ),*)))
+        {
+            let var = $var;
+            let value = format!($fmt, $( $dep ),*);
+            match $self.usage_count.get(var).unwrap_or(&0) {
+                0 => {},
+                1 => $self.define(*var, value),
+                _ => {
+                    write!($self.out, "local {} = {}", var, value);
+                }
+            }
+        }
     };
     ( $self:expr, $var:expr, $fmt:literal) => {
-        Some(($var, $fmt.into()))
+        {
+            let var = $var;
+            let value = $fmt.to_string();
+            match $self.usage_count.get(var).unwrap_or(&0) {
+                0 => {},
+                1 => $self.define(*var, value),
+                _ => {
+                    write!($self.out, "local {} = {}", var, value);
+                }
+            }
+        }
     };
 }
 
@@ -74,7 +94,7 @@ impl<'a, 'b> Generator<'a, 'b> {
             for _ in 0..depth {
                 write!(self.out, "  ");
             }
-            let expr = match instruction {
+            match instruction {
                 IR::Nil(t) => iis!(self, t, "__NIL"),
                 IR::Int(t, i) => iis!(self, t, "{}", i),
                 IR::Bool(t, b) => iis!(self, t, "{}", b),
@@ -144,14 +164,6 @@ impl<'a, 'b> Generator<'a, 'b> {
 
                 IR::Tuple(t, exprs) => iis!(self, t, "__TUPLE{{ {} }}", self.comma_sep(exprs)),
 
-                IR::Assign(t, a) => {
-                    if self.usage_count.get(t).unwrap_or(&0) > &0 {
-                        let a = self.expand(a);
-                        write!(self.out, "local {} = {}", t, a);
-                    }
-                    None
-                }
-
                 IR::Variant(t, v, a) => {
                     iis!(self, t, "__VARIANT{{ \"{}\", {} }}", v, self.expand(a))
                 }
@@ -173,14 +185,13 @@ impl<'a, 'b> Generator<'a, 'b> {
                             .join(", ")
                     );
                     write!(self.out, ")");
-                    None
+                    depth += 1;
                 }
 
                 IR::External(t, e) => {
                     write!(self.out, "{}", t);
                     write!(self.out, " = ");
                     write!(self.out, e);
-                    None
                 }
 
                 IR::Call(t, f, args) => {
@@ -190,63 +201,73 @@ impl<'a, 'b> Generator<'a, 'b> {
                     write!(self.out, "{}", f);
                     let args = self.comma_sep(args).to_string();
                     write!(self.out, "({})", args);
-                    None
                 }
 
                 IR::Assert(v) => {
+                    let v = self.expand(v).to_string();
                     write!(self.out, "assert({}, \"Assert failed!\")", v);
-                    None
                 }
 
                 IR::Define(t) => {
-                    write!(self.out, "local ");
-                    write!(self.out, "{}", t);
-                    write!(self.out, " = ");
-                    write!(self.out, "nil");
-                    None
+                    if self.usage_count.get(t).unwrap_or(&0) > &0 {
+                        write!(self.out, "local ");
+                        write!(self.out, "{}", t);
+                        write!(self.out, " = ");
+                        write!(self.out, "nil");
+                    }
                 }
 
                 IR::If(a) => {
                     write!(self.out, "if ");
+                    let a = self.expand(a).to_string();
                     write!(self.out, "{}", a);
                     write!(self.out, " then");
                     depth += 1;
-                    None
                 }
                 IR::Else => {
                     write!(self.out, "else");
                     depth += 1;
-                    None
                 }
                 IR::End => {
                     write!(self.out, "end");
-                    None
                 }
                 IR::Loop => {
                     write!(self.out, "while true do");
                     depth += 1;
-                    None
                 }
                 IR::Break => {
                     write!(self.out, "break");
-                    None
                 }
                 IR::Return(t) => {
                     write!(self.out, "return ");
+                    let t = self.expand(t).to_string();
                     write!(self.out, "{}", t);
-                    None
                 }
                 IR::HaltAndCatchFire(msg) => {
                     write!(self.out, "__CRASH(\"{}\")()", msg);
-                    None
+                }
+
+                IR::Access(t, a, f) => iis!(self, t, "{}.{}", self.expand(a), f),
+
+                IR::Copy(t, a) => {
+                    if self.usage_count.get(t).unwrap_or(&0) > &0 {
+                        let a = self.expand(a);
+                        write!(self.out, "local {} = {}", t, a);
+                    }
+                }
+
+                // These cannot be optimized
+                IR::Assign(t, a) => {
+                    if self.usage_count.get(t).unwrap_or(&0) > &0 {
+                        let a = self.expand(a);
+                        write!(self.out, "{} = {}", t, a);
+                    }
                 }
                 IR::AssignIndex(t, i, a) => {
                     if self.usage_count.get(t).unwrap_or(&0) > &0 {
                         write!(self.out, "__ASSIGN_INDEX({}, {}, {})", t, i, a);
                     }
-                    None
                 }
-                IR::Access(t, a, f) => iis!(self, t, "{}.{}", self.expand(a), f),
                 IR::AssignAccess(t, f, c) => {
                     if self.usage_count.get(t).unwrap_or(&0) > &0 {
                         let t = self.expand(t).to_string();
@@ -254,28 +275,14 @@ impl<'a, 'b> Generator<'a, 'b> {
                         write!(self.out, " = ");
                         write!(self.out, "{}", c);
                     }
-                    None
                 }
+
                 IR::Label(l) => {
                     write!(self.out, "::{}::", l);
-                    None
                 }
                 IR::Goto(l) => {
                     write!(self.out, "goto {}", l);
-                    None
                 }
-            };
-            match expr {
-                Some((var, value)) => {
-                    match self.usage_count.get(var).unwrap_or(&0) {
-                        0 => {},
-                        1 => self.define(*var, value),
-                        _ => {
-                            write!(self.out, "local {} = {}", var, value);
-                        }
-                    }
-                }
-                None => {}
             }
             write!(self.out, "\n");
         }
