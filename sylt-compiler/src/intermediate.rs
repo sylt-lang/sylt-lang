@@ -793,8 +793,12 @@ pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
             | IR::Function(_, _)
             | IR::Label(_)
             | IR::Goto(_)
-            | IR::Define(_)
             | IR::HaltAndCatchFire(_) => {}
+
+            // We cannot optimize things that are defined.
+            IR::Define(a) => {
+                *table.entry(*a).or_insert(0) += 2;
+            }
 
             IR::Add(_, a, b)
             | IR::Sub(_, a, b)
@@ -808,6 +812,8 @@ pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
             | IR::LessEqual(_, a, b)
             | IR::Index(_, a, b)
             | IR::In(_, a, b)
+            | IR::Assign(a, b)
+            | IR::AssignAccess(a, _, b)
             | IR::AssignIndex(_, a, b) => {
                 *table.entry(*a).or_insert(0) += 1;
                 *table.entry(*b).or_insert(0) += 1;
@@ -817,8 +823,6 @@ pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
             | IR::Assert(a)
             | IR::Variant(_, _, a)
             | IR::Access(_, a, _)
-            | IR::AssignAccess(_, _, a)
-            | IR::Assign(_, a)
             | IR::Copy(_, a)
             | IR::Return(a)
             | IR::If(a) => {
