@@ -14,7 +14,6 @@ impl Var {
     pub fn format(self) -> String {
         format!("V{}", self.0)
     }
-
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -557,15 +556,13 @@ impl<'a> IRCodeGen<'a> {
                 [
                     pre_code,
                     code,
-                    vec![
-                        match kind {
-                            ParserOp::Nop => IR::Assign(res, var),
-                            ParserOp::Add => IR::Add(res, current, var),
-                            ParserOp::Sub => IR::Sub(res, current, var),
-                            ParserOp::Mul => IR::Mul(res, current, var),
-                            ParserOp::Div => IR::Div(res, current, var),
-                        },
-                    ],
+                    vec![match kind {
+                        ParserOp::Nop => IR::Assign(res, var),
+                        ParserOp::Add => IR::Add(res, current, var),
+                        ParserOp::Sub => IR::Sub(res, current, var),
+                        ParserOp::Mul => IR::Mul(res, current, var),
+                        ParserOp::Div => IR::Div(res, current, var),
+                    }],
                     post_code,
                 ]
                 .concat()
@@ -804,8 +801,7 @@ pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
             | IR::HaltAndCatchFire(_) => {}
 
             // We cannot optimize things that are defined.
-            IR::Function(a, _)
-            | IR::Define(a) => {
+            IR::Function(a, _) | IR::Define(a) => {
                 *table.entry(*a).or_insert(0) += 2;
             }
 
