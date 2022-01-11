@@ -13,4 +13,4 @@ start :: fn do
     end
 end
 
-// error: $MissingVariants
+// error: Enum 'A' doesn't have variant 'E'

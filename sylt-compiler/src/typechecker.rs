@@ -144,7 +144,7 @@ enum Constraint {
     IsContainedIn(TyID),
 
     Enum,
-    Variant(String, TyID),
+    Variant(String, Option<TyID>),
     TotalEnum(BTreeSet<String>),
 
     Variable,
@@ -567,10 +567,16 @@ impl TypeChecker {
                         };
                         self.add_constraint(
                             to_match,
-                            var.span,
-                            Constraint::Variant(branch.pattern.name.clone(), var.ty),
+                            span,
+                            Constraint::Variant(branch.pattern.name.clone(), Some(var.ty)),
                         );
                         self.stack.push(var);
+                    } else {
+                        self.add_constraint(
+                            to_match,
+                            span,
+                            Constraint::Variant(branch.pattern.name.clone(), None),
+                        );
                     }
                     self.check_constraints(span, ctx, to_match)?;
                     self.statement(&mut branch.body, ctx)?;
@@ -1471,12 +1477,13 @@ impl TypeChecker {
                     ),
                 },
 
-                Constraint::Variant(var, v_b) => match self.find_type(a) {
+                Constraint::Variant(var, maybe_v_b) => match self.find_type(a) {
                     Type::Unknown => Ok(()),
 
-                    Type::Enum(enum_name, vars) => match vars.get(var) {
-                        Some(v_a) => self.unify(span, ctx, *v_a, *v_b).map(|_| ()),
-                        None => {
+                    Type::Enum(enum_name, variants) => match (variants.get(var), maybe_v_b) {
+                        (Some(_), None) => Ok(()),
+                        (Some(v_a), Some(v_b)) => self.unify(span, ctx, *v_a, *v_b).map(|_| ()),
+                        (None, _) => {
                             err_type_error!(
                                 self,
                                 span,
