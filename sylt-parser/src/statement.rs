@@ -216,7 +216,7 @@ pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
         }
     }
 
-    Ok((ctx, Identifier { span, name: result }))
+    Ok((ctx, Identifier::new(span, result)))
 }
 
 pub fn use_path<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, FileOrLib)> {
@@ -403,13 +403,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 match ctx.token() {
                     T::RightParen | T::Newline => break,
                     T::Identifier(name) => {
-                        let ident = Identifier { name: name.clone(), span: ctx.span() };
+                        let ident = Identifier::new(ctx.span(), name.clone());
                         ctx = ctx.skip(1);
                         let alias = if matches!(ctx.token(), T::As) {
                             ctx = ctx.skip(1);
                             let _alias = match ctx.token() {
                                 T::Identifier(name) => {
-                                    Some(Identifier { name: name.clone(), span: ctx.span() })
+                                    Some(Identifier::new(ctx.span(), name.clone()))
                                 }
                                 _ => raise_syntax_error!(ctx, "Expected identifier after 'as'"),
                             };
@@ -503,12 +503,12 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     }
 
                     T::Identifier(pattern) if is_capitalized(pattern) => {
-                        let pattern = Identifier { name: pattern.clone(), span: ctx.span() };
+                        let pattern = Identifier::new(ctx.span(), pattern.clone());
                         ctx = ctx.skip(1);
                         let (ctx_, variable) = match ctx.token() {
                             T::Identifier(capture) if !is_capitalized(capture) => (
                                 ctx.skip(1),
-                                Some(Identifier { name: capture.clone(), span: ctx.span() }),
+                                Some(Identifier::new(ctx.span(), capture.clone())),
                             ),
                             T::Identifier(_) => {
                                 raise_syntax_error!(
@@ -715,7 +715,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             if name == "self" {
                 raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
             }
-            let ident = Identifier { name: name.clone(), span: ctx.span() };
+            let ident = Identifier::new(ctx.span(), name.clone());
             let ctx = ctx.skip(1);
             let kind = match ctx.token() {
                 T::ColonColon => VarKind::Const,
@@ -748,7 +748,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             if name == "self" {
                 raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
             }
-            let ident = Identifier { name: name.clone(), span: ctx.span() };
+            let ident = Identifier::new(ctx.span(), name.clone());
             // Skip identifier and ':'.
             let ctx = ctx.skip(2);
 
