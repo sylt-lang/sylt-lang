@@ -24,7 +24,11 @@ pub enum FileOrLib {
 }
 
 /// The standard library
-const STD_LIB_FILES: &[(&str, &str)] = &[("std", include_str!("../../std/std.sy"))];
+const STD_LIB_FILES: &[(&str, &str)] = &[
+    ("std", include_str!("../../std/std.sy")),
+    ("math", include_str!("../../std/math.sy")),
+    ("basics", include_str!("../../std/basics.sy")),
+];
 
 pub fn library_name(name: &str) -> Option<&'static str> {
     STD_LIB_FILES

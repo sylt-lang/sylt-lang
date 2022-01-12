@@ -638,6 +638,6 @@ fn format_module(module: Module) -> Result<String, fmt::Error> {
 }
 
 pub fn format(file: &Path) -> Result<String, Vec<Error>> {
-    let mut tree = sylt_parser::tree(file, crate::read_file)?;
+    let mut tree = sylt_parser::tree(file, crate::read_file, false)?;
     Ok(format_module(tree.modules.remove(0).1).unwrap())
 }

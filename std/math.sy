@@ -1,0 +1,1 @@
+abs: fn<N: Num> *N -> *N : external

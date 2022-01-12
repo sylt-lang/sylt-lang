@@ -1,3 +1,6 @@
+use math
+
+abs :: math.abs
 atan2: fn float, float -> float : external
 dbg: fn *X -> *X : external
 random_choice: fn [*ITEM] -> *ITEM : external
@@ -23,7 +26,6 @@ as_char: fn str -> int : external
 as_chars: fn str -> [int] : external
 split: fn str -> [str] : external
 sqrt: fn float -> float : external
-abs: fn<N: Num> *N -> *N : external
 sign: fn<N: Num> *N -> *N : external
 clamp: fn<N: Num> *N, *N, *N -> *N : external
 min: fn<N: Num> *N, *N -> *N : external
