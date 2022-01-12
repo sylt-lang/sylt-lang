@@ -357,10 +357,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let (ctx, alias) = match &ctx.tokens_lookahead::<2>() {
                 [T::As, T::Identifier(alias), ..] => (
                     ctx.skip(2),
-                    NameIdentifier::Alias(Identifier::new(
-                        ctx.skip(1).span(),
-                        alias.clone(),
-                    )),
+                    NameIdentifier::Alias(Identifier::new(ctx.skip(1).span(), alias.clone())),
                 ),
                 [T::As, ..] => raise_syntax_error!(ctx.skip(1), "Expected alias"),
                 [..] => {
