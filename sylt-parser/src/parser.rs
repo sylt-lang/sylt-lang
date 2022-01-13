@@ -34,6 +34,7 @@ pub struct AST {
 #[derive(Debug, Clone)]
 pub struct Module {
     pub span: Span,
+    pub file_id: usize,
     pub statements: Vec<Statement>,
 }
 
@@ -995,7 +996,7 @@ fn module(
     if errors.is_empty() {
         (
             use_files,
-            Ok(Module { span: Span::zero(file_id), statements }),
+            Ok(Module { file_id, span: Span::zero(file_id), statements }),
         )
     } else {
         (use_files, Err(errors))
@@ -1055,6 +1056,10 @@ where
     let mut to_visit = Vec::new();
     let root = path.parent().unwrap();
 
+    if bundle_std {
+        to_visit.push(FileOrLib::Lib("basics"));
+    }
+
     to_visit.push(FileOrLib::File(PathBuf::from(path)));
 
     let mut modules = Vec::new();
@@ -1096,15 +1101,14 @@ where
     }
 
     if bundle_std {
+        let tokens = string_to_tokens(0, include_str!("../../std/basics.sy"));
+        let (_, std) = module(&FileOrLib::Lib("basics"), 0, &root, &tokens);
+        let std = std?;
         modules = modules
             .into_iter()
-            .enumerate()
-            .map(|(i, (file, mut modul))| {
+            .map(|(file, mut modul)| {
                 match file {
                     FileOrLib::File(_) => {
-                        let tokens = string_to_tokens(i, include_str!("../../std/basics.sy"));
-                        let (_, std) = module(&FileOrLib::Lib("basics"), i, &root, &tokens);
-                        let std = std.expect("Failed to parse default imports");
                         modul.statements = [std.statements.clone(), modul.statements]
                             .iter()
                             .cloned()
