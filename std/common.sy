@@ -1,0 +1,13 @@
+dbg: fn *X -> *X : external
+args: fn -> {str:str} : external
+thread_sleep: fn float -> void : external
+print: fn *X -> void : external
+spy: fn str, *X -> *X : external
+unsafe_force: fn *X -> *Y : external
+split: fn str -> [str] : external
+
+as_float: fn int -> float : external
+as_int: fn float -> int : external
+as_char: fn str -> int : external
+as_chars: fn str -> [int] : external
+as_str: fn *X -> str : external

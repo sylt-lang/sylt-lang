@@ -1,5 +1,3 @@
-from std use print
-
 A :: blob {
     a: int
 }

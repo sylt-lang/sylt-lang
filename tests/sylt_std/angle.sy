@@ -1,4 +1,4 @@
-from std use (abs, angle)
+from math use (angle)
 
 DELTA :: 0.00000000001
 PI :: 3.141592653589793238462643383279

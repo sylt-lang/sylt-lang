@@ -1,5 +1,3 @@
-from std use (reduce, print)
-
 start :: fn do
     add :: fn a: *, b: * -> int a + b end
 

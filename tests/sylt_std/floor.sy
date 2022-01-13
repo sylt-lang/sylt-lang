@@ -1,5 +1,3 @@
-from std use (floor)
-
 start :: fn do
     floor(1.0) <=> 1
     floor(9999999999999.0) <=> 9999999999999

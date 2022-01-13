@@ -1,5 +1,3 @@
-from std use abs
-
 start :: fn do
     abs(1.0) <=> 1.0
     abs(-1.0) <=> 1.0

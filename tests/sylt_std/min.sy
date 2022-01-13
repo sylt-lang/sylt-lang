@@ -1,5 +1,3 @@
-from std use (min)
-
 start :: fn do
     min(1.0, 2.0) <=> 1.0
     min(2.0, 1.0) <=> 1.0

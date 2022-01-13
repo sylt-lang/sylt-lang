@@ -1,4 +1,5 @@
-from std use (as_str, print, push, add, pop)
+from container use add
+from list use push, pop
 
 A :: blob {
     b: float,

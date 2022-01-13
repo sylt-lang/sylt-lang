@@ -1,5 +1,3 @@
-from std use print
-
 A :: enum
     Q A
     Z

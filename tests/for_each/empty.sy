@@ -1,5 +1,3 @@
-from std use (for_each, print)
-
 assert_nonzero :: fn a: int do
     a > 0 <=> true
 end

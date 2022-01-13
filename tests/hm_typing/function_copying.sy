@@ -1,5 +1,3 @@
-from std use print
-
 f1 :: fn a do end
 
 start :: fn do

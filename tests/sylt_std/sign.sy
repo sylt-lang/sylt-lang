@@ -1,5 +1,3 @@
-from std use (sign)
-
 start :: fn do
     sign(1) <=> 1
     sign(1.0) <=> 1.0

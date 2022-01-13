@@ -1,5 +1,3 @@
-from std use (print)
-
 Maybe :: enum
     Just *,
     Nothing,

@@ -1,4 +1,4 @@
-from std use (prepend, print)
+from list use (prepend)
 
 start :: fn do
     a := [1, 2, 3, 4]
