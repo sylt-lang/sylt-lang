@@ -1106,18 +1106,14 @@ where
         let std = std?;
         modules = modules
             .into_iter()
-            .map(|(file, mut modul)| {
+            .map(|(file, mut module)| {
                 match file {
                     FileOrLib::File(_) => {
-                        modul.statements = [std.statements.clone(), modul.statements]
-                            .iter()
-                            .cloned()
-                            .flatten()
-                            .collect();
+                        module.statements.append(&mut std.statements.clone());
                     }
                     FileOrLib::Lib(_) => {}
                 };
-                (file, modul)
+                (file, module)
             })
             .collect();
     }
