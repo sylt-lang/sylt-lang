@@ -1101,8 +1101,12 @@ where
     }
 
     if bundle_std {
-        let tokens = string_to_tokens(0, include_str!("../../std/basics.sy"));
-        let (_, std) = module(&FileOrLib::Lib("basics"), 0, &root, &tokens);
+        let basics_index = modules
+            .iter()
+            .position(|(f, _)| *f == FileOrLib::Lib("basics"))
+            .unwrap();
+        let tokens = string_to_tokens(basics_index, include_str!("../../std/basics.sy"));
+        let (_, std) = module(&FileOrLib::Lib("basics"), basics_index, &root, &tokens);
         let std = std?;
         modules = modules
             .into_iter()
