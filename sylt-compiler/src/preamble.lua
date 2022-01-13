@@ -425,6 +425,10 @@ end
 
 sqrt = math.sqrt
 abs = math.abs
+function div(a, b)
+    if b == 0 then return 0 end
+    return math.floor(a / b)
+end
 function sign(x)
     if x > 0 then
         return 1

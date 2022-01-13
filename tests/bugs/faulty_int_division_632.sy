@@ -1,0 +1,8 @@
+from std use print
+
+start :: fn do
+    b: int = 1 / 2
+end
+
+// error: A 'float' cannot be a 'int'
+
