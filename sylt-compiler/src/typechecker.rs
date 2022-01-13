@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use sylt_common::error::{Error, Helper, TypeError};
 use sylt_common::{FileOrLib, TyID, Type as RuntimeType};
-use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     expression::ComparisonKind, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
     Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeAssignable,
@@ -627,8 +626,10 @@ impl TypeChecker {
                         self.add_constraint(target_ty, span, Constraint::Mul(expression_ty));
                     }
                     ParserOp::Div => {
-                        self.add_constraint(expression_ty, span, Constraint::Mul(target_ty));
-                        self.add_constraint(target_ty, span, Constraint::Mul(expression_ty));
+                        let float_ty = self.push_type(Type::Float);
+                        self.unify(span, ctx, target_ty, float_ty)?;
+                        self.add_constraint(expression_ty, span, Constraint::Div(target_ty));
+                        self.add_constraint(target_ty, span, Constraint::Div(expression_ty));
                     }
                 };
                 self.unify(span, ctx, expression_ty, target_ty)?;
@@ -689,10 +690,7 @@ impl TypeChecker {
         let span = statement.span;
         match &statement.kind {
             StatementKind::Use { name, file, .. } => {
-                let ident = match name {
-                    NameIdentifier::Implicit(ident) => ident,
-                    NameIdentifier::Alias(ident) => ident,
-                };
+                let ident = name.ident();
                 let other = self.file_to_namespace[file];
                 self.globals
                     .insert((ctx.namespace, ident.name.clone()), Name::Namespace(other));
@@ -1009,7 +1007,10 @@ impl TypeChecker {
             ExpressionKind::Add(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Add),
             ExpressionKind::Sub(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Sub),
             ExpressionKind::Mul(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Mul),
-            ExpressionKind::Div(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Div),
+            ExpressionKind::Div(a, b) => {
+                bin_op!(self, span, ctx, a, b, Constraint::Div)?;
+                Ok(self.push_type(Type::Float))
+            }
 
             ExpressionKind::Comparison(a, comp, b) => match comp {
                 ComparisonKind::NotEquals | ComparisonKind::Equals => {
@@ -2032,8 +2033,7 @@ impl TypeChecker {
             (Type::Unknown, _) => Ok(()),
             (_, Type::Unknown) => Ok(()),
 
-            (Type::Float, Type::Float) => Ok(()),
-            (Type::Int, Type::Int) => Ok(()),
+            (Type::Float | Type::Int, Type::Float | Type::Int) => Ok(()),
 
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
                 for (a, b) in a.iter().zip(b.iter()) {

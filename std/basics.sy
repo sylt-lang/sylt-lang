@@ -22,6 +22,7 @@ from math use (
     min,
     max,
     rem,
+    div,
     pow,
 )
 

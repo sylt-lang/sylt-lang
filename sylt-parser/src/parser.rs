@@ -89,6 +89,12 @@ pub struct Identifier {
     pub name: String,
 }
 
+impl Identifier {
+    pub fn new(span: Span, name: String) -> Self {
+        Self { span, name }
+    }
+}
+
 impl PartialEq for Identifier {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
@@ -488,7 +494,7 @@ pub fn parse_type_constraint_argument<'t>(ctx: Context<'t>) -> ParseResult<'t, V
     let mut ctx = ctx;
     loop {
         match ctx.token() {
-            T::Identifier(var) => args.push(Identifier { span: ctx.span(), name: var.clone() }),
+            T::Identifier(var) => args.push(Identifier::new(ctx.span(), var.clone())),
             T::Plus | T::Comma | T::Greater => break,
             _ => {
                 raise_syntax_error!(ctx, "Expected a constraint argument, ',' or '+'");
@@ -512,7 +518,7 @@ pub fn parse_type_constraint<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeConstr
     let (ctx, args) = parse_type_constraint_argument(ctx)?;
     Ok((
         ctx,
-        TypeConstraint { name: Identifier { span, name }, args },
+        TypeConstraint { name: Identifier::new(span, name), args },
     ))
 }
 
@@ -525,14 +531,14 @@ pub fn type_assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeAssignable> 
         match ctx.token() {
             T::Identifier(name) if is_capitalized(name) => {
                 let ctx = ctx.skip(1);
-                let ident = Identifier { span, name: name.clone() };
+                let ident = Identifier::new(span, name.clone());
                 let assignable = TypeAssignable { span, kind: assignable };
                 Ok((ctx, TypeAssignableKind::Access(Box::new(assignable), ident)))
             }
 
             T::Identifier(name) if !is_capitalized(name) => {
                 let ctx = expect!(ctx.skip(1), T::Dot, "Expected '.' after namespace");
-                let ident = Identifier { span, name: name.clone() };
+                let ident = Identifier::new(span, name.clone());
                 let assignable = TypeAssignableKind::Access(
                     Box::new(TypeAssignable { span, kind: assignable }),
                     ident,
@@ -548,13 +554,13 @@ pub fn type_assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeAssignable> 
     let (ctx, kind) = match ctx.token() {
         T::Identifier(name) if is_capitalized(name) => {
             let ctx = ctx.skip(1);
-            let ident = Identifier { span, name: name.clone() };
+            let ident = Identifier::new(span, name.clone());
             (ctx, TypeAssignableKind::Read(ident))
         }
 
         T::Identifier(name) if !is_capitalized(name) => {
             let ctx = expect!(ctx.skip(1), T::Dot, "Expected '.' after namespace");
-            let outer = TypeAssignableKind::Read(Identifier { span, name: name.clone() });
+            let outer = TypeAssignableKind::Read(Identifier::new(span, name.clone()));
             type_assignable_inner(ctx, outer)?
         }
 
@@ -855,7 +861,7 @@ fn assignable_variant<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult
         if !is_capitalized(name) {
             raise_syntax_error!(ctx, "Enum variants have to start with a capital letter");
         }
-        (ctx, Identifier { name: name.clone(), span })
+        (ctx, Identifier::new(span, name.clone()))
     } else {
         raise_syntax_error!(ctx, "Expected an identifier after '.' in variant");
     };
@@ -883,7 +889,7 @@ fn assignable_variant<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult
 fn assignable_dot<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t, Assignable> {
     use AssignableKind::Access;
     let (ctx, ident) = if let (T::Identifier(name), span, ctx) = ctx.skip(1).eat() {
-        (ctx, Identifier { name: name.clone(), span })
+        (ctx, Identifier::new(span, name.clone()))
     } else {
         raise_syntax_error!(
             ctx,
@@ -923,7 +929,7 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
 
     // Get the identifier.
     let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
-        let ident = Identifier { span, name: name.clone() };
+        let ident = Identifier::new(span, name.clone());
         Assignable { span: outer_span, kind: Read(ident) }
     } else {
         raise_syntax_error!(

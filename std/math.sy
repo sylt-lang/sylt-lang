@@ -10,6 +10,7 @@ min: fn<N: Num> *N, *N -> *N : external
 max: fn<N: Num> *N, *N -> *N : external
 rem: fn<N: Num> *N, *N -> *N : external
 pow: fn float, float -> float : external
+div: fn int, int -> int : external
 
 
 

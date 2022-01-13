@@ -119,7 +119,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         match ctx.token() {
             T::Identifier(name) => {
                 // Parameter name
-                let ident = Identifier { span: ctx.span(), name: name.clone() };
+                let ident = Identifier::new(ctx.span(), name.clone());
                 if name == "self" {
                     raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
                 }
