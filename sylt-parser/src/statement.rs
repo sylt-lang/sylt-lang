@@ -331,17 +331,10 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Newline, ..] => (ctx, EmptyStatement),
 
         // Block: `{ <statements> }`
-        [T::Do, ..] => match (block(ctx), expression(ctx)) {
-            (Ok((ctx, statements)), _) => (ctx, Block { statements }),
-            (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
-            (Err((_, mut stmt_errs)), Err((_, mut expr_errs))) => {
-                let errs = vec![
-                    syntax_error!(ctx, "Neither a valid block nor a valid expression - inspects the two errors below"),
-                    stmt_errs.remove(0),
-                    expr_errs.remove(0),
-                ];
-                let ctx = skip_until!(ctx, T::End);
-                return Err((ctx, errs));
+        [T::Do, ..] => match block(ctx) {
+            Ok((ctx, statements)) => (ctx, Block { statements }),
+            Err((ctx, errs)) => {
+                return Err((skip_until!(ctx, T::End), errs));
             }
         },
 
