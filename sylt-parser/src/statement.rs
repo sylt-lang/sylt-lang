@@ -155,9 +155,10 @@ pub enum StatementKind {
     /// Groups together statements that are executed after another.
     ///
     /// `{ <statement>.. }`.
-    Block {
-        statements: Vec<Statement>,
-    },
+    // Block {
+    //     statements: Vec<Statement>,
+    //     value: Option<Expression>,
+    // },
 
     /// A free-standing expression. It's just a `<expression>`.
     StatementExpression {
@@ -247,7 +248,7 @@ pub fn use_path<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, FileOrLib)
     Ok((ctx, (path_ident, file)))
 }
 
-fn statement_or_block<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
+fn block_like<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     if matches!(
         ctx.token(),
         T::Do | T::If | T::Loop | T::Break | T::Continue | T::Ret
@@ -261,40 +262,6 @@ fn statement_or_block<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             ctx.token()
         );
         Err((err_ctx, vec![err]))
-    }
-}
-
-pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
-    // To allow implicit block-openings, like "fn ->"
-    let mut ctx = ctx.skip_if(T::Do);
-
-    let mut errs = Vec::new();
-    let mut statements = Vec::new();
-    // Parse multiple inner statements until } or EOF
-    while !matches!(ctx.token(), T::Else | T::End | T::EOF) {
-        match statement(ctx) {
-            Ok((_ctx, stmt)) => {
-                ctx = _ctx; // assign to outer
-                statements.push(stmt);
-            }
-            Err((_ctx, mut err)) => {
-                ctx = _ctx.pop_skip_newlines(false); // assign to outer
-                ctx = skip_until!(ctx, T::Newline).skip_if(T::Newline);
-                errs.append(&mut err);
-            }
-        }
-    }
-
-    if errs.is_empty() {
-        // Special case for chaining if-else-statements
-        if !matches!(ctx.token(), T::End | T::Else) {
-            syntax_error!(ctx, "Expected 'end' after block");
-        }
-        let ctx = ctx.skip_if(T::End);
-        #[rustfmt::skip]
-        return Ok(( ctx, statements ));
-    } else {
-        Err((ctx, errs))
     }
 }
 
@@ -323,12 +290,12 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Newline, ..] => (ctx, EmptyStatement),
 
         // Block: `{ <statements> }`
-        [T::Do, ..] => match block(ctx) {
-            Ok((ctx, statements)) => (ctx, Block { statements }),
-            Err((ctx, errs)) => {
-                return Err((skip_until!(ctx, T::End), errs));
-            }
-        },
+        // [T::Do, ..] => match block(ctx) {
+        //     Ok((ctx, statements)) => (ctx, Block { statements }),
+        //     Err((ctx, errs)) => {
+        //         return Err((skip_until!(ctx, T::End), errs));
+        //     }
+        // },
 
         // `use path/to/file`
         // `use path/to/file as alias`
@@ -485,7 +452,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                             }
                             _ => (ctx, None),
                         };
-                        let (ctx_, body) = statement_or_block(ctx_)?;
+                        let (ctx_, body) = block_like(ctx_)?;
                         ctx = ctx_;
 
                         branches.push(CaseBranch { pattern, variable, body });
@@ -508,7 +475,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 }
             }
             let (ctx, fall_through) = if matches!(ctx.token(), T::Else) {
-                let (ctx, fall_through) = statement_or_block(ctx.skip(1))?;
+                let (ctx, fall_through) = block_like(ctx.skip(1))?;
                 (ctx, Some(Box::new(fall_through)))
             } else {
                 (ctx, None)
@@ -526,10 +493,10 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let (ctx, condition) = expression(ctx.skip(1))?;
             let ctx = ctx.pop_skip_newlines(skip_newlines);
 
-            let (ctx, pass) = statement_or_block(ctx)?;
+            let (ctx, pass) = block_like(ctx)?;
             // else?
             let (ctx, fail) = if matches!(ctx.token(), T::Else) {
-                statement_or_block(ctx.skip(1))?
+                block_like(ctx.skip(1))?
             } else {
                 // No else so we insert an empty statement instead.
                 (

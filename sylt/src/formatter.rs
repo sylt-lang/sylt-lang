@@ -330,19 +330,36 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             }
 
             match body.kind {
-                StatementKind::Block { statements } => {
+                ExpressionKind::Block { statements, value } => {
                     write!(dest, "do\n")?;
                     for s in merge_empty_statements(statements) {
                         write_statement(dest, indent + 1, s)?;
+                    }
+                    if let Some(value) = value {
+                        write_expression(dest, indent + 1, *value)?;
                     }
                     write_indents(dest, indent)?;
                     write!(dest, "end")?;
                     // NOTE(ed): No newline here!
                 }
                 _ => {
-                    write_statement(dest, indent, *body)?;
+                    write_expression(dest, indent, *body)?;
                 }
             }
+        }
+        ExpressionKind::Block { statements, value } => {
+            write_indents(dest, indent)?;
+            write!(dest, "do\n")?;
+
+            for s in merge_empty_statements(statements) {
+                write_statement(dest, indent + 1, s)?;
+            }
+            if let Some(value) = value {
+                write_expression(dest, indent + 1, *value)?;
+            }
+
+            write_indents(dest, indent)?;
+            write!(dest, "end")?
         }
         ExpressionKind::Blob { blob, fields } => {
             write_type_assignable(dest, indent, blob)?;
@@ -430,17 +447,6 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write!(dest, "{} :: enum", name)?;
             let variants_as_tuples = variants.into_iter().collect();
             write_enum_variants(dest, indent + 1, variants_as_tuples)?;
-        }
-        StatementKind::Block { statements } => {
-            write_indents(dest, indent)?;
-            write!(dest, "do\n")?;
-
-            for s in merge_empty_statements(statements) {
-                write_statement(dest, indent + 1, s)?;
-            }
-
-            write_indents(dest, indent)?;
-            write!(dest, "end")?
         }
         StatementKind::Break => {
             write_indents(dest, indent)?;

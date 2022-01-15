@@ -1,6 +1,6 @@
 use sylt_common::error::Error;
 
-use crate::statement::block;
+use crate::statement::statement;
 
 use super::*;
 
@@ -49,6 +49,12 @@ pub enum ExpressionKind {
 
     Parenthesis(Box<Expression>),
 
+    // Block expression - might not have a value if the last statement isn't a StatementExpression.
+    Block {
+        statements: Vec<Statement>,
+        value: Option<Box<Expression>>,
+    },
+
     /// Inline If-statements
     IfExpression {
         condition: Box<Expression>,
@@ -62,7 +68,7 @@ pub enum ExpressionKind {
         params: Vec<(Identifier, Type)>,
         ret: Type,
 
-        body: Box<Statement>,
+        body: Box<Expression>,
     },
     /// A blob instantiation.
     Blob {
@@ -103,6 +109,54 @@ impl PartialEq for Expression {
 impl Expression {
     pub fn new(span: Span, kind: ExpressionKind) -> Self {
         Self { span, ty: None, kind }
+    }
+}
+
+/// Parse a block - which is an expression returning void or the result of the last expression.
+pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+    // To allow implicit block-openings, like "fn ->"
+    let span = ctx.span();
+    let mut ctx = ctx.skip_if(T::Do);
+
+    let mut errs = Vec::new();
+    let mut statements = Vec::new();
+    // Parse multiple inner statements until } or EOF
+    while !matches!(ctx.token(), T::Else | T::End | T::EOF) {
+        match statement(ctx) {
+            Ok((_ctx, stmt)) => {
+                ctx = _ctx; // assign to outer
+                statements.push(stmt);
+            }
+            Err((_ctx, mut err)) => {
+                ctx = _ctx.pop_skip_newlines(false); // assign to outer
+                ctx = skip_until!(ctx, T::Newline).skip_if(T::Newline);
+                errs.append(&mut err);
+            }
+        }
+    }
+
+    if errs.is_empty() {
+        // Special case for chaining if-else-statements
+        if !matches!(ctx.token(), T::End | T::Else) {
+            syntax_error!(ctx, "Expected 'end' after block");
+        }
+        let value = match statements.pop() {
+            Some(Statement {
+                kind: StatementKind::StatementExpression { value }, ..
+            }) => Some(Box::new(value)),
+            Some(x) => {
+                statements.push(x);
+                None
+            }
+            None => None,
+        };
+        let ctx = ctx.skip_if(T::End);
+        Ok((
+            ctx,
+            Expression::new(span, ExpressionKind::Block { statements, value }),
+        ))
+    } else {
+        Err((ctx, errs))
     }
 }
 
@@ -170,39 +224,14 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     };
 
     // Parse the function statement.
-    let (ctx, mut statements) = block(ctx)?;
-
-    // If the return type isn't void, check for and apply implicit returns.
-    if !matches!(ret.kind, Resolved(Void)) {
-        // If the last statement is an expression statement,
-        // replace it with a return statement.
-        let last_statement = statements.pop();
-        if let Some(Statement {
-            span,
-            kind: StatementKind::StatementExpression { value },
-            comments,
-        }) = last_statement
-        {
-            statements.push(Statement {
-                span,
-                kind: StatementKind::Ret { value: Some(value) },
-                comments,
-            });
-        } else if let Some(statement) = last_statement {
-            statements.push(statement);
-        }
-    }
+    let (ctx, body) = expression(ctx)?;
 
     use ExpressionKind::Function;
     let function = Function {
         name: "lambda".into(),
         params,
         ret,
-        body: Box::new(Statement {
-            span: ctx.span(),
-            kind: StatementKind::Block { statements },
-            comments: Vec::new(),
-        }),
+        body: Box::new(body),
     };
 
     Ok((ctx, Expression::new(span, function)))
@@ -282,6 +311,8 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
     match ctx.token() {
         T::Fn => function(ctx),
+
+        T::Do => block(ctx),
 
         T::LeftParen => grouping_or_tuple(ctx),
         T::LeftBracket => list(ctx),
@@ -896,6 +927,16 @@ impl PrettyPrint for Expression {
             EK::Parenthesis(expr) => {
                 write!(f, "Paren\n")?;
                 expr.pretty_print(f, indent + 1)?;
+            }
+            EK::Block { statements, value } => {
+                write!(f, "<Block>\n")?;
+                statements
+                    .iter()
+                    .try_for_each(|stmt| stmt.pretty_print(f, indent + 1))?;
+                if let Some(value) = value {
+                    value.pretty_print(f, indent + 1)?;
+                }
+                return Ok(());
             }
             EK::IfExpression { condition, pass, fail } => {
                 write!(f, "IfExpression\n")?;

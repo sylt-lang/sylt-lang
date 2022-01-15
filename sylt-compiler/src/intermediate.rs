@@ -412,6 +412,21 @@ impl<'a> IRCodeGen<'a> {
                 (vec![IR::Bool(a, *b)], a)
             }
 
+            ExpressionKind::Block { statements, value } => {
+                let ss = self.variables.len();
+                let stmt_code = statements
+                    .iter()
+                    .map(|stmt| self.statement(stmt, ctx))
+                    .flatten()
+                    .collect();
+                let (value_code, value) = value
+                    .as_ref()
+                    .map(|value| self.expression(value, ctx))
+                    .unwrap_or_else(|| (Vec::new(), self.var()));
+                self.variables.truncate(ss);
+                ([stmt_code, value_code].concat(), value)
+            }
+
             ExpressionKind::Function { name, body, params, .. } => {
                 let ss = self.variables.len();
                 let f = self.var();
@@ -432,10 +447,15 @@ impl<'a> IRCodeGen<'a> {
                         var
                     })
                     .collect();
-                let body = self.statement(body, ctx);
+                let (body, ret) = self.expression(body, ctx);
                 self.variables.truncate(ss);
                 (
-                    [vec![IR::Function(f, params)], body, vec![IR::End]].concat(),
+                    [
+                        vec![IR::Function(f, params)],
+                        body,
+                        vec![IR::Return(ret), IR::End],
+                    ]
+                    .concat(),
                     f,
                 )
             }
@@ -672,16 +692,6 @@ impl<'a> IRCodeGen<'a> {
             }
 
             StatementKind::StatementExpression { value } => self.expression(value, ctx).0,
-            StatementKind::Block { statements } => {
-                let ss = self.variables.len();
-                let code = statements
-                    .iter()
-                    .map(|stmt| self.statement(stmt, ctx))
-                    .flatten()
-                    .collect();
-                self.variables.truncate(ss);
-                code
-            }
 
             StatementKind::EmptyStatement => Vec::new(),
 

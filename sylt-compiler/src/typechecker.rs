@@ -13,6 +13,16 @@ use std::collections::{BTreeMap, BTreeSet};
 
 type TypeResult<T> = Result<T, Vec<Error>>;
 
+type RetNValue = (Option<TyID>, TyID);
+
+fn no_ret(value: TyID) -> TypeResult<RetNValue> {
+    Ok((None, value))
+}
+
+fn with_ret(ret: Option<TyID>, value: TyID) -> TypeResult<RetNValue> {
+    Ok((ret, value))
+}
+
 trait Help {
     fn help(self, typechecker: &TypeChecker, span: Span, message: String) -> Self;
     fn help_no_span(self, message: String) -> Self;
@@ -81,13 +91,13 @@ macro_rules! type_error {
 
 macro_rules! bin_op {
     ($self:expr, $span:expr, $ctx:expr, $a:expr, $b:expr, $con:expr) => {{
-        let a = $self.expression($a, $ctx)?;
-        let b = $self.expression($b, $ctx)?;
+        let (a_ret, a) = $self.expression($a, $ctx)?;
+        let (b_ret, b) = $self.expression($b, $ctx)?;
         $self.add_constraint(a, $span, $con(b));
         $self.add_constraint(b, $span, $con(a));
         $self.check_constraints($span, $ctx, a)?;
         $self.check_constraints($span, $ctx, b)?;
-        Ok(a) as TypeResult<TyID>
+        with_ret($self.unify_option($span, $ctx, a_ret, b_ret)?, a)
     }};
 }
 
@@ -523,27 +533,13 @@ impl TypeChecker {
     fn statement(&mut self, statement: &mut Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
         let span = statement.span;
         match &mut statement.kind {
-            StatementKind::Block { statements } => {
-                // Left this for Gustav
-
-                let ss = self.stack.len();
-                let rets = self.push_type(Type::Unknown);
-                let mut any_return = false;
-                for stmt in statements.iter_mut() {
-                    if let Some(ret) = self.statement(stmt, ctx)? {
-                        self.unify(span, ctx, rets, ret)?;
-                        any_return = true;
-                    }
+            StatementKind::Ret { value: Some(value) } => Ok(Some({
+                let (ret, value) = self.expression(value, ctx)?;
+                match ret {
+                    Some(ret) => self.unify(span, ctx, value, ret)?,
+                    None => value,
                 }
-                self.stack.truncate(ss);
-                if any_return {
-                    Ok(Some(rets))
-                } else {
-                    Ok(None)
-                }
-            }
-
-            StatementKind::Ret { value: Some(value) } => Ok(Some(self.expression(value, ctx)?)),
+            })),
             StatementKind::Ret { value: None } => Ok(Some(self.push_type(Type::Void))),
 
             StatementKind::StatementExpression { value } => {
@@ -552,7 +548,7 @@ impl TypeChecker {
             }
 
             StatementKind::Case { to_match, branches, fall_through } => {
-                let to_match = self.expression(to_match, ctx)?;
+                let (ret, to_match) = self.expression(to_match, ctx)?;
                 self.add_constraint(to_match, span, Constraint::Enum);
 
                 let mut branch_names = BTreeSet::new();
@@ -590,28 +586,24 @@ impl TypeChecker {
                     self.add_constraint(to_match, span, Constraint::TotalEnum(branch_names));
                     self.check_constraints(span, ctx, to_match)?;
                 }
-                Ok(None)
+                Ok(ret)
             }
 
             StatementKind::If { condition, pass, fail } => {
-                let condition = self.expression(condition, ctx)?;
+                let (ret, condition) = self.expression(condition, ctx)?;
                 let boolean = self.push_type(Type::Bool);
                 self.unify(span, ctx, boolean, condition)?;
 
                 let pass = self.statement(pass, ctx)?;
+                let ret = self.unify_option(span, ctx, pass, ret)?;
                 let fail = self.statement(fail, ctx)?;
-                match (pass, fail) {
-                    (Some(pass), Some(fail)) => Ok(Some(self.unify(span, ctx, pass, fail)?)),
-                    (Some(pass), _) => Ok(Some(pass)),
-                    (_, Some(fail)) => Ok(Some(fail)),
-                    _ => Ok(None),
-                }
+                self.unify_option(span, ctx, fail, ret)
             }
 
             StatementKind::Assignment { kind, target, value } => {
                 self.can_assign(span, ctx, target)?;
-                let expression_ty = self.expression(value, ctx)?;
-                let target_ty = self.assignable(target, ctx)?;
+                let (expression_ret, expression_ty) = self.expression(value, ctx)?;
+                let (target_ret, target_ty) = self.assignable(target, ctx)?;
                 match kind {
                     ParserOp::Nop => {}
                     ParserOp::Add => {
@@ -632,7 +624,7 @@ impl TypeChecker {
                     }
                 };
                 self.unify(span, ctx, expression_ty, target_ty)?;
-                Ok(None)
+                self.unify_option(span, ctx, expression_ret, target_ret)
             }
 
             StatementKind::Definition { .. } => {
@@ -641,11 +633,12 @@ impl TypeChecker {
             }
 
             StatementKind::Loop { condition, body } => {
-                let condition = self.expression(condition, ctx)?;
+                let (ret, condition) = self.expression(condition, ctx)?;
                 let boolean = self.push_type(Type::Bool);
                 self.unify(span, ctx, boolean, condition)?;
 
-                self.statement(body, ctx.enter_loop())
+                let body_ret = self.statement(body, ctx.enter_loop())?;
+                self.unify_option(span, ctx, ret, body_ret)
             }
 
             StatementKind::Break => {
@@ -780,7 +773,6 @@ impl TypeChecker {
             | StatementKind::Ret { .. }
             | StatementKind::If { .. }
             | StatementKind::Case { .. }
-            | StatementKind::Block { .. }
             | StatementKind::StatementExpression { .. }
             | StatementKind::Unreachable
             | StatementKind::EmptyStatement => {
@@ -795,7 +787,7 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn assignable(&mut self, assignable: &mut Assignable, ctx: TypeCtx) -> TypeResult<TyID> {
+    fn assignable(&mut self, assignable: &mut Assignable, ctx: TypeCtx) -> TypeResult<RetNValue> {
         let span = assignable.span;
         // FIXME: Functions are copied since they may be specialized
         // several times, this does not work properly when functions are
@@ -866,7 +858,7 @@ impl TypeChecker {
                     }
                 };
                 // Only unify this variant with the expression
-                let expr_ty = self.expression(value, ctx)?;
+                let (ret, expr_ty) = self.expression(value, ctx)?;
                 match variants.get(&variant.name) {
                     Some(field_ty) => self.unify(variant.span, ctx, *field_ty, expr_ty)?,
                     None => {
@@ -877,7 +869,7 @@ impl TypeChecker {
                         )
                     }
                 };
-                Ok(ty)
+                with_ret(ret, ty)
             }
 
             AssignableKind::Read(ident) => {
@@ -887,14 +879,14 @@ impl TypeChecker {
                     .rfind(|v| v.ident.name == ident.name)
                     .cloned()
                 {
-                    Ok(var.ty)
+                    no_ret(var.ty)
                 } else {
                     match self
                         .globals
                         .get(&(ctx.namespace, ident.name.clone()))
                         .cloned()
                     {
-                        Some(Name::Global(var)) => Ok(var.ty),
+                        Some(Name::Global(var)) => no_ret(var.ty),
                         _ => err_type_error!(
                             self,
                             span,
@@ -905,9 +897,9 @@ impl TypeChecker {
             }
 
             AssignableKind::Call(f, args) => {
-                let f = self.assignable(f, ctx)?;
+                let (ret, f) = self.assignable(f, ctx)?;
                 match self.find_type(f) {
-                    Type::Function(params, ret) => {
+                    Type::Function(params, ret_ty) => {
                         if args.len() != params.len() {
                             return err_type_error!(
                                 self,
@@ -916,13 +908,15 @@ impl TypeChecker {
                             );
                         }
                         // TODO(ed): Annotate the errors?
+                        let mut ret = ret;
                         for (a, p) in args.iter_mut().zip(params.iter()) {
                             let span = a.span;
-                            let a = self.expression(a, ctx)?;
+                            let (a_ret, a) = self.expression(a, ctx)?;
                             self.unify(span, ctx, *p, a)?;
+                            ret = self.unify_option(span, ctx, ret, a_ret)?;
                         }
 
-                        Ok(ret)
+                        with_ret(ret, ret_ty)
                     }
                     Type::Unknown => err_type_error!(
                         self,
@@ -953,51 +947,75 @@ impl TypeChecker {
                     ctx,
                 ),
                 None => {
-                    let outer = self.assignable(outer, ctx)?;
+                    let (outer_ret, outer) = self.assignable(outer, ctx)?;
                     let ret = self.push_type(Type::Unknown);
                     self.add_constraint(outer, span, Constraint::Field(ident.name.clone(), ret));
                     self.check_constraints(span, ctx, outer)?;
+                    // TODO(ed): Don't we do this further down? Do we need this code?
                     // We copy functions
-                    match self.find_type(outer) {
-                        Type::Function(_, _) => Ok(self.copy(ret)),
-                        _ => Ok(ret),
-                    }
+                    let outer = match self.find_type(outer) {
+                        Type::Function(_, _) => outer,
+                        _ => outer,
+                    };
+                    with_ret(outer_ret, outer)
                 }
             },
 
             AssignableKind::Index(outer, syn_index) => {
-                let outer = self.assignable(outer, ctx)?;
-                let index = self.expression(syn_index, ctx)?;
-                let ret = self.push_type(Type::Unknown);
+                let (outer_ret, outer) = self.assignable(outer, ctx)?;
+                let (index_ret, index) = self.expression(syn_index, ctx)?;
+                let expr = self.push_type(Type::Unknown);
                 match syn_index.kind {
                     ExpressionKind::Int(index) => {
-                        self.add_constraint(outer, span, Constraint::ConstantIndex(index, ret));
+                        self.add_constraint(outer, span, Constraint::ConstantIndex(index, expr));
                     }
                     _ => {
                         self.add_constraint(index, span, Constraint::Indexes(outer));
                         self.add_constraint(outer, span, Constraint::IndexedBy(index));
-                        self.add_constraint(outer, span, Constraint::IndexingGives(ret));
-                        self.add_constraint(ret, span, Constraint::GivenByIndex(outer));
+                        self.add_constraint(outer, span, Constraint::IndexingGives(expr));
+                        self.add_constraint(expr, span, Constraint::GivenByIndex(outer));
                     }
                 }
 
                 self.check_constraints(span, ctx, outer)?;
                 self.check_constraints(span, ctx, index)?;
-                Ok(ret)
+                let ret = self.unify_option(span, ctx, outer_ret, index_ret)?;
+                with_ret(ret, expr)
             }
 
             AssignableKind::Expression(expression) => self.expression(expression, ctx),
-        }?;
-        match self.find_type(ty) {
-            Type::Function(..) => Ok(self.copy(ty)),
-            _ => Ok(ty),
-        }
+        };
+        let (ret, ty) = ty?;
+        let ty = match self.find_type(ty) {
+            Type::Function(..) => self.copy(ty),
+            _ => ty,
+        };
+        with_ret(ret, ty)
     }
 
-    fn expression(&mut self, expression: &mut Expression, ctx: TypeCtx) -> TypeResult<TyID> {
+    fn expression(&mut self, expression: &mut Expression, ctx: TypeCtx) -> TypeResult<RetNValue> {
         let span = expression.span;
         let res = match &mut expression.kind {
             ExpressionKind::Get(ass) => self.assignable(ass, ctx),
+            ExpressionKind::Block { statements, value } => {
+                // Left this for Gustav
+
+                let ss = self.stack.len();
+                let ret = Some(self.push_type(Type::Unknown));
+                for stmt in statements.iter_mut() {
+                    let stmt = self.statement(stmt, ctx)?;
+                    self.unify_option(span, ctx, ret, stmt)?;
+                }
+                let (value_ret, value) = if let Some(value) = value {
+                    self.expression(value, ctx)?
+                } else {
+                    // TODO(ed): This is wrong.
+                    (None, self.push_type(Type::Void))
+                };
+                let ret = self.unify_option(span, ctx, ret, value_ret)?;
+                self.stack.truncate(ss);
+                with_ret(ret, value)
+            }
 
             ExpressionKind::Add(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Add),
             ExpressionKind::Sub(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Sub),
@@ -1006,63 +1024,69 @@ impl TypeChecker {
 
             ExpressionKind::Comparison(a, comp, b) => match comp {
                 ComparisonKind::NotEquals | ComparisonKind::Equals => {
-                    bin_op!(self, span, ctx, a, b, Constraint::Equ)?;
-                    Ok(self.push_type(Type::Bool))
+                    let (ret, _) = bin_op!(self, span, ctx, a, b, Constraint::Equ)?;
+                    with_ret(ret, self.push_type(Type::Bool))
                 }
                 ComparisonKind::Less | ComparisonKind::Greater => {
-                    bin_op!(self, span, ctx, a, b, Constraint::Cmp)?;
-                    Ok(self.push_type(Type::Bool))
+                    let (ret, _) = bin_op!(self, span, ctx, a, b, Constraint::Cmp)?;
+                    with_ret(ret, self.push_type(Type::Bool))
                 }
                 ComparisonKind::LessEqual | ComparisonKind::GreaterEqual => {
-                    bin_op!(self, span, ctx, a, b, Constraint::CmpEqu)?;
-                    Ok(self.push_type(Type::Bool))
+                    let (ret, _) = bin_op!(self, span, ctx, a, b, Constraint::CmpEqu)?;
+                    with_ret(ret, self.push_type(Type::Bool))
                 }
 
                 ComparisonKind::In => {
-                    let a = self.expression(a, ctx)?;
-                    let b = self.expression(b, ctx)?;
+                    let (a_ret, a) = self.expression(a, ctx)?;
+                    let (b_ret, b) = self.expression(b, ctx)?;
                     self.add_constraint(a, span, Constraint::IsContainedIn(b));
                     self.add_constraint(b, span, Constraint::Contains(a));
                     self.check_constraints(span, ctx, a)?;
                     self.check_constraints(span, ctx, b)?;
-                    Ok(self.push_type(Type::Bool))
+                    with_ret(
+                        self.unify_option(span, ctx, a_ret, b_ret)?,
+                        self.push_type(Type::Bool),
+                    )
                 }
             },
 
             ExpressionKind::AssertEq(a, b) => {
-                bin_op!(self, span, ctx, a, b, Constraint::Equ)?;
-                Ok(self.push_type(Type::Bool))
+                let (ret, _) = bin_op!(self, span, ctx, a, b, Constraint::Equ)?;
+                with_ret(ret, self.push_type(Type::Bool))
             }
 
             ExpressionKind::Or(a, b) | ExpressionKind::And(a, b) => {
-                let a = self.expression(a, ctx)?;
-                let b = self.expression(b, ctx)?;
+                let (a_ret, a) = self.expression(a, ctx)?;
+                let (b_ret, b) = self.expression(b, ctx)?;
                 let boolean = self.push_type(Type::Bool);
                 self.unify(span, ctx, a, boolean)?;
-                self.unify(span, ctx, b, boolean)
+                self.unify(span, ctx, b, boolean)?;
+                with_ret(self.unify_option(span, ctx, a_ret, b_ret)?, a)
             }
 
             ExpressionKind::Neg(a) => {
-                let a = self.expression(a, ctx)?;
+                let (a_ret, a) = self.expression(a, ctx)?;
                 self.add_constraint(a, span, Constraint::Neg);
-                Ok(a)
+                with_ret(a_ret, a)
             }
 
             ExpressionKind::Not(a) => {
-                let a = self.expression(a, ctx)?;
+                let (a_ret, a) = self.expression(a, ctx)?;
                 let boolean = self.push_type(Type::Bool);
-                self.unify(span, ctx, a, boolean)
+                with_ret(a_ret, self.unify(span, ctx, a, boolean)?)
             }
 
             ExpressionKind::Parenthesis(expr) => self.expression(expr, ctx),
 
             ExpressionKind::IfExpression { condition, pass, fail } => {
                 let boolean = self.push_type(Type::Bool);
-                let condition = self.expression(condition, ctx)?;
+                let (condition_ret, condition) = self.expression(condition, ctx)?;
                 self.unify(span, ctx, condition, boolean)?;
-                let pass = self.expression(pass, ctx)?;
-                let fail = self.expression(fail, ctx)?;
-                self.unify(span, ctx, pass, fail)
+                let (pass_ret, pass) = self.expression(pass, ctx)?;
+                let (fail_ret, fail) = self.expression(fail, ctx)?;
+                let ret = self.unify_option(span, ctx, condition_ret, pass_ret)?;
+                let ret = self.unify_option(span, ctx, ret, fail_ret)?;
+                with_ret(ret, self.unify(span, ctx, pass, fail)?)
             }
 
             ExpressionKind::Function { name: _, params, ret, body } => {
@@ -1083,16 +1107,15 @@ impl TypeChecker {
                 }
 
                 let ret = self.inner_resolve_type(span, ctx, ret, &mut seen)?;
-                if let Some(actual_ret) = self.statement(body, ctx)? {
-                    self.unify(span, ctx, ret, actual_ret)?;
-                } else {
-                    let void = self.push_type(Type::Void);
-                    self.unify(span, ctx, ret, void)?;
-                }
+                // TODO(ed): We shouldn't ignore this value! D:<
+                let (actual_ret, _val) = self.expression(body, ctx)?;
+                let actual_ret = actual_ret.unwrap_or_else(|| self.push_type(Type::Void));
+                self.unify(span, ctx, ret, actual_ret)?;
 
                 self.stack.truncate(ss);
 
-                Ok(self.push_type(Type::Function(args, ret)))
+                // Functions are the only expressions that we cannot return out of when evaluating.
+                no_ret(self.push_type(Type::Function(args, ret)))
             }
 
             ExpressionKind::Blob { blob, fields } => {
@@ -1149,6 +1172,7 @@ impl TypeChecker {
 
                 // Unify the fields with their real types
                 let ss = self.stack.len();
+                let ret = Some(self.push_type(Type::Unknown));
                 for (key, expr) in fields {
                     if matches!(expr.kind, ExpressionKind::Function { .. }) {
                         self.stack.push(Variable {
@@ -1158,59 +1182,69 @@ impl TypeChecker {
                             span,
                         });
                     }
-                    let expr_ty = self.expression(expr, ctx)?;
+                    let (inner_ret, expr_ty) = self.expression(expr, ctx)?;
+                    self.unify_option(span, ctx, ret, inner_ret)?;
                     self.unify(expr.span, ctx, expr_ty, fields_and_types[key])?;
                     self.stack.truncate(ss);
                 }
 
-                self.unify(span, ctx, given_blob, blob_ty)
+                with_ret(ret, self.unify(span, ctx, given_blob, blob_ty)?)
             }
 
             ExpressionKind::Tuple(exprs) => {
                 let mut tys = Vec::new();
+                let ret = Some(self.push_type(Type::Unknown));
                 for expr in exprs.iter_mut() {
-                    tys.push(self.expression(expr, ctx)?);
+                    let (inner_ret, ty) = self.expression(expr, ctx)?;
+                    tys.push(ty);
+                    self.unify_option(span, ctx, ret, inner_ret)?;
                 }
-                Ok(self.push_type(Type::Tuple(tys)))
+                with_ret(ret, self.push_type(Type::Tuple(tys)))
             }
 
             ExpressionKind::List(exprs) => {
                 let inner_ty = self.push_type(Type::Unknown);
+                let ret = Some(self.push_type(Type::Unknown));
                 for expr in exprs.iter_mut() {
-                    let e = self.expression(expr, ctx)?;
+                    let (e_ret, e) = self.expression(expr, ctx)?;
                     self.unify(span, ctx, inner_ty, e)?;
+                    self.unify_option(span, ctx, ret, e_ret)?;
                 }
-                Ok(self.push_type(Type::List(inner_ty)))
+                with_ret(ret, self.push_type(Type::List(inner_ty)))
             }
 
             ExpressionKind::Set(exprs) => {
                 let inner_ty = self.push_type(Type::Unknown);
+                let ret = Some(self.push_type(Type::Unknown));
                 for expr in exprs.iter_mut() {
-                    let e = self.expression(expr, ctx)?;
+                    let (e_ret, e) = self.expression(expr, ctx)?;
                     self.unify(span, ctx, inner_ty, e)?;
+                    self.unify_option(span, ctx, ret, e_ret)?;
                 }
-                Ok(self.push_type(Type::Set(inner_ty)))
+                with_ret(ret, self.push_type(Type::Set(inner_ty)))
             }
 
             ExpressionKind::Dict(exprs) => {
                 let key_ty = self.push_type(Type::Unknown);
                 let value_ty = self.push_type(Type::Unknown);
+                let ret = Some(self.push_type(Type::Unknown));
                 for (i, x) in exprs.iter_mut().enumerate() {
-                    let e = self.expression(x, ctx)?;
+                    let (e_ret, e) = self.expression(x, ctx)?;
                     // Even indexes are keys, odd are the values.
                     let ty = if i % 2 == 0 { key_ty } else { value_ty };
                     self.unify(span, ctx, ty, e)?;
+                    self.unify_option(span, ctx, e_ret, ret)?;
                 }
-                Ok(self.push_type(Type::Dict(key_ty, value_ty)))
+                with_ret(ret, self.push_type(Type::Dict(key_ty, value_ty)))
             }
 
-            ExpressionKind::Int(_) => Ok(self.push_type(Type::Int)),
-            ExpressionKind::Float(_) => Ok(self.push_type(Type::Float)),
-            ExpressionKind::Str(_) => Ok(self.push_type(Type::Str)),
-            ExpressionKind::Bool(_) => Ok(self.push_type(Type::Bool)),
-            ExpressionKind::Nil => Ok(self.push_type(Type::Nil)),
+            ExpressionKind::Int(_) => no_ret(self.push_type(Type::Int)),
+            ExpressionKind::Float(_) => no_ret(self.push_type(Type::Float)),
+            ExpressionKind::Str(_) => no_ret(self.push_type(Type::Str)),
+            ExpressionKind::Bool(_) => no_ret(self.push_type(Type::Bool)),
+            ExpressionKind::Nil => no_ret(self.push_type(Type::Nil)),
         }?;
-        expression.ty = Some(res);
+        expression.ty = Some(res.1);
         Ok(res)
     }
 
@@ -1219,57 +1253,56 @@ impl TypeChecker {
         statement: &mut Statement,
         global: bool,
         ctx: TypeCtx,
-    ) -> TypeResult<()> {
+    ) -> TypeResult<Option<TyID>> {
         let span = statement.span;
-        match &mut statement.kind {
-            StatementKind::Definition { ident, kind, ty, value } => {
-                let defined_ty = self.resolve_type(span, ctx, &ty)?;
-
-                let is_function = match &value.kind {
-                    ExpressionKind::Function { params, .. } => {
-                        let args = params
-                            .iter()
-                            .map(|_| self.push_type(Type::Unknown))
-                            .collect();
-                        let ret = self.push_type(Type::Unknown);
-                        let fn_ty = self.push_type(Type::Function(args, ret));
-                        self.unify(span, ctx, defined_ty, fn_ty)?;
-                        let var = Variable { ident: ident.clone(), ty: fn_ty, kind: *kind, span };
-                        if global {
-                            self.globals
-                                .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
-                        } else {
-                            self.stack.push(var);
-                        }
-                        true
-                    }
-                    _ => false,
-                };
-
-                let expression_ty = self.expression(value, ctx)?;
-                self.add_constraint(defined_ty, span, Constraint::Variable);
-                self.unify(span, ctx, expression_ty, defined_ty)?;
-
-                if !is_function {
-                    let var = Variable {
-                        ident: ident.clone(),
-                        ty: defined_ty,
-                        kind: *kind,
-                        span,
-                    };
-                    if global {
-                        self.globals.insert(
-                            (ctx.namespace, ident.name.clone()),
-                            Name::Global(var.clone()),
-                        );
-                    } else {
-                        self.stack.push(var);
-                    }
-                }
-            }
+        let (ident, kind, ty, value) = match &mut statement.kind {
+            StatementKind::Definition { ident, kind, ty, value } => (ident, kind, ty, value),
             _ => unreachable!(),
+        };
+        let defined_ty = self.resolve_type(span, ctx, &ty)?;
+
+        let is_function = match &value.kind {
+            ExpressionKind::Function { params, .. } => {
+                let args = params
+                    .iter()
+                    .map(|_| self.push_type(Type::Unknown))
+                    .collect();
+                let ret = self.push_type(Type::Unknown);
+                let fn_ty = self.push_type(Type::Function(args, ret));
+                self.unify(span, ctx, defined_ty, fn_ty)?;
+                let var = Variable { ident: ident.clone(), ty: fn_ty, kind: *kind, span };
+                if global {
+                    self.globals
+                        .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
+                } else {
+                    self.stack.push(var);
+                }
+                true
+            }
+            _ => false,
+        };
+
+        let (ret_expression, expression_ty) = self.expression(value, ctx)?;
+        self.add_constraint(defined_ty, span, Constraint::Variable);
+        self.unify(span, ctx, expression_ty, defined_ty)?;
+
+        if !is_function {
+            let var = Variable {
+                ident: ident.clone(),
+                ty: defined_ty,
+                kind: *kind,
+                span,
+            };
+            if global {
+                self.globals.insert(
+                    (ctx.namespace, ident.name.clone()),
+                    Name::Global(var.clone()),
+                );
+            } else {
+                self.stack.push(var);
+            }
         }
-        Ok(())
+        Ok(ret_expression)
     }
 
     fn find(&mut self, TyID(a): TyID) -> TyID {
@@ -1573,6 +1606,21 @@ impl TypeChecker {
         for (con, span) in self.types[b].constraints.clone().iter() {
             self.types[a].constraints.insert(con.clone(), *span);
         }
+    }
+
+    fn unify_option(
+        &mut self,
+        span: Span,
+        ctx: TypeCtx,
+        a: Option<TyID>,
+        b: Option<TyID>,
+    ) -> TypeResult<Option<TyID>> {
+        Ok(match (a, b) {
+            (Some(a), Some(b)) => Some(self.unify(span, ctx, a, b)?),
+            (Some(_), None) => a,
+            (None, Some(_)) => b,
+            (None, None) => None,
+        })
     }
 
     fn unify(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<TyID> {
