@@ -210,6 +210,17 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
         .flatten()
         .collect(),
 
+        Block { statements } => {
+            let vars_before = ctx.variables.len();
+            let stmt_deps = statements
+                .iter()
+                .map(|stmt| statement_dependencies(ctx, stmt))
+                .flatten()
+                .collect();
+            ctx.variables.truncate(vars_before);
+            stmt_deps
+        }
+
         Loop { condition, body } => dependencies(ctx, condition)
             .union(&statement_dependencies(ctx, body))
             .cloned()
@@ -289,17 +300,6 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<(String,
             .cloned()
             .collect(),
 
-        Block { statements } => {
-            let vars_before = ctx.variables.len();
-            let stmt_deps = statements
-                .iter()
-                .map(|stmt| statement_dependencies(ctx, stmt))
-                .flatten()
-                .collect();
-            ctx.variables.truncate(vars_before);
-            stmt_deps
-        }
-
         IfExpression { condition, pass, fail } => [pass, fail, condition]
             .iter()
             .map(|expr| dependencies(ctx, expr))
@@ -318,7 +318,7 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<(String,
                 .map(|(_, ty)| type_dependencies(ctx, ty))
                 .flatten()
                 .collect();
-            let deps = dependencies(ctx, body);
+            let deps = statement_dependencies(ctx, body);
             ctx.variables.truncate(vars_before);
             [deps, type_deps].iter().flatten().cloned().collect()
         }

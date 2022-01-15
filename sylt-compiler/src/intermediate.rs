@@ -412,25 +412,6 @@ impl<'a> IRCodeGen<'a> {
                 (vec![IR::Bool(a, *b)], a)
             }
 
-            ExpressionKind::Block { statements } => {
-                let ss = self.variables.len();
-                // TODO(ed): Remove this clone
-                let mut statements = statements.clone();
-                let last_stmt = statements.pop();
-                let stmt_code = statements
-                    .iter()
-                    .map(|stmt| self.statement(stmt, ctx))
-                    .flatten()
-                    .collect();
-                let (value_code, value) = match &last_stmt {
-                    Some(Statement { kind: StatementKind::StatementExpression { value }, .. }) => self.expression(&value, ctx),
-                    Some(stmt) => (self.statement(stmt, ctx), self.var()),
-                    None => (Vec::new(), self.var()),
-                };
-                self.variables.truncate(ss);
-                ([stmt_code, value_code].concat(), value)
-            }
-
             ExpressionKind::Function { name, body, params, .. } => {
                 let ss = self.variables.len();
                 let f = self.var();
@@ -451,18 +432,12 @@ impl<'a> IRCodeGen<'a> {
                         var
                     })
                     .collect();
-                let (body, ret) = self.expression(body, ctx);
-                let extra_return = if !matches!(body.last(), Some(IR::Return(_))) {
-                    vec![IR::Return(ret)]
-                } else {
-                    Vec::new()
-                };
+                let body = self.statement(body, ctx);
                 self.variables.truncate(ss);
                 (
                     [
                         vec![IR::Function(f, params)],
                         body,
-                        extra_return,
                         vec![IR::End],
                     ]
                     .concat(),
@@ -598,6 +573,17 @@ impl<'a> IRCodeGen<'a> {
                 .concat()
             }
             StatementKind::Definition { ident, value, .. } => self.definition(ident, value, ctx),
+            StatementKind::Block { statements } => {
+                let ss = self.variables.len();
+                let stmt_code = statements
+                    .iter()
+                    .map(|stmt| self.statement(stmt, ctx))
+                    .flatten()
+                    .collect();
+                self.variables.truncate(ss);
+                stmt_code
+            }
+
             StatementKind::If { condition, pass, fail } => {
                 let (cops, c) = self.expression(&condition, ctx);
                 let aops = self.statement(&pass, ctx);

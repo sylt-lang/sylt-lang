@@ -542,6 +542,19 @@ impl TypeChecker {
             })),
             StatementKind::Ret { value: None } => Ok(Some(self.push_type(Type::Void))),
 
+            StatementKind::Block { statements } => {
+                // Left this for Gustav
+
+                let ss = self.stack.len();
+                let mut ret = None;
+                for stmt in statements.iter_mut() {
+                    let stmt = self.statement(stmt, ctx)?;
+                    ret = self.unify_option(span, ctx, ret, stmt)?;
+                }
+                self.stack.truncate(ss);
+                Ok(ret)
+            }
+
             StatementKind::StatementExpression { value } => {
                 self.expression(value, ctx)?;
                 Ok(None)
@@ -771,6 +784,7 @@ impl TypeChecker {
             | StatementKind::Break
             | StatementKind::Continue
             | StatementKind::Ret { .. }
+            | StatementKind::Block { .. }
             | StatementKind::If { .. }
             | StatementKind::Case { .. }
             | StatementKind::StatementExpression { .. }
@@ -997,26 +1011,6 @@ impl TypeChecker {
         let span = expression.span;
         let res = match &mut expression.kind {
             ExpressionKind::Get(ass) => self.assignable(ass, ctx),
-            ExpressionKind::Block { statements } => {
-                // Left this for Gustav
-
-                let ss = self.stack.len();
-                let ret = None;
-                for stmt in statements.iter_mut() {
-                    let stmt = self.statement(stmt, ctx)?;
-                    self.unify_option(span, ctx, ret, stmt)?;
-                }
-                let (value_ret, value) = match statements.last_mut() {
-                    Some(Statement { kind: StatementKind::StatementExpression { value }, .. }) =>
-                        self.expression(value, ctx)?,
-
-                    Some(stmt) => (self.statement(stmt, ctx)?, self.push_type(Type::Void)),
-                    None => (None, self.push_type(Type::Void)),
-                };
-                let ret = self.unify_option(span, ctx, ret, value_ret)?;
-                self.stack.truncate(ss);
-                with_ret(ret, value)
-            }
 
             ExpressionKind::Add(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Add),
             ExpressionKind::Sub(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Sub),
@@ -1108,13 +1102,7 @@ impl TypeChecker {
                 }
 
                 let ret = self.inner_resolve_type(span, ctx, ret, &mut seen)?;
-                let (actual_ret, val) = self.expression(body, ctx)?;
-                let val = match self.find_type(val) {
-                    Type::Void => None,
-                    _ => Some(val),
-                };
-                let actual_ret = self
-                    .unify_option(span, ctx, actual_ret, val)?
+                let actual_ret = self.statement(body, ctx)?
                     .unwrap_or_else(|| self.push_type(Type::Void));
                 self.unify(span, ctx, ret, actual_ret)?;
 

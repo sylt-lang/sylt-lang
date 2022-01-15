@@ -155,10 +155,9 @@ pub enum StatementKind {
     /// Groups together statements that are executed after another.
     ///
     /// `{ <statement>.. }`.
-    // Block {
-    //     statements: Vec<Statement>,
-    //     value: Option<Expression>,
-    // },
+    Block {
+        statements: Vec<Statement>,
+    },
 
     /// A free-standing expression. It's just a `<expression>`.
     StatementExpression {
@@ -248,7 +247,7 @@ pub fn use_path<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, FileOrLib)
     Ok((ctx, (path_ident, file)))
 }
 
-fn block_like<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
+fn statement_or_block<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     if matches!(
         ctx.token(),
         T::Do | T::If | T::Loop | T::Break | T::Continue | T::Ret
@@ -262,6 +261,40 @@ fn block_like<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             ctx.token()
         );
         Err((err_ctx, vec![err]))
+    }
+}
+
+pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
+    // To allow implicit block-openings, like "fn ->"
+    let mut ctx = ctx.skip_if(T::Do);
+
+    let mut errs = Vec::new();
+    let mut statements = Vec::new();
+    // Parse multiple inner statements until } or EOF
+    while !matches!(ctx.token(), T::Else | T::End | T::EOF) {
+        match statement(ctx) {
+            Ok((_ctx, stmt)) => {
+                ctx = _ctx; // assign to outer
+                statements.push(stmt);
+            }
+            Err((_ctx, mut err)) => {
+                ctx = _ctx.pop_skip_newlines(false); // assign to outer
+                ctx = skip_until!(ctx, T::Newline).skip_if(T::Newline);
+                errs.append(&mut err);
+            }
+        }
+    }
+
+    if errs.is_empty() {
+        // Special case for chaining if-else-statements
+        if !matches!(ctx.token(), T::End | T::Else) {
+            syntax_error!(ctx, "Expected 'end' after block");
+        }
+        let ctx = ctx.skip_if(T::End);
+        #[rustfmt::skip]
+        return Ok(( ctx, statements ));
+    } else {
+        Err((ctx, errs))
     }
 }
 
@@ -290,12 +323,19 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Newline, ..] => (ctx, EmptyStatement),
 
         // Block: `{ <statements> }`
-        // [T::Do, ..] => match block(ctx) {
-        //     Ok((ctx, statements)) => (ctx, Block { statements }),
-        //     Err((ctx, errs)) => {
-        //         return Err((skip_until!(ctx, T::End), errs));
-        //     }
-        // },
+        [T::Do, ..] => match (block(ctx), expression(ctx)) {
+            (Ok((ctx, statements)), _) => (ctx, Block { statements }),
+            (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
+            (Err((_, mut stmt_errs)), Err((_, mut expr_errs))) => {
+                let errs = vec![
+                    syntax_error!(ctx, "Neither a valid block nor a valid expression - inspects the two errors below"),
+                    stmt_errs.remove(0),
+                    expr_errs.remove(0),
+                ];
+                let ctx = skip_until!(ctx, T::End);
+                return Err((ctx, errs));
+            }
+        },
 
         // `use path/to/file`
         // `use path/to/file as alias`
@@ -423,7 +463,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Case, ..] => {
             let (ctx, skip_newlines) = ctx.push_skip_newlines(true);
             let (ctx, to_match) = expression(ctx.skip(1))?;
-            let mut ctx = expect!(ctx, T::Do, "Expected 'do' after case-expression");
+            let mut ctx = expect!(ctx, T::Do);
 
             let mut branches = Vec::new();
             loop {
@@ -452,7 +492,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                             }
                             _ => (ctx, None),
                         };
-                        let (ctx_, body) = block_like(ctx_)?;
+                        let (ctx_, body) = statement_or_block(ctx_)?;
                         ctx = ctx_;
 
                         branches.push(CaseBranch { pattern, variable, body });
@@ -475,7 +515,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 }
             }
             let (ctx, fall_through) = if matches!(ctx.token(), T::Else) {
-                let (ctx, fall_through) = block_like(ctx.skip(1))?;
+                let (ctx, fall_through) = statement_or_block(ctx.skip(1))?;
                 (ctx, Some(Box::new(fall_through)))
             } else {
                 (ctx, None)
@@ -493,10 +533,10 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let (ctx, condition) = expression(ctx.skip(1))?;
             let ctx = ctx.pop_skip_newlines(skip_newlines);
 
-            let (ctx, pass) = block_like(ctx)?;
+            let (ctx, pass) = statement_or_block(ctx)?;
             // else?
             let (ctx, fail) = if matches!(ctx.token(), T::Else) {
-                block_like(ctx.skip(1))?
+                statement_or_block(ctx.skip(1))?
             } else {
                 // No else so we insert an empty statement instead.
                 (
@@ -756,7 +796,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
     // Newline, RightBrace and Else can end a statment.
     // If a statement does not end, we only report it as a missing newline.
-    let ctx = if matches!(ctx.token(), T::End | T::Else | T::EOF) {
+    let ctx = if matches!(ctx.token(), T::End | T::Else) {
         ctx
     } else {
         expect!(ctx, T::Newline, "Expected newline to end statement")

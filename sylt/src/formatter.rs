@@ -330,7 +330,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             }
 
             match body.kind {
-                ExpressionKind::Block { statements } => {
+                StatementKind::Block { statements } => {
                     write!(dest, "do\n")?;
                     for s in merge_empty_statements(statements) {
                         write_statement(dest, indent + 1, s)?;
@@ -340,20 +340,9 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
                     // NOTE(ed): No newline here!
                 }
                 _ => {
-                    write_expression(dest, indent, *body)?;
+                    write_statement(dest, indent, *body)?;
                 }
             }
-        }
-        ExpressionKind::Block { statements } => {
-            write_indents(dest, indent)?;
-            write!(dest, "do\n")?;
-
-            for s in merge_empty_statements(statements) {
-                write_statement(dest, indent + 1, s)?;
-            }
-
-            write_indents(dest, indent)?;
-            write!(dest, "end")?
         }
         ExpressionKind::Blob { blob, fields } => {
             write_type_assignable(dest, indent, blob)?;
@@ -429,6 +418,17 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
                 }
             )?;
             write_expression(dest, indent, value)?;
+        }
+        StatementKind::Block { statements } => {
+            write_indents(dest, indent)?;
+            write!(dest, "do\n")?;
+
+            for s in merge_empty_statements(statements) {
+                write_statement(dest, indent + 1, s)?;
+            }
+
+            write_indents(dest, indent)?;
+            write!(dest, "end")?
         }
         StatementKind::Blob { name, fields } => {
             write_indents(dest, indent)?;
