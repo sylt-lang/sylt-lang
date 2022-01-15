@@ -337,6 +337,7 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
                     }
                     if let Some(value) = value {
                         write_expression(dest, indent + 1, *value)?;
+                        write!(dest, "\n")?;
                     }
                     write_indents(dest, indent)?;
                     write!(dest, "end")?;

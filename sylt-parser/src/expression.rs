@@ -224,7 +224,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     };
 
     // Parse the function statement.
-    let (ctx, body) = expression(ctx)?;
+    let (ctx, body) = block(ctx)?;
 
     use ExpressionKind::Function;
     let function = Function {

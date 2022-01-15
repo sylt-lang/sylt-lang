@@ -756,7 +756,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
     // Newline, RightBrace and Else can end a statment.
     // If a statement does not end, we only report it as a missing newline.
-    let ctx = if matches!(ctx.token(), T::End | T::Else) {
+    let ctx = if matches!(ctx.token(), T::End | T::Else | T::EOF) {
         ctx
     } else {
         expect!(ctx, T::Newline, "Expected newline to end statement")
@@ -790,7 +790,6 @@ pub fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
 
 #[cfg(test)]
 mod test {
-    use super::StatementKind::*;
     use super::*;
 
     // NOTE(ed): Expressions are valid statements! :D
