@@ -948,16 +948,16 @@ impl TypeChecker {
                 ),
                 None => {
                     let (outer_ret, outer) = self.assignable(outer, ctx)?;
-                    let ret = self.push_type(Type::Unknown);
-                    self.add_constraint(outer, span, Constraint::Field(ident.name.clone(), ret));
+                    let field = self.push_type(Type::Unknown);
+                    self.add_constraint(outer, span, Constraint::Field(ident.name.clone(), field));
                     self.check_constraints(span, ctx, outer)?;
                     // TODO(ed): Don't we do this further down? Do we need this code?
                     // We copy functions
-                    let outer = match self.find_type(outer) {
-                        Type::Function(_, _) => outer,
-                        _ => outer,
+                    let field = match self.find_type(outer) {
+                        Type::Function(_, _) => self.copy(field),
+                        _ => field,
                     };
-                    with_ret(outer_ret, outer)
+                    with_ret(outer_ret, field)
                 }
             },
 
