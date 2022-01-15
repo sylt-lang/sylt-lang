@@ -277,9 +277,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             deps
         }
 
-        Break | Continue | EmptyStatement | IsCheck { .. } | Unreachable | Use { .. } => {
-            BTreeSet::new()
-        }
+        Break | Continue | EmptyStatement | Unreachable | Use { .. } => BTreeSet::new(),
     }
 }
 
@@ -405,7 +403,6 @@ pub(crate) fn initialization_order<'a>(
         .map(|(a, b)| (b.clone(), *a))
         .collect();
     let mut to_order = BTreeMap::new();
-    let mut is_checks = Vec::new();
     for (path, module) in tree.modules.iter() {
         let namespace = path_to_namespace_id[path];
         for statement in module.statements.iter() {
@@ -447,14 +444,9 @@ pub(crate) fn initialization_order<'a>(
                     );
                 }
 
-                IsCheck { .. } => is_checks.push((statement, namespace)),
-
                 _ => {}
             }
         }
     }
-    return order(to_order).map(|mut o| {
-        o.extend(is_checks);
-        o
-    });
+    return order(to_order);
 }

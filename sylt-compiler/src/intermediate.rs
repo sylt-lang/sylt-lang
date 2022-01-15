@@ -689,7 +689,6 @@ impl<'a> IRCodeGen<'a> {
             | StatementKind::Enum { .. }
             | StatementKind::ExternalDefinition { .. }
             | StatementKind::FromUse { .. }
-            | StatementKind::IsCheck { .. }
             | StatementKind::Use { .. } => unreachable!(),
         }
     }

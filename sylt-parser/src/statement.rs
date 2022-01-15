@@ -145,14 +145,6 @@ pub enum StatementKind {
     /// `continue`.
     Continue,
 
-    /// Handles compile time checks of types.
-    ///
-    /// `:A is :B`
-    IsCheck {
-        lhs: Type,
-        rhs: Type,
-    },
-
     /// Returns a value from a function.
     ///
     /// `ret [<expression>]`.
@@ -432,24 +424,6 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 ctx
             };
             (ctx, FromUse { path: path_ident, imports, file })
-        }
-
-        // `: A is : B`
-        [T::Colon, ..] => {
-            let ctx = ctx.skip(1);
-            let (ctx, lhs) = parse_type(ctx)?;
-            let ctx = expect!(
-                ctx,
-                T::Is,
-                "Expected 'is' after first type in 'is-check' statement"
-            );
-            let ctx = expect!(
-                ctx,
-                T::Colon,
-                "Expected ':' - only type constant are allowed in 'is-check' statements"
-            );
-            let (ctx, rhs) = parse_type(ctx)?;
-            (ctx, IsCheck { lhs, rhs })
         }
 
         [T::Break, ..] => (ctx.skip(1), Break),
@@ -840,7 +814,6 @@ pub fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
         | ExternalDefinition { .. }
         | Use { .. }
         | FromUse { .. }
-        | IsCheck { .. }
         | EmptyStatement
         => Ok((ctx, stmt)),
 
@@ -880,9 +853,6 @@ mod test {
     test!(statement, statement_assign_call: "a().b() += 2\n" => _);
     test!(statement, statement_assign_call_index: "a.c().c.b /= 4\n" => _);
     test!(statement, statement_idek: "a'.c'.c.b()().c = 0\n" => _);
-
-    test!(statement, statement_is_check: ":A is :B\n" => IsCheck { .. });
-    test!(statement, statement_is_check_nested: ":a.c.D is :b.d.D\n" => IsCheck { .. });
 
     test!(statement, statement_if_newline: "if 1 \n\n+\n 1\n\n < 2 do end\n" => _);
 

@@ -529,13 +529,6 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
                 write_statement(dest, indent, *fail)?;
             }
         }
-        StatementKind::IsCheck { lhs, rhs } => {
-            write_indents(dest, indent)?;
-            write!(dest, ":")?;
-            write_type(dest, indent, lhs)?;
-            write!(dest, " is :")?;
-            write_type(dest, indent, rhs)?;
-        }
         StatementKind::Loop { condition, body } => {
             write_indents(dest, indent)?;
             write!(dest, "loop ")?;

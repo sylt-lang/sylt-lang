@@ -675,7 +675,6 @@ impl TypeChecker {
             | StatementKind::FromUse { .. }
             | StatementKind::Blob { .. }
             | StatementKind::Enum { .. }
-            | StatementKind::IsCheck { .. }
             | StatementKind::ExternalDefinition { .. } => {
                 unreachable!(
                     "Illegal inner statement at {:?}! Parser should have caught this.",
@@ -772,12 +771,6 @@ impl TypeChecker {
                 let var = Variable { ident: ident.clone(), ty, kind: *kind, span };
                 self.globals
                     .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
-            }
-
-            StatementKind::IsCheck { lhs, rhs } => {
-                let lhs = self.resolve_type(span, ctx, lhs)?;
-                let rhs = self.resolve_type(span, ctx, rhs)?;
-                self.unify(span, ctx, lhs, rhs)?;
             }
 
             StatementKind::Assignment { .. }

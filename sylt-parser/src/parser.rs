@@ -1332,9 +1332,6 @@ impl PrettyPrint for Statement {
             SK::Continue => {
                 write!(f, "<Continue>")?;
             }
-            SK::IsCheck { lhs, rhs } => {
-                write!(f, "<Is> {} {}", lhs, rhs)?;
-            }
             SK::Ret { value } => {
                 write!(f, "<Ret>\n")?;
                 match value {
