@@ -412,17 +412,21 @@ impl<'a> IRCodeGen<'a> {
                 (vec![IR::Bool(a, *b)], a)
             }
 
-            ExpressionKind::Block { statements, value } => {
+            ExpressionKind::Block { statements } => {
                 let ss = self.variables.len();
+                // TODO(ed): Remove this clone
+                let mut statements = statements.clone();
+                let last_stmt = statements.pop();
                 let stmt_code = statements
                     .iter()
                     .map(|stmt| self.statement(stmt, ctx))
                     .flatten()
                     .collect();
-                let (value_code, value) = value
-                    .as_ref()
-                    .map(|value| self.expression(value, ctx))
-                    .unwrap_or_else(|| (Vec::new(), self.var()));
+                let (value_code, value) = match &last_stmt {
+                    Some(Statement { kind: StatementKind::StatementExpression { value }, .. }) => self.expression(&value, ctx),
+                    Some(stmt) => (self.statement(stmt, ctx), self.var()),
+                    None => (Vec::new(), self.var()),
+                };
                 self.variables.truncate(ss);
                 ([stmt_code, value_code].concat(), value)
             }
@@ -448,12 +452,18 @@ impl<'a> IRCodeGen<'a> {
                     })
                     .collect();
                 let (body, ret) = self.expression(body, ctx);
+                let extra_return = if !matches!(body.last(), Some(IR::Return(_))) {
+                    vec![IR::Return(ret)]
+                } else {
+                    Vec::new()
+                };
                 self.variables.truncate(ss);
                 (
                     [
                         vec![IR::Function(f, params)],
                         body,
-                        vec![IR::Return(ret), IR::End],
+                        extra_return,
+                        vec![IR::End],
                     ]
                     .concat(),
                     f,

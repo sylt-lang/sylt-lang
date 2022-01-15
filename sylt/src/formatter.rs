@@ -330,14 +330,10 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             }
 
             match body.kind {
-                ExpressionKind::Block { statements, value } => {
+                ExpressionKind::Block { statements } => {
                     write!(dest, "do\n")?;
                     for s in merge_empty_statements(statements) {
                         write_statement(dest, indent + 1, s)?;
-                    }
-                    if let Some(value) = value {
-                        write_expression(dest, indent + 1, *value)?;
-                        write!(dest, "\n")?;
                     }
                     write_indents(dest, indent)?;
                     write!(dest, "end")?;
@@ -348,15 +344,12 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
                 }
             }
         }
-        ExpressionKind::Block { statements, value } => {
+        ExpressionKind::Block { statements } => {
             write_indents(dest, indent)?;
             write!(dest, "do\n")?;
 
             for s in merge_empty_statements(statements) {
                 write_statement(dest, indent + 1, s)?;
-            }
-            if let Some(value) = value {
-                write_expression(dest, indent + 1, *value)?;
             }
 
             write_indents(dest, indent)?;

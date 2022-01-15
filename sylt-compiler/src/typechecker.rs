@@ -997,20 +997,21 @@ impl TypeChecker {
         let span = expression.span;
         let res = match &mut expression.kind {
             ExpressionKind::Get(ass) => self.assignable(ass, ctx),
-            ExpressionKind::Block { statements, value } => {
+            ExpressionKind::Block { statements } => {
                 // Left this for Gustav
 
                 let ss = self.stack.len();
-                let ret = Some(self.push_type(Type::Unknown));
+                let ret = None;
                 for stmt in statements.iter_mut() {
                     let stmt = self.statement(stmt, ctx)?;
                     self.unify_option(span, ctx, ret, stmt)?;
                 }
-                let (value_ret, value) = if let Some(value) = value {
-                    self.expression(value, ctx)?
-                } else {
-                    // TODO(ed): This is wrong.
-                    (None, self.push_type(Type::Void))
+                let (value_ret, value) = match statements.last_mut() {
+                    Some(Statement { kind: StatementKind::StatementExpression { value }, .. }) =>
+                        self.expression(value, ctx)?,
+
+                    Some(stmt) => (self.statement(stmt, ctx)?, self.push_type(Type::Void)),
+                    None => (None, self.push_type(Type::Void)),
                 };
                 let ret = self.unify_option(span, ctx, ret, value_ret)?;
                 self.stack.truncate(ss);
@@ -1107,9 +1108,14 @@ impl TypeChecker {
                 }
 
                 let ret = self.inner_resolve_type(span, ctx, ret, &mut seen)?;
-                // TODO(ed): We shouldn't ignore this value! D:<
-                let (actual_ret, _val) = self.expression(body, ctx)?;
-                let actual_ret = actual_ret.unwrap_or_else(|| self.push_type(Type::Void));
+                let (actual_ret, val) = self.expression(body, ctx)?;
+                let val = match self.find_type(val) {
+                    Type::Void => None,
+                    _ => Some(val),
+                };
+                let actual_ret = self
+                    .unify_option(span, ctx, actual_ret, val)?
+                    .unwrap_or_else(|| self.push_type(Type::Void));
                 self.unify(span, ctx, ret, actual_ret)?;
 
                 self.stack.truncate(ss);

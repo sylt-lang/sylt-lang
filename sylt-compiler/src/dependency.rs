@@ -289,19 +289,15 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<(String,
             .cloned()
             .collect(),
 
-        Block { statements, value } => {
+        Block { statements } => {
             let vars_before = ctx.variables.len();
             let stmt_deps = statements
                 .iter()
                 .map(|stmt| statement_dependencies(ctx, stmt))
                 .flatten()
                 .collect();
-            let value_deps = value
-                .as_ref()
-                .map(|expr| dependencies(ctx, expr))
-                .unwrap_or_else(|| BTreeSet::new());
             ctx.variables.truncate(vars_before);
-            [stmt_deps, value_deps].iter().cloned().flatten().collect()
+            stmt_deps
         }
 
         IfExpression { condition, pass, fail } => [pass, fail, condition]
