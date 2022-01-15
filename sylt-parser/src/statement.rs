@@ -423,7 +423,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Case, ..] => {
             let (ctx, skip_newlines) = ctx.push_skip_newlines(true);
             let (ctx, to_match) = expression(ctx.skip(1))?;
-            let mut ctx = expect!(ctx, T::Do);
+            let mut ctx = expect!(ctx, T::Do, "Expected 'do' after case-expression");
 
             let mut branches = Vec::new();
             loop {
