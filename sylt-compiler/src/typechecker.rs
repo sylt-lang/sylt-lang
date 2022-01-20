@@ -602,17 +602,6 @@ impl TypeChecker {
                 Ok(ret)
             }
 
-            StatementKind::If { condition, pass, fail } => {
-                let (ret, condition) = self.expression(condition, ctx)?;
-                let boolean = self.push_type(Type::Bool);
-                self.unify(span, ctx, boolean, condition)?;
-
-                let pass = self.statement(pass, ctx)?;
-                let ret = self.unify_option(span, ctx, pass, ret)?;
-                let fail = self.statement(fail, ctx)?;
-                self.unify_option(span, ctx, fail, ret)
-            }
-
             StatementKind::Assignment { kind, target, value } => {
                 self.can_assign(span, ctx, target)?;
                 let (expression_ret, expression_ty) = self.expression(value, ctx)?;
@@ -785,7 +774,6 @@ impl TypeChecker {
             | StatementKind::Continue
             | StatementKind::Ret { .. }
             | StatementKind::Block { .. }
-            | StatementKind::If { .. }
             | StatementKind::Case { .. }
             | StatementKind::StatementExpression { .. }
             | StatementKind::Unreachable
@@ -1072,6 +1060,53 @@ impl TypeChecker {
             }
 
             ExpressionKind::Parenthesis(expr) => self.expression(expr, ctx),
+
+            ExpressionKind::If { condition, pass, fail } => {
+                let (ret, condition) = self.expression(condition, ctx)?;
+                let boolean = self.push_type(Type::Bool);
+                self.unify(span, ctx, boolean, condition)?;
+
+                let (pass_ret, pass) = {
+                    // Left this for Gustav
+                    let ss = self.stack.len();
+                    let mut ret = None;
+                    for stmt in pass.iter_mut() {
+                        let stmt = self.statement(stmt, ctx)?;
+                        ret = self.unify_option(span, ctx, ret, stmt)?;
+                    }
+                    let value = if let Some(Statement { kind: StatementKind::StatementExpression { value }, ..}) = pass.last_mut() {
+                        let (value_ret, value) = self.expression(value, ctx)?;
+                        ret = self.unify_option(span, ctx, ret, value_ret)?;
+                        Some(value)
+                    } else {
+                        None
+                    };
+                    self.stack.truncate(ss);
+                    (ret, value)
+                };
+                let (fail_ret, fail) = {
+                    // Left this for Gustav
+                    let ss = self.stack.len();
+                    let mut ret = None;
+                    for stmt in fail.iter_mut() {
+                        let stmt = self.statement(stmt, ctx)?;
+                        ret = self.unify_option(span, ctx, ret, stmt)?;
+                    }
+                    let value = if let Some(Statement { kind: StatementKind::StatementExpression { value }, ..}) = fail.last_mut() {
+                        let (value_ret, value) = self.expression(value, ctx)?;
+                        ret = self.unify_option(span, ctx, ret, value_ret)?;
+                        Some(value)
+                    } else {
+                        None
+                    };
+                    self.stack.truncate(ss);
+                    (ret, value)
+                };
+                let ret = self.unify_option(span, ctx, pass_ret, ret)?;
+                let ret = self.unify_option(span, ctx, fail_ret, ret)?;
+                let value = self.unify_option(span, ctx, pass, fail)?;
+                with_ret(ret, value.unwrap_or_else(|| self.push_type(Type::Void)))
+            }
 
             ExpressionKind::IfExpression { condition, pass, fail } => {
                 let boolean = self.push_type(Type::Bool);

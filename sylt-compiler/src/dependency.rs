@@ -182,16 +182,6 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             .cloned()
             .collect(),
 
-        If { condition, pass, fail } => [
-            dependencies(ctx, condition),
-            statement_dependencies(ctx, pass),
-            statement_dependencies(ctx, fail),
-        ]
-        .iter()
-        .flatten()
-        .cloned()
-        .collect(),
-
         Case { to_match, branches, fall_through } => [
             dependencies(ctx, to_match),
             match fall_through {
@@ -305,6 +295,22 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<(String,
             .map(|expr| dependencies(ctx, expr))
             .flatten()
             .collect(),
+
+        If { condition, pass, fail } => [
+            dependencies(ctx, condition),
+            pass.iter()
+                .map(|stmt| statement_dependencies(ctx, stmt))
+                .flatten()
+                .collect(),
+            fail.iter()
+                .map(|stmt| statement_dependencies(ctx, stmt))
+                .flatten()
+                .collect(),
+        ]
+        .iter()
+        .flatten()
+        .cloned()
+        .collect(),
 
         // Functions are a bit special. They only create dependencies once
         // called, which is a problem. It is currently impossible to know when

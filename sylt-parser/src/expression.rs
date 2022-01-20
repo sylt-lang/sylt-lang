@@ -1,6 +1,6 @@
 use sylt_common::error::Error;
 
-use crate::statement::block;
+use crate::statement::{block, statement_or_block};
 
 use super::*;
 
@@ -54,6 +54,15 @@ pub enum ExpressionKind {
         condition: Box<Expression>,
         pass: Box<Expression>,
         fail: Box<Expression>,
+    },
+
+    /// Makes your code go either here or there.
+    ///
+    /// `if <expression> <statement> [else <statement>]`.
+    If {
+        condition: Box<Expression>,
+        pass: Vec<Statement>,
+        fail: Vec<Statement>,
     },
 
     /// Functions and closures.
@@ -282,6 +291,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
     match ctx.token() {
         T::Fn => function(ctx),
+        T::If => if_(ctx),
 
         T::LeftParen => grouping_or_tuple(ctx),
         T::LeftBracket => list(ctx),
@@ -335,27 +345,60 @@ fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     Ok((ctx, Expression::new(span, kind)))
 }
 
-fn if_expression<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
+fn if_<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let span = ctx.span();
     let ctx = expect!(ctx, T::If, "Expected 'if' at start of if-expression");
 
-    use ExpressionKind::*;
-    let (ctx, condition) = parse_precedence(ctx, Prec::No)?;
+    let (ctx, condition) = expression(ctx)?;
+    let condition = Box::new(condition);
 
-    let ctx = expect!(
-        ctx,
-        T::Else,
-        "Expected 'else' after if-expression condition"
-    );
-    let (ctx, rhs) = parse_precedence(ctx, Prec::No)?;
-    let condition = Box::new(condition.clone());
-    let pass = Box::new(lhs.clone());
-    let fail = Box::new(rhs);
+    let (ctx, pass_body) = statement_or_block(ctx)?;
+    let pass = match pass_body.kind {
+        StatementKind::Block { statements } => statements,
+        _ => vec![pass_body],
+    };
+
+    let (ctx, fail) = if matches!(ctx.token(), T::Else) {
+        let (ctx, body) = statement_or_block(ctx.skip(1))?;
+        (
+            ctx,
+            match body.kind {
+                StatementKind::Block { statements } => statements,
+                _ => vec![body],
+            },
+        )
+    } else {
+        // No else so we insert an empty statement instead.
+        (ctx, Vec::new())
+    };
+
     Ok((
         ctx,
-        Expression::new(span, IfExpression { condition, pass, fail }),
+        Expression::new(span, ExpressionKind::If { condition, pass, fail }),
     ))
 }
+
+// fn if_expression<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
+//     let span = ctx.span();
+//     let ctx = expect!(ctx, T::If, "Expected 'if' at start of if-expression");
+//
+//     use ExpressionKind::*;
+//     let (ctx, condition) = parse_precedence(ctx, Prec::No)?;
+//
+//     let ctx = expect!(
+//         ctx,
+//         T::Else,
+//         "Expected 'else' after if-expression condition"
+//     );
+//     let (ctx, rhs) = parse_precedence(ctx, Prec::No)?;
+//     let condition = Box::new(condition.clone());
+//     let pass = Box::new(lhs.clone());
+//     let fail = Box::new(rhs);
+//     Ok((
+//         ctx,
+//         Expression::new(span, IfExpression { condition, pass, fail }),
+//     ))
+// }
 
 fn arrow_call<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
     let ctx = expect!(ctx, T::Arrow, "Expected '->' in arrow function call");
@@ -403,9 +446,9 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
     // All valid operators have a precedence value that is differnt
     // from `Prec::no`.
     match (ctx.token(), precedence(ctx.skip(1).token())) {
-        (T::If, Prec::No) => {
-            return if_expression(ctx, lhs);
-        }
+        // (T::If, Prec::No) => {
+        //     return if_expression(ctx, lhs);
+        // }
         // The cool arrow syntax. For example: `a->b(2)` compiles to `b(a, 2)`.
         // #NotLikeOtherOperators
         (T::Arrow, _) => {
@@ -908,6 +951,22 @@ impl PrettyPrint for Expression {
                 write_indent(f, indent)?;
                 write!(f, "fail:\n")?;
                 fail.pretty_print(f, indent + 1)?;
+            }
+            EK::If { condition, pass, fail } => {
+                write!(f, "If\n")?;
+                write_indent(f, indent)?;
+                write!(f, "condition:\n")?;
+                condition.pretty_print(f, indent + 1)?;
+                write_indent(f, indent)?;
+                write!(f, "pass:\n")?;
+                for stmt in pass.iter() {
+                    stmt.pretty_print(f, indent + 1)?;
+                }
+                write_indent(f, indent)?;
+                write!(f, "fail:\n")?;
+                for stmt in fail.iter() {
+                    stmt.pretty_print(f, indent + 1)?;
+                }
             }
             EK::Function { name, params, ret, body } => {
                 write!(f, "Fn {} ", name)?;

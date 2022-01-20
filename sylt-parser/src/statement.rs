@@ -109,15 +109,6 @@ pub enum StatementKind {
         ty: Type,
     },
 
-    /// Makes your code go either here or there.
-    ///
-    /// `if <expression> <statement> [else <statement>]`.
-    If {
-        condition: Expression,
-        pass: Box<Statement>,
-        fail: Box<Statement>,
-    },
-
     /// A super branchy branch.
     ///
     /// `case <expression> do (<pattern> [<variable] <statement>)* [else <statement>] end`.
@@ -247,7 +238,7 @@ pub fn use_path<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, FileOrLib)
     Ok((ctx, (path_ident, file)))
 }
 
-fn statement_or_block<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
+pub fn statement_or_block<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     if matches!(
         ctx.token(),
         T::Do | T::If | T::Loop | T::Break | T::Continue | T::Ret
@@ -528,36 +519,36 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // `if <expression> <statement> [else <statement>]`. Note that the else is optional.
-        [T::If, ..] => {
-            let (ctx, skip_newlines) = ctx.push_skip_newlines(true);
-            let (ctx, condition) = expression(ctx.skip(1))?;
-            let ctx = ctx.pop_skip_newlines(skip_newlines);
+        // [T::If, ..] => {
+        //     let (ctx, skip_newlines) = ctx.push_skip_newlines(true);
+        //     let (ctx, condition) = expression(ctx.skip(1))?;
+        //     let ctx = ctx.pop_skip_newlines(skip_newlines);
 
-            let (ctx, pass) = statement_or_block(ctx)?;
-            // else?
-            let (ctx, fail) = if matches!(ctx.token(), T::Else) {
-                statement_or_block(ctx.skip(1))?
-            } else {
-                // No else so we insert an empty statement instead.
-                (
-                    ctx,
-                    Statement {
-                        span: ctx.span(),
-                        kind: EmptyStatement,
-                        comments: Vec::new(),
-                    },
-                )
-            };
+        //     let (ctx, pass) = statement_or_block(ctx)?;
+        //     // else?
+        //     let (ctx, fail) = if matches!(ctx.token(), T::Else) {
+        //         statement_or_block(ctx.skip(1))?
+        //     } else {
+        //         // No else so we insert an empty statement instead.
+        //         (
+        //             ctx,
+        //             Statement {
+        //                 span: ctx.span(),
+        //                 kind: EmptyStatement,
+        //                 comments: Vec::new(),
+        //             },
+        //         )
+        //     };
 
-            (
-                ctx.prev(),
-                If {
-                    condition,
-                    pass: Box::new(pass),
-                    fail: Box::new(fail),
-                },
-            )
-        }
+        //     (
+        //         ctx.prev(),
+        //         If {
+        //             condition,
+        //             pass: Box::new(pass),
+        //             fail: Box::new(fail),
+        //         },
+        //     )
+        // }
 
         // Enum declaration: `Abc :: enum A, B, C end`
         [T::Identifier(name), T::ColonColon, T::Enum, ..] => {

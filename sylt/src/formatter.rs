@@ -315,6 +315,9 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             write!(dest, " else ")?;
             write_expression(dest, indent, *fail)?;
         }
+        ExpressionKind::If { .. } => {
+            unreachable!()
+        }
         ExpressionKind::Function { name: _, params, ret, body } => {
             write!(dest, "fn")?;
             if !params.is_empty() {
@@ -510,24 +513,6 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             }
             write_indents(dest, indent)?;
             write!(dest, "end\n")?;
-        }
-        StatementKind::If { condition, pass, fail } => {
-            if matches!(fail.kind, StatementKind::EmptyStatement) {
-                for comment in &fail.comments {
-                    write_indents(dest, indent)?;
-                    write!(dest, "// {}\n", comment)?;
-                }
-            }
-
-            write_indents(dest, indent)?;
-            write!(dest, "if ")?;
-            write_expression(dest, indent, condition)?;
-            write!(dest, " ")?;
-            write_statement(dest, indent, *pass)?;
-            if !matches!(fail.kind, StatementKind::EmptyStatement) {
-                write!(dest, " else ")?;
-                write_statement(dest, indent, *fail)?;
-            }
         }
         StatementKind::Loop { condition, body } => {
             write_indents(dest, indent)?;

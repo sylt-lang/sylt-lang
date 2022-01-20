@@ -301,6 +301,83 @@ impl<'a> IRCodeGen<'a> {
                 ([aops, vec![IR::Not(b, a)]].concat(), b)
             }
 
+            ExpressionKind::If { condition, pass, fail } => {
+                // TODO(ed): Fix this.
+                let mut pass = pass.clone();
+                let mut fail = fail.clone();
+
+                let (cops, c) = self.expression(&condition, ctx);
+                let out = self.var();
+                let aops = {
+                    let value = match pass.pop() {
+                        Some(Statement {
+                            kind: StatementKind::StatementExpression { value },
+                            ..
+                        }) => {
+                            pass.pop();
+                            Some(value)
+                        }
+                        _ => None,
+                    };
+                    let ops = pass
+                        .iter()
+                        .map(|stmt| self.statement(&stmt, ctx))
+                        .flatten()
+                        .collect();
+                    [
+                        ops,
+                        if let Some(value) = value {
+                            let (ops, var) = self.expression(&value, ctx);
+                            [ops, vec![IR::Assign(out, var)]].concat()
+                        } else {
+                            Vec::new()
+                        },
+                    ]
+                    .concat()
+                };
+
+                let bops = {
+                    let value = match fail.pop() {
+                        Some(Statement {
+                            kind: StatementKind::StatementExpression { value },
+                            ..
+                        }) => {
+                            pass.pop();
+                            Some(value)
+                        }
+                        _ => None,
+                    };
+                    let ops = pass
+                        .iter()
+                        .map(|stmt| self.statement(&stmt, ctx))
+                        .flatten()
+                        .collect();
+                    [
+                        ops,
+                        if let Some(value) = value {
+                            let (ops, var) = self.expression(&value, ctx);
+                            [ops, vec![IR::Assign(out, var)]].concat()
+                        } else {
+                            Vec::new()
+                        },
+                    ]
+                    .concat()
+                };
+
+                (
+                    [
+                        cops,
+                        vec![IR::Define(out), IR::If(c)],
+                        aops,
+                        vec![IR::Else],
+                        bops,
+                        vec![IR::End],
+                    ]
+                    .concat(),
+                    out,
+                )
+            }
+
             ExpressionKind::IfExpression { condition, pass, fail } => {
                 let (cops, c) = self.expression(&condition, ctx);
                 let (aops, a) = self.expression(&pass, ctx);
@@ -435,12 +512,7 @@ impl<'a> IRCodeGen<'a> {
                 let body = self.statement(body, ctx);
                 self.variables.truncate(ss);
                 (
-                    [
-                        vec![IR::Function(f, params)],
-                        body,
-                        vec![IR::End],
-                    ]
-                    .concat(),
+                    [vec![IR::Function(f, params)], body, vec![IR::End]].concat(),
                     f,
                 )
             }
@@ -584,21 +656,6 @@ impl<'a> IRCodeGen<'a> {
                 stmt_code
             }
 
-            StatementKind::If { condition, pass, fail } => {
-                let (cops, c) = self.expression(&condition, ctx);
-                let aops = self.statement(&pass, ctx);
-                let bops = self.statement(&fail, ctx);
-
-                [
-                    cops,
-                    vec![IR::If(c)],
-                    aops,
-                    vec![IR::Else],
-                    bops,
-                    vec![IR::End],
-                ]
-                .concat()
-            }
             StatementKind::Case { to_match, branches, fall_through } => {
                 let ss = self.variables.len();
                 let (cops, c) = self.expression(&to_match, ctx);
