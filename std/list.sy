@@ -1,3 +1,5 @@
+from container use len
+
 random_choice: fn [*ITEM] -> *ITEM : external
 for_each: fn [*ITEM], fn *ITEM -> void -> void : external
 map: fn [*ITEM], fn *ITEM -> *OUT -> [*OUT] : external
