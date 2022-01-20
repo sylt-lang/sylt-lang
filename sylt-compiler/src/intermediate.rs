@@ -309,7 +309,7 @@ impl<'a> IRCodeGen<'a> {
                 let (cops, c) = self.expression(&condition, ctx);
                 let out = self.var();
                 let aops = {
-                    let value = match pass.pop() {
+                    let value = match pass.last().cloned() {
                         Some(Statement {
                             kind: StatementKind::StatementExpression { value },
                             ..
@@ -337,17 +337,17 @@ impl<'a> IRCodeGen<'a> {
                 };
 
                 let bops = {
-                    let value = match fail.pop() {
+                    let value = match fail.last().cloned() {
                         Some(Statement {
                             kind: StatementKind::StatementExpression { value },
                             ..
                         }) => {
-                            pass.pop();
+                            fail.pop();
                             Some(value)
                         }
                         _ => None,
                     };
-                    let ops = pass
+                    let ops = fail
                         .iter()
                         .map(|stmt| self.statement(&stmt, ctx))
                         .flatten()
