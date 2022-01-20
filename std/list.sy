@@ -7,4 +7,7 @@ filter: fn [*ITEM], fn *ITEM -> bool -> [*ITEM] : external
 push: fn [*ITEM], *ITEM -> void : external
 prepend: fn [*ITEM], *ITEM -> void : external
 pop: fn [*ITEM] -> *ITEM : external
-last: fn [*ITEM] -> *ITEM : external
+
+last :: fn l: [*ITEM] -> *ITEM
+    l[len(l) - 1]
+end

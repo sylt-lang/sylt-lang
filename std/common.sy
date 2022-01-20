@@ -1,8 +1,17 @@
-dbg: fn *X -> *X : external
+dbg :: fn x ->
+    print(x)
+    ret x
+end
+
 args: fn -> {str:str} : external
 thread_sleep: fn float -> void : external
 print: fn *X -> void : external
-spy: fn str, *X -> *X : external
+
+spy :: fn tag: str, x ->
+    print(tag + " " + as_str(x))
+    ret x
+end
+
 unsafe_force: fn *X -> *Y : external
 split: fn str -> [str] : external
 
