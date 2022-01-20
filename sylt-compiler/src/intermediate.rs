@@ -242,6 +242,34 @@ impl<'a> IRCodeGen<'a> {
         }
     }
 
+    fn expression_block(&mut self, out: Var, mut block: Vec<Statement>, ctx: IRContext) -> Vec<IR> {
+        let value = match block.last().cloned() {
+            Some(Statement {
+                kind: StatementKind::StatementExpression { value },
+                ..
+            }) => {
+                block.pop();
+                Some(value)
+            }
+            _ => None,
+        };
+        let ops = block
+            .iter()
+            .map(|stmt| self.statement(&stmt, ctx))
+            .flatten()
+            .collect();
+        [
+            ops,
+            if let Some(value) = value {
+                let (ops, var) = self.expression(&value, ctx);
+                [ops, vec![IR::Assign(out, var)]].concat()
+            } else {
+                Vec::new()
+            },
+        ]
+            .concat()
+    }
+
     fn expression(&mut self, expr: &Expression, ctx: IRContext) -> (Vec<IR>, Var) {
         match &expr.kind {
             ExpressionKind::Get(ass) => {
@@ -302,68 +330,10 @@ impl<'a> IRCodeGen<'a> {
             }
 
             ExpressionKind::If { condition, pass, fail } => {
-                // TODO(ed): Fix this.
-                let mut pass = pass.clone();
-                let mut fail = fail.clone();
-
                 let (cops, c) = self.expression(&condition, ctx);
                 let out = self.var();
-                let aops = {
-                    let value = match pass.last().cloned() {
-                        Some(Statement {
-                            kind: StatementKind::StatementExpression { value },
-                            ..
-                        }) => {
-                            pass.pop();
-                            Some(value)
-                        }
-                        _ => None,
-                    };
-                    let ops = pass
-                        .iter()
-                        .map(|stmt| self.statement(&stmt, ctx))
-                        .flatten()
-                        .collect();
-                    [
-                        ops,
-                        if let Some(value) = value {
-                            let (ops, var) = self.expression(&value, ctx);
-                            [ops, vec![IR::Assign(out, var)]].concat()
-                        } else {
-                            Vec::new()
-                        },
-                    ]
-                    .concat()
-                };
-
-                let bops = {
-                    let value = match fail.last().cloned() {
-                        Some(Statement {
-                            kind: StatementKind::StatementExpression { value },
-                            ..
-                        }) => {
-                            fail.pop();
-                            Some(value)
-                        }
-                        _ => None,
-                    };
-                    let ops = fail
-                        .iter()
-                        .map(|stmt| self.statement(&stmt, ctx))
-                        .flatten()
-                        .collect();
-                    [
-                        ops,
-                        if let Some(value) = value {
-                            let (ops, var) = self.expression(&value, ctx);
-                            [ops, vec![IR::Assign(out, var)]].concat()
-                        } else {
-                            Vec::new()
-                        },
-                    ]
-                    .concat()
-                };
-
+                let aops = self.expression_block(out, pass.clone(), ctx);
+                let bops = self.expression_block(out, fail.clone(), ctx);
                 (
                     [
                         cops,
