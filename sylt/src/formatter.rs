@@ -308,13 +308,6 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             write_expression(dest, indent, *expr)?;
             write!(dest, ")")?;
         }
-        ExpressionKind::IfExpression { condition, pass, fail } => {
-            write_expression(dest, indent, *pass)?;
-            write!(dest, " if ")?;
-            write_expression(dest, indent, *condition)?;
-            write!(dest, " else ")?;
-            write_expression(dest, indent, *fail)?;
-        }
         ExpressionKind::If { condition, pass, fail } => {
             write_indents(dest, indent)?;
             write!(dest, "if ")?;

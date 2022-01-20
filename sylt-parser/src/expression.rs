@@ -49,13 +49,6 @@ pub enum ExpressionKind {
 
     Parenthesis(Box<Expression>),
 
-    /// Inline If-statements
-    IfExpression {
-        condition: Box<Expression>,
-        pass: Box<Expression>,
-        fail: Box<Expression>,
-    },
-
     /// Makes your code go either here or there.
     ///
     /// `if <expression> <statement> [else <statement>]`.
@@ -378,28 +371,6 @@ fn if_<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     ))
 }
 
-// fn if_expression<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
-//     let span = ctx.span();
-//     let ctx = expect!(ctx, T::If, "Expected 'if' at start of if-expression");
-//
-//     use ExpressionKind::*;
-//     let (ctx, condition) = parse_precedence(ctx, Prec::No)?;
-//
-//     let ctx = expect!(
-//         ctx,
-//         T::Else,
-//         "Expected 'else' after if-expression condition"
-//     );
-//     let (ctx, rhs) = parse_precedence(ctx, Prec::No)?;
-//     let condition = Box::new(condition.clone());
-//     let pass = Box::new(lhs.clone());
-//     let fail = Box::new(rhs);
-//     Ok((
-//         ctx,
-//         Expression::new(span, IfExpression { condition, pass, fail }),
-//     ))
-// }
-
 fn arrow_call<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
     let ctx = expect!(ctx, T::Arrow, "Expected '->' in arrow function call");
     let (ctx, rhs) = expression(ctx)?;
@@ -446,9 +417,6 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
     // All valid operators have a precedence value that is differnt
     // from `Prec::no`.
     match (ctx.token(), precedence(ctx.skip(1).token())) {
-        // (T::If, Prec::No) => {
-        //     return if_expression(ctx, lhs);
-        // }
         // The cool arrow syntax. For example: `a->b(2)` compiles to `b(a, 2)`.
         // #NotLikeOtherOperators
         (T::Arrow, _) => {
@@ -856,8 +824,8 @@ mod test {
     test!(expression, void_simple: "fn do end" => _);
     test!(expression, void_argument: "fn a: int do ret a + 1 end" => _);
 
-    test!(expression, if_expr: "a if b else c" => IfExpression { .. });
-    test!(expression, if_expr_more: "1 + 1 + 1 if b else 2 + 2 + 2" => IfExpression { .. });
+    test!(expression, if_expr: "if a do b else c end" => If { .. });
+    test!(expression, if_expr_more: "1 + 1 + if a do b else 2 end + 2 + 2" => _);
 
     test!(expression, fn_implicit_unknown_1: "fn a do 1 end" => _);
     test!(expression, fn_implicit_unknown_2: "fn a, b do 1 end" => _);
@@ -939,18 +907,6 @@ impl PrettyPrint for Expression {
             EK::Parenthesis(expr) => {
                 write!(f, "Paren\n")?;
                 expr.pretty_print(f, indent + 1)?;
-            }
-            EK::IfExpression { condition, pass, fail } => {
-                write!(f, "IfExpression\n")?;
-                write_indent(f, indent)?;
-                write!(f, "condition:\n")?;
-                condition.pretty_print(f, indent + 1)?;
-                write_indent(f, indent)?;
-                write!(f, "pass:\n")?;
-                pass.pretty_print(f, indent + 1)?;
-                write_indent(f, indent)?;
-                write!(f, "fail:\n")?;
-                fail.pretty_print(f, indent + 1)?;
             }
             EK::If { condition, pass, fail } => {
                 write!(f, "If\n")?;

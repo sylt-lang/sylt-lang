@@ -290,12 +290,6 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<(String,
             .cloned()
             .collect(),
 
-        IfExpression { condition, pass, fail } => [pass, fail, condition]
-            .iter()
-            .map(|expr| dependencies(ctx, expr))
-            .flatten()
-            .collect(),
-
         If { condition, pass, fail } => [
             dependencies(ctx, condition),
             pass.iter()

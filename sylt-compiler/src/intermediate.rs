@@ -348,26 +348,6 @@ impl<'a> IRCodeGen<'a> {
                 )
             }
 
-            ExpressionKind::IfExpression { condition, pass, fail } => {
-                let (cops, c) = self.expression(&condition, ctx);
-                let (aops, a) = self.expression(&pass, ctx);
-                let (bops, b) = self.expression(&fail, ctx);
-                let var = self.var();
-
-                (
-                    [
-                        cops,
-                        vec![IR::Define(var), IR::If(c)],
-                        aops,
-                        vec![IR::Assign(var, a), IR::Else],
-                        bops,
-                        vec![IR::Assign(var, b), IR::End],
-                    ]
-                    .concat(),
-                    var,
-                )
-            }
-
             ExpressionKind::Blob { fields, .. } => {
                 let ss = self.variables.len();
 

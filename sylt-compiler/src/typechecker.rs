@@ -1108,17 +1108,6 @@ impl TypeChecker {
                 with_ret(ret, value.unwrap_or_else(|| self.push_type(Type::Void)))
             }
 
-            ExpressionKind::IfExpression { condition, pass, fail } => {
-                let boolean = self.push_type(Type::Bool);
-                let (condition_ret, condition) = self.expression(condition, ctx)?;
-                self.unify(span, ctx, condition, boolean)?;
-                let (pass_ret, pass) = self.expression(pass, ctx)?;
-                let (fail_ret, fail) = self.expression(fail, ctx)?;
-                let ret = self.unify_option(span, ctx, condition_ret, pass_ret)?;
-                let ret = self.unify_option(span, ctx, ret, fail_ret)?;
-                with_ret(ret, self.unify(span, ctx, pass, fail)?)
-            }
-
             ExpressionKind::Function { name: _, params, ret, body } => {
                 let ss = self.stack.len();
                 let mut args = Vec::new();
