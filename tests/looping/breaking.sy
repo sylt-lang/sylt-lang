@@ -5,6 +5,8 @@ start :: fn do
     end
     a := 0
     loop a < 3 do
+        // This tests an edge case when parsing if-expressions
+        if a > 2 break
         if a > 2 do
             break
         end

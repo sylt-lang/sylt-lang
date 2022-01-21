@@ -1,11 +1,11 @@
 f: fn -> * : external
 
 start :: fn do
-    1 if true else 1
+    if true do 1 else do 1 end
 
     a :: f'
     b :: "a"
-    (a + 1) if true else b
+    if true do (a + 1) else do b end
 end
 
 // error: $BinOp
