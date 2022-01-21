@@ -1,20 +1,20 @@
 grouping :: fn do
-    a := 1 + 2 + 3 if true else -1 * 10 if false else 2 + 2
+    a := if true do 1 + 2 + 3 else do if false do -1 * 10 else do 2 + 2 end end
     a <=> 6
-    b := 1 + 2 + 3 if true else -1 * 10 if true else 2 + 2
+    b := if true do 1 + 2 + 3 else do if true do -1 * 10 else do 2 + 2 end end
     b <=> 6
-    c := 1 + 2 + 3 if false else -1 * 10 if true else 2 + 2
+    c := if false do 1 + 2 + 3 else do if true do -1 * 10 else do 2 + 2 end end
     c <=> -10
-    d := 1 + 2 + 3 if false else -1 * 10 if false else 2 + 2
+    d := if false do 1 + 2 + 3 else do if false do -1 * 10 else do 2 + 2 end end
     d <=> 4
 end
 
 simple :: fn do
-    (1 if true else 3) <=> 1
+    1 <=> if true do 1 else do 3 end
 end
 
 expr :: fn do
-    (1 + (1 if true else 3)) <=> 2
+    2 <=> 1 + if true do 1 else do 3 end
 end
 
 start :: fn do

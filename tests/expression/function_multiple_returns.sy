@@ -1,9 +1,9 @@
 start :: fn do
     f := fn a: int -> int do
         if a == 1 do
-            ret 2
+            2
         else do
-            ret 3
+            3
         end
     end
     f(0) <=> 3

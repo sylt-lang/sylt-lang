@@ -1,6 +1,6 @@
 sign: fn<a: Num> *a -> *a : fn a: *a -> *a
-    if a < 0 ret - (a / a)
-    if a > 0 ret (a / a)
+    if a < 0 do ret - (a / a) end
+    if a > 0 do ret (a / a) end
     a - a
 end
 
