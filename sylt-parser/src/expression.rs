@@ -342,29 +342,23 @@ fn if_expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let span = ctx.span();
     let ctx = expect!(ctx, T::If, "Expected 'if' at start of if-expression");
 
+    let (ctx, old_skip) = ctx.push_skip_newlines(true);
     let (ctx, condition) = expression(ctx)?;
+    let ctx = ctx.pop_skip_newlines(old_skip);
+
     let condition = Box::new(condition);
 
-    fn wrap_in_vector(stmt: Statement) -> Vec<Statement> {
-        match stmt.kind {
-            StatementKind::Block { statements } => statements,
-            _ => vec![stmt],
-        }
-    }
-
-    let (ctx, pass_body) = statement_or_block(ctx)?;
-    let pass = wrap_in_vector(pass_body);
+    let (ctx, pass) = block(expect!(ctx, T::Do, "Expected 'do' after if condition"))?;
 
     let (ctx, fail) = if matches!(ctx.token(), T::Else) {
-        let (ctx, fail) = statement_or_block(ctx.skip(1))?;
-        (ctx, wrap_in_vector(fail))
+        block(ctx.skip(1))?
     } else {
         // No else so we insert an empty statement instead.
         (ctx, Vec::new())
     };
 
     Ok((
-        ctx.prev(),
+        ctx,
         Expression::new(span, ExpressionKind::If { condition, pass, fail }),
     ))
 }
