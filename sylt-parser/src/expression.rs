@@ -364,7 +364,7 @@ fn if_expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     };
 
     Ok((
-        ctx,
+        ctx.prev(),
         Expression::new(span, ExpressionKind::If { condition, pass, fail }),
     ))
 }

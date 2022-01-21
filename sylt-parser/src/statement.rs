@@ -314,19 +314,10 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Newline, ..] => (ctx, EmptyStatement),
 
         // Block: `{ <statements> }`
-        [T::Do, ..] => match (block(ctx), expression(ctx)) {
-            (Ok((ctx, statements)), _) => (ctx, Block { statements }),
-            (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
-            (Err((_, mut stmt_errs)), Err((_, mut expr_errs))) => {
-                let errs = vec![
-                    syntax_error!(ctx, "Neither a valid block nor a valid expression - inspects the two errors below"),
-                    stmt_errs.remove(0),
-                    expr_errs.remove(0),
-                ];
-                let ctx = skip_until!(ctx, T::End);
-                return Err((ctx, errs));
-            }
-        },
+        [T::Do, ..] => {
+            let (ctx, statements) = block(ctx)?;
+            (ctx, Block { statements })
+        }
 
         // `use path/to/file`
         // `use path/to/file as alias`
@@ -517,38 +508,6 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
             (ctx, Case { to_match, branches, fall_through })
         }
-
-        // `if <expression> <statement> [else <statement>]`. Note that the else is optional.
-        // [T::If, ..] => {
-        //     let (ctx, skip_newlines) = ctx.push_skip_newlines(true);
-        //     let (ctx, condition) = expression(ctx.skip(1))?;
-        //     let ctx = ctx.pop_skip_newlines(skip_newlines);
-
-        //     let (ctx, pass) = statement_or_block(ctx)?;
-        //     // else?
-        //     let (ctx, fail) = if matches!(ctx.token(), T::Else) {
-        //         statement_or_block(ctx.skip(1))?
-        //     } else {
-        //         // No else so we insert an empty statement instead.
-        //         (
-        //             ctx,
-        //             Statement {
-        //                 span: ctx.span(),
-        //                 kind: EmptyStatement,
-        //                 comments: Vec::new(),
-        //             },
-        //         )
-        //     };
-
-        //     (
-        //         ctx.prev(),
-        //         If {
-        //             condition,
-        //             pass: Box::new(pass),
-        //             fail: Box::new(fail),
-        //         },
-        //     )
-        // }
 
         // Enum declaration: `Abc :: enum A, B, C end`
         [T::Identifier(name), T::ColonColon, T::Enum, ..] => {
