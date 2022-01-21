@@ -1313,13 +1313,6 @@ impl PrettyPrint for Statement {
                 }
                 return Ok(());
             }
-            // SK::If { condition, pass, fail } => {
-            //     write!(f, "<If>\n")?;
-            //     condition.pretty_print(f, indent + 1)?;
-            //     pass.pretty_print(f, indent + 1)?;
-            //     fail.pretty_print(f, indent + 1)?;
-            //     return Ok(());
-            // }
             SK::Loop { condition, body } => {
                 write!(f, "<Loop>\n")?;
                 condition.pretty_print(f, indent + 1)?;

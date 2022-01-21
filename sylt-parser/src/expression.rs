@@ -284,7 +284,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
     match ctx.token() {
         T::Fn => function(ctx),
-        T::If => if_(ctx),
+        T::If => if_expression(ctx),
 
         T::LeftParen => grouping_or_tuple(ctx),
         T::LeftBracket => list(ctx),
@@ -338,28 +338,26 @@ fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     Ok((ctx, Expression::new(span, kind)))
 }
 
-fn if_<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+fn if_expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let span = ctx.span();
     let ctx = expect!(ctx, T::If, "Expected 'if' at start of if-expression");
 
     let (ctx, condition) = expression(ctx)?;
     let condition = Box::new(condition);
 
+    fn wrap_in_vector(stmt: Statement) -> Vec<Statement> {
+        match stmt.kind {
+            StatementKind::Block { statements } => statements,
+            _ => vec![stmt],
+        }
+    }
+
     let (ctx, pass_body) = statement_or_block(ctx)?;
-    let pass = match pass_body.kind {
-        StatementKind::Block { statements } => statements,
-        _ => vec![pass_body],
-    };
+    let pass = wrap_in_vector(pass_body);
 
     let (ctx, fail) = if matches!(ctx.token(), T::Else) {
-        let (ctx, body) = statement_or_block(ctx.skip(1))?;
-        (
-            ctx,
-            match body.kind {
-                StatementKind::Block { statements } => statements,
-                _ => vec![body],
-            },
-        )
+        let (ctx, fail) = statement_or_block(ctx.skip(1))?;
+        (ctx, wrap_in_vector(fail))
     } else {
         // No else so we insert an empty statement instead.
         (ctx, Vec::new())
