@@ -245,8 +245,7 @@ impl<'a> IRCodeGen<'a> {
     fn expression_block(&mut self, out: Var, mut block: Vec<Statement>, ctx: IRContext) -> Vec<IR> {
         let value = match block.last().cloned() {
             Some(Statement {
-                kind: StatementKind::StatementExpression { value },
-                ..
+                kind: StatementKind::StatementExpression { value }, ..
             }) => {
                 block.pop();
                 Some(value)
@@ -267,7 +266,7 @@ impl<'a> IRCodeGen<'a> {
                 Vec::new()
             },
         ]
-            .concat()
+        .concat()
     }
 
     fn expression(&mut self, expr: &Expression, ctx: IRContext) -> (Vec<IR>, Var) {
