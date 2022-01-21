@@ -1,6 +1,6 @@
 use sylt_common::error::Error;
 
-use crate::statement::{block, statement_or_block};
+use crate::statement::block;
 
 use super::*;
 
