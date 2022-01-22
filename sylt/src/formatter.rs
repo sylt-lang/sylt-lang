@@ -327,7 +327,6 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             write!(dest, "end")?;
         }
         ExpressionKind::Case { to_match, branches, fall_through } => {
-            write_indents(dest, indent)?;
             write!(dest, "case ")?;
             write_expression(dest, indent, *to_match)?;
             write!(dest, " do\n")?;
@@ -351,6 +350,8 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
                 for stmt in fall_through.into_iter() {
                     write_statement(dest, indent + 1, stmt)?;
                 }
+                write_indents(dest, indent + 1)?;
+                write!(dest, "end\n")?;
             }
             write_indents(dest, indent)?;
             write!(dest, "end\n")?;
