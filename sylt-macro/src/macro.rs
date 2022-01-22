@@ -1,4 +1,4 @@
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::parse_macro_input;
 
 #[proc_macro_derive(Enumerate)]
@@ -130,4 +130,40 @@ pub fn derive_numbered(item: proc_macro::TokenStream) -> proc_macro::TokenStream
         }
     };
     proc_macro::TokenStream::from(item)
+}
+
+#[proc_macro_attribute]
+pub fn timed(
+    _attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let mut function = syn::parse::<syn::ItemFn>(item.clone()).expect("Could not parse function");
+
+    let signature = if !_attr.is_empty() {
+        syn::parse::<syn::LitStr>(_attr)
+            .expect("Could not parse string")
+            .value()
+    } else {
+        function.sig.ident.to_string()
+    };
+
+    let function_block = function.block;
+
+    let new_function_block = quote! {
+        {
+            let __timer_start = std::time::SystemTime::now();
+
+            let v = (move || {
+                #function_block
+            })();
+
+            println!("Time::{} = {:?}", #signature, __timer_start.elapsed().unwrap());
+
+            return v;
+        }
+    };
+
+    function.block = Box::new(syn::parse2(new_function_block).unwrap());
+
+    function.into_token_stream().into()
 }

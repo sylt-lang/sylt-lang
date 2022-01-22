@@ -206,6 +206,7 @@ impl Compiler {
     }
 }
 
+#[sylt_macro::timed]
 pub fn compile(lua_file: &mut dyn Write, prog: AST) -> Result<(), Vec<Error>> {
     Compiler::new().compile(lua_file, prog)
 }
