@@ -23,13 +23,6 @@ impl NameIdentifier {
 
 type Alias = Identifier;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct CaseBranch {
-    pub pattern: Identifier,
-    pub variable: Option<Identifier>,
-    pub body: Statement,
-}
-
 /// The different kinds of [Statement]s.
 ///
 /// There are both shorter statements like `a = b + 1` as well as longer
@@ -111,15 +104,6 @@ pub enum StatementKind {
         ident: Identifier,
         kind: VarKind,
         ty: Type,
-    },
-
-    /// A super branchy branch.
-    ///
-    /// `case <expression> do (<pattern> [<variable] <statement>)* [else <statement>] end`.
-    Case {
-        to_match: Expression,
-        branches: Vec<CaseBranch>,
-        fall_through: Option<Box<Statement>>,
     },
 
     /// Do something as long as something else evaluates to true.
@@ -440,74 +424,6 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             };
             let (ctx, body) = statement(ctx)?;
             (ctx.prev(), Loop { condition, body: Box::new(body) })
-        }
-
-        // `case <expression> do (<branch>)* [else <statement> end] end`
-        [T::Case, ..] => {
-            let (ctx, skip_newlines) = ctx.push_skip_newlines(true);
-            let (ctx, to_match) = expression(ctx.skip(1))?;
-            let mut ctx = expect!(ctx, T::Do);
-
-            let mut branches = Vec::new();
-            loop {
-                match ctx.token() {
-                    T::EOF | T::Else | T::End => {
-                        break;
-                    }
-
-                    T::Newline => {
-                        ctx = ctx.skip(1);
-                    }
-
-                    T::Identifier(pattern) if is_capitalized(pattern) => {
-                        let pattern = Identifier::new(ctx.span(), pattern.clone());
-                        ctx = ctx.skip(1);
-                        let (ctx_, variable) = match ctx.token() {
-                            T::Identifier(capture) if !is_capitalized(capture) => (
-                                ctx.skip(1),
-                                Some(Identifier::new(ctx.span(), capture.clone())),
-                            ),
-                            T::Identifier(_) => {
-                                raise_syntax_error!(
-                                    ctx,
-                                    "Variables have to start with a lowercase letter"
-                                );
-                            }
-                            _ => (ctx, None),
-                        };
-                        let (ctx_, body) = statement_or_block(ctx_)?;
-                        ctx = ctx_;
-
-                        branches.push(CaseBranch { pattern, variable, body });
-                    }
-
-                    T::Identifier(_) => {
-                        raise_syntax_error!(
-                            ctx,
-                            "Enum variants have to start with a captial letter"
-                        );
-                    }
-
-                    _ => {
-                        raise_syntax_error!(
-                            ctx,
-                            "Expected a branch - but a branch cannot start with {:?}",
-                            ctx.token()
-                        );
-                    }
-                }
-            }
-            let (ctx, fall_through) = if matches!(ctx.token(), T::Else) {
-                let (ctx, fall_through) = statement_or_block(ctx.skip(1))?;
-                (ctx, Some(Box::new(fall_through)))
-            } else {
-                (ctx, None)
-            };
-
-            let ctx = ctx.pop_skip_newlines(skip_newlines);
-            let ctx = expect!(ctx, T::End, "Expected 'end' to finish of case-statement");
-
-            (ctx, Case { to_match, branches, fall_through })
         }
 
         // Enum declaration: `Abc :: enum A, B, C end`

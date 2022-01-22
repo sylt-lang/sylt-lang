@@ -551,48 +551,6 @@ impl TypeChecker {
                 Ok(None)
             }
 
-            StatementKind::Case { to_match, branches, fall_through } => {
-                let (ret, to_match) = self.expression(to_match, ctx)?;
-                self.add_constraint(to_match, span, Constraint::Enum);
-
-                let mut branch_names = BTreeSet::new();
-                let ss = self.stack.len();
-                for branch in branches.iter_mut() {
-                    if let Some(var) = &branch.variable {
-                        let var = Variable {
-                            ident: var.clone(),
-                            ty: self.push_type(Type::Unknown),
-                            kind: VarKind::Const,
-                            span,
-                        };
-                        self.add_constraint(
-                            to_match,
-                            span,
-                            Constraint::Variant(branch.pattern.name.clone(), Some(var.ty)),
-                        );
-                        self.stack.push(var);
-                    } else {
-                        self.add_constraint(
-                            to_match,
-                            span,
-                            Constraint::Variant(branch.pattern.name.clone(), None),
-                        );
-                    }
-                    self.check_constraints(span, ctx, to_match)?;
-                    self.statement(&mut branch.body, ctx)?;
-                    self.stack.truncate(ss);
-                    branch_names.insert(branch.pattern.name.clone());
-                }
-
-                if let Some(fall_through) = fall_through {
-                    self.statement(fall_through, ctx)?;
-                } else {
-                    self.add_constraint(to_match, span, Constraint::TotalEnum(branch_names));
-                    self.check_constraints(span, ctx, to_match)?;
-                }
-                Ok(ret)
-            }
-
             StatementKind::Assignment { kind, target, value } => {
                 self.can_assign(span, ctx, target)?;
                 let (expression_ret, expression_ty) = self.expression(value, ctx)?;
@@ -764,7 +722,6 @@ impl TypeChecker {
             | StatementKind::Continue
             | StatementKind::Ret { .. }
             | StatementKind::Block { .. }
-            | StatementKind::Case { .. }
             | StatementKind::StatementExpression { .. }
             | StatementKind::Unreachable
             | StatementKind::EmptyStatement => {
@@ -1082,6 +1039,53 @@ impl TypeChecker {
             }
 
             ExpressionKind::Parenthesis(expr) => self.expression(expr, ctx),
+
+            ExpressionKind::Case { to_match, branches, fall_through } => {
+                let (_ret, to_match) = self.expression(to_match, ctx)?;
+                self.add_constraint(to_match, span, Constraint::Enum);
+
+                let mut value = None;
+                let mut ret = None;
+                let mut branch_names = BTreeSet::new();
+                let ss = self.stack.len();
+                for branch in branches.iter_mut() {
+                    let name = branch.pattern.name.clone();
+                    let constraint = if let Some(var) = &branch.variable {
+                        let var = Variable {
+                            ident: var.clone(),
+                            ty: self.push_type(Type::Unknown),
+                            kind: VarKind::Const,
+                            span,
+                        };
+                        let constraint = Some(var.ty);
+                        self.stack.push(var);
+                        constraint
+                    } else {
+                        None
+                    };
+                    self.add_constraint(
+                        to_match,
+                        span,
+                        Constraint::Variant(name.clone(), constraint),
+                    );
+                    let (branch_ret, branch) = self.expression_block(span, &mut branch.body, ctx)?;
+                    value = self.unify_option(span, ctx, value, branch)?;
+                    ret = self.unify_option(span, ctx, ret, branch_ret)?;
+                    self.check_constraints(span, ctx, to_match)?;
+                    self.stack.truncate(ss);
+                    branch_names.insert(name.clone());
+                }
+
+                if let Some(fall_through) = fall_through {
+                    let (fall_ret, fall) = self.expression_block(span, fall_through, ctx)?;
+                    ret = self.unify_option(span, ctx, fall_ret, ret)?;
+                    value = self.unify_option(span, ctx, fall, value)?;
+                } else {
+                    self.add_constraint(to_match, span, Constraint::TotalEnum(branch_names));
+                    self.check_constraints(span, ctx, to_match)?;
+                }
+                with_ret(ret, value.unwrap_or_else(|| self.push_type(Type::Void)))
+            }
 
             ExpressionKind::If { condition, pass, fail } => {
                 let (ret, condition) = self.expression(condition, ctx)?;
