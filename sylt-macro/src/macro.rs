@@ -140,11 +140,11 @@ pub fn derive_numbered(item: proc_macro::TokenStream) -> proc_macro::TokenStream
 ///
 /// ```
 /// #[sylt_macro::timed]
-/// fn hej() {
-///     println!("Hej");
+/// fn hi() {
+///     println!("Hi");
 /// }
 /// ```
-/// will output `Time::hej = 123μ`
+/// will output `Time::hi = 123μ`
 #[proc_macro_attribute]
 pub fn timed(
     attr: proc_macro::TokenStream,
@@ -171,7 +171,7 @@ pub fn timed(
                 #function_block
             })();
 
-            println!("Time::{} = {:?}", #signature, __timer_start.elapsed().unwrap());
+            eprintln!("Time::{} = {:?}", #signature, __timer_start.elapsed().unwrap());
 
             return v;
         }
