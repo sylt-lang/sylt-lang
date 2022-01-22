@@ -326,8 +326,32 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             write_indents(dest, indent)?;
             write!(dest, "end")?;
         }
-        ExpressionKind::Case { .. } => {
-            unreachable!()
+        ExpressionKind::Case { to_match, branches, fall_through } => {
+            write_indents(dest, indent)?;
+            write!(dest, "case ")?;
+            write_expression(dest, indent, *to_match)?;
+            write!(dest, " do\n")?;
+            for branch in branches {
+                write_indents(dest, indent + 1)?;
+                write_identifier(dest, branch.pattern)?;
+                if let Some(var) = branch.variable {
+                    write!(dest, " ")?;
+                    write_identifier(dest, var)?;
+                }
+                write!(dest, " ->\n")?;
+                for stmt in branch.body.into_iter() {
+                    write_statement(dest, indent + 1, stmt)?;
+                }
+            }
+            if let Some(fall_through) = fall_through {
+                write_indents(dest, indent + 1)?;
+                write!(dest, "else\n")?;
+                for stmt in fall_through.into_iter() {
+                    write_statement(dest, indent + 1, stmt)?;
+                }
+            }
+            write_indents(dest, indent)?;
+            write!(dest, "end\n")?;
         }
         ExpressionKind::Function { name: _, params, ret, body } => {
             write!(dest, "fn")?;
