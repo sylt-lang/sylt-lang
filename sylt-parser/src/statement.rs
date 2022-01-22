@@ -11,8 +11,12 @@ pub enum NameIdentifier {
 
 impl NameIdentifier {
     pub fn name(&self) -> &str {
+        &self.ident().name
+    }
+
+    pub fn ident(&self) -> &Identifier {
         match self {
-            NameIdentifier::Implicit(i) | NameIdentifier::Alias(i) => &i.name,
+            NameIdentifier::Implicit(i) | NameIdentifier::Alias(i) => &i,
         }
     }
 }
@@ -199,7 +203,7 @@ pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
         }
     }
 
-    Ok((ctx, Identifier { span, name: result }))
+    Ok((ctx, Identifier::new(span, result)))
 }
 
 pub fn use_path<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, FileOrLib)> {
@@ -327,10 +331,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let (ctx, alias) = match &ctx.tokens_lookahead::<2>() {
                 [T::As, T::Identifier(alias), ..] => (
                     ctx.skip(2),
-                    NameIdentifier::Alias(Identifier {
-                        span: ctx.skip(1).span(),
-                        name: alias.clone(),
-                    }),
+                    NameIdentifier::Alias(Identifier::new(ctx.skip(1).span(), alias.clone())),
                 ),
                 [T::As, ..] => raise_syntax_error!(ctx.skip(1), "Expected alias"),
                 [..] => {
@@ -353,7 +354,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     .to_str()
                     .unwrap()
                     .to_string();
-                    (ctx, NameIdentifier::Implicit(Identifier { span, name }))
+                    (ctx, NameIdentifier::Implicit(Identifier::new(span, name)))
                 }
             };
             (ctx, Use { path: path_ident, name: alias, file })
@@ -377,13 +378,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 match ctx.token() {
                     T::RightParen | T::Newline => break,
                     T::Identifier(name) => {
-                        let ident = Identifier { name: name.clone(), span: ctx.span() };
+                        let ident = Identifier::new(ctx.span(), name.clone());
                         ctx = ctx.skip(1);
                         let alias = if matches!(ctx.token(), T::As) {
                             ctx = ctx.skip(1);
                             let _alias = match ctx.token() {
                                 T::Identifier(name) => {
-                                    Some(Identifier { name: name.clone(), span: ctx.span() })
+                                    Some(Identifier::new(ctx.span(), name.clone()))
                                 }
                                 _ => raise_syntax_error!(ctx, "Expected identifier after 'as'"),
                             };
@@ -459,12 +460,12 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     }
 
                     T::Identifier(pattern) if is_capitalized(pattern) => {
-                        let pattern = Identifier { name: pattern.clone(), span: ctx.span() };
+                        let pattern = Identifier::new(ctx.span(), pattern.clone());
                         ctx = ctx.skip(1);
                         let (ctx_, variable) = match ctx.token() {
                             T::Identifier(capture) if !is_capitalized(capture) => (
                                 ctx.skip(1),
-                                Some(Identifier { name: capture.clone(), span: ctx.span() }),
+                                Some(Identifier::new(ctx.span(), capture.clone())),
                             ),
                             T::Identifier(_) => {
                                 raise_syntax_error!(
@@ -639,7 +640,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             if name == "self" {
                 raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
             }
-            let ident = Identifier { name: name.clone(), span: ctx.span() };
+            let ident = Identifier::new(ctx.span(), name.clone());
             let ctx = ctx.skip(1);
             let kind = match ctx.token() {
                 T::ColonColon => VarKind::Const,
@@ -672,7 +673,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             if name == "self" {
                 raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
             }
-            let ident = Identifier { name: name.clone(), span: ctx.span() };
+            let ident = Identifier::new(ctx.span(), name.clone());
             // Skip identifier and ':'.
             let ctx = ctx.skip(2);
 

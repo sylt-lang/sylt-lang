@@ -2,7 +2,6 @@ use std::collections::{hash_map::Entry, HashMap};
 use std::io::Write;
 use sylt_common::error::Error;
 use sylt_common::FileOrLib;
-use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{Identifier, StatementKind, AST};
 
 mod dependency;
@@ -136,10 +135,7 @@ impl Compiler {
                         continue;
                     }
                     Use { name, file, .. } => {
-                        let ident = match name {
-                            NameIdentifier::Implicit(ident) => ident,
-                            NameIdentifier::Alias(ident) => ident,
-                        };
+                        let ident = name.ident();
                         let other = include_to_namespace[file];
                         (Name::Namespace(other), ident.name.clone(), ident.span)
                     }

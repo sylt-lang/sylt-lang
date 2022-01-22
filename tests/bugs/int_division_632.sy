@@ -1,0 +1,7 @@
+from std use div
+
+start :: fn do
+    0 <=> div' 1, 2
+    2 <=> div' 2, 1
+    2 <=> div' 5, 2
+end
