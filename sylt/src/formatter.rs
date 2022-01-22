@@ -342,6 +342,8 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
                 for stmt in branch.body.into_iter() {
                     write_statement(dest, indent + 1, stmt)?;
                 }
+                write_indents(dest, indent + 1)?;
+                write!(dest, "end\n")?;
             }
             if let Some(fall_through) = fall_through {
                 write_indents(dest, indent + 1)?;
