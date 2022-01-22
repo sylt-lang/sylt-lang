@@ -387,7 +387,11 @@ impl<'a> IRCodeGen<'a> {
                     .flatten()
                     .collect();
 
-                let fall_through_code = self.expression_block(out, fall_through.clone().unwrap_or_else(|| Vec::new()), ctx);
+                let fall_through_code = self.expression_block(
+                    out,
+                    fall_through.clone().unwrap_or_else(|| Vec::new()),
+                    ctx,
+                );
 
                 (
                     [

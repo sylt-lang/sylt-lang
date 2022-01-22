@@ -580,9 +580,7 @@ impl TypeChecker {
                 self.unify_option(span, ctx, expression_ret, target_ret)
             }
 
-            StatementKind::Definition { .. } => {
-                self.definition(statement, false, ctx)
-            }
+            StatementKind::Definition { .. } => self.definition(statement, false, ctx),
 
             StatementKind::Loop { condition, body } => {
                 let (ret, condition) = self.expression(condition, ctx)?;
@@ -1071,7 +1069,8 @@ impl TypeChecker {
                     // - for example - this makes it more permissive than if you place it after the
                     // `self.expression_block`.
                     self.check_constraints(span, ctx, to_match)?;
-                    let (branch_ret, branch) = self.expression_block(span, &mut branch.body, ctx)?;
+                    let (branch_ret, branch) =
+                        self.expression_block(span, &mut branch.body, ctx)?;
                     value = self.unify_option(span, ctx, value, branch)?;
                     ret = self.unify_option(span, ctx, ret, branch_ret)?;
                     self.stack.truncate(ss);
