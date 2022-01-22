@@ -29,6 +29,7 @@ pub fn comma_sep(out: &mut dyn Write, vars: &[Var]) {
     }
 }
 
+#[cfg_attr(timed, sylt_macro::timed("lua::generate"))]
 pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
     write!(out, include_str!("preamble.lua"));
 

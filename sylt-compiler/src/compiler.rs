@@ -67,6 +67,7 @@ impl Compiler {
         self.namespace_id_to_file.get(&namespace).unwrap()
     }
 
+    #[cfg_attr(timed, sylt_macro::timed("compile"))]
     fn compile(mut self, lua_file: &mut dyn Write, tree: AST) -> Result<(), Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
 
@@ -206,7 +207,6 @@ impl Compiler {
     }
 }
 
-#[sylt_macro::timed]
 pub fn compile(lua_file: &mut dyn Write, prog: AST) -> Result<(), Vec<Error>> {
     Compiler::new().compile(lua_file, prog)
 }

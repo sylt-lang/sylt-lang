@@ -132,15 +132,29 @@ pub fn derive_numbered(item: proc_macro::TokenStream) -> proc_macro::TokenStream
     proc_macro::TokenStream::from(item)
 }
 
+/// Timed macro
+///
+/// Time a function and print the output.
+///
+/// # Examples
+///
+/// ```
+/// #[sylt_macro::timed]
+/// fn hej() {
+///     println!("Hej");
+/// }
+/// ```
+/// will output `Time::hej = 123μ`
 #[proc_macro_attribute]
 pub fn timed(
-    _attr: proc_macro::TokenStream,
+    attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let mut function = syn::parse::<syn::ItemFn>(item.clone()).expect("Could not parse function");
 
-    let signature = if !_attr.is_empty() {
-        syn::parse::<syn::LitStr>(_attr)
+    // Get signature from attribute input or function signature
+    let signature = if !attr.is_empty() {
+        syn::parse::<syn::LitStr>(attr)
             .expect("Could not parse string")
             .value()
     } else {

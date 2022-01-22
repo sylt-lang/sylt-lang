@@ -749,6 +749,7 @@ impl<'a> IRCodeGen<'a> {
     }
 }
 
+#[cfg_attr(timed, sylt_macro::timed("intermediate::compile"))]
 pub(crate) fn compile(
     typechecker: &TypeChecker,
     statements: &Vec<(Statement, NamespaceID)>,
