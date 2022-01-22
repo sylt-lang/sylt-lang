@@ -547,8 +547,8 @@ impl TypeChecker {
             }
 
             StatementKind::StatementExpression { value } => {
-                self.expression(value, ctx)?;
-                Ok(None)
+                let (ret, _) = self.expression(value, ctx)?;
+                Ok(ret)
             }
 
             StatementKind::Assignment { kind, target, value } => {
@@ -581,8 +581,7 @@ impl TypeChecker {
             }
 
             StatementKind::Definition { .. } => {
-                self.definition(statement, false, ctx)?;
-                Ok(None)
+                self.definition(statement, false, ctx)
             }
 
             StatementKind::Loop { condition, body } => {
@@ -952,8 +951,8 @@ impl TypeChecker {
         let ss = self.stack.len();
         let mut ret = None;
         for stmt in statements.iter_mut() {
-            let stmt = self.statement(stmt, ctx)?;
-            ret = self.unify_option(span, ctx, ret, stmt)?;
+            let stmt_ret = self.statement(stmt, ctx)?;
+            ret = self.unify_option(span, ctx, ret, stmt_ret)?;
         }
         // We typecheck the last statement twice sometimes, doesn't matte though.
         let value = if let Some(Statement {
@@ -1041,11 +1040,11 @@ impl TypeChecker {
             ExpressionKind::Parenthesis(expr) => self.expression(expr, ctx),
 
             ExpressionKind::Case { to_match, branches, fall_through } => {
-                let (_ret, to_match) = self.expression(to_match, ctx)?;
+                let (ret, to_match) = self.expression(to_match, ctx)?;
                 self.add_constraint(to_match, span, Constraint::Enum);
 
+                let mut ret = ret;
                 let mut value = None;
-                let mut ret = None;
                 let mut branch_names = BTreeSet::new();
                 let ss = self.stack.len();
                 for branch in branches.iter_mut() {
@@ -1632,8 +1631,8 @@ impl TypeChecker {
     ) -> TypeResult<Option<TyID>> {
         Ok(match (a, b) {
             (Some(a), Some(b)) => Some(self.unify(span, ctx, a, b)?),
-            (Some(_), None) => a,
-            (None, Some(_)) => b,
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
             (None, None) => None,
         })
     }
