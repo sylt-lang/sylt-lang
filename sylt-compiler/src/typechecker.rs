@@ -1068,10 +1068,13 @@ impl TypeChecker {
                         span,
                         Constraint::Variant(name.clone(), constraint),
                     );
+                    // NOTE(ed): This unifies the variable with the enum, so it injects a function
+                    // - for example - this makes it more permissive than if you place it after the
+                    // `self.expression_block`.
+                    self.check_constraints(span, ctx, to_match)?;
                     let (branch_ret, branch) = self.expression_block(span, &mut branch.body, ctx)?;
                     value = self.unify_option(span, ctx, value, branch)?;
                     ret = self.unify_option(span, ctx, ret, branch_ret)?;
-                    self.check_constraints(span, ctx, to_match)?;
                     self.stack.truncate(ss);
                     branch_names.insert(name.clone());
                 }
