@@ -23,10 +23,10 @@ current_id_number = 0
 
 # Limit amount of assignments, since sylt compiles expressions to different assignments
 # Lua only supports up to 200.
-BLOCK_ASSIGNMENTS = 80
+BLOCK_ASSIGNMENTS = 50
 # Limit nested expressions and functions
 NESTED_EXPRESSION_LIMIT = 2
-NESTED_FUNCTION_LIMIT = 3
+NESTED_FUNCTION_LIMIT = 2
 
 
 def gen_id():
@@ -163,7 +163,7 @@ class Assignment(Statement):
         self.const = const
         self.expr = expr
 
-        self.size += expr.size()
+        self.size = expr.size()
 
     def compose(self) -> str:
         return f"{self.ident} :{':' if self.const else '='} {self.expr.compose()}\n"
@@ -198,7 +198,9 @@ class Block(Node):
         block._generate(fns, vars, depth)
         return block
 
-    def _generate(self, scope_fns, scope_vars, depth=0):
+    def _generate(
+        self, scope_fns, scope_vars, depth=0, block_assignments=BLOCK_ASSIGNMENTS
+    ):
         size = sum(stmt.size for stmt in self.statements)
 
         while (
@@ -208,7 +210,7 @@ class Block(Node):
                     self.fns + scope_fns, self.vars + scope_vars, depth + 1
                 )
             ).size
-            < BLOCK_ASSIGNMENTS
+            < block_assignments
         ):
             size += stmt.size
             self.statements.append(stmt)
@@ -267,12 +269,13 @@ class Root(Block):
         root = Root([], list(), list())
         root.add_start()
 
-        root._generate(list(), list())
+        root._generate(list(), list(), 0, BLOCK_ASSIGNMENTS - 1)
 
         return root
 
 
 root = Root.generate()
+root.scramble()
 print(root.compose())
 with open("big_test.sy", "w") as file:
     file.write(root.compose())
