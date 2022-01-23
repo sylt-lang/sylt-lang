@@ -19,7 +19,7 @@ from typing import Union
 
 # Limit amount of assignments, since sylt compiles expressions to different assignments
 # Lua only supports up to 200.
-BLOCK_ASSIGNMENTS = 20
+MAX_LUA_LOCALS = 20
 # Limit nested expressions and functions
 MAX_EXPR_DEPTH = 2
 MAX_FN_DEPTH = 1
@@ -206,7 +206,7 @@ class Block(Node):
         return block
 
     def _generate(
-        self, scope_fns, scope_vars, fn_depth=0, block_assignments=BLOCK_ASSIGNMENTS
+        self, scope_fns, scope_vars, fn_depth=0, block_assignments=MAX_LUA_ASSIGNMENTS
     ):
         size = sum(stmt.size for stmt in self.statements)
 
@@ -277,7 +277,7 @@ class Root(Block):
         root = Root([], list(), list())
         root.add_start()
 
-        root._generate(list(), list(), 0, BLOCK_ASSIGNMENTS - 1)
+        root._generate(list(), list(), 0, MAX_LUA_ASSIGNMENTS - 1)
 
         return root
 
