@@ -272,18 +272,6 @@ class Root(Block):
         return root
 
 
-# v1 = Value(1)
-# v2 = Value(2)
-# op = Operator(v1, "+", v2)
-# assignment = Assignment("var", True, op)
-# root = Root([assignment], set(), set())
-# start_block = Block([assignment], set(), set())
-# root.add_start(start_block)
-#
-# with open("big_test.sy", "w") as file:
-#     file.write(root.compose())
-# print(root.compose())
-
 root = Root.generate()
 print(root.compose())
 with open("big_test.sy", "w") as file:
