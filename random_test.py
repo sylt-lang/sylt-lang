@@ -206,7 +206,7 @@ class Block(Node):
         return block
 
     def _generate(
-        self, scope_fns, scope_vars, fn_depth=0, block_assignments=MAX_LUA_ASSIGNMENTS
+        self, scope_fns, scope_vars, fn_depth=0, block_assignments=MAX_LUA_LOCALS
     ):
         size = sum(stmt.size for stmt in self.statements)
 
@@ -277,7 +277,7 @@ class Root(Block):
         root = Root([], list(), list())
         root.add_start()
 
-        root._generate(list(), list(), 0, MAX_LUA_ASSIGNMENTS - 1)
+        root._generate(list(), list(), 0, MAX_LUA_LOCALS - 1)
 
         return root
 
