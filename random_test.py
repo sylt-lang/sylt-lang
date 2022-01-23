@@ -17,22 +17,28 @@ Future improvements:
 from random import choice, random, shuffle
 from typing import Union
 
-indented = lambda s: "\n".join(map(lambda ss: "  " + ss, s.splitlines())) + "\n"  # noqa
-current_id_number = 0
-
-
 # Limit amount of assignments, since sylt compiles expressions to different assignments
 # Lua only supports up to 200.
-BLOCK_ASSIGNMENTS = 50
+BLOCK_ASSIGNMENTS = 20
 # Limit nested expressions and functions
 MAX_EXPR_DEPTH = 2
-MAX_FN_DEPTH = 3
+MAX_FN_DEPTH = 1
+
+indented = lambda s: "".join(map(lambda ss: "  " + ss + "\n", s.splitlines()))  # noqa
+current_var_number = 0
+current_fn_number = 0
 
 
-def gen_id():
-    global current_id_number
-    current_id_number += 1
-    return f"v{current_id_number}"
+def gen_varname():
+    global current_var_number
+    current_var_number += 1
+    return f"v{current_var_number}"
+
+
+def gen_fnname():
+    global current_fn_number
+    current_fn_number += 1
+    return f"f{current_fn_number}"
 
 
 class Node:
@@ -151,7 +157,7 @@ class Statement(Node):
         return choice(
             [
                 lambda: Assignment.generate(scope_fns, scope_vars),
-                lambda: Function.generate(scope_fns, scope_vars, fn_depth + 1),
+                lambda: Function.generate(scope_fns, scope_vars, fn_depth),
             ]
         )()
 
@@ -171,7 +177,7 @@ class Assignment(Statement):
 
     @staticmethod
     def generate(scope_fns, scope_vars):
-        ident = gen_id()
+        ident = gen_varname()
         const = random() > 0.5
         expr = Expression.generate(scope_fns, scope_vars)
 
@@ -243,10 +249,11 @@ class Function(Statement):
 
     @staticmethod
     def generate(scope_fns, scope_vars, fn_depth):
-        ident = gen_id()
+        ident = gen_fnname()
         const = random() > 0.5
-        args = ["a"]
-        block = Block.generate(scope_fns, scope_vars + args, fn_depth)
+        arg = chr(ord("a") + fn_depth)
+        args = [arg]
+        block = Block.generate(scope_fns, scope_vars + args, fn_depth + 1)
         ret = choice(block.vars + scope_vars)
 
         return Function(ident, args, const, block, ret)
@@ -276,6 +283,7 @@ class Root(Block):
 
 
 root = Root.generate()
+root.scramble()
 print(root.compose())
 with open("big_test.sy", "w") as file:
     file.write(root.compose())
