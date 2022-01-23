@@ -25,8 +25,8 @@ current_id_number = 0
 # Lua only supports up to 200.
 BLOCK_ASSIGNMENTS = 50
 # Limit nested expressions and functions
-NESTED_EXPRESSION_LIMIT = 2
-NESTED_FUNCTION_LIMIT = 2
+MAX_EXPR_DEPTH = 2
+MAX_FN_DEPTH = 3
 
 
 def gen_id():
@@ -51,17 +51,17 @@ class Expression(Node):
         raise NotImplementedError
 
     @staticmethod
-    def generate(scope_fns, scope_vars, depth=0):
-        if depth >= NESTED_EXPRESSION_LIMIT:
+    def generate(scope_fns, scope_vars, expr_depth=0):
+        if expr_depth >= MAX_EXPR_DEPTH:
             return Value.generate(scope_fns, scope_vars)
         else:
             return choice(
                 [
                     lambda: Value.generate(scope_fns, scope_vars),
-                    lambda: Operator.generate(scope_fns, scope_vars, depth),
+                    lambda: Operator.generate(scope_fns, scope_vars, expr_depth),
                 ]
                 + (
-                    [lambda: FnCall.generate(scope_fns, scope_vars, depth)]
+                    [lambda: FnCall.generate(scope_fns, scope_vars, expr_depth)]
                     if scope_fns
                     else []
                 )
@@ -107,10 +107,10 @@ class Operator(Expression):
         return self.lhs.size() + 1 + self.rhs.size()
 
     @staticmethod
-    def generate(scope_fns, scope_vars, depth):
+    def generate(scope_fns, scope_vars, expr_depth):
         op = choice(["+", "-", "*"])
-        lhs = Expression.generate(scope_fns, scope_vars, depth + 1)
-        rhs = Expression.generate(scope_fns, scope_vars, depth + 1)
+        lhs = Expression.generate(scope_fns, scope_vars, expr_depth + 1)
+        rhs = Expression.generate(scope_fns, scope_vars, expr_depth + 1)
         return Operator(lhs, op, rhs)
 
 
@@ -128,9 +128,10 @@ class FnCall(Expression):
         return 1
 
     @staticmethod
-    def generate(scope_fns, scope_vars, depth):
+    def generate(scope_fns, scope_vars, expr_depth):
         return FnCall(
-            choice(scope_fns), Expression.generate(scope_fns, scope_vars, depth + 1)
+            choice(scope_fns),
+            Expression.generate(scope_fns, scope_vars, expr_depth + 1),
         )
 
 
@@ -144,13 +145,13 @@ class Statement(Node):
         raise NotImplementedError
 
     @staticmethod
-    def generate(scope_fns, scope_vars, depth=0):
-        if depth >= NESTED_FUNCTION_LIMIT:
+    def generate(scope_fns, scope_vars, fn_depth=0):
+        if fn_depth >= MAX_FN_DEPTH:
             return Assignment.generate(scope_fns, scope_vars)
         return choice(
             [
                 lambda: Assignment.generate(scope_fns, scope_vars),
-                lambda: Function.generate(scope_fns, scope_vars, depth),
+                lambda: Function.generate(scope_fns, scope_vars, fn_depth + 1),
             ]
         )()
 
@@ -193,13 +194,13 @@ class Block(Node):
         return "".join(f"{child.compose()}" for child in self.statements)
 
     @staticmethod
-    def generate(fns, vars, depth):
+    def generate(fns, vars, fn_depth):
         block = Block([], list(), list())
-        block._generate(fns, vars, depth)
+        block._generate(fns, vars, fn_depth)
         return block
 
     def _generate(
-        self, scope_fns, scope_vars, depth=0, block_assignments=BLOCK_ASSIGNMENTS
+        self, scope_fns, scope_vars, fn_depth=0, block_assignments=BLOCK_ASSIGNMENTS
     ):
         size = sum(stmt.size for stmt in self.statements)
 
@@ -207,7 +208,7 @@ class Block(Node):
             size
             + (
                 stmt := Statement.generate(
-                    self.fns + scope_fns, self.vars + scope_vars, depth + 1
+                    self.fns + scope_fns, self.vars + scope_vars, fn_depth
                 )
             ).size
             < block_assignments
@@ -241,11 +242,11 @@ class Function(Statement):
         )
 
     @staticmethod
-    def generate(scope_fns, scope_vars, depth):
+    def generate(scope_fns, scope_vars, fn_depth):
         ident = gen_id()
         const = random() > 0.5
         args = ["a"]
-        block = Block.generate(scope_fns, scope_vars + args, depth + 1)
+        block = Block.generate(scope_fns, scope_vars + args, fn_depth)
         ret = choice(block.vars + scope_vars)
 
         return Function(ident, args, const, block, ret)
@@ -275,7 +276,6 @@ class Root(Block):
 
 
 root = Root.generate()
-root.scramble()
 print(root.compose())
 with open("big_test.sy", "w") as file:
     file.write(root.compose())
