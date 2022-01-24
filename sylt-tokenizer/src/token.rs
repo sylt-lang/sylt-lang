@@ -165,7 +165,7 @@ pub enum Token {
     #[regex(r"//[^\n]*", |lex| lex.slice()[2..].trim().to_string())]
     Comment(String),
 
-    #[regex(r"[ \t\r]", logos::skip)]
+    #[regex(r"[ \t\r]+", logos::skip)]
     Whitespace,
 
     EOF,
