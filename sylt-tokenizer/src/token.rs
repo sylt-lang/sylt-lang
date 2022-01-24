@@ -20,7 +20,7 @@ pub enum Token {
     String(String),
 
     // `X.`, `.Y`, `X.Y`, `XeY` and `Xe-Y`
-    #[regex(r"([\d]+\.[\d]*|[\d]*\.[\d]+)|[\d]+e-?[\d]+", |lex| lex.slice().parse(), priority=2)]
+    #[regex(r"([\d]+\.[\d]*|[\d]*\.[\d]+)|[\d]+e(-|\+)?[\d]+", |lex| lex.slice().parse(), priority=2)]
     Float(f64),
     #[regex(r"[\d]+", |lex| lex.slice().parse())]
     Int(i64),
