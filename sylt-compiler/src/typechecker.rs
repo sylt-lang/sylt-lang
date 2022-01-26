@@ -952,7 +952,7 @@ impl TypeChecker {
             let stmt_ret = self.statement(stmt, ctx)?;
             ret = self.unify_option(span, ctx, ret, stmt_ret)?;
         }
-        // We typecheck the last statement twice sometimes, doesn't matte though.
+        // We typecheck the last statement twice sometimes, doesn't matter though.
         let value = if let Some(Statement {
             kind: StatementKind::StatementExpression { value },
             ..
