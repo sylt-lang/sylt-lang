@@ -298,6 +298,7 @@ impl<'a, 'b> Generator<'a, 'b> {
     }
 }
 
+#[cfg_attr(timed, sylt_macro::timed("lua::generate"))]
 pub fn generate(ir: &Vec<IR>, usage_count: &HashMap<Var, usize>, out: &mut dyn Write) {
     Generator::new(usage_count, out).generate(ir);
 }

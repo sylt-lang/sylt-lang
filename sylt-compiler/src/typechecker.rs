@@ -2281,6 +2281,7 @@ impl TypeChecker {
     }
 }
 
+#[cfg_attr(timed, sylt_macro::timed("typechecker::solve"))]
 pub(crate) fn solve(
     statements: &mut Vec<(Statement, NamespaceID)>,
     namespace_to_file: &HashMap<NamespaceID, FileOrLib>,
