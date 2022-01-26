@@ -1,10 +1,10 @@
 # How to Contribute to Sylt-lang
-First of all - nice to see you here! It's always nice
-to get more people to help out with Sylt-lang.
+First of all, nice to see you here! It's always nice
+to get more people to help out with Sylt.
 
 ## Prerequisites
-Sylt is built with Rust. You'll need a Rust-compiler
-to work on sylt. You'll also need to install Lua,
+Sylt is built with Rust. You need a Rust compiler
+to work on Sylt. You also need to install Lua,
 since Sylt compiles to Lua.
 
 ## Some useful commands
@@ -42,11 +42,11 @@ cargo run -- --help
 Start by finding an issue. It's the easiest way to make sure
 work isn't wasted.
 
-When you have something that works, put up a pull request,
-then people can look at it and you can get feedback so you
+When you have something that works, put up a pull request.
+Then people can look at it and you can get feedback so you
 don't do more than you should.
 
-When you get a passing review you can merge the code.
+When you get a passing review a maintainer can merge the code.
 
 You'll probably get some feedback in your review which you can
 respond to and fix. We iterate until we're all happy with the code.
