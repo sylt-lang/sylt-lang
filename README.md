@@ -21,21 +21,21 @@ The short version:
 
 Sylt has become a mix of functional-programming concepts 
 mixed with more procedural code. The language itself is very small
-but is till expressive. But the typechecker is what sets it appart from
-Python and Lua, which end up in similar uses.
+but still expressive. The typechecker is what sets it apart from
+Python and Lua, which usually end up being used for similar use-cases.
 
-The Sylt-typechecker is ment to not get in your way, so there's no need to
+The Sylt typechecker is meant to not get in your way, so there's no need to
 write types anywhere in your code. If your program is correct (which it
 probably isn't) the typechecker will be all fine with it.
 
-This is ment to give the same rapid iteration speed as working in something
+This is meant to give the same rapid iteration speed as working in something
 like Python or Lua, but with the added peace of mind a strict static
 typechecker gives you. 
 
-# Sylt and Game Jams
+# Sylt and game jams
 The language is made for game jams, and has been used in multiple. Unfortunately
-the language has been rewritten multiple times between each jam. And since
-there's no goal of making Sylt backwards compatible it means there are no
+the language has been rewritten multiple times between each jam, and since
+there's no goal of making Sylt backwards compatible it means there are (currently) no
 games made in the most recent verision of the language.
 
 # Some cool small programs
