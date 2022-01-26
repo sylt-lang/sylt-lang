@@ -1,8 +1,9 @@
 use std::{collections::HashMap, fmt::Display};
 
 use sylt_parser::{
-    expression::ComparisonKind, Assignable, AssignableKind, CaseBranch, Expression, ExpressionKind,
-    Identifier, Op as ParserOp, Statement, StatementKind,
+    expression::{CaseBranch, ComparisonKind},
+    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp, Statement,
+    StatementKind,
 };
 
 use crate::{typechecker::TypeChecker, NamespaceID};
@@ -242,6 +243,33 @@ impl<'a> IRCodeGen<'a> {
         }
     }
 
+    fn expression_block(&mut self, out: Var, mut block: Vec<Statement>, ctx: IRContext) -> Vec<IR> {
+        let value = match block.last().cloned() {
+            Some(Statement {
+                kind: StatementKind::StatementExpression { value }, ..
+            }) => {
+                block.pop();
+                Some(value)
+            }
+            _ => None,
+        };
+        let ops = block
+            .iter()
+            .map(|stmt| self.statement(&stmt, ctx))
+            .flatten()
+            .collect();
+        [
+            ops,
+            if let Some(value) = value {
+                let (ops, var) = self.expression(&value, ctx);
+                [ops, vec![IR::Assign(out, var)]].concat()
+            } else {
+                Vec::new()
+            },
+        ]
+        .concat()
+    }
+
     fn expression(&mut self, expr: &Expression, ctx: IRContext) -> (Vec<IR>, Var) {
         match &expr.kind {
             ExpressionKind::Get(ass) => {
@@ -301,23 +329,85 @@ impl<'a> IRCodeGen<'a> {
                 ([aops, vec![IR::Not(b, a)]].concat(), b)
             }
 
-            ExpressionKind::IfExpression { condition, pass, fail } => {
+            ExpressionKind::If { condition, pass, fail } => {
                 let (cops, c) = self.expression(&condition, ctx);
-                let (aops, a) = self.expression(&pass, ctx);
-                let (bops, b) = self.expression(&fail, ctx);
-                let var = self.var();
+                let out = self.var();
+                let aops = self.expression_block(out, pass.clone(), ctx);
+                let bops = self.expression_block(out, fail.clone(), ctx);
+                (
+                    [
+                        cops,
+                        vec![IR::Define(out), IR::If(c)],
+                        aops,
+                        vec![IR::Else],
+                        bops,
+                        vec![IR::End],
+                    ]
+                    .concat(),
+                    out,
+                )
+            }
+
+            ExpressionKind::Case { to_match, branches, fall_through } => {
+                let ss = self.variables.len();
+                let (cops, c) = self.expression(&to_match, ctx);
+                let tag = self.var();
+                let tag_index = self.var();
+                let value = self.var();
+                let value_index = self.var();
+
+                let out = self.var();
+
+                let branches_code = branches
+                    .iter()
+                    .map(|CaseBranch { pattern, variable, body }| {
+                        if let Some(var_name) = variable {
+                            self.variables.push(Variable {
+                                name: var_name.name.clone(),
+                                namespace: ctx.namespace,
+                                var: value,
+                            });
+                        }
+                        let body = self.expression_block(out, body.clone(), ctx);
+                        self.variables.truncate(ss);
+
+                        let exp_str = self.var();
+                        let cmp = self.var();
+                        [
+                            vec![
+                                IR::Str(exp_str, pattern.name.clone()),
+                                IR::Equals(cmp, exp_str, tag),
+                                IR::If(cmp),
+                            ],
+                            body,
+                            vec![IR::Else],
+                        ]
+                        .concat()
+                    })
+                    .flatten()
+                    .collect();
+
+                let fall_through_code = self.expression_block(
+                    out,
+                    fall_through.clone().unwrap_or_else(|| Vec::new()),
+                    ctx,
+                );
 
                 (
                     [
                         cops,
-                        vec![IR::Define(var), IR::If(c)],
-                        aops,
-                        vec![IR::Assign(var, a), IR::Else],
-                        bops,
-                        vec![IR::Assign(var, b), IR::End],
+                        vec![
+                            IR::Int(tag_index, 1),
+                            IR::Index(tag, c, tag_index),
+                            IR::Int(value_index, 2),
+                            IR::Index(value, c, value_index),
+                        ],
+                        branches_code,
+                        fall_through_code,
+                        (0..branches.len()).map(|_| IR::End).collect(),
                     ]
                     .concat(),
-                    var,
+                    out,
                 )
             }
 
@@ -568,77 +658,17 @@ impl<'a> IRCodeGen<'a> {
                 .concat()
             }
             StatementKind::Definition { ident, value, .. } => self.definition(ident, value, ctx),
-            StatementKind::If { condition, pass, fail } => {
-                let (cops, c) = self.expression(&condition, ctx);
-                let aops = self.statement(&pass, ctx);
-                let bops = self.statement(&fail, ctx);
-
-                [
-                    cops,
-                    vec![IR::If(c)],
-                    aops,
-                    vec![IR::Else],
-                    bops,
-                    vec![IR::End],
-                ]
-                .concat()
-            }
-            StatementKind::Case { to_match, branches, fall_through } => {
+            StatementKind::Block { statements } => {
                 let ss = self.variables.len();
-                let (cops, c) = self.expression(&to_match, ctx);
-                let tag = self.var();
-                let tag_index = self.var();
-                let value = self.var();
-                let value_index = self.var();
-
-                let branches_code = branches
+                let stmt_code = statements
                     .iter()
-                    .map(|CaseBranch { pattern, variable, body }| {
-                        if let Some(var_name) = variable {
-                            self.variables.push(Variable {
-                                name: var_name.name.clone(),
-                                namespace: ctx.namespace,
-                                var: value,
-                            });
-                        }
-                        let body = self.statement(body, ctx);
-                        self.variables.truncate(ss);
-
-                        let exp_str = self.var();
-                        let cmp = self.var();
-                        [
-                            vec![
-                                IR::Str(exp_str, pattern.name.clone()),
-                                IR::Equals(cmp, exp_str, tag),
-                                IR::If(cmp),
-                            ],
-                            body,
-                            vec![IR::Else],
-                        ]
-                        .concat()
-                    })
+                    .map(|stmt| self.statement(stmt, ctx))
                     .flatten()
                     .collect();
-
-                let fall_through_code = fall_through
-                    .as_ref()
-                    .map(|stmt| self.statement(stmt, ctx))
-                    .unwrap_or_else(Vec::new);
-
-                [
-                    cops,
-                    vec![
-                        IR::Int(tag_index, 1),
-                        IR::Index(tag, c, tag_index),
-                        IR::Int(value_index, 2),
-                        IR::Index(value, c, value_index),
-                    ],
-                    branches_code,
-                    fall_through_code,
-                    (0..branches.len()).map(|_| IR::End).collect(),
-                ]
-                .concat()
+                self.variables.truncate(ss);
+                stmt_code
             }
+
             StatementKind::Loop { condition, body } => {
                 let (cops, c) = self.expression(&condition, ctx);
                 let l = self.label();
@@ -672,16 +702,6 @@ impl<'a> IRCodeGen<'a> {
             }
 
             StatementKind::StatementExpression { value } => self.expression(value, ctx).0,
-            StatementKind::Block { statements } => {
-                let ss = self.variables.len();
-                let code = statements
-                    .iter()
-                    .map(|stmt| self.statement(stmt, ctx))
-                    .flatten()
-                    .collect();
-                self.variables.truncate(ss);
-                code
-            }
 
             StatementKind::EmptyStatement => Vec::new(),
 
@@ -689,7 +709,6 @@ impl<'a> IRCodeGen<'a> {
             | StatementKind::Enum { .. }
             | StatementKind::ExternalDefinition { .. }
             | StatementKind::FromUse { .. }
-            | StatementKind::IsCheck { .. }
             | StatementKind::Use { .. } => unreachable!(),
         }
     }

@@ -308,12 +308,53 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             write_expression(dest, indent, *expr)?;
             write!(dest, ")")?;
         }
-        ExpressionKind::IfExpression { condition, pass, fail } => {
-            write_expression(dest, indent, *pass)?;
-            write!(dest, " if ")?;
+        ExpressionKind::If { condition, pass, fail } => {
+            write!(dest, "if ")?;
             write_expression(dest, indent, *condition)?;
-            write!(dest, " else ")?;
-            write_expression(dest, indent, *fail)?;
+            write!(dest, " do\n")?;
+            for stmt in pass.into_iter() {
+                write_statement(dest, indent + 1, stmt)?;
+            }
+
+            if fail.len() != 0 {
+                write_indents(dest, indent)?;
+                write!(dest, "else do\n")?;
+                for stmt in fail.into_iter() {
+                    write_statement(dest, indent + 1, stmt)?;
+                }
+            }
+            write_indents(dest, indent)?;
+            write!(dest, "end")?;
+        }
+        ExpressionKind::Case { to_match, branches, fall_through } => {
+            write!(dest, "case ")?;
+            write_expression(dest, indent, *to_match)?;
+            write!(dest, " do\n")?;
+            for branch in branches {
+                write_indents(dest, indent + 1)?;
+                write_identifier(dest, branch.pattern)?;
+                if let Some(var) = branch.variable {
+                    write!(dest, " ")?;
+                    write_identifier(dest, var)?;
+                }
+                write!(dest, " ->\n")?;
+                for stmt in branch.body.into_iter() {
+                    write_statement(dest, indent + 1, stmt)?;
+                }
+                write_indents(dest, indent + 1)?;
+                write!(dest, "end\n")?;
+            }
+            if let Some(fall_through) = fall_through {
+                write_indents(dest, indent + 1)?;
+                write!(dest, "else\n")?;
+                for stmt in fall_through.into_iter() {
+                    write_statement(dest, indent + 1, stmt)?;
+                }
+                write_indents(dest, indent + 1)?;
+                write!(dest, "end\n")?;
+            }
+            write_indents(dest, indent)?;
+            write!(dest, "end\n")?;
         }
         ExpressionKind::Function { name: _, params, ret, body } => {
             write!(dest, "fn")?;
@@ -419,6 +460,17 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             )?;
             write_expression(dest, indent, value)?;
         }
+        StatementKind::Block { statements } => {
+            write_indents(dest, indent)?;
+            write!(dest, "do\n")?;
+
+            for s in merge_empty_statements(statements) {
+                write_statement(dest, indent + 1, s)?;
+            }
+
+            write_indents(dest, indent)?;
+            write!(dest, "end")?
+        }
         StatementKind::Blob { name, fields } => {
             write_indents(dest, indent)?;
             write!(dest, "{} :: blob", name)?;
@@ -430,17 +482,6 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write!(dest, "{} :: enum", name)?;
             let variants_as_tuples = variants.into_iter().collect();
             write_enum_variants(dest, indent + 1, variants_as_tuples)?;
-        }
-        StatementKind::Block { statements } => {
-            write_indents(dest, indent)?;
-            write!(dest, "do\n")?;
-
-            for s in merge_empty_statements(statements) {
-                write_statement(dest, indent + 1, s)?;
-            }
-
-            write_indents(dest, indent)?;
-            write!(dest, "end")?
         }
         StatementKind::Break => {
             write_indents(dest, indent)?;
@@ -488,54 +529,6 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write_expression(dest, indent, value)?;
         }
         StatementKind::EmptyStatement => (),
-        StatementKind::Case { to_match, branches, fall_through } => {
-            write_indents(dest, indent)?;
-            write!(dest, "case ")?;
-            write_expression(dest, indent, to_match)?;
-            write!(dest, " do\n")?;
-            for branch in branches {
-                write_indents(dest, indent + 1)?;
-                write_identifier(dest, branch.pattern)?;
-                if let Some(var) = branch.variable {
-                    write!(dest, " ")?;
-                    write_identifier(dest, var)?;
-                }
-                write!(dest, "\n")?;
-                write_statement(dest, indent + 1, branch.body)?;
-            }
-            if let Some(fall_through) = fall_through {
-                write_indents(dest, indent + 1)?;
-                write!(dest, "else\n")?;
-                write_statement(dest, indent + 1, *fall_through)?;
-            }
-            write_indents(dest, indent)?;
-            write!(dest, "end\n")?;
-        }
-        StatementKind::If { condition, pass, fail } => {
-            if matches!(fail.kind, StatementKind::EmptyStatement) {
-                for comment in &fail.comments {
-                    write_indents(dest, indent)?;
-                    write!(dest, "// {}\n", comment)?;
-                }
-            }
-
-            write_indents(dest, indent)?;
-            write!(dest, "if ")?;
-            write_expression(dest, indent, condition)?;
-            write!(dest, " ")?;
-            write_statement(dest, indent, *pass)?;
-            if !matches!(fail.kind, StatementKind::EmptyStatement) {
-                write!(dest, " else ")?;
-                write_statement(dest, indent, *fail)?;
-            }
-        }
-        StatementKind::IsCheck { lhs, rhs } => {
-            write_indents(dest, indent)?;
-            write!(dest, ":")?;
-            write_type(dest, indent, lhs)?;
-            write!(dest, " is :")?;
-            write_type(dest, indent, rhs)?;
-        }
         StatementKind::Loop { condition, body } => {
             write_indents(dest, indent)?;
             write!(dest, "loop ")?;

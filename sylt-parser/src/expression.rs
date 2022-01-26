@@ -15,6 +15,13 @@ pub enum ComparisonKind {
     In,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CaseBranch {
+    pub pattern: Identifier,
+    pub variable: Option<Identifier>,
+    pub body: Vec<Statement>,
+}
+
 /// The different kinds of [Expression]s.
 ///
 /// Expressions are recursive and evaluate to some kind of value.
@@ -49,11 +56,22 @@ pub enum ExpressionKind {
 
     Parenthesis(Box<Expression>),
 
-    /// Inline If-statements
-    IfExpression {
+    /// Makes your code go either here or there.
+    ///
+    /// `if <expression> <statement> [else <statement>]`.
+    If {
         condition: Box<Expression>,
-        pass: Box<Expression>,
-        fail: Box<Expression>,
+        pass: Vec<Statement>,
+        fail: Vec<Statement>,
+    },
+
+    /// A super branchy branch.
+    ///
+    /// `case <expression> do (<pattern> [<variable] <statement>)* [else <statement>] end`.
+    Case {
+        to_match: Box<Expression>,
+        branches: Vec<CaseBranch>,
+        fall_through: Option<Vec<Statement>>,
     },
 
     /// Functions and closures.
@@ -213,13 +231,13 @@ fn parse_precedence<'t>(ctx: Context<'t>, prec: Prec) -> ParseResult<'t, Express
     // Initial value, e.g. a number value, assignable, ...
     let (mut ctx, mut expr) = prefix(ctx)?;
     while prec <= precedence(ctx.token()) {
-        if let Ok((ctx_, _expr)) = infix(ctx, &expr) {
-            // assign to outer
-            ctx = ctx_;
-            expr = _expr;
-        } else {
+        if !valid_infix(ctx) {
             break;
         }
+        let (ctx_, _expr) = infix(ctx, &expr)?;
+        // assign to outer
+        ctx = ctx_;
+        expr = _expr;
     }
     Ok((ctx, expr))
 }
@@ -282,6 +300,8 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
     match ctx.token() {
         T::Fn => function(ctx),
+        T::If => if_expression(ctx),
+        T::Case => case_expression(ctx),
 
         T::LeftParen => grouping_or_tuple(ctx),
         T::LeftBracket => list(ctx),
@@ -335,25 +355,99 @@ fn unary<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     Ok((ctx, Expression::new(span, kind)))
 }
 
-fn if_expression<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
+fn case_expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+    let span = ctx.span();
+    let (ctx, skip_newlines) = ctx.push_skip_newlines(true);
+    let ctx = expect!(ctx, T::Case, "Expected 'case' at start of case-expression");
+    let (ctx, to_match) = expression(ctx)?;
+    let to_match = Box::new(to_match);
+    let mut ctx = expect!(ctx, T::Do, "Expected 'do' after case-expression");
+
+    let mut branches = Vec::new();
+    loop {
+        match ctx.token() {
+            T::EOF | T::Else | T::End => {
+                break;
+            }
+
+            T::Newline => {
+                ctx = ctx.skip(1);
+            }
+
+            T::Identifier(pattern) if is_capitalized(pattern) => {
+                let pattern = Identifier::new(ctx.span(), pattern.clone());
+                ctx = ctx.skip(1);
+                let (ctx_, variable) = match ctx.token() {
+                    T::Identifier(capture) if !is_capitalized(capture) => (
+                        ctx.skip(1),
+                        Some(Identifier::new(ctx.span(), capture.clone())),
+                    ),
+                    T::Identifier(_) => {
+                        raise_syntax_error!(ctx, "Variables have to start with a lowercase letter");
+                    }
+                    _ => (ctx, None),
+                };
+                ctx = expect!(ctx_, T::Arrow, "Expected '->' after case-pattern");
+                let (ctx_, body) = block(ctx)?;
+                ctx = ctx_;
+
+                branches.push(CaseBranch { pattern, variable, body });
+            }
+
+            T::Identifier(_) => {
+                raise_syntax_error!(ctx, "Enum variants have to start with a captial letter");
+            }
+
+            _ => {
+                raise_syntax_error!(
+                    ctx,
+                    "Expected a branch - but a branch cannot start with {:?}",
+                    ctx.token()
+                );
+            }
+        }
+    }
+    let (ctx, fall_through) = if matches!(ctx.token(), T::Else) {
+        let (ctx, fall_through) = block(ctx.skip(1))?;
+        (ctx, Some(fall_through))
+    } else {
+        (ctx, None)
+    };
+
+    let ctx = ctx.pop_skip_newlines(skip_newlines);
+    let ctx = expect!(ctx, T::End, "Expected 'end' to finish of case-statement");
+
+    Ok((
+        ctx,
+        Expression::new(
+            span,
+            ExpressionKind::Case { to_match, branches, fall_through },
+        ),
+    ))
+}
+
+fn if_expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let span = ctx.span();
     let ctx = expect!(ctx, T::If, "Expected 'if' at start of if-expression");
 
-    use ExpressionKind::*;
-    let (ctx, condition) = parse_precedence(ctx, Prec::No)?;
+    let (ctx, old_skip) = ctx.push_skip_newlines(true);
+    let (ctx, condition) = expression(ctx)?;
+    let ctx = ctx.pop_skip_newlines(old_skip);
 
-    let ctx = expect!(
-        ctx,
-        T::Else,
-        "Expected 'else' after if-expression condition"
-    );
-    let (ctx, rhs) = parse_precedence(ctx, Prec::No)?;
-    let condition = Box::new(condition.clone());
-    let pass = Box::new(lhs.clone());
-    let fail = Box::new(rhs);
+    let condition = Box::new(condition);
+
+    let (ctx, pass) = block(expect!(ctx, T::Do, "Expected 'do' after if condition"))?;
+
+    let (ctx, fail) = if matches!(ctx.token(), T::Else) {
+        block(ctx.skip(1))?
+    } else {
+        // No else so we insert an empty statement instead.
+        (ctx, Vec::new())
+    };
+
     Ok((
         ctx,
-        Expression::new(span, IfExpression { condition, pass, fail }),
+        Expression::new(span, ExpressionKind::If { condition, pass, fail }),
     ))
 }
 
@@ -394,6 +488,31 @@ fn arrow_call<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Express
     prepend_expresion(ctx, lhs.clone(), rhs)
 }
 
+fn valid_infix<'t>(ctx: Context<'t>) -> bool {
+    matches!(
+        ctx.token(),
+        T::Plus
+            | T::Minus
+            | T::Star
+            | T::Slash
+            | T::EqualEqual
+            | T::NotEqual
+            | T::Greater
+            | T::GreaterEqual
+            | T::Less
+            | T::LessEqual
+            | T::And
+            | T::Or
+            | T::AssertEqual
+            | T::In
+            | T::Arrow
+            | T::Prime
+            | T::LeftParen
+            | T::LeftBracket
+            | T::Dot
+    )
+}
+
 /// Parse an expression starting from an infix operator. Called by `parse_precedence`.
 fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
     use ComparisonKind::*;
@@ -403,9 +522,6 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
     // All valid operators have a precedence value that is differnt
     // from `Prec::no`.
     match (ctx.token(), precedence(ctx.skip(1).token())) {
-        (T::If, Prec::No) => {
-            return if_expression(ctx, lhs);
-        }
         // The cool arrow syntax. For example: `a->b(2)` compiles to `b(a, 2)`.
         // #NotLikeOtherOperators
         (T::Arrow, _) => {
@@ -450,7 +566,7 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
 
         // Unknown infix operator.
         _ => {
-            return Err((ctx, Vec::new()));
+            raise_syntax_error!(ctx.prev(), "Not a valid infix operator");
         }
     };
 
@@ -813,8 +929,8 @@ mod test {
     test!(expression, void_simple: "fn do end" => _);
     test!(expression, void_argument: "fn a: int do ret a + 1 end" => _);
 
-    test!(expression, if_expr: "a if b else c" => IfExpression { .. });
-    test!(expression, if_expr_more: "1 + 1 + 1 if b else 2 + 2 + 2" => IfExpression { .. });
+    test!(expression, if_expr: "if a do b else c end" => If { .. });
+    test!(expression, if_expr_more: "1 + 1 + if a do b else 2 end + 2 + 2" => _);
 
     test!(expression, fn_implicit_unknown_1: "fn a do 1 end" => _);
     test!(expression, fn_implicit_unknown_2: "fn a, b do 1 end" => _);
@@ -897,17 +1013,45 @@ impl PrettyPrint for Expression {
                 write!(f, "Paren\n")?;
                 expr.pretty_print(f, indent + 1)?;
             }
-            EK::IfExpression { condition, pass, fail } => {
-                write!(f, "IfExpression\n")?;
+            EK::Case { to_match, branches, fall_through } => {
+                write!(f, "<Case>\n")?;
+                to_match.pretty_print(f, indent + 1)?;
+                for CaseBranch { pattern, variable, body } in branches.iter() {
+                    write_indent(f, indent + 1)?;
+                    write!(
+                        f,
+                        "{} {:?}\n",
+                        pattern.name,
+                        variable.as_ref().map(|x| &x.name)
+                    )?;
+                    for stmt in body.iter() {
+                        stmt.pretty_print(f, indent + 2)?;
+                    }
+                }
+                write_indent(f, indent + 1)?;
+                if let Some(fall_through) = fall_through {
+                    write!(f, "else")?;
+                    for stmt in fall_through.iter() {
+                        stmt.pretty_print(f, indent + 2)?;
+                    }
+                }
+                return Ok(());
+            }
+            EK::If { condition, pass, fail } => {
+                write!(f, "If\n")?;
                 write_indent(f, indent)?;
                 write!(f, "condition:\n")?;
                 condition.pretty_print(f, indent + 1)?;
                 write_indent(f, indent)?;
                 write!(f, "pass:\n")?;
-                pass.pretty_print(f, indent + 1)?;
+                for stmt in pass.iter() {
+                    stmt.pretty_print(f, indent + 1)?;
+                }
                 write_indent(f, indent)?;
                 write!(f, "fail:\n")?;
-                fail.pretty_print(f, indent + 1)?;
+                for stmt in fail.iter() {
+                    stmt.pretty_print(f, indent + 1)?;
+                }
             }
             EK::Function { name, params, ret, body } => {
                 write!(f, "Fn {} ", name)?;

@@ -7,8 +7,8 @@ end
 
 start :: fn do
     case A.Q do
-        Q do end
-        W do end
-        E do end
+        Q -> end
+        W -> end
+        E -> end
     end
 end

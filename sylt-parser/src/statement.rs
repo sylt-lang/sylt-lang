@@ -23,13 +23,6 @@ impl NameIdentifier {
 
 type Alias = Identifier;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct CaseBranch {
-    pub pattern: Identifier,
-    pub variable: Option<Identifier>,
-    pub body: Statement,
-}
-
 /// The different kinds of [Statement]s.
 ///
 /// There are both shorter statements like `a = b + 1` as well as longer
@@ -113,24 +106,6 @@ pub enum StatementKind {
         ty: Type,
     },
 
-    /// Makes your code go either here or there.
-    ///
-    /// `if <expression> <statement> [else <statement>]`.
-    If {
-        condition: Expression,
-        pass: Box<Statement>,
-        fail: Box<Statement>,
-    },
-
-    /// A super branchy branch.
-    ///
-    /// `case <expression> do (<pattern> [<variable] <statement>)* [else <statement>] end`.
-    Case {
-        to_match: Expression,
-        branches: Vec<CaseBranch>,
-        fall_through: Option<Box<Statement>>,
-    },
-
     /// Do something as long as something else evaluates to true.
     ///
     /// `loop <expression> <statement>`.
@@ -148,14 +123,6 @@ pub enum StatementKind {
     ///
     /// `continue`.
     Continue,
-
-    /// Handles compile time checks of types.
-    ///
-    /// `:A is :B`
-    IsCheck {
-        lhs: Type,
-        rhs: Type,
-    },
 
     /// Returns a value from a function.
     ///
@@ -259,7 +226,7 @@ pub fn use_path<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, FileOrLib)
     Ok((ctx, (path_ident, file)))
 }
 
-fn statement_or_block<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
+pub fn statement_or_block<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     if matches!(
         ctx.token(),
         T::Do | T::If | T::Loop | T::Break | T::Continue | T::Ret
@@ -335,19 +302,10 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         [T::Newline, ..] => (ctx, EmptyStatement),
 
         // Block: `{ <statements> }`
-        [T::Do, ..] => match (block(ctx), expression(ctx)) {
-            (Ok((ctx, statements)), _) => (ctx, Block { statements }),
-            (_, Ok((ctx, value))) => (ctx, StatementExpression { value }),
-            (Err((_, mut stmt_errs)), Err((_, mut expr_errs))) => {
-                let errs = vec![
-                    syntax_error!(ctx, "Neither a valid block nor a valid expression - inspects the two errors below"),
-                    stmt_errs.remove(0),
-                    expr_errs.remove(0),
-                ];
-                let ctx = skip_until!(ctx, T::End);
-                return Err((ctx, errs));
-            }
-        },
+        [T::Do, ..] => {
+            let (ctx, statements) = block(ctx)?;
+            (ctx, Block { statements })
+        }
 
         // `use path/to/file`
         // `use path/to/file as alias`
@@ -442,24 +400,6 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx, FromUse { path: path_ident, imports, file })
         }
 
-        // `: A is : B`
-        [T::Colon, ..] => {
-            let ctx = ctx.skip(1);
-            let (ctx, lhs) = parse_type(ctx)?;
-            let ctx = expect!(
-                ctx,
-                T::Is,
-                "Expected 'is' after first type in 'is-check' statement"
-            );
-            let ctx = expect!(
-                ctx,
-                T::Colon,
-                "Expected ':' - only type constant are allowed in 'is-check' statements"
-            );
-            let (ctx, rhs) = parse_type(ctx)?;
-            (ctx, IsCheck { lhs, rhs })
-        }
-
         [T::Break, ..] => (ctx.skip(1), Break),
         [T::Continue, ..] => (ctx.skip(1), Continue),
         [T::Unreachable, ..] => (ctx.skip(1), Unreachable),
@@ -484,106 +424,6 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             };
             let (ctx, body) = statement(ctx)?;
             (ctx.prev(), Loop { condition, body: Box::new(body) })
-        }
-
-        // `case <expression> do (<branch>)* [else <statement> end] end`
-        [T::Case, ..] => {
-            let (ctx, skip_newlines) = ctx.push_skip_newlines(true);
-            let (ctx, to_match) = expression(ctx.skip(1))?;
-            let mut ctx = expect!(ctx, T::Do);
-
-            let mut branches = Vec::new();
-            loop {
-                match ctx.token() {
-                    T::EOF | T::Else | T::End => {
-                        break;
-                    }
-
-                    T::Newline => {
-                        ctx = ctx.skip(1);
-                    }
-
-                    T::Identifier(pattern) if is_capitalized(pattern) => {
-                        let pattern = Identifier::new(ctx.span(), pattern.clone());
-                        ctx = ctx.skip(1);
-                        let (ctx_, variable) = match ctx.token() {
-                            T::Identifier(capture) if !is_capitalized(capture) => (
-                                ctx.skip(1),
-                                Some(Identifier::new(ctx.span(), capture.clone())),
-                            ),
-                            T::Identifier(_) => {
-                                raise_syntax_error!(
-                                    ctx,
-                                    "Variables have to start with a lowercase letter"
-                                );
-                            }
-                            _ => (ctx, None),
-                        };
-                        let (ctx_, body) = statement_or_block(ctx_)?;
-                        ctx = ctx_;
-
-                        branches.push(CaseBranch { pattern, variable, body });
-                    }
-
-                    T::Identifier(_) => {
-                        raise_syntax_error!(
-                            ctx,
-                            "Enum variants have to start with a captial letter"
-                        );
-                    }
-
-                    _ => {
-                        raise_syntax_error!(
-                            ctx,
-                            "Expected a branch - but a branch cannot start with {:?}",
-                            ctx.token()
-                        );
-                    }
-                }
-            }
-            let (ctx, fall_through) = if matches!(ctx.token(), T::Else) {
-                let (ctx, fall_through) = statement_or_block(ctx.skip(1))?;
-                (ctx, Some(Box::new(fall_through)))
-            } else {
-                (ctx, None)
-            };
-
-            let ctx = ctx.pop_skip_newlines(skip_newlines);
-            let ctx = expect!(ctx, T::End, "Expected 'end' to finish of case-statement");
-
-            (ctx, Case { to_match, branches, fall_through })
-        }
-
-        // `if <expression> <statement> [else <statement>]`. Note that the else is optional.
-        [T::If, ..] => {
-            let (ctx, skip_newlines) = ctx.push_skip_newlines(true);
-            let (ctx, condition) = expression(ctx.skip(1))?;
-            let ctx = ctx.pop_skip_newlines(skip_newlines);
-
-            let (ctx, pass) = statement_or_block(ctx)?;
-            // else?
-            let (ctx, fail) = if matches!(ctx.token(), T::Else) {
-                statement_or_block(ctx.skip(1))?
-            } else {
-                // No else so we insert an empty statement instead.
-                (
-                    ctx,
-                    Statement {
-                        span: ctx.span(),
-                        kind: EmptyStatement,
-                        comments: Vec::new(),
-                    },
-                )
-            };
-
-            (
-                ctx.prev(),
-                If {
-                    condition,
-                    pass: Box::new(pass),
-                    fail: Box::new(fail),
-                },
-            )
         }
 
         // Enum declaration: `Abc :: enum A, B, C end`
@@ -848,7 +688,6 @@ pub fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
         | ExternalDefinition { .. }
         | Use { .. }
         | FromUse { .. }
-        | IsCheck { .. }
         | EmptyStatement
         => Ok((ctx, stmt)),
 
@@ -858,7 +697,6 @@ pub fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
 
 #[cfg(test)]
 mod test {
-    use super::StatementKind::*;
     use super::*;
 
     // NOTE(ed): Expressions are valid statements! :D
@@ -888,9 +726,6 @@ mod test {
     test!(statement, statement_assign_call: "a().b() += 2\n" => _);
     test!(statement, statement_assign_call_index: "a.c().c.b /= 4\n" => _);
     test!(statement, statement_idek: "a'.c'.c.b()().c = 0\n" => _);
-
-    test!(statement, statement_is_check: ":A is :B\n" => IsCheck { .. });
-    test!(statement, statement_is_check_nested: ":a.c.D is :b.d.D\n" => IsCheck { .. });
 
     test!(statement, statement_if_newline: "if 1 \n\n+\n 1\n\n < 2 do end\n" => _);
 

@@ -148,7 +148,7 @@ impl Compiler {
                     }
 
                     // Handled later since we need type information.
-                    IsCheck { .. } | EmptyStatement => continue,
+                    EmptyStatement => continue,
 
                     _ => {
                         error!(self, statement.span, "Invalid outer statement");

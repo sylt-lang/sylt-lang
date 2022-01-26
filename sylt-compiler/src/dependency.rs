@@ -182,49 +182,21 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             .cloned()
             .collect(),
 
-        If { condition, pass, fail } => [
-            dependencies(ctx, condition),
-            statement_dependencies(ctx, pass),
-            statement_dependencies(ctx, fail),
-        ]
-        .iter()
-        .flatten()
-        .cloned()
-        .collect(),
-
-        Case { to_match, branches, fall_through } => [
-            dependencies(ctx, to_match),
-            match fall_through {
-                Some(f) => statement_dependencies(ctx, f),
-                None => BTreeSet::new(),
-            },
-        ]
-        .iter()
-        .cloned()
-        .chain(
-            branches
-                .iter()
-                .map(|branch| statement_dependencies(ctx, &branch.body))
-                .collect::<BTreeSet<_>>(),
-        )
-        .flatten()
-        .collect(),
-
-        Loop { condition, body } => dependencies(ctx, condition)
-            .union(&statement_dependencies(ctx, body))
-            .cloned()
-            .collect(),
-
         Block { statements } => {
             let vars_before = ctx.variables.len();
-            let deps = statements
+            let stmt_deps = statements
                 .iter()
                 .map(|stmt| statement_dependencies(ctx, stmt))
                 .flatten()
                 .collect();
             ctx.variables.truncate(vars_before);
-            deps
+            stmt_deps
         }
+
+        Loop { condition, body } => dependencies(ctx, condition)
+            .union(&statement_dependencies(ctx, body))
+            .cloned()
+            .collect(),
 
         Definition { ident, value, ty, .. } => {
             ctx.shadow(&ident.name);
@@ -277,9 +249,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             deps
         }
 
-        Break | Continue | EmptyStatement | IsCheck { .. } | Unreachable | Use { .. } => {
-            BTreeSet::new()
-        }
+        Break | Continue | EmptyStatement | Unreachable | Use { .. } => BTreeSet::new(),
     }
 }
 
@@ -302,11 +272,48 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<(String,
             .cloned()
             .collect(),
 
-        IfExpression { condition, pass, fail } => [pass, fail, condition]
-            .iter()
-            .map(|expr| dependencies(ctx, expr))
-            .flatten()
-            .collect(),
+        If { condition, pass, fail } => [
+            dependencies(ctx, condition),
+            pass.iter()
+                .map(|stmt| statement_dependencies(ctx, stmt))
+                .flatten()
+                .collect(),
+            fail.iter()
+                .map(|stmt| statement_dependencies(ctx, stmt))
+                .flatten()
+                .collect(),
+        ]
+        .iter()
+        .flatten()
+        .cloned()
+        .collect(),
+
+        Case { to_match, branches, fall_through } => [
+            dependencies(ctx, to_match),
+            fall_through
+                .clone()
+                .unwrap_or_else(|| Vec::new())
+                .iter()
+                .map(|f| statement_dependencies(ctx, f))
+                .flatten()
+                .collect(),
+            branches
+                .iter()
+                .map(|branch| {
+                    branch
+                        .body
+                        .iter()
+                        .map(|stmt| statement_dependencies(ctx, stmt))
+                        .flatten()
+                        .collect::<BTreeSet<_>>()
+                })
+                .flatten()
+                .collect::<BTreeSet<_>>(),
+        ]
+        .iter()
+        .cloned()
+        .flatten()
+        .collect(),
 
         // Functions are a bit special. They only create dependencies once
         // called, which is a problem. It is currently impossible to know when
@@ -405,7 +412,6 @@ pub(crate) fn initialization_order<'a>(
         .map(|(a, b)| (b.clone(), *a))
         .collect();
     let mut to_order = BTreeMap::new();
-    let mut is_checks = Vec::new();
     for (path, module) in tree.modules.iter() {
         let namespace = path_to_namespace_id[path];
         for statement in module.statements.iter() {
@@ -447,14 +453,9 @@ pub(crate) fn initialization_order<'a>(
                     );
                 }
 
-                IsCheck { .. } => is_checks.push((statement, namespace)),
-
                 _ => {}
             }
         }
     }
-    return order(to_order).map(|mut o| {
-        o.extend(is_checks);
-        o
-    });
+    return order(to_order);
 }

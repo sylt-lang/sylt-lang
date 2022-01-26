@@ -1,5 +1,5 @@
 abs: fn<a: Num> *a -> *a : fn a ->
-    if a < 0 ret -a
+    if a < 0 do ret -a end
     a
 end
 

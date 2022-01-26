@@ -8,16 +8,12 @@ out := ""
 
 f :: fn a do
     case a do
-        X do
-            out = out + "X"
-        end
-        Y x do
+        X -> out = out + "X" end
+        Y x ->
             out = out + "Y"
             x <=> 2
         end
-        else do
-            out = out + "?"
-        end
+        else out = out + "?" end
     end
 end
 
