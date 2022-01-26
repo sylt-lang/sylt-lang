@@ -182,24 +182,6 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
             .cloned()
             .collect(),
 
-        Case { to_match, branches, fall_through } => [
-            dependencies(ctx, to_match),
-            match fall_through {
-                Some(f) => statement_dependencies(ctx, f),
-                None => BTreeSet::new(),
-            },
-        ]
-        .iter()
-        .cloned()
-        .chain(
-            branches
-                .iter()
-                .map(|branch| statement_dependencies(ctx, &branch.body))
-                .collect::<BTreeSet<_>>(),
-        )
-        .flatten()
-        .collect(),
-
         Block { statements } => {
             let vars_before = ctx.variables.len();
             let stmt_deps = statements
@@ -304,6 +286,33 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<(String,
         .iter()
         .flatten()
         .cloned()
+        .collect(),
+
+        Case { to_match, branches, fall_through } => [
+            dependencies(ctx, to_match),
+            fall_through
+                .clone()
+                .unwrap_or_else(|| Vec::new())
+                .iter()
+                .map(|f| statement_dependencies(ctx, f))
+                .flatten()
+                .collect(),
+            branches
+                .iter()
+                .map(|branch| {
+                    branch
+                        .body
+                        .iter()
+                        .map(|stmt| statement_dependencies(ctx, stmt))
+                        .flatten()
+                        .collect::<BTreeSet<_>>()
+                })
+                .flatten()
+                .collect::<BTreeSet<_>>(),
+        ]
+        .iter()
+        .cloned()
+        .flatten()
         .collect(),
 
         // Functions are a bit special. They only create dependencies once

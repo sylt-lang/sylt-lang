@@ -4,7 +4,7 @@ end
 
 start :: fn do
     case A.X do
-        else do end
+        else end
     end
 end
 

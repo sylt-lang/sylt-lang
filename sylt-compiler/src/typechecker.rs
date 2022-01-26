@@ -547,49 +547,7 @@ impl TypeChecker {
             }
 
             StatementKind::StatementExpression { value } => {
-                self.expression(value, ctx)?;
-                Ok(None)
-            }
-
-            StatementKind::Case { to_match, branches, fall_through } => {
-                let (ret, to_match) = self.expression(to_match, ctx)?;
-                self.add_constraint(to_match, span, Constraint::Enum);
-
-                let mut branch_names = BTreeSet::new();
-                let ss = self.stack.len();
-                for branch in branches.iter_mut() {
-                    if let Some(var) = &branch.variable {
-                        let var = Variable {
-                            ident: var.clone(),
-                            ty: self.push_type(Type::Unknown),
-                            kind: VarKind::Const,
-                            span,
-                        };
-                        self.add_constraint(
-                            to_match,
-                            span,
-                            Constraint::Variant(branch.pattern.name.clone(), Some(var.ty)),
-                        );
-                        self.stack.push(var);
-                    } else {
-                        self.add_constraint(
-                            to_match,
-                            span,
-                            Constraint::Variant(branch.pattern.name.clone(), None),
-                        );
-                    }
-                    self.check_constraints(span, ctx, to_match)?;
-                    self.statement(&mut branch.body, ctx)?;
-                    self.stack.truncate(ss);
-                    branch_names.insert(branch.pattern.name.clone());
-                }
-
-                if let Some(fall_through) = fall_through {
-                    self.statement(fall_through, ctx)?;
-                } else {
-                    self.add_constraint(to_match, span, Constraint::TotalEnum(branch_names));
-                    self.check_constraints(span, ctx, to_match)?;
-                }
+                let (ret, _) = self.expression(value, ctx)?;
                 Ok(ret)
             }
 
@@ -622,10 +580,7 @@ impl TypeChecker {
                 self.unify_option(span, ctx, expression_ret, target_ret)
             }
 
-            StatementKind::Definition { .. } => {
-                self.definition(statement, false, ctx)?;
-                Ok(None)
-            }
+            StatementKind::Definition { .. } => self.definition(statement, false, ctx),
 
             StatementKind::Loop { condition, body } => {
                 let (ret, condition) = self.expression(condition, ctx)?;
@@ -764,7 +719,6 @@ impl TypeChecker {
             | StatementKind::Continue
             | StatementKind::Ret { .. }
             | StatementKind::Block { .. }
-            | StatementKind::Case { .. }
             | StatementKind::StatementExpression { .. }
             | StatementKind::Unreachable
             | StatementKind::EmptyStatement => {
@@ -995,8 +949,8 @@ impl TypeChecker {
         let ss = self.stack.len();
         let mut ret = None;
         for stmt in statements.iter_mut() {
-            let stmt = self.statement(stmt, ctx)?;
-            ret = self.unify_option(span, ctx, ret, stmt)?;
+            let stmt_ret = self.statement(stmt, ctx)?;
+            ret = self.unify_option(span, ctx, ret, stmt_ret)?;
         }
         // We typecheck the last statement twice sometimes, doesn't matte though.
         let value = if let Some(Statement {
@@ -1082,6 +1036,57 @@ impl TypeChecker {
             }
 
             ExpressionKind::Parenthesis(expr) => self.expression(expr, ctx),
+
+            ExpressionKind::Case { to_match, branches, fall_through } => {
+                let (ret, to_match) = self.expression(to_match, ctx)?;
+                self.add_constraint(to_match, span, Constraint::Enum);
+
+                let mut ret = ret;
+                let mut value = None;
+                let mut branch_names = BTreeSet::new();
+                let ss = self.stack.len();
+                for branch in branches.iter_mut() {
+                    let name = branch.pattern.name.clone();
+                    let constraint = if let Some(var) = &branch.variable {
+                        let var = Variable {
+                            ident: var.clone(),
+                            ty: self.push_type(Type::Unknown),
+                            kind: VarKind::Const,
+                            span,
+                        };
+                        let constraint = Some(var.ty);
+                        self.stack.push(var);
+                        constraint
+                    } else {
+                        None
+                    };
+                    self.add_constraint(
+                        to_match,
+                        span,
+                        Constraint::Variant(name.clone(), constraint),
+                    );
+                    // NOTE(ed): This unifies the variable with the enum, so it injects a function
+                    // - for example - this makes it more permissive than if you place it after the
+                    // `self.expression_block`.
+                    self.check_constraints(span, ctx, to_match)?;
+                    let (branch_ret, branch) =
+                        self.expression_block(span, &mut branch.body, ctx)?;
+                    value = self.unify_option(span, ctx, value, branch)?;
+                    ret = self.unify_option(span, ctx, ret, branch_ret)?;
+                    self.stack.truncate(ss);
+                    branch_names.insert(name.clone());
+                }
+
+                if let Some(fall_through) = fall_through {
+                    let (fall_ret, fall) = self.expression_block(span, fall_through, ctx)?;
+                    ret = self.unify_option(span, ctx, fall_ret, ret)?;
+                    value = self.unify_option(span, ctx, fall, value)?;
+                } else {
+                    self.add_constraint(to_match, span, Constraint::TotalEnum(branch_names));
+                    self.check_constraints(span, ctx, to_match)?;
+                }
+                with_ret(ret, value.unwrap_or_else(|| self.push_type(Type::Void)))
+            }
 
             ExpressionKind::If { condition, pass, fail } => {
                 let (ret, condition) = self.expression(condition, ctx)?;
@@ -1625,8 +1630,8 @@ impl TypeChecker {
     ) -> TypeResult<Option<TyID>> {
         Ok(match (a, b) {
             (Some(a), Some(b)) => Some(self.unify(span, ctx, a, b)?),
-            (Some(_), None) => a,
-            (None, Some(_)) => b,
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
             (None, None) => None,
         })
     }
