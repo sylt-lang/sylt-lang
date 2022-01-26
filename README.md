@@ -25,8 +25,8 @@ but still expressive. The typechecker is what sets it apart from
 Python and Lua, which usually end up being used for similar use-cases.
 
 The Sylt typechecker is meant to not get in your way, so there's no need to
-write types anywhere in your code. If your program is correct (which it
-probably isn't) the typechecker will be all fine with it.
+write types anywhere in your code. If your program is correct
+the typechecker will be all fine with it.
 
 This is meant to give the same rapid iteration speed as working in something
 like Python or Lua, but with the added peace of mind a strict static
