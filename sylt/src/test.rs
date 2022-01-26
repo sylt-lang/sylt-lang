@@ -220,6 +220,7 @@ fn program_tests() {
     .unwrap();
 
     for test in tests.iter() {
+        writeln!(std::io::stdout().lock(), " {}", test.path.to_str().unwrap()).unwrap();
         if !run_test(read_file, test) {
             failed.push(test);
             continue;

@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use sylt_parser::{
     expression::ComparisonKind, Assignable, AssignableKind, CaseBranch, Expression, ExpressionKind,
@@ -7,13 +7,12 @@ use sylt_parser::{
 
 use crate::{typechecker::TypeChecker, NamespaceID};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub struct Var(pub usize);
 
-impl Display for Var {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Var(n) = self;
-        write!(f, "V{}", n)
+impl Var {
+    pub fn format(self) -> String {
+        format!("V{}", self.0)
     }
 }
 
@@ -39,7 +38,6 @@ pub enum IR {
     Mul(Var, Var, Var),
     Div(Var, Var, Var),
     Neg(Var, Var),
-    Copy(Var, Var),
 
     Not(Var, Var),
 
@@ -74,6 +72,7 @@ pub enum IR {
 
     Label(Label),
     Goto(Label),
+    Copy(Var, Var),
     Define(Var),
     Assign(Var, Var),
     Return(Var),
@@ -494,8 +493,14 @@ impl<'a> IRCodeGen<'a> {
                 namespace: ctx.namespace,
                 var,
             });
-            let (code, f_var) = self.expression(&value, ctx);
-            [vec![IR::Define(var)], code, vec![IR::Assign(var, f_var)]].concat()
+            let (mut code, _) = self.expression(&value, ctx);
+            if let IR::Function(_, args) = &code[0] {
+                code[0] = IR::Function(var, args.clone());
+            } else {
+                unreachable!();
+            }
+
+            code
         } else {
             let (code, var) = self.expression(&value, ctx);
             self.variables.push(Variable {
@@ -551,16 +556,13 @@ impl<'a> IRCodeGen<'a> {
                 [
                     pre_code,
                     code,
-                    vec![
-                        IR::Define(res),
-                        match kind {
-                            ParserOp::Nop => IR::Assign(res, var),
-                            ParserOp::Add => IR::Add(res, current, var),
-                            ParserOp::Sub => IR::Sub(res, current, var),
-                            ParserOp::Mul => IR::Mul(res, current, var),
-                            ParserOp::Div => IR::Div(res, current, var),
-                        },
-                    ],
+                    vec![match kind {
+                        ParserOp::Nop => IR::Assign(res, var),
+                        ParserOp::Add => IR::Add(res, current, var),
+                        ParserOp::Sub => IR::Sub(res, current, var),
+                        ParserOp::Mul => IR::Mul(res, current, var),
+                        ParserOp::Div => IR::Div(res, current, var),
+                    }],
                     post_code,
                 ]
                 .concat()
@@ -776,4 +778,80 @@ pub(crate) fn compile(
     let tmp = gen.var();
     code.push(IR::Call(tmp, start, Vec::new()));
     code
+}
+
+// TODO(ed): We could remove more dead-code if we built a dependency-graph
+// and removed all paths without side-effects, since they don't have
+// an observable effect.
+pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
+    let mut table = HashMap::new();
+    for op in ops {
+        match op {
+            IR::Nil(_)
+            | IR::Int(_, _)
+            | IR::Float(_, _)
+            | IR::Str(_, _)
+            | IR::Bool(_, _)
+            | IR::Loop
+            | IR::Break
+            | IR::Else
+            | IR::End
+            | IR::External(_, _)
+            | IR::Label(_)
+            | IR::Goto(_)
+            | IR::HaltAndCatchFire(_) => {}
+
+            // We cannot optimize things that are defined.
+            IR::Function(a, _) | IR::Define(a) => {
+                *table.entry(*a).or_insert(0) += 2;
+            }
+
+            IR::Add(_, a, b)
+            | IR::Sub(_, a, b)
+            | IR::Mul(_, a, b)
+            | IR::Div(_, a, b)
+            | IR::Equals(_, a, b)
+            | IR::NotEquals(_, a, b)
+            | IR::Greater(_, a, b)
+            | IR::GreaterEqual(_, a, b)
+            | IR::Less(_, a, b)
+            | IR::LessEqual(_, a, b)
+            | IR::Index(_, a, b)
+            | IR::In(_, a, b)
+            | IR::Assign(a, b)
+            | IR::AssignAccess(a, _, b)
+            | IR::AssignIndex(_, a, b) => {
+                *table.entry(*a).or_insert(0) += 1;
+                *table.entry(*b).or_insert(0) += 1;
+            }
+            IR::Neg(_, a)
+            | IR::Not(_, a)
+            | IR::Assert(a)
+            | IR::Variant(_, _, a)
+            | IR::Access(_, a, _)
+            | IR::Copy(_, a)
+            | IR::Return(a)
+            | IR::If(a) => {
+                *table.entry(*a).or_insert(0) += 1;
+            }
+
+            IR::Call(_, a, bs) => {
+                *table.entry(*a).or_insert(0) += 1;
+                for b in bs.iter() {
+                    *table.entry(*b).or_insert(0) += 1;
+                }
+            }
+            IR::List(_, xs) | IR::Set(_, xs) | IR::Dict(_, xs) | IR::Tuple(_, xs) => {
+                for x in xs.iter() {
+                    *table.entry(*x).or_insert(0) += 1;
+                }
+            }
+            IR::Blob(_, blob_vars) => {
+                for (_, x) in blob_vars.iter() {
+                    *table.entry(*x).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+    table
 }
