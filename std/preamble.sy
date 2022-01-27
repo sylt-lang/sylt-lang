@@ -1,3 +1,4 @@
+// NOTE(ed): Only use-statements are allowed in the preamble.
 from common use (
     dbg,
     args,
