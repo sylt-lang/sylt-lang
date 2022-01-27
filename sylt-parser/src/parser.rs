@@ -1063,7 +1063,7 @@ where
     let root = path.parent().unwrap();
 
     if bundle_std {
-        to_visit.push(FileOrLib::Lib("basics"));
+        to_visit.push(FileOrLib::Lib("preamble"));
     }
 
     to_visit.push(FileOrLib::File(PathBuf::from(path)));

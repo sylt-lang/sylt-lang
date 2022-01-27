@@ -25,7 +25,7 @@ pub enum FileOrLib {
 
 /// The standard library
 const STD_LIB_FILES: &[(&str, &str)] = &[
-    ("basics", include_str!("../../std/basics.sy")),
+    ("preamble", include_str!("../../std/preamble.sy")),
     ("common", include_str!("../../std/common.sy")),
     ("container", include_str!("../../std/container.sy")),
     ("list", include_str!("../../std/list.sy")),

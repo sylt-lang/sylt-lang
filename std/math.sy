@@ -1,8 +1,8 @@
-abs :: fn n ->
+abs : fn<N: Num> *N -> *N: fn n ->
     if n < 0 do
-        ret -n
+        -n
     else do
-        ret n
+        n
     end
 end
 
@@ -17,19 +17,15 @@ clamp :: fn x, lo, hi ->
     min(hi, max(x, lo))
 end
 
-min :: fn a, b ->
-    if a < b do
-        ret a
-    else do
-        ret b
+min : fn<N: Num> *N, *N -> *N : fn a, b ->
+    if a < b do a
+    else do b
     end
 end
 
-max :: fn a, b ->
-    if a > b do
-        ret a
-    else do
-        ret b
+max : fn<N: Num> *N, *N -> *N : fn a, b ->
+    if a > b do a
+    else do b
     end
 end
 
