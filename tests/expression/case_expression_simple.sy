@@ -1,0 +1,25 @@
+A :: enum
+    B int
+    C int
+    D
+end
+
+start :: fn do
+    12 <=> 1 + case A.B 1 do
+        B a -> a + 10 end
+        C a -> a end
+        D -> 0 end
+    end
+
+    2 <=> 1 + case A.C 1 do
+        B a -> a + 10 end
+        C a -> a end
+        D -> 0 end
+    end
+
+    -99 <=> 1 + case A.D do
+        B a -> a + 10 end
+        C a -> a end
+        else -100 end
+    end
+end

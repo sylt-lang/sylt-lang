@@ -4,10 +4,8 @@ end
 
 f :: fn a: M do
     case a do
-        J x do
-            x()
-        end
-        else do end
+        J x -> x() end
+        else end
     end
 end
 

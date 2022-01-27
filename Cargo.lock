@@ -159,6 +159,7 @@ name = "sylt-compiler"
 version = "0.2.0"
 dependencies = [
  "sylt-common",
+ "sylt-macro",
  "sylt-parser",
  "sylt-tokenizer",
 ]

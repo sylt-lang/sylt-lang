@@ -1,5 +1,5 @@
 use crate::intermediate::{Var, IR};
-use std::io::Write;
+use std::{collections::HashMap, io::Write};
 
 macro_rules! write {
     ($out:expr, $msg:expr ) => {
@@ -11,296 +11,294 @@ macro_rules! write {
     };
 }
 
-pub fn bin_op(out: &mut dyn Write, t: &Var, a: &Var, b: &Var, op: &str) {
-    write!(out, "local ");
-    write!(out, "{}", t);
-    write!(out, " = ");
-    write!(out, "{}", a);
-    write!(out, " {} ", op);
-    write!(out, "{}", b);
+macro_rules! ii {
+    ( $self:expr, $var:expr, $fmt:literal, $a:expr ) => {
+        iis!($self, $var, $fmt, $self.expand($a))
+    };
+
+    ( $self:expr, $var:expr, $fmt:literal, $a:expr, $b:expr ) => {{
+        let a = $self.expand($a).to_string();
+        let b = $self.expand($b);
+        iis!($self, $var, $fmt, a, b)
+    }};
 }
 
-pub fn comma_sep(out: &mut dyn Write, vars: &[Var]) {
-    for (i, v) in vars.iter().enumerate() {
-        if i != 0 {
-            write!(out, ", ");
+macro_rules! iis {
+    ( $self:expr, $var:expr, $fmt:literal, $( $dep:expr ),* ) => {
+        {
+            let var = $var;
+            let value = format!($fmt, $( $dep ),*);
+            match $self.usage_count.get(var).unwrap_or(&0) {
+                0 => {},
+                1 => $self.define(*var, value),
+                _ => {
+                    write!($self.out, "local {} = {}", var.format(), value);
+                }
+            }
         }
-        write!(out, "{}", v);
+    };
+    ( $self:expr, $var:expr, $fmt:literal) => {
+        {
+            let var = $var;
+            let value = $fmt.to_string();
+            match $self.usage_count.get(var).unwrap_or(&0) {
+                0 => {},
+                1 => $self.define(*var, value),
+                _ => {
+                    write!($self.out, "local {} = {}", var.format(), value);
+                }
+            }
+        }
+    };
+}
+
+struct Generator<'a, 'b> {
+    usage_count: &'a HashMap<Var, usize>,
+    out: &'b mut dyn Write,
+    lut: HashMap<Var, String>,
+}
+
+impl<'a, 'b> Generator<'a, 'b> {
+    pub fn new(usage_count: &'a HashMap<Var, usize>, out: &'b mut dyn Write) -> Self {
+        Self { usage_count, out, lut: HashMap::new() }
     }
-}
 
-pub fn generate(ir: &Vec<IR>, out: &mut dyn Write) {
-    write!(out, include_str!("preamble.lua"));
+    fn comma_sep(&mut self, vars: &[Var]) -> String {
+        vars.iter()
+            .map(|v| format!("{}", self.expand(v)))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 
-    let mut depth = 0;
-    for instruction in ir.iter() {
-        depth += match instruction {
-            IR::Else | IR::End => -1,
-            _ => 0,
-        };
-
-        for _ in 0..depth {
-            write!(out, "  ");
+    fn expand(&mut self, var: &Var) -> String {
+        match self.lut.get(var) {
+            Some(var) => var.into(),
+            None => var.format(),
         }
-        match instruction {
-            IR::Nil(t) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = __NIL");
-            }
-            IR::Int(t, i) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = {}", i);
-            }
-            IR::Bool(t, b) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = {}", b);
-            }
-            IR::Add(t, a, b) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, "__ADD(");
-                write!(out, "{}", a);
-                write!(out, ", ");
-                write!(out, "{}", b);
-                write!(out, ")");
-            }
-            IR::Sub(t, a, b) => bin_op(out, t, a, b, "-"),
-            IR::Mul(t, a, b) => bin_op(out, t, a, b, "*"),
-            IR::Div(t, a, b) => bin_op(out, t, a, b, "/"),
+    }
 
-            IR::Function(f, params) => {
-                write!(out, "local ");
-                write!(out, "function ");
-                write!(out, "{}", f);
-                write!(out, "(");
-                comma_sep(out, params);
-                write!(out, ")");
-                depth += 1;
-            }
-            IR::Neg(t, a) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, "-");
-                write!(out, "{}", a);
-            }
-            IR::Copy(d, s) => {
-                write!(out, "local ");
-                write!(out, "{}", d);
-                write!(out, " = ");
-                write!(out, "{}", s);
-            }
-            IR::External(t, e) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, e);
-            }
-            IR::Call(t, f, args) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, "{}", f);
-                write!(out, "(");
-                comma_sep(out, args);
-                write!(out, ")");
-            }
-            IR::Assert(v) => {
-                write!(out, "assert(");
-                write!(out, "{}", v);
-                write!(out, ", \":(\")");
-            }
-            IR::Str(t, s) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = \"{}\"", s);
-            }
-            IR::Float(t, f) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = {:?}", f);
-            }
-            IR::Equals(t, a, b) => bin_op(out, t, a, b, "=="),
-            IR::NotEquals(t, a, b) => bin_op(out, t, a, b, "~="),
-            IR::Greater(t, a, b) => bin_op(out, t, a, b, ">"),
-            IR::GreaterEqual(t, a, b) => bin_op(out, t, a, b, ">="),
-            IR::Less(t, a, b) => bin_op(out, t, a, b, "<"),
-            IR::LessEqual(t, a, b) => bin_op(out, t, a, b, "<="),
-            IR::In(t, a, b) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, "__CONTAINS(");
-                write!(out, "{}", a);
-                write!(out, ", ");
-                write!(out, "{}", b);
-                write!(out, ")");
-            }
+    fn define(&mut self, var: Var, value: String) {
+        self.lut.insert(var, value);
+    }
 
-            IR::Not(t, a) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, "not ");
-                write!(out, "{}", a);
-            }
+    pub fn generate(&mut self, ir: &Vec<IR>) {
+        write!(self.out, include_str!("preamble.lua"));
 
-            IR::List(t, exprs) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, "__LIST{");
-                comma_sep(out, exprs);
-                write!(out, "}");
-            }
+        let mut depth = 0;
+        for instruction in ir.iter() {
+            depth += match instruction {
+                IR::Else | IR::End => -1,
+                _ => 0,
+            };
 
-            IR::Set(t, exprs) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, "__SET{");
-                write!(
-                    out,
-                    "{}",
+            for _ in 0..depth {
+                write!(self.out, "  ");
+            }
+            match instruction {
+                IR::Nil(t) => iis!(self, t, "__NIL"),
+                IR::Int(t, i) => iis!(self, t, "{}", i),
+                IR::Bool(t, b) => iis!(self, t, "{}", b),
+                IR::Add(t, a, b) => ii!(self, t, "__ADD({}, {})", a, b),
+                IR::Sub(t, a, b) => ii!(self, t, "({} - {})", a, b),
+                IR::Mul(t, a, b) => ii!(self, t, "({} * {})", a, b),
+                IR::Div(t, a, b) => ii!(self, t, "({} / {})", a, b),
+
+                IR::Neg(t, a) => ii!(self, t, "(-{})", a),
+
+                IR::Str(t, s) => iis!(self, t, "\"{}\"", s),
+                IR::Float(t, f) => iis!(self, t, "{:?}", f),
+
+                IR::Equals(t, a, b) => ii!(self, t, "({} == {})", a, b),
+                IR::LessEqual(t, a, b) => ii!(self, t, "({} <= {})", a, b),
+                IR::Less(t, a, b) => ii!(self, t, "({} < {})", a, b),
+                IR::GreaterEqual(t, a, b) => ii!(self, t, "({} >= {})", a, b),
+                IR::Greater(t, a, b) => ii!(self, t, "({} > {})", a, b),
+                IR::NotEquals(t, a, b) => ii!(self, t, "({} ~= {})", a, b),
+
+                IR::In(t, a, b) => ii!(self, t, "__CONTAINS({}, {})", a, b),
+
+                IR::Not(t, a) => ii!(self, t, "(not {})", a),
+
+                IR::List(t, exprs) => iis!(self, t, "__LIST{{ {} }}", self.comma_sep(exprs)),
+
+                IR::Set(t, exprs) => iis!(
+                    self,
+                    t,
+                    "__SET{{ {} }}",
                     exprs
                         .iter()
-                        .map(|v| format!("[{}] = true", v))
+                        .map(|v| format!("[{}] = true", self.expand(v)))
                         .collect::<Vec<_>>()
                         .join(", ")
-                );
-                write!(out, "}");
-            }
+                ),
 
-            IR::Dict(t, exprs) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, "__DICT{");
-                write!(
-                    out,
-                    "{}",
+                IR::Dict(t, exprs) => iis!(
+                    self,
+                    t,
+                    "__DICT{{ {} }}",
                     exprs
                         .windows(2)
                         .step_by(2)
                         .map(|v| match v {
                             [k, v] => {
+                                let k = self.expand(k).to_string();
+                                let v = self.expand(v);
                                 format!("[{}] = {}", k, v)
                             }
                             _ => unreachable!(),
                         })
                         .collect::<Vec<_>>()
                         .join(", ")
-                );
-                write!(out, "}");
-            }
+                ),
 
-            IR::Blob(t, fields) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, "__BLOB{");
-                write!(
-                    out,
-                    "{}",
+                IR::Blob(t, fields) => iis!(
+                    self,
+                    t,
+                    "__BLOB{{ {} }}",
                     fields
                         .iter()
-                        .map(|(f, v)| format!("{} = {}", f, v))
+                        .map(|(f, v)| format!("{} = {}", f, self.expand(v)))
                         .collect::<Vec<_>>()
                         .join(", ")
-                );
-                write!(out, "}");
-            }
+                ),
 
-            IR::Tuple(t, exprs) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, "__TUPLE{");
-                comma_sep(out, exprs);
-                write!(out, "}");
-            }
+                IR::Tuple(t, exprs) => iis!(self, t, "__TUPLE{{ {} }}", self.comma_sep(exprs)),
 
-            IR::Define(t) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, "nil");
+                IR::Variant(t, v, a) => {
+                    iis!(self, t, "__VARIANT{{ \"{}\", {} }}", v, self.expand(a))
+                }
+
+                IR::Index(t, a, i) => ii!(self, t, "__INDEX({}, {})", a, i),
+
+                IR::Function(f, params) => {
+                    write!(self.out, "local ");
+                    write!(self.out, "function ");
+                    let f = self.expand(f);
+                    write!(self.out, "{}", f);
+                    write!(self.out, "(");
+                    write!(
+                        self.out,
+                        "{}",
+                        params
+                            .iter()
+                            .map(|v| v.format())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                    write!(self.out, ")");
+                    depth += 1;
+                }
+
+                IR::External(t, e) => {
+                    let t = self.expand(t);
+                    write!(self.out, "{}", t);
+                    write!(self.out, " = ");
+                    write!(self.out, e);
+                }
+
+                IR::Call(t, f, args) => {
+                    write!(self.out, "local ");
+                    let t = self.expand(t);
+                    write!(self.out, "{}", t);
+                    write!(self.out, " = ");
+                    let f = self.expand(f);
+                    write!(self.out, "{}", f);
+                    let args = self.comma_sep(args).to_string();
+                    write!(self.out, "({})", args);
+                }
+
+                IR::Assert(v) => {
+                    let v = self.expand(v).to_string();
+                    write!(self.out, "assert({}, \"Assert failed!\")", v);
+                }
+
+                IR::Define(t) => {
+                    if self.usage_count.get(t).unwrap_or(&0) > &0 {
+                        write!(self.out, "local ");
+                        let t = self.expand(t);
+                        write!(self.out, "{}", t);
+                        write!(self.out, " = ");
+                        write!(self.out, "nil");
+                    }
+                }
+
+                IR::If(a) => {
+                    write!(self.out, "if ");
+                    let a = self.expand(a).to_string();
+                    write!(self.out, "{}", a);
+                    write!(self.out, " then");
+                    depth += 1;
+                }
+                IR::Else => {
+                    write!(self.out, "else");
+                    depth += 1;
+                }
+                IR::End => {
+                    write!(self.out, "end");
+                }
+                IR::Loop => {
+                    write!(self.out, "while true do");
+                    depth += 1;
+                }
+                IR::Break => {
+                    write!(self.out, "break");
+                }
+                IR::Return(t) => {
+                    write!(self.out, "return ");
+                    let t = self.expand(t).to_string();
+                    write!(self.out, "{}", t);
+                }
+                IR::HaltAndCatchFire(msg) => {
+                    write!(self.out, "__CRASH(\"{}\")()", msg);
+                }
+
+                IR::Access(t, a, f) => iis!(self, t, "{}.{}", self.expand(a), f),
+
+                IR::Copy(t, a) => {
+                    if self.usage_count.get(t).unwrap_or(&0) > &0 {
+                        let t = self.expand(t);
+                        let a = self.expand(a);
+                        write!(self.out, "local {} = {}", t, a);
+                    }
+                }
+
+                // These cannot be optimized
+                IR::Assign(t, a) => {
+                    if self.usage_count.get(t).unwrap_or(&0) > &0 {
+                        let a = self.expand(a);
+                        let t = self.expand(t);
+                        write!(self.out, "{} = {}", t, a);
+                    }
+                }
+                IR::AssignIndex(t, i, a) => {
+                    if self.usage_count.get(t).unwrap_or(&0) > &0 {
+                        let a = self.expand(a);
+                        let i = self.expand(i);
+                        let t = self.expand(t);
+                        write!(self.out, "__ASSIGN_INDEX({}, {}, {})", t, i, a);
+                    }
+                }
+                IR::AssignAccess(t, f, c) => {
+                    if self.usage_count.get(t).unwrap_or(&0) > &0 {
+                        let t = self.expand(t);
+                        let c = self.expand(c);
+                        write!(self.out, "{}.{} = {}", t, f, c);
+                    }
+                }
+
+                IR::Label(l) => {
+                    write!(self.out, "::{}::", l);
+                }
+                IR::Goto(l) => {
+                    write!(self.out, "goto {}", l);
+                }
             }
-            IR::Assign(t, a) => {
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, "{}", a);
-            }
-            IR::If(a) => {
-                write!(out, "if ");
-                write!(out, "{}", a);
-                write!(out, " then");
-                depth += 1;
-            }
-            IR::Else => {
-                write!(out, "else");
-                depth += 1;
-            }
-            IR::End => {
-                write!(out, "end");
-            }
-            IR::Loop => {
-                write!(out, "while true do");
-                depth += 1;
-            }
-            IR::Break => {
-                write!(out, "break");
-            }
-            IR::Return(t) => {
-                write!(out, "return ");
-                write!(out, "{}", t);
-            }
-            IR::HaltAndCatchFire(msg) => {
-                write!(out, "__CRASH(\"{}\")()", msg);
-            }
-            IR::Variant(t, v, a) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, "__VARIANT{");
-                write!(out, "\"{}\", {}", v, a);
-                write!(out, "}");
-            }
-            IR::Index(t, a, i) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, "__INDEX(");
-                write!(out, "{}, {}", a, i);
-                write!(out, ")");
-            }
-            IR::AssignIndex(t, i, a) => {
-                write!(out, "__ASSIGN_INDEX(");
-                write!(out, "{}, {}, {}", t, i, a);
-                write!(out, ")");
-            }
-            IR::Access(t, a, f) => {
-                write!(out, "local ");
-                write!(out, "{}", t);
-                write!(out, " = ");
-                write!(out, "{}.{}", a, f);
-            }
-            IR::AssignAccess(t, f, c) => {
-                write!(out, "{}.{}", t, f);
-                write!(out, " = ");
-                write!(out, "{}", c);
-            }
-            IR::Label(l) => {
-                write!(out, "::{}::", l);
-            }
-            IR::Goto(l) => {
-                write!(out, "goto {}", l);
-            }
+            write!(self.out, "\n");
         }
-        write!(out, "\n");
     }
+}
+
+#[cfg_attr(timed, sylt_macro::timed("lua::generate"))]
+pub fn generate(ir: &Vec<IR>, usage_count: &HashMap<Var, usize>, out: &mut dyn Write) {
+    Generator::new(usage_count, out).generate(ir);
 }

@@ -19,7 +19,8 @@ pub enum Token {
     #[regex(r#""[^"]*""#, |lex| { let mut s = lex.slice().to_string(); s.remove(0); s.pop(); s })]
     String(String),
 
-    #[regex(r"[\d]+\.[\d]*|[\d]*\.[\d]+", |lex| lex.slice().parse(), priority=2)]
+    // `X.`, `.Y`, `X.Y`, `XeY` and `Xe-Y`
+    #[regex(r"([\d]+\.[\d]*|[\d]*\.[\d]+)|[\d]+e(-|\+)?[\d]+", |lex| lex.slice().parse(), priority=2)]
     Float(f64),
     #[regex(r"[\d]+", |lex| lex.slice().parse())]
     Int(i64),
@@ -164,7 +165,7 @@ pub enum Token {
     #[regex(r"//[^\n]*", |lex| lex.slice()[2..].trim().to_string())]
     Comment(String),
 
-    #[regex(r"[ \t\r]", logos::skip)]
+    #[regex(r"[ \t\r]+", logos::skip)]
     Whitespace,
 
     EOF,

@@ -4,12 +4,8 @@ end
 
 f :: fn a do
     case a do
-        A do
-
-        end
-        B do
-
-        end
+        A -> end
+        B -> end
     end
 end
 

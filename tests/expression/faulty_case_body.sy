@@ -1,0 +1,16 @@
+A :: enum
+    A
+end
+
+f :: fn -> int
+    case A.A do
+        A ->
+            ret "abc"
+        end
+    end
+    1
+end
+
+start :: fn do end
+
+// error: A 'str' cannot be a 'int'

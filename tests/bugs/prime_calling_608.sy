@@ -13,7 +13,7 @@ start :: fn do
     [f', f', (g' 1), (f' ), g' (1)] <=> [1, 1, 1, 1, 1]
     {(g' 1)} <=> {1}
     [(g' 1)] <=> [1]
-    1 <=> g' 1 if true else 2
+    1 <=> g' if true do 1 else do 2 end
 
     A {
         a: f',

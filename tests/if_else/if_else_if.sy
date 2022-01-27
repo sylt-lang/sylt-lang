@@ -3,10 +3,11 @@ start :: fn do
     res := 0
     if a == 0 do
         <!>
-    else if a == 1 do
-        res = 1
-    else do
-        <!>
+    else do if a == 1 do
+            res = 1
+        else do
+            <!>
+        end
     end
     res <=> 1
 end

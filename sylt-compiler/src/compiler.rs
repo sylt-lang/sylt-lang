@@ -67,6 +67,7 @@ impl Compiler {
         self.namespace_id_to_file.get(&namespace).unwrap()
     }
 
+    #[cfg_attr(timed, sylt_macro::timed("compile"))]
     fn compile(mut self, lua_file: &mut dyn Write, tree: AST) -> Result<(), Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
 
@@ -92,8 +93,9 @@ impl Compiler {
         let typechecker = typechecker::solve(&mut statements, &self.namespace_id_to_file)?;
 
         let ir = intermediate::compile(&typechecker, &statements);
+        let usage_count = intermediate::count_usages(&ir);
 
-        lua::generate(&ir, lua_file);
+        lua::generate(&ir, &usage_count, lua_file);
 
         Ok(())
     }
@@ -146,7 +148,7 @@ impl Compiler {
                     }
 
                     // Handled later since we need type information.
-                    IsCheck { .. } | EmptyStatement => continue,
+                    EmptyStatement => continue,
 
                     _ => {
                         error!(self, statement.span, "Invalid outer statement");

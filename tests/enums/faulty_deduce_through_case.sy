@@ -5,13 +5,13 @@ end
 
 f :: fn a do
     case a do
-        X x do
+        X x ->
             x + 1
         end
-        Y x do
+        Y x ->
             x + "a"
         end
-        else do <!> end
+        else <!> end
     end
 end
 

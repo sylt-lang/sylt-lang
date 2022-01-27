@@ -1,4 +1,4 @@
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::parse_macro_input;
 
 #[proc_macro_derive(Enumerate)]
@@ -130,4 +130,54 @@ pub fn derive_numbered(item: proc_macro::TokenStream) -> proc_macro::TokenStream
         }
     };
     proc_macro::TokenStream::from(item)
+}
+
+/// Timed macro
+///
+/// Time a function and print the output.
+///
+/// # Examples
+///
+/// ```
+/// #[sylt_macro::timed]
+/// fn hi() {
+///     println!("Hi");
+/// }
+/// ```
+/// will output `Time::hi = 123μ`
+#[proc_macro_attribute]
+pub fn timed(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let mut function = syn::parse::<syn::ItemFn>(item.clone()).expect("Could not parse function");
+
+    // Get signature from attribute input or function signature
+    let signature = if !attr.is_empty() {
+        syn::parse::<syn::LitStr>(attr)
+            .expect("Could not parse string")
+            .value()
+    } else {
+        function.sig.ident.to_string()
+    };
+
+    let function_block = function.block;
+
+    let new_function_block = quote! {
+        {
+            let __timer_start = std::time::SystemTime::now();
+
+            let v = (move || {
+                #function_block
+            })();
+
+            eprintln!("Time::{} = {:?}", #signature, __timer_start.elapsed().unwrap());
+
+            return v;
+        }
+    };
+
+    function.block = Box::new(syn::parse2(new_function_block).unwrap());
+
+    function.into_token_stream().into()
 }
