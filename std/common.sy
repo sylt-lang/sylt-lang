@@ -1,6 +1,6 @@
 dbg :: fn x ->
     print(x)
-    ret x
+    x
 end
 
 args: fn -> {str:str} : external
@@ -8,8 +8,8 @@ thread_sleep: fn float -> void : external
 print: fn *X -> void : external
 
 spy :: fn tag: str, x ->
-    print(tag + " " + as_str(x))
-    ret x
+    dbg(tag + " " + as_str(x))
+    x
 end
 
 unsafe_force: fn *X -> *Y : external
