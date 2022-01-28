@@ -1109,9 +1109,9 @@ where
     if bundle_std {
         let basics_index = modules
             .iter()
-            .position(|(f, _)| *f == FileOrLib::Lib("basics"))
+            .position(|(f, _)| *f == FileOrLib::Lib("preamble"))
             .unwrap();
-        let tokens = string_to_tokens(basics_index, include_str!("../../std/basics.sy"));
+        let tokens = string_to_tokens(basics_index, library_source("preamble").unwrap());
         let (_, std) = module(&FileOrLib::Lib("basics"), basics_index, &root, &tokens);
         let std = std?;
         modules = modules
