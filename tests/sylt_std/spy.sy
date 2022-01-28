@@ -1,5 +1,3 @@
-from std use spy
-
 start :: fn do
     a :: spy' "abc", 123
     a <=> 123

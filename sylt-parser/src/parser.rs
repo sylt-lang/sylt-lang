@@ -34,6 +34,7 @@ pub struct AST {
 #[derive(Debug, Clone)]
 pub struct Module {
     pub span: Span,
+    pub file_id: usize,
     pub statements: Vec<Statement>,
 }
 
@@ -1001,7 +1002,7 @@ fn module(
     if errors.is_empty() {
         (
             use_files,
-            Ok(Module { span: Span::zero(file_id), statements }),
+            Ok(Module { file_id, span: Span::zero(file_id), statements }),
         )
     } else {
         (use_files, Err(errors))
@@ -1051,7 +1052,7 @@ pub fn find_conflict_markers(file: &FileOrLib, file_id: usize, source: &str) -> 
 ///
 /// Returns any errors that occured when parsing the file(s). Basic error
 /// continuation is performed as documented in [module].
-pub fn tree<F>(path: &Path, reader: F) -> Result<AST, Vec<Error>>
+pub fn tree<F>(path: &Path, reader: F, bundle_std: bool) -> Result<AST, Vec<Error>>
 where
     F: Fn(&Path) -> Result<String, Error>,
 {
@@ -1060,6 +1061,11 @@ where
     // Files we want to parse but haven't yet.
     let mut to_visit = Vec::new();
     let root = path.parent().unwrap();
+
+    if bundle_std {
+        to_visit.push(FileOrLib::Lib("preamble"));
+    }
+
     to_visit.push(FileOrLib::File(PathBuf::from(path)));
 
     let mut modules = Vec::new();
@@ -1092,11 +1098,34 @@ where
         let tokens = string_to_tokens(file_id, &source);
         // Parse the module.
         let (mut next, result) = module(&include, file_id, &root, &tokens);
+
         match result {
             Ok(module) => modules.push((include.clone(), module)),
             Err(mut errs) => errors.append(&mut errs),
         }
         to_visit.append(&mut next);
+    }
+
+    if bundle_std {
+        let basics_index = modules
+            .iter()
+            .position(|(f, _)| *f == FileOrLib::Lib("preamble"))
+            .unwrap();
+        let tokens = string_to_tokens(basics_index, library_source("preamble").unwrap());
+        let (_, std) = module(&FileOrLib::Lib("basics"), basics_index, &root, &tokens);
+        let std = std?;
+        modules = modules
+            .into_iter()
+            .map(|(file, mut module)| {
+                match file {
+                    FileOrLib::File(_) => {
+                        module.statements.append(&mut std.statements.clone());
+                    }
+                    FileOrLib::Lib(_) => {}
+                };
+                (file, module)
+            })
+            .collect();
     }
 
     if errors.is_empty() {

@@ -1,4 +1,4 @@
-from std use (clear)
+from container use (clear)
 
 start :: fn do
     a := [1, 2, 3, 4]

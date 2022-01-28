@@ -1,0 +1,59 @@
+abs : fn<N: Num> *N -> *N: fn n ->
+    if n < 0 do
+        -n
+    else do
+        n
+    end
+end
+
+atan2: fn float, float -> float : external
+sin: fn float -> float : external
+cos: fn float -> float : external
+floor: fn<N: Num> *N -> int : external
+sqrt: fn float -> float : external
+sign: fn<N: Num> *N -> *N : external
+
+clamp :: fn x, lo, hi ->
+    min(hi, max(x, lo))
+end
+
+min : fn<N: Num> *N, *N -> *N : fn a, b ->
+    if a < b do
+        a
+    else do
+        b
+    end
+end
+
+max : fn<N: Num> *N, *N -> *N : fn a, b ->
+    if a > b do a
+    else do b
+    end
+end
+
+rem: fn<N: Num> *N, *N -> *N : external
+pow: fn float, float -> float : external
+div: fn int, int -> int : external
+
+angle :: fn v: (float, float) -> float
+    atan2(v[0], v[1])
+end
+
+magnitude_squared :: fn v: (float, float) -> float
+    dot(v, v)
+end
+
+magnitude :: fn v: (float, float) -> float
+    sqrt(magnitude_squared(v))
+end
+
+normalize :: fn v: (float, float) -> (float, float)
+    mag :: magnitude(v)
+    (v[0] / mag, v[1] / mag)
+end
+
+reflect: fn (float, float), (float, float) -> (float, float) : external
+
+dot :: fn v1: (float, float), v2: (float, float) -> float
+    v1[0] * v2[0] + v1[1] * v2[1]
+end

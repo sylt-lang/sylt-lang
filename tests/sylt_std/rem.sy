@@ -1,5 +1,3 @@
-from std use (rem)
-
 DELTA :: 0.00000000001
 
 start :: fn do

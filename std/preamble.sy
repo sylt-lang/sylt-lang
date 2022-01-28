@@ -1,0 +1,43 @@
+// NOTE(ed): Only use-statements are allowed in the preamble.
+from common use (
+    dbg,
+    args,
+    thread_sleep,
+    print,
+    spy,
+    as_float,
+    as_int,
+    as_char,
+    as_chars,
+    as_str,
+)
+from math use (
+    abs,
+    atan2,
+    sin,
+    cos,
+    floor,
+    sqrt,
+    sign,
+    clamp,
+    min,
+    max,
+    rem,
+    div,
+    pow,
+)
+
+from container use len
+
+from list use (
+    for_each,
+    map,
+    reduce,
+    fold,
+    filter,
+)
+
+use common
+use container
+use list
+use math

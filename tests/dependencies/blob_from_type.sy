@@ -1,4 +1,4 @@
-from std use (unsafe_force)
+from common use (unsafe_force)
 
 B :: blob {
     b: int,

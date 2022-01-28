@@ -319,7 +319,6 @@ end
 -- std-sylt
 
 function atan2(x, y) return math.atan2(y, x) end
-function dbg(x) print(x); return x end
 function random_choice(l) return l[math.random(1, #l)] end
 
 function varargs(f)
@@ -382,6 +381,10 @@ function add(s, v)
     s[v] = true
 end
 
+function remove(s, v)
+    s[v] = nil
+end
+
 function len(c)
     local s = 0
     for _ in pairs(c) do
@@ -424,7 +427,6 @@ function split(s)
 end
 
 sqrt = math.sqrt
-abs = math.abs
 function div(a, b)
     if b == 0 then return 0 end
     return math.floor(a / b)
@@ -438,47 +440,15 @@ function sign(x)
         return 0
     end
 end
-function clamp(x, lo, hi)
-    return math.min(hi, math.max(x, lo))
-end
-min = math.min
-max = math.max
 function rem(x, y)
     return math.abs(x % y)
 end
 pow = math.pow
-function angle(v)
-    return atan2(v[1], v[2])
-end
-
-function dot(a, b)
-    local out = 0
-    for x = 1, #a, 1 do
-        out = out + a[x] * b[x]
-    end
-    return out
-end
-
-function magnitude_squared(a)
-    return dot(a, a)
-end
-
-function magnitude(a)
-    return math.sqrt(dot(a, a))
-end
 
 function __CRASH(msg)
     return function() assert(false, "!!CRASH!!: " .. (msg or "")) end
 end
 
-function normalize(a)
-    local mag = magnitude(a)
-    local out = {}
-    for x = 1, #a, 1 do
-        out[x] = a[x] / mag
-    end
-    return __TUPLE(out)
-end
 reflect = __CRASH("reflect is not implemented")
 debug_assertions = __CRASH("debug_assertions is not implemented")
 thread_sleep = __CRASH("thread_sleep is not implemented")
@@ -488,16 +458,9 @@ function pop(l)
     l[#l] = nil
     return popped
 end
-function last(l)
-    return l[#l]
-end
 
 as_str = tostring
 print = print
-function spy(tag, x)
-    print(tag, x)
-    return x
-end
 
 unsafe_force = __IDENTITY
 

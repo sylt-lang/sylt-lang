@@ -103,8 +103,8 @@ impl Compiler {
     fn extract_globals(&mut self, tree: &AST) {
         // Find all files and map them to their namespace
         let mut include_to_namespace = HashMap::new();
-        for (path, _) in tree.modules.iter() {
-            let slot = self.namespaces.len();
+        for (path, module) in tree.modules.iter() {
+            let slot = module.file_id;
             self.namespaces.push(Namespace::new());
 
             if include_to_namespace.insert(path.clone(), slot).is_some() {
@@ -122,8 +122,8 @@ impl Compiler {
 
         // Find all globals in all files and declare them. The globals are
         // initialized at a later stage.
-        for (path, module) in tree.modules.iter() {
-            let slot = include_to_namespace[path];
+        for (_, module) in tree.modules.iter() {
+            let slot = module.file_id;
 
             let mut namespace = Namespace::new();
             for statement in module.statements.iter() {
@@ -132,7 +132,7 @@ impl Compiler {
                     FromUse { .. } => {
                         // We cannot resolve this here since the namespace
                         // might not be loaded yet. We process these after.
-                        from_statements.push(statement.clone());
+                        from_statements.push((slot, statement.clone()));
                         continue;
                     }
                     Use { name, file, .. } => {
@@ -170,8 +170,7 @@ impl Compiler {
             self.namespaces[slot] = namespace;
         }
 
-        for from_stmt in from_statements.into_iter() {
-            let slot = from_stmt.span.file_id;
+        for (slot, from_stmt) in from_statements.into_iter() {
             match from_stmt.kind {
                 StatementKind::FromUse { imports, file, .. } => {
                     let from_slot = include_to_namespace[&file];

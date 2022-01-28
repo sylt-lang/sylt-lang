@@ -1,4 +1,4 @@
-from std use split
+from common use split
 
 start :: fn do
     // TODO: Newlines, tabs, other whitespace.

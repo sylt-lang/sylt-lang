@@ -25,7 +25,7 @@ where
     R: Fn(&Path) -> Result<String, Error>,
 {
     let file = PathBuf::from(args.args.first().expect("No file to run"));
-    let tree = sylt_parser::tree(&file, reader)?;
+    let tree = sylt_parser::tree(&file, reader, true)?;
     if args.dump_tree {
         println!("{}", tree);
     }

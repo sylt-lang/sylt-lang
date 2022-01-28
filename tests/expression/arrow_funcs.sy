@@ -1,4 +1,4 @@
-from std use (print, push)
+from list use (push)
 
 l := []
 f :: fn a: int, b: int -> int do
