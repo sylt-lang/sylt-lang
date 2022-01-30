@@ -470,7 +470,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         } else {
                             let (ctx_, ty) = parse_type(ctx)?;
                             if !matches!(ctx_.token(), T::Comma | T::End | T::Newline) {
-                                raise_syntax_error!(ctx, "Expected a deliminator ','");
+                                raise_syntax_error!(ctx, "Expected a delimiter ','");
                             };
                             (ctx_, ty)
                         };
@@ -532,7 +532,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                         fields.insert(field, ty);
 
                         if !matches!(ctx.token(), T::Comma | T::RightBrace) {
-                            raise_syntax_error!(ctx, "Expected a field deliminator ','");
+                            raise_syntax_error!(ctx, "Expected a field delimiter ','");
                         }
                         ctx = ctx.skip_if(T::Comma);
                     }
