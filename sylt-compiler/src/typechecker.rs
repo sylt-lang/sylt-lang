@@ -1269,13 +1269,18 @@ impl TypeChecker {
     ) -> TypeResult<Option<TyID>> {
         let span = statement.span;
         let (ident, kind, ty, value) = match &mut statement.kind {
-            StatementKind::Definition { ident, kind, ty, value } => (ident, kind, ty, value),
+            StatementKind::Definition { ident, kind, ty, value } => {
+                (ident.clone(), *kind, ty, value)
+            }
             _ => unreachable!(),
         };
+        let global_name = (ctx.namespace, ident.name.clone());
         let defined_ty = self.resolve_type(span, ctx, &ty)?;
+        self.add_constraint(defined_ty, span, Constraint::Variable);
 
-        let is_function = match &value.kind {
+        match &value.kind {
             ExpressionKind::Function { params, .. } => {
+                // Special case for functions
                 let args = params
                     .iter()
                     .map(|_| self.push_type(Type::Unknown))
@@ -1283,39 +1288,36 @@ impl TypeChecker {
                 let ret = self.push_type(Type::Unknown);
                 let fn_ty = self.push_type(Type::Function(args, ret));
                 self.unify(span, ctx, defined_ty, fn_ty)?;
-                let var = Variable { ident: ident.clone(), ty: fn_ty, kind: *kind, span };
+                let var = Variable { ident, ty: fn_ty, kind, span };
                 if global {
-                    self.globals
-                        .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
+                    self.globals.insert(global_name, Name::Global(var));
                 } else {
                     self.stack.push(var);
                 }
-                true
+
+                let (ret_expression, expression_ty) = self.expression(value, ctx)?;
+                self.unify(span, ctx, defined_ty, expression_ty)?;
+                // Re-check the function body, this catches type-errors from recursion.
+                self.expression(value, ctx)?;
+
+                Ok(ret_expression)
             }
-            _ => false,
-        };
 
-        let (ret_expression, expression_ty) = self.expression(value, ctx)?;
-        self.add_constraint(defined_ty, span, Constraint::Variable);
-        self.unify(span, ctx, expression_ty, defined_ty)?;
+            _ => {
+                // 'Normal' variables
+                let (ret_expression, expression_ty) = self.expression(value, ctx)?;
+                self.unify(span, ctx, defined_ty, expression_ty)?;
 
-        if !is_function {
-            let var = Variable {
-                ident: ident.clone(),
-                ty: defined_ty,
-                kind: *kind,
-                span,
-            };
-            if global {
-                self.globals.insert(
-                    (ctx.namespace, ident.name.clone()),
-                    Name::Global(var.clone()),
-                );
-            } else {
-                self.stack.push(var);
+                let var = Variable { ident, ty: defined_ty, kind, span };
+                if global {
+                    self.globals.insert(global_name, Name::Global(var));
+                } else {
+                    self.stack.push(var);
+                }
+
+                Ok(ret_expression)
             }
         }
-        Ok(ret_expression)
     }
 
     fn find(&mut self, TyID(a): TyID) -> TyID {
