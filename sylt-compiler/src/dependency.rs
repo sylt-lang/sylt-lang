@@ -326,8 +326,12 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<(String,
                 .iter()
                 .map(|(_, ty)| type_dependencies(ctx, ty))
                 .flatten()
+                .collect::<BTreeSet<_>>();
+            let deps = body
+                .iter()
+                .map(|stmt| statement_dependencies(ctx, stmt))
+                .flatten()
                 .collect();
-            let deps = statement_dependencies(ctx, body);
             ctx.variables.truncate(vars_before);
             [deps, type_deps].iter().flatten().cloned().collect()
         }
