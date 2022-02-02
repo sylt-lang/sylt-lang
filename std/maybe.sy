@@ -1,0 +1,30 @@
+
+Maybe :: enum
+    Just *
+    None
+end
+
+fromMaybe :: fn maybe, a ->
+    case maybe do
+        Just x -> x end
+        None -> a end
+    end
+end
+
+flatten :: fn maybe -> Maybe
+    case maybe do
+        Just x -> x end
+        None -> Maybe.None end
+    end
+end
+
+isJust :: fn maybe -> bool
+    case maybe do
+        Just _ -> true end
+        None -> false end
+    end
+end
+
+isNone :: fn maybe -> bool
+    not isJust' maybe
+end
