@@ -1859,7 +1859,9 @@ impl TypeChecker {
                         C::Contains(x) => C::Contains(self.inner_copy(*x, seen)),
                         C::IsContainedIn(x) => C::IsContainedIn(self.inner_copy(*x, seen)),
                         C::Enum => C::Enum,
-                        C::Variant(v, x) => C::Variant(v.clone(), x.map(|y| self.inner_copy(y, seen))),
+                        C::Variant(v, x) => {
+                            C::Variant(v.clone(), x.map(|y| self.inner_copy(y, seen)))
+                        }
                         C::TotalEnum(x) => C::TotalEnum(x.clone()),
                         C::Variable => C::Variable,
                     },
