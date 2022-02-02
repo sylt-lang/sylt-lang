@@ -81,6 +81,7 @@ pub enum ExpressionKind {
         ret: Type,
 
         body: Vec<Statement>,
+        pure: bool,
     },
     /// A blob instantiation.
     Blob {
@@ -132,7 +133,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let (fn_type, span, mut ctx) = ctx.eat();
     match fn_type {
         T::Fn | T::Pu => (),
-        _ => raise_syntax_error!(ctx, "Expected 'fn' or 'pu' for function expression.")
+        _ => raise_syntax_error!(ctx, "Expected 'fn' or 'pu' for function expression."),
     }
 
     let mut params = Vec::new();
@@ -199,7 +200,8 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         name: "lambda".into(),
         params,
         ret,
-        body: statements
+        body: statements,
+        pure: matches!(fn_type, T::Pu),
     };
 
     Ok((ctx, Expression::new(span, function)))
@@ -1032,8 +1034,13 @@ impl PrettyPrint for Expression {
                     stmt.pretty_print(f, indent + 1)?;
                 }
             }
-            EK::Function { name, params, ret, body } => {
-                write!(f, "Fn {} ", name)?;
+            EK::Function { name, params, ret, body, pure } => {
+                if *pure {
+                    write!(f, "Pu {} ", name)?;
+                } else {
+                    write!(f, "Fn {} ", name)?;
+                }
+
                 for (i, (name, ty)) in params.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;

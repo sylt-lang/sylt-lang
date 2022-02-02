@@ -173,16 +173,21 @@ pub struct TypeChecker {
 #[derive(Clone, Debug, Copy)]
 struct TypeCtx {
     inside_loop: bool,
+    inside_pure: bool,
     namespace: NamespaceID,
 }
 
 impl TypeCtx {
     fn namespace(namespace: NamespaceID) -> Self {
-        Self { inside_loop: false, namespace }
+        Self { inside_loop: false, inside_pure: false, namespace }
     }
 
     fn enter_loop(self) -> Self {
         Self { inside_loop: true, ..self }
+    }
+
+    fn enter_pure(self) -> Self {
+        Self { inside_pure: true, ..self }
     }
 }
 
@@ -1108,7 +1113,7 @@ impl TypeChecker {
                 with_ret(ret, value.unwrap_or_else(|| self.push_type(Type::Void)))
             }
 
-            ExpressionKind::Function { name: _, params, ret, body } => {
+            ExpressionKind::Function { name: _, params, ret, body, pure } => {
                 let ss = self.stack.len();
                 let mut args = Vec::new();
                 let mut seen = HashMap::new();
@@ -1127,6 +1132,13 @@ impl TypeChecker {
 
                 let returns_something = ret.kind != TypeKind::Resolved(RuntimeType::Void);
                 let ret_ty = self.inner_resolve_type(span, ctx, ret, &mut seen)?;
+
+                let ctx = if *pure {
+                    ctx.enter_pure()
+                } else {
+                    ctx
+                };
+
                 let (actual_ret, implicit_ret) = self.expression_block(span, body, ctx)?;
 
                 let actual_ret = if returns_something {
@@ -1137,7 +1149,9 @@ impl TypeChecker {
                     self.unify_option(span, ctx, actual_ret, void)?
                 };
                 self.unify_option(span, ctx, Some(ret_ty), actual_ret)
-                    .help_no_span("The actual return type and the specified return type differ!".into())?;
+                    .help_no_span(
+                        "The actual return type and the specified return type differ!".into(),
+                    )?;
 
                 if actual_ret.is_none() && returns_something {
                     return err_type_error!(
@@ -1145,8 +1159,7 @@ impl TypeChecker {
                         ret.span,
                         TypeError::Exotic,
                         "The return-type isn't explicitly set to `void`, but the function returns nothing"
-                    )
-
+                    );
                 }
 
                 self.stack.truncate(ss);
@@ -1294,6 +1307,15 @@ impl TypeChecker {
         let span = statement.span;
         let (ident, kind, ty, value) = match &mut statement.kind {
             StatementKind::Definition { ident, kind, ty, value } => {
+                dbg!(ctx.inside_pure);
+                if ctx.inside_pure && !kind.immutable() {
+                    return err_type_error!(
+                        self,
+                        span,
+                        TypeError::Exotic,
+                        "Cannot make assignments in pure functions."
+                    );
+                }
                 (ident.clone(), *kind, ty, value)
             }
             _ => unreachable!(),
@@ -1598,7 +1620,6 @@ impl TypeChecker {
                             }
                         }
                     }
-
 
                     _ => err_type_error!(
                         self,
