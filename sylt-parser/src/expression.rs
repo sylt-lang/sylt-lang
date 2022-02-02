@@ -195,7 +195,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         name: "lambda".into(),
         params,
         ret,
-        body: statements
+        body: statements,
     };
 
     Ok((ctx, Expression::new(span, function)))

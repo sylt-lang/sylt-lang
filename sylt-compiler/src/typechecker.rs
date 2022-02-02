@@ -1131,7 +1131,9 @@ impl TypeChecker {
                     self.unify_option(span, ctx, actual_ret, void)?
                 };
                 self.unify_option(span, ctx, Some(ret_ty), actual_ret)
-                    .help_no_span("The actual return type and the specified return type differ!".into())?;
+                    .help_no_span(
+                        "The actual return type and the specified return type differ!".into(),
+                    )?;
 
                 if actual_ret.is_none() && returns_something {
                     return err_type_error!(
@@ -1139,8 +1141,7 @@ impl TypeChecker {
                         ret.span,
                         TypeError::Exotic,
                         "The return-type isn't explicitly set to `void`, but the function returns nothing"
-                    )
-
+                    );
                 }
 
                 self.stack.truncate(ss);
@@ -1592,7 +1593,6 @@ impl TypeChecker {
                             }
                         }
                     }
-
 
                     _ => err_type_error!(
                         self,
