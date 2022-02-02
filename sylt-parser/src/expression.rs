@@ -129,8 +129,12 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use RuntimeType::{Unknown, Void};
     use TypeKind::Resolved;
 
-    let span = ctx.span();
-    let mut ctx = expect!(ctx, T::Fn, "Expected 'fn' for function expression");
+    let (fn_type, span, mut ctx) = ctx.eat();
+    match fn_type {
+        T::Fn | T::Pu => (),
+        _ => raise_syntax_error!(ctx, "Expected 'fn' or 'pu' for function expression.")
+    }
+
     let mut params = Vec::new();
     // Parameters
     let ret = loop {
@@ -299,7 +303,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use ExpressionKind::Get;
 
     match ctx.token() {
-        T::Fn => function(ctx),
+        T::Fn | T::Pu => function(ctx),
         T::If => if_expression(ctx),
         T::Case => case_expression(ctx),
 

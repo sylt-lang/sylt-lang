@@ -123,6 +123,8 @@ pub enum Token {
 
     #[token("fn")]
     Fn,
+    #[token("pu")]
+    Pu,
 
     #[token("and")]
     And,

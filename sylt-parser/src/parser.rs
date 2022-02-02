@@ -599,10 +599,15 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         }
 
         // Function type
-        T::Fn => {
+        ty @ T::Fn | ty @ T::Pu => {
             let ctx = ctx.skip(1);
 
             let mut constraints = BTreeMap::new();
+
+            if let T::Pu = ty {
+                constraints.insert("Pure".to_string(), Vec::new());
+            }
+
             let ctx = if matches!(ctx.token(), T::Less) {
                 let mut ctx = ctx.skip(1);
                 'outer: loop {
