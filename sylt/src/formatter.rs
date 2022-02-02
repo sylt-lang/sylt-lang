@@ -370,20 +370,13 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
                 write!(dest, " ")?;
             }
 
-            match body.kind {
-                StatementKind::Block { statements } => {
-                    write!(dest, "do\n")?;
-                    for s in merge_empty_statements(statements) {
-                        write_statement(dest, indent + 1, s)?;
-                    }
-                    write_indents(dest, indent)?;
-                    write!(dest, "end")?;
-                    // NOTE(ed): No newline here!
-                }
-                _ => {
-                    write_statement(dest, indent, *body)?;
-                }
+            write!(dest, "do\n")?;
+            for s in merge_empty_statements(body) {
+                write_statement(dest, indent + 1, s)?;
             }
+            write_indents(dest, indent)?;
+            // NOTE(ed): No newline here!
+            write!(dest, "end")?;
         }
         ExpressionKind::Blob { blob, fields } => {
             write_type_assignable(dest, indent, blob)?;

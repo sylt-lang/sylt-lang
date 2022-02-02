@@ -503,6 +503,7 @@ impl<'a> IRCodeGen<'a> {
             }
 
             ExpressionKind::Function { name, body, params, .. } => {
+                let mut body = body.clone();
                 let ss = self.variables.len();
                 let f = self.var();
                 self.variables.push(Variable {
@@ -522,10 +523,32 @@ impl<'a> IRCodeGen<'a> {
                         var
                     })
                     .collect();
-                let body = self.statement(body, ctx);
+                let last_statement = body.pop();
+                let body = body
+                    .iter()
+                    .map(|stmt| self.statement(stmt, ctx))
+                    .flatten()
+                    .collect();
+                let last_statement = match last_statement {
+                    Some(Statement {
+                        kind: StatementKind::StatementExpression { value, .. },
+                        ..
+                    }) => {
+                        let (ir, ret) = self.expression(&value, ctx);
+                        [ir, vec![IR::Return(ret)]].concat()
+                    }
+                    Some(stmt) => self.statement(&stmt, ctx),
+                    None => Vec::new(),
+                };
                 self.variables.truncate(ss);
                 (
-                    [vec![IR::Function(f, params)], body, vec![IR::End]].concat(),
+                    [
+                        vec![IR::Function(f, params)],
+                        body,
+                        last_statement,
+                        vec![IR::End],
+                    ]
+                    .concat(),
                     f,
                 )
             }

@@ -1119,16 +1119,34 @@ impl TypeChecker {
                     self.stack.push(var);
                 }
 
-                let ret = self.inner_resolve_type(span, ctx, ret, &mut seen)?;
-                let actual_ret = self
-                    .statement(body, ctx)?
-                    .unwrap_or_else(|| self.push_type(Type::Void));
-                self.unify(span, ctx, ret, actual_ret)?;
+                let returns_something = ret.kind != TypeKind::Resolved(RuntimeType::Void);
+                let ret_ty = self.inner_resolve_type(span, ctx, ret, &mut seen)?;
+                let (actual_ret, implicit_ret) = self.expression_block(span, body, ctx)?;
+
+                let actual_ret = if returns_something {
+                    self.unify_option(span, ctx, actual_ret, implicit_ret)
+                        .help_no_span("The implicit and explicit returns differ in type!".into())?
+                } else {
+                    let void = Some(self.push_type(Type::Void));
+                    self.unify_option(span, ctx, actual_ret, void)?
+                };
+                self.unify_option(span, ctx, Some(ret_ty), actual_ret)
+                    .help_no_span("The actual return type and the specified return type differ!".into())?;
+
+                if actual_ret.is_none() && returns_something {
+                    return err_type_error!(
+                        self,
+                        ret.span,
+                        TypeError::Exotic,
+                        "The return-type isn't explicitly set to `void`, but the function returns nothing"
+                    )
+
+                }
 
                 self.stack.truncate(ss);
 
                 // Functions are the only expressions that we cannot return out of when evaluating.
-                no_ret(self.push_type(Type::Function(args, ret)))
+                no_ret(self.push_type(Type::Function(args, ret_ty)))
             }
 
             ExpressionKind::Blob { blob, fields } => {
@@ -1574,6 +1592,7 @@ impl TypeChecker {
                             }
                         }
                     }
+
 
                     _ => err_type_error!(
                         self,
