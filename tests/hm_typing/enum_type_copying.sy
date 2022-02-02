@@ -1,0 +1,17 @@
+A :: enum
+    B *
+    C
+end
+
+f :: fn a -> A
+    case a do
+        B x -> x end
+        C -> A.C end
+    end
+end
+
+start :: fn do
+    // Check that we correctly copy recursive enums.
+    f' A.B A.B 1
+    f' f' A.B A.B A.B 1
+end
