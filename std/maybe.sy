@@ -4,7 +4,7 @@ Maybe :: enum
     None
 end
 
-fromMaybe :: fn maybe, a ->
+orDefault :: fn maybe, a ->
     case maybe do
         Just x -> x end
         None -> a end

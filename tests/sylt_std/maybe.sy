@@ -1,8 +1,8 @@
-from maybe use (Maybe, flatten)
+from maybe use (Maybe, flatten, orDefault, isJust, isNone)
 
 start :: fn do
-    1 <=> fromMaybe' Maybe.Just 1, 2
-    2 <=> fromMaybe' Maybe.None, 2
+    1 <=> orDefault' Maybe.Just 1, 2
+    2 <=> orDefault' Maybe.None, 2
 
     (Maybe.Just Maybe.Just 2) <=> flatten' Maybe.Just Maybe.Just Maybe.Just 2
     (Maybe.Just 1) <=> flatten' Maybe.Just Maybe.Just 1
