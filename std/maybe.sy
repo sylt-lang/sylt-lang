@@ -11,7 +11,7 @@ fromMaybe :: fn maybe, a ->
     end
 end
 
-flatten :: fn maybe -> Maybe
+flatten :: fn maybe ->
     case maybe do
         Just x -> x end
         None -> Maybe.None end
