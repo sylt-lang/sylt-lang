@@ -854,12 +854,12 @@ impl TypeChecker {
                         .cloned()
                     {
                         Some(Name::Global(var)) => {
-                            if ctx.inside_pure {
+                            if ctx.inside_pure && matches!(var.kind, VarKind::Mutable) {
                                 err_type_error!(
                                     self,
                                     span,
                                     TypeError::Impurity,
-                                    "Cannot read global variables inside pure functions."
+                                    "Cannot access mutable variables from pure functions."
                                 )
                             } else {
                                 no_ret(var.ty)
@@ -885,6 +885,21 @@ impl TypeChecker {
                                 TypeError::WrongArity { got: args.len(), expected: params.len() }
                             );
                         }
+
+                        if ctx.inside_pure
+                            && !self
+                                .find_node(f)
+                                .constraints
+                                .contains_key(&Constraint::Pure)
+                        {
+                            return err_type_error!(
+                                self,
+                                span,
+                                TypeError::Impurity,
+                                "Cannot call unpure functions from pure functions."
+                            );
+                        }
+
                         // TODO(ed): Annotate the errors?
                         let mut ret = ret;
                         for (a, p) in args.iter_mut().zip(params.iter()) {
