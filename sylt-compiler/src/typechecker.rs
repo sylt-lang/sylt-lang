@@ -478,7 +478,9 @@ impl TypeChecker {
                 let ty = self.type_assignable(ctx, assignable)?;
                 self.print_type(ty);
                 match self.find_type(ty) {
-                    Type::Blob(name, _, sub) | Type::Enum(name, _, sub) => {
+                    Type::Blob(name, _, sub)
+                    | Type::Newblob(name, _, sub, _)
+                    | Type::Enum(name, _, sub) => {
                         for (i, var) in vars.iter().enumerate() {
                             if sub.len() == i {
                                 return err_type_error!(
@@ -767,7 +769,7 @@ impl TypeChecker {
                 self.unify(span, ctx, ty, enum_ty)?;
             }
 
-            StatementKind::Blob { name, fields, variables } => {
+            StatementKind::Blob { name, fields, variables, newblob } => {
                 let blob_ty = self.push_type(Type::Unknown);
                 self.globals
                     .insert((ctx.namespace, name.name.clone()), Name::Type(blob_ty));
@@ -801,7 +803,12 @@ impl TypeChecker {
                         ));
                     }
                 }
-                let ty = self.push_type(Type::Blob(name.clone(), resolved_fields, type_params));
+                let ty = self.push_type(match newblob {
+                    true => {
+                        Type::Newblob(name.clone(), resolved_fields, type_params, ctx.namespace)
+                    }
+                    false => Type::Blob(name.clone(), resolved_fields, type_params),
+                });
                 self.unify(span, ctx, ty, blob_ty)?;
             }
 
@@ -1336,8 +1343,16 @@ impl TypeChecker {
 
             ExpressionKind::Blob { blob, fields } => {
                 let blob_ty = self.type_assignable(ctx, blob)?;
+
                 let (blob_name, blob_fields, blob_args) = match self.find_type(blob_ty) {
                     Type::Blob(name, fields, args) => (name, fields, args),
+                    Type::Newblob(name, _, _, _) => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::NewblobInstance { name: name.name.clone() }
+                        );
+                    }
                     _ => {
                         return err_type_error!(
                             self,
@@ -1610,7 +1625,7 @@ impl TypeChecker {
                 Box::new(self.inner_bake_type(ret, seen)),
             ),
             // TODO(ed): Should we print out the arguments to the blob instead?
-            Type::Blob(name, fields, _) => RuntimeType::Blob(
+            Type::Newblob(name, fields, _, _) | Type::Blob(name, fields, _) => RuntimeType::Blob(
                 name.name.clone(),
                 fields
                     .iter()
@@ -1671,24 +1686,26 @@ impl TypeChecker {
 
                 Constraint::Field(name, expected_ty) => match self.find_type(a).clone() {
                     Type::Unknown => Ok(()),
-                    Type::Blob(blob_name, fields, _) => match fields.get(name) {
-                        Some((span, actual_ty)) => {
-                            self.unify(*span, ctx, *expected_ty, *actual_ty).map(|_| ())
-                        }
-                        None => err_type_error!(
-                            self,
-                            span,
-                            TypeError::MissingField {
-                                blob: blob_name.name.clone(),
-                                field: name.clone(),
+                    Type::Newblob(blob_name, fields, _, _) | Type::Blob(blob_name, fields, _) => {
+                        match fields.get(name) {
+                            Some((span, actual_ty)) => {
+                                self.unify(*span, ctx, *expected_ty, *actual_ty).map(|_| ())
                             }
-                        )
-                        .help(
-                            self,
-                            blob_name.span,
-                            "Defined here".to_string(),
-                        ),
-                    },
+                            None => err_type_error!(
+                                self,
+                                span,
+                                TypeError::MissingField {
+                                    blob: blob_name.name.clone(),
+                                    field: name.clone(),
+                                }
+                            )
+                            .help(
+                                self,
+                                blob_name.span,
+                                "Defined here".to_string(),
+                            ),
+                        }
+                    }
                     _ => err_type_error!(
                         self,
                         span,
@@ -2032,6 +2049,13 @@ impl TypeChecker {
                     }
                 }
 
+                (
+                    Type::Newblob(a_name, _, a_args, a_namespace),
+                    Type::Newblob(b_name, _, b_args, b_namespace),
+                ) if a_name == b_name && a_namespace == b_namespace && a_args == b_args => {
+                    // Need not recurse - we already know the types are identical.
+                }
+
                 (Type::Enum(a_name, a_variants, _), Type::Enum(b_name, b_variants, _)) => {
                     for (a_var, _) in a_variants.iter() {
                         if !b_variants.contains_key(a_var) {
@@ -2186,6 +2210,16 @@ impl TypeChecker {
                 args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
                 self.inner_copy(ret, seen),
                 purity,
+            ),
+
+            Type::Newblob(name, fields, args, namespace) => Type::Newblob(
+                name.clone(),
+                fields
+                    .iter()
+                    .map(|(name, (span, ty))| (name.clone(), (*span, self.inner_copy(*ty, seen))))
+                    .collect(),
+                args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
+                namespace,
             ),
 
             // TODO(ed): We can cheat here and just copy the table directly.

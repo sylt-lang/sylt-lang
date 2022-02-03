@@ -1,0 +1,17 @@
+Foo :: newblob {
+  bar: int
+}
+
+Hack :: blob {
+  bar: int
+}
+
+get_bar :: fn f -> int
+  f.bar
+end
+
+start :: fn do
+  foo: Foo : common.unsafe_force' Hack { bar: 7 }
+
+  (get_bar' foo) <=> 7
+end
