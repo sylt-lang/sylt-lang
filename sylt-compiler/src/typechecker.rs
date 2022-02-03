@@ -886,7 +886,7 @@ impl TypeChecker {
                             );
                         }
 
-                        if ctx.inside_pure && self.is_function_pure(f) {
+                        if ctx.inside_pure && !self.is_function_pure(f) {
                             return err_type_error!(
                                 self,
                                 span,
