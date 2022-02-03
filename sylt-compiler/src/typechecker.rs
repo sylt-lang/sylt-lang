@@ -858,7 +858,7 @@ impl TypeChecker {
                                 err_type_error!(
                                     self,
                                     span,
-                                    TypeError::Exotic,
+                                    TypeError::Impurity,
                                     "Cannot read global variables inside pure functions."
                                 )
                             } else {
@@ -1332,7 +1332,7 @@ impl TypeChecker {
                     return err_type_error!(
                         self,
                         span,
-                        TypeError::Exotic,
+                        TypeError::Impurity,
                         "Cannot make mutable declarations in pure functions."
                     );
                 }
@@ -1667,7 +1667,7 @@ impl TypeChecker {
                     _ => err_type_error!(
                         self,
                         span,
-                        TypeError::Exotic,
+                        TypeError::Impurity,
                         "Non pure function something something"
                     ),
                 },
