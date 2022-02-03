@@ -1185,7 +1185,7 @@ impl TypeChecker {
                         self,
                         ret.span,
                         TypeError::Exotic,
-                        "The return-type isn't explicitly set to `void`, but the function returns nothing"
+                        "The return-type isn't explicitly set to `void`, but the function doesn't return anything"
                     );
                 }
 
