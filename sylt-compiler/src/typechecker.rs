@@ -886,12 +886,7 @@ impl TypeChecker {
                             );
                         }
 
-                        if ctx.inside_pure
-                            && !self
-                                .find_node(f)
-                                .constraints
-                                .contains_key(&Constraint::Pure)
-                        {
+                        if ctx.inside_pure && self.is_function_pure(f) {
                             return err_type_error!(
                                 self,
                                 span,
@@ -2301,6 +2296,12 @@ impl TypeChecker {
                 }
             ),
         }
+    }
+
+    fn is_function_pure(&mut self, f: TyID) -> bool {
+        self.find_node(f)
+            .constraints
+            .contains_key(&Constraint::Pure)
     }
 
     fn constant_index(
