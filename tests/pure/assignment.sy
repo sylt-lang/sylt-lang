@@ -1,0 +1,6 @@
+a := 1
+start :: pu do
+    a = 2
+end
+
+// error: Cannot make assignments in pure functions
