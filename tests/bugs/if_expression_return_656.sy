@@ -8,4 +8,4 @@ end
 
 start :: fn do end
 
-// error: A 'void' cannot be a 'int'
+// error: A 'int' cannot be a 'void'
