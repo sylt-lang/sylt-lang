@@ -570,7 +570,7 @@ impl TypeChecker {
                         self,
                         span,
                         TypeError::Exotic,
-                        "Cannot make assignments in pure functions."
+                        "Cannot make assignments in pure functions"
                     );
                 }
 
@@ -641,7 +641,7 @@ impl TypeChecker {
             | StatementKind::Enum { .. }
             | StatementKind::ExternalDefinition { .. } => {
                 unreachable!(
-                    "Illegal inner statement at {:?}! Parser should have caught this.",
+                    "Illegal inner statement at {:?}! Parser should have caught this",
                     span
                 )
             }
@@ -859,7 +859,7 @@ impl TypeChecker {
                                     self,
                                     span,
                                     TypeError::Impurity,
-                                    "Cannot access mutable variables from pure functions."
+                                    "Cannot access mutable variables from pure functions"
                                 )
                             } else {
                                 no_ret(var.ty)
@@ -896,7 +896,7 @@ impl TypeChecker {
                                 self,
                                 span,
                                 TypeError::Impurity,
-                                "Cannot call unpure functions from pure functions."
+                                "Cannot call impure functions from pure functions"
                             );
                         }
 
@@ -1348,7 +1348,7 @@ impl TypeChecker {
                         self,
                         span,
                         TypeError::Impurity,
-                        "Cannot make mutable declarations in pure functions."
+                        "Cannot make mutable declarations in pure functions"
                     );
                 }
                 (ident.clone(), *kind, ty, value)
