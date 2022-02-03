@@ -566,7 +566,12 @@ impl TypeChecker {
                 self.can_assign(span, ctx, target)?;
 
                 if ctx.inside_pure {
-                    return err_type_error!(self, span, TypeError::Exotic, "Cannot make assignments in pure functions.")
+                    return err_type_error!(
+                        self,
+                        span,
+                        TypeError::Exotic,
+                        "Cannot make assignments in pure functions."
+                    );
                 }
 
                 let (expression_ret, expression_ty) = self.expression(value, ctx)?;
@@ -848,7 +853,18 @@ impl TypeChecker {
                         .get(&(ctx.namespace, ident.name.clone()))
                         .cloned()
                     {
-                        Some(Name::Global(var)) => no_ret(var.ty),
+                        Some(Name::Global(var)) => {
+                            if ctx.inside_pure {
+                                err_type_error!(
+                                    self,
+                                    span,
+                                    TypeError::Exotic,
+                                    "Cannot read global variables inside pure functions."
+                                )
+                            } else {
+                                no_ret(var.ty)
+                            }
+                        }
                         _ => err_type_error!(
                             self,
                             span,
