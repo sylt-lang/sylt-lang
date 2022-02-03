@@ -564,6 +564,11 @@ impl TypeChecker {
 
             StatementKind::Assignment { kind, target, value } => {
                 self.can_assign(span, ctx, target)?;
+
+                if ctx.inside_pure {
+                    return err_type_error!(self, span, TypeError::Exotic, "Cannot make assignments in pure functions.")
+                }
+
                 let (expression_ret, expression_ty) = self.expression(value, ctx)?;
                 let (target_ret, target_ty) = self.assignable(target, ctx)?;
                 match kind {
@@ -1307,13 +1312,12 @@ impl TypeChecker {
         let span = statement.span;
         let (ident, kind, ty, value) = match &mut statement.kind {
             StatementKind::Definition { ident, kind, ty, value } => {
-                dbg!(ctx.inside_pure);
                 if ctx.inside_pure && !kind.immutable() {
                     return err_type_error!(
                         self,
                         span,
                         TypeError::Exotic,
-                        "Cannot make assignments in pure functions."
+                        "Cannot make mutable declarations in pure functions."
                     );
                 }
                 (ident.clone(), *kind, ty, value)
