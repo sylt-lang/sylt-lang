@@ -1133,11 +1133,7 @@ impl TypeChecker {
                 let returns_something = ret.kind != TypeKind::Resolved(RuntimeType::Void);
                 let ret_ty = self.inner_resolve_type(span, ctx, ret, &mut seen)?;
 
-                let ctx = if *pure {
-                    ctx.enter_pure()
-                } else {
-                    ctx
-                };
+                let ctx = if *pure { ctx.enter_pure() } else { ctx };
 
                 let (actual_ret, implicit_ret) = self.expression_block(span, body, ctx)?;
 
@@ -1165,7 +1161,11 @@ impl TypeChecker {
                 self.stack.truncate(ss);
 
                 // Functions are the only expressions that we cannot return out of when evaluating.
-                no_ret(self.push_type(Type::Function(args, ret_ty)))
+                let f = self.push_type(Type::Function(args, ret_ty));
+                if *pure {
+                    self.add_constraint(f, span, Constraint::Pure);
+                }
+                no_ret(f)
             }
 
             ExpressionKind::Blob { blob, fields } => {
