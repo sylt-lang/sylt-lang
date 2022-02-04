@@ -1678,7 +1678,7 @@ impl TypeChecker {
                         self,
                         span,
                         TypeError::Impurity,
-                        "Non pure function something something"
+                        "Only functions can be pure, but this is not a function"
                     ),
                 },
             }
