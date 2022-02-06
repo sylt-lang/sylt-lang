@@ -165,13 +165,13 @@ pub fn timed(
 
     let new_function_block = quote! {
         {
-            let __timer_start = std::time::SystemTime::now();
-
-            let v = (move || {
+            let mut f = (move || {
                 #function_block
-            })();
+            });
 
-            eprintln!("Time::{} = {:?}", #signature, __timer_start.elapsed().unwrap());
+            let timer_start = std::time::SystemTime::now();
+            let v = f();
+            eprintln!("Time::{} = {:?}", #signature, timer_start.elapsed().unwrap());
 
             return v;
         }
