@@ -138,46 +138,48 @@ pub fn timed_init(item: TokenStream) -> TokenStream {
     assert!(item.is_empty());
 
     TokenStream::from(quote! {
+        #[cfg(feature = "timed")]
         #[doc(hidden)]
-        #[derive(Debug)]
-        pub struct __TimedState {
-            t0: ::std::time::Instant,
+        pub mod __timed {
+            #[derive(Debug)]
+            pub struct State {
+                pub t0: ::std::time::Instant,
 
-            pub calls: ::std::vec::Vec<(
-                // function identifier
-                &'static ::std::primitive::str,
-                // start
-                ::std::time::Instant,
-                // end
-                ::std::time::Instant,
-            )>,
-        }
-
-        #[doc(hidden)]
-        pub(crate) struct __TimedHandle(&'static ::std::primitive::str, ::std::time::Instant);
-
-        impl Drop for __TimedHandle {
-            fn drop(&mut self) {
-                let end = ::std::time::Instant::now();
-
-                crate::__TIMED_STATE.with(|state| {
-                    state.lock().unwrap().calls.push((
-                        self.0.clone(),
-                        self.1.clone(),
-                        end,
-                    ));
-                });
+                pub calls: ::std::vec::Vec<(
+                    // function identifier
+                    &'static ::std::primitive::str,
+                    // start
+                    ::std::time::Instant,
+                    // end
+                    ::std::time::Instant,
+                )>,
             }
-        }
 
+            pub(crate) struct Handle(pub &'static ::std::primitive::str, pub ::std::time::Instant);
 
-        thread_local! {
-            pub static __TIMED_STATE: ::std::sync::Mutex<(__TimedState)> =
-                ::std::sync::Mutex::new(__TimedState {
-                    t0: ::std::time::Instant::now(),
-                    calls: ::std::vec::Vec::new(),
+            impl Drop for Handle {
+                fn drop(&mut self) {
+                    let end = ::std::time::Instant::now();
+
+                    crate::__timed::STATE.with(|state| {
+                        state.lock().unwrap().calls.push((
+                            self.0.clone(),
+                            self.1.clone(),
+                            end,
+                        ));
+                    });
                 }
-            )
+            }
+
+
+            thread_local! {
+                pub static STATE: ::std::sync::Mutex<(State)> =
+                    ::std::sync::Mutex::new(State {
+                        t0: ::std::time::Instant::now(),
+                        calls: ::std::vec::Vec::new(),
+                    }
+                )
+            }
         }
     })
 }
@@ -193,46 +195,54 @@ pub fn timed_trace(item: TokenStream) -> TokenStream {
 
     TokenStream::from(quote! {
         {
-            let (t0, mut calls) = crate::__TIMED_STATE.with(|state| {
-                let state = state.lock().unwrap();
-                (state.t0.clone(), state.calls.clone())
-            });
+            #[cfg(feature = "timed")]
+                {
+                let (t0, mut calls) = crate::__timed::STATE.with(|state| {
+                    let state = state.lock().unwrap();
+                    (state.t0.clone(), state.calls.clone())
+                });
 
-            #(
-                calls.extend(#other_paths::__TIMED_STATE.with(|state| {
-                    state.lock().unwrap().calls.clone()
-                }));
-            )*
+                #(
+                    calls.extend(#other_paths::__timed::STATE.with(|state| {
+                        state.lock().unwrap().calls.clone()
+                    }));
+                )*
 
-            let events = calls.iter().map(|call| {
-                let (ident, start, end) = call;
-                format!(
-                    "{{\
-                        \"name\": \"{}\", \
-                        \"cat\": \"\", \
-                        \"ph\": \"B\", \
-                        \"ts\": {}, \
-                        \"pid\": 1, \
-                        \"tid\": 1, \
-                        \"args\": {{}}\
-                    }}\n,{{\
-                        \"name\": \"{}\", \
-                        \"cat\": \"\", \
-                        \"ph\": \"E\", \
-                        \"ts\": {}, \
-                        \"pid\": 1, \
-                        \"tid\": 1, \
-                        \"args\": {{}}\
-                    }}\n",
-                    ident,
-                    start.duration_since(t0).as_micros(),
-                    ident,
-                    end.duration_since(t0).as_micros(),
-                )
-            })
-            .collect::<Vec<String>>()
-            .join(",");
-            format!("{{\"traceEvents\": [\n{}]}}", events)
+                let events = calls.iter().map(|call| {
+                    let (ident, start, end) = call;
+                    format!(
+                        "{{\
+                            \"name\": \"{}\", \
+                            \"cat\": \"\", \
+                            \"ph\": \"B\", \
+                            \"ts\": {}, \
+                            \"pid\": 1, \
+                            \"tid\": 1, \
+                            \"args\": {{}}\
+                        }}\n,{{\
+                            \"name\": \"{}\", \
+                            \"cat\": \"\", \
+                            \"ph\": \"E\", \
+                            \"ts\": {}, \
+                            \"pid\": 1, \
+                            \"tid\": 1, \
+                            \"args\": {{}}\
+                        }}\n",
+                        ident,
+                        start.duration_since(t0).as_micros(),
+                        ident,
+                        end.duration_since(t0).as_micros(),
+                    )
+                })
+                .collect::<Vec<String>>()
+                .join(",");
+                format!("{{\"traceEvents\": [\n{}]}}", events)
+            }
+
+            #[cfg(not(feature = "timed"))]
+            {
+                String::new()
+            }
         }
     })
 }
@@ -271,22 +281,30 @@ pub fn timed(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #function_block
             });
 
-            // ensure timed state is initialized
-            crate::__TIMED_STATE.with(|_| {});
+            #[cfg(feature = "timed")]
+            {
+                // ensure timed state is initialized
+                crate::__timed::STATE.with(|_| {});
 
-            let start = ::std::time::Instant::now();
-            let v = f();
-            let end = ::std::time::Instant::now();
+                let start = ::std::time::Instant::now();
+                let v = f();
+                let end = ::std::time::Instant::now();
 
-            crate::__TIMED_STATE.with(|state| {
-                state.lock().unwrap().calls.push((
-                    #signature,
-                    start,
-                    end,
-                ));
-            });
+                crate::__timed::STATE.with(|state| {
+                    state.lock().unwrap().calls.push((
+                        #signature,
+                        start,
+                        end,
+                    ));
+                });
 
-            return v;
+                return v;
+            }
+
+            #[cfg(not(feature = "timed"))]
+            {
+                f()
+            }
         }
     };
 
@@ -301,7 +319,16 @@ pub fn timed_handle(item: TokenStream) -> TokenStream {
         .expect("expected timing name")
         .value();
     TokenStream::from(quote! {
-        crate::__TimedHandle(#signature, ::std::time::Instant::now())
+        {
+            #[cfg(feature = "timed")]
+            {
+                crate::__timed::Handle(#signature, ::std::time::Instant::now())
+            }
+            #[cfg(not(feature = "timed"))]
+            {
+                ()
+            }
+        }
     })
 }
 
@@ -310,6 +337,9 @@ pub fn timed_set_t0(item: TokenStream) -> TokenStream {
     assert!(item.is_empty());
 
     TokenStream::from(quote! {
-        crate::__TIMED_STATE.with(|_| {})
+        #[cfg(feature = "timed")]
+        {
+            crate::__timed::STATE.with(|_| {})
+        }
     })
 }

@@ -70,7 +70,7 @@ impl Compiler {
         self.namespace_id_to_file.get(&namespace).unwrap()
     }
 
-    #[cfg_attr(feature = "timed", sylt_macro::timed())]
+    #[sylt_macro::timed()]
     fn compile(mut self, lua_file: &mut dyn Write, tree: AST) -> Result<(), Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
 
@@ -103,7 +103,7 @@ impl Compiler {
         Ok(())
     }
 
-    #[cfg_attr(feature = "timed", sylt_macro::timed())]
+    #[sylt_macro::timed()]
     fn extract_globals(&mut self, tree: &AST) {
         // Find all files and map them to their namespace
         let mut include_to_namespace = HashMap::new();

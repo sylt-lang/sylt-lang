@@ -81,7 +81,7 @@ impl<'a, 'b> Generator<'a, 'b> {
         self.lut.insert(var, value);
     }
 
-    #[cfg_attr(feature = "timed", sylt_macro::timed("lua::generate"))]
+    #[sylt_macro::timed("lua::generate")]
     pub fn generate(&mut self, ir: &Vec<IR>) {
         write!(self.out, include_str!("preamble.lua"));
 
