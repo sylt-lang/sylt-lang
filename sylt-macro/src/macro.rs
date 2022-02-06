@@ -132,6 +132,13 @@ pub fn derive_numbered(item: proc_macro::TokenStream) -> proc_macro::TokenStream
     proc_macro::TokenStream::from(item)
 }
 
+#[proc_macro]
+pub fn timed_init(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    assert!(item.is_empty());
+
+    proc_macro::TokenStream::from(quote! {})
+}
+
 /// Timed macro
 ///
 /// Time a function and print the output.
