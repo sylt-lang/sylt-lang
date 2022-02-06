@@ -169,7 +169,7 @@ pub fn timed(
                 #function_block
             });
 
-            let timer_start = std::time::SystemTime::now();
+            let timer_start = ::std::time::Instant::now();
             let v = f();
             eprintln!("Time::{} = {:?}", #signature, timer_start.elapsed().unwrap());
 
