@@ -137,14 +137,61 @@ pub fn derive_numbered(item: TokenStream) -> TokenStream {
 pub fn timed_init(item: TokenStream) -> TokenStream {
     assert!(item.is_empty());
 
-    TokenStream::from(quote! {})
+    TokenStream::from(quote! {
+        #[derive(Debug)]
+        pub(crate) struct __TimedState {
+            t0: ::std::time::Instant,
+            calls: ::std::vec::Vec<(
+                // function identifier
+                &'static ::std::primitive::str,
+                // (start - t0) in microseconds
+                ::std::primitive::u128,
+                // (end - t0) in microseconds
+                ::std::primitive::u128,
+            )>,
+        }
+
+        thread_local! {
+            pub(crate) static __TIMED_STATE: ::std::sync::Mutex<(__TimedState)> =
+                ::std::sync::Mutex::new(__TimedState {
+                    t0: ::std::time::Instant::now(),
+                    calls: ::std::vec::Vec::new(),
+                }
+            )
+        }
+    })
 }
 
 #[proc_macro]
 pub fn timed_trace(item: TokenStream) -> TokenStream {
     assert!(item.is_empty());
 
-    TokenStream::from(quote! {})
+    TokenStream::from(quote! {
+        crate::__TIMED_STATE.with(|state| {
+            let state = state.lock().unwrap();
+            let events = state.calls.iter().map(|call| {
+                let (ident, start, end) = call;
+                format!(
+                    "{{\
+                        \"name\": \"{}\", \
+                        \"cat\": \"\", \
+                        \"ph\": \"X\", \
+                        \"ts\": {}, \
+                        \"dur\": {}, \
+                        \"pid\": 1, \
+                        \"tid\": 1, \
+                        \"args\": {{}}\
+                    }}\n",
+                    ident,
+                    start,
+                    end,
+                )
+            })
+            .collect::<Vec<String>>()
+            .join(",");
+            format!("{{\"traceEvents\": [\n{}]}}", events)
+        })
+    })
 }
 
 /// Timed macro
@@ -181,9 +228,23 @@ pub fn timed(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #function_block
             });
 
-            let timer_start = ::std::time::Instant::now();
+            // ensure timed state is initialized
+            crate::__TIMED_STATE.with(|_| {});
+
+            let start = ::std::time::Instant::now();
             let v = f();
-            eprintln!("Time::{} = {:?}", #signature, timer_start.elapsed().unwrap());
+            let end = ::std::time::Instant::now();
+
+            crate::__TIMED_STATE.with(|state| {
+                let mut state = state.lock().unwrap();
+                let start = start.duration_since(state.t0);
+                let end = end.duration_since(state.t0);
+                state.calls.push((
+                    #signature,
+                    start.as_micros(),
+                    end.as_micros(),
+                ));
+            });
 
             return v;
         }
