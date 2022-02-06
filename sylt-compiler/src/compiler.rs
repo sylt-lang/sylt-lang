@@ -212,11 +212,5 @@ impl Compiler {
 }
 
 pub fn compile(lua_file: &mut dyn Write, prog: AST) -> Result<(), Vec<Error>> {
-    Compiler::new().compile(lua_file, prog)?;
-
-    if cfg!(feature = "timed") {
-        eprintln!("{}", sylt_macro::timed_trace!());
-    }
-
-    Ok(())
+    Compiler::new().compile(lua_file, prog)
 }

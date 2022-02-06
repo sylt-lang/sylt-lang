@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
-use syn::parse_macro_input;
+use syn::{parse::Parser, parse_macro_input, punctuated::Punctuated, ExprPath, Token};
 
 #[proc_macro_derive(Enumerate)]
 pub fn derive_enumerate(item: TokenStream) -> TokenStream {
@@ -138,21 +138,23 @@ pub fn timed_init(item: TokenStream) -> TokenStream {
     assert!(item.is_empty());
 
     TokenStream::from(quote! {
+        #[doc(hidden)]
         #[derive(Debug)]
-        pub(crate) struct __TimedState {
+        pub struct __TimedState {
             t0: ::std::time::Instant,
-            calls: ::std::vec::Vec<(
+
+            pub calls: ::std::vec::Vec<(
                 // function identifier
                 &'static ::std::primitive::str,
-                // (start - t0) in microseconds
-                ::std::primitive::u128,
-                // (end - t0) in microseconds
-                ::std::primitive::u128,
+                // start
+                ::std::time::Instant,
+                // end
+                ::std::time::Instant,
             )>,
         }
 
         thread_local! {
-            pub(crate) static __TIMED_STATE: ::std::sync::Mutex<(__TimedState)> =
+            pub static __TIMED_STATE: ::std::sync::Mutex<(__TimedState)> =
                 ::std::sync::Mutex::new(__TimedState {
                     t0: ::std::time::Instant::now(),
                     calls: ::std::vec::Vec::new(),
@@ -164,12 +166,27 @@ pub fn timed_init(item: TokenStream) -> TokenStream {
 
 #[proc_macro]
 pub fn timed_trace(item: TokenStream) -> TokenStream {
-    assert!(item.is_empty());
+    let other_paths: Vec<ExprPath> = Punctuated::<ExprPath, Token![,]>::parse_terminated
+        .parse(item)
+        .unwrap()
+        .iter()
+        .cloned()
+        .collect();
 
     TokenStream::from(quote! {
-        crate::__TIMED_STATE.with(|state| {
-            let state = state.lock().unwrap();
-            let events = state.calls.iter().map(|call| {
+        {
+            let (t0, mut calls) = crate::__TIMED_STATE.with(|state| {
+                let state = state.lock().unwrap();
+                (state.t0.clone(), state.calls.clone())
+            });
+
+            #(
+                calls.extend(#other_paths::__TIMED_STATE.with(|state| {
+                    state.lock().unwrap().calls.clone()
+                }));
+            )*
+
+            let events = calls.iter().map(|call| {
                 let (ident, start, end) = call;
                 format!(
                     "{{\
@@ -183,14 +200,14 @@ pub fn timed_trace(item: TokenStream) -> TokenStream {
                         \"args\": {{}}\
                     }}\n",
                     ident,
-                    start,
-                    end,
+                    start.duration_since(t0).as_micros(),
+                    end.duration_since(t0).as_micros(),
                 )
             })
             .collect::<Vec<String>>()
             .join(",");
             format!("{{\"traceEvents\": [\n{}]}}", events)
-        })
+        }
     })
 }
 
@@ -236,13 +253,10 @@ pub fn timed(attr: TokenStream, item: TokenStream) -> TokenStream {
             let end = ::std::time::Instant::now();
 
             crate::__TIMED_STATE.with(|state| {
-                let mut state = state.lock().unwrap();
-                let start = start.duration_since(state.t0);
-                let end = end.duration_since(state.t0);
-                state.calls.push((
+                state.lock().unwrap().calls.push((
                     #signature,
-                    start.as_micros(),
-                    end.as_micros(),
+                    start,
+                    end,
                 ));
             });
 
@@ -253,4 +267,13 @@ pub fn timed(attr: TokenStream, item: TokenStream) -> TokenStream {
     function.block = Box::new(syn::parse2(new_function_block).unwrap());
 
     function.into_token_stream().into()
+}
+
+#[proc_macro]
+pub fn timed_set_t0(item: TokenStream) -> TokenStream {
+    assert!(item.is_empty());
+
+    TokenStream::from(quote! {
+        crate::__TIMED_STATE.with(|_| {})
+    })
 }

@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 use sylt::{Args, Options};
 
+sylt_macro::timed_init!();
+
 fn main() -> Result<(), String> {
     let args = Args::parse_args_default_or_exit();
     if args.help {
@@ -11,6 +13,8 @@ fn main() -> Result<(), String> {
         println!("{}", Args::usage());
         return Err("No file to run".into());
     }
+
+    sylt_macro::timed_set_t0!();
 
     let errs = if args.format {
         match sylt::formatter::format(&PathBuf::from(args.args.first().unwrap())) {
@@ -23,6 +27,10 @@ fn main() -> Result<(), String> {
     } else {
         sylt::run_file(&args).err().unwrap_or_else(Vec::new)
     };
+
+    if cfg!(feature = "timed") {
+        eprintln!("{}", sylt_macro::timed_trace!(sylt_compiler, sylt_parser));
+    }
 
     if errs.is_empty() {
         Ok(())

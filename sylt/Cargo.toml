@@ -32,7 +32,7 @@ gumdrop = "0.8"
 
 [features]
 
-timed = ["sylt-compiler/timed"]
+timed = ["sylt-compiler/timed", "sylt-parser/timed"]
 
 #[[bench]]
 #name = "sylt_benchmark"

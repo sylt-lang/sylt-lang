@@ -14,6 +14,8 @@ pub use self::statement::{Statement, StatementKind};
 
 pub use sylt_tokenizer::Span;
 
+sylt_macro::timed_init!();
+
 type T = Token;
 
 pub trait Next {
@@ -1052,6 +1054,7 @@ pub fn find_conflict_markers(file: &FileOrLib, file_id: usize, source: &str) -> 
 ///
 /// Returns any errors that occured when parsing the file(s). Basic error
 /// continuation is performed as documented in [module].
+#[cfg_attr(feature = "timed", sylt_macro::timed("parser::tree"))]
 pub fn tree<F>(path: &Path, reader: F, bundle_std: bool) -> Result<AST, Vec<Error>>
 where
     F: Fn(&Path) -> Result<String, Error>,
