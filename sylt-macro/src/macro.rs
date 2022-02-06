@@ -192,15 +192,23 @@ pub fn timed_trace(item: TokenStream) -> TokenStream {
                     "{{\
                         \"name\": \"{}\", \
                         \"cat\": \"\", \
-                        \"ph\": \"X\", \
+                        \"ph\": \"B\", \
                         \"ts\": {}, \
-                        \"dur\": {}, \
+                        \"pid\": 1, \
+                        \"tid\": 1, \
+                        \"args\": {{}}\
+                    }}\n,{{\
+                        \"name\": \"{}\", \
+                        \"cat\": \"\", \
+                        \"ph\": \"E\", \
+                        \"ts\": {}, \
                         \"pid\": 1, \
                         \"tid\": 1, \
                         \"args\": {{}}\
                     }}\n",
                     ident,
                     start.duration_since(t0).as_micros(),
+                    ident,
                     end.duration_since(t0).as_micros(),
                 )
             })
