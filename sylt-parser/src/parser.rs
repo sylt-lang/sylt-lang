@@ -83,7 +83,7 @@ pub enum Op {
     Div,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, Hash)]
 pub struct Identifier {
     pub span: Span,
     pub name: String,
@@ -98,6 +98,12 @@ impl Identifier {
 impl PartialEq for Identifier {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
+    }
+}
+
+impl Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{}", self.name, self.span.line_start)
     }
 }
 
@@ -381,6 +387,23 @@ impl<'a> Context<'a> {
     fn eat(&self) -> (&T, Span, Self) {
         (self.token(), self.span(), self.skip(1))
     }
+
+}
+
+fn parse_sep_end_by<'t, T>(
+        ctx: Context<'t>,
+        sep: &dyn Fn(Context<'t>) -> ParseResult<'t, ()>,
+        end: &dyn Fn(Context<'t>) -> ParseResult<'t, bool>,
+        item: &dyn Fn(Context<'t>) -> ParseResult<'t, T>) -> ParseResult<'t, Vec<T>> {
+    let (ctx, is_end) = end(ctx)?;
+    if is_end {
+        return Ok((ctx, vec![]));
+    }
+    let (ctx, i) = item(ctx)?;
+    let (ctx, _) = sep(ctx)?;
+    let (ctx, mut res) = parse_sep_end_by(ctx, sep, end, item)?;
+    res.insert(0, i);
+    Ok((ctx, res))
 }
 
 /// Add more text to an error message after it has been created.
@@ -529,6 +552,9 @@ pub fn type_assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeAssignable> 
     ) -> ParseResult<'t, TypeAssignableKind> {
         let span = ctx.span();
         match ctx.token() {
+            T::LeftParen => {
+                todo!("Add in parsing for generics here!");
+            }
             T::Identifier(name) if is_capitalized(name) => {
                 let ctx = ctx.skip(1);
                 let ident = Identifier::new(span, name.clone());
@@ -1293,8 +1319,13 @@ impl PrettyPrint for Statement {
                     write!(f, "\n")?;
                 }
             }
-            SK::Enum { name, variants } => {
-                write!(f, "<Enum> {} {{ ", name)?;
+            SK::Enum { name, variants, variables } => {
+                let args_string = variables
+                    .iter()
+                    .map(|x| format!("{}", x))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "<Enum> {} {} {{ ", name.name, args_string)?;
                 for (i, (name, ty)) in variants.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;

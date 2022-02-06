@@ -470,10 +470,11 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             let fields_as_tuples = fields.into_iter().collect();
             write_blob_fields(dest, indent + 1, fields_as_tuples, write_type)?;
         }
-        StatementKind::Enum { name, variants } => {
+        StatementKind::Enum { name, variants, .. } => {
+            todo!("Add in variables!");
             write_indents(dest, indent)?;
-            write!(dest, "{} :: enum", name)?;
-            let variants_as_tuples = variants.into_iter().collect();
+            write!(dest, "{} :: enum", name.name)?;
+            let variants_as_tuples = variants.into_iter().map(|(k, v)| (k.name, v)).collect();
             write_enum_variants(dest, indent + 1, variants_as_tuples)?;
         }
         StatementKind::Break => {

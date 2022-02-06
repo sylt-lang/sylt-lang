@@ -140,7 +140,7 @@ impl Compiler {
                         let other = include_to_namespace[file];
                         (Name::Namespace(other), ident.name.clone(), ident.span)
                     }
-                    Enum { name, .. }
+                    Enum { name: Identifier { name, ..}, .. }
                     | Blob { name, .. }
                     | Definition { ident: Identifier { name, .. }, .. }
                     | ExternalDefinition { ident: Identifier { name, .. }, .. } => {

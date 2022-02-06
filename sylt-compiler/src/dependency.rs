@@ -211,7 +211,7 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
 
         ExternalDefinition { ty, .. } => type_dependencies(ctx, ty),
 
-        Blob { name, fields: sub_types } | Enum { name, variants: sub_types } => {
+        Blob { name, fields: sub_types } => {
             ctx.shadow(&name);
             let namespace = ctx.namespace;
             sub_types
@@ -219,6 +219,17 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
                 .map(|t| type_dependencies(ctx, t))
                 .flatten()
                 .filter(|(n, s)| !(n == name && *s == namespace))
+                .collect()
+        }
+
+        Enum { name, variants: sub_types, .. } => {
+            ctx.shadow(&name.name);
+            let namespace = ctx.namespace;
+            sub_types
+                .values()
+                .map(|t| type_dependencies(ctx, t))
+                .flatten()
+                .filter(|(n, s)| !(n == &name.name && *s == namespace))
                 .collect()
         }
 
@@ -436,7 +447,7 @@ pub(crate) fn initialization_order<'a>(
                 }
 
                 Blob { name, .. }
-                | Enum { name, .. }
+                | Enum { name: Identifier { name, .. }, .. }
                 | Use {
                     name: NameIdentifier::Implicit(Identifier { name, .. }),
                     ..

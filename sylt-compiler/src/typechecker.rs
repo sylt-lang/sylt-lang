@@ -674,17 +674,20 @@ impl TypeChecker {
                     }
                 }
             }
-            StatementKind::Enum { name, variants } => {
+            StatementKind::Enum { name, variants, variables } => {
                 let enum_ty = self.push_type(Type::Unknown);
                 self.globals
-                    .insert((ctx.namespace, name.clone()), Name::Type(enum_ty));
+                    .insert((ctx.namespace, name.name.clone()), Name::Type(enum_ty));
                 let mut resolved_variants = BTreeMap::new();
                 let mut seen = HashMap::new();
+                for v in variables.iter() {
+                    seen.insert(v.name.clone(), self.push_type(Type::Unknown));
+                }
                 for (k, t) in variants.iter() {
                     resolved_variants
-                        .insert(k.clone(), self.inner_resolve_type(span, ctx, t, &mut seen)?);
+                        .insert(k.name.clone(), self.inner_resolve_type(span, ctx, t, &mut seen)?);
                 }
-                let ty = self.push_type(Type::Enum(name.clone(), resolved_variants));
+                let ty = self.push_type(Type::Enum(name.name.clone(), resolved_variants));
                 self.unify(span, ctx, ty, enum_ty)?;
             }
 
