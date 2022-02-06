@@ -153,6 +153,24 @@ pub fn timed_init(item: TokenStream) -> TokenStream {
             )>,
         }
 
+        #[doc(hidden)]
+        pub(crate) struct __TimedHandle(&'static ::std::primitive::str, ::std::time::Instant);
+
+        impl Drop for __TimedHandle {
+            fn drop(&mut self) {
+                let end = ::std::time::Instant::now();
+
+                crate::__TIMED_STATE.with(|state| {
+                    state.lock().unwrap().calls.push((
+                        self.0.clone(),
+                        self.1.clone(),
+                        end,
+                    ));
+                });
+            }
+        }
+
+
         thread_local! {
             pub static __TIMED_STATE: ::std::sync::Mutex<(__TimedState)> =
                 ::std::sync::Mutex::new(__TimedState {
@@ -275,6 +293,16 @@ pub fn timed(attr: TokenStream, item: TokenStream) -> TokenStream {
     function.block = Box::new(syn::parse2(new_function_block).unwrap());
 
     function.into_token_stream().into()
+}
+
+#[proc_macro]
+pub fn timed_handle(item: TokenStream) -> TokenStream {
+    let signature = syn::parse::<syn::LitStr>(item)
+        .expect("expected timing name")
+        .value();
+    TokenStream::from(quote! {
+        crate::__TimedHandle(#signature, ::std::time::Instant::now())
+    })
 }
 
 #[proc_macro]

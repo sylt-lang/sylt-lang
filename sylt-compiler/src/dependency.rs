@@ -419,6 +419,7 @@ pub(crate) fn initialization_order<'a>(
         .collect();
     let mut to_order = BTreeMap::new();
     for (path, module) in tree.modules.iter() {
+        let handle = sylt_macro::timed_handle!("module");
         let namespace = path_to_namespace_id[path];
         for statement in module.statements.iter() {
             use StatementKind::*;
@@ -462,6 +463,7 @@ pub(crate) fn initialization_order<'a>(
                 _ => {}
             }
         }
+        drop(handle);
     }
     return order(to_order);
 }
