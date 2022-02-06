@@ -1,8 +1,9 @@
+use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
 use syn::parse_macro_input;
 
 #[proc_macro_derive(Enumerate)]
-pub fn derive_enumerate(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn derive_enumerate(item: TokenStream) -> TokenStream {
     assert!(!item.is_empty());
     let parsed: syn::ItemEnum = parse_macro_input!(item);
 
@@ -50,11 +51,11 @@ pub fn derive_enumerate(item: proc_macro::TokenStream) -> proc_macro::TokenStrea
             }
         }
     };
-    proc_macro::TokenStream::from(item)
+    TokenStream::from(item)
 }
 
 #[proc_macro_derive(Next)]
-pub fn derive_next(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn derive_next(item: TokenStream) -> TokenStream {
     assert!(!item.is_empty());
     let parsed: syn::ItemEnum = parse_macro_input!(item);
 
@@ -84,11 +85,11 @@ pub fn derive_next(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
             }
         }
     };
-    proc_macro::TokenStream::from(item)
+    TokenStream::from(item)
 }
 
 #[proc_macro_derive(Numbered)]
-pub fn derive_numbered(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn derive_numbered(item: TokenStream) -> TokenStream {
     assert!(!item.is_empty());
     let parsed: syn::ItemEnum = parse_macro_input!(item);
 
@@ -129,14 +130,14 @@ pub fn derive_numbered(item: proc_macro::TokenStream) -> proc_macro::TokenStream
             }
         }
     };
-    proc_macro::TokenStream::from(item)
+    TokenStream::from(item)
 }
 
 #[proc_macro]
-pub fn timed_init(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn timed_init(item: TokenStream) -> TokenStream {
     assert!(item.is_empty());
 
-    proc_macro::TokenStream::from(quote! {})
+    TokenStream::from(quote! {})
 }
 
 /// Timed macro
@@ -153,10 +154,7 @@ pub fn timed_init(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 /// ```
 /// will output `Time::hi = 123μ`
 #[proc_macro_attribute]
-pub fn timed(
-    attr: proc_macro::TokenStream,
-    item: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
+pub fn timed(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut function = syn::parse::<syn::ItemFn>(item.clone()).expect("Could not parse function");
 
     // Get signature from attribute input or function signature
