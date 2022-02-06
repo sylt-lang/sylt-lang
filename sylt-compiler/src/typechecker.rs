@@ -1136,7 +1136,7 @@ impl TypeChecker {
                         self,
                         ret.span,
                         TypeError::Exotic,
-                        "The return type isn't explicitly set to `void`, but nothing is returnd"
+                        "The return type isn't explicitly set to `void`, but nothing is returned"
                     );
                 }
 
@@ -1144,7 +1144,7 @@ impl TypeChecker {
                     .help(
                         self,
                         ret.span,
-                        "The actual return type differ from the specified return type".into(),
+                        "The actual return type differs from the specified return type".into(),
                     )?;
 
                 self.stack.truncate(ss);
