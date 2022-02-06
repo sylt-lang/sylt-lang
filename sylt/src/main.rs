@@ -29,7 +29,10 @@ fn main() -> Result<(), String> {
     };
 
     if cfg!(feature = "timed") {
-        eprintln!("{}", sylt_macro::timed_trace!(sylt_compiler, sylt_parser));
+        eprintln!(
+            "{}",
+            sylt_macro::timed_trace!(sylt, sylt_compiler, sylt_parser)
+        );
     }
 
     if errs.is_empty() {

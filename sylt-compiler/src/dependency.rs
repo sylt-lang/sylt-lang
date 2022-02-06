@@ -357,6 +357,7 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<(String,
     }
 }
 
+#[cfg_attr(feature = "timed", sylt_macro::timed())]
 fn order(
     to_order: BTreeMap<(String, usize), (BTreeSet<(String, usize)>, (&Statement, usize))>,
 ) -> Result<Vec<(&Statement, usize)>, Vec<(&Statement, usize)>> {
@@ -406,6 +407,7 @@ fn order(
     Ok(ordered)
 }
 
+#[cfg_attr(feature = "timed", sylt_macro::timed())]
 pub(crate) fn initialization_order<'a>(
     tree: &'a AST,
     compiler: &Compiler,

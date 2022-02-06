@@ -9,6 +9,8 @@ use sylt_common::error::Error;
 
 pub mod formatter;
 
+sylt_macro::timed_init!();
+
 #[cfg(test)]
 pub mod test;
 
@@ -16,6 +18,7 @@ pub fn read_file(path: &Path) -> Result<String, Error> {
     std::fs::read_to_string(path).map_err(|_| Error::FileNotFound(path.to_path_buf()))
 }
 
+#[cfg_attr(feature = "timed", sylt_macro::timed())]
 pub fn compile_with_reader_to_writer<R>(
     args: &Args,
     reader: R,
