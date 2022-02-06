@@ -140,6 +140,13 @@ pub fn timed_init(item: TokenStream) -> TokenStream {
     TokenStream::from(quote! {})
 }
 
+#[proc_macro]
+pub fn timed_trace(item: TokenStream) -> TokenStream {
+    assert!(item.is_empty());
+
+    TokenStream::from(quote! {})
+}
+
 /// Timed macro
 ///
 /// Time a function and print the output.
