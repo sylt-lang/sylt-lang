@@ -80,7 +80,7 @@ pub enum ExpressionKind {
         params: Vec<(Identifier, Type)>,
         ret: Type,
 
-        body: Box<Statement>,
+        body: Vec<Statement>,
     },
     /// A blob instantiation.
     Blob {
@@ -190,25 +190,11 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     // Parse the function statement.
     let (ctx, mut statements) = block(ctx)?;
 
-    // If the return type isn't void, check for and apply implicit returns.
-    if !matches!(ret.kind, Resolved(Void)) {
-        // If the last statement is an expression statement,
-        // replace it with a return statement.
-        let last_statement = statements.pop();
-        if let Some(Statement {
-            span,
-            kind: StatementKind::StatementExpression { value },
-            comments,
-        }) = last_statement
-        {
-            statements.push(Statement {
-                span,
-                kind: StatementKind::Ret { value: Some(value) },
-                comments,
-            });
-        } else if let Some(statement) = last_statement {
-            statements.push(statement);
-        }
+    while matches!(
+        statements.last(),
+        Some(Statement { kind: StatementKind::EmptyStatement, .. })
+    ) {
+        statements.pop();
     }
 
     use ExpressionKind::Function;
@@ -216,11 +202,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         name: "lambda".into(),
         params,
         ret,
-        body: Box::new(Statement {
-            span: ctx.span(),
-            kind: StatementKind::Block { statements },
-            comments: Vec::new(),
-        }),
+        body: statements,
     };
 
     Ok((ctx, Expression::new(span, function)))
@@ -1063,7 +1045,9 @@ impl PrettyPrint for Expression {
                 }
                 write!(f, " -> {}", ret)?;
                 write!(f, "\n")?;
-                body.pretty_print(f, indent + 1)?;
+                for stmt in body.iter() {
+                    stmt.pretty_print(f, indent + 1)?;
+                }
             }
             EK::Blob { blob, fields } => {
                 write!(f, "Blob ")?;

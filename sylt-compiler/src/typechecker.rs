@@ -1119,16 +1119,38 @@ impl TypeChecker {
                     self.stack.push(var);
                 }
 
-                let ret = self.inner_resolve_type(span, ctx, ret, &mut seen)?;
-                let actual_ret = self
-                    .statement(body, ctx)?
-                    .unwrap_or_else(|| self.push_type(Type::Void));
-                self.unify(span, ctx, ret, actual_ret)?;
+                let returns_something = ret.kind != TypeKind::Resolved(RuntimeType::Void);
+                let ret_ty = self.inner_resolve_type(span, ctx, ret, &mut seen)?;
+                let (actual_ret, implicit_ret) = self.expression_block(span, body, ctx)?;
+
+                let actual_ret = if returns_something {
+                    self.unify_option(span, ctx, actual_ret, implicit_ret)
+                        .help_no_span("The implicit and explicit return types differ".into())?
+                } else {
+                    let void = Some(self.push_type(Type::Void));
+                    self.unify_option(span, ctx, actual_ret, void)?
+                };
+
+                if actual_ret.map(|x| self.is_void(x)).unwrap_or(true) && returns_something {
+                    return err_type_error!(
+                        self,
+                        ret.span,
+                        TypeError::Exotic,
+                        "The return type isn't explicitly set to `void`, but nothing is returned"
+                    );
+                }
+
+                self.unify_option(span, ctx, Some(ret_ty), actual_ret)
+                    .help(
+                        self,
+                        ret.span,
+                        "The actual return type differs from the specified return type".into(),
+                    )?;
 
                 self.stack.truncate(ss);
 
                 // Functions are the only expressions that we cannot return out of when evaluating.
-                no_ret(self.push_type(Type::Function(args, ret)))
+                no_ret(self.push_type(Type::Function(args, ret_ty)))
             }
 
             ExpressionKind::Blob { blob, fields } => {
@@ -1347,6 +1369,10 @@ impl TypeChecker {
 
     fn find_type(&mut self, a: TyID) -> Type {
         self.find_node(a).ty.clone()
+    }
+
+    fn is_void(&mut self, a: TyID) -> bool {
+        matches!(self.find_type(a), Type::Void)
     }
 
     fn inner_bake_type(&mut self, a: TyID, seen: &mut HashMap<TyID, RuntimeType>) -> RuntimeType {
