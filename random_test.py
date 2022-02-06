@@ -19,7 +19,7 @@ from typing import Union
 
 # Limit amount of assignments, since sylt compiles expressions to different assignments
 # Lua only supports up to 200.
-MAX_LUA_LOCALS = 20
+MAX_LUA_LOCALS = 40
 # Limit nested expressions and functions
 MAX_EXPR_DEPTH = 2
 MAX_FN_DEPTH = 1

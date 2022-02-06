@@ -939,6 +939,7 @@ impl TypeChecker {
         with_ret(ret, ty)
     }
 
+    #[sylt_macro::timed]
     fn expression_block(
         &mut self,
         span: Span,
@@ -949,6 +950,7 @@ impl TypeChecker {
         let ss = self.stack.len();
         let mut ret = None;
         for stmt in statements.iter_mut() {
+            let _handle = sylt_macro::timed_handle!("expression block statement", line = stmt.span);
             let stmt_ret = self.statement(stmt, ctx)?;
             ret = self.unify_option(span, ctx, ret, stmt_ret)?;
         }
@@ -1103,6 +1105,7 @@ impl TypeChecker {
             }
 
             ExpressionKind::Function { name: _, params, ret, body } => {
+                let handle = sylt_macro::timed_handle!("typecheck function");
                 let ss = self.stack.len();
                 let mut args = Vec::new();
                 let mut seen = HashMap::new();
@@ -1148,6 +1151,8 @@ impl TypeChecker {
                     )?;
 
                 self.stack.truncate(ss);
+
+                drop(handle);
 
                 // Functions are the only expressions that we cannot return out of when evaluating.
                 no_ret(self.push_type(Type::Function(args, ret_ty)))
@@ -1664,6 +1669,7 @@ impl TypeChecker {
         })
     }
 
+    #[sylt_macro::timed]
     fn unify(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<TyID> {
         // TODO(ed): Is this worth doing? Or can we eagerly union types?
         // I tried some and it didn't work great, but I might have missed something.
@@ -2306,23 +2312,31 @@ impl TypeChecker {
         }
     }
 
+    #[sylt_macro::timed("typechecker::solve")]
     fn solve(&mut self, statements: &mut Vec<(Statement, NamespaceID)>) -> TypeResult<()> {
         // Initialize the namespaces first.
+        let handle = sylt_macro::timed_handle!("typecheck namespace statements");
         for (statement, namespace) in statements.iter_mut() {
             if matches!(statement.kind, StatementKind::Use { .. }) {
                 self.outer_statement(statement, TypeCtx::namespace(*namespace))?;
             }
         }
 
+        drop(handle);
+        let handle = sylt_macro::timed_handle!("typecheck rest statements");
         // Then the rest.
         for (statement, namespace) in statements.iter_mut() {
+            let handle = sylt_macro::timed_handle!("typecheck statement");
             if !matches!(statement.kind, StatementKind::Use { .. }) {
                 self.outer_statement(statement, TypeCtx::namespace(*namespace))?;
             }
+            drop(handle);
         }
 
+        drop(handle);
+        let handle = sylt_macro::timed_handle!("typecheck start");
         let ctx = TypeCtx::namespace(0);
-        match self.globals.get(&(0, "start".to_string())).cloned() {
+        let res = match self.globals.get(&(0, "start".to_string())).cloned() {
             Some(Name::Global(var)) => {
                 let void = self.push_type(Type::Void);
                 let start = self.push_type(Type::Function(Vec::new(), void));
@@ -2356,7 +2370,9 @@ impl TypeChecker {
                     "Expected a start function in the main module - but couldn't find it"
                 )
             }
-        }
+        };
+        drop(handle);
+        res
     }
 
     fn span_file(&self, span: &Span) -> FileOrLib {
@@ -2364,7 +2380,6 @@ impl TypeChecker {
     }
 }
 
-#[sylt_macro::timed("typechecker::solve")]
 pub(crate) fn solve(
     statements: &mut Vec<(Statement, NamespaceID)>,
     namespace_to_file: &HashMap<NamespaceID, FileOrLib>,

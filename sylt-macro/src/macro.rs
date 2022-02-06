@@ -1,6 +1,11 @@
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
-use syn::{parse::Parser, parse_macro_input, punctuated::Punctuated, ExprPath, Token};
+use syn::{
+    parse::{Parse, ParseStream, Parser},
+    parse_macro_input,
+    punctuated::Punctuated,
+    Expr, ExprPath, Ident, LitStr, Token,
+};
 
 #[proc_macro_derive(Enumerate)]
 pub fn derive_enumerate(item: TokenStream) -> TokenStream {
@@ -142,6 +147,7 @@ pub fn timed_init(item: TokenStream) -> TokenStream {
         #[doc(hidden)]
         pub mod __timed {
             type Instant = ::std::time::Instant;
+            type Mutex<T> = ::std::sync::Mutex<T>;
             type Vec<T> = ::std::vec::Vec<T>;
             type str = ::std::primitive::str;
 
@@ -180,10 +186,10 @@ pub fn timed_init(item: TokenStream) -> TokenStream {
             }
 
             thread_local! {
-                pub static STATE: ::std::sync::Mutex<(State)> =
-                    ::std::sync::Mutex::new(State {
-                        t0: ::std::time::Instant::now(),
-                        calls: ::std::vec::Vec::new(),
+                pub static STATE: Mutex<(State)> =
+                    Mutex::new(State {
+                        t0: Instant::now(),
+                        calls: Vec::new(),
                     }
                 )
             }
@@ -304,7 +310,7 @@ pub fn timed(attr: TokenStream, item: TokenStream) -> TokenStream {
                         #signature,
                         start,
                         end,
-                        Vec::new(),
+                        ::std::vec::Vec::new(),
                     ));
                 });
 
@@ -323,16 +329,56 @@ pub fn timed(attr: TokenStream, item: TokenStream) -> TokenStream {
     function.into_token_stream().into()
 }
 
+struct TimedHandleItem {
+    name: LitStr,
+    args: Vec<(Ident, Expr)>,
+}
+
+impl Parse for TimedHandleItem {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let name = input.parse()?;
+
+        if input.parse::<Token![,]>().is_err() {
+            return Ok(Self { name, args: vec![] });
+        };
+
+        struct ArgItem(Ident, Token![=], Expr);
+
+        impl Parse for ArgItem {
+            fn parse(input: ParseStream) -> syn::Result<Self> {
+                Ok(Self(input.parse()?, input.parse()?, input.parse()?))
+            }
+        }
+
+        let args = Punctuated::<ArgItem, Token![,]>::parse_separated_nonempty(input)?
+            .iter()
+            .map(|ArgItem(i, _, e)| (i.clone(), e.clone()))
+            .collect();
+
+        Ok(Self { name, args })
+    }
+}
+
+// sylt_macro::timed_handle!("name", arg=123, )
+
 #[proc_macro]
 pub fn timed_handle(item: TokenStream) -> TokenStream {
-    let signature = syn::parse::<syn::LitStr>(item)
-        .expect("expected timing name")
-        .value();
+    let TimedHandleItem { name, args } = syn::parse(item).unwrap();
+
+    let args: Vec<_> = args
+        .into_iter()
+        .map(|(ident, expr)| {
+            quote! {
+                (stringify!(#ident), Box::leak(format!("{:?}", #expr).into_boxed_str()))
+            }
+        })
+        .collect();
+
     TokenStream::from(quote! {
         {
             #[cfg(feature = "timed")]
             {
-                crate::__timed::Handle(#signature, ::std::time::Instant::now(), Vec::new())
+                crate::__timed::Handle(#name, ::std::time::Instant::now(), vec![#(#args),*])
             }
             #[cfg(not(feature = "timed"))]
             {
