@@ -141,36 +141,43 @@ pub fn timed_init(item: TokenStream) -> TokenStream {
         #[cfg(feature = "timed")]
         #[doc(hidden)]
         pub mod __timed {
+            type Instant = ::std::time::Instant;
+            type Vec<T> = ::std::vec::Vec<T>;
+            type str = ::std::primitive::str;
+
             #[derive(Debug)]
             pub struct State {
-                pub t0: ::std::time::Instant,
+                pub t0: Instant,
 
-                pub calls: ::std::vec::Vec<(
+                pub calls: Vec<(
                     // function identifier
-                    &'static ::std::primitive::str,
+                    &'static str,
                     // start
-                    ::std::time::Instant,
+                    Instant,
                     // end
-                    ::std::time::Instant,
+                    Instant,
+                    //TODO(gu): these could be nested as json.
+                    //          would be a way to insert generated data and separate it from user-provided args
+                    Vec<(&'static str, &'static str)>,
                 )>,
             }
 
-            pub(crate) struct Handle(pub &'static ::std::primitive::str, pub ::std::time::Instant);
+            pub(crate) struct Handle(pub &'static str, pub Instant, pub Vec<(&'static str, &'static str)>);
 
             impl Drop for Handle {
                 fn drop(&mut self) {
-                    let end = ::std::time::Instant::now();
+                    let end = Instant::now();
 
                     crate::__timed::STATE.with(|state| {
                         state.lock().unwrap().calls.push((
                             self.0.clone(),
                             self.1.clone(),
                             end,
+                            self.2.clone(),
                         ));
                     });
                 }
             }
-
 
             thread_local! {
                 pub static STATE: ::std::sync::Mutex<(State)> =
@@ -209,7 +216,8 @@ pub fn timed_trace(item: TokenStream) -> TokenStream {
                 )*
 
                 let events = calls.iter().map(|call| {
-                    let (ident, start, end) = call;
+                    let (ident, start, end, args) = call;
+                    let args = args.iter().map(|arg| format!("\"{}\": \"{}\"", arg.0, arg.1)).collect::<Vec<String>>().join(",");
                     format!(
                         "{{\
                             \"name\": \"{}\", \
@@ -226,12 +234,13 @@ pub fn timed_trace(item: TokenStream) -> TokenStream {
                             \"ts\": {}, \
                             \"pid\": 1, \
                             \"tid\": 1, \
-                            \"args\": {{}}\
+                            \"args\": {{{}}}\
                         }}\n",
                         ident,
                         start.duration_since(t0).as_micros(),
                         ident,
                         end.duration_since(t0).as_micros(),
+                        args,
                     )
                 })
                 .collect::<Vec<String>>()
@@ -295,6 +304,7 @@ pub fn timed(attr: TokenStream, item: TokenStream) -> TokenStream {
                         #signature,
                         start,
                         end,
+                        Vec::new(),
                     ));
                 });
 
@@ -322,7 +332,7 @@ pub fn timed_handle(item: TokenStream) -> TokenStream {
         {
             #[cfg(feature = "timed")]
             {
-                crate::__timed::Handle(#signature, ::std::time::Instant::now())
+                crate::__timed::Handle(#signature, ::std::time::Instant::now(), Vec::new())
             }
             #[cfg(not(feature = "timed"))]
             {
