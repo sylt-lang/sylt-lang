@@ -1170,7 +1170,7 @@ impl TypeChecker {
 
                 let actual_ret = if returns_something {
                     self.unify_option(span, ctx, actual_ret, implicit_ret)
-                        .help_no_span("The implicit and explicit returns differ in type!".into())?
+                        .help_no_span("The implicit and explicit return types differ".into())?
                 } else {
                     let void = Some(self.push_type(Type::Void));
                     self.unify_option(span, ctx, actual_ret, void)?
@@ -1180,14 +1180,21 @@ impl TypeChecker {
                         "The actual return type and the specified return type differ!".into(),
                     )?;
 
-                if actual_ret.is_none() && returns_something {
+                if actual_ret.map(|x| self.is_void(x)).unwrap_or(true) && returns_something {
                     return err_type_error!(
                         self,
                         ret.span,
                         TypeError::Exotic,
-                        "The return-type isn't explicitly set to `void`, but the function doesn't return anything"
+                        "The return type isn't explicitly set to `void`, but the function doesn't return anything"
                     );
                 }
+
+                self.unify_option(span, ctx, Some(ret_ty), actual_ret)
+                    .help(
+                        self,
+                        ret.span,
+                        "The actual return type differs from the specified return type".into(),
+                    )?;
 
                 self.stack.truncate(ss);
 
@@ -1423,6 +1430,10 @@ impl TypeChecker {
 
     fn find_type(&mut self, a: TyID) -> Type {
         self.find_node(a).ty.clone()
+    }
+
+    fn is_void(&mut self, a: TyID) -> bool {
+        matches!(self.find_type(a), Type::Void)
     }
 
     fn inner_bake_type(&mut self, a: TyID, seen: &mut HashMap<TyID, RuntimeType>) -> RuntimeType {
@@ -1946,7 +1957,9 @@ impl TypeChecker {
                         C::Contains(x) => C::Contains(self.inner_copy(*x, seen)),
                         C::IsContainedIn(x) => C::IsContainedIn(self.inner_copy(*x, seen)),
                         C::Enum => C::Enum,
-                        C::Variant(v, x) => C::Variant(v.clone(), *x),
+                        C::Variant(v, x) => {
+                            C::Variant(v.clone(), x.map(|y| self.inner_copy(y, seen)))
+                        }
                         C::TotalEnum(x) => C::TotalEnum(x.clone()),
                         C::Variable => C::Variable,
                         C::Pure => C::Pure,

@@ -1115,7 +1115,7 @@ where
         let basics_index = modules
             .iter()
             .position(|(f, _)| *f == FileOrLib::Lib("preamble"))
-            .unwrap();
+            .expect("Error in the preamble code");
         let tokens = string_to_tokens(basics_index, library_source("preamble").unwrap());
         let (_, std) = module(&FileOrLib::Lib("basics"), basics_index, &root, &tokens);
         let std = std?;

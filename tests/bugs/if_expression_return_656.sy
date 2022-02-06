@@ -1,0 +1,11 @@
+a :: fn a ->
+    if a == 0 do
+        ret a
+    else do
+        ret 1
+    end
+end
+
+start :: fn do end
+
+// error: A 'int' cannot be a 'void'

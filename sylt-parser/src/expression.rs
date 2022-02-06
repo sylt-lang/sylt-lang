@@ -193,7 +193,14 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     };
 
     // Parse the function statement.
-    let (ctx, statements) = block(ctx)?;
+    let (ctx, mut statements) = block(ctx)?;
+
+    while matches!(
+        statements.last(),
+        Some(Statement { kind: StatementKind::EmptyStatement, .. })
+    ) {
+        statements.pop();
+    }
 
     use ExpressionKind::Function;
     let function = Function {
