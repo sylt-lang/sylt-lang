@@ -426,9 +426,7 @@ fn if_expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let (ctx, body) = block(expect!(ctx, T::Do, "Expected 'do' after if condition"))?;
     let condition = Some(condition);
 
-    let mut branches = vec![{
-        IfBranch { span, condition, body }
-    }];
+    let mut branches = vec![{ IfBranch { span, condition, body } }];
 
     let mut ctx = ctx;
     while matches!(ctx.token(), T::Elif) {
@@ -456,10 +454,7 @@ fn if_expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         ctx
     };
 
-    Ok((
-        ctx,
-        Expression::new(span, ExpressionKind::If(branches)),
-    ))
+    Ok((ctx, Expression::new(span, ExpressionKind::If(branches))))
 }
 
 fn arrow_call<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {

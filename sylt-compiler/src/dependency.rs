@@ -275,15 +275,14 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<(String,
 
         If(branches) => branches
             .iter()
-            .map(|IfBranch { condition, body, span: _}| {
+            .map(|IfBranch { condition, body, span: _ }| {
                 [
                     condition
                         .as_ref()
                         .map(|cond| dependencies(ctx, &cond))
                         .unwrap_or_else(|| BTreeSet::new())
                         .clone(),
-                    body
-                        .iter()
+                    body.iter()
                         .map(|f| statement_dependencies(ctx, f))
                         .flatten()
                         .collect(),

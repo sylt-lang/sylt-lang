@@ -337,29 +337,17 @@ impl<'a> IRCodeGen<'a> {
                         if let Some(cond) = condition {
                             let (expr, var) = self.expression(&cond, ctx);
                             let block = self.expression_block(out, body.clone(), ctx);
-                            [
-                                expr,
-                                vec![IR::If(var)],
-                                block,
-                                vec![IR::Else],
-                            ].concat()
+                            [expr, vec![IR::If(var)], block, vec![IR::Else]].concat()
                         } else {
                             let var = self.var();
                             let block = self.expression_block(out, body.clone(), ctx);
-                            [
-                                vec![IR::Bool(var, true),IR::If(var)],
-                                block,
-                            ].concat()
+                            [vec![IR::Bool(var, true), IR::If(var)], block].concat()
                         }
                     })
                     .flatten()
                     .collect::<Vec<_>>();
                 (
-                    [
-                        code,
-                        branches.iter().map(|_| IR::End).collect()
-                    ]
-                    .concat(),
+                    [code, branches.iter().map(|_| IR::End).collect()].concat(),
                     out,
                 )
             }
