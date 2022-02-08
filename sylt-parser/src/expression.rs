@@ -81,6 +81,7 @@ pub enum ExpressionKind {
         ret: Type,
 
         body: Vec<Statement>,
+        pure: bool,
     },
     /// A blob instantiation.
     Blob {
@@ -129,8 +130,12 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use RuntimeType::{Unknown, Void};
     use TypeKind::Resolved;
 
-    let span = ctx.span();
-    let mut ctx = expect!(ctx, T::Fn, "Expected 'fn' for function expression");
+    let (fn_type, span, mut ctx) = ctx.eat();
+    match fn_type {
+        T::Fn | T::Pu => (),
+        _ => raise_syntax_error!(ctx, "Expected 'fn' or 'pu' for function expression."),
+    }
+
     let mut params = Vec::new();
     // Parameters
     let ret = loop {
@@ -203,6 +208,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         params,
         ret,
         body: statements,
+        pure: matches!(fn_type, T::Pu),
     };
 
     Ok((ctx, Expression::new(span, function)))
@@ -281,7 +287,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use ExpressionKind::Get;
 
     match ctx.token() {
-        T::Fn => function(ctx),
+        T::Fn | T::Pu => function(ctx),
         T::If => if_expression(ctx),
         T::Case => case_expression(ctx),
 
@@ -1035,8 +1041,13 @@ impl PrettyPrint for Expression {
                     stmt.pretty_print(f, indent + 1)?;
                 }
             }
-            EK::Function { name, params, ret, body } => {
-                write!(f, "Fn {} ", name)?;
+            EK::Function { name, params, ret, body, pure } => {
+                if *pure {
+                    write!(f, "Pu {} ", name)?;
+                } else {
+                    write!(f, "Fn {} ", name)?;
+                }
+
                 for (i, (name, ty)) in params.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;

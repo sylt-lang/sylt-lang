@@ -1,0 +1,17 @@
+from list use (prepend)
+
+a :: [1]
+
+access_a :: pu ->
+    a[0]
+end
+
+start :: fn do
+    first :: access_a'
+
+    a -> prepend' 2
+
+    second :: access_a'
+
+    first == second <=> false
+end

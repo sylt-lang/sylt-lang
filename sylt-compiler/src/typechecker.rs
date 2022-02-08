@@ -157,6 +157,8 @@ enum Constraint {
     TotalEnum(BTreeSet<String>),
 
     Variable,
+
+    Pure,
 }
 
 pub struct TypeChecker {
@@ -171,16 +173,21 @@ pub struct TypeChecker {
 #[derive(Clone, Debug, Copy)]
 struct TypeCtx {
     inside_loop: bool,
+    inside_pure: bool,
     namespace: NamespaceID,
 }
 
 impl TypeCtx {
     fn namespace(namespace: NamespaceID) -> Self {
-        Self { inside_loop: false, namespace }
+        Self { inside_loop: false, inside_pure: false, namespace }
     }
 
     fn enter_loop(self) -> Self {
         Self { inside_loop: true, ..self }
+    }
+
+    fn enter_pure(self) -> Self {
+        Self { inside_pure: true, ..self }
     }
 }
 
@@ -441,6 +448,10 @@ impl TypeChecker {
                 self.add_constraint(var, span, Constraint::Contains(a));
                 self.add_constraint(a, span, Constraint::IsContainedIn(var));
             }
+            "Pure" => {
+                check_constraint_arity(self, span, "Pure", num_args, 0)?;
+                self.add_constraint(var, span, Constraint::Pure);
+            }
             x => return err_type_error!(self, span, TypeError::UnknownConstraint(x.into())),
         }
         Ok(())
@@ -553,6 +564,16 @@ impl TypeChecker {
 
             StatementKind::Assignment { kind, target, value } => {
                 self.can_assign(span, ctx, target)?;
+
+                if ctx.inside_pure {
+                    return err_type_error!(
+                        self,
+                        span,
+                        TypeError::Exotic,
+                        "Cannot make assignments in pure functions"
+                    );
+                }
+
                 let (expression_ret, expression_ty) = self.expression(value, ctx)?;
                 let (target_ret, target_ty) = self.assignable(target, ctx)?;
                 match kind {
@@ -620,7 +641,7 @@ impl TypeChecker {
             | StatementKind::Enum { .. }
             | StatementKind::ExternalDefinition { .. } => {
                 unreachable!(
-                    "Illegal inner statement at {:?}! Parser should have caught this.",
+                    "Illegal inner statement at {:?}! Parser should have caught this",
                     span
                 )
             }
@@ -832,7 +853,18 @@ impl TypeChecker {
                         .get(&(ctx.namespace, ident.name.clone()))
                         .cloned()
                     {
-                        Some(Name::Global(var)) => no_ret(var.ty),
+                        Some(Name::Global(var)) => {
+                            if ctx.inside_pure && matches!(var.kind, VarKind::Mutable) {
+                                err_type_error!(
+                                    self,
+                                    span,
+                                    TypeError::Impurity,
+                                    "Cannot access mutable variables from pure functions"
+                                )
+                            } else {
+                                no_ret(var.ty)
+                            }
+                        }
                         _ => err_type_error!(
                             self,
                             span,
@@ -853,6 +885,16 @@ impl TypeChecker {
                                 TypeError::WrongArity { got: args.len(), expected: params.len() }
                             );
                         }
+
+                        if ctx.inside_pure && !self.is_function_pure(f) {
+                            return err_type_error!(
+                                self,
+                                span,
+                                TypeError::Impurity,
+                                "Cannot call impure functions from pure functions"
+                            );
+                        }
+
                         // TODO(ed): Annotate the errors?
                         let mut ret = ret;
                         for (a, p) in args.iter_mut().zip(params.iter()) {
@@ -1102,7 +1144,7 @@ impl TypeChecker {
                 with_ret(ret, value.unwrap_or_else(|| self.push_type(Type::Void)))
             }
 
-            ExpressionKind::Function { name: _, params, ret, body } => {
+            ExpressionKind::Function { name: _, params, ret, body, pure } => {
                 let ss = self.stack.len();
                 let mut args = Vec::new();
                 let mut seen = HashMap::new();
@@ -1121,6 +1163,9 @@ impl TypeChecker {
 
                 let returns_something = ret.kind != TypeKind::Resolved(RuntimeType::Void);
                 let ret_ty = self.inner_resolve_type(span, ctx, ret, &mut seen)?;
+
+                let ctx = if *pure { ctx.enter_pure() } else { ctx };
+
                 let (actual_ret, implicit_ret) = self.expression_block(span, body, ctx)?;
 
                 let actual_ret = if returns_something {
@@ -1130,13 +1175,17 @@ impl TypeChecker {
                     let void = Some(self.push_type(Type::Void));
                     self.unify_option(span, ctx, actual_ret, void)?
                 };
+                self.unify_option(span, ctx, Some(ret_ty), actual_ret)
+                    .help_no_span(
+                        "The actual return type and the specified return type differ!".into(),
+                    )?;
 
                 if actual_ret.map(|x| self.is_void(x)).unwrap_or(true) && returns_something {
                     return err_type_error!(
                         self,
                         ret.span,
                         TypeError::Exotic,
-                        "The return type isn't explicitly set to `void`, but nothing is returned"
+                        "The return type isn't explicitly set to `void`, but the function doesn't return anything"
                     );
                 }
 
@@ -1150,7 +1199,11 @@ impl TypeChecker {
                 self.stack.truncate(ss);
 
                 // Functions are the only expressions that we cannot return out of when evaluating.
-                no_ret(self.push_type(Type::Function(args, ret_ty)))
+                let f = self.push_type(Type::Function(args, ret_ty));
+                if *pure {
+                    self.add_constraint(f, span, Constraint::Pure);
+                }
+                no_ret(f)
             }
 
             ExpressionKind::Blob { blob, fields } => {
@@ -1299,6 +1352,14 @@ impl TypeChecker {
         let span = statement.span;
         let (ident, kind, ty, value) = match &mut statement.kind {
             StatementKind::Definition { ident, kind, ty, value } => {
+                if ctx.inside_pure && !kind.immutable() {
+                    return err_type_error!(
+                        self,
+                        span,
+                        TypeError::Impurity,
+                        "Cannot make mutable declarations in pure functions"
+                    );
+                }
                 (ident.clone(), *kind, ty, value)
             }
             _ => unreachable!(),
@@ -1627,6 +1688,17 @@ impl TypeChecker {
 
                     _ => Ok(()),
                 },
+
+                Constraint::Pure => match self.find_type(a) {
+                    Type::Function(_, _) => Ok(()),
+                    Type::Unknown => Ok(()),
+                    _ => err_type_error!(
+                        self,
+                        span,
+                        TypeError::Impurity,
+                        "Only functions can be pure, but this is not a function"
+                    ),
+                },
             }
             .help(self, *original_span, "Requirement came from".to_string())?
         }
@@ -1897,6 +1969,7 @@ impl TypeChecker {
                         }
                         C::TotalEnum(x) => C::TotalEnum(x.clone()),
                         C::Variable => C::Variable,
+                        C::Pure => C::Pure,
                     },
                     *span,
                 )
@@ -2243,6 +2316,12 @@ impl TypeChecker {
                 }
             ),
         }
+    }
+
+    fn is_function_pure(&mut self, f: TyID) -> bool {
+        self.find_node(f)
+            .constraints
+            .contains_key(&Constraint::Pure)
     }
 
     fn constant_index(

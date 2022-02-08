@@ -356,8 +356,12 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             write_indents(dest, indent)?;
             write!(dest, "end\n")?;
         }
-        ExpressionKind::Function { name: _, params, ret, body } => {
-            write!(dest, "fn")?;
+        ExpressionKind::Function { name: _, params, ret, body, pure } => {
+            if pure {
+                write!(dest, "pu")?;
+            } else {
+                write!(dest, "fn")?;
+            }
             if !params.is_empty() {
                 write!(dest, " ")?;
             }
