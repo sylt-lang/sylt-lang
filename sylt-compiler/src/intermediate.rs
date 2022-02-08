@@ -344,7 +344,12 @@ impl<'a> IRCodeGen<'a> {
                                 vec![IR::Else],
                             ].concat()
                         } else {
-                            self.expression_block(out, body.clone(), ctx)
+                            let var = self.var();
+                            let block = self.expression_block(out, body.clone(), ctx);
+                            [
+                                vec![IR::Bool(var, true),IR::If(var)],
+                                block,
+                            ].concat()
                         }
                     })
                     .flatten()
@@ -352,7 +357,7 @@ impl<'a> IRCodeGen<'a> {
                 (
                     [
                         code,
-                        branches.iter().skip(1).map(|_| IR::End).collect()
+                        branches.iter().map(|_| IR::End).collect()
                     ]
                     .concat(),
                     out,
