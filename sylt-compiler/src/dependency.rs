@@ -1,6 +1,7 @@
 use crate::{Compiler, Name};
 use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use sylt_parser::expression::IfBranch;
 use sylt_parser::statement::NameIdentifier;
 use sylt_parser::{
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Statement, StatementKind,
@@ -272,21 +273,28 @@ fn dependencies(ctx: &mut Context, expression: &Expression) -> BTreeSet<(String,
             .cloned()
             .collect(),
 
-        If { condition, pass, fail } => [
-            dependencies(ctx, condition),
-            pass.iter()
-                .map(|stmt| statement_dependencies(ctx, stmt))
+        If(branches) => branches
+            .iter()
+            .map(|IfBranch { condition, body, span: _}| {
+                [
+                    condition
+                        .as_ref()
+                        .map(|cond| dependencies(ctx, &cond))
+                        .unwrap_or_else(|| BTreeSet::new())
+                        .clone(),
+                    body
+                        .iter()
+                        .map(|f| statement_dependencies(ctx, f))
+                        .flatten()
+                        .collect(),
+                ]
+                .iter()
                 .flatten()
-                .collect(),
-            fail.iter()
-                .map(|stmt| statement_dependencies(ctx, stmt))
-                .flatten()
-                .collect(),
-        ]
-        .iter()
-        .flatten()
-        .cloned()
-        .collect(),
+                .cloned()
+                .collect::<BTreeSet<_>>()
+            })
+            .flatten()
+            .collect(),
 
         Case { to_match, branches, fall_through } => [
             dependencies(ctx, to_match),

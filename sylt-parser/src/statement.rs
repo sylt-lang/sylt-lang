@@ -250,7 +250,7 @@ pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
     let mut errs = Vec::new();
     let mut statements = Vec::new();
     // Parse multiple inner statements until } or EOF
-    while !matches!(ctx.token(), T::Else | T::End | T::EOF) {
+    while !matches!(ctx.token(), T::Else | T::Elif | T::End | T::EOF) {
         match statement(ctx) {
             Ok((_ctx, stmt)) => {
                 ctx = _ctx; // assign to outer

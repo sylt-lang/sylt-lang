@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 
 use sylt_parser::{
-    expression::{CaseBranch, ComparisonKind},
+    expression::{CaseBranch, ComparisonKind, IfBranch},
     Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp, Statement,
     StatementKind,
 };
@@ -329,19 +329,30 @@ impl<'a> IRCodeGen<'a> {
                 ([aops, vec![IR::Not(b, a)]].concat(), b)
             }
 
-            ExpressionKind::If { condition, pass, fail } => {
-                let (cops, c) = self.expression(&condition, ctx);
+            ExpressionKind::If(branches) => {
                 let out = self.var();
-                let aops = self.expression_block(out, pass.clone(), ctx);
-                let bops = self.expression_block(out, fail.clone(), ctx);
+                let code = branches
+                    .iter()
+                    .map(|IfBranch { condition, body, span: _ }| {
+                        if let Some(cond) = condition {
+                            let (expr, var) = self.expression(&cond, ctx);
+                            let block = self.expression_block(out, body.clone(), ctx);
+                            [
+                                expr,
+                                vec![IR::If(var)],
+                                block,
+                                vec![IR::Else],
+                            ].concat()
+                        } else {
+                            self.expression_block(out, body.clone(), ctx)
+                        }
+                    })
+                    .flatten()
+                    .collect::<Vec<_>>();
                 (
                     [
-                        cops,
-                        vec![IR::Define(out), IR::If(c)],
-                        aops,
-                        vec![IR::Else],
-                        bops,
-                        vec![IR::End],
+                        code,
+                        branches.iter().skip(1).map(|_| IR::End).collect()
                     ]
                     .concat(),
                     out,

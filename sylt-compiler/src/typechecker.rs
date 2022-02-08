@@ -1130,17 +1130,32 @@ impl TypeChecker {
                 with_ret(ret, value.unwrap_or_else(|| self.push_type(Type::Void)))
             }
 
-            ExpressionKind::If { condition, pass, fail } => {
-                let (ret, condition) = self.expression(condition, ctx)?;
-                let boolean = self.push_type(Type::Bool);
-                self.unify(span, ctx, boolean, condition)?;
+            ExpressionKind::If(branches) => {
+                let tys = branches.iter_mut().map(|branch| {
+                    let condition_ret = if let Some(condition) = &mut branch.condition {
+                        let span = condition.span;
+                        let (ret, condition) = self.expression(condition, ctx)?;
+                        let boolean = self.push_type(Type::Bool);
+                        self.unify(span, ctx, boolean, condition)?;
+                        ret
+                    } else {
+                        None
+                    };
+                    let (block_ret, block_value) = self.expression_block(span, &mut branch.body, ctx)?;
+                    Ok((span, self.unify_option(span, ctx, condition_ret, block_ret)?, block_value))
+                }).collect::<TypeResult<Vec<_>>>()?;
 
-                let (pass_ret, pass) = self.expression_block(span, pass, ctx)?;
-                let (fail_ret, fail) = self.expression_block(span, fail, ctx)?;
+                let mut ret = None;
+                let mut value = None;
+                for (span, branch_ret, branch_value) in tys.iter() {
+                    // TODO(ed): These are bad errors, they're easy to confuse. A better
+                    // formulation?
+                    ret = self.unify_option(*span, ctx, *branch_ret, ret)
+                        .help_no_span("The return from this block doesn't match the other branches".into())?;
+                    value = self.unify_option(*span, ctx, *branch_value, value)
+                        .help_no_span("The value from this block doesn't match the other branches".into())?;
+                }
 
-                let ret = self.unify_option(span, ctx, pass_ret, ret)?;
-                let ret = self.unify_option(span, ctx, fail_ret, ret)?;
-                let value = self.unify_option(span, ctx, pass, fail)?;
                 with_ret(ret, value.unwrap_or_else(|| self.push_type(Type::Void)))
             }
 
