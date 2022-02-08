@@ -464,9 +464,6 @@ impl TypeChecker {
         ty: &ParserType,
         seen: &mut HashMap<String, TyID>,
     ) -> TypeResult<TyID> {
-        // Constraints that should be added to the type
-        let mut added_constraints: Vec<(Span, Constraint)> = Vec::new();
-
         use TypeKind::*;
         let ty = match &ty.kind {
             Implied => Type::Unknown,
@@ -486,38 +483,36 @@ impl TypeChecker {
                 return self.type_assignable(ctx, assignable);
             }
 
-            Fn { constraints, params, ret } => {
+            Fn { constraints, params, ret, pure } => {
                 let params = params
                     .iter()
                     .map(|t| self.inner_resolve_type(span, ctx, t, seen))
                     .collect::<TypeResult<Vec<_>>>()?;
                 let ret = self.inner_resolve_type(span, ctx, ret, seen)?;
                 for (var, constraints) in constraints.iter() {
-                    match var.as_str() {
-                        "Pure" => {
-                            added_constraints.push((span, Constraint::Pure));
+                    match seen.get(var) {
+                        Some(var) => {
+                            // NOTE(ed): This disallowes type-variables that are only used for
+                            // constraints.
+                            for constraint in constraints.iter() {
+                                self.resolve_constraint(span, *var, constraint, seen)?;
+                            }
                         }
-
-                        _ => match seen.get(var) {
-                            Some(var) => {
-                                // NOTE(ed): This disallowes type-variables that are only used for
-                                // constraints.
-                                for constraint in constraints.iter() {
-                                    self.resolve_constraint(span, *var, constraint, seen)?;
-                                }
-                            }
-                            None => {
-                                return err_type_error!(
-                                    self,
-                                    span,
-                                    TypeError::UnresolvedName(var.clone()),
-                                    "Unused type-variable. (Only usages in the function signature are counted)"
-                                );
-                            }
-                        },
+                        None => {
+                            return err_type_error!(
+                                self,
+                                span,
+                                TypeError::UnresolvedName(var.clone()),
+                                "Unused type-variable. (Only usages in the function signature are counted)"
+                            );
+                        }
                     }
                 }
-                Type::Function(params, ret)
+                let ty = self.push_type(Type::Function(params, ret));
+                if *pure {
+                    self.add_constraint(ty, span, Constraint::Pure);
+                }
+                return Ok(ty);
             }
 
             Tuple(fields) => Type::Tuple(
@@ -546,11 +541,7 @@ impl TypeChecker {
                     .or_insert_with(|| self.push_type(Type::Unknown)))
             }
         };
-        let tyid = self.push_type(ty);
-        for (span, constraint) in added_constraints {
-            self.add_constraint(tyid, span, constraint);
-        }
-        Ok(tyid)
+        Ok(self.push_type(ty))
     }
 
     fn statement(&mut self, statement: &mut Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
