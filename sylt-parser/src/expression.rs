@@ -942,6 +942,9 @@ mod test {
 
     test!(expression, if_expr: "if a do b else c end" => If { .. });
     test!(expression, if_expr_more: "1 + 1 + if a do b else 2 end + 2 + 2" => _);
+    test!(expression, if_elif_else_expr: "if a do b elif c do d else e end" => If { .. });
+    test!(expression, if_elif_expr: "if a do b elif c do d end" => If { .. });
+    test!(expression, if_only_if_expr: "if a do b end" => If { .. });
 
     test!(expression, fn_implicit_unknown_1: "fn a do 1 end" => _);
     test!(expression, fn_implicit_unknown_2: "fn a, b do 1 end" => _);
