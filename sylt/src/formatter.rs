@@ -314,13 +314,13 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
                     (Some(expr), true) => {
                         write!(dest, "if ")?;
                         write_expression(dest, indent, expr)?;
-                        write!(dest, "do\n")?;
+                        write!(dest, " do\n")?;
                     }
                     (None, true) => unreachable!("The parser should never return this"),
                     (Some(expr), _) => {
                         write!(dest, "elif ")?;
                         write_expression(dest, indent, expr)?;
-                        write!(dest, "do\n")?;
+                        write!(dest, " do\n")?;
                     }
                     (None, _) => {
                         write!(dest, "else\n")?;
@@ -330,6 +330,8 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
                     write_statement(dest, indent + 1, stmt)?;
                 }
             }
+            write_indents(dest, indent)?;
+            write!(dest, "end\n")?;
         }
         ExpressionKind::Case { to_match, branches, fall_through } => {
             write!(dest, "case ")?;
