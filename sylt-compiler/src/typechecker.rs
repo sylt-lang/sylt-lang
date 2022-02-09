@@ -531,6 +531,8 @@ impl TypeChecker {
 
     fn statement(&mut self, statement: &mut Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
         let span = statement.span;
+        let _handle =
+            sylt_macro::timed_handle!("typecheck::statement", line_start = span.line_start);
         match &mut statement.kind {
             StatementKind::Ret { value: Some(value) } => Ok(Some({
                 let (ret, value) = self.expression(value, ctx)?;
@@ -629,6 +631,8 @@ impl TypeChecker {
 
     fn outer_statement(&mut self, statement: &mut Statement, ctx: TypeCtx) -> TypeResult<()> {
         let span = statement.span;
+        let _handle =
+            sylt_macro::timed_handle!("typecheck::outer_statement", line = span.line_start);
         match &statement.kind {
             StatementKind::Use { name, file, .. } => {
                 let ident = name.ident();
@@ -950,7 +954,6 @@ impl TypeChecker {
         let ss = self.stack.len();
         let mut ret = None;
         for stmt in statements.iter_mut() {
-            let _handle = sylt_macro::timed_handle!("expression block statement", line = stmt.span);
             let stmt_ret = self.statement(stmt, ctx)?;
             ret = self.unify_option(span, ctx, ret, stmt_ret)?;
         }
@@ -1105,7 +1108,6 @@ impl TypeChecker {
             }
 
             ExpressionKind::Function { name: _, params, ret, body } => {
-                let handle = sylt_macro::timed_handle!("typecheck function");
                 let ss = self.stack.len();
                 let mut args = Vec::new();
                 let mut seen = HashMap::new();
@@ -1151,8 +1153,6 @@ impl TypeChecker {
                     )?;
 
                 self.stack.truncate(ss);
-
-                drop(handle);
 
                 // Functions are the only expressions that we cannot return out of when evaluating.
                 no_ret(self.push_type(Type::Function(args, ret_ty)))
@@ -1669,7 +1669,6 @@ impl TypeChecker {
         })
     }
 
-    #[sylt_macro::timed]
     fn unify(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<TyID> {
         // TODO(ed): Is this worth doing? Or can we eagerly union types?
         // I tried some and it didn't work great, but I might have missed something.
@@ -2326,15 +2325,13 @@ impl TypeChecker {
         let handle = sylt_macro::timed_handle!("typecheck rest statements");
         // Then the rest.
         for (statement, namespace) in statements.iter_mut() {
-            let handle = sylt_macro::timed_handle!("typecheck statement");
             if !matches!(statement.kind, StatementKind::Use { .. }) {
                 self.outer_statement(statement, TypeCtx::namespace(*namespace))?;
             }
-            drop(handle);
         }
 
         drop(handle);
-        let handle = sylt_macro::timed_handle!("typecheck start");
+        let handle = sylt_macro::timed_handle!("typecheck start function");
         let ctx = TypeCtx::namespace(0);
         let res = match self.globals.get(&(0, "start".to_string())).cloned() {
             Some(Name::Global(var)) => {

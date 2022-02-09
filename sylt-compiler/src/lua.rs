@@ -87,6 +87,8 @@ impl<'a, 'b> Generator<'a, 'b> {
 
         let mut depth = 0;
         for instruction in ir.iter() {
+            //TODO(gu): which instruction?
+            let _handle = sylt_macro::timed_handle!("lua::generate instruction");
             depth += match instruction {
                 IR::Else | IR::End => -1,
                 _ => 0,
