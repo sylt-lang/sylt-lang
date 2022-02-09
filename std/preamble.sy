@@ -26,6 +26,7 @@ from math use (
     div,
     pow,
     random,
+    randint,
 )
 
 from container use len

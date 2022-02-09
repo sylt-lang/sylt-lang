@@ -484,5 +484,6 @@ function __CONTAINS(a, b)
 end
 
 random = math.random
+randint = math.random
 
 -- End Sylt preamble

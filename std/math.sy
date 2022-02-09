@@ -59,3 +59,7 @@ dot :: pu v1: (float, float), v2: (float, float) -> float
 end
 
 random : fn -> float : external
+
+/// args: min, max
+/// error if max < min
+randint : fn int, int -> int : external
