@@ -1,11 +1,8 @@
-dbg :: pu x ->
-    print(x)
-    x
-end
+dbg : pu *X -> *X : external
 
-args: pu -> {str:str} : external
+args: fn -> {str:str} : external
 thread_sleep: fn float -> void : external
-print: pu *X -> void : external
+print: fn *X -> void : external
 
 spy :: pu tag: str, x ->
     dbg(tag + " " + as_str(x))
@@ -17,6 +14,6 @@ split: pu str -> [str] : external
 
 as_float: pu int -> float : external
 as_int: pu float -> int : external
-as_char: pu str -> int : external
+as_char: fn str -> int : external
 as_chars: pu str -> [int] : external
 as_str: pu *X -> str : external

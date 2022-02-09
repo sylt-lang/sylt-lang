@@ -461,6 +461,7 @@ end
 
 as_str = tostring
 print = print
+function dbg(x) print(x); return x end
 
 unsafe_force = __IDENTITY
 
