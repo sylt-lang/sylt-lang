@@ -1,0 +1,4 @@
+start : pu -> void : fn do
+end
+
+// error:
