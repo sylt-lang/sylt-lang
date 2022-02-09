@@ -483,4 +483,6 @@ function __CONTAINS(a, b)
     assert(false, "Invalid contains!")
 end
 
+random = math.random
+
 -- End Sylt preamble
