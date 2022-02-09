@@ -243,15 +243,20 @@ pub fn timed_trace(item: TokenStream) -> TokenStream {
                             \"args\": {{{}}}\
                         }}\n",
                         ident,
-                        start.duration_since(t0).as_micros(),
+                        (start.duration_since(t0).as_nanos() as f64 / 1000.0),
                         ident,
-                        end.duration_since(t0).as_micros(),
+                        (end.duration_since(t0).as_nanos() as f64 / 1000.0),
                         args,
                     )
                 })
                 .collect::<Vec<String>>()
                 .join(",");
-                format!("{{\"traceEvents\": [\n{}]}}", events)
+                format!(
+                    "{{ \
+                        \"displayTimeUnit\": \"ns\", \
+                        \"traceEvents\": [\n{}] \
+                    }}",
+                    events)
             }
 
             #[cfg(not(feature = "timed"))]
