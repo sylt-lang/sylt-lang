@@ -1,4 +1,4 @@
 start : pu -> void : fn do
 end
 
-// error:
+// error: Cannot use impure function implementations for pure function declarations

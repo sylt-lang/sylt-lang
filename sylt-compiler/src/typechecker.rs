@@ -1467,7 +1467,7 @@ impl TypeChecker {
                 Box::new(self.inner_bake_type(ty_k, seen)),
                 Box::new(self.inner_bake_type(ty_v, seen)),
             ),
-            Type::Function(args, ret, purity) => RuntimeType::Function(
+            Type::Function(args, ret, _) => RuntimeType::Function(
                 args.iter()
                     .map(|ty| self.inner_bake_type(*ty, seen))
                     .collect(),
@@ -1801,6 +1801,18 @@ impl TypeChecker {
                     Type::Function(b_args, b_ret, b_purity),
                 ) => {
                     // TODO: Make sure there is one place this is checked.
+                    match (a_purity, b_purity) {
+                            (Purity::Undefined, _) |
+                            (_, Purity::Undefined) |
+                            (Purity::Pure, Purity::Pure) |
+                            (Purity::Impure, Purity::Impure) => (),
+                            (_, _) => return err_type_error!(
+                                self,
+                                span,
+                                TypeError::Impurity,
+                                "Cannot use impure function implementations for pure function declarations"
+                            ),
+                        }
                     if a_args.len() != b_args.len() {
                         return err_type_error!(
                             self,
