@@ -158,8 +158,6 @@ enum Constraint {
     TotalEnum(BTreeSet<String>),
 
     Variable,
-
-    Pure,
 }
 
 pub struct TypeChecker {
@@ -448,10 +446,6 @@ impl TypeChecker {
                 let a = parse_constraint_arg(self, span, &constraint.args[0].name, seen)?;
                 self.add_constraint(var, span, Constraint::Contains(a));
                 self.add_constraint(a, span, Constraint::IsContainedIn(var));
-            }
-            "Pure" => {
-                check_constraint_arity(self, span, "Pure", num_args, 0)?;
-                self.add_constraint(var, span, Constraint::Pure);
             }
             x => return err_type_error!(self, span, TypeError::UnknownConstraint(x.into())),
         }
@@ -1690,17 +1684,6 @@ impl TypeChecker {
 
                     _ => Ok(()),
                 },
-
-                Constraint::Pure => match self.find_type(a) {
-                    Type::Function(_, _, _) => Ok(()),
-                    Type::Unknown => Ok(()),
-                    _ => err_type_error!(
-                        self,
-                        span,
-                        TypeError::Impurity,
-                        "Only functions can be pure, but this is not a function"
-                    ),
-                },
             }
             .help(self, *original_span, "Requirement came from".to_string())?
         }
@@ -1974,7 +1957,6 @@ impl TypeChecker {
                         }
                         C::TotalEnum(x) => C::TotalEnum(x.clone()),
                         C::Variable => C::Variable,
-                        C::Pure => C::Pure,
                     },
                     *span,
                 )
