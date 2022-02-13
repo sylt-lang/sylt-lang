@@ -211,6 +211,7 @@ fn program_tests() {
     set_current_dir("../").unwrap();
     let tests = find_and_parse_tests(Path::new("tests/"));
     let mut failed = Vec::new();
+    let mut formatter_failed = Vec::new();
 
     writeln!(
         std::io::stdout().lock(),
@@ -234,7 +235,7 @@ fn program_tests() {
                 test,
             )
         {
-            failed.push(test);
+            formatter_failed.push(test);
             continue;
         }
     }
@@ -248,9 +249,16 @@ fn program_tests() {
         }
     }
 
+    if !formatter_failed.is_empty() {
+        eprintln!("\nFailed formatter tests:");
+        for fail in formatter_failed.iter() {
+            eprintln!(" {}", fail.path.to_str().unwrap());
+        }
+    }
+
     let num_tests = tests.len();
-    let num_failed = failed.len();
-    let num_passed = tests.len() - failed.len();
+    let num_failed = failed.len() + formatter_failed.len();
+    let num_passed = tests.len() - num_failed;
     eprintln!(
         "\n SUMMARY {}/{}      {} failed\n",
         num_passed, num_tests, num_failed
