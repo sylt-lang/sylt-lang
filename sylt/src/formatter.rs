@@ -137,7 +137,14 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
     match ty.kind {
         TypeKind::Implied => unreachable!(),
         TypeKind::Resolved(ty) => write!(dest, "{}", ty),
-        TypeKind::UserDefined(assignable) => write_type_assignable(dest, indent, assignable),
+        TypeKind::UserDefined(assignable, args) => {
+            write_type_assignable(dest, indent, assignable)?;
+            write!(dest, "(")?;
+            for arg in args.into_iter() {
+                write_type(dest, indent, arg)?
+            }
+            write!(dest, ")")
+        }
         TypeKind::Fn { constraints, params, ret } => {
             write!(dest, "fn")?;
             if !constraints.is_empty() {
@@ -470,10 +477,14 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             let fields_as_tuples = fields.into_iter().collect();
             write_blob_fields(dest, indent + 1, fields_as_tuples, write_type)?;
         }
-        StatementKind::Enum { name, variants, .. } => {
-            todo!("Add in variables!");
+        StatementKind::Enum { name, variants, variables } => {
             write_indents(dest, indent)?;
             write!(dest, "{} :: enum", name.name)?;
+            if variables.len() > 0 {
+                write!(dest, "(")?;
+                write_comma_separated!(dest, indent, &|dest: &mut W, _, var| write!(dest, "{}", var), variables);
+                write!(dest, ")")?;
+            }
             let variants_as_tuples = variants.into_iter().map(|(k, v)| (k.name, v)).collect();
             write_enum_variants(dest, indent + 1, variants_as_tuples)?;
         }
