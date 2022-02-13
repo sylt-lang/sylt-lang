@@ -149,8 +149,18 @@ fn type_dependencies(ctx: &mut Context, ty: &ParserType) -> BTreeSet<(String, us
         Implied | Resolved(_) | Generic(_) => BTreeSet::new(),
 
         Grouping(ty) => type_dependencies(ctx, ty),
-        UserDefined(assignable) => type_assignable_dependencies(ctx, &assignable),
-
+        UserDefined(assignable, type_args) => [
+            type_args
+                .iter()
+                .map(|ty| type_dependencies(ctx, ty))
+                .flatten()
+                .collect(),
+            type_assignable_dependencies(ctx, &assignable),
+        ]
+        .iter()
+        .flatten()
+        .cloned()
+        .collect(),
         Fn { params, ret, .. } => params
             .iter()
             .chain([ret.as_ref()])

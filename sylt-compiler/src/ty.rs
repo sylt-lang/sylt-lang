@@ -21,6 +21,6 @@ pub enum Type {
     Set(TyID),
     Dict(TyID, TyID),
     Function(Vec<TyID>, TyID),
-    Blob(String, BTreeMap<String, TyID>),
-    Enum(String, BTreeMap<String, TyID>),
+    Blob(String, BTreeMap<String, TyID>, Vec<TyID>),
+    Enum(String, BTreeMap<String, TyID>, Vec<TyID>),
 }

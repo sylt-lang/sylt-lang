@@ -188,7 +188,7 @@ pub enum TypeKind {
     /// A specified type by the user.
     Resolved(RuntimeType),
     /// I.e. blobs.
-    UserDefined(TypeAssignable),
+    UserDefined(TypeAssignable, Vec<Type>),
     /// `(params, return)`.
     Fn {
         constraints: BTreeMap<String, Vec<TypeConstraint>>,
@@ -387,19 +387,23 @@ impl<'a> Context<'a> {
     fn eat(&self) -> (&T, Span, Self) {
         (self.token(), self.span(), self.skip(1))
     }
-
 }
 
 fn parse_sep_end_by<'t, T>(
-        ctx: Context<'t>,
-        sep: &dyn Fn(Context<'t>) -> ParseResult<'t, ()>,
-        end: &dyn Fn(Context<'t>) -> ParseResult<'t, bool>,
-        item: &dyn Fn(Context<'t>) -> ParseResult<'t, T>) -> ParseResult<'t, Vec<T>> {
-    let (ctx, is_end) = end(ctx)?;
+    ctx: Context<'t>,
+    sep: &dyn Fn(Context<'t>) -> ParseResult<'t, ()>,
+    end: &dyn Fn(Context<'t>) -> ParseResult<'t, bool>,
+    item: &dyn Fn(Context<'t>) -> ParseResult<'t, T>,
+) -> ParseResult<'t, Vec<T>> {
+    let (end_ctx, is_end) = end(ctx)?;
     if is_end {
-        return Ok((ctx, vec![]));
+        return Ok((end_ctx, vec![]));
     }
     let (ctx, i) = item(ctx)?;
+    let (end_ctx, is_end) = end(ctx)?;
+    if is_end {
+        return Ok((end_ctx, vec![i]));
+    }
     let (ctx, _) = sep(ctx)?;
     let (ctx, mut res) = parse_sep_end_by(ctx, sep, end, item)?;
     res.insert(0, i);
@@ -613,7 +617,25 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
 
         T::Identifier(_) => {
             let (ctx, ass) = type_assignable(ctx)?;
-            (ctx, UserDefined(ass))
+            let (ctx, vars) = if matches!(ctx.token(), T::LeftParen) {
+                let sep = |ctx: Context<'t>| {
+                    Ok((
+                        expect!(ctx, T::Comma, "Expected ',' after type argument"),
+                        (),
+                    ))
+                };
+
+                let end = |ctx: Context<'t>| {
+                    Ok((
+                        ctx.skip_if(T::RightParen),
+                        matches!(ctx.token(), T::RightParen),
+                    ))
+                };
+                parse_sep_end_by(ctx.skip(1), &sep, &end, &parse_type)?
+            } else {
+                (ctx, Vec::new())
+            };
+            (ctx, UserDefined(ass, vars))
         }
 
         T::Star => {
@@ -1410,9 +1432,15 @@ impl Display for Type {
             TypeKind::Resolved(ty) => {
                 write!(f, "{}", ty)?;
             }
-            TypeKind::UserDefined(name) => {
+            TypeKind::UserDefined(name, args) => {
                 write!(f, "User(")?;
                 name.pretty_print(f, 0)?;
+                write!(f, ")")?;
+                write!(f, "(")?;
+                for arg in args.iter() {
+                    write!(f, "{}, ", arg)?;
+                    // Self::pretty_print(arg, f, 0)?;
+                }
                 write!(f, ")")?;
             }
             TypeKind::Fn { constraints, params, ret } => {

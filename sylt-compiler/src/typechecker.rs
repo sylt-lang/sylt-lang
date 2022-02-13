@@ -468,8 +468,32 @@ impl TypeChecker {
                 x => unreachable!("Got an unexpected resolved type '{:?}'", x),
             },
 
-            UserDefined(assignable) => {
-                return self.type_assignable(ctx, assignable);
+            UserDefined(assignable, vars) => {
+                let ty = self.type_assignable(ctx, assignable)?;
+                match self.find_type(ty) {
+                    Type::Blob(_, _, sub) | Type::Enum(_, _, sub) => {
+                        for (i, var) in vars.iter().enumerate() {
+                            if sub.len() == i {
+                                return err_type_error!(
+                                    self,
+                                    var.span,
+                                    TypeError::ToDo { line: line!(), file: file!().into() }
+                                );
+                            }
+                            let var_ty = self.inner_resolve_type(var.span, ctx, var, seen)?;
+                            self.unify(span, ctx, var_ty, sub[i])?;
+                        }
+                    }
+
+                    _ => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::ToDo { line: line!(), file: file!().into() }
+                        );
+                    }
+                }
+                return Ok(ty);
             }
 
             Fn { constraints, params, ret } => {
@@ -679,15 +703,39 @@ impl TypeChecker {
                 self.globals
                     .insert((ctx.namespace, name.name.clone()), Name::Type(enum_ty));
                 let mut resolved_variants = BTreeMap::new();
+                let mut type_params = Vec::new();
                 let mut seen = HashMap::new();
                 for v in variables.iter() {
-                    seen.insert(v.name.clone(), self.push_type(Type::Unknown));
+                    let ty = self.push_type(Type::Unknown);
+                    type_params.push(ty);
+                    seen.insert(v.name.clone(), ty);
                 }
+                let num_vars = seen.len();
                 for (k, t) in variants.iter() {
-                    resolved_variants
-                        .insert(k.name.clone(), self.inner_resolve_type(span, ctx, t, &mut seen)?);
+                    resolved_variants.insert(
+                        k.name.clone(),
+                        self.inner_resolve_type(span, ctx, t, &mut seen)?,
+                    );
+
+                    if num_vars != seen.len() {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::Exotic,
+                            "Unknown generic {}",
+                            t
+                        )
+                        .help_no_span(format!(
+                            "Generics have the be defined before use, like this: `{} :: enum({})`",
+                            name.name, t
+                        ));
+                    }
                 }
-                let ty = self.push_type(Type::Enum(name.name.clone(), resolved_variants));
+                let ty = self.push_type(Type::Enum(
+                    name.name.clone(),
+                    resolved_variants,
+                    type_params,
+                ));
                 self.unify(span, ctx, ty, enum_ty)?;
             }
 
@@ -701,7 +749,7 @@ impl TypeChecker {
                     resolved_fields
                         .insert(k.clone(), self.inner_resolve_type(span, ctx, t, &mut seen)?);
                 }
-                let ty = self.push_type(Type::Blob(name.clone(), resolved_fields));
+                let ty = self.push_type(Type::Blob(name.clone(), resolved_fields, Vec::new()));
                 self.unify(span, ctx, ty, blob_ty)?;
             }
 
@@ -795,7 +843,7 @@ impl TypeChecker {
                 };
 
                 let (enum_name, variants) = match self.find_type(ty) {
-                    Type::Enum(name, variants) => (name, variants),
+                    Type::Enum(name, variants, _) => (name, variants),
                     Type::Unknown => todo!("Should this ever happen?"),
                     _ => {
                         return err_type_error!(
@@ -1158,8 +1206,8 @@ impl TypeChecker {
 
             ExpressionKind::Blob { blob, fields } => {
                 let blob_ty = self.type_assignable(ctx, blob)?;
-                let (blob_name, blob_fields) = match self.find_type(blob_ty) {
-                    Type::Blob(name, fields) => (name, fields),
+                let (blob_name, blob_fields, blob_args) = match self.find_type(blob_ty) {
+                    Type::Blob(name, fields, args) => (name, fields, args),
                     _ => unreachable!(),
                 };
 
@@ -1205,8 +1253,11 @@ impl TypeChecker {
                     .iter()
                     .map(|(a, (_, x))| (a.clone(), x.clone()))
                     .collect::<BTreeMap<_, _>>();
-                let given_blob =
-                    self.push_type(Type::Blob(blob_name.clone(), fields_and_types.clone()));
+                let given_blob = self.push_type(Type::Blob(
+                    blob_name.clone(),
+                    fields_and_types.clone(),
+                    blob_args.clone(),
+                ));
 
                 // Unify the fields with their real types
                 let ss = self.stack.len();
@@ -1412,14 +1463,16 @@ impl TypeChecker {
                     .collect(),
                 Box::new(self.inner_bake_type(ret, seen)),
             ),
-            Type::Blob(name, fields) => RuntimeType::Blob(
+            // TODO(ed): Should we print out the arguments to the blob instead?
+            Type::Blob(name, fields, _) => RuntimeType::Blob(
                 name.clone(),
                 fields
                     .iter()
                     .map(|(name, ty)| (name.clone(), self.inner_bake_type(*ty, seen)))
                     .collect(),
             ),
-            Type::Enum(name, variants) => RuntimeType::Enum(
+            // TODO(ed): Should we print out the arguments to the enum instead?
+            Type::Enum(name, variants, _) => RuntimeType::Enum(
                 name.clone(),
                 variants
                     .iter()
@@ -1472,7 +1525,7 @@ impl TypeChecker {
 
                 Constraint::Field(name, expected_ty) => match self.find_type(a).clone() {
                     Type::Unknown => Ok(()),
-                    Type::Blob(blob_name, fields) => match fields.get(name) {
+                    Type::Blob(blob_name, fields, _) => match fields.get(name) {
                         Some(actual_ty) => {
                             self.unify(span, ctx, *expected_ty, *actual_ty).map(|_| ())
                         }
@@ -1550,7 +1603,7 @@ impl TypeChecker {
                 Constraint::Variant(var, maybe_v_b) => match self.find_type(a) {
                     Type::Unknown => Ok(()),
 
-                    Type::Enum(enum_name, variants) => match (variants.get(var), maybe_v_b) {
+                    Type::Enum(enum_name, variants, _) => match (variants.get(var), maybe_v_b) {
                         (Some(_), None) => Ok(()),
                         (Some(v_a), Some(v_b)) => self.unify(span, ctx, *v_a, *v_b).map(|_| ()),
                         (None, _) => {
@@ -1574,7 +1627,7 @@ impl TypeChecker {
                 Constraint::TotalEnum(vars) => match self.find_type(a) {
                     Type::Unknown => Ok(()),
 
-                    Type::Enum(enum_name, enum_vars) => {
+                    Type::Enum(enum_name, enum_vars, _) => {
                         let missing = vars
                             .iter()
                             .cloned()
@@ -1752,7 +1805,7 @@ impl TypeChecker {
                         .help_no_span("While checking return type".into())?;
                 }
 
-                (Type::Blob(a_blob, a_fields), Type::Blob(b_blob, b_fields)) => {
+                (Type::Blob(a_blob, a_fields, _), Type::Blob(b_blob, b_fields, _)) => {
                     for (a_field, _) in a_fields.iter() {
                         if !b_fields.contains_key(a_field) {
                             return err_type_error!(
@@ -1785,7 +1838,7 @@ impl TypeChecker {
                     }
                 }
 
-                (Type::Enum(a_name, a_variants), Type::Enum(b_name, b_variants)) => {
+                (Type::Enum(a_name, a_variants, _), Type::Enum(b_name, b_variants, _)) => {
                     for (a_var, _) in a_variants.iter() {
                         if !b_variants.contains_key(a_var) {
                             return err_type_error!(
@@ -1928,20 +1981,22 @@ impl TypeChecker {
             ),
 
             // TODO(ed): We can cheat here and just copy the table directly.
-            Type::Blob(name, fields) => Type::Blob(
+            Type::Blob(name, fields, args) => Type::Blob(
                 name.clone(),
                 fields
                     .iter()
                     .map(|(name, ty)| (name.clone(), self.inner_copy(*ty, seen)))
                     .collect(),
+                args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
             ),
 
-            Type::Enum(name, variants) => Type::Enum(
+            Type::Enum(name, variants, args) => Type::Enum(
                 name.clone(),
                 variants
                     .iter()
                     .map(|(name, ty)| (name.clone(), self.inner_copy(*ty, seen)))
                     .collect(),
+                args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
             ),
         };
         new_ty
