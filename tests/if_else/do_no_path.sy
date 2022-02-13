@@ -10,5 +10,3 @@ start :: fn do
     f' 3
     f' 0
 end
-
-// error: type isn't explicitly set to `void`
