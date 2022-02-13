@@ -63,8 +63,9 @@ pub enum StatementKind {
     ///
     /// `A :: blob { <field>.. }`.
     Blob {
-        name: String,
-        fields: HashMap<String, Type>,
+        name: Identifier,
+        variables: Vec<Identifier>,
+        fields: HashMap<Identifier, Type>,
     },
 
     /// Defines a new Enum.
@@ -439,36 +440,21 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let ctx = ctx.skip(3);
             let (ctx, skip_newlines) = ctx.push_skip_newlines(false);
             // Parse variables: `enum(*A)`
-            let (ctx, variables) = {
-                fn sep<'t>(ctx: Context<'t>) -> ParseResult<'t, ()> {
-                    Ok((ctx.skip_if(T::Comma), ()))
-                }
-
-                fn end<'t>(ctx: Context<'t>) -> ParseResult<'t, bool> {
-                    Ok(match ctx.token() {
-                        T::RightParen => (ctx.skip(1), true),
-                        _ => (ctx, false),
-                    })
-                }
-
-                fn item<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
-                    let ctx = expect!(ctx, T::Star, "Type variables have to start with '*'");
-                    match ctx.eat() {
-                        (T::Identifier(variant), span, ctx) => {
-                            Ok((ctx, Identifier::new(span, variant.clone())))
-                        }
-                        _ => raise_syntax_error!(
-                            ctx,
-                            "Expected an identifier after '*' in type parameter"
-                        ),
+            fn item<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
+                let ctx = expect!(ctx, T::Star, "Type variables have to start with '*'");
+                match ctx.eat() {
+                    (T::Identifier(variant), span, ctx) => {
+                        Ok((ctx, Identifier::new(span, variant.clone())))
                     }
+                    _ => raise_syntax_error!(
+                        ctx,
+                        "Expected an identifier after '*' in type parameter"
+                    ),
                 }
-                if matches!(ctx.token(), T::LeftParen) {
-                    parse_sep_end_by(ctx.skip(1), &sep, &end, &item)?
-                } else {
-                    (ctx, Vec::new())
-                }
-            };
+            }
+
+            let (ctx, variables) =
+                parse_beg_end_comma_sep!(ctx, T::LeftParen, T::RightParen, &item)?;
 
             // Parse variants: `A(..), B(..)`
             let (ctx, items) = {
@@ -547,8 +533,27 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     "User defined types have to start with a capital letter"
                 );
             }
-            let name = name.clone();
-            let ctx = expect!(ctx.skip(3), T::LeftBrace, "Expected '{{' to open blob");
+            let name = Identifier::new(ctx.span(), name.clone());
+
+            // Parse variables: `blob(*A)`
+            fn item<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
+                let ctx = expect!(ctx, T::Star, "Type variables have to start with '*'");
+                match ctx.eat() {
+                    (T::Identifier(variant), span, ctx) => {
+                        Ok((ctx, Identifier::new(span, variant.clone())))
+                    }
+                    _ => raise_syntax_error!(
+                        ctx,
+                        "Expected an identifier after '*' in type parameter"
+                    ),
+                }
+            }
+
+            let (ctx, variables) =
+                parse_beg_end_comma_sep!(ctx.skip(3), T::LeftParen, T::RightParen, &item)?;
+            dbg!(&variables);
+
+            let ctx = expect!(ctx, T::LeftBrace, "Expected '{{' to open blob");
             let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
 
             let mut fields = HashMap::new();
@@ -565,11 +570,12 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
                     // Another one.
                     T::Identifier(field) => {
-                        if field == "self" {
+                        let field = Identifier::new(ctx.span(), field.clone());
+                        if field.name == "self" {
                             raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
                         }
                         if fields.contains_key(&field) {
-                            raise_syntax_error!(ctx, "Field '{}' is declared twice", field);
+                            raise_syntax_error!(ctx, "Field '{}' is declared twice", field.name);
                         }
                         ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after field name");
                         let (_ctx, ty) = parse_type(ctx)?;
@@ -590,7 +596,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
             let ctx = ctx.pop_skip_newlines(skip_newlines);
             let ctx = expect!(ctx, T::RightBrace, "Expected '}}' to close blob fields");
-            (ctx, Blob { name, fields })
+            (ctx, Blob { name, fields, variables })
         }
 
         // Implied type declaration, e.g. `a :: 1` or `a := 1`.

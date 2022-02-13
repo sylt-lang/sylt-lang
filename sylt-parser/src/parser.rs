@@ -95,6 +95,18 @@ impl Identifier {
     }
 }
 
+impl PartialOrd for Identifier {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.name.cmp(&other.name))
+    }
+}
+
+impl Ord for Identifier {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+
 impl PartialEq for Identifier {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
@@ -389,12 +401,12 @@ impl<'a> Context<'a> {
     }
 }
 
-fn parse_sep_end_by<'t, T>(
+fn parse_sep_end_by<'t, Item>(
     ctx: Context<'t>,
     sep: &dyn Fn(Context<'t>) -> ParseResult<'t, ()>,
     end: &dyn Fn(Context<'t>) -> ParseResult<'t, bool>,
-    item: &dyn Fn(Context<'t>) -> ParseResult<'t, T>,
-) -> ParseResult<'t, Vec<T>> {
+    item: &dyn Fn(Context<'t>) -> ParseResult<'t, Item>,
+) -> ParseResult<'t, Vec<Item>> {
     let (end_ctx, is_end) = end(ctx)?;
     if is_end {
         return Ok((end_ctx, vec![]));
@@ -408,6 +420,33 @@ fn parse_sep_end_by<'t, T>(
     let (ctx, mut res) = parse_sep_end_by(ctx, sep, end, item)?;
     res.insert(0, i);
     Ok((ctx, res))
+}
+
+#[macro_export]
+macro_rules! parse_beg_end_comma_sep {
+    ($ctx:expr,
+    $beg_token: pat,
+    $end_token: pat,
+    $item:expr) => {
+        if matches!($ctx.token(), $beg_token) {
+            let sep =
+                |ctx: Context<'t>| Ok((expect!(ctx, T::Comma, "Expected ',' as seperator"), ()));
+
+            let end = |ctx: Context<'t>| {
+                Ok((
+                    if matches!(ctx.token(), $end_token) {
+                        ctx.skip(1)
+                    } else {
+                        ctx
+                    },
+                    matches!(ctx.token(), $end_token),
+                ))
+            };
+            parse_sep_end_by($ctx.skip(1), &sep, &end, $item)
+        } else {
+            Ok(($ctx, Vec::new()))
+        }
+    };
 }
 
 /// Add more text to an error message after it has been created.
@@ -617,24 +656,8 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
 
         T::Identifier(_) => {
             let (ctx, ass) = type_assignable(ctx)?;
-            let (ctx, vars) = if matches!(ctx.token(), T::LeftParen) {
-                let sep = |ctx: Context<'t>| {
-                    Ok((
-                        expect!(ctx, T::Comma, "Expected ',' after type argument"),
-                        (),
-                    ))
-                };
-
-                let end = |ctx: Context<'t>| {
-                    Ok((
-                        ctx.skip_if(T::RightParen),
-                        matches!(ctx.token(), T::RightParen),
-                    ))
-                };
-                parse_sep_end_by(ctx.skip(1), &sep, &end, &parse_type)?
-            } else {
-                (ctx, Vec::new())
-            };
+            let (ctx, vars) =
+                parse_beg_end_comma_sep!(ctx, T::LeftParen, T::RightParen, &parse_type)?;
             (ctx, UserDefined(ass, vars))
         }
 
@@ -1268,7 +1291,9 @@ mod test {
         test!(parse_type, type_int: "int" => Resolved(RT::Int));
         test!(parse_type, type_float: "float" => Resolved(RT::Float));
         test!(parse_type, type_str: "str" => Resolved(RT::String));
-        test!(parse_type, type_unknown: "Blargh" => UserDefined(_));
+        test!(parse_type, type_userdefined: "Blargh" => UserDefined(_, _));
+        test!(parse_type, type_userdefined_int_int: "A(int, int)" => UserDefined(_, _));
+        test!(parse_type, type_userdefined_int_unknown: "B(int, *)" => UserDefined(_, _));
 
         test!(parse_type, type_fn_no_params: "fn ->" => Fn{ .. });
         test!(parse_type, type_fn_one_param: "fn int -> bool" => Fn{ .. });
@@ -1356,8 +1381,13 @@ impl PrettyPrint for Statement {
                 }
                 write!(f, " }}")?;
             }
-            SK::Blob { name, fields } => {
-                write!(f, "<Blob> {} {{ ", name)?;
+            SK::Blob { name, fields, variables } => {
+                let args_string = variables
+                    .iter()
+                    .map(|x| format!("{}", x))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "<Blob> {} {} {{ ", name, args_string)?;
                 for (i, (name, ty)) in fields.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;

@@ -470,15 +470,19 @@ impl TypeChecker {
 
             UserDefined(assignable, vars) => {
                 let ty = self.type_assignable(ctx, assignable)?;
+                self.print_type(ty);
                 match self.find_type(ty) {
-                    Type::Blob(_, _, sub) | Type::Enum(_, _, sub) => {
+                    Type::Blob(name, _, sub) | Type::Enum(name, _, sub) => {
                         for (i, var) in vars.iter().enumerate() {
                             if sub.len() == i {
                                 return err_type_error!(
                                     self,
                                     var.span,
-                                    TypeError::ToDo { line: line!(), file: file!().into() }
-                                );
+                                    TypeError::Exotic,
+                                    "The type {} takes at most {} type arguments",
+                                    name.name,
+                                    sub.len()
+                                ).help(self, name.span, "Defined here".into());
                             }
                             let var_ty = self.inner_resolve_type(var.span, ctx, var, seen)?;
                             self.unify(span, ctx, var_ty, sub[i])?;
@@ -489,7 +493,8 @@ impl TypeChecker {
                         return err_type_error!(
                             self,
                             span,
-                            TypeError::ToDo { line: line!(), file: file!().into() }
+                            TypeError::Violating(self.bake_type(ty)),
+                            "Only enums and blobs can take type-arguments"
                         );
                     }
                 }
@@ -714,42 +719,63 @@ impl TypeChecker {
                 for (k, t) in variants.iter() {
                     resolved_variants.insert(
                         k.name.clone(),
-                        self.inner_resolve_type(span, ctx, t, &mut seen)?,
+                        (k.span, self.inner_resolve_type(span, ctx, t, &mut seen)?),
                     );
 
                     if num_vars != seen.len() {
                         return err_type_error!(
                             self,
-                            span,
+                            k.span,
                             TypeError::Exotic,
                             "Unknown generic {}",
                             t
                         )
+                        .help(self, span, "While defining".to_string())
                         .help_no_span(format!(
                             "Generics have the be defined before use, like this: `{} :: enum({})`",
                             name.name, t
                         ));
                     }
                 }
-                let ty = self.push_type(Type::Enum(
-                    name.name.clone(),
-                    resolved_variants,
-                    type_params,
-                ));
+                let ty = self.push_type(Type::Enum(name.clone(), resolved_variants, type_params));
                 self.unify(span, ctx, ty, enum_ty)?;
             }
 
-            StatementKind::Blob { name, fields } => {
+            StatementKind::Blob { name, fields, variables } => {
                 let blob_ty = self.push_type(Type::Unknown);
                 self.globals
-                    .insert((ctx.namespace, name.clone()), Name::Type(blob_ty));
+                    .insert((ctx.namespace, name.name.clone()), Name::Type(blob_ty));
                 let mut resolved_fields = BTreeMap::new();
+                let mut type_params = Vec::new();
                 let mut seen = HashMap::new();
-                for (k, t) in fields.iter() {
-                    resolved_fields
-                        .insert(k.clone(), self.inner_resolve_type(span, ctx, t, &mut seen)?);
+                for v in variables.iter() {
+                    let ty = self.push_type(Type::Unknown);
+                    type_params.push(ty);
+                    seen.insert(v.name.clone(), ty);
                 }
-                let ty = self.push_type(Type::Blob(name.clone(), resolved_fields, Vec::new()));
+                let num_vars = seen.len();
+                for (k, t) in fields.iter() {
+                    resolved_fields.insert(
+                        k.name.clone(),
+                        (k.span, self.inner_resolve_type(span, ctx, t, &mut seen)?),
+                    );
+
+                    if num_vars != seen.len() {
+                        return err_type_error!(
+                            self,
+                            k.span,
+                            TypeError::Exotic,
+                            "Unknown generic {}",
+                            t
+                        )
+                        .help(self, span, "While defining".to_string())
+                        .help_no_span(format!(
+                            "Generics have the be defined before use, like this: `{} :: blob({})`",
+                            name.name, t
+                        ));
+                    }
+                }
+                let ty = self.push_type(Type::Blob(name.clone(), resolved_fields, type_params));
                 self.unify(span, ctx, ty, blob_ty)?;
             }
 
@@ -857,12 +883,17 @@ impl TypeChecker {
                 // Only unify this variant with the expression
                 let (ret, expr_ty) = self.expression(value, ctx)?;
                 match variants.get(&variant.name) {
-                    Some(field_ty) => self.unify(variant.span, ctx, *field_ty, expr_ty)?,
+                    Some((span, field_ty)) => self.unify(*span, ctx, *field_ty, expr_ty)?,
                     None => {
                         return err_type_error!(
                             self,
                             variant.span,
-                            TypeError::UnknownVariant(enum_name, variant.name.clone())
+                            TypeError::UnknownVariant(enum_name.name.clone(), variant.name.clone())
+                        )
+                        .help(
+                            self,
+                            enum_name.span,
+                            "Defined here".to_string(),
                         )
                     }
                 };
@@ -1225,7 +1256,7 @@ impl TypeChecker {
                             self,
                             span,
                             TypeError::MissingField {
-                                blob: blob_name.clone(),
+                                blob: blob_name.name.clone(),
                                 field: field.clone(),
                             }
                         ));
@@ -1238,7 +1269,7 @@ impl TypeChecker {
                             self,
                             *span,
                             TypeError::UnknownField {
-                                blob: blob_name.clone(),
+                                blob: blob_name.name.clone(),
                                 field: field.clone(),
                             }
                         ));
@@ -1251,7 +1282,7 @@ impl TypeChecker {
 
                 let fields_and_types = given_fields
                     .iter()
-                    .map(|(a, (_, x))| (a.clone(), x.clone()))
+                    .map(|(a, (s, x))| (a.clone(), (s.clone(), x.clone())))
                     .collect::<BTreeMap<_, _>>();
                 let given_blob = self.push_type(Type::Blob(
                     blob_name.clone(),
@@ -1273,7 +1304,7 @@ impl TypeChecker {
                     }
                     let (inner_ret, expr_ty) = self.expression(expr, ctx)?;
                     self.unify_option(span, ctx, ret, inner_ret)?;
-                    self.unify(expr.span, ctx, expr_ty, fields_and_types[key])?;
+                    self.unify(expr.span, ctx, expr_ty, fields_and_types[key].1)?;
                     self.stack.truncate(ss);
                 }
 
@@ -1465,18 +1496,18 @@ impl TypeChecker {
             ),
             // TODO(ed): Should we print out the arguments to the blob instead?
             Type::Blob(name, fields, _) => RuntimeType::Blob(
-                name.clone(),
+                name.name.clone(),
                 fields
                     .iter()
-                    .map(|(name, ty)| (name.clone(), self.inner_bake_type(*ty, seen)))
+                    .map(|(name, ty)| (name.clone(), self.inner_bake_type(ty.1, seen)))
                     .collect(),
             ),
             // TODO(ed): Should we print out the arguments to the enum instead?
             Type::Enum(name, variants, _) => RuntimeType::Enum(
-                name.clone(),
+                name.name.clone(),
                 variants
                     .iter()
-                    .map(|(name, ty)| (name.clone(), self.inner_bake_type(*ty, seen)))
+                    .map(|(name, ty)| (name.clone(), self.inner_bake_type(ty.1, seen)))
                     .collect(),
             ),
 
@@ -1526,17 +1557,17 @@ impl TypeChecker {
                 Constraint::Field(name, expected_ty) => match self.find_type(a).clone() {
                     Type::Unknown => Ok(()),
                     Type::Blob(blob_name, fields, _) => match fields.get(name) {
-                        Some(actual_ty) => {
-                            self.unify(span, ctx, *expected_ty, *actual_ty).map(|_| ())
+                        Some((span, actual_ty)) => {
+                            self.unify(*span, ctx, *expected_ty, *actual_ty).map(|_| ())
                         }
                         None => err_type_error!(
                             self,
                             span,
                             TypeError::MissingField {
-                                blob: blob_name.clone(),
+                                blob: blob_name.name.clone(),
                                 field: name.clone(),
                             }
-                        ),
+                        ).help(self, blob_name.span, "Defined here".to_string()),
                     },
                     _ => err_type_error!(
                         self,
@@ -1605,13 +1636,13 @@ impl TypeChecker {
 
                     Type::Enum(enum_name, variants, _) => match (variants.get(var), maybe_v_b) {
                         (Some(_), None) => Ok(()),
-                        (Some(v_a), Some(v_b)) => self.unify(span, ctx, *v_a, *v_b).map(|_| ()),
+                        (Some((_, v_a)), Some(v_b)) => self.unify(span, ctx, *v_a, *v_b).map(|_| ()),
                         (None, _) => {
                             err_type_error!(
                                 self,
                                 span,
-                                TypeError::UnknownVariant(enum_name, var.clone())
-                            )
+                                TypeError::UnknownVariant(enum_name.name, var.clone())
+                            ).help(self, enum_name.span, "Defined here".to_string())
                         }
                     },
 
@@ -1637,8 +1668,8 @@ impl TypeChecker {
                             err_type_error!(
                                 self,
                                 span,
-                                TypeError::MissingVariants(enum_name.clone(), missing)
-                            )
+                                TypeError::MissingVariants(enum_name.name.clone(), missing)
+                            ).help(self, enum_name.span, "Defined here".to_string())
                         } else {
                             let extra = enum_vars
                                 .iter()
@@ -1649,8 +1680,8 @@ impl TypeChecker {
                                 err_type_error!(
                                     self,
                                     span,
-                                    TypeError::ExtraVariants(enum_name.clone(), extra)
-                                )
+                                    TypeError::ExtraVariants(enum_name.name.clone(), extra)
+                                ).help(self, enum_name.span, "Defined here".to_string())
                             } else {
                                 Ok(())
                             }
@@ -1812,29 +1843,29 @@ impl TypeChecker {
                                 self,
                                 span,
                                 TypeError::MissingField {
-                                    blob: b_blob.clone(),
+                                    blob: b_blob.name.clone(),
                                     field: a_field.clone()
                                 }
-                            );
+                            ).help(self, b_blob.span, "Defined here".to_string());
                         };
                     }
 
-                    for (b_field, b_ty) in b_fields.iter() {
-                        let a_ty = match a_fields.get(b_field) {
+                    for (b_field, (b_span, b_ty)) in b_fields.iter() {
+                        let (_a_span, a_ty) = match a_fields.get(b_field) {
                             Some(b_ty) => *b_ty,
                             None => {
                                 return err_type_error!(
                                     self,
                                     span,
                                     TypeError::MissingField {
-                                        blob: a_blob.clone(),
+                                        blob: a_blob.name.clone(),
                                         field: b_field.clone()
                                     }
-                                )
+                                ).help(self, a_blob.span, "Defined here".to_string());
                             }
                         };
                         self.sub_unify(span, ctx, a_ty, *b_ty, seen)
-                            .help_no_span(format!("While checking field .{}", b_field))?;
+                            .help(self, *b_span, format!("While checking field .{}", b_field))?;
                     }
                 }
 
@@ -1844,23 +1875,23 @@ impl TypeChecker {
                             return err_type_error!(
                                 self,
                                 span,
-                                TypeError::UnknownVariant(b_name.clone(), a_var.clone())
-                            );
+                                TypeError::UnknownVariant(b_name.name.clone(), a_var.clone())
+                            ).help(self, b_name.span, "Defined here".to_string());
                         }
                     }
-                    for (b_var, b_ty) in b_variants.iter() {
-                        let a_ty = match a_variants.get(b_var) {
+                    for (b_var, (_b_span, b_ty)) in b_variants.iter() {
+                        let (a_span, a_ty) = match a_variants.get(b_var) {
                             Some(a_ty) => *a_ty,
                             None => {
                                 return err_type_error!(
                                     self,
                                     span,
-                                    TypeError::UnknownVariant(a_name.clone(), b_var.clone())
-                                )
+                                    TypeError::UnknownVariant(a_name.name.clone(), b_var.clone())
+                                ).help(self, a_name.span, "Defined here".to_string());
                             }
                         };
                         self.sub_unify(span, ctx, a_ty, *b_ty, seen)
-                            .help_no_span(format!("While checking variant {}", b_var))?;
+                            .help(self, a_span, format!("While checking variant {}", b_var))?;
                     }
                 }
 
@@ -1985,7 +2016,7 @@ impl TypeChecker {
                 name.clone(),
                 fields
                     .iter()
-                    .map(|(name, ty)| (name.clone(), self.inner_copy(*ty, seen)))
+                    .map(|(name, (span, ty))| (name.clone(), (*span, self.inner_copy(*ty, seen))))
                     .collect(),
                 args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
             ),
@@ -1994,7 +2025,7 @@ impl TypeChecker {
                 name.clone(),
                 variants
                     .iter()
-                    .map(|(name, ty)| (name.clone(), self.inner_copy(*ty, seen)))
+                    .map(|(name, (span, ty))| (name.clone(), (*span, self.inner_copy(*ty, seen))))
                     .collect(),
                 args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
             ),

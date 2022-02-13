@@ -471,10 +471,15 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write_indents(dest, indent)?;
             write!(dest, "end")?
         }
-        StatementKind::Blob { name, fields } => {
+        StatementKind::Blob { name, fields, variables } => {
             write_indents(dest, indent)?;
             write!(dest, "{} :: blob", name)?;
-            let fields_as_tuples = fields.into_iter().collect();
+            if variables.len() > 0 {
+                write!(dest, "(")?;
+                write_comma_separated!(dest, indent, &|dest: &mut W, _, var| write!(dest, "{}", var), variables);
+                write!(dest, ")")?;
+            }
+            let fields_as_tuples = fields.into_iter().map(|(k, v)| (k.name, v)).collect();
             write_blob_fields(dest, indent + 1, fields_as_tuples, write_type)?;
         }
         StatementKind::Enum { name, variants, variables } => {
