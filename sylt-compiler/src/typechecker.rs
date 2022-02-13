@@ -1176,7 +1176,8 @@ impl TypeChecker {
                         value = self
                             .unify_option(*span, ctx, *branch_value, value)
                             .help_no_span(
-                                "The value from this block doesn't match the earlier branches".into(),
+                                "The value from this block doesn't match the earlier branches"
+                                    .into(),
                             )?;
                     }
                     value
