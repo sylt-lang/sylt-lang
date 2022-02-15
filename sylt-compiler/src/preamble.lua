@@ -408,7 +408,14 @@ function as_int(x)
     return f
 end
 floor = math.floor
-as_char = string.byte
+function as_char(s)
+   char = string.byte(s)
+   if char ~= nil then
+      return __VARIANT({"Just", char})
+   else
+      return __VARIANT({"None"})
+   end
+end
 function as_chars(s)
     local chars = {}
     local len = string.len(s)
