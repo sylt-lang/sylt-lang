@@ -103,7 +103,10 @@ pub struct Args {
     pub output: Option<PathBuf>,
 
     #[cfg(feature = "timed")]
-    #[options(long = "trace", help = "Output a tracing log to a file. '-' for stderr.")]
+    #[options(
+        long = "trace",
+        help = "Output a tracing log to a file. '-' for stderr."
+    )]
     pub trace_output: Option<PathBuf>,
 
     #[options(short = "v", no_long, count, help = "Increase verbosity (max 2)")]

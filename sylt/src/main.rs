@@ -33,12 +33,11 @@ fn main() -> Result<(), String> {
         let output = sylt_macro::timed_trace!(sylt, sylt_compiler, sylt_parser);
 
         if outfile == &std::path::Path::new("-") {
-            eprintln!(
-                "{}",
-                output,
-            );
+            eprintln!("{}", output,);
         } else {
-            if let Err(e) = std::fs::write(outfile, output).map_err(|e| format!("failed to write trace to file: {}", e)) {
+            if let Err(e) = std::fs::write(outfile, output)
+                .map_err(|e| format!("failed to write trace to file: {}", e))
+            {
                 eprintln!("{}", e);
             }
         };
