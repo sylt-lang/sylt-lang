@@ -1204,7 +1204,14 @@ impl TypeChecker {
                 let blob_ty = self.type_assignable(ctx, blob)?;
                 let (blob_name, blob_fields) = match self.find_type(blob_ty) {
                     Type::Blob(name, fields) => (name, fields),
-                    _ => unreachable!(),
+                    _ => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::Violating(self.bake_type(blob_ty)),
+                            "A blob type was expected, but the given type isn't a blob"
+                        )
+                    }
                 };
 
                 let given_fields: BTreeMap<_, _> = fields
