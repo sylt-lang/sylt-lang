@@ -63,7 +63,7 @@ where
             }
         }
 
-        Some(s) if s == "-" => {
+        Some(s) if s == &Path::new("-") => {
             use std::io;
             // NOTE(ed): Lack of running
             compile_with_reader_to_writer(args, reader, io::stdout().by_ref())?;
@@ -75,8 +75,8 @@ where
             // NOTE(ed): Lack of running
             compile_with_reader_to_writer(args, reader, buf.by_ref())?;
 
-            File::create(PathBuf::from(s))
-                .expect(&format!("Failed to create file: {}", s))
+            File::create(s)
+                .expect(&format!("Failed to create file: {}", s.display()))
                 .write(&buf)
                 .map_err(|e| vec![Error::IOError(Rc::new(e))])?;
         }
@@ -98,9 +98,13 @@ pub struct Args {
         long = "output",
         short = "o",
         meta = "FILE",
-        help = "Output a compiled lua file, '-' for stdout"
+        help = "Output a compiled lua file. '-' for stdout."
     )]
-    pub output: Option<String>,
+    pub output: Option<PathBuf>,
+
+    #[cfg(feature = "timed")]
+    #[options(long = "trace", help = "Output a tracing log to a file. '-' for stderr.")]
+    pub trace_output: Option<PathBuf>,
 
     #[options(short = "v", no_long, count, help = "Increase verbosity (max 2)")]
     pub verbosity: u32,

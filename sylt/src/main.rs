@@ -28,11 +28,20 @@ fn main() -> Result<(), String> {
         sylt::run_file(&args).err().unwrap_or_else(Vec::new)
     };
 
-    if cfg!(feature = "timed") {
-        eprintln!(
-            "{}",
-            sylt_macro::timed_trace!(sylt, sylt_compiler, sylt_parser)
-        );
+    #[cfg(feature = "timed")]
+    if let Some(outfile) = &args.trace_output {
+        let output = sylt_macro::timed_trace!(sylt, sylt_compiler, sylt_parser);
+
+        if outfile == &std::path::Path::new("-") {
+            eprintln!(
+                "{}",
+                output,
+            );
+        } else {
+            if let Err(e) = std::fs::write(outfile, output).map_err(|e| format!("failed to write trace to file: {}", e)) {
+                eprintln!("{}", e);
+            }
+        };
     }
 
     if errs.is_empty() {
