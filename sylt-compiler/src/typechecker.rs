@@ -478,7 +478,7 @@ impl TypeChecker {
                 return self.type_assignable(ctx, assignable);
             }
 
-            Fn { constraints, params, ret, pure } => {
+            Fn { constraints, params, ret, is_pure } => {
                 let params = params
                     .iter()
                     .map(|t| self.inner_resolve_type(span, ctx, t, seen))
@@ -503,7 +503,7 @@ impl TypeChecker {
                         }
                     }
                 }
-                let purity = if *pure {
+                let purity = if *is_pure {
                     Purity::Pure
                 } else {
                     Purity::Undefined

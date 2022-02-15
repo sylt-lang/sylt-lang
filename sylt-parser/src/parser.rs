@@ -188,7 +188,7 @@ pub enum TypeKind {
         constraints: BTreeMap<String, Vec<TypeConstraint>>,
         params: Vec<Type>,
         ret: Box<Type>,
-        pure: bool,
+        is_pure: bool,
     },
     /// Tuples can mix types since the length is constant.
     Tuple(Vec<Type>),
@@ -683,7 +683,7 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                     constraints,
                     params,
                     ret: Box::new(ret),
-                    pure: matches!(ty, T::Pu),
+                    is_pure: matches!(ty, T::Pu),
                 },
             )
         }
@@ -1394,7 +1394,7 @@ impl Display for Type {
                 name.pretty_print(f, 0)?;
                 write!(f, ")")?;
             }
-            TypeKind::Fn { constraints, params, ret, pure } => {
+            TypeKind::Fn { constraints, params, ret, is_pure: pure } => {
                 if *pure {
                     write!(f, "Pu ")?;
                 } else {

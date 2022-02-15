@@ -138,8 +138,8 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
         TypeKind::Implied => unreachable!(),
         TypeKind::Resolved(ty) => write!(dest, "{}", ty),
         TypeKind::UserDefined(assignable) => write_type_assignable(dest, indent, assignable),
-        TypeKind::Fn { constraints, params, ret, pure } => {
-            if pure {
+        TypeKind::Fn { constraints, params, ret, is_pure } => {
+            if is_pure {
                 write!(dest, "pu")?;
             } else {
                 write!(dest, "fn")?;
