@@ -7,6 +7,7 @@ use sylt_parser::{
     TypeAssignableKind, TypeConstraint, TypeKind, VarKind,
 };
 
+use crate::ty::Purity;
 use crate::{ty::Type, NamespaceID};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -157,8 +158,6 @@ enum Constraint {
     TotalEnum(BTreeSet<String>),
 
     Variable,
-
-    Pure,
 }
 
 pub struct TypeChecker {
@@ -448,10 +447,6 @@ impl TypeChecker {
                 self.add_constraint(var, span, Constraint::Contains(a));
                 self.add_constraint(a, span, Constraint::IsContainedIn(var));
             }
-            "Pure" => {
-                check_constraint_arity(self, span, "Pure", num_args, 0)?;
-                self.add_constraint(var, span, Constraint::Pure);
-            }
             x => return err_type_error!(self, span, TypeError::UnknownConstraint(x.into())),
         }
         Ok(())
@@ -483,32 +478,33 @@ impl TypeChecker {
                 return self.type_assignable(ctx, assignable);
             }
 
-            Fn { constraints, params, ret } => {
+            Fn { constraints, params, ret, is_pure } => {
                 let params = params
                     .iter()
                     .map(|t| self.inner_resolve_type(span, ctx, t, seen))
                     .collect::<TypeResult<Vec<_>>>()?;
                 let ret = self.inner_resolve_type(span, ctx, ret, seen)?;
                 for (var, constraints) in constraints.iter() {
-                    let var = match seen.get(var) {
-                        Some(var) => *var,
-                        // NOTE(ed): This disallowes type-variables that are only used for
-                        // constraints.
+                    match seen.get(var) {
+                        Some(var) => {
+                            // NOTE(ed): This disallowes type-variables that are only used for
+                            // constraints.
+                            for constraint in constraints.iter() {
+                                self.resolve_constraint(span, *var, constraint, seen)?;
+                            }
+                        }
                         None => {
                             return err_type_error!(
                                 self,
                                 span,
                                 TypeError::UnresolvedName(var.clone()),
                                 "Unused type-variable. (Only usages in the function signature are counted)"
-                            )
+                            );
                         }
-                    };
-
-                    for constraint in constraints.iter() {
-                        self.resolve_constraint(span, var, constraint, seen)?;
                     }
                 }
-                Type::Function(params, ret)
+                let purity = is_pure.then(|| Purity::Pure).unwrap_or(Purity::Undefined);
+                Type::Function(params, ret, purity)
             }
 
             Tuple(fields) => Type::Tuple(
@@ -877,7 +873,7 @@ impl TypeChecker {
             AssignableKind::Call(f, args) => {
                 let (ret, f) = self.assignable(f, ctx)?;
                 match self.find_type(f) {
-                    Type::Function(params, ret_ty) => {
+                    Type::Function(params, ret_ty, purity) => {
                         if args.len() != params.len() {
                             return err_type_error!(
                                 self,
@@ -886,7 +882,7 @@ impl TypeChecker {
                             );
                         }
 
-                        if ctx.inside_pure && !self.is_function_pure(f) {
+                        if ctx.inside_pure && !matches!(purity, Purity::Pure) {
                             return err_type_error!(
                                 self,
                                 span,
@@ -942,7 +938,7 @@ impl TypeChecker {
                     // TODO(ed): Don't we do this further down? Do we need this code?
                     // We copy functions
                     let field = match self.find_type(outer) {
-                        Type::Function(_, _) => self.copy(field),
+                        Type::Function(_, _, _) => self.copy(field),
                         _ => field,
                     };
                     with_ret(outer_ret, field)
@@ -1199,10 +1195,8 @@ impl TypeChecker {
                 self.stack.truncate(ss);
 
                 // Functions are the only expressions that we cannot return out of when evaluating.
-                let f = self.push_type(Type::Function(args, ret_ty));
-                if *pure {
-                    self.add_constraint(f, span, Constraint::Pure);
-                }
+                let purity = if *pure { Purity::Pure } else { Purity::Impure };
+                let f = self.push_type(Type::Function(args, ret_ty, purity));
                 no_ret(f)
             }
 
@@ -1369,14 +1363,15 @@ impl TypeChecker {
         self.add_constraint(defined_ty, span, Constraint::Variable);
 
         match &value.kind {
-            ExpressionKind::Function { params, .. } => {
+            ExpressionKind::Function { params, pure, .. } => {
                 // Special case for functions
                 let args = params
                     .iter()
                     .map(|_| self.push_type(Type::Unknown))
                     .collect();
                 let ret = self.push_type(Type::Unknown);
-                let fn_ty = self.push_type(Type::Function(args, ret));
+                let purity = pure.then(|| Purity::Pure).unwrap_or(Purity::Impure);
+                let fn_ty = self.push_type(Type::Function(args, ret, purity));
                 self.unify(span, ctx, defined_ty, fn_ty)?;
                 let var = Variable { ident, ty: fn_ty, kind, span };
                 if global {
@@ -1471,7 +1466,7 @@ impl TypeChecker {
                 Box::new(self.inner_bake_type(ty_k, seen)),
                 Box::new(self.inner_bake_type(ty_v, seen)),
             ),
-            Type::Function(args, ret) => RuntimeType::Function(
+            Type::Function(args, ret, _) => RuntimeType::Function(
                 args.iter()
                     .map(|ty| self.inner_bake_type(*ty, seen))
                     .collect(),
@@ -1688,17 +1683,6 @@ impl TypeChecker {
 
                     _ => Ok(()),
                 },
-
-                Constraint::Pure => match self.find_type(a) {
-                    Type::Function(_, _) => Ok(()),
-                    Type::Unknown => Ok(()),
-                    _ => err_type_error!(
-                        self,
-                        span,
-                        TypeError::Impurity,
-                        "Only functions can be pure, but this is not a function"
-                    ),
-                },
             }
             .help(self, *original_span, "Requirement came from".to_string())?
         }
@@ -1811,8 +1795,23 @@ impl TypeChecker {
                     }
                 }
 
-                (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
+                (
+                    Type::Function(a_args, a_ret, a_purity),
+                    Type::Function(b_args, b_ret, b_purity),
+                ) => {
                     // TODO: Make sure there is one place this is checked.
+                    match (a_purity, b_purity) {
+                            (Purity::Undefined, _) |
+                            (_, Purity::Undefined) |
+                            (Purity::Pure, Purity::Pure) |
+                            (Purity::Impure, Purity::Impure) => (),
+                            (_, _) => return err_type_error!(
+                                self,
+                                span,
+                                TypeError::Impurity,
+                                "Cannot use impure function implementations for pure function declarations"
+                            ),
+                        }
                     if a_args.len() != b_args.len() {
                         return err_type_error!(
                             self,
@@ -1969,7 +1968,6 @@ impl TypeChecker {
                         }
                         C::TotalEnum(x) => C::TotalEnum(x.clone()),
                         C::Variable => C::Variable,
-                        C::Pure => C::Pure,
                     },
                     *span,
                 )
@@ -1999,9 +1997,10 @@ impl TypeChecker {
                 Type::Dict(self.inner_copy(ty_k, seen), self.inner_copy(ty_v, seen))
             }
 
-            Type::Function(args, ret) => Type::Function(
+            Type::Function(args, ret, purity) => Type::Function(
                 args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
                 self.inner_copy(ret, seen),
+                purity,
             ),
 
             // TODO(ed): We can cheat here and just copy the table directly.
@@ -2318,12 +2317,6 @@ impl TypeChecker {
         }
     }
 
-    fn is_function_pure(&mut self, f: TyID) -> bool {
-        self.find_node(f)
-            .constraints
-            .contains_key(&Constraint::Pure)
-    }
-
     fn constant_index(
         &mut self,
         span: Span,
@@ -2411,7 +2404,7 @@ impl TypeChecker {
         match self.globals.get(&(0, "start".to_string())).cloned() {
             Some(Name::Global(var)) => {
                 let void = self.push_type(Type::Void);
-                let start = self.push_type(Type::Function(Vec::new(), void));
+                let start = self.push_type(Type::Function(Vec::new(), void, Purity::Undefined));
                 self.unify(var.ident.span, ctx, var.ty, start)
                     .map(|_| ())
                     .or_else(|_| {

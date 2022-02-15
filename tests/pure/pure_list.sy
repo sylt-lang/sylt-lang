@@ -1,0 +1,6 @@
+a : [fn -> void] : [
+    pu do end,
+]
+
+start :: fn do
+end

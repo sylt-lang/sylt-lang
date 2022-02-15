@@ -188,6 +188,7 @@ pub enum TypeKind {
         constraints: BTreeMap<String, Vec<TypeConstraint>>,
         params: Vec<Type>,
         ret: Box<Type>,
+        is_pure: bool,
     },
     /// Tuples can mix types since the length is constant.
     Tuple(Vec<Type>),
@@ -604,10 +605,6 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
 
             let mut constraints = BTreeMap::new();
 
-            if let T::Pu = ty {
-                constraints.insert("Pure".to_string(), Vec::new());
-            }
-
             let ctx = if matches!(ctx.token(), T::Less) {
                 let mut ctx = ctx.skip(1);
                 'outer: loop {
@@ -680,7 +677,15 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                     }
                 }
             };
-            (ctx, Fn { constraints, params, ret: Box::new(ret) })
+            (
+                ctx,
+                Fn {
+                    constraints,
+                    params,
+                    ret: Box::new(ret),
+                    is_pure: matches!(ty, T::Pu),
+                },
+            )
         }
 
         // Tuple
@@ -1389,8 +1394,12 @@ impl Display for Type {
                 name.pretty_print(f, 0)?;
                 write!(f, ")")?;
             }
-            TypeKind::Fn { constraints, params, ret } => {
-                write!(f, "Fn ")?;
+            TypeKind::Fn { constraints, params, ret, is_pure: pure } => {
+                if *pure {
+                    write!(f, "Pu ")?;
+                } else {
+                    write!(f, "Fn ")?;
+                }
                 if constraints.len() > 0 {
                     write!(f, "<")?;
                     for (var, constraints) in constraints.iter() {
