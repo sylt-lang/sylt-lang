@@ -503,11 +503,7 @@ impl TypeChecker {
                         }
                     }
                 }
-                let purity = if *is_pure {
-                    Purity::Pure
-                } else {
-                    Purity::Undefined
-                };
+                let purity = is_pure.then(|| Purity::Pure).unwrap_or(Purity::Undefined);
                 Type::Function(params, ret, purity)
             }
 
@@ -1367,11 +1363,7 @@ impl TypeChecker {
                     .map(|_| self.push_type(Type::Unknown))
                     .collect();
                 let ret = self.push_type(Type::Unknown);
-                let purity = if *pure {
-                    Purity::Pure
-                } else {
-                    Purity::Undefined
-                };
+                let purity = pure.then(|| Purity::Pure).unwrap_or(Purity::Impure);
                 let fn_ty = self.push_type(Type::Function(args, ret, purity));
                 self.unify(span, ctx, defined_ty, fn_ty)?;
                 let var = Variable { ident, ty: fn_ty, kind, span };
