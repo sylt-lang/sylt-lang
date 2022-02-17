@@ -263,5 +263,5 @@ fn program_tests() {
         "\n SUMMARY {}/{}      {} failed\n",
         num_passed, num_tests, num_failed
     );
-    assert!(failed.is_empty(), "Some tests failed!");
+    assert!(failed.is_empty() && formatter_failed.is_empty(), "Some tests failed!");
 }
