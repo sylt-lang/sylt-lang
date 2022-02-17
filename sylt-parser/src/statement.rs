@@ -464,6 +464,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     Ok((ctx, ()))
                 }
                 fn end<'t>(ctx: Context<'t>) -> ParseResult<'t, bool> {
+                    let ctx = skip_while!(ctx, T::Newline);
                     match ctx.token() {
                         // Done with variants.
                         T::End => Ok((ctx.skip(1), true)),

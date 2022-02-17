@@ -90,7 +90,7 @@ fn write_enum_variants<W: Write>(
     mut variants: Vec<(String, Type)>,
 ) -> fmt::Result {
     match variants.len() {
-        0 => {}
+        0 => { write!(dest, "\n")?; }
         1 => {
             let (var, ty) = variants.pop().unwrap();
             write!(dest, " {} ", var)?;
