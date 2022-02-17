@@ -595,9 +595,6 @@ pub fn type_assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeAssignable> 
     ) -> ParseResult<'t, TypeAssignableKind> {
         let span = ctx.span();
         match ctx.token() {
-            T::LeftParen => {
-                todo!("Add in parsing for generics here!");
-            }
             T::Identifier(name) if is_capitalized(name) => {
                 let ctx = ctx.skip(1);
                 let ident = Identifier::new(span, name.clone());
