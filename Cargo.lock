@@ -165,6 +165,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "sylt-formatter"
+version = "0.2.0"
+dependencies = [
+ "gumdrop",
+ "sylt-tokenizer",
+]
+
+[[package]]
 name = "sylt-macro"
 version = "0.2.0"
 dependencies = [

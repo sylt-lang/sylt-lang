@@ -36,6 +36,10 @@ pub struct PlacedToken {
     pub span: Span,
 }
 
+pub fn spanned_lexer<'a>(content: &'a str) -> logos::SpannedIter<'a, Token> {
+    Token::lexer(content).spanned()
+}
+
 pub fn string_to_tokens(file_id: usize, content: &str) -> Vec<PlacedToken> {
     // A list containing which char index a specific byte index is at.
     //
@@ -61,8 +65,7 @@ pub fn string_to_tokens(file_id: usize, content: &str) -> Vec<PlacedToken> {
     let mut line = 1;
     let mut last_newline = 0;
 
-    Token::lexer(&content)
-        .spanned()
+    spanned_lexer(content)
         // Contains side-effects.
         .map(|(token, byte_range)| {
             let is_newline = token == Token::Newline;

@@ -1,0 +1,14 @@
+[package]
+name = "sylt-formatter"
+description = """
+Parser for the Sylt programming language.
+"""
+license = "MIT"
+repository = "https://github.com/sylt-lang/sylt-lang.git"
+readme = "../README.md"
+version = "0.2.0"
+edition = "2018"
+
+[dependencies]
+sylt-tokenizer = { version = "0.2.0", path = "../sylt-tokenizer" }
+gumdrop = "0.8"
