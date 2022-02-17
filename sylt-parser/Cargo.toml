@@ -4,7 +4,7 @@ description = """
 Parser for the Sylt programming language.
 """
 license = "MIT"
-repository = "https://github.com/FredTheDino/sylt.git"
+repository = "https://github.com/sylt-lang/sylt-lang.git"
 readme = "../README.md"
 version = "0.2.0"
 edition = "2018"

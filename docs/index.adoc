@@ -3,7 +3,7 @@
 Sylt is a statically checked and dynamically typed programming language made for
 game jams. Working in Sylt should be a pain- and fearless experience. If it
 isn't, please file an
-https://github.com/FredTheDino/sylt-lang/issues/new/choose[issue].
+https://github.com/sylt-lang/sylt-lang/issues/new/choose[issue].
 
 This introduction talks about how to install Sylt and write your first program
 and game. You may also want to check out the link:guide.html[Guide] and
@@ -13,7 +13,7 @@ link:quick-reference.html[Quick Reference].
 == Installing the compiler
 
 The simplest way of getting the binary is to download a tagged release from
-https://github.com/FredTheDino/sylt-lang/releases/.
+https://github.com/sylt-lang/sylt-lang/releases/.
 
 If you can't download a pre-built binary (due to a different architecture or
 operating system) or don't want to, you will need a Rust installation and the
@@ -27,7 +27,7 @@ With Rust installed, run
 
 [source, shell]
 ----
-$ cargo install sylt --git https://github.com/FredTheDino/sylt-lang.git
+$ cargo install sylt --git https://github.com/sylt-lang/sylt-lang.git
 ----
 to
 install the latest and greatest from the main branch. If you want a tagged
@@ -35,7 +35,7 @@ version you can add `--tag <tag-name>` to the command, as in
 
 [source, shell]
 ----
-$ cargo install sylt --git https://github.com/FredTheDino/sylt-lang.git --tag v0.1.0
+$ cargo install sylt --git https://github.com/sylt-lang/sylt-lang.git --tag v0.1.0
 ----
 
 You can also download the source code and build it locally with
