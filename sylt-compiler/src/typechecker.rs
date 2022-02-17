@@ -489,6 +489,10 @@ impl TypeChecker {
                         }
                     }
 
+                    // NOTE(ed): Is this going to hant me later?
+                    // Gives better errors for recursive types - which are illegal.
+                    Type::Unknown => { }
+
                     _ => {
                         return err_type_error!(
                             self,
