@@ -185,6 +185,8 @@ pub enum TypeError {
     ExtraVariants(String, Vec<String>),
 
     ExpectVoid(Type),
+
+    Impurity,
 }
 
 // TODO(ed): Switch to spans for the whole compiler?
@@ -431,6 +433,8 @@ impl fmt::Display for TypeError {
                     ty
                 )
             }
+
+            TypeError::Impurity => Ok(()),
         }
     }
 }

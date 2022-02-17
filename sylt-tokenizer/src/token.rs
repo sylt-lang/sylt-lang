@@ -33,12 +33,14 @@ pub enum Token {
 
     #[token("if")]
     If,
+    #[token("elif")]
+    Elif,
+    #[token("else")]
+    Else,
     #[token("case")]
     Case,
     #[token("is")]
     Is,
-    #[token("else")]
-    Else,
     #[token("break")]
     Break,
     #[token("continue")]
@@ -123,6 +125,8 @@ pub enum Token {
 
     #[token("fn")]
     Fn,
+    #[token("pu")]
+    Pu,
 
     #[token("and")]
     And,

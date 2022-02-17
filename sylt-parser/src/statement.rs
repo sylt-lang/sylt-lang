@@ -252,7 +252,7 @@ pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
     let mut errs = Vec::new();
     let mut statements = Vec::new();
     // Parse multiple inner statements until } or EOF
-    while !matches!(ctx.token(), T::Else | T::End | T::EOF) {
+    while !matches!(ctx.token(), T::Else | T::Elif | T::End | T::EOF) {
         match statement(ctx) {
             Ok((_ctx, stmt)) => {
                 ctx = _ctx; // assign to outer
@@ -268,7 +268,7 @@ pub fn block<'t>(ctx: Context<'t>) -> ParseResult<'t, Vec<Statement>> {
 
     if errs.is_empty() {
         // Special case for chaining if-else-statements
-        if !matches!(ctx.token(), T::End | T::Else) {
+        if !matches!(ctx.token(), T::End | T::Else | T::Elif) {
             syntax_error!(ctx, "Expected 'end' after block");
         }
         let ctx = ctx.skip_if(T::End);
@@ -714,7 +714,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
     // Newline, RightBrace and Else can end a statment.
     // If a statement does not end, we only report it as a missing newline.
-    let ctx = if matches!(ctx.token(), T::End | T::Else) {
+    let ctx = if matches!(ctx.token(), T::End | T::Else | T::Elif) {
         ctx
     } else {
         expect!(ctx, T::Newline, "Expected newline to end statement")

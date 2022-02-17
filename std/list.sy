@@ -2,10 +2,10 @@ from container use len
 
 random_choice: fn [*ITEM] -> *ITEM : external
 for_each: fn [*ITEM], fn *ITEM -> void -> void : external
-map: fn [*ITEM], fn *ITEM -> *OUT -> [*OUT] : external
-reduce: fn [*ITEM], (fn *ITEM, *ITEM -> *OUT) -> *OUT : external
-fold: fn [*ITEM], *OUT, (fn *ITEM, *OUT -> *OUT) -> *OUT : external
-filter: fn [*ITEM], fn *ITEM -> bool -> [*ITEM] : external
+map: pu [*ITEM], pu *ITEM -> *OUT -> [*OUT] : external
+reduce: pu [*ITEM], (pu *ITEM, *ITEM -> *OUT) -> *OUT : external
+fold: pu [*ITEM], *OUT, (pu *ITEM, *OUT -> *OUT) -> *OUT : external
+filter: pu [*ITEM], pu *ITEM -> bool -> [*ITEM] : external
 push: fn [*ITEM], *ITEM -> void : external
 prepend: fn [*ITEM], *ITEM -> void : external
 pop: fn [*ITEM] -> *ITEM : external

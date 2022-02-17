@@ -1,0 +1,17 @@
+f :: fn a ->
+    if a == 1 do
+        "a"
+    elif a == 2 do
+        "b"
+    else
+        "c"
+    end
+end
+
+start :: fn do
+    "a" <=> f' 1
+    "b" <=> f' 2
+    "c" <=> f' 3
+    "c" <=> f' 4
+    "c" <=> f' 0
+end

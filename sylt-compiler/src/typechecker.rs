@@ -7,6 +7,7 @@ use sylt_parser::{
     TypeAssignableKind, TypeConstraint, TypeKind, VarKind,
 };
 
+use crate::ty::Purity;
 use crate::{ty::Type, NamespaceID};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -171,16 +172,21 @@ pub struct TypeChecker {
 #[derive(Clone, Debug, Copy)]
 struct TypeCtx {
     inside_loop: bool,
+    inside_pure: bool,
     namespace: NamespaceID,
 }
 
 impl TypeCtx {
     fn namespace(namespace: NamespaceID) -> Self {
-        Self { inside_loop: false, namespace }
+        Self { inside_loop: false, inside_pure: false, namespace }
     }
 
     fn enter_loop(self) -> Self {
         Self { inside_loop: true, ..self }
+    }
+
+    fn enter_pure(self) -> Self {
+        Self { inside_pure: true, ..self }
     }
 }
 
@@ -505,32 +511,33 @@ impl TypeChecker {
                 return Ok(ty);
             }
 
-            Fn { constraints, params, ret } => {
+            Fn { constraints, params, ret, is_pure } => {
                 let params = params
                     .iter()
                     .map(|t| self.inner_resolve_type(span, ctx, t, seen))
                     .collect::<TypeResult<Vec<_>>>()?;
                 let ret = self.inner_resolve_type(span, ctx, ret, seen)?;
                 for (var, constraints) in constraints.iter() {
-                    let var = match seen.get(var) {
-                        Some(var) => *var,
-                        // NOTE(ed): This disallowes type-variables that are only used for
-                        // constraints.
+                    match seen.get(var) {
+                        Some(var) => {
+                            // NOTE(ed): This disallowes type-variables that are only used for
+                            // constraints.
+                            for constraint in constraints.iter() {
+                                self.resolve_constraint(span, *var, constraint, seen)?;
+                            }
+                        }
                         None => {
                             return err_type_error!(
                                 self,
                                 span,
                                 TypeError::UnresolvedName(var.clone()),
                                 "Unused type-variable. (Only usages in the function signature are counted)"
-                            )
+                            );
                         }
-                    };
-
-                    for constraint in constraints.iter() {
-                        self.resolve_constraint(span, var, constraint, seen)?;
                     }
                 }
-                Type::Function(params, ret)
+                let purity = is_pure.then(|| Purity::Pure).unwrap_or(Purity::Undefined);
+                Type::Function(params, ret, purity)
             }
 
             Tuple(fields) => Type::Tuple(
@@ -586,6 +593,16 @@ impl TypeChecker {
 
             StatementKind::Assignment { kind, target, value } => {
                 self.can_assign(span, ctx, target)?;
+
+                if ctx.inside_pure {
+                    return err_type_error!(
+                        self,
+                        span,
+                        TypeError::Exotic,
+                        "Cannot make assignments in pure functions"
+                    );
+                }
+
                 let (expression_ret, expression_ty) = self.expression(value, ctx)?;
                 let (target_ret, target_ty) = self.assignable(target, ctx)?;
                 match kind {
@@ -653,7 +670,7 @@ impl TypeChecker {
             | StatementKind::Enum { .. }
             | StatementKind::ExternalDefinition { .. } => {
                 unreachable!(
-                    "Illegal inner statement at {:?}! Parser should have caught this.",
+                    "Illegal inner statement at {:?}! Parser should have caught this",
                     span
                 )
             }
@@ -918,7 +935,18 @@ impl TypeChecker {
                         .get(&(ctx.namespace, ident.name.clone()))
                         .cloned()
                     {
-                        Some(Name::Global(var)) => no_ret(var.ty),
+                        Some(Name::Global(var)) => {
+                            if ctx.inside_pure && matches!(var.kind, VarKind::Mutable) {
+                                err_type_error!(
+                                    self,
+                                    span,
+                                    TypeError::Impurity,
+                                    "Cannot access mutable variables from pure functions"
+                                )
+                            } else {
+                                no_ret(var.ty)
+                            }
+                        }
                         _ => err_type_error!(
                             self,
                             span,
@@ -931,7 +959,7 @@ impl TypeChecker {
             AssignableKind::Call(f, args) => {
                 let (ret, f) = self.assignable(f, ctx)?;
                 match self.find_type(f) {
-                    Type::Function(params, ret_ty) => {
+                    Type::Function(params, ret_ty, purity) => {
                         if args.len() != params.len() {
                             return err_type_error!(
                                 self,
@@ -939,6 +967,16 @@ impl TypeChecker {
                                 TypeError::WrongArity { got: args.len(), expected: params.len() }
                             );
                         }
+
+                        if ctx.inside_pure && !matches!(purity, Purity::Pure) {
+                            return err_type_error!(
+                                self,
+                                span,
+                                TypeError::Impurity,
+                                "Cannot call impure functions from pure functions"
+                            );
+                        }
+
                         // TODO(ed): Annotate the errors?
                         let mut ret = ret;
                         for (a, p) in args.iter_mut().zip(params.iter()) {
@@ -986,7 +1024,7 @@ impl TypeChecker {
                     // TODO(ed): Don't we do this further down? Do we need this code?
                     // We copy functions
                     let field = match self.find_type(outer) {
-                        Type::Function(_, _) => self.copy(field),
+                        Type::Function(_, _, _) => self.copy(field),
                         _ => field,
                     };
                     with_ret(outer_ret, field)
@@ -1174,21 +1212,62 @@ impl TypeChecker {
                 with_ret(ret, value.unwrap_or_else(|| self.push_type(Type::Void)))
             }
 
-            ExpressionKind::If { condition, pass, fail } => {
-                let (ret, condition) = self.expression(condition, ctx)?;
-                let boolean = self.push_type(Type::Bool);
-                self.unify(span, ctx, boolean, condition)?;
+            ExpressionKind::If(branches) => {
+                let tys = branches
+                    .iter_mut()
+                    .map(|branch| {
+                        let condition_ret = if let Some(condition) = &mut branch.condition {
+                            let span = condition.span;
+                            let (ret, condition) = self.expression(condition, ctx)?;
+                            let boolean = self.push_type(Type::Bool);
+                            self.unify(span, ctx, boolean, condition)?;
+                            ret
+                        } else {
+                            None
+                        };
+                        let (block_ret, block_value) =
+                            self.expression_block(span, &mut branch.body, ctx)?;
+                        Ok((
+                            span,
+                            self.unify_option(span, ctx, condition_ret, block_ret)?,
+                            block_value,
+                        ))
+                    })
+                    .collect::<TypeResult<Vec<_>>>()?;
 
-                let (pass_ret, pass) = self.expression_block(span, pass, ctx)?;
-                let (fail_ret, fail) = self.expression_block(span, fail, ctx)?;
-
-                let ret = self.unify_option(span, ctx, pass_ret, ret)?;
-                let ret = self.unify_option(span, ctx, fail_ret, ret)?;
-                let value = self.unify_option(span, ctx, pass, fail)?;
+                let mut ret = None;
+                let value = if branches
+                    .last()
+                    .map(|branch| branch.condition.is_some())
+                    .unwrap()
+                {
+                    // There isn't an else branch - so we can fall through.
+                    let void = self.push_type(Type::Void);
+                    Some(void)
+                } else {
+                    let mut value = None;
+                    for (span, branch_ret, branch_value) in tys.iter() {
+                        // TODO(ed): These are bad errors, they're easy to confuse. A better
+                        // formulation?
+                        ret = self
+                            .unify_option(*span, ctx, *branch_ret, ret)
+                            .help_no_span(
+                                "The return from this block doesn't match the earlier branches"
+                                    .into(),
+                            )?;
+                        value = self
+                            .unify_option(*span, ctx, *branch_value, value)
+                            .help_no_span(
+                                "The value from this block doesn't match the earlier branches"
+                                    .into(),
+                            )?;
+                    }
+                    value
+                };
                 with_ret(ret, value.unwrap_or_else(|| self.push_type(Type::Void)))
             }
 
-            ExpressionKind::Function { name: _, params, ret, body } => {
+            ExpressionKind::Function { name: _, params, ret, body, pure } => {
                 let ss = self.stack.len();
                 let mut args = Vec::new();
                 let mut seen = HashMap::new();
@@ -1207,6 +1286,9 @@ impl TypeChecker {
 
                 let returns_something = ret.kind != TypeKind::Resolved(RuntimeType::Void);
                 let ret_ty = self.inner_resolve_type(span, ctx, ret, &mut seen)?;
+
+                let ctx = if *pure { ctx.enter_pure() } else { ctx };
+
                 let (actual_ret, implicit_ret) = self.expression_block(span, body, ctx)?;
 
                 let actual_ret = if returns_something {
@@ -1216,13 +1298,17 @@ impl TypeChecker {
                     let void = Some(self.push_type(Type::Void));
                     self.unify_option(span, ctx, actual_ret, void)?
                 };
+                self.unify_option(span, ctx, Some(ret_ty), actual_ret)
+                    .help_no_span(
+                        "The actual return type and the specified return type differ!".into(),
+                    )?;
 
                 if actual_ret.map(|x| self.is_void(x)).unwrap_or(true) && returns_something {
                     return err_type_error!(
                         self,
                         ret.span,
                         TypeError::Exotic,
-                        "The return type isn't explicitly set to `void`, but nothing is returned"
+                        "The return type isn't explicitly set to `void`, but the function doesn't return anything"
                     );
                 }
 
@@ -1236,14 +1322,23 @@ impl TypeChecker {
                 self.stack.truncate(ss);
 
                 // Functions are the only expressions that we cannot return out of when evaluating.
-                no_ret(self.push_type(Type::Function(args, ret_ty)))
+                let purity = if *pure { Purity::Pure } else { Purity::Impure };
+                let f = self.push_type(Type::Function(args, ret_ty, purity));
+                no_ret(f)
             }
 
             ExpressionKind::Blob { blob, fields } => {
                 let blob_ty = self.type_assignable(ctx, blob)?;
                 let (blob_name, blob_fields, blob_args) = match self.find_type(blob_ty) {
                     Type::Blob(name, fields, args) => (name, fields, args),
-                    _ => unreachable!(),
+                    _ => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::Violating(self.bake_type(blob_ty)),
+                            "A blob type was expected, but the given type isn't a blob"
+                        )
+                    }
                 };
 
                 let given_fields: BTreeMap<_, _> = fields
@@ -1381,6 +1476,14 @@ impl TypeChecker {
         let span = statement.span;
         let (ident, kind, ty, value) = match &mut statement.kind {
             StatementKind::Definition { ident, kind, ty, value } => {
+                if ctx.inside_pure && !kind.immutable() {
+                    return err_type_error!(
+                        self,
+                        span,
+                        TypeError::Impurity,
+                        "Cannot make mutable declarations in pure functions"
+                    );
+                }
                 (ident.clone(), *kind, ty, value)
             }
             _ => unreachable!(),
@@ -1390,14 +1493,15 @@ impl TypeChecker {
         self.add_constraint(defined_ty, span, Constraint::Variable);
 
         match &value.kind {
-            ExpressionKind::Function { params, .. } => {
+            ExpressionKind::Function { params, pure, .. } => {
                 // Special case for functions
                 let args = params
                     .iter()
                     .map(|_| self.push_type(Type::Unknown))
                     .collect();
                 let ret = self.push_type(Type::Unknown);
-                let fn_ty = self.push_type(Type::Function(args, ret));
+                let purity = pure.then(|| Purity::Pure).unwrap_or(Purity::Impure);
+                let fn_ty = self.push_type(Type::Function(args, ret, purity));
                 self.unify(span, ctx, defined_ty, fn_ty)?;
                 let var = Variable { ident, ty: fn_ty, kind, span };
                 if global {
@@ -1492,7 +1596,7 @@ impl TypeChecker {
                 Box::new(self.inner_bake_type(ty_k, seen)),
                 Box::new(self.inner_bake_type(ty_v, seen)),
             ),
-            Type::Function(args, ret) => RuntimeType::Function(
+            Type::Function(args, ret, _) => RuntimeType::Function(
                 args.iter()
                     .map(|ty| self.inner_bake_type(*ty, seen))
                     .collect(),
@@ -1823,8 +1927,23 @@ impl TypeChecker {
                     }
                 }
 
-                (Type::Function(a_args, a_ret), Type::Function(b_args, b_ret)) => {
+                (
+                    Type::Function(a_args, a_ret, a_purity),
+                    Type::Function(b_args, b_ret, b_purity),
+                ) => {
                     // TODO: Make sure there is one place this is checked.
+                    match (a_purity, b_purity) {
+                            (Purity::Undefined, _) |
+                            (_, Purity::Undefined) |
+                            (Purity::Pure, Purity::Pure) |
+                            (Purity::Impure, Purity::Impure) => (),
+                            (_, _) => return err_type_error!(
+                                self,
+                                span,
+                                TypeError::Impurity,
+                                "Cannot use impure function implementations for pure function declarations"
+                            ),
+                        }
                     if a_args.len() != b_args.len() {
                         return err_type_error!(
                             self,
@@ -2010,9 +2129,10 @@ impl TypeChecker {
                 Type::Dict(self.inner_copy(ty_k, seen), self.inner_copy(ty_v, seen))
             }
 
-            Type::Function(args, ret) => Type::Function(
+            Type::Function(args, ret, purity) => Type::Function(
                 args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
                 self.inner_copy(ret, seen),
+                purity,
             ),
 
             // TODO(ed): We can cheat here and just copy the table directly.
@@ -2418,7 +2538,7 @@ impl TypeChecker {
         match self.globals.get(&(0, "start".to_string())).cloned() {
             Some(Name::Global(var)) => {
                 let void = self.push_type(Type::Void);
-                let start = self.push_type(Type::Function(Vec::new(), void));
+                let start = self.push_type(Type::Function(Vec::new(), void, Purity::Undefined));
                 self.unify(var.ident.span, ctx, var.ty, start)
                     .map(|_| ())
                     .or_else(|_| {

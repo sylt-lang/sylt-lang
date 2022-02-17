@@ -1,0 +1,15 @@
+a :: pu ->
+    1
+end
+
+c :: pu ->
+    b :: pu ->
+        2 * a'
+    end
+
+    3 * b'
+end
+
+start :: fn do
+    x :: c'
+end

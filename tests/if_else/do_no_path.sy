@@ -1,0 +1,12 @@
+f :: fn a do
+    if a == 1 do
+        <!>
+    elif a == 2 do
+        <!>
+    end
+end
+
+start :: fn do
+    f' 3
+    f' 0
+end

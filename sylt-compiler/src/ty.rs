@@ -3,6 +3,13 @@ use sylt_common::TyID;
 use sylt_parser::{Identifier, Span};
 
 #[derive(Debug, Clone)]
+pub enum Purity {
+    Pure,
+    Impure,
+    Undefined,
+}
+
+#[derive(Debug, Clone)]
 pub enum Type {
     Unknown,
 
@@ -21,7 +28,7 @@ pub enum Type {
     List(TyID),
     Set(TyID),
     Dict(TyID, TyID),
-    Function(Vec<TyID>, TyID),
+    Function(Vec<TyID>, TyID, Purity),
     Blob(Identifier, BTreeMap<String, (Span, TyID)>, Vec<TyID>),
     Enum(Identifier, BTreeMap<String, (Span, TyID)>, Vec<TyID>),
 }

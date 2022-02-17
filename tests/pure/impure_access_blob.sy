@@ -1,0 +1,19 @@
+Bob :: blob {
+    x: int
+}
+
+bob :: Bob { x: 1 }
+
+access_bob :: pu ->
+    bob.x
+end
+
+start :: fn do
+    first :: access_bob'
+
+    bob.x = 2
+
+    second :: access_bob'
+
+    first == second <=> false
+end

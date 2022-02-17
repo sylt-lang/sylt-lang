@@ -1,0 +1,7 @@
+a := 1
+
+start :: pu do
+    b :: a
+end
+
+// error: Cannot access mutable variables from pure functions
