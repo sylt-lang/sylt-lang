@@ -140,9 +140,7 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
         TypeKind::UserDefined(assignable, args) => {
             write_type_assignable(dest, indent, assignable)?;
             write!(dest, "(")?;
-            for arg in args.into_iter() {
-                write_type(dest, indent, arg)?
-            }
+            write_comma_separated!(dest, indent, &|dest: &mut W, _, arg| write_type(dest, indent, arg), args);
             write!(dest, ")")
         }
         TypeKind::Fn { constraints, params, ret } => {
@@ -473,10 +471,10 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
         }
         StatementKind::Blob { name, fields, variables } => {
             write_indents(dest, indent)?;
-            write!(dest, "{} :: blob", name)?;
+            write!(dest, "{} :: blob", name.name)?;
             if variables.len() > 0 {
                 write!(dest, "(")?;
-                write_comma_separated!(dest, indent, &|dest: &mut W, _, var| write!(dest, "{}", var), variables);
+                write_comma_separated!(dest, indent, &|dest: &mut W, _, var: Identifier| write!(dest, "*{}", var.name), variables);
                 write!(dest, ")")?;
             }
             let fields_as_tuples = fields.into_iter().map(|(k, v)| (k.name, v)).collect();
@@ -487,7 +485,7 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write!(dest, "{} :: enum", name.name)?;
             if variables.len() > 0 {
                 write!(dest, "(")?;
-                write_comma_separated!(dest, indent, &|dest: &mut W, _, var| write!(dest, "{}", var), variables);
+                write_comma_separated!(dest, indent, &|dest: &mut W, _, var: Identifier| write!(dest, "*{}", var.name), variables);
                 write!(dest, ")")?;
             }
             let variants_as_tuples = variants.into_iter().map(|(k, v)| (k.name, v)).collect();
