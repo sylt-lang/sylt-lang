@@ -9,3 +9,5 @@ end
 start :: fn do
     print' f'
 end
+
+// error: The `void` has no values
