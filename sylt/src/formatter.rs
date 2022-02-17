@@ -90,7 +90,9 @@ fn write_enum_variants<W: Write>(
     mut variants: Vec<(String, Type)>,
 ) -> fmt::Result {
     match variants.len() {
-        0 => { write!(dest, "\n")?; }
+        0 => {
+            write!(dest, "\n")?;
+        }
         1 => {
             let (var, ty) = variants.pop().unwrap();
             write!(dest, " {} ", var)?;
@@ -140,7 +142,12 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
         TypeKind::UserDefined(assignable, args) => {
             write_type_assignable(dest, indent, assignable)?;
             write!(dest, "(")?;
-            write_comma_separated!(dest, indent, &|dest: &mut W, _, arg| write_type(dest, indent, arg), args);
+            write_comma_separated!(
+                dest,
+                indent,
+                &|dest: &mut W, _, arg| write_type(dest, indent, arg),
+                args
+            );
             write!(dest, ")")
         }
         TypeKind::Fn { constraints, params, ret, is_pure } => {
@@ -489,7 +496,12 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write!(dest, "{} :: blob", name.name)?;
             if variables.len() > 0 {
                 write!(dest, "(")?;
-                write_comma_separated!(dest, indent, &|dest: &mut W, _, var: Identifier| write!(dest, "*{}", var.name), variables);
+                write_comma_separated!(
+                    dest,
+                    indent,
+                    &|dest: &mut W, _, var: Identifier| write!(dest, "*{}", var.name),
+                    variables
+                );
                 write!(dest, ")")?;
             }
             let fields_as_tuples = fields.into_iter().map(|(k, v)| (k.name, v)).collect();
@@ -500,7 +512,12 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write!(dest, "{} :: enum", name.name)?;
             if variables.len() > 0 {
                 write!(dest, "(")?;
-                write_comma_separated!(dest, indent, &|dest: &mut W, _, var: Identifier| write!(dest, "*{}", var.name), variables);
+                write_comma_separated!(
+                    dest,
+                    indent,
+                    &|dest: &mut W, _, var: Identifier| write!(dest, "*{}", var.name),
+                    variables
+                );
                 write!(dest, ")")?;
             }
             let variants_as_tuples = variants.into_iter().map(|(k, v)| (k.name, v)).collect();

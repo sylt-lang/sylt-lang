@@ -488,7 +488,12 @@ impl TypeChecker {
                                     "The type {} takes at most {} type arguments",
                                     name.name,
                                     sub.len()
-                                ).help(self, name.span, "Defined here".into());
+                                )
+                                .help(
+                                    self,
+                                    name.span,
+                                    "Defined here".into(),
+                                );
                             }
                             let var_ty = self.inner_resolve_type(var.span, ctx, var, seen)?;
                             self.unify(span, ctx, var_ty, sub[i])?;
@@ -497,7 +502,7 @@ impl TypeChecker {
 
                     // NOTE(ed): Is this going to hant me later?
                     // Gives better errors for recursive types - which are illegal.
-                    Type::Unknown => { }
+                    Type::Unknown => {}
 
                     _ => {
                         return err_type_error!(
@@ -1675,7 +1680,12 @@ impl TypeChecker {
                                 blob: blob_name.name.clone(),
                                 field: name.clone(),
                             }
-                        ).help(self, blob_name.span, "Defined here".to_string()),
+                        )
+                        .help(
+                            self,
+                            blob_name.span,
+                            "Defined here".to_string(),
+                        ),
                     },
                     _ => err_type_error!(
                         self,
@@ -1744,14 +1754,19 @@ impl TypeChecker {
 
                     Type::Enum(enum_name, variants, _) => match (variants.get(var), maybe_v_b) {
                         (Some(_), None) => Ok(()),
-                        (Some((_, v_a)), Some(v_b)) => self.unify(span, ctx, *v_a, *v_b).map(|_| ()),
-                        (None, _) => {
-                            err_type_error!(
-                                self,
-                                span,
-                                TypeError::UnknownVariant(enum_name.name, var.clone())
-                            ).help(self, enum_name.span, "Defined here".to_string())
+                        (Some((_, v_a)), Some(v_b)) => {
+                            self.unify(span, ctx, *v_a, *v_b).map(|_| ())
                         }
+                        (None, _) => err_type_error!(
+                            self,
+                            span,
+                            TypeError::UnknownVariant(enum_name.name, var.clone())
+                        )
+                        .help(
+                            self,
+                            enum_name.span,
+                            "Defined here".to_string(),
+                        ),
                     },
 
                     _ => err_type_error!(
@@ -1777,7 +1792,12 @@ impl TypeChecker {
                                 self,
                                 span,
                                 TypeError::MissingVariants(enum_name.name.clone(), missing)
-                            ).help(self, enum_name.span, "Defined here".to_string())
+                            )
+                            .help(
+                                self,
+                                enum_name.span,
+                                "Defined here".to_string(),
+                            )
                         } else {
                             let extra = enum_vars
                                 .iter()
@@ -1789,7 +1809,12 @@ impl TypeChecker {
                                     self,
                                     span,
                                     TypeError::ExtraVariants(enum_name.name.clone(), extra)
-                                ).help(self, enum_name.span, "Defined here".to_string())
+                                )
+                                .help(
+                                    self,
+                                    enum_name.span,
+                                    "Defined here".to_string(),
+                                )
                             } else {
                                 Ok(())
                             }
@@ -1969,7 +1994,12 @@ impl TypeChecker {
                                     blob: b_blob.name.clone(),
                                     field: a_field.clone()
                                 }
-                            ).help(self, b_blob.span, "Defined here".to_string());
+                            )
+                            .help(
+                                self,
+                                b_blob.span,
+                                "Defined here".to_string(),
+                            );
                         };
                     }
 
@@ -1984,11 +2014,19 @@ impl TypeChecker {
                                         blob: a_blob.name.clone(),
                                         field: b_field.clone()
                                     }
-                                ).help(self, a_blob.span, "Defined here".to_string());
+                                )
+                                .help(
+                                    self,
+                                    a_blob.span,
+                                    "Defined here".to_string(),
+                                );
                             }
                         };
-                        self.sub_unify(span, ctx, a_ty, *b_ty, seen)
-                            .help(self, *b_span, format!("While checking field .{}", b_field))?;
+                        self.sub_unify(span, ctx, a_ty, *b_ty, seen).help(
+                            self,
+                            *b_span,
+                            format!("While checking field .{}", b_field),
+                        )?;
                     }
                 }
 
@@ -1999,7 +2037,12 @@ impl TypeChecker {
                                 self,
                                 span,
                                 TypeError::UnknownVariant(b_name.name.clone(), a_var.clone())
-                            ).help(self, b_name.span, "Defined here".to_string());
+                            )
+                            .help(
+                                self,
+                                b_name.span,
+                                "Defined here".to_string(),
+                            );
                         }
                     }
                     for (b_var, (_b_span, b_ty)) in b_variants.iter() {
@@ -2010,11 +2053,19 @@ impl TypeChecker {
                                     self,
                                     span,
                                     TypeError::UnknownVariant(a_name.name.clone(), b_var.clone())
-                                ).help(self, a_name.span, "Defined here".to_string());
+                                )
+                                .help(
+                                    self,
+                                    a_name.span,
+                                    "Defined here".to_string(),
+                                );
                             }
                         };
-                        self.sub_unify(span, ctx, a_ty, *b_ty, seen)
-                            .help(self, a_span, format!("While checking variant {}", b_var))?;
+                        self.sub_unify(span, ctx, a_ty, *b_ty, seen).help(
+                            self,
+                            a_span,
+                            format!("While checking variant {}", b_var),
+                        )?;
                     }
                 }
 
