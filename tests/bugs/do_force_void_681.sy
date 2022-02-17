@@ -1,0 +1,11 @@
+g :: fn do
+    1
+end
+
+f :: fn do
+    g'
+end
+
+start :: fn do
+    print' f'
+end
