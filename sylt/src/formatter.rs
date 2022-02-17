@@ -312,23 +312,30 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             write_expression(dest, indent, *expr)?;
             write!(dest, ")")?;
         }
-        ExpressionKind::If { condition, pass, fail } => {
-            write!(dest, "if ")?;
-            write_expression(dest, indent, *condition)?;
-            write!(dest, " do\n")?;
-            for stmt in pass.into_iter() {
-                write_statement(dest, indent + 1, stmt)?;
-            }
-
-            if fail.len() != 0 {
-                write_indents(dest, indent)?;
-                write!(dest, "else do\n")?;
-                for stmt in fail.into_iter() {
+        ExpressionKind::If(branches) => {
+            for (i, branch) in branches.into_iter().enumerate() {
+                match (branch.condition, i == 0) {
+                    (Some(expr), true) => {
+                        write!(dest, "if ")?;
+                        write_expression(dest, indent, expr)?;
+                        write!(dest, " do\n")?;
+                    }
+                    (None, true) => unreachable!("The parser should never return this"),
+                    (Some(expr), _) => {
+                        write!(dest, "elif ")?;
+                        write_expression(dest, indent, expr)?;
+                        write!(dest, " do\n")?;
+                    }
+                    (None, _) => {
+                        write!(dest, "else\n")?;
+                    }
+                }
+                for stmt in branch.body {
                     write_statement(dest, indent + 1, stmt)?;
                 }
             }
             write_indents(dest, indent)?;
-            write!(dest, "end")?;
+            write!(dest, "end\n")?;
         }
         ExpressionKind::Case { to_match, branches, fall_through } => {
             write!(dest, "case ")?;
