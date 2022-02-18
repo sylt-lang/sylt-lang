@@ -404,9 +404,9 @@ impl<'a> Context<'a> {
 
 fn parse_sep_end_by<'t, Item>(
     ctx: Context<'t>,
-    sep: &dyn Fn(Context<'t>) -> ParseResult<'t, ()>,
-    end: &dyn Fn(Context<'t>) -> ParseResult<'t, bool>,
-    item: &dyn Fn(Context<'t>) -> ParseResult<'t, Item>,
+    sep: impl Fn(Context<'t>) -> ParseResult<'t, ()>,
+    end: impl Fn(Context<'t>) -> ParseResult<'t, bool>,
+    item: impl Fn(Context<'t>) -> ParseResult<'t, Item>,
 ) -> ParseResult<'t, Vec<Item>> {
     let (end_ctx, is_end) = end(ctx)?;
     if is_end {
