@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use sylt::{Args, Options};
 
 fn main() -> Result<(), String> {
@@ -12,17 +11,7 @@ fn main() -> Result<(), String> {
         return Err("No file to run".into());
     }
 
-    let errs = if args.format {
-        match sylt::formatter::format(&PathBuf::from(args.args.first().unwrap())) {
-            Ok(formatted) => {
-                print!("{}", formatted);
-                Vec::new()
-            }
-            Err(errs) => errs,
-        }
-    } else {
-        sylt::run_file(&args).err().unwrap_or_else(Vec::new)
-    };
+    let errs = sylt::run_file(&args).err().unwrap_or_else(Vec::new);
 
     if errs.is_empty() {
         Ok(())
