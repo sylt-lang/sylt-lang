@@ -505,7 +505,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     };
                     Ok((ctx.skip_if(T::Comma), (variant, ty)))
                 }
-                parse_sep_end_by(ctx, &sep, &end, &item)?
+                parse_sep_end_by(ctx, sep, end, item)?
             };
 
             let mut variants = HashMap::new();
