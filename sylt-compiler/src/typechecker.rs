@@ -897,6 +897,8 @@ impl TypeChecker {
                             let span = a.span;
                             let (a_ret, a) = self.expression(a, ctx)?;
                             self.unify(span, ctx, *p, a)?;
+                            self.add_constraint(a, span, Constraint::Variable);
+                            self.check_constraints(span, ctx, a)?;
                             ret = self.unify_option(span, ctx, ret, a_ret)?;
                         }
 
