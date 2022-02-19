@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use sylt_tokenizer::Token;
 
-use super::{Context, ParseResult, Parseable};
+use super::{Context, ParseResult};
 
 /// An expression in sylt
 #[derive(Debug)]
@@ -14,9 +14,11 @@ pub enum Expression<'a> {
     Float(f64, &'a Range<usize>),
 }
 
-pub fn parse_expression<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression<'a>> {
-    match ctx.eat() {
-        (ctx, Token::Int(v), span) => Ok((Expression::Int(*v, span), ctx)),
-        _ => panic!(),
+impl<'a> Expression<'a> {
+    pub fn parse(ctx: Context<'a>) -> ParseResult<'a, Expression<'a>> {
+        match ctx.eat() {
+            (ctx, Token::Int(v), span) => Ok((Expression::Int(*v, span), ctx)),
+            _ => panic!(),
+        }
     }
 }

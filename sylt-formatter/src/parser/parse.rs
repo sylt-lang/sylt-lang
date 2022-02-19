@@ -65,10 +65,6 @@ pub struct Module<'a> {
 #[derive(Debug)]
 pub struct ParseErr {}
 
-pub trait Parseable<'a, T> {
-    fn parse(ctx: Context) -> ParseResult<'a, T>;
-}
-
 /// Parse a sylt module (sylt file)
 pub fn parse_module<'a>(tokens: &'a [(Token, Range<usize>)]) -> Result<Module<'a>, ParseErr> {
     let ctx = Context::new(tokens);
@@ -78,7 +74,7 @@ pub fn parse_module<'a>(tokens: &'a [(Token, Range<usize>)]) -> Result<Module<'a
 }
 
 /// The type of result for parsing
-pub type ParseResult<'a, T: 'a> = Result<(T, Context<'a>), (ParseErr, Context<'a>)>;
+pub type ParseResult<'a, T> = Result<(T, Context<'a>), (ParseErr, Context<'a>)>;
 
 /// Parse a statement
 fn parse_statement<'a>(ctx: Context<'a>) -> ParseResult<'a, Statement> {

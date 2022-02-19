@@ -2,9 +2,7 @@ use std::ops::Range;
 
 use sylt_tokenizer::Token;
 
-use crate::parser::expression::parse_expression;
-
-use super::{expression::Expression, Context, ParseResult, Parseable};
+use super::{expression::Expression, Context, ParseResult};
 
 /// A statement in sylt
 #[derive(Debug)]
@@ -21,19 +19,24 @@ pub enum Statement<'a> {
     },
 }
 
-pub fn parse_statement<'a>(ctx: Context<'a>) -> ParseResult<'a, Statement> {
-    let (ctx, token, name_span) = ctx.eat();
+impl<'a> Statement<'a> {
+    fn parse(ctx: Context<'a>) -> ParseResult<'a, Statement> {
+        let (ctx, token, name_span) = ctx.eat();
 
-    let name = if let Token::Identifier(name) = token {
-        name
-    } else {
-        panic!();
-    };
+        let name = if let Token::Identifier(name) = token {
+            name
+        } else {
+            panic!();
+        };
 
-    let (ctx, token, span) = ctx.eat();
-    assert!(matches!(token, Token::ColonColon));
+        let (ctx, token, span) = ctx.eat();
+        assert!(matches!(token, Token::ColonColon));
 
-    let (expression, ctx) = parse_expression(ctx)?;
+        let (expression, ctx) = Expression::parse(ctx)?;
 
-    Ok((Statement::Definition { var: (name, name_span), expr: expression }, ctx))
+        Ok((
+            Statement::Definition { var: (name, name_span), expr: expression },
+            ctx,
+        ))
+    }
 }
