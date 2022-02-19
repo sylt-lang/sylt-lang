@@ -14,7 +14,7 @@ fn main() {
 
     let tokens: Vec<_> = sylt_tokenizer::spanned_lexer(&content).collect();
 
-    let module = parser::parse::parse_module(&tokens).unwrap();
+    let module = parser::parse_module(&tokens).unwrap();
 
     dbg!(module);
 }
