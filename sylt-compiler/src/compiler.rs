@@ -2,7 +2,7 @@ use std::collections::{hash_map::Entry, HashMap};
 use std::io::Write;
 use sylt_common::error::Error;
 use sylt_common::FileOrLib;
-use sylt_parser::{Identifier, StatementKind, AST};
+use sylt_parser::{StatementKind, AST};
 
 mod dependency;
 mod intermediate;
@@ -142,9 +142,9 @@ impl Compiler {
                     }
                     Enum { name, .. }
                     | Blob { name, .. }
-                    | Definition { ident: Identifier { name, .. }, .. }
-                    | ExternalDefinition { ident: Identifier { name, .. }, .. } => {
-                        (Name::Name, name.clone(), statement.span)
+                    | Definition { ident: name, .. }
+                    | ExternalDefinition { ident: name, .. } => {
+                        (Name::Name, name.name.clone(), name.span)
                     }
 
                     // Handled later since we need type information.

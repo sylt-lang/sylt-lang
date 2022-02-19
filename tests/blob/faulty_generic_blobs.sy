@@ -1,4 +1,4 @@
-A :: blob {
+A :: blob(*a) {
     a: *a,
     b: *a,
 }

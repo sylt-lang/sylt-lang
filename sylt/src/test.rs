@@ -238,7 +238,7 @@ fn program_tests() {
 
     let num_tests = tests.len();
     let num_failed = failed.len();
-    let num_passed = tests.len() - failed.len();
+    let num_passed = tests.len() - num_failed;
     eprintln!(
         "\n SUMMARY {}/{}      {} failed\n",
         num_passed, num_tests, num_failed

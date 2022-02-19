@@ -150,8 +150,18 @@ fn type_dependencies(ctx: &mut Context, ty: &ParserType) -> BTreeSet<(String, us
         Implied | Resolved(_) | Generic(_) => BTreeSet::new(),
 
         Grouping(ty) => type_dependencies(ctx, ty),
-        UserDefined(assignable) => type_assignable_dependencies(ctx, &assignable),
-
+        UserDefined(assignable, type_args) => [
+            type_args
+                .iter()
+                .map(|ty| type_dependencies(ctx, ty))
+                .flatten()
+                .collect(),
+            type_assignable_dependencies(ctx, &assignable),
+        ]
+        .iter()
+        .flatten()
+        .cloned()
+        .collect(),
         Fn { params, ret, .. } => params
             .iter()
             .chain([ret.as_ref()])
@@ -212,14 +222,14 @@ fn statement_dependencies(ctx: &mut Context, statement: &Statement) -> BTreeSet<
 
         ExternalDefinition { ty, .. } => type_dependencies(ctx, ty),
 
-        Blob { name, fields: sub_types } | Enum { name, variants: sub_types } => {
-            ctx.shadow(&name);
+        Blob { name, fields: sub_types, .. } | Enum { name, variants: sub_types, .. } => {
+            ctx.shadow(&name.name);
             let namespace = ctx.namespace;
             sub_types
                 .values()
                 .map(|t| type_dependencies(ctx, t))
                 .flatten()
-                .filter(|(n, s)| !(n == name && *s == namespace))
+                .filter(|(n, s)| !(n == &name.name && *s == namespace))
                 .collect()
         }
 
@@ -442,8 +452,8 @@ pub(crate) fn initialization_order<'a>(
                     });
                 }
 
-                Blob { name, .. }
-                | Enum { name, .. }
+                Blob { name: Identifier { name, .. }, .. }
+                | Enum { name: Identifier { name, .. }, .. }
                 | Use {
                     name: NameIdentifier::Implicit(Identifier { name, .. }),
                     ..
