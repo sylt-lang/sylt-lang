@@ -20,7 +20,7 @@ pub enum Statement<'a> {
 }
 
 impl<'a> Statement<'a> {
-    fn parse(ctx: Context<'a>) -> ParseResult<'a, Statement> {
+    pub fn parse(ctx: Context<'a>) -> ParseResult<'a, Statement> {
         let (ctx, token, name_span) = ctx.eat();
 
         let name = if let Token::Identifier(name) = token {

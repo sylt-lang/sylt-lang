@@ -68,39 +68,10 @@ pub struct ParseErr {}
 /// Parse a sylt module (sylt file)
 pub fn parse_module<'a>(tokens: &'a [(Token, Range<usize>)]) -> Result<Module<'a>, ParseErr> {
     let ctx = Context::new(tokens);
-    let (statement, ctx) = parse_statement(ctx).unwrap();
+    let (statement, ctx) = Statement::parse(ctx).unwrap();
 
     Ok(Module { statements: vec![statement] })
 }
 
 /// The type of result for parsing
 pub type ParseResult<'a, T> = Result<(T, Context<'a>), (ParseErr, Context<'a>)>;
-
-/// Parse a statement
-fn parse_statement<'a>(ctx: Context<'a>) -> ParseResult<'a, Statement> {
-    let (ctx, token, name_span) = ctx.eat();
-
-    let name = if let Token::Identifier(name) = token {
-        name
-    } else {
-        panic!();
-    };
-
-    let (ctx, token, span) = ctx.eat();
-    assert!(matches!(token, Token::ColonColon));
-
-    let (expression, ctx) = parse_expression(ctx)?;
-
-    Ok((
-        Statement::Definition { var: (name, name_span), expr: expression },
-        ctx,
-    ))
-}
-
-/// Parse an expression
-fn parse_expression<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
-    match ctx.eat() {
-        (ctx, Token::Int(v), span) => Ok((Expression::Int(*v, span), ctx)),
-        _ => panic!(),
-    }
-}
