@@ -7,8 +7,6 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use sylt_common::error::Error;
 
-pub mod formatter;
-
 #[cfg(test)]
 pub mod test;
 

@@ -205,7 +205,7 @@ where
 
 #[test]
 fn program_tests() {
-    use crate::{formatter::format, read_file};
+    use crate::read_file;
     use std::env::set_current_dir;
     use std::io::Write;
     set_current_dir("../").unwrap();
@@ -222,18 +222,6 @@ fn program_tests() {
     for test in tests.iter() {
         writeln!(std::io::stdout().lock(), " {}", test.path.to_str().unwrap()).unwrap();
         if !run_test(read_file, test) {
-            failed.push(test);
-            continue;
-        }
-
-        if test.errors.is_empty()
-            && !run_test(
-                |path| {
-                    format(path).map_err(|errs| panic!("Got errors from formatter!:\n{:?}", errs))
-                },
-                test,
-            )
-        {
             failed.push(test);
             continue;
         }
