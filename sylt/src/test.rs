@@ -205,13 +205,12 @@ where
 
 #[test]
 fn program_tests() {
-    use crate::{formatter::format, read_file};
+    use crate::read_file;
     use std::env::set_current_dir;
     use std::io::Write;
     set_current_dir("../").unwrap();
     let tests = find_and_parse_tests(Path::new("tests/"));
     let mut failed = Vec::new();
-    let mut formatter_failed = Vec::new();
 
     writeln!(
         std::io::stdout().lock(),
@@ -226,18 +225,6 @@ fn program_tests() {
             failed.push(test);
             continue;
         }
-
-        if test.errors.is_empty()
-            && !run_test(
-                |path| {
-                    format(path).map_err(|errs| panic!("Got errors from formatter!:\n{:?}", errs))
-                },
-                test,
-            )
-        {
-            formatter_failed.push(test);
-            continue;
-        }
     }
     // TODO(ed): Add time
     // Maybe even time/test?
@@ -249,22 +236,12 @@ fn program_tests() {
         }
     }
 
-    if !formatter_failed.is_empty() {
-        eprintln!("\nFailed formatter tests:");
-        for fail in formatter_failed.iter() {
-            eprintln!(" {}", fail.path.to_str().unwrap());
-        }
-    }
-
     let num_tests = tests.len();
-    let num_failed = failed.len() + formatter_failed.len();
+    let num_failed = failed.len();
     let num_passed = tests.len() - num_failed;
     eprintln!(
         "\n SUMMARY {}/{}      {} failed\n",
         num_passed, num_tests, num_failed
     );
-    assert!(
-        failed.is_empty() && formatter_failed.is_empty(),
-        "Some tests failed!"
-    );
+    assert!(failed.is_empty(), "Some tests failed!");
 }
