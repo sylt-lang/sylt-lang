@@ -3,7 +3,7 @@ use std::fs;
 use sylt_formatter::Args;
 
 mod lib;
-mod parse;
+mod parser;
 
 fn main() {
     let args = Args::parse_args_default_or_exit();
@@ -14,7 +14,7 @@ fn main() {
 
     let tokens: Vec<_> = sylt_tokenizer::spanned_lexer(&content).collect();
 
-    let module = parse::parse_module(&tokens).unwrap();
+    let module = parser::parse::parse_module(&tokens).unwrap();
 
     dbg!(module);
 }

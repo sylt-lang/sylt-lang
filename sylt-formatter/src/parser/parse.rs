@@ -6,6 +6,8 @@ use std::ops::Range;
 
 use sylt_tokenizer::Token;
 
+use super::{expression::Expression, statement::Statement};
+
 /// The context of the parser.
 #[derive(Clone, Copy, Debug)]
 struct Context<'a> {
@@ -62,31 +64,6 @@ pub struct Module<'a> {
 /// A parse error
 #[derive(Debug)]
 pub struct ParseErr {}
-
-/// An expression in sylt
-#[derive(Debug)]
-pub enum Expression<'a> {
-    /// An integer value
-    Int(i64, &'a Range<usize>),
-
-    /// A floating point value
-    Float(f64, &'a Range<usize>),
-}
-
-/// A statement in sylt
-#[derive(Debug)]
-pub enum Statement<'a> {
-    /// A definition of a variable
-    ///
-    /// Ex: `var :: <expr>`
-    Definition {
-        /// The variable name
-        var: (&'a String, &'a Range<usize>),
-
-        /// The expression defines the variable
-        expr: Expression<'a>,
-    },
-}
 
 /// Parse a sylt module (sylt file)
 pub fn parse_module<'a>(tokens: &'a [(Token, Range<usize>)]) -> Result<Module<'a>, ParseErr> {
