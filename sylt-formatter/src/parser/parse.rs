@@ -10,7 +10,7 @@ use super::{expression::Expression, statement::Statement};
 
 /// The context of the parser.
 #[derive(Clone, Copy, Debug)]
-struct Context<'a> {
+pub struct Context<'a> {
     /// The token position
     position: usize,
 
@@ -20,33 +20,33 @@ struct Context<'a> {
 
 impl<'a> Context<'a> {
     /// Create a new context
-    fn new(tokens: &'a [(Token, Range<usize>)]) -> Self {
+    pub fn new(tokens: &'a [(Token, Range<usize>)]) -> Self {
         Self { position: 0, tokens }
     }
 
     /// Peek at the current token
-    fn peek(self) -> &'a Token {
+    pub fn peek(self) -> &'a Token {
         self.peek_ahead(0)
     }
 
     /// Peek a some tokens ahead
-    fn peek_ahead(self, lookahead: usize) -> &'a Token {
+    pub fn peek_ahead(self, lookahead: usize) -> &'a Token {
         &self.tokens[self.position + lookahead].0
     }
 
     /// Get the span of the current token
-    fn span(self) -> &'a Range<usize> {
+    pub fn span(self) -> &'a Range<usize> {
         self.span_ahead(0)
     }
 
     /// Get the span of a few tokens ahead
-    fn span_ahead(self, lookahead: usize) -> &'a Range<usize> {
+    pub fn span_ahead(self, lookahead: usize) -> &'a Range<usize> {
         &self.tokens[self.position + lookahead].1
     }
 
     /// Return a context advanced by 1 token as well as the token and span
     /// advanced
-    fn eat(self) -> (Self, &'a Token, &'a Range<usize>) {
+    pub fn eat(self) -> (Self, &'a Token, &'a Range<usize>) {
         (
             Self { position: self.position + 1, tokens: self.tokens },
             self.peek(),
@@ -65,6 +65,10 @@ pub struct Module<'a> {
 #[derive(Debug)]
 pub struct ParseErr {}
 
+pub trait Parseable<'a, T> {
+    fn parse(ctx: Context) -> ParseResult<'a, T>;
+}
+
 /// Parse a sylt module (sylt file)
 pub fn parse_module<'a>(tokens: &'a [(Token, Range<usize>)]) -> Result<Module<'a>, ParseErr> {
     let ctx = Context::new(tokens);
@@ -74,7 +78,7 @@ pub fn parse_module<'a>(tokens: &'a [(Token, Range<usize>)]) -> Result<Module<'a
 }
 
 /// The type of result for parsing
-type ParseResult<'a, T: 'a> = Result<(T, Context<'a>), (ParseErr, Context<'a>)>;
+pub type ParseResult<'a, T: 'a> = Result<(T, Context<'a>), (ParseErr, Context<'a>)>;
 
 /// Parse a statement
 fn parse_statement<'a>(ctx: Context<'a>) -> ParseResult<'a, Statement> {
