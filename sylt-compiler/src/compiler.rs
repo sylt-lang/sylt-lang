@@ -9,6 +9,7 @@ mod intermediate;
 mod lua;
 mod ty;
 mod typechecker;
+mod name_resolution;
 
 type Namespace = HashMap<String, Name>;
 type NamespaceID = usize;
@@ -72,6 +73,7 @@ impl Compiler {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
 
         self.extract_globals(&tree);
+        let resolved_tree = name_resolution::resolve(&tree, &self.namespace_id_to_file)?;
 
         let mut statements = match dependency::initialization_order(&tree, &self) {
             // TODO(ed): This clone can probably be removed.
