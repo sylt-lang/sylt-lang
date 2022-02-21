@@ -24,13 +24,11 @@ pub trait Numbered {
     fn to_number(&self) -> usize;
 }
 
-/// Contains modules.
 #[derive(Debug, Clone)]
 pub struct AST {
     pub modules: Vec<(FileOrLib, Module)>,
 }
 
-/// Contains statements.
 #[derive(Debug, Clone)]
 pub struct Module {
     pub span: Span,

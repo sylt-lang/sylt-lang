@@ -1,21 +1,22 @@
 use std::collections::HashMap;
 
 use sylt_common::{Error, FileOrLib};
-use sylt_parser::{Span, AST};
+use sylt_parser::{Identifier, Span, Statement as ParserStatement, VarKind, AST as ParserAST};
 
 use crate::NamespaceID;
 
 type ResolveResult<T> = Result<T, Vec<Error>>;
-
-struct Var {
-    id: usize,
-    definition: Span,
-    usage: Vec<Span>,
-}
-
 type Ref = usize;
 type Namespace = usize;
 
+struct Var {
+    id: Ref,
+    definition: Option<Span>,
+    kind: VarKind,
+    usage: Vec<Span>,
+}
+
+#[derive(Debug, Clone)]
 pub enum BinOp {
     // Comp
     Equals,
@@ -37,6 +38,7 @@ pub enum BinOp {
     Or,
 }
 
+#[derive(Debug, Clone)]
 pub enum UniOp {
     Neg,
     NotEquals,
@@ -51,6 +53,7 @@ pub enum UniOp {
     Div,
 }
 
+#[derive(Debug, Clone)]
 pub enum Collection {
     Tuple,
     List,
@@ -72,6 +75,7 @@ pub struct CaseBranch {
     pub body: Vec<Statement>,
 }
 
+#[derive(Debug, Clone)]
 pub enum Expression {
     Read {
         var: Ref,
@@ -139,7 +143,141 @@ pub enum Expression {
     Nil,
 }
 
-pub struct Type {
+#[derive(Debug, Clone)]
+pub enum Type {
+    Noop,
 }
 
-pub fn resolve<'a>(tree: &'a AST, namespace_to_file: &HashMap<NamespaceID, FileOrLib>) -> _ {}
+#[derive(Debug, Clone)]
+pub enum Statement {
+    Assignment {
+        op: BinOp,
+        target: Expression,
+        value: Expression,
+        span: Span,
+    },
+
+    /// Defines a new variable.
+    ///
+    /// Example: `a := <expression>`.
+    ///
+    /// Valid definition operators are `::`, `:=` and `: <type> =`.
+    Definition {
+        ident: Identifier,
+        kind: VarKind,
+        ty: Type,
+        value: Expression,
+        span: Span,
+    },
+
+    /// Defines a an external variable - here the type is required.
+    ///
+    /// Example: `a: int = external`.
+    ///
+    /// Valid definition operators are `: <type> :`, and `: <type> =`.
+    ExternalDefinition {
+        ident: Identifier,
+        kind: VarKind,
+        ty: Type,
+        span: Span,
+    },
+
+    /// Do something as long as something else evaluates to true.
+    ///
+    /// `loop <expression> <statement>`.
+    Loop {
+        condition: Expression,
+        body: Box<Statement>,
+        span: Span,
+    },
+
+    /// Jump out of a loop.
+    ///
+    /// `break`.
+    Break(Span),
+
+    /// Go back to the start of the loop.
+    ///
+    /// `continue`.
+    Continue(Span),
+
+    /// Returns a value from a function.
+    ///
+    /// `ret [<expression>]`.
+    Ret {
+        value: Option<Expression>,
+        span: Span,
+    },
+
+    /// Groups together statements that are executed after another.
+    ///
+    /// `{ <statement>.. }`.
+    Block {
+        statements: Vec<Statement>,
+        span: Span,
+    },
+
+    /// A free-standing expression. It's just a `<expression>`.
+    StatementExpression { value: Expression, span: Span },
+
+    /// Throws an error if it is ever evaluated.
+    ///
+    /// `<!>`.
+    Unreachable(Span),
+}
+
+enum Name {
+    Name(Ref),
+    Namespace(usize),
+}
+
+struct Resolver {
+    namespaces: Vec<HashMap<Name, FileOrLib>>,
+    variables: Vec<Var>,
+}
+
+impl Resolver {
+    fn new() -> Self {
+        Self { namespaces: Vec::new(), variables: Vec::new() }
+    }
+
+    fn statement(&mut self, stmt: &ParserStatement) -> Option<Statement> {
+        match stmt.kind {
+            sylt_parser::StatementKind::EmptyStatement
+            | sylt_parser::StatementKind::Use { .. }
+            | sylt_parser::StatementKind::FromUse { .. }
+            | sylt_parser::StatementKind::Blob { .. }
+            | sylt_parser::StatementKind::Enum { .. } => None,
+
+            sylt_parser::StatementKind::Definition { ident, kind, ty, value } => todo!("Erik"),
+
+            sylt_parser::StatementKind::Assignment { kind, target, value } => todo!(),
+            sylt_parser::StatementKind::ExternalDefinition { ident, kind, ty } => todo!(),
+            sylt_parser::StatementKind::Loop { condition, body } => todo!(),
+            sylt_parser::StatementKind::Break => todo!(),
+            sylt_parser::StatementKind::Continue => todo!(),
+            sylt_parser::StatementKind::Ret { value } => todo!(),
+            sylt_parser::StatementKind::Block { statements } => todo!(),
+            sylt_parser::StatementKind::StatementExpression { value } => todo!(),
+            sylt_parser::StatementKind::Unreachable => todo!(),
+        }
+    }
+}
+
+pub fn resolve<'a>(
+    tree: &'a ParserAST,
+    namespace_to_file: &HashMap<NamespaceID, FileOrLib>,
+) -> Result<Vec<Statement>, Vec<Error>> {
+    let mut resolver = Resolver::new();
+    tree.modules
+        .iter()
+        .map(|(_, module)| {
+            module
+                .statements
+                .iter()
+                .map(|stmt| resolver.statement(&stmt))
+        })
+        .flatten()
+        .flatten()
+        .collect()
+}
