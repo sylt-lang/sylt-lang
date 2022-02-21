@@ -169,6 +169,7 @@ name = "sylt-formatter"
 version = "0.2.0"
 dependencies = [
  "gumdrop",
+ "sylt-macro",
  "sylt-tokenizer",
 ]
 
