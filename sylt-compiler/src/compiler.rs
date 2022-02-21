@@ -7,9 +7,9 @@ use sylt_parser::{StatementKind, AST};
 mod dependency;
 mod intermediate;
 mod lua;
+mod name_resolution;
 mod ty;
 mod typechecker;
-mod name_resolution;
 
 type Namespace = HashMap<String, Name>;
 type NamespaceID = usize;
@@ -106,10 +106,12 @@ impl Compiler {
         // Find all files and map them to their namespace
         let mut include_to_namespace = HashMap::new();
         for (path, module) in tree.modules.iter() {
-            let slot = module.file_id;
             self.namespaces.push(Namespace::new());
 
-            if include_to_namespace.insert(path.clone(), slot).is_some() {
+            if include_to_namespace
+                .insert(path.clone(), module.file_id)
+                .is_some()
+            {
                 unreachable!("File was read twice!?");
             }
         }

@@ -232,13 +232,18 @@ enum Name {
 }
 
 struct Resolver {
-    namespaces: Vec<HashMap<Name, FileOrLib>>,
+    namespaces: HashMap<FileOrLib, HashMap<String, Name>>,
     variables: Vec<Var>,
+    var_id: Ref,
 }
 
 impl Resolver {
     fn new() -> Self {
-        Self { namespaces: Vec::new(), variables: Vec::new() }
+        Self {
+            namespaces: HashMap::new(),
+            variables: Vec::new(),
+            var_id: 0,
+        }
     }
 
     fn statement(&mut self, stmt: &ParserStatement) -> Option<Statement> {
@@ -262,6 +267,57 @@ impl Resolver {
             sylt_parser::StatementKind::Unreachable => todo!(),
         }
     }
+
+    fn insert_namespace(&mut self, file_or_lib: FileOrLib) {
+        self.namespaces.insert(file_or_lib, HashMap::new());
+    }
+
+    fn new_var(&mut self, definition: Span, kind: VarKind) -> Ref {
+        let id = self.var_id;
+
+        self.var_id += 1;
+        self.variables.push(Var {
+            id: self.new_var_id(),
+            definition,
+            kind,
+            usage: Vec::new(),
+        });
+        id
+    }
+
+    fn define_namespace_variables(
+        &mut self,
+        file_or_lib: FileOrLib,
+        statements: Vec<ParserStatement>,
+    ) {
+        let mut names = HashMap::new();
+        for stmt in statements {
+            match stmt.kind {
+                sylt_parser::StatementKind::Use { path, name, file } => todo!(),
+                sylt_parser::StatementKind::FromUse { path, imports, file } => todo!(),
+                sylt_parser::StatementKind::Blob { name, variables, fields } => todo!(),
+                sylt_parser::StatementKind::Enum { name, variables, variants } => todo!(),
+                sylt_parser::StatementKind::Definition { ident, kind, ty, value } => names.insert(
+                    ident.name, // TODO: Check for duplicates
+                    Name::Name(self.new_var(ident.span, kind)),
+                ),
+                sylt_parser::StatementKind::ExternalDefinition { ident, kind, ty } => names.insert(
+                    ident.name, // TODO: Check for duplicates
+                    Name::Name(self.new_var(ident.span, kind)),
+                ),
+
+                sylt_parser::StatementKind::Loop { condition, body }
+                | sylt_parser::StatementKind::Assignment { kind, target, value }
+                | sylt_parser::StatementKind::Break
+                | sylt_parser::StatementKind::Continue
+                | sylt_parser::StatementKind::Ret { value }
+                | sylt_parser::StatementKind::Block { statements }
+                | sylt_parser::StatementKind::StatementExpression { value }
+                | sylt_parser::StatementKind::Unreachable
+                | sylt_parser::StatementKind::EmptyStatement => {}
+            }
+        }
+    }
 }
 
 pub fn resolve<'a>(
@@ -269,6 +325,13 @@ pub fn resolve<'a>(
     namespace_to_file: &HashMap<NamespaceID, FileOrLib>,
 ) -> Result<Vec<Statement>, Vec<Error>> {
     let mut resolver = Resolver::new();
+
+    // Create namespaces and insert the variables in them
+    tree.modules.iter().for_each(|(file_or_lib, module)| {
+        resolver.insert_namespace(file_or_lib);
+        resolver.define_namespace_variables(file_or_lib, module.statements);
+    });
+
     tree.modules
         .iter()
         .map(|(_, module)| {
