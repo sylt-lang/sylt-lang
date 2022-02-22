@@ -19,6 +19,15 @@ pub enum Expression<'a> {
 
     /// Nil value (lua construct)
     Nil(&'a Span),
+
+    /// Negated expression
+    Negation(Box<Expression<'a>>, &'a Span),
+
+    /// The sum of multiple values
+    Sum(Vec<Expression<'a>>, &'a Span),
+
+    /// The product of multiple values
+    Product(Vec<Expression<'a>>, &'a Span),
 }
 
 impl<'a> Expression<'a> {
@@ -26,7 +35,7 @@ impl<'a> Expression<'a> {
         Self::parse_precedence(ctx, Prec::No)
     }
 
-    pub fn parse_precedence(ctx: Context<'a>, prec: Prec) -> ParseResult<'a, Expression<'a>> {
+    fn parse_precedence(ctx: Context<'a>, prec: Prec) -> ParseResult<'a, Expression<'a>> {
         // Initial value, e.g. a number value, assignable, ...
         let (mut expr, mut ctx) = prefix(ctx)?;
 
@@ -40,6 +49,14 @@ impl<'a> Expression<'a> {
             ctx = _ctx;
         }
         Ok((expr, ctx))
+    }
+
+    fn parse_prefix(ctx: Context<'a>) -> ParseResult<'a, Option<Expression<'a>>> {
+        todo!()
+    }
+
+    fn parse_infix(ctx: Context<'a>) -> ParseResult<'a, Expression<'a>> {
+        todo!()
     }
 }
 
