@@ -6,7 +6,7 @@ use std::ops::Range;
 
 use sylt_tokenizer::Token;
 
-use super::{expression::Expression, statement::Statement};
+use super::statement::Statement;
 
 /// The context of the parser.
 #[derive(Clone, Copy, Debug)]

@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use sylt_tokenizer::Token;
 
-use super::{expression::Expression, Context, ParseResult};
+use super::{expression::Expression, Context, ParseResult, Span};
 
 /// A statement in sylt
 #[derive(Debug)]
@@ -29,7 +29,7 @@ impl<'a> Statement<'a> {
             panic!();
         };
 
-        let (ctx, token, span) = ctx.eat();
+        let (ctx, token, _span) = ctx.eat();
         assert!(matches!(token, Token::ColonColon));
 
         let (expression, ctx) = Expression::parse(ctx)?;
@@ -40,3 +40,5 @@ impl<'a> Statement<'a> {
         ))
     }
 }
+
+pub type Block<'a> = (Vec<Statement<'a>>, Span);

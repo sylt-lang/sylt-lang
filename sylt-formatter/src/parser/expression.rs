@@ -1,6 +1,6 @@
 use sylt_tokenizer::Token as T;
 
-use super::{Context, ParseErr, ParseResult, Prec, Span};
+use super::{Context, ParseResult, Prec, Span};
 
 /// An expression in sylt
 #[derive(Debug)]
@@ -11,10 +11,13 @@ pub enum Expression<'a> {
     /// A floating point value
     Float(f64, &'a Span),
 
+    /// A boolean value
     Bool(bool, &'a Span),
 
+    /// A string
     String(String, &'a Span),
 
+    /// Nil value (lua construct)
     Nil(&'a Span),
 }
 
@@ -27,10 +30,10 @@ impl<'a> Expression<'a> {
         // Initial value, e.g. a number value, assignable, ...
         let (mut expr, mut ctx) = prefix(ctx)?;
 
-        while prec <= precedence(ctx.peek()) {
-            if !valid_infix(ctx) {
-                break;
-            }
+        while {
+            let token = ctx.peek();
+            prec <= precedence(token) && valid_infix(token)
+        } {
             let (_expr, _ctx) = infix(ctx, &expr)?;
             // assign to outer
             expr = _expr;
@@ -115,19 +118,22 @@ fn value<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
 
     let (ctx, token, span) = ctx.eat();
 
-    Ok((match token {
-        T::Float(v) => E::Float(*v, span),
-        T::Bool(v) => E::Bool(*v, span),
-        T::Int(v) => E::Int(*v, span),
-        T::String(s) => E::String(s.clone(), span),
-        T::Nil => E::Nil(span),
-        _ => unreachable!(),
-    }, ctx))
+    Ok((
+        match token {
+            T::Float(v) => E::Float(*v, span),
+            T::Bool(v) => E::Bool(*v, span),
+            T::Int(v) => E::Int(*v, span),
+            T::String(s) => E::String(s.clone(), span),
+            T::Nil => E::Nil(span),
+            _ => unreachable!(),
+        },
+        ctx,
+    ))
 }
 
-fn valid_infix<'t>(ctx: Context<'t>) -> bool {
+fn valid_infix<'t>(token: &T) -> bool {
     matches!(
-        ctx.peek(),
+        token,
         T::Plus
             | T::Minus
             | T::Star
