@@ -2064,8 +2064,11 @@ impl TypeChecker {
                 (
                     Type::Newblob(a_name, _, a_args, a_namespace),
                     Type::Newblob(b_name, _, b_args, b_namespace),
-                ) if a_name == b_name && a_namespace == b_namespace && a_args == b_args => {
-                    // Need not recurse - we already know the types are identical.
+                ) if a_name == b_name && a_namespace == b_namespace => {
+                    for (i, (a, b)) in a_args.iter().zip(b_args.iter()).enumerate() {
+                        self.sub_unify(span, ctx, *a, *b, seen)
+                            .help_no_span(format!("While checking type argument #{}", i))?;
+                    }
                 }
 
                 (Type::Enum(a_name, a_variants, _), Type::Enum(b_name, b_variants, _)) => {
