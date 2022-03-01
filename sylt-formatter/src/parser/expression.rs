@@ -7,27 +7,65 @@ use super::{Context, ParseResult, Span};
 pub enum Expression {
     /// An integer value
     Int { span: Span, value: i64 },
-
     /// A floating point value
     Float { span: Span, value: f64 },
-
     /// A boolean value
     Bool { span: Span, value: bool },
-
     /// A string
     String { span: Span, value: String },
-
     /// Nil value (lua construct)
     Nil { span: Span },
 
     /// Negated expression
-    Negation {
-        span: Span,
-        value: Box<Expression>,
-    },
+    ///
+    /// `-value`
+    Negated { span: Span, value: Box<Expression> },
 
     /// Add two values
+    ///
+    /// `lhs + rhs`
     Add {
+        span: Span,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+    /// Subtraction between two values
+    ///
+    /// `lhs - rhs`
+    Subtract {
+        span: Span,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+    /// Multiply two values
+    ///
+    /// `lhs * rhs`
+    Multiplication {
+        span: Span,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+    /// Division between two values
+    ///
+    /// `lhs / rhs`
+    Division {
+        span: Span,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+
+    /// Boolean and between values
+    ///
+    /// `lhs and rhs`
+    And {
+        span: Span,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+    /// Boolean and between values
+    ///
+    /// `lhs and rhs`
+    Or {
         span: Span,
         lhs: Box<Expression>,
         rhs: Box<Expression>,
@@ -52,14 +90,6 @@ fn parse_precedence<'a>(ctx: Context<'a>, prec: Prec) -> ParseResult<'a, Express
         ctx = _ctx;
     }
     Ok((expr, ctx))
-}
-
-fn parse_prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Option<Expression>> {
-    todo!()
-}
-
-fn parse_infix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
-    todo!()
 }
 
 #[rustfmt::skip]
@@ -242,10 +272,10 @@ fn infix<'t>(ctx: Context<'t>, lhs: Expression) -> ParseResult<'t, Expression> {
     let expr = match op {
         // Simple arithmetic.
         T::Plus => Add { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
-        //     T::Minus => Sub(lhs, rhs),
-        //     T::Star => Mul(lhs, rhs),
-        //     T::Slash => Div(lhs, rhs),
-        //
+        T::Minus => Subtract { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
+        T::Star => Multiplication { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
+        T::Slash => Division { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
+
         //     // Comparisons
         //     T::EqualEqual => Comparison(lhs, Equals, rhs),
         //     T::NotEqual => Comparison(lhs, NotEquals, rhs),
@@ -254,11 +284,11 @@ fn infix<'t>(ctx: Context<'t>, lhs: Expression) -> ParseResult<'t, Expression> {
         //     T::Less => Comparison(lhs, Less, rhs),
         //     T::LessEqual => Comparison(lhs, LessEqual, rhs),
         //     T::In => Comparison(lhs, In, rhs),
-        //
-        //     // Boolean operators.
-        //     T::And => And(lhs, rhs),
-        //     T::Or => Or(lhs, rhs),
-        //
+
+        // Boolean operators.
+        T::And => And { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
+        T::Or => Or { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
+
         //     T::AssertEqual => AssertEq(lhs, rhs),
         //
         //     // Unknown infix operator.
@@ -277,7 +307,12 @@ fn expr_span<'a>(expr: &'a Expression) -> &'a Span {
         | Expression::Bool { span, .. }
         | Expression::String { span, .. }
         | Expression::Nil { span }
-        | Expression::Negation { span, .. }
+        | Expression::Negated { span, .. }
+        | Expression::Subtract { span, .. }
+        | Expression::Division { span, .. }
+        | Expression::Multiplication { span, .. }
+        | Expression::And { span, .. }
+        | Expression::Or { span, .. }
         | Expression::Add { span, .. } => span,
     }
 }
