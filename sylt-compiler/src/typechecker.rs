@@ -1625,12 +1625,24 @@ impl TypeChecker {
                 Box::new(self.inner_bake_type(ret, seen)),
             ),
             // TODO(ed): Should we print out the arguments to the blob instead?
-            Type::Newblob(name, fields, _, _) | Type::Blob(name, fields, _) => RuntimeType::Blob(
+            Type::Blob(name, fields, _) => RuntimeType::Blob(
                 name.name.clone(),
                 fields
                     .iter()
                     .map(|(name, ty)| (name.clone(), self.inner_bake_type(ty.1, seen)))
                     .collect(),
+            ),
+            // TODO(ed): Should we print out the arguments to the newblob instead?
+            Type::Newblob(name, fields, _, namespace) => RuntimeType::Newblob(
+                name.name.clone(),
+                fields
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.inner_bake_type(ty.1, seen)))
+                    .collect(),
+                match self.namespace_to_file.get(&namespace).unwrap() {
+                    FileOrLib::Lib(name) => name.to_string(),
+                    FileOrLib::File(path) => path.to_string_lossy().to_string(),
+                },
             ),
             // TODO(ed): Should we print out the arguments to the enum instead?
             Type::Enum(name, variants, _) => RuntimeType::Enum(
