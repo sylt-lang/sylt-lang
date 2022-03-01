@@ -205,7 +205,7 @@ where
 
 #[test]
 fn program_tests() {
-    use crate::{formatter::format, read_file};
+    use crate::read_file;
     use std::env::set_current_dir;
     use std::io::Write;
     set_current_dir("../").unwrap();
@@ -225,18 +225,6 @@ fn program_tests() {
             failed.push(test);
             continue;
         }
-
-        if test.errors.is_empty()
-            && !run_test(
-                |path| {
-                    format(path).map_err(|errs| panic!("Got errors from formatter!:\n{:?}", errs))
-                },
-                test,
-            )
-        {
-            failed.push(test);
-            continue;
-        }
     }
     // TODO(ed): Add time
     // Maybe even time/test?
@@ -250,7 +238,7 @@ fn program_tests() {
 
     let num_tests = tests.len();
     let num_failed = failed.len();
-    let num_passed = tests.len() - failed.len();
+    let num_passed = tests.len() - num_failed;
     eprintln!(
         "\n SUMMARY {}/{}      {} failed\n",
         num_passed, num_tests, num_failed

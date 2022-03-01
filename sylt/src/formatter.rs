@@ -90,7 +90,9 @@ fn write_enum_variants<W: Write>(
     mut variants: Vec<(String, Type)>,
 ) -> fmt::Result {
     match variants.len() {
-        0 => {}
+        0 => {
+            write!(dest, "\n")?;
+        }
         1 => {
             let (var, ty) = variants.pop().unwrap();
             write!(dest, " {} ", var)?;
@@ -137,7 +139,17 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
     match ty.kind {
         TypeKind::Implied => unreachable!(),
         TypeKind::Resolved(ty) => write!(dest, "{}", ty),
-        TypeKind::UserDefined(assignable) => write_type_assignable(dest, indent, assignable),
+        TypeKind::UserDefined(assignable, args) => {
+            write_type_assignable(dest, indent, assignable)?;
+            write!(dest, "(")?;
+            write_comma_separated!(
+                dest,
+                indent,
+                &|dest: &mut W, _, arg| write_type(dest, indent, arg),
+                args
+            );
+            write!(dest, ")")
+        }
         TypeKind::Fn { constraints, params, ret, is_pure } => {
             if is_pure {
                 write!(dest, "pu")?;
@@ -479,16 +491,36 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write_indents(dest, indent)?;
             write!(dest, "end")?
         }
-        StatementKind::Blob { name, fields } => {
+        StatementKind::Blob { name, fields, variables } => {
             write_indents(dest, indent)?;
-            write!(dest, "{} :: blob", name)?;
-            let fields_as_tuples = fields.into_iter().collect();
+            write!(dest, "{} :: blob", name.name)?;
+            if variables.len() > 0 {
+                write!(dest, "(")?;
+                write_comma_separated!(
+                    dest,
+                    indent,
+                    &|dest: &mut W, _, var: Identifier| write!(dest, "*{}", var.name),
+                    variables
+                );
+                write!(dest, ")")?;
+            }
+            let fields_as_tuples = fields.into_iter().map(|(k, v)| (k.name, v)).collect();
             write_blob_fields(dest, indent + 1, fields_as_tuples, write_type)?;
         }
-        StatementKind::Enum { name, variants } => {
+        StatementKind::Enum { name, variants, variables } => {
             write_indents(dest, indent)?;
-            write!(dest, "{} :: enum", name)?;
-            let variants_as_tuples = variants.into_iter().collect();
+            write!(dest, "{} :: enum", name.name)?;
+            if variables.len() > 0 {
+                write!(dest, "(")?;
+                write_comma_separated!(
+                    dest,
+                    indent,
+                    &|dest: &mut W, _, var: Identifier| write!(dest, "*{}", var.name),
+                    variables
+                );
+                write!(dest, ")")?;
+            }
+            let variants_as_tuples = variants.into_iter().map(|(k, v)| (k.name, v)).collect();
             write_enum_variants(dest, indent + 1, variants_as_tuples)?;
         }
         StatementKind::Break => {
