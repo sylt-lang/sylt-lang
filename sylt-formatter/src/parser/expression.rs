@@ -4,40 +4,41 @@ use super::{Context, ParseResult, Span};
 
 /// An expression in sylt
 #[derive(Debug)]
-pub enum Expression<'a> {
+pub enum Expression {
     /// An integer value
-    Int(i64, &'a Span),
+    Int { span: Span, value: i64 },
 
     /// A floating point value
-    Float(f64, &'a Span),
+    Float { span: Span, value: f64 },
 
     /// A boolean value
-    Bool(bool, &'a Span),
+    Bool { span: Span, value: bool },
 
     /// A string
-    String(String, &'a Span),
+    String { span: Span, value: String },
 
     /// Nil value (lua construct)
-    Nil(&'a Span),
-
-    /// Add two values
-    Add(Box<Expression<'a>>, Box<Expression<'a>>),
+    Nil { span: Span },
 
     /// Negated expression
-    Negation(Box<Expression<'a>>, &'a Span),
+    Negation {
+        span: Span,
+        value: Box<Expression>,
+    },
 
-    /// The sum of multiple values
-    Sum(Vec<Expression<'a>>, &'a Span),
-
-    /// The product of multiple values
-    Product(Vec<Expression<'a>>, &'a Span),
+    /// Add two values
+    Add {
+        span: Span,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
 }
 
-pub fn parse<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression<'a>> {
+pub fn parse<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
     parse_precedence(ctx, Prec::No)
 }
 
-fn parse_precedence<'a>(ctx: Context<'a>, prec: Prec) -> ParseResult<'a, Expression<'a>> {
+fn parse_precedence<'a>(ctx: Context<'a>, prec: Prec) -> ParseResult<'a, Expression> {
     // Initial value, e.g. a number value, assignable, ...
     let (mut expr, mut ctx) = prefix(ctx)?;
 
@@ -53,11 +54,11 @@ fn parse_precedence<'a>(ctx: Context<'a>, prec: Prec) -> ParseResult<'a, Express
     Ok((expr, ctx))
 }
 
-fn parse_prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Option<Expression<'a>>> {
+fn parse_prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Option<Expression>> {
     todo!()
 }
 
-fn parse_infix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression<'a>> {
+fn parse_infix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
     todo!()
 }
 
@@ -124,7 +125,7 @@ fn prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
         //         Ok((ctx, Expression::new(span, Get(assign))))
         //     }
         // }
-        t => {
+        _t => {
             panic!()
             // raise_syntax_error!(ctx, "No valid expression starts with '{:?}'", t);
         }
@@ -135,14 +136,15 @@ fn value<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
     use Expression as E;
 
     let (ctx, token, span) = ctx.eat();
+    let span = span.clone();
 
     Ok((
         match token {
-            T::Float(v) => E::Float(*v, span),
-            T::Bool(v) => E::Bool(*v, span),
-            T::Int(v) => E::Int(*v, span),
-            T::String(s) => E::String(s.clone(), span),
-            T::Nil => E::Nil(span),
+            T::Float(value) => E::Float { value: *value, span },
+            T::Bool(value) => E::Bool { value: *value, span },
+            T::Int(value) => E::Int { value: *value, span },
+            T::String(s) => E::String { value: s.clone(), span },
+            T::Nil => E::Nil { span },
             _ => unreachable!(),
         },
         ctx,
@@ -174,7 +176,7 @@ fn valid_infix<'t>(token: &T) -> bool {
     )
 }
 
-fn infix<'t>(ctx: Context<'t>, lhs: Expression<'t>) -> ParseResult<'t, Expression<'t>> {
+fn infix<'t>(ctx: Context<'t>, lhs: Expression) -> ParseResult<'t, Expression> {
     use Expression::*;
 
     // If there is no precedence it's the start of an expression.
@@ -205,29 +207,30 @@ fn infix<'t>(ctx: Context<'t>, lhs: Expression<'t>) -> ParseResult<'t, Expressio
     //
     // The operator has to be checked before - this
     // removes an O(x^n).
-    let (ctx, op, span) = ctx.eat();
+    let (ctx, op, _span) = ctx.eat();
 
-    // match op {
-    //     T::Plus
-    //     | T::Minus
-    //     | T::Star
-    //     | T::Slash
-    //     | T::EqualEqual
-    //     | T::NotEqual
-    //     | T::Greater
-    //     | T::GreaterEqual
-    //     | T::Less
-    //     | T::LessEqual
-    //     | T::And
-    //     | T::Or
-    //     | T::AssertEqual
-    //     | T::In => {}
-    //
-    //     // Unknown infix operator.
-    //     _ => {
-    //         raise_syntax_error!(ctx.prev(), "Not a valid infix operator");
-    //     }
-    // };
+    match op {
+        T::Plus
+        | T::Minus
+        | T::Star
+        | T::Slash
+        | T::EqualEqual
+        | T::NotEqual
+        | T::Greater
+        | T::GreaterEqual
+        | T::Less
+        | T::LessEqual
+        | T::And
+        | T::Or
+        | T::AssertEqual
+        | T::In => {}
+
+        // Unknown infix operator.
+        _ => {
+            // raise_syntax_error!(ctx.prev(), "Not a valid infix operator");
+            todo!()
+        }
+    };
 
     let (rhs, ctx) = parse_precedence(ctx, precedence(op).next())?;
 
@@ -238,7 +241,7 @@ fn infix<'t>(ctx: Context<'t>, lhs: Expression<'t>) -> ParseResult<'t, Expressio
     // Which expression kind to emit depends on the token.
     let expr = match op {
         // Simple arithmetic.
-        T::Plus => Add(lhs, rhs),
+        T::Plus => Add { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
         //     T::Minus => Sub(lhs, rhs),
         //     T::Star => Mul(lhs, rhs),
         //     T::Slash => Div(lhs, rhs),
@@ -265,6 +268,25 @@ fn infix<'t>(ctx: Context<'t>, lhs: Expression<'t>) -> ParseResult<'t, Expressio
     };
 
     Ok((expr, ctx))
+}
+
+fn expr_span<'a>(expr: &'a Expression) -> &'a Span {
+    match expr {
+        Expression::Int { span, .. }
+        | Expression::Float { span, .. }
+        | Expression::Bool { span, .. }
+        | Expression::String { span, .. }
+        | Expression::Nil { span }
+        | Expression::Negation { span, .. }
+        | Expression::Add { span, .. } => span,
+    }
+}
+
+fn combine_expr_spans<'a>(first: &'a Expression, second: &'a Expression) -> Span {
+    let first_span = expr_span(first);
+    let second_span = expr_span(second);
+
+    first_span.start..second_span.end
 }
 
 pub trait Next {

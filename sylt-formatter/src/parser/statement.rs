@@ -15,7 +15,7 @@ pub enum Statement<'a> {
         var: (&'a String, &'a Range<usize>),
 
         /// The expression defines the variable
-        expr: Expression<'a>,
+        expr: Expression,
     },
 }
 
