@@ -1,6 +1,6 @@
 use sylt_tokenizer::Token as T;
 
-use super::{Context, ParseResult, Prec, Span};
+use super::{Context, ParseResult, Span};
 
 /// An expression in sylt
 #[derive(Debug)]
@@ -20,6 +20,9 @@ pub enum Expression<'a> {
     /// Nil value (lua construct)
     Nil(&'a Span),
 
+    /// Add two values
+    Add(Box<Expression<'a>>, Box<Expression<'a>>),
+
     /// Negated expression
     Negation(Box<Expression<'a>>, &'a Span),
 
@@ -30,34 +33,32 @@ pub enum Expression<'a> {
     Product(Vec<Expression<'a>>, &'a Span),
 }
 
-impl<'a> Expression<'a> {
-    pub fn parse(ctx: Context<'a>) -> ParseResult<'a, Expression<'a>> {
-        Self::parse_precedence(ctx, Prec::No)
-    }
+pub fn parse<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression<'a>> {
+    parse_precedence(ctx, Prec::No)
+}
 
-    fn parse_precedence(ctx: Context<'a>, prec: Prec) -> ParseResult<'a, Expression<'a>> {
-        // Initial value, e.g. a number value, assignable, ...
-        let (mut expr, mut ctx) = prefix(ctx)?;
+fn parse_precedence<'a>(ctx: Context<'a>, prec: Prec) -> ParseResult<'a, Expression<'a>> {
+    // Initial value, e.g. a number value, assignable, ...
+    let (mut expr, mut ctx) = prefix(ctx)?;
 
-        while {
-            let token = ctx.peek();
-            prec <= precedence(token) && valid_infix(token)
-        } {
-            let (_expr, _ctx) = infix(ctx, &expr)?;
-            // assign to outer
-            expr = _expr;
-            ctx = _ctx;
-        }
-        Ok((expr, ctx))
+    while {
+        let token = ctx.peek();
+        prec <= precedence(token) && valid_infix(token)
+    } {
+        let (_expr, _ctx) = infix(ctx, expr)?;
+        // assign to outer
+        expr = _expr;
+        ctx = _ctx;
     }
+    Ok((expr, ctx))
+}
 
-    fn parse_prefix(ctx: Context<'a>) -> ParseResult<'a, Option<Expression<'a>>> {
-        todo!()
-    }
+fn parse_prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Option<Expression<'a>>> {
+    todo!()
+}
 
-    fn parse_infix(ctx: Context<'a>) -> ParseResult<'a, Expression<'a>> {
-        todo!()
-    }
+fn parse_infix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression<'a>> {
+    todo!()
 }
 
 #[rustfmt::skip]
@@ -173,11 +174,13 @@ fn valid_infix<'t>(token: &T) -> bool {
     )
 }
 
-fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression<'t>> {
-    // // If there is no precedence it's the start of an expression.
-    // // All valid operators have a precedence value that is differnt
-    // // from `Prec::no`.
-    // match (ctx.token(), precedence(ctx.skip(1).token())) {
+fn infix<'t>(ctx: Context<'t>, lhs: Expression<'t>) -> ParseResult<'t, Expression<'t>> {
+    use Expression::*;
+
+    // If there is no precedence it's the start of an expression.
+    // All valid operators have a precedence value that is differnt
+    // from `Prec::no`.
+    // match (ctx.peek(), precedence(ctx.peek_ahead(1))) {
     //     // The cool arrow syntax. For example: `a->b(2)` compiles to `b(a, 2)`.
     //     // #NotLikeOtherOperators
     //     (T::Arrow, _) => {
@@ -196,14 +199,14 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression<'
     //     }
     //     _ => {}
     // }
+
+    // Parse an operator and a following expression
+    // until we reach a token with higher precedence.
     //
-    // // Parse an operator and a following expression
-    // // until we reach a token with higher precedence.
-    // //
-    // // The operator has to be checked before - this
-    // // removes an O(x^n).
-    // let (op, span, ctx) = ctx.eat();
-    //
+    // The operator has to be checked before - this
+    // removes an O(x^n).
+    let (ctx, op, span) = ctx.eat();
+
     // match op {
     //     T::Plus
     //     | T::Minus
@@ -225,42 +228,58 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression<'
     //         raise_syntax_error!(ctx.prev(), "Not a valid infix operator");
     //     }
     // };
-    //
-    // let (ctx, rhs) = parse_precedence(ctx, precedence(op).next())?;
-    //
-    // // Left and right of the operator.
-    // let lhs = Box::new(lhs.clone());
-    // let rhs = Box::new(rhs);
-    //
-    // // Which expression kind to emit depends on the token.
-    // let kind = match op {
-    //     // Simple arithmetic.
-    //     T::Plus => Add(lhs, rhs),
-    //     T::Minus => Sub(lhs, rhs),
-    //     T::Star => Mul(lhs, rhs),
-    //     T::Slash => Div(lhs, rhs),
-    //
-    //     // Comparisons
-    //     T::EqualEqual => Comparison(lhs, Equals, rhs),
-    //     T::NotEqual => Comparison(lhs, NotEquals, rhs),
-    //     T::Greater => Comparison(lhs, Greater, rhs),
-    //     T::GreaterEqual => Comparison(lhs, GreaterEqual, rhs),
-    //     T::Less => Comparison(lhs, Less, rhs),
-    //     T::LessEqual => Comparison(lhs, LessEqual, rhs),
-    //     T::In => Comparison(lhs, In, rhs),
-    //
-    //     // Boolean operators.
-    //     T::And => And(lhs, rhs),
-    //     T::Or => Or(lhs, rhs),
-    //
-    //     T::AssertEqual => AssertEq(lhs, rhs),
-    //
-    //     // Unknown infix operator.
-    //     _ => {
-    //         unreachable!();
-    //     }
-    // };
-    //
-    // Ok((ctx, Expression::new(span, kind)))
-    panic!()
+
+    let (rhs, ctx) = parse_precedence(ctx, precedence(op).next())?;
+
+    // Left and right of the operator.
+    let lhs = Box::new(lhs);
+    let rhs = Box::new(rhs);
+
+    // Which expression kind to emit depends on the token.
+    let expr = match op {
+        // Simple arithmetic.
+        T::Plus => Add(lhs, rhs),
+        //     T::Minus => Sub(lhs, rhs),
+        //     T::Star => Mul(lhs, rhs),
+        //     T::Slash => Div(lhs, rhs),
+        //
+        //     // Comparisons
+        //     T::EqualEqual => Comparison(lhs, Equals, rhs),
+        //     T::NotEqual => Comparison(lhs, NotEquals, rhs),
+        //     T::Greater => Comparison(lhs, Greater, rhs),
+        //     T::GreaterEqual => Comparison(lhs, GreaterEqual, rhs),
+        //     T::Less => Comparison(lhs, Less, rhs),
+        //     T::LessEqual => Comparison(lhs, LessEqual, rhs),
+        //     T::In => Comparison(lhs, In, rhs),
+        //
+        //     // Boolean operators.
+        //     T::And => And(lhs, rhs),
+        //     T::Or => Or(lhs, rhs),
+        //
+        //     T::AssertEqual => AssertEq(lhs, rhs),
+        //
+        //     // Unknown infix operator.
+        _ => {
+            unreachable!();
+        }
+    };
+
+    Ok((expr, ctx))
+}
+
+pub trait Next {
+    fn next(&self) -> Self;
+}
+
+#[derive(sylt_macro::Next, PartialEq, PartialOrd, Clone, Copy, Debug)]
+pub enum Prec {
+    No,
+    Assert,
+    BoolOr,
+    BoolAnd,
+    Comp,
+    Term,
+    Factor,
+    Index,
+    Arrow,
 }

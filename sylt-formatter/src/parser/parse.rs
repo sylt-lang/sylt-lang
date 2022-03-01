@@ -77,20 +77,3 @@ pub fn parse_module<'a>(tokens: &'a [(Token, Range<usize>)]) -> Result<Module<'a
 pub type ParseResult<'a, T> = Result<(T, Context<'a>), (ParseErr, Context<'a>)>;
 
 pub type Span = Range<usize>;
-
-pub trait Next {
-    fn next(&self) -> Self;
-}
-
-#[derive(sylt_macro::Next, PartialEq, PartialOrd, Clone, Copy, Debug)]
-pub enum Prec {
-    No,
-    Assert,
-    BoolOr,
-    BoolAnd,
-    Comp,
-    Term,
-    Factor,
-    Index,
-    Arrow,
-}
