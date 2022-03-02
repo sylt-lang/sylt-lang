@@ -379,7 +379,11 @@ impl fmt::Display for TypeError {
             }
 
             TypeError::ExternBlobInstance { name } => {
-                write!(f, "'{}' is an externally defined blob and cannot be instantiated", name)
+                write!(
+                    f,
+                    "'{}' is an externally defined blob and cannot be instantiated",
+                    name
+                )
             }
 
             TypeError::TupleIndexOutOfRange { length, got } => {

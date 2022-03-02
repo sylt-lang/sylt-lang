@@ -1698,26 +1698,25 @@ impl TypeChecker {
 
                 Constraint::Field(name, expected_ty) => match self.find_type(a).clone() {
                     Type::Unknown => Ok(()),
-                    Type::ExternBlob(blob_name, fields, _, _) | Type::Blob(blob_name, fields, _) => {
-                        match fields.get(name) {
-                            Some((span, actual_ty)) => {
-                                self.unify(*span, ctx, *expected_ty, *actual_ty).map(|_| ())
-                            }
-                            None => err_type_error!(
-                                self,
-                                span,
-                                TypeError::MissingField {
-                                    blob: blob_name.name.clone(),
-                                    field: name.clone(),
-                                }
-                            )
-                            .help(
-                                self,
-                                blob_name.span,
-                                "Defined here".to_string(),
-                            ),
+                    Type::ExternBlob(blob_name, fields, _, _)
+                    | Type::Blob(blob_name, fields, _) => match fields.get(name) {
+                        Some((span, actual_ty)) => {
+                            self.unify(*span, ctx, *expected_ty, *actual_ty).map(|_| ())
                         }
-                    }
+                        None => err_type_error!(
+                            self,
+                            span,
+                            TypeError::MissingField {
+                                blob: blob_name.name.clone(),
+                                field: name.clone(),
+                            }
+                        )
+                        .help(
+                            self,
+                            blob_name.span,
+                            "Defined here".to_string(),
+                        ),
+                    },
                     _ => err_type_error!(
                         self,
                         span,
