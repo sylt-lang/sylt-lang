@@ -478,7 +478,7 @@ impl TypeChecker {
                 let ty = self.type_assignable(ctx, assignable)?;
                 match self.find_type(ty) {
                     Type::Blob(name, _, sub)
-                    | Type::Newblob(name, _, sub, _)
+                    | Type::ExternBlob(name, _, sub, _)
                     | Type::Enum(name, _, sub) => {
                         for (i, var) in vars.iter().enumerate() {
                             if sub.len() == i {
@@ -768,7 +768,7 @@ impl TypeChecker {
                 self.unify(span, ctx, ty, enum_ty)?;
             }
 
-            StatementKind::Blob { name, fields, variables, newblob } => {
+            StatementKind::Blob { name, fields, variables, external } => {
                 let blob_ty = self.push_type(Type::Unknown);
                 self.globals
                     .insert((ctx.namespace, name.name.clone()), Name::Type(blob_ty));
@@ -802,9 +802,9 @@ impl TypeChecker {
                         ));
                     }
                 }
-                let ty = self.push_type(match newblob {
+                let ty = self.push_type(match external {
                     true => {
-                        Type::Newblob(name.clone(), resolved_fields, type_params, ctx.namespace)
+                        Type::ExternBlob(name.clone(), resolved_fields, type_params, ctx.namespace)
                     }
                     false => Type::Blob(name.clone(), resolved_fields, type_params),
                 });
@@ -1345,11 +1345,11 @@ impl TypeChecker {
 
                 let (blob_name, blob_fields, blob_args) = match self.find_type(blob_ty) {
                     Type::Blob(name, fields, args) => (name, fields, args),
-                    Type::Newblob(name, _, _, _) => {
+                    Type::ExternBlob(name, _, _, _) => {
                         return err_type_error!(
                             self,
                             span,
-                            TypeError::NewblobInstance { name: name.name.clone() }
+                            TypeError::ExternBlobInstance { name: name.name.clone() }
                         );
                     }
                     _ => {
@@ -1631,8 +1631,8 @@ impl TypeChecker {
                     .map(|(name, ty)| (name.clone(), self.inner_bake_type(ty.1, seen)))
                     .collect(),
             ),
-            // TODO(ed): Should we print out the arguments to the newblob instead?
-            Type::Newblob(name, fields, _, namespace) => RuntimeType::Newblob(
+            // TODO(ed): Should we print out the arguments to the external blob instead?
+            Type::ExternBlob(name, fields, _, namespace) => RuntimeType::ExternBlob(
                 name.name.clone(),
                 fields
                     .iter()
@@ -1697,26 +1697,25 @@ impl TypeChecker {
 
                 Constraint::Field(name, expected_ty) => match self.find_type(a).clone() {
                     Type::Unknown => Ok(()),
-                    Type::Newblob(blob_name, fields, _, _) | Type::Blob(blob_name, fields, _) => {
-                        match fields.get(name) {
-                            Some((span, actual_ty)) => {
-                                self.unify(*span, ctx, *expected_ty, *actual_ty).map(|_| ())
-                            }
-                            None => err_type_error!(
-                                self,
-                                span,
-                                TypeError::MissingField {
-                                    blob: blob_name.name.clone(),
-                                    field: name.clone(),
-                                }
-                            )
-                            .help(
-                                self,
-                                blob_name.span,
-                                "Defined here".to_string(),
-                            ),
+                    Type::ExternBlob(blob_name, fields, _, _)
+                    | Type::Blob(blob_name, fields, _) => match fields.get(name) {
+                        Some((span, actual_ty)) => {
+                            self.unify(*span, ctx, *expected_ty, *actual_ty).map(|_| ())
                         }
-                    }
+                        None => err_type_error!(
+                            self,
+                            span,
+                            TypeError::MissingField {
+                                blob: blob_name.name.clone(),
+                                field: name.clone(),
+                            }
+                        )
+                        .help(
+                            self,
+                            blob_name.span,
+                            "Defined here".to_string(),
+                        ),
+                    },
                     _ => err_type_error!(
                         self,
                         span,
@@ -2061,8 +2060,8 @@ impl TypeChecker {
                 }
 
                 (
-                    Type::Newblob(a_name, _, a_args, a_namespace),
-                    Type::Newblob(b_name, _, b_args, b_namespace),
+                    Type::ExternBlob(a_name, _, a_args, a_namespace),
+                    Type::ExternBlob(b_name, _, b_args, b_namespace),
                 ) if a_name == b_name && a_namespace == b_namespace => {
                     for (i, (a, b)) in a_args.iter().zip(b_args.iter()).enumerate() {
                         self.sub_unify(span, ctx, *a, *b, seen)
@@ -2226,7 +2225,7 @@ impl TypeChecker {
                 purity,
             ),
 
-            Type::Newblob(name, fields, args, namespace) => Type::Newblob(
+            Type::ExternBlob(name, fields, args, namespace) => Type::ExternBlob(
                 name.clone(),
                 fields
                     .iter()

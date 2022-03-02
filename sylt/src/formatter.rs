@@ -491,10 +491,10 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write_indents(dest, indent)?;
             write!(dest, "end")?
         }
-        StatementKind::Blob { name, fields, variables, newblob } => {
+        StatementKind::Blob { name, fields, variables, external } => {
             write_indents(dest, indent)?;
-            match newblob {
-                true => write!(dest, "{} :: newblob", name)?,
+            match external {
+                true => write!(dest, "{} :: externblob", name)?,
                 false => write!(dest, "{} :: blob", name)?,
             };
             if variables.len() > 0 {

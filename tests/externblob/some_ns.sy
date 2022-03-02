@@ -1,4 +1,4 @@
-Foo :: newblob { }
+Foo :: externblob { }
 
 use_foo :: fn arg: Foo do end
 

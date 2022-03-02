@@ -31,7 +31,7 @@ pub enum Type {
     Dict(TyID, TyID),
     Function(Vec<TyID>, TyID, Purity),
     Blob(Identifier, BTreeMap<String, (Span, TyID)>, Vec<TyID>),
-    Newblob(
+    ExternBlob(
         Identifier,
         BTreeMap<String, (Span, TyID)>,
         Vec<TyID>,

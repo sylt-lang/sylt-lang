@@ -1,4 +1,4 @@
-Foo :: newblob(*T) {
+Foo :: externblob(*T) {
   bar: *T
 }
 
