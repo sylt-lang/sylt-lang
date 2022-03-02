@@ -206,19 +206,19 @@ pub enum Error {
         message: String,
     },
 
-    TypeError {
-        kind: TypeError,
+    CompileError {
         file: FileOrLib,
         span: Span,
         message: Option<String>,
         helpers: Vec<Helper>,
     },
 
-    // TODO(ed): Remove this! They should be panics, and be caught in the type-checker.
-    CompileError {
+    TypeError {
+        kind: TypeError,
         file: FileOrLib,
         span: Span,
         message: Option<String>,
+        helpers: Vec<Helper>,
     },
 
     RuntimeError,
@@ -297,7 +297,7 @@ impl fmt::Display for Error {
                 }
                 Ok(())
             }
-            Error::CompileError { file, span, message } => {
+            Error::CompileError { file, span, message, helpers } => {
                 write!(f, "{}: ", "compile error".red())?;
                 write!(f, "{}\n", file_line_display(file, span.line_start))?;
                 write!(f, "{}Failed to compile line {}\n", INDENT, span.line_start)?;
@@ -307,7 +307,20 @@ impl fmt::Display for Error {
                         write!(f, "{}{}\n", INDENT, line)?;
                     }
                 }
-                write_source_span_at(f, file, *span)
+                write_source_span_at(f, file, *span)?;
+
+                if !helpers.is_empty() {
+                    // TODO(ed): Might be helpfull to not write all the errors?
+                    write!(f, "{}\n", "help:".yellow())?;
+                    for Helper { message, at } in helpers.iter() {
+                        write!(f, "{}{}\n", INDENT, message)?;
+                        match at {
+                            Some((file, span)) => write_source_span_at(f, file, *span)?,
+                            None => {}
+                        }
+                    }
+                }
+                Ok(())
             }
         }
     }

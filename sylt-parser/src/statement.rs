@@ -14,6 +14,10 @@ impl NameIdentifier {
         &self.ident().name
     }
 
+    pub fn span(&self) -> &Span {
+        &self.ident().span
+    }
+
     pub fn ident(&self) -> &Identifier {
         match self {
             NameIdentifier::Implicit(i) | NameIdentifier::Alias(i) => &i,

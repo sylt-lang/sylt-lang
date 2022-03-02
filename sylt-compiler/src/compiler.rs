@@ -39,6 +39,7 @@ macro_rules! error {
                 file: $compiler.file_from_namespace($span.file_id).clone(),
                 span: $span,
                 message: Some(msg),
+                helpers: Vec::new(),
             };
             $compiler.errors.push(err);
         }

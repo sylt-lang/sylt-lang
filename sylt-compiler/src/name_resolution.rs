@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 
-use sylt_common::{Error, FileOrLib};
+use sylt_common::{error::Helper, Error, FileOrLib};
 use sylt_parser::{Identifier, Span, Statement as ParserStatement, VarKind, AST as ParserAST};
 
 use crate::NamespaceID;
@@ -9,12 +9,54 @@ type ResolveResult<T> = Result<T, Vec<Error>>;
 type Ref = usize;
 type Namespace = usize;
 
-#[derive(Debug, Clone, PartialEq)]
-struct Var {
-    id: Ref,
-    definition: Option<Span>,
-    kind: VarKind,
-    usage: Vec<Span>,
+macro_rules! resolution_error {
+    ($self:expr, $span:expr, $( $msg:expr ),* ) => {
+        {
+            let message = format!($( $msg ),*);
+            Error::CompileError {
+                file: $self.span_file(&$span),
+                span: $span.clone(),
+                message: Some(message),
+                helpers: Vec::new(),
+            }
+        }
+    };
+}
+
+trait Help {
+    fn help(self, resolver: &Resolver, span: Span, message: String) -> Self;
+    fn help_no_span(self, message: String) -> Self;
+}
+
+impl<T> Help for ResolveResult<T> {
+    fn help(mut self, resolver: &Resolver, span: Span, message: String) -> Self {
+        match &mut self {
+            Ok(_) => {}
+            Err(errs) => match &mut errs.last_mut() {
+                Some(Error::CompileError { helpers, .. }) => {
+                    helpers.push(Helper {
+                        at: Some((resolver.span_file(&span), span)),
+                        message,
+                    });
+                }
+                _ => panic!("Cannot help on this error since the error is empty"),
+            },
+        }
+        self
+    }
+
+    fn help_no_span(mut self, message: String) -> Self {
+        match &mut self {
+            Ok(_) => {}
+            Err(errs) => match &mut errs.last_mut() {
+                Some(Error::TypeError { helpers, .. }) => {
+                    helpers.push(Helper { at: None, message });
+                }
+                _ => panic!("Cannot help on this error since the error is empty"),
+            },
+        }
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -228,31 +270,50 @@ pub enum Statement {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum Name {
-    Name(Ref),
-    Namespace(usize),
+pub enum TypeAssignable {
+    SomeTypeAssignable,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum TypeAssignable {
-    SomeTypeAssignable,
+struct Var {
+    id: Ref,
+    definition: Option<Span>,
+    kind: VarKind,
+    usage: Vec<Span>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum Name {
+    Name(Ref),
+    Namespace(FileOrLib, Span),
 }
 
 struct Resolver {
     namespaces: HashMap<FileOrLib, HashMap<String, Name>>,
     variables: Vec<Var>,
+    namespace_to_file: HashMap<NamespaceID, FileOrLib>,
 }
 
 impl Resolver {
-    fn new() -> Self {
+    fn new(namespace_to_file: HashMap<NamespaceID, FileOrLib>) -> Self {
         Self {
+            namespace_to_file,
             namespaces: HashMap::new(),
             variables: Vec::new(),
         }
     }
 
-    fn statement(&mut self, stmt: &ParserStatement) -> Option<Statement> {
-        match &stmt.kind {
+    fn span_file(&self, span: &Span) -> FileOrLib {
+        self.namespace_to_file[&span.file_id].clone()
+    }
+
+    fn add_help(&self, err: Error, span: Span, msg: String) -> Error {
+        let wrapper: ResolveResult<()> = Err(vec![err]);
+        wrapper.help(self, span, msg).unwrap_err()[0].clone()
+    }
+
+    fn statement(&mut self, stmt: &ParserStatement) -> ResolveResult<Option<Statement>> {
+        Ok(match &stmt.kind {
             sylt_parser::StatementKind::EmptyStatement
             | sylt_parser::StatementKind::Use { .. }
             | sylt_parser::StatementKind::FromUse { .. }
@@ -270,11 +331,68 @@ impl Resolver {
             sylt_parser::StatementKind::Block { statements } => todo!(),
             sylt_parser::StatementKind::StatementExpression { value } => todo!(),
             sylt_parser::StatementKind::Unreachable => todo!(),
-        }
+        })
     }
 
-    fn insert_namespace(&mut self, file_or_lib: FileOrLib) {
-        self.namespaces.insert(file_or_lib, HashMap::new());
+    fn insert_namespace_and_add_definitions(
+        &mut self,
+        file_or_lib: &FileOrLib,
+        statements: &[ParserStatement],
+    ) -> ResolveResult<()> {
+        let mut namespace = HashMap::new();
+        let mut errs = Vec::new();
+        for stmt in statements.iter() {
+            let (name, var) = match &stmt.kind {
+                sylt_parser::StatementKind::Blob { name, .. }
+                | sylt_parser::StatementKind::Enum { name, .. } => {
+                    let var = self.new_var(name.span, VarKind::Const);
+                    (name.name.clone(), Name::Name(var))
+                }
+
+                sylt_parser::StatementKind::ExternalDefinition { ident, kind, .. }
+                | sylt_parser::StatementKind::Definition { ident, kind, .. } => {
+                    let var = self.new_var(ident.span, *kind);
+                    (ident.name.clone(), Name::Name(var))
+                }
+
+                sylt_parser::StatementKind::Assignment { .. }
+                | sylt_parser::StatementKind::Block { .. }
+                | sylt_parser::StatementKind::Break
+                | sylt_parser::StatementKind::Continue
+                | sylt_parser::StatementKind::EmptyStatement
+                | sylt_parser::StatementKind::FromUse { .. }
+                | sylt_parser::StatementKind::Loop { .. }
+                | sylt_parser::StatementKind::Ret { .. }
+                | sylt_parser::StatementKind::StatementExpression { .. }
+                | sylt_parser::StatementKind::Unreachable
+                | sylt_parser::StatementKind::Use { .. } => continue,
+            };
+            match namespace.entry(name.clone()) {
+                Entry::Vacant(ent) => {
+                    ent.insert(var);
+                },
+                Entry::Occupied(old) => {
+                    let err = resolution_error!(
+                        self,
+                        stmt.span,
+                        "Name collision - duplicate definitions of {:?}",
+                        name
+                    );
+                    let span = match old.get() {
+                        Name::Name(r) => self.variables[*r].definition.unwrap(),
+                        Name::Namespace(_, span) => *span,
+                    };
+                    let err = self.add_help(err, span, "First definition is here".into());
+                    errs.push(err);
+                }
+            }
+        }
+        self.namespaces.insert(file_or_lib.clone(), HashMap::new());
+        if errs.is_empty() {
+            Ok(())
+        } else {
+            Err(errs)
+        }
     }
 
     fn new_var(&mut self, definition: Span, kind: VarKind) -> Ref {
@@ -295,31 +413,49 @@ impl Resolver {
             .map(|x| x.insert(ident.name, name));
     }
 
-    fn define_namespace_variables(
+    fn resolve_global_variables(
         &mut self,
-        file_or_lib: FileOrLib,
-        statements: Vec<ParserStatement>,
-    ) -> Result<(), Error> {
+        file_or_lib: &FileOrLib,
+        statements: &[ParserStatement],
+    ) -> ResolveResult<()> {
+        let mut errs = Vec::new();
         for stmt in statements {
-            match stmt.kind {
-                sylt_parser::StatementKind::Use { path, name, file } => todo!(),
-                sylt_parser::StatementKind::FromUse { path, imports, file } => todo!(),
+            let span = stmt.span;
+            match &stmt.kind {
+                sylt_parser::StatementKind::Use { name, file, .. } => {
+                    if !self.namespaces.contains_key(file) {
+                        errs.push(resolution_error!(
+                            self,
+                            name.span(),
+                            "No namespace named {:?}",
+                            file
+                        ));
+                    } else {
+                        self.namespaces.get_mut(&file_or_lib).map(|x| {
+                            x.insert(
+                                name.name().to_string(),
+                                Name::Namespace(file.clone(), name.span().clone()),
+                            )
+                        });
+                    }
+                }
+                sylt_parser::StatementKind::FromUse { imports, file, .. } => {}
                 sylt_parser::StatementKind::Blob { name, variables, fields } => todo!(),
                 sylt_parser::StatementKind::Enum { name, variables, variants } => todo!(),
                 sylt_parser::StatementKind::Definition { ident, kind, ty, value } => {
-                    let var = self.new_var(ident.span, kind);
-                    self.define_variable(&file_or_lib, ident, Name::Name(var))
+                    let var = self.new_var(ident.span, *kind);
+                    self.define_variable(&file_or_lib, ident.clone(), Name::Name(var))
                 }
                 sylt_parser::StatementKind::ExternalDefinition { ident, kind, ty } => {
-                    let var = self.new_var(ident.span, kind);
-                    self.define_variable(&file_or_lib, ident, Name::Name(var))
+                    let var = self.new_var(ident.span, *kind);
+                    self.define_variable(&file_or_lib, ident.clone(), Name::Name(var))
                 }
 
                 sylt_parser::StatementKind::Loop { .. }
                 | sylt_parser::StatementKind::Assignment { .. }
                 | sylt_parser::StatementKind::Break
                 | sylt_parser::StatementKind::Continue
-                | sylt_parser::StatementKind::Ret {  .. }
+                | sylt_parser::StatementKind::Ret { .. }
                 | sylt_parser::StatementKind::Block { .. }
                 | sylt_parser::StatementKind::StatementExpression { .. }
                 | sylt_parser::StatementKind::Unreachable
@@ -333,26 +469,22 @@ impl Resolver {
 pub fn resolve<'a>(
     tree: &'a ParserAST,
     namespace_to_file: &HashMap<NamespaceID, FileOrLib>,
-) -> Result<Vec<Statement>, Vec<Error>> {
-    let mut resolver = Resolver::new();
+) -> ResolveResult<Vec<Statement>> {
+    let mut resolver = Resolver::new(namespace_to_file.clone());
 
     // Create namespaces and insert the variables in them
-    tree.modules.iter().for_each(|(file_or_lib, module)| {
-        resolver.insert_namespace(file_or_lib.clone());
-        resolver.define_namespace_variables(file_or_lib.clone(), module.statements);
-    });
+    for (file_or_lib, module) in tree.modules.iter() {
+        resolver.insert_namespace_and_add_definitions(file_or_lib, &module.statements)?;
+    }
+    for (file_or_lib, module) in tree.modules.iter() {
+        resolver.resolve_global_variables(file_or_lib, &module.statements)?;
+    }
 
-    Ok(
-        tree.modules
-            .iter()
-            .map(|(_, module)| {
-                module
-                    .statements
-                    .iter()
-                    .map(|stmt| resolver.statement(&stmt))
-                    .filter_map(|x| x)
-            })
-            .flatten()
-            .collect::<Vec<Statement>>()
-    )
+    let mut out = Vec::new();
+    for (_, module) in tree.modules.iter() {
+        for stmt in module.statements.iter() {
+            resolver.statement(&stmt)?.map(|x| out.push(x));
+        }
+    }
+    Ok(out)
 }
