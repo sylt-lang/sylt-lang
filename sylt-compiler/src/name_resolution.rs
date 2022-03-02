@@ -7,7 +7,6 @@ use crate::NamespaceID;
 
 type ResolveResult<T> = Result<T, Vec<Error>>;
 type Ref = usize;
-type Namespace = usize;
 
 macro_rules! resolution_error {
     ($self:expr, $span:expr, $( $msg:expr ),* ) => {
