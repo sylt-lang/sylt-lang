@@ -158,6 +158,10 @@ pub enum TypeError {
         field: String,
     },
 
+    NewblobInstance {
+        name: String,
+    },
+
     // TODO(ed): got and expected doesn't make sense - we don't know what we expect!
     TupleIndexOutOfRange {
         got: i64,
@@ -372,6 +376,10 @@ impl fmt::Display for TypeError {
 
             TypeError::MissingField { blob, field } => {
                 write!(f, "Blob instance lacks field '{}.{}'", blob, field)
+            }
+
+            TypeError::NewblobInstance { name } => {
+                write!(f, "'{}' is a newblob and cannot be instantiated", name)
             }
 
             TypeError::TupleIndexOutOfRange { length, got } => {

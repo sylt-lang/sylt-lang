@@ -1,0 +1,5 @@
+start :: fn do
+  (14., 9.) / (2., 3.) <=> (7., 3.)
+end
+
+// error: A 'float' cannot be a '(float, float)'
