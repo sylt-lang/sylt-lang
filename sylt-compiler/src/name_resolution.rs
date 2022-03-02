@@ -450,7 +450,7 @@ impl Resolver {
                             );
                             errs.push(self.add_help(err, span, "First definition is here".into()));
                         }
-                        Entry::Occupied(occ) => { /* We allow importing the same thing multiple times */ }
+                        Entry::Occupied(_) => { /* We allow importing the same thing multiple times */ }
                     }
                 }
                 sylt_parser::StatementKind::FromUse { imports, file, .. } => {
@@ -504,7 +504,7 @@ impl Resolver {
                                     "First definition is here".into(),
                                 ));
                             }
-                            Entry::Occupied(occ) => { /* We allow importing the same thing multiple times */ }
+                            Entry::Occupied(_) => { /* We allow importing the same thing multiple times */ }
                         }
                     }
                 }
