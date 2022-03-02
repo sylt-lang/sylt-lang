@@ -24,7 +24,7 @@ pub enum Type {
     Dict(Box<Type>, Box<Type>),
     Function(Vec<Type>, Box<Type>),
     Blob(String, BTreeMap<String, Type>),
-    Newblob(String, BTreeMap<String, Type>, String),
+    ExternBlob(String, BTreeMap<String, Type>, String),
     Enum(String, BTreeMap<String, Type>),
     ExternFunction(usize),
 
@@ -82,7 +82,7 @@ impl Display for Type {
                 write!(f, " -> {})", ret)
             }
             Type::Blob(name, _) => write!(f, "{}", name),
-            Type::Newblob(name, _, ns) => write!(f, "{name} from {ns}"),
+            Type::ExternBlob(name, _, ns) => write!(f, "{name} from {ns}"),
             Type::Enum(name, _) => write!(f, "{}", name),
             Type::ExternFunction(id) => write!(f, "ExternFunction({})", id),
             Type::Invalid => write!(f, "Invalid"),

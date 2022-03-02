@@ -66,7 +66,7 @@ pub enum StatementKind {
         name: Identifier,
         variables: Vec<Identifier>,
         fields: HashMap<Identifier, Type>,
-        newblob: bool,
+        external: bool,
     },
 
     /// Defines a new Enum.
@@ -528,7 +528,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // Blob declaration: `A :: blob { <fields> }
-        [T::Identifier(name), T::ColonColon, T::Blob | T::Newblob, ..] => {
+        [T::Identifier(name), T::ColonColon, T::Blob | T::ExternBlob, ..] => {
             if !is_capitalized(name) {
                 raise_syntax_error!(
                     ctx,
@@ -552,7 +552,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             }
 
             let ctx = ctx.skip(2);
-            let newblob = matches!(ctx.token(), T::Newblob);
+            let external = matches!(ctx.token(), T::ExternBlob);
 
             let (ctx, variables) =
                 parse_beg_end_comma_sep!(ctx.skip(1), T::LeftParen, T::RightParen, &item)?;
@@ -601,7 +601,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
             let ctx = ctx.pop_skip_newlines(skip_newlines);
             let ctx = expect!(ctx, T::RightBrace, "Expected '}}' to close blob fields");
-            (ctx, Blob { name, fields, variables, newblob })
+            (ctx, Blob { name, fields, variables, external })
         }
 
         // Implied type declaration, e.g. `a :: 1` or `a := 1`.

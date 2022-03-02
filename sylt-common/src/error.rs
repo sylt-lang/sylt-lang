@@ -158,7 +158,7 @@ pub enum TypeError {
         field: String,
     },
 
-    NewblobInstance {
+    ExternBlobInstance {
         name: String,
     },
 
@@ -378,8 +378,8 @@ impl fmt::Display for TypeError {
                 write!(f, "Blob instance lacks field '{}.{}'", blob, field)
             }
 
-            TypeError::NewblobInstance { name } => {
-                write!(f, "'{}' is a newblob and cannot be instantiated", name)
+            TypeError::ExternBlobInstance { name } => {
+                write!(f, "'{}' is an externally defined blob and cannot be instantiated", name)
             }
 
             TypeError::TupleIndexOutOfRange { length, got } => {
