@@ -9,6 +9,7 @@ type ResolveResult<T> = Result<T, Vec<Error>>;
 type Ref = usize;
 type Namespace = usize;
 
+#[derive(Debug, Clone, PartialEq)]
 struct Var {
     id: Ref,
     definition: Option<Span>,
@@ -16,7 +17,7 @@ struct Var {
     usage: Vec<Span>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BinOp {
     // Comp
     Equals,
@@ -38,7 +39,7 @@ pub enum BinOp {
     Or,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UniOp {
     Neg,
     NotEquals,
@@ -53,7 +54,7 @@ pub enum UniOp {
     Div,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Collection {
     Tuple,
     List,
@@ -75,7 +76,7 @@ pub struct CaseBranch {
     pub body: Vec<Statement>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Read {
         var: Ref,
@@ -86,24 +87,24 @@ pub enum Expression {
         span: Span,
     },
     Call {
-        value: Expression,
+        value: Box<Expression>,
         args: Vec<(Expression, Span)>,
         span: Span,
     },
     BlobAccess {
-        value: Expression,
+        value: Box<Expression>,
         field: String,
         span: Span,
     },
 
     BinOp {
-        a: Expression,
-        b: Expression,
+        a: Box<Expression>,
+        b: Box<Expression>,
         op: BinOp,
         span: Span,
     },
     UniOp {
-        a: Expression,
+        a: Box<Expression>,
         op: UniOp,
         span: Span,
     },
@@ -143,12 +144,12 @@ pub enum Expression {
     Nil,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Noop,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     Assignment {
         op: BinOp,
@@ -226,15 +227,20 @@ pub enum Statement {
     Unreachable(Span),
 }
 
+#[derive(Debug, Clone, PartialEq)]
 enum Name {
     Name(Ref),
     Namespace(usize),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum TypeAssignable {
+    SomeTypeAssignable,
+}
+
 struct Resolver {
     namespaces: HashMap<FileOrLib, HashMap<String, Name>>,
     variables: Vec<Var>,
-    var_id: Ref,
 }
 
 impl Resolver {
@@ -242,12 +248,11 @@ impl Resolver {
         Self {
             namespaces: HashMap::new(),
             variables: Vec::new(),
-            var_id: 0,
         }
     }
 
     fn statement(&mut self, stmt: &ParserStatement) -> Option<Statement> {
-        match stmt.kind {
+        match &stmt.kind {
             sylt_parser::StatementKind::EmptyStatement
             | sylt_parser::StatementKind::Use { .. }
             | sylt_parser::StatementKind::FromUse { .. }
@@ -273,50 +278,55 @@ impl Resolver {
     }
 
     fn new_var(&mut self, definition: Span, kind: VarKind) -> Ref {
-        let id = self.var_id;
+        let id = self.variables.len();
 
-        self.var_id += 1;
         self.variables.push(Var {
-            id: self.new_var_id(),
-            definition,
+            id,
+            definition: Some(definition),
             kind,
             usage: Vec::new(),
         });
         id
     }
 
+    fn define_variable(&mut self, file_or_lib: &FileOrLib, ident: Identifier, name: Name) {
+        self.namespaces
+            .get_mut(file_or_lib)
+            .map(|x| x.insert(ident.name, name));
+    }
+
     fn define_namespace_variables(
         &mut self,
         file_or_lib: FileOrLib,
         statements: Vec<ParserStatement>,
-    ) {
-        let mut names = HashMap::new();
+    ) -> Result<(), Error> {
         for stmt in statements {
             match stmt.kind {
                 sylt_parser::StatementKind::Use { path, name, file } => todo!(),
                 sylt_parser::StatementKind::FromUse { path, imports, file } => todo!(),
                 sylt_parser::StatementKind::Blob { name, variables, fields } => todo!(),
                 sylt_parser::StatementKind::Enum { name, variables, variants } => todo!(),
-                sylt_parser::StatementKind::Definition { ident, kind, ty, value } => names.insert(
-                    ident.name, // TODO: Check for duplicates
-                    Name::Name(self.new_var(ident.span, kind)),
-                ),
-                sylt_parser::StatementKind::ExternalDefinition { ident, kind, ty } => names.insert(
-                    ident.name, // TODO: Check for duplicates
-                    Name::Name(self.new_var(ident.span, kind)),
-                ),
+                sylt_parser::StatementKind::Definition { ident, kind, ty, value } => {
+                    let var = self.new_var(ident.span, kind);
+                    self.define_variable(&file_or_lib, ident, Name::Name(var))
+                }
+                sylt_parser::StatementKind::ExternalDefinition { ident, kind, ty } => {
+                    let var = self.new_var(ident.span, kind);
+                    self.define_variable(&file_or_lib, ident, Name::Name(var))
+                }
 
-                sylt_parser::StatementKind::Loop { condition, body }
-                | sylt_parser::StatementKind::Assignment { kind, target, value }
+                sylt_parser::StatementKind::Loop { .. }
+                | sylt_parser::StatementKind::Assignment { .. }
                 | sylt_parser::StatementKind::Break
                 | sylt_parser::StatementKind::Continue
-                | sylt_parser::StatementKind::Ret { value }
-                | sylt_parser::StatementKind::Block { statements }
-                | sylt_parser::StatementKind::StatementExpression { value }
+                | sylt_parser::StatementKind::Ret {  .. }
+                | sylt_parser::StatementKind::Block { .. }
+                | sylt_parser::StatementKind::StatementExpression { .. }
                 | sylt_parser::StatementKind::Unreachable
                 | sylt_parser::StatementKind::EmptyStatement => {}
-            }
+            };
         }
+        Ok(())
     }
 }
 
@@ -328,19 +338,21 @@ pub fn resolve<'a>(
 
     // Create namespaces and insert the variables in them
     tree.modules.iter().for_each(|(file_or_lib, module)| {
-        resolver.insert_namespace(file_or_lib);
-        resolver.define_namespace_variables(file_or_lib, module.statements);
+        resolver.insert_namespace(file_or_lib.clone());
+        resolver.define_namespace_variables(file_or_lib.clone(), module.statements);
     });
 
-    tree.modules
-        .iter()
-        .map(|(_, module)| {
-            module
-                .statements
-                .iter()
-                .map(|stmt| resolver.statement(&stmt))
-        })
-        .flatten()
-        .flatten()
-        .collect()
+    Ok(
+        tree.modules
+            .iter()
+            .map(|(_, module)| {
+                module
+                    .statements
+                    .iter()
+                    .map(|stmt| resolver.statement(&stmt))
+                    .filter_map(|x| x)
+            })
+            .flatten()
+            .collect::<Vec<Statement>>()
+    )
 }
