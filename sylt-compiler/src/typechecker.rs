@@ -476,7 +476,6 @@ impl TypeChecker {
 
             UserDefined(assignable, vars) => {
                 let ty = self.type_assignable(ctx, assignable)?;
-                self.print_type(ty);
                 match self.find_type(ty) {
                     Type::Blob(name, _, sub)
                     | Type::Newblob(name, _, sub, _)
