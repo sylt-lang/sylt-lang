@@ -313,13 +313,15 @@ impl Resolver {
 
     fn statement(&mut self, stmt: &ParserStatement) -> ResolveResult<Option<Statement>> {
         Ok(match &stmt.kind {
+            // These are already handled
             sylt_parser::StatementKind::EmptyStatement
             | sylt_parser::StatementKind::Use { .. }
             | sylt_parser::StatementKind::FromUse { .. }
             | sylt_parser::StatementKind::Blob { .. }
             | sylt_parser::StatementKind::Enum { .. } => None,
 
-            sylt_parser::StatementKind::Definition { ident, kind, ty, value } => todo!("Erik"),
+            sylt_parser::StatementKind::Definition { ident, kind, ty, value } => todo!("Edvard"),
+            Start here! Start inserting some definitions and see what happens.
 
             sylt_parser::StatementKind::Assignment { kind, target, value } => todo!(),
             sylt_parser::StatementKind::ExternalDefinition { ident, kind, ty } => todo!(),
