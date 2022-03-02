@@ -1,5 +1,5 @@
-A :: newblob { }
-B :: newblob { }
+A :: externblob { }
+B :: externblob { }
 
 make_a : fn -> A : external
 make_b : fn -> B : external

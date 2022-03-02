@@ -1,6 +1,6 @@
 use some_ns
 
-Foo :: newblob { }
+Foo :: externblob { }
 
 create_foo : fn -> Foo : external
 
@@ -10,4 +10,4 @@ start :: fn do
   some_ns.use_foo' foo
 end
 
-// error: A 'Foo from tests/newblob/some_ns.sy' cannot be a 'Foo from tests/newblob/from_other_ns.sy'
+// error: A 'Foo from tests/externblob/some_ns.sy' cannot be a 'Foo from tests/externblob/from_other_ns.sy'

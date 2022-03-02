@@ -1,4 +1,4 @@
-A :: newblob { }
+A :: externblob { }
 B :: blob { }
 
 make_a : fn -> A : external
