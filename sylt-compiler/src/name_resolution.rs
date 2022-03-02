@@ -369,12 +369,12 @@ impl Resolver {
             match namespace.entry(name.clone()) {
                 Entry::Vacant(ent) => {
                     ent.insert(var);
-                },
+                }
                 Entry::Occupied(old) => {
                     let err = resolution_error!(
                         self,
                         stmt.span,
-                        "Name collision - duplicate definitions of {:?}",
+                        "Name collision - duplicate definitions of the namespace {:?}",
                         name
                     );
                     let span = match old.get() {
@@ -386,7 +386,7 @@ impl Resolver {
                 }
             }
         }
-        self.namespaces.insert(file_or_lib.clone(), HashMap::new());
+        self.namespaces.insert(file_or_lib.clone(), namespace);
         if errs.is_empty() {
             Ok(())
         } else {
@@ -419,7 +419,6 @@ impl Resolver {
     ) -> ResolveResult<()> {
         let mut errs = Vec::new();
         for stmt in statements {
-            let span = stmt.span;
             match &stmt.kind {
                 sylt_parser::StatementKind::Use { name, file, .. } => {
                     if !self.namespaces.contains_key(file) {
@@ -429,39 +428,107 @@ impl Resolver {
                             "No namespace named {:?}",
                             file
                         ));
-                    } else {
-                        self.namespaces.get_mut(&file_or_lib).map(|x| {
-                            x.insert(
-                                name.name().to_string(),
-                                Name::Namespace(file.clone(), name.span().clone()),
-                            )
-                        });
+                        continue;
+                    };
+                    let to_ns = self.namespaces.get_mut(&file_or_lib).unwrap();
+                    let to_insert = Name::Namespace(file.clone(), name.span().clone());
+                    match to_ns.entry(name.name().to_string()) {
+                        Entry::Vacant(ent) => {
+                            ent.insert(to_insert);
+                        }
+                        Entry::Occupied(occ) if occ.get() != &to_insert => {
+
+                            let span = match occ.get() {
+                                Name::Name(r) => self.variables[*r].definition.unwrap(),
+                                Name::Namespace(_, span) => *span,
+                            };
+                            let err = resolution_error!(
+                                self,
+                                stmt.span,
+                                "Name collision - duplicate definitions of {:?}",
+                                name
+                            );
+                            errs.push(self.add_help(err, span, "First definition is here".into()));
+                        }
+                        Entry::Occupied(occ) => { /* We allow importing the same thing multiple times */ }
                     }
                 }
-                sylt_parser::StatementKind::FromUse { imports, file, .. } => {}
-                sylt_parser::StatementKind::Blob { name, variables, fields } => todo!(),
-                sylt_parser::StatementKind::Enum { name, variables, variants } => todo!(),
-                sylt_parser::StatementKind::Definition { ident, kind, ty, value } => {
-                    let var = self.new_var(ident.span, *kind);
-                    self.define_variable(&file_or_lib, ident.clone(), Name::Name(var))
-                }
-                sylt_parser::StatementKind::ExternalDefinition { ident, kind, ty } => {
-                    let var = self.new_var(ident.span, *kind);
-                    self.define_variable(&file_or_lib, ident.clone(), Name::Name(var))
+                sylt_parser::StatementKind::FromUse { imports, file, .. } => {
+                    for (import_name, import_as) in imports.iter() {
+                        let from_ns = match self.namespaces.get(file) {
+                            None => {
+                                errs.push(resolution_error!(
+                                    self,
+                                    stmt.span,
+                                    "No namespace named {:?}",
+                                    file
+                                ));
+                                continue;
+                            }
+                            Some(from_ns) => from_ns,
+                        };
+                        let to_insert = match from_ns.get(&import_name.name) {
+                            None => {
+                                errs.push(resolution_error!(
+                                    self,
+                                    import_name.span,
+                                    "Cannot find {:?} in namespace {:?}",
+                                    import_name.name,
+                                    file
+                                ));
+                                continue;
+                            }
+                            Some(to_insert) => to_insert,
+                        };
+                        let to_insert = to_insert.clone();
+                        let var = import_as.as_ref().unwrap_or(import_name);
+                        let to_ns = self.namespaces.get_mut(&file_or_lib).unwrap();
+                        match to_ns.entry(var.name.clone()) {
+                            Entry::Vacant(ent) => {
+                                ent.insert(to_insert);
+                            }
+                            Entry::Occupied(occ) if occ.get() != &to_insert => {
+                                let span = match occ.get() {
+                                    Name::Name(r) => self.variables[*r].definition.unwrap(),
+                                    Name::Namespace(_, span) => *span,
+                                };
+                                let err = resolution_error!(
+                                    self,
+                                    var.span,
+                                    "Name collision - duplicate definitions of {:?}",
+                                    var.name
+                                );
+                                errs.push(self.add_help(
+                                    err,
+                                    span,
+                                    "First definition is here".into(),
+                                ));
+                            }
+                            Entry::Occupied(occ) => { /* We allow importing the same thing multiple times */ }
+                        }
+                    }
                 }
 
-                sylt_parser::StatementKind::Loop { .. }
-                | sylt_parser::StatementKind::Assignment { .. }
+                sylt_parser::StatementKind::Assignment { .. }
+                | sylt_parser::StatementKind::Blob { .. }
+                | sylt_parser::StatementKind::Block { .. }
                 | sylt_parser::StatementKind::Break
                 | sylt_parser::StatementKind::Continue
+                | sylt_parser::StatementKind::Definition { .. }
+                | sylt_parser::StatementKind::EmptyStatement
+                | sylt_parser::StatementKind::Enum { .. }
+                | sylt_parser::StatementKind::ExternalDefinition { .. }
+                | sylt_parser::StatementKind::Loop { .. }
                 | sylt_parser::StatementKind::Ret { .. }
-                | sylt_parser::StatementKind::Block { .. }
                 | sylt_parser::StatementKind::StatementExpression { .. }
-                | sylt_parser::StatementKind::Unreachable
-                | sylt_parser::StatementKind::EmptyStatement => {}
+                | sylt_parser::StatementKind::Unreachable => {}
             };
         }
-        Ok(())
+        if errs.is_empty() {
+            Ok(())
+        } else {
+            Err(errs)
+        }
     }
 }
 
