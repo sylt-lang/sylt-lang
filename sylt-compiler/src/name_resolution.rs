@@ -123,17 +123,24 @@ pub enum Expression {
         span: Span,
     },
     Variant {
+        ty: Box<Expression>,
         variant: String,
+        value: Box<Expression>,
         span: Span,
     },
     Call {
-        value: Box<Expression>,
-        args: Vec<(Expression, Span)>,
+        function: Box<Expression>,
+        args: Vec<Expression>,
         span: Span,
     },
     BlobAccess {
         value: Box<Expression>,
         field: String,
+        span: Span,
+    },
+    Index {
+        value: Box<Expression>,
+        index: Box<Expression>,
         span: Span,
     },
 
@@ -316,6 +323,28 @@ impl Resolver {
         wrapper.help(self, span, msg).unwrap_err()[0].clone()
     }
 
+    fn lookup(&self, namespace_id: usize, name: &String, span: Span) -> ResolveResult<Ref> {
+        // TODO(ed): Find the closest matching name if we don't find anything?
+        for (var_name, var_id) in self.stack.iter().rev() {
+            if var_name == name {
+                return Ok(*var_id);
+            }
+        }
+        match self.namespaces[&self.namespace_to_file[&namespace_id]].get(name) {
+            Some(Name::Name(var)) => Ok(*var),
+            Some(Name::Namespace(..)) => Err(vec![resolution_error!(
+                    self, span, "When resolving the name {:?} - a namespace was found", name
+            )]),
+            None => Err(vec![resolution_error!(
+                    self, span, "Failed to resolve {:?} - nothing matched", name
+            )]),
+        }
+    }
+
+    fn namespace_list(&self, assignable: &ParserAssignable) -> Option<usize> {
+        panic!()
+    }
+
     fn ty(&mut self, _: &ParserType) -> ResolveResult<Type> {
         Ok(Type::Noop)
     }
@@ -324,8 +353,57 @@ impl Resolver {
         panic!();
     }
 
-    fn assignable(&mut self, _: &ParserAssignable) -> ResolveResult<Expression> {
-        panic!();
+    fn assignable(&mut self, assignable: &ParserAssignable) -> ResolveResult<Expression> {
+        use sylt_parser::AssignableKind as AK;
+        use Expression as E;
+        let span = assignable.span;
+        Ok(match &assignable.kind {
+            AK::Read(Identifier { name, span }) => {
+                let var = self.lookup(span.file_id, name, *span)?;
+                let span = *span;
+                E::Read { var, span }
+            }
+            AK::Variant { enum_ass, variant, value } => {
+                // Checking that this is a valid type, should be done in the typechecker
+                let ty = Box::new(self.assignable(enum_ass)?);
+                let value = Box::new(self.expression(value)?);
+                E::Variant { ty, variant: variant.name.clone(), value, span }
+            }
+            AK::Call(function, parser_args) => {
+                let function = Box::new(self.assignable(function)?);
+                let mut args = Vec::new();
+                for arg in parser_args.iter() {
+                    args.push(self.expression(arg)?);
+                }
+                E::Call { function, args, span }
+            }
+            AK::ArrowCall(extra_arg, function, parser_args) => {
+                let extra_arg = self.expression(extra_arg)?;
+                let function = Box::new(self.assignable(function)?);
+                let mut args = vec![extra_arg];
+                for arg in parser_args.iter() {
+                    args.push(self.expression(arg)?);
+                }
+                E::Call { function, args, span }
+            }
+            AK::Access(assignable, ident) => match self.namespace_list(assignable) {
+                Some(ns) => {
+                    let var = self.lookup(ns, &ident.name, ident.span)?;
+                    let span = ident.span;
+                    E::Read { var, span }
+                }
+                None => {
+                    let value = Box::new(self.assignable(assignable)?);
+                    E::BlobAccess { value, field: ident.name.clone(), span: ident.span }
+                }
+            },
+            AK::Index(assignable, index) => {
+                let value = Box::new(self.assignable(assignable)?);
+                let index = Box::new(self.expression(index)?);
+                E::Index { value, index, span }
+            }
+            AK::Expression(value) => self.expression(value)?,
+        })
     }
 
     fn collection(
@@ -451,18 +529,17 @@ impl Resolver {
                 E::Case { to_match, branches, fall_through, span }
             }
             EK::Function { name, params: parser_params, ret, body, pure } => {
+                let ss = self.stack.len();
+                let name = name.clone();
                 let mut params = Vec::new();
                 for (n, t) in parser_params.iter() {
                     params.push((n.name.clone(), n.span, self.ty(t)?));
+                    self.push_var(n.clone(), VarKind::Const);
                 }
-                E::Function {
-                    name: name.clone(),
-                    params,
-                    ret: self.ty(ret)?,
-                    body: self.block(body)?,
-                    pure: *pure,
-                    span,
-                }
+                let ret = self.ty(ret)?;
+                let body = self.block(body)?;
+                self.stack.truncate(ss);
+                E::Function { name, params, ret, body, pure: *pure, span }
             }
             EK::Blob { blob, fields: parser_fields } => {
                 let blob = self.ty_assignable(blob)?;
@@ -560,7 +637,10 @@ impl Resolver {
                 span,
             }),
             SK::Block { statements } => {
-                Some(S::Block { statements: self.block(statements)?, span })
+                let ss = self.stack.len();
+                let statements = self.block(statements)?;
+                self.stack.truncate(ss);
+                Some(S::Block { statements, span })
             }
             SK::StatementExpression { value } => {
                 Some(S::StatementExpression { value: self.expression(value)?, span })
