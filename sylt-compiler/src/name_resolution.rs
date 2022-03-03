@@ -1,7 +1,12 @@
 use std::collections::{hash_map::Entry, HashMap};
 
 use sylt_common::{error::Helper, Error, FileOrLib};
-use sylt_parser::{Identifier, Span, Statement as ParserStatement, VarKind, AST as ParserAST};
+use sylt_parser::{
+    expression::CaseBranch as ParserCaseBranch, expression::IfBranch as ParserIfBranch,
+    Assignable as ParserAssignable, Expression as ParserExpression, Identifier, Span,
+    Statement as ParserStatement, Type as ParserType, TypeAssignable as ParserTypeAssignable,
+    VarKind, AST as ParserAST,
+};
 
 use crate::NamespaceID;
 
@@ -83,16 +88,7 @@ pub enum BinOp {
 #[derive(Debug, Clone, PartialEq)]
 pub enum UniOp {
     Neg,
-    NotEquals,
-    Greater,
-    GreaterEqual,
-    Less,
-    LessEqual,
-    In,
-    Add,
-    Sub,
-    Mul,
-    Div,
+    Not,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -115,6 +111,7 @@ pub struct CaseBranch {
     pub pattern: Identifier,
     pub variable: Option<Identifier>,
     pub body: Vec<Statement>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -158,6 +155,7 @@ pub enum Expression {
         to_match: Box<Expression>,
         branches: Vec<CaseBranch>,
         fall_through: Option<Vec<Statement>>,
+        span: Span,
     },
     Function {
         name: String,
@@ -166,10 +164,13 @@ pub enum Expression {
 
         body: Vec<Statement>,
         pure: bool,
+
+        span: Span,
     },
     Blob {
         blob: TypeAssignable,
         fields: Vec<(String, Expression)>, // Keep calling order
+        span: Span,
     },
 
     Collection {
@@ -178,11 +179,11 @@ pub enum Expression {
         span: Span,
     },
 
-    Float(f64),
-    Int(i64),
-    Str(String),
-    Bool(bool),
-    Nil,
+    Float(f64, Span),
+    Int(i64, Span),
+    Str(String, Span),
+    Bool(bool, Span),
+    Nil(Span),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -229,7 +230,7 @@ pub enum Statement {
     /// `loop <expression> <statement>`.
     Loop {
         condition: Expression,
-        body: Box<Statement>,
+        body: Vec<Statement>, // TODO(ed): The parser-statement-loop should have a vector here.
         span: Span,
     },
 
@@ -289,6 +290,7 @@ enum Name {
 
 struct Resolver {
     namespaces: HashMap<FileOrLib, HashMap<String, Name>>,
+    stack: Vec<(String, Ref)>,
     variables: Vec<Var>,
     namespace_to_file: HashMap<NamespaceID, FileOrLib>,
 }
@@ -299,6 +301,7 @@ impl Resolver {
             namespace_to_file,
             namespaces: HashMap::new(),
             variables: Vec::new(),
+            stack: Vec::new(),
         }
     }
 
@@ -311,27 +314,224 @@ impl Resolver {
         wrapper.help(self, span, msg).unwrap_err()[0].clone()
     }
 
+    fn ty(&mut self, _: &ParserType) -> ResolveResult<Type> {
+        Ok(Type::Noop)
+    }
+
+    fn ty_assignable(&mut self, _: &ParserTypeAssignable) -> ResolveResult<Type> {
+        panic!();
+    }
+
+    fn assignable(&mut self, _: &ParserAssignable) -> ResolveResult<Expression> {
+        panic!();
+    }
+
+    fn collection(
+        &mut self,
+        collection: Collection,
+        expr: &[ParserExpression],
+        span: Span,
+    ) -> ResolveResult<Expression> {
+        let mut values = Vec::new();
+        for e in expr.iter() {
+            values.push(self.expression(e)?);
+        }
+        Ok(Expression::Collection { collection, values, span })
+    }
+
+    fn binop(
+        &mut self,
+        op: BinOp,
+        a: &ParserExpression,
+        b: &ParserExpression,
+        span: Span,
+    ) -> ResolveResult<Expression> {
+        let a = Box::new(self.expression(a)?);
+        let b = Box::new(self.expression(b)?);
+        Ok(Expression::BinOp { op, a, b, span })
+    }
+
+    fn uniop(&mut self, op: UniOp, a: &ParserExpression, span: Span) -> ResolveResult<Expression> {
+        let a = Box::new(self.expression(a)?);
+        Ok(Expression::UniOp { op, a, span })
+    }
+
+    fn if_branch(&mut self, branch: &ParserIfBranch) -> ResolveResult<IfBranch> {
+        let condition = match &branch.condition {
+            Some(cond) => Some(self.expression(&cond)?),
+            None => None,
+        };
+        let body = self.block(&branch.body)?;
+        let span = branch.span;
+        Ok(IfBranch { condition, body, span })
+    }
+
+    fn case_branch(&mut self, branch: &ParserCaseBranch) -> ResolveResult<CaseBranch> {
+        if let Some(var) = &branch.variable {
+            self.push_var(var.clone(), VarKind::Const);
+        }
+        let mut body = Vec::new();
+        for stmt in branch.body.iter() {
+            match self.statement(stmt)? {
+                None => {}
+                Some(stmt) => body.push(stmt),
+            }
+        }
+        Ok(CaseBranch {
+            pattern: branch.pattern.clone(),
+            variable: branch.variable.clone(),
+            body,
+            span: branch.pattern.span,
+        })
+    }
+
+    fn block(&mut self, parser_stmts: &[ParserStatement]) -> ResolveResult<Vec<Statement>> {
+        let mut stmts = Vec::new();
+        let mut errs = Vec::new();
+        for stmt in parser_stmts.iter() {
+            match self.statement(stmt) {
+                Ok(Some(stmt)) => stmts.push(stmt),
+                Ok(None) => {}
+                Err(mut es) => errs.append(&mut es),
+            }
+        }
+        if errs.is_empty() {
+            Ok(stmts)
+        } else {
+            Err(errs)
+        }
+    }
+
+    fn expression(&mut self, expr: &ParserExpression) -> ResolveResult<Expression> {
+        use sylt_parser::expression::ComparisonKind as CK;
+        use sylt_parser::ExpressionKind as EK;
+        use Expression as E;
+        let span = expr.span;
+
+        Ok(match &expr.kind {
+            EK::Get(g) => self.assignable(g)?,
+            EK::Add(a, b) => self.binop(BinOp::Add, a, b, span)?,
+            EK::Sub(a, b) => self.binop(BinOp::Sub, a, b, span)?,
+            EK::Mul(a, b) => self.binop(BinOp::Mul, a, b, span)?,
+            EK::Div(a, b) => self.binop(BinOp::Div, a, b, span)?,
+            EK::Neg(a) => self.uniop(UniOp::Neg, a, span)?,
+            EK::Comparison(a, kind, b) => match kind {
+                CK::Equals => self.binop(BinOp::Equals, a, b, span)?,
+                CK::NotEquals => self.binop(BinOp::NotEquals, a, b, span)?,
+                CK::Greater => self.binop(BinOp::Greater, a, b, span)?,
+                CK::GreaterEqual => self.binop(BinOp::GreaterEqual, a, b, span)?,
+                CK::Less => self.binop(BinOp::Less, a, b, span)?,
+                CK::LessEqual => self.binop(BinOp::LessEqual, a, b, span)?,
+                CK::In => self.binop(BinOp::In, a, b, span)?,
+            },
+            EK::AssertEq(a, b) => self.binop(BinOp::AssertEq, a, b, span)?,
+            EK::And(a, b) => self.binop(BinOp::And, a, b, span)?,
+            EK::Or(a, b) => self.binop(BinOp::Or, a, b, span)?,
+            EK::Not(a) => self.uniop(UniOp::Not, a, span)?,
+            EK::Parenthesis(x) => self.expression(x)?,
+            EK::If(parser_branches) => {
+                let mut branches = Vec::new();
+                for branch in parser_branches.iter() {
+                    branches.push(self.if_branch(branch)?);
+                }
+                E::If { branches, span }
+            }
+            EK::Case { to_match, branches: parser_branches, fall_through } => {
+                let to_match = Box::new(self.expression(to_match)?);
+                let mut branches = Vec::new();
+                for branch in parser_branches.iter() {
+                    branches.push(self.case_branch(branch)?);
+                }
+                let fall_through = match fall_through {
+                    Some(x) => Some(self.block(x)?),
+                    None => None,
+                };
+                E::Case { to_match, branches, fall_through, span }
+            }
+            EK::Function { name, params, ret, body, pure } => todo!(),
+            EK::Blob { blob, fields } => todo!(),
+            EK::Tuple(values) => self.collection(Collection::Tuple, &values, span)?,
+            EK::List(values) => self.collection(Collection::Tuple, &values, span)?,
+            EK::Set(values) => self.collection(Collection::Tuple, &values, span)?,
+            EK::Dict(values) => self.collection(Collection::Tuple, &values, span)?,
+            EK::Float(f) => E::Float(*f, span),
+            EK::Int(i) => E::Int(*i, span),
+            EK::Str(s) => E::Str(s.clone(), span),
+            EK::Bool(b) => E::Bool(*b, span),
+            EK::Nil => E::Nil(span),
+        })
+    }
+
     fn statement(&mut self, stmt: &ParserStatement) -> ResolveResult<Option<Statement>> {
+        use sylt_parser::StatementKind as SK;
+        use Statement as S;
+        let span = stmt.span;
         Ok(match &stmt.kind {
             // These are already handled
-            sylt_parser::StatementKind::EmptyStatement
-            | sylt_parser::StatementKind::Use { .. }
-            | sylt_parser::StatementKind::FromUse { .. }
-            | sylt_parser::StatementKind::Blob { .. }
-            | sylt_parser::StatementKind::Enum { .. } => None,
+            SK::EmptyStatement
+            | SK::Use { .. }
+            | SK::FromUse { .. }
+            | SK::Blob { .. }
+            | SK::Enum { .. } => None,
 
-            sylt_parser::StatementKind::Definition { ident, kind, ty, value } => todo!("Edvard"),
-            Start here! Start inserting some definitions and see what happens.
+            SK::Definition { ident, kind, ty, value } => {
+                let ss = self.stack.len();
+                let value = match (
+                    matches!(value.kind, sylt_parser::ExpressionKind::Function { .. }),
+                    ss == 0,
+                ) {
+                    (true, true) | (false, true) => {
+                        // Outer statement - it's a global so just evaluate the value!
+                        self.expression(value)?
+                    }
+                    (true, false) => {
+                        // Function, push the var before!
+                        self.push_var(ident.clone(), *kind);
+                        self.expression(value)?
+                    }
+                    (false, false) => {
+                        // Value, push the var after!
+                        let expr = self.expression(value)?;
+                        self.push_var(ident.clone(), *kind);
+                        expr
+                    }
+                };
+                let ty = self.ty(ty)?;
+                Some(Statement::Definition {
+                    span: ident.span,
+                    ident: ident.clone(),
+                    kind: *kind,
+                    ty,
+                    value,
+                })
+            }
 
-            sylt_parser::StatementKind::Assignment { kind, target, value } => todo!(),
-            sylt_parser::StatementKind::ExternalDefinition { ident, kind, ty } => todo!(),
-            sylt_parser::StatementKind::Loop { condition, body } => todo!(),
-            sylt_parser::StatementKind::Break => todo!(),
-            sylt_parser::StatementKind::Continue => todo!(),
-            sylt_parser::StatementKind::Ret { value } => todo!(),
-            sylt_parser::StatementKind::Block { statements } => todo!(),
-            sylt_parser::StatementKind::StatementExpression { value } => todo!(),
-            sylt_parser::StatementKind::Unreachable => todo!(),
+            SK::Assignment { kind, target, value } => todo!(),
+            SK::ExternalDefinition { ident, kind, ty } => None,
+            SK::Loop { condition, body } => {
+                let condition = self.expression(condition)?;
+                let body = match self.statement(body)? {
+                    Some(body) => vec![body],
+                    None => Vec::new(),
+                };
+                Some(S::Loop { condition, body, span })
+            }
+            SK::Break => Some(S::Break(span)),
+            SK::Continue => Some(S::Continue(span)),
+            SK::Ret { value } => Some(S::Ret {
+                value: match value {
+                    Some(value) => Some(self.expression(value)?),
+                    None => None,
+                },
+                span,
+            }),
+            SK::Block { statements } => {
+                Some(S::Block { statements: self.block(statements)?, span })
+            }
+            SK::StatementExpression { value } => {
+                Some(S::StatementExpression { value: self.expression(value)?, span })
+            }
+            SK::Unreachable => Some(S::Unreachable(span)),
         })
     }
 
@@ -414,6 +614,11 @@ impl Resolver {
             .map(|x| x.insert(ident.name, name));
     }
 
+    fn push_var(&mut self, ident: Identifier, kind: VarKind) {
+        let var = self.new_var(ident.span, kind);
+        self.stack.push((ident.name, var));
+    }
+
     fn resolve_global_variables(
         &mut self,
         file_or_lib: &FileOrLib,
@@ -439,7 +644,6 @@ impl Resolver {
                             ent.insert(to_insert);
                         }
                         Entry::Occupied(occ) if occ.get() != &to_insert => {
-
                             let span = match occ.get() {
                                 Name::Name(r) => self.variables[*r].definition.unwrap(),
                                 Name::Namespace(_, span) => *span,
@@ -452,7 +656,8 @@ impl Resolver {
                             );
                             errs.push(self.add_help(err, span, "First definition is here".into()));
                         }
-                        Entry::Occupied(_) => { /* We allow importing the same thing multiple times */ }
+                        Entry::Occupied(_) => { /* We allow importing the same thing multiple times */
+                        }
                     }
                 }
                 sylt_parser::StatementKind::FromUse { imports, file, .. } => {
@@ -506,7 +711,8 @@ impl Resolver {
                                     "First definition is here".into(),
                                 ));
                             }
-                            Entry::Occupied(_) => { /* We allow importing the same thing multiple times */ }
+                            Entry::Occupied(_) => { /* We allow importing the same thing multiple times */
+                            }
                         }
                     }
                 }
