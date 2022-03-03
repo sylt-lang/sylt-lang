@@ -65,6 +65,8 @@ impl<T> Help for ResolveResult<T> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinOp {
+    // For assignment
+    Nop,
     // Comp
     Equals,
     NotEquals,
@@ -168,7 +170,7 @@ pub enum Expression {
         span: Span,
     },
     Blob {
-        blob: TypeAssignable,
+        blob: Type,
         fields: Vec<(String, Expression)>, // Keep calling order
         span: Span,
     },
@@ -448,8 +450,28 @@ impl Resolver {
                 };
                 E::Case { to_match, branches, fall_through, span }
             }
-            EK::Function { name, params, ret, body, pure } => todo!(),
-            EK::Blob { blob, fields } => todo!(),
+            EK::Function { name, params: parser_params, ret, body, pure } => {
+                let mut params = Vec::new();
+                for (n, t) in parser_params.iter() {
+                    params.push((n.name.clone(), n.span, self.ty(t)?));
+                }
+                E::Function {
+                    name: name.clone(),
+                    params,
+                    ret: self.ty(ret)?,
+                    body: self.block(body)?,
+                    pure: *pure,
+                    span,
+                }
+            }
+            EK::Blob { blob, fields: parser_fields } => {
+                let blob = self.ty_assignable(blob)?;
+                let mut fields = Vec::new();
+                for (name, field) in parser_fields.iter() {
+                    fields.push((name.clone(), self.expression(field)?));
+                }
+                E::Blob { blob, fields, span }
+            }
             EK::Tuple(values) => self.collection(Collection::Tuple, &values, span)?,
             EK::List(values) => self.collection(Collection::Tuple, &values, span)?,
             EK::Set(values) => self.collection(Collection::Tuple, &values, span)?,
@@ -468,11 +490,12 @@ impl Resolver {
         let span = stmt.span;
         Ok(match &stmt.kind {
             // These are already handled
-            SK::EmptyStatement
-            | SK::Use { .. }
+            SK::Blob { .. }
+            | SK::EmptyStatement
+            | SK::Enum { .. }
+            | SK::ExternalDefinition { .. }
             | SK::FromUse { .. }
-            | SK::Blob { .. }
-            | SK::Enum { .. } => None,
+            | SK::Use { .. } => None,
 
             SK::Definition { ident, kind, ty, value } => {
                 let ss = self.stack.len();
@@ -506,8 +529,19 @@ impl Resolver {
                 })
             }
 
-            SK::Assignment { kind, target, value } => todo!(),
-            SK::ExternalDefinition { ident, kind, ty } => None,
+            SK::Assignment { kind, target, value } => {
+                use sylt_parser::Op;
+                let op = match kind {
+                    Op::Nop => BinOp::Nop,
+                    Op::Add => BinOp::Add,
+                    Op::Sub => BinOp::Sub,
+                    Op::Mul => BinOp::Mul,
+                    Op::Div => BinOp::Div,
+                };
+                let value = self.expression(value)?;
+                let target = self.assignable(target)?;
+                Some(S::Assignment { op, target, value, span })
+            }
             SK::Loop { condition, body } => {
                 let condition = self.expression(condition)?;
                 let body = match self.statement(body)? {
