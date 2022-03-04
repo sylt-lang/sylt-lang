@@ -747,11 +747,11 @@ impl Resolver {
                     matches!(value.kind, sylt_parser::ExpressionKind::Function { .. }),
                     ss == 0,
                 ) {
-                    (true, true) | (false, true) => {
+                    (false, true) => {
                         // Outer statement - it's a global so just evaluate the value!
                         self.expression(value)?
                     }
-                    (true, false) => {
+                    (true, _) => {
                         // Function, push the var before!
                         self.push_var(ident.clone(), *kind);
                         self.expression(value)?
