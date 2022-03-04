@@ -1386,13 +1386,16 @@ impl PrettyPrint for Statement {
                 }
                 write!(f, " }}")?;
             }
-            SK::Blob { name, fields, variables } => {
+            SK::Blob { name, fields, variables, external } => {
                 let args_string = variables
                     .iter()
                     .map(|x| format!("{}", x))
                     .collect::<Vec<_>>()
                     .join(", ");
-                write!(f, "<Blob> {} {} {{ ", name, args_string)?;
+                match external {
+                    true => write!(f, "<ExternBlob> {} {} {{ ", name, args_string)?,
+                    false => write!(f, "<Blob> {} {} {{ ", name, args_string)?,
+                };
                 for (i, (name, ty)) in fields.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;

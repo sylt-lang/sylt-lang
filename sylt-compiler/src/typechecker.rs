@@ -476,9 +476,10 @@ impl TypeChecker {
 
             UserDefined(assignable, vars) => {
                 let ty = self.type_assignable(ctx, assignable)?;
-                self.print_type(ty);
                 match self.find_type(ty) {
-                    Type::Blob(name, _, sub) | Type::Enum(name, _, sub) => {
+                    Type::Blob(name, _, sub)
+                    | Type::ExternBlob(name, _, sub, _)
+                    | Type::Enum(name, _, sub) => {
                         for (i, var) in vars.iter().enumerate() {
                             if sub.len() == i {
                                 return err_type_error!(
@@ -767,7 +768,7 @@ impl TypeChecker {
                 self.unify(span, ctx, ty, enum_ty)?;
             }
 
-            StatementKind::Blob { name, fields, variables } => {
+            StatementKind::Blob { name, fields, variables, external } => {
                 let blob_ty = self.push_type(Type::Unknown);
                 self.globals
                     .insert((ctx.namespace, name.name.clone()), Name::Type(blob_ty));
@@ -801,7 +802,12 @@ impl TypeChecker {
                         ));
                     }
                 }
-                let ty = self.push_type(Type::Blob(name.clone(), resolved_fields, type_params));
+                let ty = self.push_type(match external {
+                    true => {
+                        Type::ExternBlob(name.clone(), resolved_fields, type_params, ctx.namespace)
+                    }
+                    false => Type::Blob(name.clone(), resolved_fields, type_params),
+                });
                 self.unify(span, ctx, ty, blob_ty)?;
             }
 
@@ -1336,8 +1342,16 @@ impl TypeChecker {
 
             ExpressionKind::Blob { blob, fields } => {
                 let blob_ty = self.type_assignable(ctx, blob)?;
+
                 let (blob_name, blob_fields, blob_args) = match self.find_type(blob_ty) {
                     Type::Blob(name, fields, args) => (name, fields, args),
+                    Type::ExternBlob(name, _, _, _) => {
+                        return err_type_error!(
+                            self,
+                            span,
+                            TypeError::ExternBlobInstance { name: name.name.clone() }
+                        );
+                    }
                     _ => {
                         return err_type_error!(
                             self,
@@ -1617,6 +1631,18 @@ impl TypeChecker {
                     .map(|(name, ty)| (name.clone(), self.inner_bake_type(ty.1, seen)))
                     .collect(),
             ),
+            // TODO(ed): Should we print out the arguments to the external blob instead?
+            Type::ExternBlob(name, fields, _, namespace) => RuntimeType::ExternBlob(
+                name.name.clone(),
+                fields
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), self.inner_bake_type(ty.1, seen)))
+                    .collect(),
+                match self.namespace_to_file.get(&namespace).unwrap() {
+                    FileOrLib::Lib(name) => name.to_string(),
+                    FileOrLib::File(path) => path.to_string_lossy().to_string(),
+                },
+            ),
             // TODO(ed): Should we print out the arguments to the enum instead?
             Type::Enum(name, variants, _) => RuntimeType::Enum(
                 name.name.clone(),
@@ -1671,7 +1697,8 @@ impl TypeChecker {
 
                 Constraint::Field(name, expected_ty) => match self.find_type(a).clone() {
                     Type::Unknown => Ok(()),
-                    Type::Blob(blob_name, fields, _) => match fields.get(name) {
+                    Type::ExternBlob(blob_name, fields, _, _)
+                    | Type::Blob(blob_name, fields, _) => match fields.get(name) {
                         Some((span, actual_ty)) => {
                             self.unify(*span, ctx, *expected_ty, *actual_ty).map(|_| ())
                         }
@@ -2032,6 +2059,16 @@ impl TypeChecker {
                     }
                 }
 
+                (
+                    Type::ExternBlob(a_name, _, a_args, a_namespace),
+                    Type::ExternBlob(b_name, _, b_args, b_namespace),
+                ) if a_name == b_name && a_namespace == b_namespace => {
+                    for (i, (a, b)) in a_args.iter().zip(b_args.iter()).enumerate() {
+                        self.sub_unify(span, ctx, *a, *b, seen)
+                            .help_no_span(format!("While checking type argument #{}", i))?;
+                    }
+                }
+
                 (Type::Enum(a_name, a_variants, _), Type::Enum(b_name, b_variants, _)) => {
                     for (a_var, _) in a_variants.iter() {
                         if !b_variants.contains_key(a_var) {
@@ -2186,6 +2223,16 @@ impl TypeChecker {
                 args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
                 self.inner_copy(ret, seen),
                 purity,
+            ),
+
+            Type::ExternBlob(name, fields, args, namespace) => Type::ExternBlob(
+                name.clone(),
+                fields
+                    .iter()
+                    .map(|(name, (span, ty))| (name.clone(), (*span, self.inner_copy(*ty, seen))))
+                    .collect(),
+                args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
+                namespace,
             ),
 
             // TODO(ed): We can cheat here and just copy the table directly.
