@@ -1,17 +1,27 @@
+use std::collections::BTreeMap;
 use std::collections::{hash_map::Entry, HashMap};
 
+use sylt_common::Type as RuntimeType;
 use sylt_common::{error::Helper, Error, FileOrLib};
 use sylt_parser::{
     expression::CaseBranch as ParserCaseBranch, expression::IfBranch as ParserIfBranch,
     Assignable as ParserAssignable, Expression as ParserExpression, Identifier, Span,
     Statement as ParserStatement, Type as ParserType, TypeAssignable as ParserTypeAssignable,
-    VarKind, AST as ParserAST,
+    TypeConstraint, VarKind, AST as ParserAST,
 };
 
 use crate::NamespaceID;
 
 type ResolveResult<T> = Result<T, Vec<Error>>;
 type Ref = usize;
+
+macro_rules! raise_resolution_error {
+    ($self:expr, $span:expr, $( $msg:expr ),* ) => {
+        return Err(vec![
+            resolution_error!($self, $span, $( $msg ),*)
+        ])
+    };
+}
 
 macro_rules! resolution_error {
     ($self:expr, $span:expr, $( $msg:expr ),* ) => {
@@ -197,7 +207,21 @@ pub enum Expression {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
-    Noop,
+    UserType(Ref, Span),
+    UserDefinedWithGenerics(Ref, Vec<Type>, Span),
+    Implied(Span),
+    Resolved(RuntimeType, Span),
+    Generic(String, Span),
+    Tuple(Vec<Type>, Span),
+    List(Box<Type>, Span),
+    Set(Box<Type>, Span),
+    Dict(Box<Type>, Box<Type>, Span),
+    Fn {
+        constraints: BTreeMap<String, Vec<TypeConstraint>>,
+        params: Vec<Type>,
+        ret: Box<Type>,
+        is_pure: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -279,11 +303,6 @@ pub enum Statement {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum TypeAssignable {
-    SomeTypeAssignable,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 struct Var {
     id: Ref,
     definition: Option<Span>,
@@ -302,12 +321,18 @@ struct Resolver {
     stack: Vec<(String, Ref)>,
     variables: Vec<Var>,
     namespace_to_file: HashMap<NamespaceID, FileOrLib>,
+    file_to_namespace: HashMap<FileOrLib, NamespaceID>,
 }
 
 impl Resolver {
     fn new(namespace_to_file: HashMap<NamespaceID, FileOrLib>) -> Self {
+        let file_to_namespace = namespace_to_file
+            .iter()
+            .map(|(a, b)| (b.clone(), a.clone()))
+            .collect();
         Self {
             namespace_to_file,
+            file_to_namespace,
             namespaces: HashMap::new(),
             variables: Vec::new(),
             stack: Vec::new(),
@@ -323,6 +348,10 @@ impl Resolver {
         wrapper.help(self, span, msg).unwrap_err()[0].clone()
     }
 
+    fn lookup_global(&self, namespace_id: usize, name: &String) -> Option<&Name> {
+        self.namespaces[&self.namespace_to_file[&namespace_id]].get(name)
+    }
+
     fn lookup(&self, namespace_id: usize, name: &String, span: Span) -> ResolveResult<Ref> {
         // TODO(ed): Find the closest matching name if we don't find anything?
         for (var_name, var_id) in self.stack.iter().rev() {
@@ -330,27 +359,159 @@ impl Resolver {
                 return Ok(*var_id);
             }
         }
-        match self.namespaces[&self.namespace_to_file[&namespace_id]].get(name) {
+        match self.lookup_global(namespace_id, name) {
             Some(Name::Name(var)) => Ok(*var),
             Some(Name::Namespace(..)) => Err(vec![resolution_error!(
-                    self, span, "When resolving the name {:?} - a namespace was found", name
+                self,
+                span,
+                "When resolving the name {:?} - a namespace was found",
+                name
             )]),
             None => Err(vec![resolution_error!(
-                    self, span, "Failed to resolve {:?} - nothing matched", name
+                self,
+                span,
+                "Failed to resolve {:?} - nothing matched",
+                name
             )]),
         }
     }
 
-    fn namespace_list(&self, assignable: &ParserAssignable) -> Option<usize> {
-        panic!()
+    fn namespace_list(&self, namespace_id: usize, assignable: &ParserAssignable) -> Option<usize> {
+        use sylt_parser::AssignableKind as AK;
+        (match &assignable.kind {
+            AK::Read(ident) => match self.lookup_global(namespace_id, &ident.name) {
+                Some(Name::Namespace(file_or_lib, _)) => Some(file_or_lib),
+                _ => None,
+            },
+            AK::Access(prev, ident) => {
+                match self
+                    .namespace_list(namespace_id, prev)
+                    .map(|new_namespace| self.lookup_global(new_namespace, &ident.name))
+                    .flatten()
+                {
+                    Some(Name::Namespace(file_or_lib, _)) => Some(file_or_lib),
+                    _ => None,
+                }
+            }
+            AK::Index { .. }
+            | AK::Variant { .. }
+            | AK::Call { .. }
+            | AK::ArrowCall { .. }
+            | AK::Expression { .. } => None,
+        })
+        .map(|file_or_lib| self.file_to_namespace.get(file_or_lib).cloned())
+        .flatten()
     }
 
-    fn ty(&mut self, _: &ParserType) -> ResolveResult<Type> {
-        Ok(Type::Noop)
+    fn type_vec(&self, parser_tys: &[ParserType]) -> ResolveResult<Vec<Type>> {
+        let mut tys = Vec::new();
+        let mut errs = Vec::new();
+        for ty in parser_tys.iter() {
+            match self.ty(ty) {
+                Err(mut es) => errs.append(&mut es),
+                Ok(ty) => tys.push(ty),
+            }
+        }
+        if errs.is_empty() {
+            Ok(tys)
+        } else {
+            Err(errs)
+        }
     }
 
-    fn ty_assignable(&mut self, _: &ParserTypeAssignable) -> ResolveResult<Type> {
-        panic!();
+    fn ty(&self, ty: &ParserType) -> ResolveResult<Type> {
+        use sylt_parser::TypeKind as TK;
+        use Type as T;
+        let span = ty.span;
+        Ok(match &ty.kind {
+            TK::Implied => T::Implied(span),
+            TK::Resolved(t) => T::Resolved(t.clone(), span),
+            TK::UserDefined(t, gs) => {
+                let r = match self.ty_assignable(t)? {
+                    T::UserType(r, _) => r,
+                    _ => raise_resolution_error! {
+                        self,
+                        span,
+                        "This is not a reference to a user defined type"
+                    },
+                };
+                let gs = self.type_vec(gs)?;
+                T::UserDefinedWithGenerics(r, gs, span)
+            }
+            TK::Fn { constraints, params, ret, is_pure } => T::Fn {
+                is_pure: *is_pure,
+                constraints: constraints.clone(),
+                params: self.type_vec(params)?,
+                ret: Box::new(self.ty(ret)?),
+            },
+            TK::Tuple(gs) => T::Tuple(self.type_vec(gs)?, span),
+            TK::List(t) => T::List(Box::new(self.ty(t)?), span),
+            TK::Set(t) => T::Set(Box::new(self.ty(t)?), span),
+            TK::Dict(k, v) => T::Dict(Box::new(self.ty(k)?), Box::new(self.ty(v)?), span),
+            TK::Generic(name) => T::Generic(name.clone(), span),
+            TK::Grouping(t) => self.ty(t)?,
+        })
+    }
+
+    fn namespace_type_list(
+        &self,
+        namespace_id: NamespaceID,
+        ty_ass: &ParserTypeAssignable,
+    ) -> ResolveResult<NamespaceID> {
+        use sylt_parser::TypeAssignableKind as TAK;
+        let (maybe_name, ident) = match &ty_ass.kind {
+            TAK::Read(ident) => (self.lookup_global(namespace_id, &ident.name), ident),
+            TAK::Access(namespace_list, ty) => (
+                self.lookup_global(
+                    self.namespace_type_list(namespace_id, &namespace_list)?,
+                    &ty.name,
+                ),
+                ty,
+            ),
+        };
+        Ok(match maybe_name {
+            Some(Name::Name(_)) => raise_resolution_error! {
+                self,
+                ident.span,
+                "{:?} is a variable, not a type",
+                ident.name
+            },
+            None => raise_resolution_error! {
+                self,
+                ident.span,
+                "{:?} no type named",
+                ident.name
+            },
+            Some(Name::Namespace(namespace, _)) => *self.file_to_namespace.get(namespace).unwrap(),
+        })
+    }
+
+    fn ty_assignable(&self, ty_ass: &ParserTypeAssignable) -> ResolveResult<Type> {
+        use sylt_parser::TypeAssignableKind as TAK;
+        let span = ty_ass.span;
+        Ok(match &ty_ass.kind {
+            TAK::Read(ident) => {
+                Type::UserType(self.lookup(span.file_id, &ident.name, ident.span)?, span)
+            }
+            TAK::Access(namespace, ty) => {
+                let new_namespace = self.namespace_type_list(span.file_id, &namespace)?;
+                match self.lookup_global(new_namespace, &ty.name) {
+                    Some(Name::Name(r)) => Type::UserType(*r, span),
+                    None => raise_resolution_error! {
+                        self,
+                        ty.span,
+                        "{:?} no type named",
+                        ty.name
+                    },
+                    Some(Name::Namespace(_, _)) => raise_resolution_error! {
+                        self,
+                        ty.span,
+                        "{:?} is a namespace, not a type",
+                        ty.name
+                    },
+                }
+            }
+        })
     }
 
     fn assignable(&mut self, assignable: &ParserAssignable) -> ResolveResult<Expression> {
@@ -386,7 +547,7 @@ impl Resolver {
                 }
                 E::Call { function, args, span }
             }
-            AK::Access(assignable, ident) => match self.namespace_list(assignable) {
+            AK::Access(assignable, ident) => match self.namespace_list(span.file_id, assignable) {
                 Some(ns) => {
                     let var = self.lookup(ns, &ident.name, ident.span)?;
                     let span = ident.span;
@@ -550,9 +711,9 @@ impl Resolver {
                 E::Blob { blob, fields, span }
             }
             EK::Tuple(values) => self.collection(Collection::Tuple, &values, span)?,
-            EK::List(values) => self.collection(Collection::Tuple, &values, span)?,
-            EK::Set(values) => self.collection(Collection::Tuple, &values, span)?,
-            EK::Dict(values) => self.collection(Collection::Tuple, &values, span)?,
+            EK::List(values) => self.collection(Collection::List, &values, span)?,
+            EK::Set(values) => self.collection(Collection::Set, &values, span)?,
+            EK::Dict(values) => self.collection(Collection::Dict, &values, span)?,
             EK::Float(f) => E::Float(*f, span),
             EK::Int(i) => E::Int(*i, span),
             EK::Str(s) => E::Str(s.clone(), span),
@@ -570,9 +731,15 @@ impl Resolver {
             SK::Blob { .. }
             | SK::EmptyStatement
             | SK::Enum { .. }
-            | SK::ExternalDefinition { .. }
             | SK::FromUse { .. }
             | SK::Use { .. } => None,
+
+            SK::ExternalDefinition { ident, kind, ty } => Some(S::ExternalDefinition {
+                ident: ident.clone(),
+                kind: *kind,
+                span: ident.span,
+                ty: self.ty(ty)?,
+            }),
 
             SK::Definition { ident, kind, ty, value } => {
                 let ss = self.stack.len();
@@ -596,12 +763,11 @@ impl Resolver {
                         expr
                     }
                 };
-                let ty = self.ty(ty)?;
-                Some(Statement::Definition {
+                Some(S::Definition {
                     span: ident.span,
                     ident: ident.clone(),
                     kind: *kind,
-                    ty,
+                    ty: self.ty(ty)?,
                     value,
                 })
             }
@@ -720,12 +886,6 @@ impl Resolver {
             usage: Vec::new(),
         });
         id
-    }
-
-    fn define_variable(&mut self, file_or_lib: &FileOrLib, ident: Identifier, name: Name) {
-        self.namespaces
-            .get_mut(file_or_lib)
-            .map(|x| x.insert(ident.name, name));
     }
 
     fn push_var(&mut self, ident: Identifier, kind: VarKind) {
