@@ -1,6 +1,6 @@
+#![allow(unused)]
 use std::collections::BTreeMap;
 use std::collections::{hash_map::Entry, HashMap};
-
 use sylt_common::Type as RuntimeType;
 use sylt_common::{error::Helper, Error, FileOrLib};
 use sylt_parser::{
