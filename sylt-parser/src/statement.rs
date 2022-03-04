@@ -559,7 +559,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             let external = matches!(ctx.token(), T::ExternBlob);
 
             let (ctx, variables) =
-                parse_beg_end_comma_sep!(ctx.skip(3), T::LeftParen, T::RightParen, &item)?;
+                parse_beg_end_comma_sep!(ctx.skip(1), T::LeftParen, T::RightParen, &item)?;
 
             let ctx = expect!(ctx, T::LeftBrace, "Expected '{{' to open blob");
             let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
