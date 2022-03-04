@@ -300,7 +300,6 @@ impl fmt::Display for Error {
             Error::CompileError { file, span, message, helpers } => {
                 write!(f, "{}: ", "compile error".red())?;
                 write!(f, "{}\n", file_line_display(file, span.line_start))?;
-                write!(f, "{}Failed to compile line {}\n", INDENT, span.line_start)?;
 
                 if let Some(message) = message {
                     for line in message.split('\n') {
