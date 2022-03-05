@@ -207,8 +207,7 @@ pub enum Expression {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
-    UserType(Ref, Span),
-    UserDefinedWithGenerics(Ref, Vec<Type>, Span),
+    UserType(Ref, Vec<Type>, Span),
     Implied(Span),
     Resolved(RuntimeType, Span),
     Generic(String, Span),
@@ -428,7 +427,7 @@ impl Resolver {
             TK::Resolved(t) => T::Resolved(t.clone(), span),
             TK::UserDefined(t, gs) => {
                 let r = match self.ty_assignable(t)? {
-                    T::UserType(r, _) => r,
+                    T::UserType(r, _, _) => r,
                     _ => raise_resolution_error! {
                         self,
                         span,
@@ -436,7 +435,7 @@ impl Resolver {
                     },
                 };
                 let gs = self.type_vec(gs)?;
-                T::UserDefinedWithGenerics(r, gs, span)
+                T::UserType(r, gs, span)
             }
             TK::Fn { constraints, params, ret, is_pure } => T::Fn {
                 is_pure: *is_pure,
@@ -479,7 +478,7 @@ impl Resolver {
             None => raise_resolution_error! {
                 self,
                 ident.span,
-                "{:?} no type named",
+                "No type named {:?}",
                 ident.name
             },
             Some(Name::Namespace(namespace, _)) => *self.file_to_namespace.get(namespace).unwrap(),
@@ -490,17 +489,19 @@ impl Resolver {
         use sylt_parser::TypeAssignableKind as TAK;
         let span = ty_ass.span;
         Ok(match &ty_ass.kind {
-            TAK::Read(ident) => {
-                Type::UserType(self.lookup(span.file_id, &ident.name, ident.span)?, span)
-            }
+            TAK::Read(ident) => Type::UserType(
+                self.lookup(span.file_id, &ident.name, ident.span)?,
+                Vec::new(),
+                span,
+            ),
             TAK::Access(namespace, ty) => {
                 let new_namespace = self.namespace_type_list(span.file_id, &namespace)?;
                 match self.lookup_global(new_namespace, &ty.name) {
-                    Some(Name::Name(r)) => Type::UserType(*r, span),
+                    Some(Name::Name(r)) => Type::UserType(*r, Vec::new(), span),
                     None => raise_resolution_error! {
                         self,
                         ty.span,
-                        "{:?} no type named",
+                        "No type named {:?}",
                         ty.name
                     },
                     Some(Name::Namespace(_, _)) => raise_resolution_error! {
