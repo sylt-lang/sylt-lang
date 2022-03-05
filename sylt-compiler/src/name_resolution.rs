@@ -232,6 +232,10 @@ pub enum Statement {
         span: Span,
     },
 
+    Blob {
+
+    }
+
     /// Defines a new variable.
     ///
     /// Example: `a := <expression>`.
@@ -301,12 +305,32 @@ pub enum Statement {
     Unreachable(Span),
 }
 
+impl Statement {
+    pub fn span(&self) -> Span {
+        match self {
+            Statement::Assignment { span, .. }
+            | Statement::Definition { span, .. }
+            | Statement::ExternalDefinition { span, .. }
+            | Statement::Loop { span, .. }
+            | Statement::Break(span)
+            | Statement::Continue(span)
+            | Statement::Ret { span, .. }
+            | Statement::Block { span, .. }
+            | Statement::StatementExpression { span, .. }
+            | Statement::Unreachable(span) => *span
+        }
+    }
+
+    pub fn namespace(&self) -> usize {
+        self.span().file_id
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
-struct Var {
-    id: Ref,
-    definition: Option<Span>,
-    kind: VarKind,
-    usage: Vec<Span>,
+pub struct Var {
+    pub id: Ref,
+    pub definition: Span,
+    pub kind: VarKind,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -729,11 +753,13 @@ impl Resolver {
         let span = stmt.span;
         Ok(match &stmt.kind {
             // These are already handled
-            SK::Blob { .. }
             | SK::EmptyStatement
             | SK::Enum { .. }
             | SK::FromUse { .. }
             | SK::Use { .. } => None,
+
+            SK::Blob {  } => {
+            }
 
             SK::ExternalDefinition { ident, kind, ty } => Some(S::ExternalDefinition {
                 ident: ident.clone(),
@@ -861,7 +887,7 @@ impl Resolver {
                         name
                     );
                     let span = match old.get() {
-                        Name::Name(r) => self.variables[*r].definition.unwrap(),
+                        Name::Name(r) => self.variables[*r].definition,
                         Name::Namespace(_, span) => *span,
                     };
                     let err = self.add_help(err, span, "First definition is here".into());
@@ -882,9 +908,8 @@ impl Resolver {
 
         self.variables.push(Var {
             id,
-            definition: Some(definition),
+            definition,
             kind,
-            usage: Vec::new(),
         });
         id
     }
@@ -920,7 +945,7 @@ impl Resolver {
                         }
                         Entry::Occupied(occ) if occ.get() != &to_insert => {
                             let span = match occ.get() {
-                                Name::Name(r) => self.variables[*r].definition.unwrap(),
+                                Name::Name(r) => self.variables[*r].definition,
                                 Name::Namespace(_, span) => *span,
                             };
                             let err = resolution_error!(
@@ -971,7 +996,7 @@ impl Resolver {
                             }
                             Entry::Occupied(occ) if occ.get() != &to_insert => {
                                 let span = match occ.get() {
-                                    Name::Name(r) => self.variables[*r].definition.unwrap(),
+                                    Name::Name(r) => self.variables[*r].definition,
                                     Name::Namespace(_, span) => *span,
                                 };
                                 let err = resolution_error!(
@@ -1018,7 +1043,7 @@ impl Resolver {
 pub fn resolve<'a>(
     tree: &'a ParserAST,
     namespace_to_file: &HashMap<NamespaceID, FileOrLib>,
-) -> ResolveResult<Vec<Statement>> {
+) -> ResolveResult<(Vec<Var>, Vec<Statement>)> {
     let mut resolver = Resolver::new(namespace_to_file.clone());
 
     // Create namespaces and insert the variables in them
@@ -1037,5 +1062,5 @@ pub fn resolve<'a>(
             }
         }
     }
-    Ok(out)
+    Ok((resolver.variables, out))
 }
