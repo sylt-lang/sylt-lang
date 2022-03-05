@@ -133,7 +133,7 @@ pub enum Expression {
         span: Span,
     },
     Variant {
-        ty: Box<Expression>,
+        ty: Ref,
         variant: String,
         value: Box<Expression>,
         span: Span,
@@ -203,6 +203,30 @@ pub enum Expression {
     Str(String, Span),
     Bool(bool, Span),
     Nil(Span),
+}
+
+impl Expression {
+    pub fn span(&self) -> Span {
+        match self {
+            Expression::Read { span, .. }
+            | Expression::Variant { span, .. }
+            | Expression::Call { span, .. }
+            | Expression::BlobAccess { span, .. }
+            | Expression::Index { span, .. }
+            | Expression::BinOp { span, .. }
+            | Expression::UniOp { span, .. }
+            | Expression::If { span, .. }
+            | Expression::Case { span, .. }
+            | Expression::Function { span, .. }
+            | Expression::Blob { span, .. }
+            | Expression::Collection { span, .. }
+            | Expression::Float(_, span)
+            | Expression::Int(_, span)
+            | Expression::Str(_, span)
+            | Expression::Bool(_, span)
+            | Expression::Nil(span) => *span,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -564,7 +588,15 @@ impl Resolver {
             }
             AK::Variant { enum_ass, variant, value } => {
                 // Checking that this is a valid type, should be done in the typechecker
-                let ty = Box::new(self.assignable(enum_ass)?);
+                let ty = if let E::Read { var, .. } = self.assignable(enum_ass)? {
+                    var
+                } else {
+                    raise_resolution_error!{
+                        self,
+                        span,
+                        "This is not ok TODO(ed)"
+                    };
+                };
                 let value = Box::new(self.expression(value)?);
                 E::Variant { ty, variant: variant.name.clone(), value, span }
             }

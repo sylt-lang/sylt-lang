@@ -30,12 +30,13 @@ pub enum Type {
     Set(TyID),
     Dict(TyID, TyID),
     Function(Vec<TyID>, TyID, Purity),
-    Blob(Identifier, BTreeMap<String, (Span, TyID)>, Vec<TyID>),
+    Blob(String, Span, BTreeMap<String, (Span, TyID)>, Vec<TyID>),
     ExternBlob(
-        Identifier,
+        String,
+        Span,
         BTreeMap<String, (Span, TyID)>,
         Vec<TyID>,
         NamespaceID,
     ),
-    Enum(Identifier, BTreeMap<String, (Span, TyID)>, Vec<TyID>),
+    Enum(String, Span, BTreeMap<String, (Span, TyID)>, Vec<TyID>),
 }

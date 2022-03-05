@@ -1,8 +1,8 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::HashMap;
 use std::io::Write;
 use sylt_common::error::Error;
 use sylt_common::FileOrLib;
-use sylt_parser::{StatementKind, AST};
+use sylt_parser::AST;
 
 mod dependency;
 mod intermediate;
@@ -69,32 +69,14 @@ impl Compiler {
         self.namespace_id_to_file.get(&namespace).unwrap()
     }
 
+    fn tree_to_statements(
+
     #[cfg_attr(timed, sylt_macro::timed("compile"))]
     fn compile(mut self, lua_file: &mut dyn Write, tree: AST) -> Result<(), Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
 
-        self.extract_globals(&tree);
-        // TODO(ed): We're gonna switch to using this tree soon (tm)
-        // let resolved_tree = name_resolution::resolve(&tree, &self.namespace_id_to_file)?;
-
-        let mut statements = match dependency::initialization_order(&tree, &self) {
-            // TODO(ed): This clone can probably be removed.
-            Ok(statements) => statements
-                .into_iter()
-                .map(|(a, b)| (a.clone(), b))
-                .collect(),
-            Err(statements) => {
-                statements.iter().for_each(|(statement, _)| {
-                    error_no_panic!(self, statement.span, "Dependency cycle")
-                });
-                return Err(self.errors);
-            }
-        };
-        if !self.errors.is_empty() {
-            return Err(self.errors);
-        }
-
-        let typechecker = typechecker::solve(&mut statements, &self.namespace_id_to_file)?;
+        let (vars, statements) = name_resolution::resolve(&tree, &self.namespace_id_to_file)?;
+        let typechecker = typechecker::solve(&vars, &statements, &self.namespace_id_to_file)?;
 
         let ir = intermediate::compile(&typechecker, &statements);
         let usage_count = intermediate::count_usages(&ir);
