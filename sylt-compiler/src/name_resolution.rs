@@ -1032,7 +1032,9 @@ pub fn resolve<'a>(
     let mut out = Vec::new();
     for (_, module) in tree.modules.iter() {
         for stmt in module.statements.iter() {
-            resolver.statement(&stmt)?.map(|x| out.push(x));
+            if let Some(resolved) = resolver.statement(&stmt)? {
+                out.push(resolved);
+            }
         }
     }
     Ok(out)

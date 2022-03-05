@@ -313,7 +313,7 @@ impl fmt::Display for Error {
                 write_source_span_at(f, file, *span)?;
 
                 if !helpers.is_empty() {
-                    // TODO(ed): Might be helpfull to not write all the errors?
+                    // TODO(ed): Might be helpful to not write all the errors?
                     write!(f, "{}\n", "help:".yellow())?;
                     for Helper { message, at } in helpers.iter() {
                         write!(f, "{}{}\n", INDENT, message)?;
