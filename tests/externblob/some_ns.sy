@@ -1,0 +1,5 @@
+Foo :: externblob { }
+
+use_foo :: fn arg: Foo do end
+
+start :: fn do end

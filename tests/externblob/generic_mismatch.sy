@@ -1,0 +1,17 @@
+Foo :: externblob(*T) {
+  bar: *T
+}
+
+Hack :: blob(*T) {
+  bar: *T
+}
+
+start :: fn do
+  a: Foo(str) : common.unsafe_force' Hack { bar: "hello" }
+  b: Foo(int) : common.unsafe_force' Hack { bar: 7 }
+
+  x := a
+  x = b
+end
+
+// error: A 'int' cannot be a 'str'

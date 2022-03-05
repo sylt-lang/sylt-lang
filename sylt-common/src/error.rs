@@ -158,6 +158,10 @@ pub enum TypeError {
         field: String,
     },
 
+    ExternBlobInstance {
+        name: String,
+    },
+
     // TODO(ed): got and expected doesn't make sense - we don't know what we expect!
     TupleIndexOutOfRange {
         got: i64,
@@ -372,6 +376,14 @@ impl fmt::Display for TypeError {
 
             TypeError::MissingField { blob, field } => {
                 write!(f, "Blob instance lacks field '{}.{}'", blob, field)
+            }
+
+            TypeError::ExternBlobInstance { name } => {
+                write!(
+                    f,
+                    "'{}' is an externally defined blob and cannot be instantiated",
+                    name
+                )
             }
 
             TypeError::TupleIndexOutOfRange { length, got } => {

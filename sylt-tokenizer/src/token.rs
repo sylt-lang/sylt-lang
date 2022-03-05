@@ -51,6 +51,8 @@ pub enum Token {
     Loop,
     #[token("blob")]
     Blob,
+    #[token("externblob")]
+    ExternBlob,
     #[token("enum")]
     Enum,
 
