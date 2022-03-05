@@ -233,8 +233,19 @@ pub enum Statement {
     },
 
     Blob {
+        name: String,
+        span: Span,
+        variables: Vec<String>,
+        fields: HashMap<String, (Span, Type)>,
+        external: bool,
+    },
 
-    }
+    Enum {
+        name: String,
+        span: Span,
+        variables: Vec<String>,
+        variants: HashMap<String, (Span, Type)>,
+    },
 
     /// Defines a new variable.
     ///
@@ -309,15 +320,17 @@ impl Statement {
     pub fn span(&self) -> Span {
         match self {
             Statement::Assignment { span, .. }
-            | Statement::Definition { span, .. }
-            | Statement::ExternalDefinition { span, .. }
-            | Statement::Loop { span, .. }
+            | Statement::Blob { span, .. }
+            | Statement::Block { span, .. }
             | Statement::Break(span)
             | Statement::Continue(span)
+            | Statement::Definition { span, .. }
+            | Statement::Enum { span, .. }
+            | Statement::ExternalDefinition { span, .. }
+            | Statement::Loop { span, .. }
             | Statement::Ret { span, .. }
-            | Statement::Block { span, .. }
             | Statement::StatementExpression { span, .. }
-            | Statement::Unreachable(span) => *span
+            | Statement::Unreachable(span) => *span,
         }
     }
 
@@ -753,13 +766,27 @@ impl Resolver {
         let span = stmt.span;
         Ok(match &stmt.kind {
             // These are already handled
-            | SK::EmptyStatement
-            | SK::Enum { .. }
-            | SK::FromUse { .. }
-            | SK::Use { .. } => None,
+            SK::EmptyStatement | SK::FromUse { .. } | SK::Use { .. } => None,
 
-            SK::Blob {  } => {
-            }
+            SK::Blob { name, variables, fields, external } => Some(S::Blob {
+                name: name.name.clone(),
+                span,
+                variables: variables.iter().map(|var| var.name.clone()).collect(),
+                fields: fields
+                    .iter()
+                    .map(|(field, ty)| Ok((field.name.clone(), (field.span, self.ty(ty)?))))
+                    .collect::<ResolveResult<_>>()?,
+                external: *external,
+            }),
+            SK::Enum { name, variables, variants } => Some(S::Enum {
+                name: name.name.clone(),
+                span,
+                variables: variables.iter().map(|var| var.name.clone()).collect(),
+                variants: variants
+                    .iter()
+                    .map(|(var, ty)| Ok((var.name.clone(), (var.span, self.ty(ty)?))))
+                    .collect::<ResolveResult<_>>()?,
+            }),
 
             SK::ExternalDefinition { ident, kind, ty } => Some(S::ExternalDefinition {
                 ident: ident.clone(),
@@ -906,11 +933,7 @@ impl Resolver {
     fn new_var(&mut self, definition: Span, kind: VarKind) -> Ref {
         let id = self.variables.len();
 
-        self.variables.push(Var {
-            id,
-            definition,
-            kind,
-        });
+        self.variables.push(Var { id, definition, kind });
         id
     }
 
