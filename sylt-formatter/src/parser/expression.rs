@@ -32,7 +32,7 @@ pub enum Expression {
     /// Subtraction between two values
     ///
     /// `lhs - rhs`
-    Subtract {
+    Sub {
         span: Span,
         lhs: Box<Expression>,
         rhs: Box<Expression>,
@@ -40,7 +40,7 @@ pub enum Expression {
     /// Multiply two values
     ///
     /// `lhs * rhs`
-    Multiplication {
+    Mul {
         span: Span,
         lhs: Box<Expression>,
         rhs: Box<Expression>,
@@ -48,7 +48,7 @@ pub enum Expression {
     /// Division between two values
     ///
     /// `lhs / rhs`
-    Division {
+    Div {
         span: Span,
         lhs: Box<Expression>,
         rhs: Box<Expression>,
@@ -66,6 +66,72 @@ pub enum Expression {
     ///
     /// `lhs and rhs`
     Or {
+        span: Span,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+
+    /// If values are equal
+    ///
+    /// `lhs == rhs`
+    Equal {
+        span: Span,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+    /// If values are inequal
+    ///
+    /// `lhs != rhs`
+    NotEqual {
+        span: Span,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+    /// If lhs is greater than rhs
+    ///
+    /// `lhs > rhs`
+    Greater {
+        span: Span,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+    /// If lhs is greater than or equals rhs
+    ///
+    /// `lhs >= rhs`
+    GreaterEqual {
+        span: Span,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+    /// If lhs is less than rhs
+    ///
+    /// `lhs < rhs`
+    Less {
+        span: Span,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+    /// If lhs is less than or equals rhs
+    ///
+    /// `lhs <= rhs`
+    LessEqual {
+        span: Span,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+    /// If lhs is contained within rhs, used in sets for instance
+    ///
+    /// `lhs in rhs`
+    In {
+        span: Span,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+
+    /// Assert equality between lhs and rhs
+    ///
+    /// `lhs <=> rhs`
+    AssertEq {
         span: Span,
         lhs: Box<Expression>,
         rhs: Box<Expression>,
@@ -272,26 +338,27 @@ fn infix<'t>(ctx: Context<'t>, lhs: Expression) -> ParseResult<'t, Expression> {
     let expr = match op {
         // Simple arithmetic.
         T::Plus => Add { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
-        T::Minus => Subtract { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
-        T::Star => Multiplication { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
-        T::Slash => Division { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
+        T::Minus => Sub { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
+        T::Star => Mul { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
+        T::Slash => Div { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
 
-        //     // Comparisons
-        //     T::EqualEqual => Comparison(lhs, Equals, rhs),
-        //     T::NotEqual => Comparison(lhs, NotEquals, rhs),
-        //     T::Greater => Comparison(lhs, Greater, rhs),
-        //     T::GreaterEqual => Comparison(lhs, GreaterEqual, rhs),
-        //     T::Less => Comparison(lhs, Less, rhs),
-        //     T::LessEqual => Comparison(lhs, LessEqual, rhs),
-        //     T::In => Comparison(lhs, In, rhs),
+        // Comparisons
+        T::EqualEqual => Equal { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
+        T::NotEqual => NotEqual { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
+        T::Greater => Greater { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
+        T::GreaterEqual => GreaterEqual { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
+        T::Less => Less { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
+        T::LessEqual => LessEqual { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
+        T::In => In { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
 
-        // Boolean operators.
+        // Boolean operators
         T::And => And { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
         T::Or => Or { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
 
-        //     T::AssertEqual => AssertEq(lhs, rhs),
-        //
-        //     // Unknown infix operator.
+        // Assert equality
+        T::AssertEqual => AssertEq { span: combine_expr_spans(&lhs, &rhs), lhs, rhs },
+
+        // Unknown infix operator.
         _ => {
             unreachable!();
         }
@@ -308,11 +375,19 @@ fn expr_span<'a>(expr: &'a Expression) -> &'a Span {
         | Expression::String { span, .. }
         | Expression::Nil { span }
         | Expression::Negated { span, .. }
-        | Expression::Subtract { span, .. }
-        | Expression::Division { span, .. }
-        | Expression::Multiplication { span, .. }
+        | Expression::Sub { span, .. }
+        | Expression::Div { span, .. }
+        | Expression::Mul { span, .. }
         | Expression::And { span, .. }
         | Expression::Or { span, .. }
+        | Expression::Equal { span, .. }
+        | Expression::NotEqual { span, .. }
+        | Expression::Greater { span, .. }
+        | Expression::GreaterEqual { span, .. }
+        | Expression::Less { span, .. }
+        | Expression::LessEqual { span, .. }
+        | Expression::In { span, .. }
+        | Expression::AssertEq { span, .. }
         | Expression::Add { span, .. } => span,
     }
 }
