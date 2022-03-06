@@ -155,16 +155,19 @@ enum Constraint {
 
 pub struct TypeVariable {
     #[allow(unused)]
-    id: usize,
+    pub name: String,
     #[allow(unused)]
-    definition: Span,
-    kind: VarKind,
-    ty: TyID,
+    pub id: usize,
+    #[allow(unused)]
+    pub definition: Span,
+    pub is_global: bool,
+    pub kind: VarKind,
+    pub ty: TyID,
 }
 
 pub struct TypeChecker {
     types: Vec<TypeNode>,
-    variables: Vec<TypeVariable>,
+    pub variables: Vec<TypeVariable>,
     namespace_to_file: HashMap<NamespaceID, FileOrLib>,
     // TODO(ed): This can probably be removed via some trickery
     pub file_to_namespace: HashMap<FileOrLib, NamespaceID>,
@@ -205,7 +208,9 @@ impl TypeChecker {
         for var in variables {
             let ty = res.push_type(Type::Unknown);
             res.variables.push(TypeVariable {
+                name: var.name.clone(),
                 id: var.id,
+                is_global: var.is_global,
                 definition: var.definition,
                 kind: var.kind,
                 ty,
@@ -976,7 +981,7 @@ impl TypeChecker {
                 no_ret(f)
             }
 
-            E::Blob { blob, fields, span } => {
+            E::Blob { blob, fields, span, .. } => {
                 let blob_ty =
                     if let crate::name_resolution::Type::UserType(blob_var_ty, _, _) = blob {
                         self.variables[*blob_var_ty].ty

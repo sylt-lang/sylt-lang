@@ -1,6 +1,6 @@
-use crate::name_resolution::{Expression, IfBranch, Statement, Var};
+use crate::name_resolution::{Expression, IfBranch, Statement};
 use std::collections::btree_map::Entry::{Occupied, Vacant};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 
 fn statement_dependencies(statement: &Statement) -> BTreeSet<usize> {
     use Statement as S;
@@ -55,7 +55,7 @@ fn dependencies(expression: &Expression) -> BTreeSet<usize> {
     match &expression {
         E::Read { var, .. } => [*var].iter().map(|v| *v).collect(),
         E::Variant { value, .. } => dependencies(value),
-        E::Call { function, args, span } => dependencies(function)
+        E::Call { function, args, .. } => dependencies(function)
             .union(
                 &args
                     .iter()
@@ -137,7 +137,7 @@ fn dependencies(expression: &Expression) -> BTreeSet<usize> {
             .flatten()
             .collect(),
 
-        E::Blob { blob, fields, .. } => fields
+        E::Blob { fields, .. } => fields
             .iter()
             .map(|(_, expr)| dependencies(expr))
             .flatten()

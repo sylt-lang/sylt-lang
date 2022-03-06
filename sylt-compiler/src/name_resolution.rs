@@ -189,6 +189,7 @@ pub enum Expression {
     Blob {
         blob: Type,
         fields: Vec<(String, Expression)>, // Keep calling order
+        self_var: Ref,
         span: Span,
     },
 
@@ -803,18 +804,18 @@ impl Resolver {
                 E::Function { name, params, ret, body, pure: *pure, span }
             }
             EK::Blob { blob, fields: parser_fields } => {
-                // TODO(ed): `self` should be added here!
                 let blob = self.ty_assignable(blob)?;
                 let mut fields = Vec::new();
+                let self_var = self.new_var(&Identifier { name: "self".to_string(), span }, VarKind::Mutable);
                 for (name, field) in parser_fields.iter() {
                     let ss = self.stack.len();
                     if matches!(field.kind, EK::Function { .. }) {
-                        self.push_var(&Identifier { name: "self".to_string(), span }, VarKind::Mutable);
+                        self.stack.push(("self".to_string(), self_var));
                     }
                     fields.push((name.clone(), self.expression(field)?));
                     self.stack.truncate(ss);
                 }
-                E::Blob { blob, fields, span }
+                E::Blob { blob, fields, self_var, span }
             }
             EK::Tuple(values) => self.collection(Collection::Tuple, &values, span)?,
             EK::List(values) => self.collection(Collection::List, &values, span)?,

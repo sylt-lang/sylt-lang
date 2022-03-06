@@ -1,5 +1,3 @@
-#![allow(unused)]
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::io::Write;
 use sylt_common::error::Error;
@@ -13,18 +11,10 @@ mod name_resolution;
 mod ty;
 mod typechecker;
 
-type Namespace = HashMap<String, Name>;
 type NamespaceID = usize;
-#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-enum Name {
-    Name,
-    Namespace(NamespaceID),
-}
 
 struct Compiler {
     namespace_id_to_file: HashMap<NamespaceID, FileOrLib>,
-
-    namespaces: Vec<Namespace>,
 
     panic: bool,
     errors: Vec<Error>,
@@ -61,8 +51,6 @@ impl Compiler {
     fn new() -> Self {
         Self {
             namespace_id_to_file: HashMap::new(),
-            namespaces: Vec::new(),
-
             panic: false,
             errors: Vec::new(),
         }
@@ -73,7 +61,7 @@ impl Compiler {
     }
 
     #[cfg_attr(timed, sylt_macro::timed("compile"))]
-    fn compile(&mut self, _lua_file: &mut dyn Write, tree: AST) -> Result<(), Vec<Error>> {
+    fn compile(&mut self, lua_file: &mut dyn Write, tree: AST) -> Result<(), Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
 
         self.extract_namespaces(&tree);
@@ -95,12 +83,12 @@ impl Compiler {
         }
 
         let statements = statements.iter().map(|s| (*s).clone()).collect();
-        let _typechecker = typechecker::solve(&vars, &statements, &self.namespace_id_to_file)?;
+        let typechecker = typechecker::solve(&vars, &statements, &self.namespace_id_to_file)?;
 
-        // let ir = intermediate::compile(&typechecker, &statements);
-        // let usage_count = intermediate::count_usages(&ir);
+        let ir = intermediate::compile(&typechecker, &statements);
+        let usage_count = intermediate::count_usages(&ir);
 
-        // lua::generate(&ir, &usage_count, lua_file);
+        lua::generate(&ir, &usage_count, lua_file);
 
         Ok(())
     }
@@ -109,8 +97,6 @@ impl Compiler {
         // Find all files and map them to their namespace
         let mut include_to_namespace = HashMap::new();
         for (path, module) in tree.modules.iter() {
-            self.namespaces.push(Namespace::new());
-
             if include_to_namespace
                 .insert(path.clone(), module.file_id)
                 .is_some()
