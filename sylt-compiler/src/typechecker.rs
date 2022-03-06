@@ -689,7 +689,7 @@ impl TypeChecker {
 
     fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> TypeResult<RetNValue> {
         use Expression as E;
-        match expression {
+        let (expr_ret, expr) = match expression {
             E::Read { var, .. } => no_ret(self.variables[*var].ty),
             E::Variant { ty, variant, value, span } => {
                 let (value_ret, value) = self.expression(value, ctx)?;
@@ -1119,6 +1119,11 @@ impl TypeChecker {
             E::Str(_, _) => no_ret(self.push_type(Type::Str)),
             E::Bool(_, _) => no_ret(self.push_type(Type::Bool)),
             E::Nil(_) => no_ret(self.push_type(Type::Nil)),
+        }?;
+        // TODO[ed]: Don't agressively copy function! D:
+        match self.find_type(expr) {
+            Type::Function { .. } => with_ret(expr_ret, self.copy(expr)),
+            _ => with_ret(expr_ret, expr),
         }
     }
 
