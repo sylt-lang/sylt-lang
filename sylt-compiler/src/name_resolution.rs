@@ -391,6 +391,7 @@ impl Statement {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Var {
     pub id: Ref,
+    pub name: String,
     pub definition: Span,
     pub is_global: bool,
     pub kind: VarKind,
@@ -709,7 +710,7 @@ impl Resolver {
         let variable = &branch
             .variable
             .as_ref()
-            .map(|var| self.push_var(var.clone(), VarKind::Const));
+            .map(|var| self.push_var(var, VarKind::Const));
         let mut body = Vec::new();
         for stmt in branch.body.iter() {
             match self.statement(stmt)? {
@@ -793,7 +794,7 @@ impl Resolver {
                 let name = name.clone();
                 let mut params = Vec::new();
                 for (n, t) in parser_params.iter() {
-                    let var = self.push_var(n.clone(), VarKind::Const);
+                    let var = self.push_var(n, VarKind::Const);
                     params.push((n.name.clone(), var, n.span, self.ty(t)?));
                 }
                 let ret = self.ty(ret)?;
@@ -868,28 +869,29 @@ impl Resolver {
 
             SK::Definition { ident, kind, ty, value } => {
                 let ss = self.stack.len();
-                let (value, var) = match (
-                    matches!(value.kind, sylt_parser::ExpressionKind::Function { .. }),
-                    ss == 0,
-                ) {
-                    (false, true) => {
-                        // Outer statement - it's a global so just evaluate the value!
-                        let value = self.expression(value)?;
-                        let var = self.lookup(span.file_id, &ident.name, span)?;
-                        (value, var)
-                    }
-                    (true, _) => {
-                        // Function, push the var before!
-                        let var = self.push_var(ident.clone(), *kind);
-                        let value = self.expression(value)?;
-                        (value, var)
-                    }
-                    (false, false) => {
-                        // Value, push the var after!
-                        let value = self.expression(value)?;
-                        let var = self.push_var(ident.clone(), *kind);
-                        (value, var)
-                    }
+                let (value, var) = if self.stack.is_empty() {
+                    // Outer statement - it's a global so just evaluate the value and push a dummy
+                    // value on the stack.
+                    let fake_ident = Identifier {
+                        name: format!("== STACK BEGIN {:?} ==", ident.name),
+                        span: ident.span,
+                    };
+                    self.push_var(&fake_ident, *kind);
+                    let value = self.expression(value)?;
+                    // Clear the stack imediately
+                    self.stack.clear();
+                    let var = self.lookup(span.file_id, &ident.name, span)?;
+                    (value, var)
+                } else if matches!(value.kind, sylt_parser::ExpressionKind::Function { .. }) {
+                    // Function, push the var before!
+                    let var = self.push_var(ident, *kind);
+                    let value = self.expression(value)?;
+                    (value, var)
+                } else {
+                    // Value, push the var after!
+                    let value = self.expression(value)?;
+                    let var = self.push_var(ident, *kind);
+                    (value, var)
                 };
                 Some(S::Definition {
                     span: ident.span,
@@ -955,13 +957,13 @@ impl Resolver {
             let (name, var) = match &stmt.kind {
                 sylt_parser::StatementKind::Blob { name, .. }
                 | sylt_parser::StatementKind::Enum { name, .. } => {
-                    let var = self.new_global(name.span, VarKind::Const);
+                    let var = self.new_global(name, VarKind::Const);
                     (name.name.clone(), Name::Name(var))
                 }
 
                 sylt_parser::StatementKind::ExternalDefinition { ident, kind, .. }
                 | sylt_parser::StatementKind::Definition { ident, kind, .. } => {
-                    let var = self.new_global(ident.span, *kind);
+                    let var = self.new_global(ident, *kind);
                     (ident.name.clone(), Name::Name(var))
                 }
 
@@ -1005,23 +1007,35 @@ impl Resolver {
         }
     }
 
-    fn new_var(&mut self, definition: Span, kind: VarKind) -> Ref {
+    fn new_var(&mut self, ident: &Identifier, kind: VarKind) -> Ref {
         let id = self.variables.len();
 
-        self.variables.push(Var { id, definition, kind, is_global: false });
+        self.variables.push(Var {
+            id,
+            name: ident.name.clone(),
+            definition: ident.span,
+            kind,
+            is_global: false,
+        });
         id
     }
 
-    fn new_global(&mut self, definition: Span, kind: VarKind) -> Ref {
+    fn new_global(&mut self, ident: &Identifier, kind: VarKind) -> Ref {
         let id = self.variables.len();
 
-        self.variables.push(Var { id, definition, kind, is_global: true });
+        self.variables.push(Var {
+            id,
+            name: ident.name.clone(),
+            definition: ident.span,
+            kind,
+            is_global: true,
+        });
         id
     }
 
-    fn push_var(&mut self, ident: Identifier, kind: VarKind) -> usize {
-        let var = self.new_var(ident.span, kind);
-        self.stack.push((ident.name, var));
+    fn push_var(&mut self, ident: &Identifier, kind: VarKind) -> usize {
+        let var = self.new_var(ident, kind);
+        self.stack.push((ident.name.clone(), var));
         var
     }
 

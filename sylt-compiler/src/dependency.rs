@@ -155,7 +155,6 @@ fn dependencies(expression: &Expression) -> BTreeSet<usize> {
 }
 
 fn order<'a>(
-    vars: &'a [Var],
     to_order: BTreeMap<usize, (BTreeSet<usize>, &'a Statement)>,
 ) -> Result<Vec<&'a Statement>, Vec<&'a Statement>> {
     enum State {
@@ -168,11 +167,7 @@ fn order<'a>(
         to_order: &BTreeMap<usize, (BTreeSet<usize>, &'a Statement)>,
         inserted: &mut BTreeMap<usize, State>,
         ordered: &mut Vec<&'a Statement>,
-        vars: &'a [Var],
     ) -> Result<(), Vec<&'a Statement>> {
-        if !vars[*global].is_global {
-            return Ok(());
-        }
         let (deps, statement) = if let Some(thing) = to_order.get(&global) {
             thing
         } else  {
@@ -183,19 +178,22 @@ fn order<'a>(
             Vacant(entry) => entry.insert(State::Inserting),
             Occupied(entry) => {
                 return match entry.get() {
-                    State::Inserting => Err(Vec::new()),
+                    State::Inserting => {
+                        Err(Vec::new())
+                    }
                     State::Inserted => Ok(()),
                 }
             }
         };
 
         for dep in deps {
-            recurse(dep, to_order, inserted, ordered, vars).map_err(|mut cycle| {
+            recurse(dep, to_order, inserted, ordered).map_err(|mut cycle| {
                 cycle.push(*statement);
                 cycle
             })?;
         }
         ordered.push(*statement);
+        inserted.insert(global.clone(), State::Inserted);
 
         Ok(())
     }
@@ -203,14 +201,13 @@ fn order<'a>(
     let mut ordered = Vec::new();
     let mut inserted = BTreeMap::new();
     for (var, _) in to_order.iter() {
-        recurse(var, &to_order, &mut inserted, &mut ordered, vars)?;
+        recurse(var, &to_order, &mut inserted, &mut ordered)?;
     }
 
     Ok(ordered)
 }
 
 pub(crate) fn initialization_order<'a>(
-    vars: &'a [Var],
     statements: &'a [Statement],
 ) -> Result<Vec<&'a Statement>, Vec<&'a Statement>> {
     let mut to_order = BTreeMap::new();
@@ -231,5 +228,5 @@ pub(crate) fn initialization_order<'a>(
         }
     }
 
-    return order(vars, to_order);
+    return order(to_order);
 }

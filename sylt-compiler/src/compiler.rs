@@ -80,7 +80,7 @@ impl Compiler {
         let (vars, statements) = name_resolution::resolve(&tree, &self.namespace_id_to_file)?;
 
         // TODO[ed]: These clones are unneeded!
-        let statements = match dependency::initialization_order(&vars, &statements) {
+        let statements = match dependency::initialization_order(&statements) {
             // TODO(ed): This clone can probably be removed.
             Ok(statements) => statements,
             Err(statements) => {
