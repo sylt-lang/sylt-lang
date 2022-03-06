@@ -435,12 +435,12 @@ impl Resolver {
         wrapper.help(self, span, msg).unwrap_err()[0].clone()
     }
 
-    fn lookup_global(&self, namespace_id: usize, name: &String) -> Option<&Name> {
+    fn lookup_global(&self, namespace_id: usize, name: &str) -> Option<&Name> {
         let namespace = &self.namespace_to_file[&namespace_id];
         self.namespaces[namespace].get(name)
     }
 
-    fn lookup(&self, namespace_id: usize, name: &String, span: Span) -> ResolveResult<Ref> {
+    fn lookup(&self, namespace_id: usize, name: &str, span: Span) -> ResolveResult<Ref> {
         // TODO(ed): Find the closest matching name if we don't find anything?
         for (var_name, var_id) in self.stack.iter().rev() {
             if var_name == name {
@@ -1185,6 +1185,13 @@ pub fn resolve<'a>(
             if let Some(resolved) = resolver.statement(&stmt)? {
                 out.push(resolved);
             }
+        }
+    }
+    if resolver.lookup_global(0, "start").is_none() {
+        raise_resolution_error!{
+            resolver,
+            Span::zero(0),
+            "Expected a start function in the main module - but couldn't find it"
         }
     }
     Ok((resolver.variables, out))

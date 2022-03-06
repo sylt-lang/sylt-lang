@@ -2157,51 +2157,41 @@ impl TypeChecker {
         }
     }
 
-    fn solve(&mut self, statements: &Vec<Statement>) -> TypeResult<()> {
+    fn solve(&mut self, statements: &Vec<Statement>, start_var: Option<&Var>) -> TypeResult<()> {
         for statement in statements.iter() {
             self.outer_statement(statement, TypeCtx::namespace(statement.namespace()))?;
         }
 
-        let _ctx = TypeCtx::namespace(0);
-        // TODO(ed): Check the start function
-        /*
-        match self.globals.get(&(0, "start".to_string())).cloned() {
-            Some(Name::Global(var)) => {
+        let ctx = TypeCtx::namespace(0);
+        match start_var {
+            Some(var) => {
                 let void = self.push_type(Type::Void);
                 let start = self.push_type(Type::Function(Vec::new(), void, Purity::Undefined));
-                self.unify(var.ident.span, ctx, var.ty, start)
+                let ty = self.variables[var.id].ty;
+                self.unify(var.definition, ctx, ty, start)
                     .map(|_| ())
                     .or_else(|_| {
                         err_type_error!(
                             self,
-                            var.ident.span,
+                            var.definition,
                             TypeError::Mismatch {
-                                got: self.bake_type(var.ty),
+                                got: self.bake_type(ty),
                                 expected: self.bake_type(start),
                             },
                             "The start function has the wrong type"
                         )
                     })
             }
-            Some(_) => {
-                err_type_error!(
-                    self,
-                    Span::zero(ctx.namespace),
-                    TypeError::Exotic,
-                    "Expected a start function in the main module - but it was something else"
-                )
-            }
             None => {
+                // TODO[ed]: Is this unreachable?
                 err_type_error!(
                     self,
-                    Span::zero(ctx.namespace),
+                    Span::zero(0),
                     TypeError::Exotic,
                     "Expected a start function in the main module - but couldn't find it"
                 )
             }
         }
-        */
-        Ok(())
     }
 
     fn span_file(&self, span: &Span) -> FileOrLib {
@@ -2216,6 +2206,10 @@ pub(crate) fn solve(
     namespace_to_file: &HashMap<NamespaceID, FileOrLib>,
 ) -> TypeResult<TypeChecker> {
     let mut tc = TypeChecker::new(vars, namespace_to_file);
-    tc.solve(&statements)?;
+    // TODO(ed): We assume the first global start we find is the start-function.
+    // We check that there's a "start" in the main file in `name_resolution`.
+    // I hope this is good enough.
+    let start = vars.iter().find(|x| &x.name == "start" && x.is_global);
+    tc.solve(&statements, start)?;
     Ok(tc)
 }
