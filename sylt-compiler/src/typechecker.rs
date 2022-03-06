@@ -952,9 +952,8 @@ impl TypeChecker {
                         "The actual return type and the specified return type differ!".into(),
                     )?;
 
-                // TODO(ed): This looks wrong?
-                dbg!(&actual_ret, returns_void);
-                if !actual_ret.map(|x| self.is_void(x)).unwrap_or(true) || !returns_void {
+                // TODO[ed]: This is wrong.
+                if actual_ret.map(|x| !self.is_void(x)).unwrap_or(false) && returns_void {
                     return err_type_error!(
                         self,
                         ret.span(),
