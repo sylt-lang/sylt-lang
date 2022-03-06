@@ -68,12 +68,12 @@ pub struct ParseErr {}
 /// Parse a sylt module (sylt file)
 pub fn parse_module<'a>(tokens: &'a [(Token, Range<usize>)]) -> Result<Module<'a>, ParseErr> {
     let ctx = Context::new(tokens);
-    let (statement, ctx) = Statement::parse(ctx).unwrap();
+    let (ctx, statement) = Statement::parse(ctx).unwrap();
 
     Ok(Module { statements: vec![statement] })
 }
 
 /// The type of result for parsing
-pub type ParseResult<'a, T> = Result<(T, Context<'a>), (ParseErr, Context<'a>)>;
+pub type ParseResult<'a, T> = Result<(Context<'a>, T), (ParseErr, Context<'a>)>;
 
 pub type Span = Range<usize>;

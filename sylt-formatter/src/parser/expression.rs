@@ -144,18 +144,18 @@ pub fn parse<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
 
 fn parse_precedence<'a>(ctx: Context<'a>, prec: Prec) -> ParseResult<'a, Expression> {
     // Initial value, e.g. a number value, assignable, ...
-    let (mut expr, mut ctx) = prefix(ctx)?;
+    let (mut ctx, mut expr) = prefix(ctx)?;
 
     while {
         let token = ctx.peek();
         prec <= precedence(token) && valid_infix(token)
     } {
-        let (_expr, _ctx) = infix(ctx, expr)?;
+        let (_ctx, _expr) = infix(ctx, expr)?;
         // assign to outer
         expr = _expr;
         ctx = _ctx;
     }
-    Ok((expr, ctx))
+    Ok((ctx, expr))
 }
 
 #[rustfmt::skip]
@@ -235,6 +235,7 @@ fn value<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
     let span = span.clone();
 
     Ok((
+        ctx,
         match token {
             T::Float(value) => E::Float { value: *value, span },
             T::Bool(value) => E::Bool { value: *value, span },
@@ -243,7 +244,6 @@ fn value<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
             T::Nil => E::Nil { span },
             _ => unreachable!(),
         },
-        ctx,
     ))
 }
 
@@ -328,7 +328,7 @@ fn infix<'t>(ctx: Context<'t>, lhs: Expression) -> ParseResult<'t, Expression> {
         }
     };
 
-    let (rhs, ctx) = parse_precedence(ctx, precedence(op).next())?;
+    let (ctx, rhs) = parse_precedence(ctx, precedence(op).next())?;
 
     // Left and right of the operator.
     let lhs = Box::new(lhs);
@@ -364,7 +364,7 @@ fn infix<'t>(ctx: Context<'t>, lhs: Expression) -> ParseResult<'t, Expression> {
         }
     };
 
-    Ok((expr, ctx))
+    Ok((ctx, expr))
 }
 
 fn expr_span<'a>(expr: &'a Expression) -> &'a Span {
