@@ -121,7 +121,7 @@ pub struct IfBranch {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CaseBranch {
     pub pattern: Identifier,
-    pub variable: Option<Identifier>,
+    pub variable: Option<Ref>,
     pub body: Vec<Statement>,
     pub span: Span,
 }
@@ -178,7 +178,7 @@ pub enum Expression {
     },
     Function {
         name: String,
-        params: Vec<(String, Span, Type)>,
+        params: Vec<(String, Ref, Span, Type)>,
         ret: Type,
 
         body: Vec<Statement>,
@@ -244,7 +244,28 @@ pub enum Type {
         params: Vec<Type>,
         ret: Box<Type>,
         is_pure: bool,
+        span: Span,
     },
+}
+
+impl Type {
+    pub fn span(&self) -> Span {
+        match self {
+            Type::UserType(_, _, span)
+            | Type::Implied(span)
+            | Type::Resolved(_, span)
+            | Type::Generic(_, span)
+            | Type::Tuple(_, span)
+            | Type::List(_, span)
+            | Type::Set(_, span)
+            | Type::Dict(_, _, span)
+            | Type::Fn { span, .. } => *span,
+        }
+    }
+
+    pub fn is_void(&self) -> bool {
+        return matches!(self, Type::Resolved(RuntimeType::Void, _));
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -258,6 +279,7 @@ pub enum Statement {
 
     Blob {
         name: String,
+        var: Ref,
         span: Span,
         variables: Vec<String>,
         fields: HashMap<String, (Span, Type)>,
@@ -266,6 +288,7 @@ pub enum Statement {
 
     Enum {
         name: String,
+        var: Ref,
         span: Span,
         variables: Vec<String>,
         variants: HashMap<String, (Span, Type)>,
@@ -277,7 +300,7 @@ pub enum Statement {
     ///
     /// Valid definition operators are `::`, `:=` and `: <type> =`.
     Definition {
-        ident: Identifier,
+        var: Ref,
         kind: VarKind,
         ty: Type,
         value: Expression,
@@ -290,7 +313,7 @@ pub enum Statement {
     ///
     /// Valid definition operators are `: <type> :`, and `: <type> =`.
     ExternalDefinition {
-        ident: Identifier,
+        var: Ref,
         kind: VarKind,
         ty: Type,
         span: Span,
@@ -409,7 +432,8 @@ impl Resolver {
     }
 
     fn lookup_global(&self, namespace_id: usize, name: &String) -> Option<&Name> {
-        self.namespaces[&self.namespace_to_file[&namespace_id]].get(name)
+        let namespace = &self.namespace_to_file[&namespace_id];
+        self.namespaces[namespace].get(name)
     }
 
     fn lookup(&self, namespace_id: usize, name: &String, span: Span) -> ResolveResult<Ref> {
@@ -500,6 +524,7 @@ impl Resolver {
             }
             TK::Fn { constraints, params, ret, is_pure } => T::Fn {
                 is_pure: *is_pure,
+                span,
                 constraints: constraints.clone(),
                 params: self.type_vec(params)?,
                 ret: Box::new(self.ty(ret)?),
@@ -591,7 +616,7 @@ impl Resolver {
                 let ty = if let E::Read { var, .. } = self.assignable(enum_ass)? {
                     var
                 } else {
-                    raise_resolution_error!{
+                    raise_resolution_error! {
                         self,
                         span,
                         "This is not ok TODO(ed)"
@@ -678,9 +703,10 @@ impl Resolver {
     }
 
     fn case_branch(&mut self, branch: &ParserCaseBranch) -> ResolveResult<CaseBranch> {
-        if let Some(var) = &branch.variable {
-            self.push_var(var.clone(), VarKind::Const);
-        }
+        let variable = &branch
+            .variable
+            .as_ref()
+            .map(|var| self.push_var(var.clone(), VarKind::Const));
         let mut body = Vec::new();
         for stmt in branch.body.iter() {
             match self.statement(stmt)? {
@@ -690,7 +716,7 @@ impl Resolver {
         }
         Ok(CaseBranch {
             pattern: branch.pattern.clone(),
-            variable: branch.variable.clone(),
+            variable: *variable,
             body,
             span: branch.pattern.span,
         })
@@ -764,8 +790,8 @@ impl Resolver {
                 let name = name.clone();
                 let mut params = Vec::new();
                 for (n, t) in parser_params.iter() {
-                    params.push((n.name.clone(), n.span, self.ty(t)?));
-                    self.push_var(n.clone(), VarKind::Const);
+                    let var = self.push_var(n.clone(), VarKind::Const);
+                    params.push((n.name.clone(), var, n.span, self.ty(t)?));
                 }
                 let ret = self.ty(ret)?;
                 let body = self.block(body)?;
@@ -773,6 +799,7 @@ impl Resolver {
                 E::Function { name, params, ret, body, pure: *pure, span }
             }
             EK::Blob { blob, fields: parser_fields } => {
+                // TODO(ed): `this` should be added here!
                 let blob = self.ty_assignable(blob)?;
                 let mut fields = Vec::new();
                 for (name, field) in parser_fields.iter() {
@@ -800,28 +827,36 @@ impl Resolver {
             // These are already handled
             SK::EmptyStatement | SK::FromUse { .. } | SK::Use { .. } => None,
 
-            SK::Blob { name, variables, fields, external } => Some(S::Blob {
-                name: name.name.clone(),
-                span,
-                variables: variables.iter().map(|var| var.name.clone()).collect(),
-                fields: fields
-                    .iter()
-                    .map(|(field, ty)| Ok((field.name.clone(), (field.span, self.ty(ty)?))))
-                    .collect::<ResolveResult<_>>()?,
-                external: *external,
-            }),
-            SK::Enum { name, variables, variants } => Some(S::Enum {
-                name: name.name.clone(),
-                span,
-                variables: variables.iter().map(|var| var.name.clone()).collect(),
-                variants: variants
-                    .iter()
-                    .map(|(var, ty)| Ok((var.name.clone(), (var.span, self.ty(ty)?))))
-                    .collect::<ResolveResult<_>>()?,
-            }),
+            SK::Blob { name, variables, fields, external } => {
+                let var = self.lookup(span.file_id, &name.name, span)?;
+                Some(S::Blob {
+                    name: name.name.clone(),
+                    var,
+                    span,
+                    variables: variables.iter().map(|var| var.name.clone()).collect(),
+                    fields: fields
+                        .iter()
+                        .map(|(field, ty)| Ok((field.name.clone(), (field.span, self.ty(ty)?))))
+                        .collect::<ResolveResult<_>>()?,
+                    external: *external,
+                })
+            }
+            SK::Enum { name, variables, variants } => {
+                let var = self.lookup(span.file_id, &name.name, span)?;
+                Some(S::Enum {
+                    name: name.name.clone(),
+                    var,
+                    span,
+                    variables: variables.iter().map(|var| var.name.clone()).collect(),
+                    variants: variants
+                        .iter()
+                        .map(|(var, ty)| Ok((var.name.clone(), (var.span, self.ty(ty)?))))
+                        .collect::<ResolveResult<_>>()?,
+                })
+            }
 
             SK::ExternalDefinition { ident, kind, ty } => Some(S::ExternalDefinition {
-                ident: ident.clone(),
+                var: self.lookup(span.file_id, &ident.name, span)?,
                 kind: *kind,
                 span: ident.span,
                 ty: self.ty(ty)?,
@@ -829,29 +864,32 @@ impl Resolver {
 
             SK::Definition { ident, kind, ty, value } => {
                 let ss = self.stack.len();
-                let value = match (
+                let (value, var) = match (
                     matches!(value.kind, sylt_parser::ExpressionKind::Function { .. }),
                     ss == 0,
                 ) {
                     (false, true) => {
                         // Outer statement - it's a global so just evaluate the value!
-                        self.expression(value)?
+                        let value = self.expression(value)?;
+                        let var = self.lookup(span.file_id, &ident.name, span)?;
+                        (value, var)
                     }
                     (true, _) => {
                         // Function, push the var before!
-                        self.push_var(ident.clone(), *kind);
-                        self.expression(value)?
+                        let var = self.push_var(ident.clone(), *kind);
+                        let value = self.expression(value)?;
+                        (value, var)
                     }
                     (false, false) => {
                         // Value, push the var after!
-                        let expr = self.expression(value)?;
-                        self.push_var(ident.clone(), *kind);
-                        expr
+                        let value = self.expression(value)?;
+                        let var = self.push_var(ident.clone(), *kind);
+                        (value, var)
                     }
                 };
                 Some(S::Definition {
                     span: ident.span,
-                    ident: ident.clone(),
+                    var,
                     kind: *kind,
                     ty: self.ty(ty)?,
                     value,
@@ -969,9 +1007,10 @@ impl Resolver {
         id
     }
 
-    fn push_var(&mut self, ident: Identifier, kind: VarKind) {
+    fn push_var(&mut self, ident: Identifier, kind: VarKind) -> usize {
         let var = self.new_var(ident.span, kind);
         self.stack.push((ident.name, var));
+        var
     }
 
     fn resolve_global_variables(

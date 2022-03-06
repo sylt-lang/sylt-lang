@@ -1,7 +1,7 @@
 use crate::NamespaceID;
 use std::collections::BTreeMap;
 use sylt_common::TyID;
-use sylt_parser::{Identifier, Span};
+use sylt_parser::Span;
 
 #[derive(Debug, Clone)]
 pub enum Purity {
