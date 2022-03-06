@@ -693,7 +693,8 @@ impl TypeChecker {
             E::Read { var, .. } => no_ret(self.variables[*var].ty),
             E::Variant { ty, variant, value, span } => {
                 let (value_ret, value) = self.expression(value, ctx)?;
-                let enum_ty = self.variables[*ty].ty;
+                // TODO[ed]: We should be able to do without this!
+                let enum_ty = self.copy(self.variables[*ty].ty);
                 self.add_constraint(
                     enum_ty,
                     *span,
