@@ -1,6 +1,6 @@
 #![allow(unused)]
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::io::Write;
 use sylt_common::error::Error;
 use sylt_common::FileOrLib;
@@ -48,14 +48,15 @@ macro_rules! error {
     };
 }
 
-// macro_rules! error_no_panic {
-//     ($compiler:expr, $span:expr, $( $msg:expr ),+ ) => {
-//         {
-//             error!($compiler, $span, $( $msg ),*);
-//             $compiler.panic = false;
-//         }
-//     };
-// }
+macro_rules! error_no_panic {
+     ($compiler:expr, $span:expr, $( $msg:expr ),+ ) => {
+         {
+             error!($compiler, $span, $( $msg ),*);
+             $compiler.panic = false;
+         }
+     };
+}
+
 impl Compiler {
     fn new() -> Self {
         Self {
@@ -77,6 +78,23 @@ impl Compiler {
 
         self.extract_namespaces(&tree);
         let (vars, statements) = name_resolution::resolve(&tree, &self.namespace_id_to_file)?;
+
+        // TODO[ed]: These clones are unneeded!
+        let statements = match dependency::initialization_order(&vars, &statements) {
+            // TODO(ed): This clone can probably be removed.
+            Ok(statements) => statements,
+            Err(statements) => {
+                statements.iter().for_each(|statement| {
+                    error_no_panic!(self, statement.span(), "Dependency cycle")
+                });
+                return Err(self.errors.clone());
+            }
+        };
+        if !self.errors.is_empty() {
+            return Err(self.errors.clone());
+        }
+
+        let statements = statements.iter().map(|s| (*s).clone()).collect();
         let _typechecker = typechecker::solve(&vars, &statements, &self.namespace_id_to_file)?;
 
         // let ir = intermediate::compile(&typechecker, &statements);

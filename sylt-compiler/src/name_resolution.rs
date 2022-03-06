@@ -300,6 +300,7 @@ pub enum Statement {
     ///
     /// Valid definition operators are `::`, `:=` and `: <type> =`.
     Definition {
+        name: String,
         var: Ref,
         kind: VarKind,
         ty: Type,
@@ -313,6 +314,7 @@ pub enum Statement {
     ///
     /// Valid definition operators are `: <type> :`, and `: <type> =`.
     ExternalDefinition {
+        name: String,
         var: Ref,
         kind: VarKind,
         ty: Type,
@@ -390,6 +392,7 @@ impl Statement {
 pub struct Var {
     pub id: Ref,
     pub definition: Span,
+    pub is_global: bool,
     pub kind: VarKind,
 }
 
@@ -856,6 +859,7 @@ impl Resolver {
             }
 
             SK::ExternalDefinition { ident, kind, ty } => Some(S::ExternalDefinition {
+                name: ident.name.clone(),
                 var: self.lookup(span.file_id, &ident.name, span)?,
                 kind: *kind,
                 span: ident.span,
@@ -889,6 +893,7 @@ impl Resolver {
                 };
                 Some(S::Definition {
                     span: ident.span,
+                    name: ident.name.clone(),
                     var,
                     kind: *kind,
                     ty: self.ty(ty)?,
@@ -950,13 +955,13 @@ impl Resolver {
             let (name, var) = match &stmt.kind {
                 sylt_parser::StatementKind::Blob { name, .. }
                 | sylt_parser::StatementKind::Enum { name, .. } => {
-                    let var = self.new_var(name.span, VarKind::Const);
+                    let var = self.new_global(name.span, VarKind::Const);
                     (name.name.clone(), Name::Name(var))
                 }
 
                 sylt_parser::StatementKind::ExternalDefinition { ident, kind, .. }
                 | sylt_parser::StatementKind::Definition { ident, kind, .. } => {
-                    let var = self.new_var(ident.span, *kind);
+                    let var = self.new_global(ident.span, *kind);
                     (ident.name.clone(), Name::Name(var))
                 }
 
@@ -1003,7 +1008,14 @@ impl Resolver {
     fn new_var(&mut self, definition: Span, kind: VarKind) -> Ref {
         let id = self.variables.len();
 
-        self.variables.push(Var { id, definition, kind });
+        self.variables.push(Var { id, definition, kind, is_global: false });
+        id
+    }
+
+    fn new_global(&mut self, definition: Span, kind: VarKind) -> Ref {
+        let id = self.variables.len();
+
+        self.variables.push(Var { id, definition, kind, is_global: true });
         id
     }
 
