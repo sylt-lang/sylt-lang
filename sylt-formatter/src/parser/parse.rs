@@ -61,19 +61,35 @@ pub struct Module<'a> {
     statements: Vec<Statement<'a>>,
 }
 
+#[derive(Debug)]
+pub enum ParseErrType {
+    Undefined { message: String },
+}
+
 /// A parse error
 #[derive(Debug)]
-pub struct ParseErr {}
+pub struct ParseErr {
+    pub err_type: ParseErrType,
+    pub inner_span: Span,
+}
+
+impl ParseErr {
+    pub fn message(&self) -> String {
+        match &self.err_type {
+            ParseErrType::Undefined { message } => message.clone(),
+        }
+    }
+}
 
 /// Parse a sylt module (sylt file)
-pub fn parse_module<'a>(tokens: &'a [(Token, Range<usize>)]) -> Result<Module<'a>, ParseErr> {
+pub fn parse_module<'a>(tokens: &'a [(Token, Range<usize>)]) -> ParseResult<'a, Module> {
     let ctx = Context::new(tokens);
-    let (ctx, statement) = Statement::parse(ctx).unwrap();
+    let (ctx, statement) = Statement::parse(ctx)?;
 
-    Ok(Module { statements: vec![statement] })
+    Ok((ctx, Module { statements: vec![statement] }))
 }
 
 /// The type of result for parsing
-pub type ParseResult<'a, T> = Result<(Context<'a>, T), (ParseErr, Context<'a>)>;
+pub type ParseResult<'a, T> = Result<(Context<'a>, T), (Context<'a>, ParseErr)>;
 
 pub type Span = Range<usize>;

@@ -1,5 +1,7 @@
 use sylt_tokenizer::Token as T;
 
+use crate::parser::{ParseErr, ParseErrType};
+
 use super::{Context, ParseResult, Span};
 
 /// An expression in sylt
@@ -221,10 +223,15 @@ fn prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
         //         Ok((ctx, Expression::new(span, Get(assign))))
         //     }
         // }
-        _t => {
-            panic!()
-            // raise_syntax_error!(ctx, "No valid expression starts with '{:?}'", t);
-        }
+        _t => Err((
+            ctx,
+            ParseErr {
+                err_type: ParseErrType::Undefined {
+                    message: "Unexpected prefix token".to_string(),
+                },
+                inner_span: ctx.span().clone(),
+            },
+        )), // raise_syntax_error!(ctx, "No valid expression starts with '{:?}'", t);
     }
 }
 
@@ -324,7 +331,15 @@ fn infix<'t>(ctx: Context<'t>, lhs: Expression) -> ParseResult<'t, Expression> {
         // Unknown infix operator.
         _ => {
             // raise_syntax_error!(ctx.prev(), "Not a valid infix operator");
-            todo!()
+            return Err((
+                ctx,
+                ParseErr {
+                    err_type: ParseErrType::Undefined {
+                        message: "Unexpected infix token".to_string(),
+                    },
+                    inner_span: ctx.span().clone(),
+                },
+            ));
         }
     };
 
@@ -360,7 +375,15 @@ fn infix<'t>(ctx: Context<'t>, lhs: Expression) -> ParseResult<'t, Expression> {
 
         // Unknown infix operator.
         _ => {
-            unreachable!();
+            return Err((
+                ctx,
+                ParseErr {
+                    err_type: ParseErrType::Undefined {
+                        message: "Unexpected infix operator".to_string(),
+                    },
+                    inner_span: ctx.span().clone(),
+                },
+            ))
         }
     };
 
