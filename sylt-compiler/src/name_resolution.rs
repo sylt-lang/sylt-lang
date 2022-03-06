@@ -803,11 +803,16 @@ impl Resolver {
                 E::Function { name, params, ret, body, pure: *pure, span }
             }
             EK::Blob { blob, fields: parser_fields } => {
-                // TODO(ed): `this` should be added here!
+                // TODO(ed): `self` should be added here!
                 let blob = self.ty_assignable(blob)?;
                 let mut fields = Vec::new();
                 for (name, field) in parser_fields.iter() {
+                    let ss = self.stack.len();
+                    if matches!(field.kind, EK::Function { .. }) {
+                        self.push_var(&Identifier { name: "self".to_string(), span }, VarKind::Mutable);
+                    }
                     fields.push((name.clone(), self.expression(field)?));
+                    self.stack.truncate(ss);
                 }
                 E::Blob { blob, fields, span }
             }
@@ -889,9 +894,9 @@ impl Resolver {
                     (value, var)
                 } else {
                     // Value, push the var after!
-                    let value = self.expression(value)?;
+                    let value_maybe = self.expression(value);
                     let var = self.push_var(ident, *kind);
-                    (value, var)
+                    (value_maybe?, var)
                 };
                 Some(S::Definition {
                     span: ident.span,
