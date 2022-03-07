@@ -982,17 +982,7 @@ impl TypeChecker {
             }
 
             E::Blob { blob, fields, span, .. } => {
-                let blob_ty =
-                    if let crate::name_resolution::Type::UserType(blob_var_ty, _, _) = blob {
-                        self.variables[*blob_var_ty].ty
-                    } else {
-                        return err_type_error!(
-                            self,
-                            *span,
-                            TypeError::ToDo { line: line!(), file: file!().to_string() }
-                        );
-                    };
-
+                let blob_ty = self.variables[*blob].ty;
                 let (blob_name, blob_fields, blob_args) = match self.find_type(blob_ty) {
                     Type::Blob(name, _, fields, args) => (name, fields, args),
                     Type::ExternBlob(name, _, _, _, _) => {

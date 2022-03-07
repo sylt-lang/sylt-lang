@@ -187,7 +187,7 @@ pub enum Expression {
         span: Span,
     },
     Blob {
-        blob: Type,
+        blob: Ref,
         fields: Vec<(String, Expression)>, // Keep calling order
         self_var: Ref,
         span: Span,
@@ -804,7 +804,10 @@ impl Resolver {
                 E::Function { name, params, ret, body, pure: *pure, span }
             }
             EK::Blob { blob, fields: parser_fields } => {
-                let blob = self.ty_assignable(blob)?;
+                let blob = match self.ty_assignable(blob)? {
+                    Type::UserType(blob, ..) => blob,
+                    _ => unreachable!("Blobs are always userdefined!"),
+                };
                 let mut fields = Vec::new();
                 let self_var = self.new_var(&Identifier { name: "self".to_string(), span }, VarKind::Mutable);
                 for (name, field) in parser_fields.iter() {

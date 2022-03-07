@@ -1,4 +1,4 @@
-use crate::name_resolution::{Expression, IfBranch, Statement, Type};
+use crate::name_resolution::{Expression, IfBranch, Statement};
 use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -54,7 +54,11 @@ fn dependencies(expression: &Expression) -> BTreeSet<usize> {
     use Expression as E;
     match &expression {
         E::Read { var, .. } => [*var].iter().map(|v| *v).collect(),
-        E::Variant { value, .. } => dependencies(value),
+        E::Variant { ty, value, .. } => dependencies(value)
+            .iter()
+            .chain([*ty].iter())
+            .cloned()
+            .collect(),
         E::Call { function, args, .. } => dependencies(function)
             .union(
                 &args
@@ -137,14 +141,12 @@ fn dependencies(expression: &Expression) -> BTreeSet<usize> {
             .flatten()
             .collect(),
 
-        E::Blob { blob: Type::UserType(var, ..), fields, .. } => fields
+        E::Blob { blob, fields, .. } => fields
             .iter()
             .map(|(_, expr)| dependencies(expr))
             .flatten()
-            .chain([*var])
+            .chain([*blob])
             .collect(),
-
-        E::Blob { .. } => unreachable!("Type assignable that isn't a UserType - not currently supported"),
 
         E::Collection { values, .. } => values
             .iter()
@@ -173,7 +175,7 @@ fn order<'a>(
     ) -> Result<(), Vec<&'a Statement>> {
         let (deps, statement) = if let Some(thing) = to_order.get(&global) {
             thing
-        } else  {
+        } else {
             return Ok(());
         };
 
@@ -181,9 +183,7 @@ fn order<'a>(
             Vacant(entry) => entry.insert(State::Inserting),
             Occupied(entry) => {
                 return match entry.get() {
-                    State::Inserting => {
-                        Err(Vec::new())
-                    }
+                    State::Inserting => Err(Vec::new()),
                     State::Inserted => Ok(()),
                 }
             }
@@ -221,10 +221,7 @@ pub(crate) fn initialization_order<'a>(
             | S::Enum { var, .. }
             | S::ExternalDefinition { var, .. }
             | S::Definition { var, .. } => {
-                to_order.insert(
-                    *var,
-                    (statement_dependencies(statement), statement),
-                );
+                to_order.insert(*var, (statement_dependencies(statement), statement));
             }
 
             _ => {}
