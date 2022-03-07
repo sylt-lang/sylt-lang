@@ -4,4 +4,4 @@ start :: fn do
     a = 2
 end
 
-// error: $Assignability
+// error: When resolving the name "a" - a namespace was found
