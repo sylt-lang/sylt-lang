@@ -974,7 +974,7 @@ impl TypeChecker {
                         "The actual return type and the specified return type differ!".into(),
                     )?;
 
-                if actual_ret.map(|x| !self.is_void(x)).unwrap_or(false) && ret.is_void() {
+                if actual_ret.map(|x| self.is_void(x)).unwrap_or(true) && !ret.is_void() {
                     return err_type_error!(
                         self,
                         ret.span(),
