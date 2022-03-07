@@ -4,4 +4,4 @@ start :: fn do
      num1 <=> 200
 end
 
-// error: Nothing named 'num2'
+// error: Cannot find "num2"
