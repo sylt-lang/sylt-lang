@@ -1,4 +1,4 @@
-use crate::name_resolution::{Expression, IfBranch, Statement};
+use crate::name_resolution::{Expression, IfBranch, Statement, Type};
 use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -137,11 +137,14 @@ fn dependencies(expression: &Expression) -> BTreeSet<usize> {
             .flatten()
             .collect(),
 
-        E::Blob { fields, .. } => fields
+        E::Blob { blob: Type::UserType(var, ..), fields, .. } => fields
             .iter()
             .map(|(_, expr)| dependencies(expr))
             .flatten()
+            .chain([*var])
             .collect(),
+
+        E::Blob { .. } => unreachable!("Type assignable that isn't a UserType - not currently supported"),
 
         E::Collection { values, .. } => values
             .iter()
