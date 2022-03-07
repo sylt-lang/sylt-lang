@@ -9,4 +9,4 @@ end
 start :: fn do
 end
 
-// error: type isn't explicitly set to `void`
+// error: The return type is explicitly set to
