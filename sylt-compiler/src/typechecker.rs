@@ -445,7 +445,15 @@ impl TypeChecker {
     fn definition(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
         use Expression as E;
         use Statement as S;
-        if let S::Definition { var, ty, value, span, .. } = statement {
+        if let S::Definition { var, ty, value, span, kind, .. } = statement {
+            if ctx.inside_pure && !kind.immutable() {
+                return err_type_error!(
+                    self,
+                    *span,
+                    TypeError::Impurity,
+                    "Cannot make mutable declarations in pure functions"
+                );
+            }
             let var_ty = self.variables[*var].ty;
             if let E::Function { params, ret, pure, .. } = value {
                 let (f_ty, _) = self.type_from_function(ctx, params, ret, *pure)?;
