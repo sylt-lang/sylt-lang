@@ -469,7 +469,8 @@ impl<'a> IRCodeGen<'a> {
             }
             code
         } else {
-            self.expression(&value, ctx).0
+            let (code, tmp) = self.expression(&value, ctx);
+            [code, vec![IR::Assign(var, tmp)]].concat()
         }
     }
 
