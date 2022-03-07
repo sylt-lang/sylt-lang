@@ -301,12 +301,17 @@ impl<'a> IRCodeGen<'a> {
 
                 let branches_code = branches
                     .iter()
-                    .map(|CaseBranch { pattern, body, .. }| {
+                    .map(|CaseBranch { variable, pattern, body, .. }| {
                         let body = self.expression_block(out, body.clone(), ctx);
 
                         let exp_str = self.var();
                         let cmp = self.var();
                         [
+                            if let Some(var) = variable {
+                                vec![IR::Assign(Var(*var), value)]
+                            } else {
+                                Vec::new()
+                            },
                             vec![
                                 IR::Str(exp_str, pattern.name.clone()),
                                 IR::Equals(cmp, exp_str, tag),
@@ -470,7 +475,7 @@ impl<'a> IRCodeGen<'a> {
             code
         } else {
             let (code, tmp) = self.expression(&value, ctx);
-            [code, vec![IR::Assign(var, tmp)]].concat()
+            [vec![IR::Define(var)], code, vec![IR::Assign(var, tmp)]].concat()
         }
     }
 
