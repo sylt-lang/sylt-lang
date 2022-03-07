@@ -721,7 +721,18 @@ impl TypeChecker {
     fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> TypeResult<RetNValue> {
         use Expression as E;
         let (expr_ret, expr) = match expression {
-            E::Read { var, .. } => no_ret(self.variables[*var].ty),
+            E::Read { var, span, .. } => {
+                let immutable = self.variables[*var].kind.immutable();
+                if ctx.inside_pure && !immutable {
+                    return err_type_error!(
+                        self,
+                        *span,
+                        TypeError::Impurity,
+                        "Cannot access mutable variables from pure functions"
+                    );
+                }
+                no_ret(self.variables[*var].ty)
+            }
             E::Variant { ty, variant, value, span } => {
                 let (value_ret, value) = self.expression(value, ctx)?;
                 // TODO[ed]: We should be able to do without this!
