@@ -445,17 +445,19 @@ impl TypeChecker {
     fn definition(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
         use Expression as E;
         use Statement as S;
-        if let S::Definition { name, var, ty, value, span, .. } = statement {
+        if let S::Definition { var, ty, value, span, .. } = statement {
+            let var_ty = self.variables[*var].ty;
             if let E::Function { params, ret, pure, .. } = value {
                 let (f_ty, _) = self.type_from_function(ctx, params, ret, *pure)?;
-                self.unify(*span, ctx, self.variables[*var].ty, f_ty)?;
+                self.unify(*span, ctx, var_ty, f_ty)?;
             }
             let ty = self.resolve_type(ctx, ty)?;
             // TODO(ed): Make sure the option is void or none - you cannot return otherwise.
             // But this might be caught somewhere else?
-            let (value_ret, value) = self.expression(value, ctx)?;
-            self.unify(*span, ctx, self.variables[*var].ty, ty)?;
-            self.unify(*span, ctx, self.variables[*var].ty, value)?;
+            let (value_ret, value_ty) = self.expression(value, ctx)?;
+            self.add_constraint(ty, *span, Constraint::Variable);
+            self.unify(*span, ctx, var_ty, ty)?;
+            self.unify(*span, ctx, var_ty, value_ty)?;
             Ok(value_ret)
         } else {
             unreachable!("Not a definition!");
