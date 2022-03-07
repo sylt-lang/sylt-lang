@@ -421,6 +421,47 @@ impl TypeChecker {
         Ok(self.push_type(ty))
     }
 
+    // TODO(ed): ctx can be removed in some places? :O
+    fn type_from_function(
+        &mut self,
+        ctx: TypeCtx,
+        params: &[(String, usize, Span, ResolverType)],
+        ret: &ResolverType,
+        pure: bool,
+    ) -> TypeResult<(TyID, TyID)> {
+        let mut args = Vec::new();
+        let mut seen = HashMap::new();
+        for (_name, var, span, ty) in params.iter() {
+            let var_ty = self.variables[*var].ty;
+            let ty = self.inner_resolve_type(ctx, &ty, &mut seen)?;
+            args.push(self.unify(*span, ctx, var_ty, ty)?);
+        }
+        let ret = self.inner_resolve_type(ctx, &ret, &mut seen)?;
+        let purity = if pure { Purity::Pure } else { Purity::Impure };
+        let f = self.push_type(Type::Function(args, ret, purity));
+        Ok((f, ret))
+    }
+
+    fn definition(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
+        use Expression as E;
+        use Statement as S;
+        if let S::Definition { name, var, ty, value, span, .. } = statement {
+            if let E::Function { params, ret, pure, .. } = value {
+                let (f_ty, _) = self.type_from_function(ctx, params, ret, *pure)?;
+                self.unify(*span, ctx, self.variables[*var].ty, f_ty)?;
+            }
+            let ty = self.resolve_type(ctx, ty)?;
+            // TODO(ed): Make sure the option is void or none - you cannot return otherwise.
+            // But this might be caught somewhere else?
+            let (value_ret, value) = self.expression(value, ctx)?;
+            self.unify(*span, ctx, self.variables[*var].ty, ty)?;
+            self.unify(*span, ctx, self.variables[*var].ty, value)?;
+            Ok(value_ret)
+        } else {
+            unreachable!("Not a definition!");
+        }
+    }
+
     fn statement(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
         use Statement as S;
         let span = statement.span();
@@ -491,13 +532,7 @@ impl TypeChecker {
                 self.unify_option(*span, ctx, expression_ret, target_ret)
             }
 
-            S::Definition { var, ty, span, value, .. } => {
-                let ty = self.resolve_type(ctx, ty)?;
-                let (value_ret, value) = self.expression(&value, ctx)?;
-                self.unify(*span, ctx, self.variables[*var].ty, ty)?;
-                self.unify(*span, ctx, self.variables[*var].ty, value)?;
-                Ok(value_ret)
-            }
+            S::Definition { .. } => self.definition(statement, ctx),
 
             S::Loop { condition, body, span } => {
                 let (ret, condition) = self.expression(&condition, ctx)?;
@@ -621,25 +656,16 @@ impl TypeChecker {
                     }
                 }
                 let ty = self.push_type(match external {
-                    true => Type::ExternBlob(
-                        name.clone(),
-                        *span,
-                        resolved_fields,
-                        type_params,
-                        *var,
-                    ),
+                    true => {
+                        Type::ExternBlob(name.clone(), *span, resolved_fields, type_params, *var)
+                    }
                     false => Type::Blob(name.clone(), *span, resolved_fields, type_params),
                 });
                 self.unify(*span, ctx, ty, blob_ty)?;
             }
 
-            S::Definition { var, ty, span, value, .. } => {
-                let ty = self.resolve_type(ctx, ty)?;
-                // TODO(ed): Make sure the option is void or none - you cannot return otherwise.
-                // But this might be caught somewhere else?
-                let (_, value) = self.expression(value, ctx)?;
-                self.unify(*span, ctx, self.variables[*var].ty, ty)?;
-                self.unify(*span, ctx, self.variables[*var].ty, value)?;
+            S::Definition { .. } => {
+                self.definition(statement, ctx)?;
             }
 
             S::ExternalDefinition { var, ty, span, .. } => {
@@ -680,14 +706,13 @@ impl TypeChecker {
             ret = self.unify_option(span, ctx, ret, stmt_ret)?;
         }
         // We typecheck the last statement twice sometimes, doesn't matter though.
-        let value =
-            if let Some(Statement::StatementExpression { value, .. }) = statements.last() {
-                let (value_ret, value) = self.expression(value, ctx)?;
-                ret = self.unify_option(span, ctx, ret, value_ret)?;
-                Some(value)
-            } else {
-                None
-            };
+        let value = if let Some(Statement::StatementExpression { value, .. }) = statements.last() {
+            let (value_ret, value) = self.expression(value, ctx)?;
+            ret = self.unify_option(span, ctx, ret, value_ret)?;
+            Some(value)
+        } else {
+            None
+        };
         Ok((ret, value))
     }
 
@@ -931,21 +956,11 @@ impl TypeChecker {
             }
 
             E::Function { name: _, params, ret, body, pure, span } => {
-                let mut args = Vec::new();
-                let mut seen = HashMap::new();
-                for (_name, var, span, ty) in params.iter() {
-                    let var_ty = self.variables[*var].ty;
-                    let ty = self.inner_resolve_type(ctx, ty, &mut seen)?;
-                    args.push(self.unify(*span, ctx, var_ty, ty)?);
-                }
-
-                let returns_void = ret.is_void();
-                let ret_ty = self.inner_resolve_type(ctx, ret, &mut seen)?;
+                let (f_ty, ret_ty) = self.type_from_function(ctx, params, ret, *pure)?;
 
                 let ctx = if *pure { ctx.enter_pure() } else { ctx };
-
                 let (actual_ret, implicit_ret) = self.expression_block(*span, body, ctx)?;
-                let actual_ret = if returns_void {
+                let actual_ret = if ret.is_void() {
                     let void = Some(self.push_type(Type::Void));
                     self.unify_option(*span, ctx, actual_ret, void)?
                 } else {
@@ -957,8 +972,7 @@ impl TypeChecker {
                         "The actual return type and the specified return type differ!".into(),
                     )?;
 
-                // TODO[ed]: This is wrong.
-                if actual_ret.map(|x| !self.is_void(x)).unwrap_or(false) && returns_void {
+                if actual_ret.map(|x| !self.is_void(x)).unwrap_or(false) && ret.is_void() {
                     return err_type_error!(
                         self,
                         ret.span(),
@@ -974,10 +988,8 @@ impl TypeChecker {
                         "The actual return type differs from the specified return type".into(),
                     )?;
 
-                let purity = if *pure { Purity::Pure } else { Purity::Impure };
-                let f = self.push_type(Type::Function(args, ret_ty, purity));
                 // Functions are the only expressions that we cannot return out of when evaluating.
-                no_ret(f)
+                no_ret(f_ty)
             }
 
             E::Blob { blob, fields, span, .. } => {
