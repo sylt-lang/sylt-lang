@@ -177,12 +177,11 @@ pub struct TypeChecker {
 struct TypeCtx {
     inside_loop: bool,
     inside_pure: bool,
-    namespace: NamespaceID,
 }
 
 impl TypeCtx {
-    fn namespace(namespace: NamespaceID) -> Self {
-        Self { inside_loop: false, inside_pure: false, namespace }
+    fn new() -> Self {
+        Self { inside_loop: false, inside_pure: false }
     }
 
     fn enter_loop(self) -> Self {
@@ -627,7 +626,7 @@ impl TypeChecker {
                         *span,
                         resolved_fields,
                         type_params,
-                        ctx.namespace,
+                        *var,
                     ),
                     false => Type::Blob(name.clone(), *span, resolved_fields, type_params),
                 });
@@ -1198,13 +1197,13 @@ impl TypeChecker {
                     .collect(),
             ),
             // TODO(ed): Should we print out the arguments to the external blob instead?
-            Type::ExternBlob(name, _, fields, _, namespace) => RuntimeType::ExternBlob(
+            Type::ExternBlob(name, span, fields, _, _) => RuntimeType::ExternBlob(
                 name.clone(),
                 fields
                     .iter()
                     .map(|(name, ty)| (name.clone(), self.inner_bake_type(ty.1, seen)))
                     .collect(),
-                match self.namespace_to_file.get(&namespace).unwrap() {
+                match self.namespace_to_file.get(&span.file_id).unwrap() {
                     FileOrLib::Lib(name) => name.to_string(),
                     FileOrLib::File(path) => path.to_string_lossy().to_string(),
                 },
@@ -1627,9 +1626,9 @@ impl TypeChecker {
                 }
 
                 (
-                    Type::ExternBlob(a_name, _a_span, _, a_args, a_namespace),
-                    Type::ExternBlob(b_name, _b_span, _, b_args, b_namespace),
-                ) if a_name == b_name && a_namespace == b_namespace => {
+                    Type::ExternBlob(_, _, _, a_args, a_id),
+                    Type::ExternBlob(_, _, _, b_args, b_id),
+                ) if a_id == b_id => {
                     for (i, (a, b)) in a_args.iter().zip(b_args.iter()).enumerate() {
                         self.sub_unify(span, ctx, *a, *b, seen)
                             .help_no_span(format!("While checking type argument #{}", i))?;
@@ -2153,11 +2152,11 @@ impl TypeChecker {
     }
 
     fn solve(&mut self, statements: &Vec<Statement>, start_var: Option<&Var>) -> TypeResult<()> {
+        let ctx = TypeCtx::new();
         for statement in statements.iter() {
-            self.outer_statement(statement, TypeCtx::namespace(statement.namespace()))?;
+            self.outer_statement(statement, ctx)?;
         }
 
-        let ctx = TypeCtx::namespace(0);
         match start_var {
             Some(var) => {
                 let void = self.push_type(Type::Void);

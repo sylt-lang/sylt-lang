@@ -1,4 +1,3 @@
-use crate::NamespaceID;
 use std::collections::BTreeMap;
 use sylt_common::TyID;
 use sylt_parser::Span;
@@ -36,7 +35,7 @@ pub enum Type {
         Span,
         BTreeMap<String, (Span, TyID)>,
         Vec<TyID>,
-        NamespaceID,
+        usize,
     ),
     Enum(String, Span, BTreeMap<String, (Span, TyID)>, Vec<TyID>),
 }
