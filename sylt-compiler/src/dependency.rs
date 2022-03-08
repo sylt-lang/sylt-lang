@@ -1,4 +1,4 @@
-use crate::name_resolution::{Expression, IfBranch, Statement};
+use crate::name_resolution::{Expression, IfBranch, Statement, Type};
 use std::collections::btree_map::Entry::{Occupied, Vacant};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -27,9 +27,12 @@ fn statement_dependencies(statement: &Statement) -> BTreeSet<usize> {
             .cloned()
             .collect(),
 
-        S::Definition { var, value, .. } => {
-            let mut deps = dependencies(value);
-            // Functions can be recursive - it's fine!
+        S::Definition { ty, var, value, .. } => {
+            let mut deps = dependencies(value)
+                .union(&ty_dependency(ty))
+                .chain(&[*var])
+                .cloned()
+                .collect::<BTreeSet<_>>();
             if matches!(value, Expression::Function { .. }) {
                 deps.remove(var);
             }
@@ -47,6 +50,31 @@ fn statement_dependencies(statement: &Statement) -> BTreeSet<usize> {
         | S::Break(..)
         | S::Continue(..)
         | S::Unreachable(..) => BTreeSet::new(),
+    }
+}
+
+fn ty_dependency(ty: &Type) -> BTreeSet<usize> {
+    match &ty {
+        Type::UserType(r, t, _) => {
+            let mut deps = t
+                .iter()
+                .map(|x| ty_dependency(x).into_iter())
+                .flatten()
+                .collect::<BTreeSet<_>>();
+            deps.insert(*r);
+            deps
+        }
+        Type::Tuple(ts, _) => ts.iter().map(|x| ty_dependency(x)).flatten().collect(),
+        Type::List(t, _) => ty_dependency(t),
+        Type::Set(t, _) => ty_dependency(t),
+        Type::Dict(k, b, _) => ty_dependency(k).union(&ty_dependency(b)).cloned().collect(),
+        Type::Fn { params, ret, .. } => dbg!(params
+            .iter()
+            .map(|x| ty_dependency(x).into_iter())
+            .flatten()
+            .chain(ty_dependency(ret).into_iter())
+            .collect()),
+        Type::Implied(_) | Type::Resolved(_, _) | Type::Generic(_, _) => BTreeSet::new(),
     }
 }
 
@@ -217,12 +245,21 @@ pub(crate) fn initialization_order<'a>(
     for statement in statements.iter() {
         use Statement as S;
         match &statement {
-            S::Blob { var, .. }
-            | S::Enum { var, .. }
-            | S::ExternalDefinition { var, .. }
-            | S::Definition { var, .. } => {
+            S::ExternalDefinition { var, .. }
+            | S::Definition { var, .. }
+            | S::Blob { var, .. }
+            | S::Enum { var, .. }=> {
                 to_order.insert(*var, (statement_dependencies(statement), statement));
             }
+
+            /*
+            | S::ExternalDefinition { ty, var, .. }
+            | S::Definition { ty, var, .. } => {
+                let deps = statement_dependencies(statement);
+                let deps = deps.union(&ty_dependency(ty)).cloned().collect();
+                to_order.insert(*var, (deps, statement));
+            }
+            */
 
             _ => {}
         }

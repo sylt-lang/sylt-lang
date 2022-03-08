@@ -461,11 +461,11 @@ impl TypeChecker {
                 self.unify(*span, ctx, var_ty, f_ty)?;
             }
             let ty = self.resolve_type(ctx, ty)?;
+            self.add_constraint(ty, *span, Constraint::Variable);
+            self.unify(*span, ctx, var_ty, ty)?;
             // TODO(ed): Make sure the option is void or none - you cannot return otherwise.
             // But this might be caught somewhere else?
             let (value_ret, value_ty) = self.expression(value, ctx)?;
-            self.add_constraint(ty, *span, Constraint::Variable);
-            self.unify(*span, ctx, var_ty, ty)?;
             self.unify(*span, ctx, var_ty, value_ty)?;
             Ok(value_ret)
         } else {
@@ -785,6 +785,7 @@ impl TypeChecker {
                             self.check_constraints(span, ctx, a)?;
                             ret = self.unify_option(span, ctx, ret, a_ret)?;
                         }
+                        self.check_constraints(*span, ctx, ret_ty)?;
 
                         with_ret(ret, ret_ty)
                     }
