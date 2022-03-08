@@ -4,6 +4,8 @@ use sylt_common::error::Error;
 use sylt_common::FileOrLib;
 use sylt_parser::AST;
 
+use crate::name_resolution::Statement;
+
 mod dependency;
 mod intermediate;
 mod lua;
@@ -82,7 +84,26 @@ impl Compiler {
             return Err(self.errors.clone());
         }
 
-        let statements = statements.iter().map(|s| (*s).clone()).collect();
+        let mut statements: Vec<Statement> = statements.iter().map(|s| (*s).clone()).collect();
+
+        // NOTE(ed): SOMEHOW! The blobs aren't placed at the start - it frustrates me. So there's
+        // something wrong in the dependency checker - but I don't know anymore.
+        statements.sort_by_key(|s| match s {
+            Statement::Blob { .. }
+            | Statement::Enum { .. } => 0,
+
+            Statement::Assignment { .. }
+            |Statement::Definition { .. }
+            |Statement::ExternalDefinition { .. }
+            |Statement::Loop { .. }
+            |Statement::Break(_)
+            |Statement::Continue(_)
+            |Statement::Ret { .. }
+            |Statement::Block { .. }
+            |Statement::StatementExpression { .. }
+            |Statement::Unreachable(_) => 1,
+        });
+
         let typechecker = typechecker::solve(&vars, &statements, &self.namespace_id_to_file)?;
 
         let ir = intermediate::compile(&typechecker, &statements);

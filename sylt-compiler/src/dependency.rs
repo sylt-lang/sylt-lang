@@ -248,15 +248,6 @@ pub(crate) fn initialization_order<'a>(
                 to_order.insert(*var, (statement_dependencies(statement), statement));
             }
 
-            /*
-            | S::ExternalDefinition { ty, var, .. }
-            | S::Definition { ty, var, .. } => {
-                let deps = statement_dependencies(statement);
-                let deps = deps.union(&ty_dependency(ty)).cloned().collect();
-                to_order.insert(*var, (deps, statement));
-            }
-            */
-
             _ => {}
         }
     }

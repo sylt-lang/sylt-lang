@@ -231,7 +231,8 @@ impl TypeChecker {
     }
 
     fn resolve_type(&mut self, ctx: TypeCtx, ty: &ResolverType) -> TypeResult<TyID> {
-        self.inner_resolve_type(ctx, ty, &mut HashMap::new())
+        let t = self.inner_resolve_type(ctx, ty, &mut HashMap::new())?;
+        Ok(t)
     }
 
     fn resolve_constraint(
@@ -352,7 +353,7 @@ impl TypeChecker {
                         }
                     }
 
-                    // NOTE(ed): Is this going to hant me later?
+                    // NOTE(ed): Is this going to haunt me later?
                     // Gives better errors for recursive types - which are illegal.
                     Type::Unknown => {}
 
