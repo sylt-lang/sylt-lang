@@ -5,10 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 fn statement_dependencies(statement: &Statement) -> BTreeSet<usize> {
     use Statement as S;
     match &statement {
-        S::Assignment { target, value, .. } => dependencies(value)
-            .union(&dependencies(target))
-            .cloned()
-            .collect(),
+        S::Assignment { value, .. } => dependencies(value),
 
         S::Block { statements, .. } => statements
             .iter()
@@ -30,7 +27,6 @@ fn statement_dependencies(statement: &Statement) -> BTreeSet<usize> {
         S::Definition { ty, var, value, .. } => {
             let mut deps = dependencies(value)
                 .union(&ty_dependency(ty))
-                .chain(&[*var])
                 .cloned()
                 .collect::<BTreeSet<_>>();
             if matches!(value, Expression::Function { .. }) {
@@ -68,12 +64,12 @@ fn ty_dependency(ty: &Type) -> BTreeSet<usize> {
         Type::List(t, _) => ty_dependency(t),
         Type::Set(t, _) => ty_dependency(t),
         Type::Dict(k, b, _) => ty_dependency(k).union(&ty_dependency(b)).cloned().collect(),
-        Type::Fn { params, ret, .. } => dbg!(params
+        Type::Fn { params, ret, .. } => params
             .iter()
             .map(|x| ty_dependency(x).into_iter())
             .flatten()
             .chain(ty_dependency(ret).into_iter())
-            .collect()),
+            .collect(),
         Type::Implied(_) | Type::Resolved(_, _) | Type::Generic(_, _) => BTreeSet::new(),
     }
 }
