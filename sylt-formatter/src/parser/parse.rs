@@ -53,6 +53,13 @@ impl<'a> Context<'a> {
             self.span(),
         )
     }
+
+    pub fn forward(self, steps: usize) -> Self {
+        Self {
+            position: self.position + steps,
+            tokens: self.tokens,
+        }
+    }
 }
 
 /// A sylt module (a sylt file)

@@ -18,9 +18,13 @@ pub enum Expression {
     /// Nil value (lua construct)
     Nil { span: Span },
 
-    /// Negated expression
+    /// Negative expression
     ///
     /// `-value`
+    Negative { span: Span, value: Box<Expression> },
+    /// Negated expression
+    ///
+    /// `not value`
     Negated { span: Span, value: Box<Expression> },
 
     /// Add two values
@@ -194,6 +198,31 @@ fn precedence(token: &T) -> Prec {
 /// Parse something that begins at the start of an expression.
 fn prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
     match ctx.peek() {
+        h @ T::Minus | h @ T::Not => {
+            let prefix_span = ctx.span();
+            let (ctx, expr) = non_prefix(ctx.forward(1))?;
+            let negated = match h {
+                T::Minus => Expression::Negative {
+                    span: prefix_span.start..expr_span(&expr).end,
+                    value: Box::new(expr),
+                },
+                T::Not => Expression::Negated {
+                    span: prefix_span.start..expr_span(&expr).end,
+                    value: Box::new(expr),
+                },
+                _ => unreachable!(),
+            };
+
+            Ok((ctx, negated))
+        }
+
+        _ => non_prefix(ctx),
+    }
+}
+
+/// Parse an expression that is not prefixed
+fn non_prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
+    match ctx.peek() {
         //T::Fn | T::Pu => function(ctx),
         //T::If => if_expression(ctx),
         //T::Case => case_expression(ctx),
@@ -202,7 +231,6 @@ fn prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
         //T::LeftBracket => list(ctx),
         //T::LeftBrace => set_or_dict(ctx),
         T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
-        //T::Minus | T::Not => unary(ctx),
 
         // T::Identifier(_) => {
         //     let span = ctx.span();
@@ -223,6 +251,7 @@ fn prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
         //         Ok((ctx, Expression::new(span, Get(assign))))
         //     }
         // }
+
         _t => Err((
             ctx,
             ParseErr {
@@ -231,7 +260,7 @@ fn prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
                 },
                 inner_span: ctx.span().clone(),
             },
-        )), // raise_syntax_error!(ctx, "No valid expression starts with '{:?}'", t);
+        )),
     }
 }
 
@@ -397,6 +426,7 @@ fn expr_span<'a>(expr: &'a Expression) -> &'a Span {
         | Expression::Bool { span, .. }
         | Expression::String { span, .. }
         | Expression::Nil { span }
+        | Expression::Negative { span, .. }
         | Expression::Negated { span, .. }
         | Expression::Sub { span, .. }
         | Expression::Div { span, .. }
