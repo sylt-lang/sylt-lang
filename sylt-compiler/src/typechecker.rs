@@ -327,7 +327,7 @@ impl TypeChecker {
             },
 
             T::UserType(var, vars, span) => {
-                let ty = self.variables[*var].ty;
+                let ty = self.copy(self.variables[*var].ty);
                 match self.find_type(ty) {
                     Type::Blob(name, span, _, sub)
                     | Type::ExternBlob(name, span, _, sub, _)
@@ -732,7 +732,8 @@ impl TypeChecker {
         use Expression as E;
         let (expr_ret, expr) = match expression {
             E::Read { var, span, .. } => {
-                let immutable = self.variables[*var].kind.immutable();
+                let var = &self.variables[*var];
+                let immutable = var.kind.immutable();
                 if ctx.inside_pure && !immutable {
                     return err_type_error!(
                         self,
@@ -741,7 +742,7 @@ impl TypeChecker {
                         "Cannot access mutable variables from pure functions"
                     );
                 }
-                no_ret(self.variables[*var].ty)
+                no_ret(var.ty)
             }
             E::Variant { ty, variant, value, span } => {
                 let (value_ret, value) = self.expression(value, ctx)?;
@@ -1017,7 +1018,7 @@ impl TypeChecker {
             }
 
             E::Blob { blob, fields, span, .. } => {
-                let blob_ty = self.variables[*blob].ty;
+                let blob_ty = self.copy(self.variables[*blob].ty);
                 let (blob_name, blob_fields, blob_args) = match self.find_type(blob_ty) {
                     Type::Blob(name, _, fields, args) => (name, fields, args),
                     Type::ExternBlob(name, _, _, _, _) => {
