@@ -1,4 +1,3 @@
-#![allow(unused)]
 use std::collections::BTreeMap;
 use std::collections::{hash_map::Entry, HashMap};
 use sylt_common::Type as RuntimeType;
@@ -382,10 +381,6 @@ impl Statement {
             | Statement::StatementExpression { span, .. }
             | Statement::Unreachable(span) => *span,
         }
-    }
-
-    pub fn namespace(&self) -> usize {
-        self.span().file_id
     }
 }
 
@@ -877,7 +872,6 @@ impl Resolver {
             }),
 
             SK::Definition { ident, kind, ty, value } => {
-                let ss = self.stack.len();
                 let (value, var) = if self.stack.is_empty() {
                     // Outer statement - it's a global so just evaluate the value and push a dummy
                     // value on the stack.
