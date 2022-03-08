@@ -153,6 +153,7 @@ enum Constraint {
     Variable,
 }
 
+#[derive(Clone, Debug)]
 pub struct TypeVariable {
     #[allow(unused)]
     pub name: String,
