@@ -91,7 +91,6 @@ impl IRContext {
     }
 }
 
-
 struct IRCodeGen<'a> {
     #[allow(unused)]
     typechecker: &'a TypeChecker,
@@ -180,10 +179,7 @@ impl<'a> IRCodeGen<'a> {
             E::BlobAccess { value, field, .. } => {
                 let (code, a) = self.expression(value, ctx);
                 let b = self.var();
-                (
-                    [code, vec![IR::Access(b, a, field.clone())]].concat(),
-                    b,
-                )
+                ([code, vec![IR::Access(b, a, field.clone())]].concat(), b)
             }
 
             E::Index { value, index, .. } => {
@@ -460,7 +456,6 @@ impl<'a> IRCodeGen<'a> {
                 let a = self.var();
                 (vec![IR::Nil(a)], a)
             }
-
         }
     }
 

@@ -89,19 +89,18 @@ impl Compiler {
         // NOTE(ed): SOMEHOW! The blobs aren't placed at the start - it frustrates me. So there's
         // something wrong in the dependency checker - but I don't know anymore.
         statements.sort_by_key(|s| match s {
-            Statement::Blob { .. }
-            | Statement::Enum { .. } => 0,
+            Statement::Blob { .. } | Statement::Enum { .. } => 0,
 
             Statement::Assignment { .. }
-            |Statement::Definition { .. }
-            |Statement::ExternalDefinition { .. }
-            |Statement::Loop { .. }
-            |Statement::Break(_)
-            |Statement::Continue(_)
-            |Statement::Ret { .. }
-            |Statement::Block { .. }
-            |Statement::StatementExpression { .. }
-            |Statement::Unreachable(_) => 1,
+            | Statement::Definition { .. }
+            | Statement::ExternalDefinition { .. }
+            | Statement::Loop { .. }
+            | Statement::Break(_)
+            | Statement::Continue(_)
+            | Statement::Ret { .. }
+            | Statement::Block { .. }
+            | Statement::StatementExpression { .. }
+            | Statement::Unreachable(_) => 1,
         });
 
         let typechecker = typechecker::solve(&vars, &statements, &self.namespace_id_to_file)?;

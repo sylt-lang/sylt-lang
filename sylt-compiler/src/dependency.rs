@@ -244,7 +244,7 @@ pub(crate) fn initialization_order<'a>(
             S::ExternalDefinition { var, .. }
             | S::Definition { var, .. }
             | S::Blob { var, .. }
-            | S::Enum { var, .. }=> {
+            | S::Enum { var, .. } => {
                 to_order.insert(*var, (statement_dependencies(statement), statement));
             }
 

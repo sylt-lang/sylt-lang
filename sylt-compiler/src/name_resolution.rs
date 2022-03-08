@@ -804,7 +804,10 @@ impl Resolver {
                     _ => unreachable!("Blobs are always userdefined!"),
                 };
                 let mut fields = Vec::new();
-                let self_var = self.new_var(&Identifier { name: "self".to_string(), span }, VarKind::Mutable);
+                let self_var = self.new_var(
+                    &Identifier { name: "self".to_string(), span },
+                    VarKind::Mutable,
+                );
                 for (name, field) in parser_fields.iter() {
                     let ss = self.stack.len();
                     if matches!(field.kind, EK::Function { .. }) {
@@ -1186,7 +1189,7 @@ pub fn resolve<'a>(
         }
     }
     if resolver.lookup_global(0, "start").is_none() {
-        raise_resolution_error!{
+        raise_resolution_error! {
             resolver,
             Span::zero(0),
             "Expected a start function in the main module - but couldn't find it"
