@@ -5,27 +5,47 @@ use crate::parser::{ParseErr, ParseErrType};
 use super::{Context, ParseResult, Span};
 
 /// An expression in sylt
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression {
     /// An integer value
-    Int { span: Span, value: i64 },
+    Int {
+        span: Span,
+        value: i64,
+    },
     /// A floating point value
-    Float { span: Span, value: f64 },
+    Float {
+        span: Span,
+        value: f64,
+    },
     /// A boolean value
-    Bool { span: Span, value: bool },
+    Bool {
+        span: Span,
+        value: bool,
+    },
     /// A string
-    String { span: Span, value: String },
+    String {
+        span: Span,
+        value: String,
+    },
     /// Nil value (lua construct)
-    Nil { span: Span },
+    Nil {
+        span: Span,
+    },
 
     /// Negative expression
     ///
     /// `-value`
-    Negative { span: Span, value: Box<Expression> },
+    Negative {
+        span: Span,
+        value: Box<Expression>,
+    },
     /// Negated expression
     ///
     /// `not value`
-    Negated { span: Span, value: Box<Expression> },
+    Negated {
+        span: Span,
+        value: Box<Expression>,
+    },
 
     /// Add two values
     ///
@@ -142,6 +162,15 @@ pub enum Expression {
         lhs: Box<Expression>,
         rhs: Box<Expression>,
     },
+
+    Tuple {
+        span: Span,
+        inner_expressions: Vec<Expression>,
+    },
+    Parenthesis {
+        span: Span,
+        expr: Box<Expression>,
+    },
 }
 
 pub fn parse<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
@@ -195,7 +224,7 @@ fn precedence(token: &T) -> Prec {
     }
 }
 
-/// Parse something that begins at the start of an expression.
+/// Parse an expression that may be prefixed
 fn prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
     match ctx.peek() {
         h @ T::Minus | h @ T::Not => {
@@ -226,8 +255,7 @@ fn non_prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
         //T::Fn | T::Pu => function(ctx),
         //T::If => if_expression(ctx),
         //T::Case => case_expression(ctx),
-
-        //T::LeftParen => grouping_or_tuple(ctx),
+        T::LeftParen => parenthesis_or_tuple(ctx),
         //T::LeftBracket => list(ctx),
         //T::LeftBrace => set_or_dict(ctx),
         T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
@@ -251,7 +279,6 @@ fn non_prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
         //         Ok((ctx, Expression::new(span, Get(assign))))
         //     }
         // }
-
         _t => Err((
             ctx,
             ParseErr {
@@ -281,6 +308,77 @@ fn value<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
             _ => unreachable!(),
         },
     ))
+}
+
+fn parenthesis_or_tuple<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
+    let (ctx, token, begin_span) = ctx.eat();
+    assert!(*token == T::LeftParen);
+
+    let (ctx, first_inner) = parse_precedence(ctx, Prec::No)?;
+
+    match ctx.peek() {
+        T::Comma => {
+            let mut inner_expressions: Vec<Expression> = Vec::new();
+            inner_expressions.push(first_inner);
+
+            let mut outer_ctx = ctx;
+            while matches!(outer_ctx.peek(), T::Comma) {
+                outer_ctx = outer_ctx.forward(1);
+
+                if matches!(outer_ctx.peek(), T::RightParen) {
+                    break;
+                }
+
+                let (ctx, inner) = parse_precedence(outer_ctx, Prec::No)?;
+                inner_expressions.push(inner);
+                outer_ctx = ctx;
+            }
+            let ctx = outer_ctx;
+
+            let (ctx, token, end_span) = ctx.eat();
+
+            if matches!(token, T::RightParen) {
+                let expr = Expression::Tuple {
+                    span: begin_span.start..end_span.end,
+                    inner_expressions,
+                };
+                Ok((ctx, expr))
+            } else {
+                Err((
+                    ctx,
+                    ParseErr {
+                        err_type: ParseErrType::Undefined {
+                            message: "Expected ')' to end tuple".to_string(),
+                        },
+                        inner_span: ctx.span().clone(),
+                    },
+                ))
+            }
+        }
+
+        T::RightParen => {
+            let ctx = ctx.forward(1);
+
+            let expr = Expression::Parenthesis {
+                expr: Box::new(first_inner),
+                span: begin_span.start..ctx.span().end,
+            };
+
+            Ok((ctx, expr))
+        }
+
+        _ => {
+            return Err((
+                ctx,
+                ParseErr {
+                    err_type: ParseErrType::Undefined {
+                        message: "Expected ',' or ')'".to_string(),
+                    },
+                    inner_span: ctx.span().clone(),
+                },
+            ));
+        }
+    }
 }
 
 fn valid_infix<'t>(token: &T) -> bool {
@@ -441,6 +539,8 @@ fn expr_span<'a>(expr: &'a Expression) -> &'a Span {
         | Expression::LessEqual { span, .. }
         | Expression::In { span, .. }
         | Expression::AssertEq { span, .. }
+        | Expression::Tuple { span, .. }
+        | Expression::Parenthesis { span, .. }
         | Expression::Add { span, .. } => span,
     }
 }
