@@ -163,10 +163,16 @@ pub enum Expression {
         rhs: Box<Expression>,
     },
 
+    /// A tuple of expressions
+    ///
+    /// `(1, 2, c, d)`
     Tuple {
         span: Span,
         inner_expressions: Vec<Expression>,
     },
+    /// An expression surrounded by parenthesis
+    ///
+    /// `(1 + 2)`
     Parenthesis {
         span: Span,
         expr: Box<Expression>,
