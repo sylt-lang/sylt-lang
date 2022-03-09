@@ -4,48 +4,28 @@ use crate::parser::{ParseErr, ParseErrType};
 
 use super::{Context, ParseResult, Span};
 
-/// An expression in sylt
+/// A sylt expression
 #[derive(Debug, Clone)]
 pub enum Expression {
     /// An integer value
-    Int {
-        span: Span,
-        value: i64,
-    },
+    Int { span: Span, value: i64 },
     /// A floating point value
-    Float {
-        span: Span,
-        value: f64,
-    },
+    Float { span: Span, value: f64 },
     /// A boolean value
-    Bool {
-        span: Span,
-        value: bool,
-    },
+    Bool { span: Span, value: bool },
     /// A string
-    String {
-        span: Span,
-        value: String,
-    },
+    String { span: Span, value: String },
     /// Nil value (lua construct)
-    Nil {
-        span: Span,
-    },
+    Nil { span: Span },
 
     /// Negative expression
     ///
     /// `-value`
-    Negative {
-        span: Span,
-        value: Box<Expression>,
-    },
+    Negative { span: Span, value: Box<Expression> },
     /// Negated expression
     ///
     /// `not value`
-    Negated {
-        span: Span,
-        value: Box<Expression>,
-    },
+    Negated { span: Span, value: Box<Expression> },
 
     /// Add two values
     ///
@@ -173,16 +153,15 @@ pub enum Expression {
     /// An expression surrounded by parenthesis
     ///
     /// `(1 + 2)`
-    Parenthesis {
-        span: Span,
-        expr: Box<Expression>,
-    },
+    Parenthesis { span: Span, expr: Box<Expression> },
 }
 
+/// Parse an expression
 pub fn parse<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
     parse_precedence(ctx, Prec::No)
 }
 
+/// Parse an expression with infixes
 fn parse_precedence<'a>(ctx: Context<'a>, prec: Prec) -> ParseResult<'a, Expression> {
     // Initial value, e.g. a number value, assignable, ...
     let (mut ctx, mut expr) = prefix(ctx)?;
@@ -199,6 +178,7 @@ fn parse_precedence<'a>(ctx: Context<'a>, prec: Prec) -> ParseResult<'a, Express
     Ok((ctx, expr))
 }
 
+/// Get the precedence of an infix operator token
 #[rustfmt::skip]
 fn precedence(token: &T) -> Prec {
     use Prec;
@@ -236,6 +216,7 @@ fn prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
         h @ T::Minus | h @ T::Not => {
             let prefix_span = ctx.span();
             let (ctx, expr) = non_prefix(ctx.forward(1))?;
+
             let negated = match h {
                 T::Minus => Expression::Negative {
                     span: prefix_span.start..expr_span(&expr).end,
@@ -297,6 +278,7 @@ fn non_prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
     }
 }
 
+/// Parse a primitive value expression
 fn value<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
     use Expression as E;
 
@@ -316,6 +298,7 @@ fn value<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
     ))
 }
 
+/// Parse an expression surrounded by parenthesis or a tuple
 fn parenthesis_or_tuple<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
     let (ctx, token, begin_span) = ctx.eat();
     assert!(*token == T::LeftParen);
@@ -387,6 +370,7 @@ fn parenthesis_or_tuple<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
     }
 }
 
+/// If a token is a valid infix operator
 fn valid_infix<'t>(token: &T) -> bool {
     matches!(
         token,
@@ -412,6 +396,7 @@ fn valid_infix<'t>(token: &T) -> bool {
     )
 }
 
+/// Parse infix operator and next statement
 fn infix<'t>(ctx: Context<'t>, lhs: Expression) -> ParseResult<'t, Expression> {
     use Expression::*;
 
@@ -523,6 +508,7 @@ fn infix<'t>(ctx: Context<'t>, lhs: Expression) -> ParseResult<'t, Expression> {
     Ok((ctx, expr))
 }
 
+/// Get the span of an expression
 fn expr_span<'a>(expr: &'a Expression) -> &'a Span {
     match expr {
         Expression::Int { span, .. }
@@ -551,6 +537,7 @@ fn expr_span<'a>(expr: &'a Expression) -> &'a Span {
     }
 }
 
+/// Combine the spans of two expressions, from the beginning of first to the end of second.
 fn combine_expr_spans<'a>(first: &'a Expression, second: &'a Expression) -> Span {
     let first_span = expr_span(first);
     let second_span = expr_span(second);
@@ -562,6 +549,7 @@ pub trait Next {
     fn next(&self) -> Self;
 }
 
+/// Precedence of infix operators
 #[derive(sylt_macro::Next, PartialEq, PartialOrd, Clone, Copy, Debug)]
 pub enum Prec {
     No,
