@@ -1,12 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 
-use sylt_parser::{
-    expression::{CaseBranch, ComparisonKind, IfBranch},
-    Assignable, AssignableKind, Expression, ExpressionKind, Identifier, Op as ParserOp, Statement,
-    StatementKind,
-};
-
-use crate::{typechecker::TypeChecker, NamespaceID};
+use crate::name_resolution::*;
+use crate::typechecker::TypeChecker;
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub struct Var(pub usize);
@@ -87,34 +82,18 @@ pub enum IR {
 
 #[derive(Debug, Clone, Copy)]
 struct IRContext {
-    namespace: usize,
     closest_loop: Label,
 }
 
 impl IRContext {
-    pub fn from_namespace(namespace: usize) -> Self {
-        Self { namespace, closest_loop: Label(0) }
+    pub fn new() -> Self {
+        Self { closest_loop: Label(0) }
     }
-}
-
-struct Variable {
-    name: String,
-    namespace: NamespaceID,
-    var: Var,
-}
-
-#[derive(Debug, Clone)]
-struct Namespace {
-    name: String,
-    namespace: NamespaceID,
-    points_to: NamespaceID,
 }
 
 struct IRCodeGen<'a> {
     #[allow(unused)]
     typechecker: &'a TypeChecker,
-    variables: Vec<Variable>,
-    namespaces: Vec<Namespace>,
 
     counter: usize,
 }
@@ -122,10 +101,9 @@ struct IRCodeGen<'a> {
 impl<'a> IRCodeGen<'a> {
     fn new(typechecker: &'a TypeChecker) -> Self {
         Self {
-            counter: 0,
+            // Temporary variables are placed after the stack allocated ones
+            counter: typechecker.variables.len() + 1,
             typechecker,
-            variables: Vec::new(),
-            namespaces: Vec::new(),
         }
     }
 
@@ -141,113 +119,9 @@ impl<'a> IRCodeGen<'a> {
         Label(i)
     }
 
-    fn lookup(&self, search_name: &str, search_namespace: usize) -> Option<Var> {
-        self.variables
-            .iter()
-            .rfind(|Variable { name, namespace, .. }| {
-                search_namespace == *namespace && name == search_name
-            })
-            .map(|v| v.var)
-    }
-
-    fn lookup_namespace(&self, search_name: &str, search_namespace: usize) -> Option<NamespaceID> {
-        self.namespaces
-            .iter()
-            .rfind(|Namespace { name, namespace, .. }| {
-                search_namespace == *namespace && name == search_name
-            })
-            .map(|v| v.points_to)
-    }
-
-    fn namespace_chain(&self, assignable: &Assignable, ctx: IRContext) -> Option<IRContext> {
-        match &assignable.kind {
-            AssignableKind::Read(ident) => match self.lookup(&ident.name, ctx.namespace) {
-                Some(_) => None,
-                None => self
-                    .lookup_namespace(&ident.name, ctx.namespace)
-                    .map(IRContext::from_namespace),
-            },
-            AssignableKind::Access(ass, ident) => {
-                let ctx = self.namespace_chain(ass, ctx)?;
-                self.lookup_namespace(&ident.name, ctx.namespace)
-                    .map(IRContext::from_namespace)
-            }
-
-            AssignableKind::Call(..)
-            | AssignableKind::Variant { .. }
-            | AssignableKind::ArrowCall(..)
-            | AssignableKind::Index(..)
-            | AssignableKind::Expression(..) => None,
-        }
-    }
-
-    fn assignable(&mut self, assignable: &Assignable, ctx: IRContext) -> (Vec<IR>, Var) {
-        match &assignable.kind {
-            AssignableKind::Read(ident) => (
-                Vec::new(),
-                self.lookup(&ident.name, ctx.namespace).expect(&ident.name),
-            ),
-            AssignableKind::Variant { variant, value, .. } => {
-                let (xops, x) = self.expression(&value, ctx);
-                let out = self.var();
-                (
-                    [xops, vec![IR::Variant(out, variant.name.clone(), x)]].concat(),
-                    out,
-                )
-            }
-            AssignableKind::Call(ass, exprs) => {
-                let (fn_code, fn_var) = self.assignable(ass, ctx);
-                let (code, args): (Vec<_>, Vec<_>) =
-                    exprs.iter().map(|expr| self.expression(expr, ctx)).unzip();
-                let code = code.concat();
-
-                let var = self.var();
-                (
-                    [fn_code, code, vec![IR::Call(var, fn_var, args)]].concat(),
-                    var,
-                )
-            }
-            AssignableKind::ArrowCall(extra, ass, exprs) => {
-                let (fn_code, fn_var) = self.assignable(ass, ctx);
-                let (extra_code, extra) = self.expression(extra, ctx);
-                let (code, mut args): (Vec<_>, Vec<_>) =
-                    exprs.iter().map(|expr| self.expression(expr, ctx)).unzip();
-                let code = code.concat();
-                args.insert(0, extra);
-
-                let var = self.var();
-                (
-                    [fn_code, extra_code, code, vec![IR::Call(var, fn_var, args)]].concat(),
-                    var,
-                )
-            }
-            AssignableKind::Access(ass, ident) => match self.namespace_chain(ass, ctx) {
-                Some(ctx) => (Vec::new(), self.lookup(&ident.name, ctx.namespace).unwrap()),
-                None => {
-                    let (code, a) = self.assignable(ass, ctx);
-                    let b = self.var();
-                    (
-                        [code, vec![IR::Access(b, a, ident.name.clone())]].concat(),
-                        b,
-                    )
-                }
-            },
-            AssignableKind::Index(ass, expr) => {
-                let (aops, a) = self.assignable(&ass, ctx);
-                let (bops, b) = self.expression(&expr, ctx);
-                let c = self.var();
-
-                ([aops, bops, vec![IR::Index(c, a, b)]].concat(), c)
-            }
-            AssignableKind::Expression(expr) => self.expression(expr, ctx),
-        }
-    }
-
     fn expression_block(&mut self, out: Var, mut block: Vec<Statement>, ctx: IRContext) -> Vec<IR> {
         let value = match block.last().cloned() {
-            Some(Statement {
-                kind: StatementKind::StatementExpression { value }, ..
-            }) => {
+            Some(Statement::StatementExpression { value, .. }) => {
                 block.pop();
                 Some(value)
             }
@@ -271,28 +145,62 @@ impl<'a> IRCodeGen<'a> {
     }
 
     fn expression(&mut self, expr: &Expression, ctx: IRContext) -> (Vec<IR>, Var) {
-        match &expr.kind {
-            ExpressionKind::Get(ass) => {
-                let (code, source) = self.assignable(ass, ctx);
+        use Expression as E;
+        use Statement as S;
+        match &expr {
+            E::Read { var, .. } => {
+                let source = Var(*var);
                 let dest = self.var();
-                ([code, vec![IR::Copy(dest, source)]].concat(), dest)
+                (vec![IR::Copy(dest, source)], dest)
             }
-            ExpressionKind::Comparison(a, op, b) => {
+
+            E::Variant { variant, value, .. } => {
+                let (xops, x) = self.expression(&value, ctx);
+                let out = self.var();
+                (
+                    [xops, vec![IR::Variant(out, variant.clone(), x)]].concat(),
+                    out,
+                )
+            }
+
+            E::Call { function, args, .. } => {
+                let (fn_code, fn_var) = self.expression(function, ctx);
+                let (code, args): (Vec<_>, Vec<_>) =
+                    args.iter().map(|expr| self.expression(expr, ctx)).unzip();
+                let code = code.concat();
+
+                let var = self.var();
+                (
+                    [fn_code, code, vec![IR::Call(var, fn_var, args)]].concat(),
+                    var,
+                )
+            }
+
+            E::BlobAccess { value, field, .. } => {
+                let (code, a) = self.expression(value, ctx);
+                let b = self.var();
+                ([code, vec![IR::Access(b, a, field.clone())]].concat(), b)
+            }
+
+            E::Index { value, index, .. } => {
+                let (aops, a) = self.expression(&value, ctx);
+                let (bops, b) = self.expression(&index, ctx);
+                let c = self.var();
+
+                ([aops, bops, vec![IR::Index(c, a, b)]].concat(), c)
+            }
+
+            E::BinOp { a, b, op: BinOp::AssertEq, .. } => {
                 let (aops, a) = self.expression(&a, ctx);
                 let (bops, b) = self.expression(&b, ctx);
                 let c = self.var();
-                let op = match op {
-                    ComparisonKind::Equals => IR::Equals(c, a, b),
-                    ComparisonKind::NotEquals => IR::NotEquals(c, a, b),
-                    ComparisonKind::Greater => IR::Greater(c, a, b),
-                    ComparisonKind::GreaterEqual => IR::GreaterEqual(c, a, b),
-                    ComparisonKind::Less => IR::Less(c, a, b),
-                    ComparisonKind::LessEqual => IR::LessEqual(c, a, b),
-                    ComparisonKind::In => IR::In(c, a, b),
-                };
-                ([aops, bops, vec![op]].concat(), c)
+                (
+                    [aops, bops, vec![IR::Equals(c, a, b), IR::Assert(c)]].concat(),
+                    c,
+                )
             }
-            ExpressionKind::And(a, b) => {
+
+            E::BinOp { a, b, op: BinOp::And, .. } => {
                 let (aops, a) = self.expression(&a, ctx);
                 let (bops, b) = self.expression(&b, ctx);
                 let c = self.var();
@@ -307,7 +215,7 @@ impl<'a> IRCodeGen<'a> {
                     c,
                 )
             }
-            ExpressionKind::Or(a, b) => {
+            E::BinOp { a, b, op: BinOp::Or, .. } => {
                 let (aops, a) = self.expression(&a, ctx);
                 let (bops, b) = self.expression(&b, ctx);
                 let neg_a = self.var();
@@ -323,13 +231,41 @@ impl<'a> IRCodeGen<'a> {
                     c,
                 )
             }
-            ExpressionKind::Not(a) => {
+
+            E::BinOp { a, b, op, .. } => {
+                let (aops, a) = self.expression(&a, ctx);
+                let (bops, b) = self.expression(&b, ctx);
+                let c = self.var();
+                let ops = match op {
+                    BinOp::Add => vec![IR::Add(c, a, b)],
+                    BinOp::Sub => vec![IR::Sub(c, a, b)],
+                    BinOp::Mul => vec![IR::Mul(c, a, b)],
+                    BinOp::Div => vec![IR::Div(c, a, b)],
+                    BinOp::Equals => vec![IR::Equals(c, a, b)],
+                    BinOp::NotEquals => vec![IR::NotEquals(c, a, b)],
+                    BinOp::Greater => vec![IR::Greater(c, a, b)],
+                    BinOp::GreaterEqual => vec![IR::GreaterEqual(c, a, b)],
+                    BinOp::Less => vec![IR::Less(c, a, b)],
+                    BinOp::LessEqual => vec![IR::LessEqual(c, a, b)],
+                    BinOp::In => vec![IR::In(c, a, b)],
+                    _ => unreachable!(),
+                };
+                ([aops, bops, ops].concat(), c)
+            }
+
+            E::UniOp { a, op: UniOp::Not, .. } => {
                 let (aops, a) = self.expression(&a, ctx);
                 let b = self.var();
                 ([aops, vec![IR::Not(b, a)]].concat(), b)
             }
 
-            ExpressionKind::If(branches) => {
+            E::UniOp { a, op: UniOp::Neg, .. } => {
+                let (aops, a) = self.expression(&a, ctx);
+                let b = self.var();
+                ([aops, vec![IR::Neg(b, a)]].concat(), b)
+            }
+
+            E::If { branches, .. } => {
                 let out = self.var();
                 let code = branches
                     .iter()
@@ -352,32 +288,26 @@ impl<'a> IRCodeGen<'a> {
                 )
             }
 
-            ExpressionKind::Case { to_match, branches, fall_through } => {
-                let ss = self.variables.len();
+            E::Case { to_match, branches, fall_through, .. } => {
                 let (cops, c) = self.expression(&to_match, ctx);
                 let tag = self.var();
-                let tag_index = self.var();
                 let value = self.var();
-                let value_index = self.var();
 
                 let out = self.var();
 
                 let branches_code = branches
                     .iter()
-                    .map(|CaseBranch { pattern, variable, body }| {
-                        if let Some(var_name) = variable {
-                            self.variables.push(Variable {
-                                name: var_name.name.clone(),
-                                namespace: ctx.namespace,
-                                var: value,
-                            });
-                        }
+                    .map(|CaseBranch { variable, pattern, body, .. }| {
                         let body = self.expression_block(out, body.clone(), ctx);
-                        self.variables.truncate(ss);
 
                         let exp_str = self.var();
                         let cmp = self.var();
                         [
+                            if let Some(var) = variable {
+                                vec![IR::Assign(Var(*var), value)]
+                            } else {
+                                Vec::new()
+                            },
                             vec![
                                 IR::Str(exp_str, pattern.name.clone()),
                                 IR::Equals(cmp, exp_str, tag),
@@ -397,6 +327,8 @@ impl<'a> IRCodeGen<'a> {
                     ctx,
                 );
 
+                let tag_index = self.var();
+                let value_index = self.var();
                 (
                     [
                         cops,
@@ -415,15 +347,7 @@ impl<'a> IRCodeGen<'a> {
                 )
             }
 
-            ExpressionKind::Blob { fields, .. } => {
-                let ss = self.variables.len();
-
-                let self_var = self.var();
-                self.variables.push(Variable {
-                    name: "self".into(),
-                    namespace: ctx.namespace,
-                    var: self_var,
-                });
+            E::Blob { self_var, fields, .. } => {
                 let (fields, (code, exprs)): (Vec<_>, (Vec<_>, Vec<_>)) = fields
                     .iter()
                     .map(|(field, expr)| (field.clone(), self.expression(expr, ctx)))
@@ -432,101 +356,57 @@ impl<'a> IRCodeGen<'a> {
                 let fields: Vec<_> = fields.into_iter().zip(exprs.into_iter()).collect();
                 let var = self.var();
 
-                self.variables.truncate(ss);
-
                 (
                     [
-                        vec![IR::Define(self_var)],
+                        vec![IR::Define(Var(*self_var))],
                         code,
-                        vec![IR::Blob(var, fields), IR::Assign(self_var, var)],
+                        vec![IR::Blob(var, fields), IR::Assign(Var(*self_var), var)],
                     ]
                     .concat(),
                     var,
                 )
             }
 
-            ExpressionKind::List(exprs) => {
-                let (code, exprs): (Vec<_>, Vec<_>) =
-                    exprs.iter().map(|expr| self.expression(expr, ctx)).unzip();
+            E::Collection { collection: Collection::List, values, .. } => {
+                let (code, values): (Vec<_>, Vec<_>) =
+                    values.iter().map(|expr| self.expression(expr, ctx)).unzip();
                 let code = code.concat();
                 let var = self.var();
 
-                ([code, vec![IR::List(var, exprs)]].concat(), var)
+                ([code, vec![IR::List(var, values)]].concat(), var)
             }
 
-            ExpressionKind::Set(exprs) => {
-                let (code, exprs): (Vec<_>, Vec<_>) =
-                    exprs.iter().map(|expr| self.expression(expr, ctx)).unzip();
+            E::Collection { collection: Collection::Set, values, .. } => {
+                let (code, values): (Vec<_>, Vec<_>) =
+                    values.iter().map(|expr| self.expression(expr, ctx)).unzip();
                 let code = code.concat();
                 let var = self.var();
 
-                ([code, vec![IR::Set(var, exprs)]].concat(), var)
+                ([code, vec![IR::Set(var, values)]].concat(), var)
             }
-            ExpressionKind::Dict(exprs) => {
-                let (code, exprs): (Vec<_>, Vec<_>) =
-                    exprs.iter().map(|expr| self.expression(expr, ctx)).unzip();
+
+            E::Collection { collection: Collection::Dict, values, .. } => {
+                let (code, values): (Vec<_>, Vec<_>) =
+                    values.iter().map(|expr| self.expression(expr, ctx)).unzip();
                 let code = code.concat();
                 let var = self.var();
 
-                ([code, vec![IR::Dict(var, exprs)]].concat(), var)
+                ([code, vec![IR::Dict(var, values)]].concat(), var)
             }
 
-            ExpressionKind::Tuple(exprs) => {
-                let (code, exprs): (Vec<_>, Vec<_>) =
-                    exprs.iter().map(|expr| self.expression(expr, ctx)).unzip();
+            E::Collection { collection: Collection::Tuple, values, .. } => {
+                let (code, values): (Vec<_>, Vec<_>) =
+                    values.iter().map(|expr| self.expression(expr, ctx)).unzip();
                 let code = code.concat();
                 let var = self.var();
 
-                ([code, vec![IR::Tuple(var, exprs)]].concat(), var)
+                ([code, vec![IR::Tuple(var, values)]].concat(), var)
             }
 
-            ExpressionKind::Parenthesis(expr) => self.expression(expr, ctx),
-
-            ExpressionKind::Float(a) => {
-                let var = self.var();
-                (vec![IR::Float(var, *a)], var)
-            }
-            ExpressionKind::Str(a) => {
-                let var = self.var();
-                (vec![IR::Str(var, a.into())], var)
-            }
-
-            ExpressionKind::AssertEq(a, b) => {
-                let (aops, a) = self.expression(&a, ctx);
-                let (bops, b) = self.expression(&b, ctx);
-                let c = self.var();
-                (
-                    [aops, bops, vec![IR::Equals(c, a, b), IR::Assert(c)]].concat(),
-                    c,
-                )
-            }
-
-            ExpressionKind::Bool(b) => {
-                let a = self.var();
-                (vec![IR::Bool(a, *b)], a)
-            }
-
-            ExpressionKind::Function { name, body, params, .. } => {
+            E::Function { body, params, .. } => {
                 let mut body = body.clone();
-                let ss = self.variables.len();
                 let f = self.var();
-                self.variables.push(Variable {
-                    name: name.clone(),
-                    namespace: ctx.namespace,
-                    var: f,
-                });
-                let params = params
-                    .iter()
-                    .map(|(name, _)| {
-                        let var = self.var();
-                        self.variables.push(Variable {
-                            name: name.name.clone(),
-                            namespace: ctx.namespace,
-                            var,
-                        });
-                        var
-                    })
-                    .collect();
+                let params = params.iter().map(|(_, var, _, _)| Var(*var)).collect();
                 let last_statement = body.pop();
                 let body = body
                     .iter()
@@ -534,17 +414,13 @@ impl<'a> IRCodeGen<'a> {
                     .flatten()
                     .collect();
                 let last_statement = match last_statement {
-                    Some(Statement {
-                        kind: StatementKind::StatementExpression { value, .. },
-                        ..
-                    }) => {
+                    Some(S::StatementExpression { value, .. }) => {
                         let (ir, ret) = self.expression(&value, ctx);
                         [ir, vec![IR::Return(ret)]].concat()
                     }
                     Some(stmt) => self.statement(&stmt, ctx),
                     None => Vec::new(),
                 };
-                self.variables.truncate(ss);
                 (
                     [
                         vec![IR::Function(f, params)],
@@ -557,90 +433,60 @@ impl<'a> IRCodeGen<'a> {
                 )
             }
 
-            ExpressionKind::Nil => {
-                let a = self.var();
-                (vec![IR::Nil(a)], a)
+            E::Float(a, _) => {
+                let var = self.var();
+                (vec![IR::Float(var, *a)], var)
+            }
+            E::Str(a, _) => {
+                let var = self.var();
+                (vec![IR::Str(var, a.into())], var)
             }
 
-            ExpressionKind::Int(i) => {
+            E::Bool(b, _) => {
+                let a = self.var();
+                (vec![IR::Bool(a, *b)], a)
+            }
+
+            E::Int(i, _) => {
                 let a = self.var();
                 (vec![IR::Int(a, *i)], a)
             }
 
-            ExpressionKind::Add(a, b) => {
-                let (aops, a) = self.expression(&a, ctx);
-                let (bops, b) = self.expression(&b, ctx);
-                let c = self.var();
-                ([aops, bops, vec![IR::Add(c, a, b)]].concat(), c)
-            }
-
-            ExpressionKind::Sub(a, b) => {
-                let (aops, a) = self.expression(&a, ctx);
-                let (bops, b) = self.expression(&b, ctx);
-                let c = self.var();
-                ([aops, bops, vec![IR::Sub(c, a, b)]].concat(), c)
-            }
-
-            ExpressionKind::Mul(a, b) => {
-                let (aops, a) = self.expression(&a, ctx);
-                let (bops, b) = self.expression(&b, ctx);
-                let c = self.var();
-                ([aops, bops, vec![IR::Mul(c, a, b)]].concat(), c)
-            }
-            ExpressionKind::Div(a, b) => {
-                let (aops, a) = self.expression(&a, ctx);
-                let (bops, b) = self.expression(&b, ctx);
-                let c = self.var();
-                ([aops, bops, vec![IR::Div(c, a, b)]].concat(), c)
-            }
-
-            ExpressionKind::Neg(a) => {
-                let (aops, a) = self.expression(&a, ctx);
-                let b = self.var();
-                ([aops, vec![IR::Neg(b, a)]].concat(), b)
+            E::Nil(_) => {
+                let a = self.var();
+                (vec![IR::Nil(a)], a)
             }
         }
     }
 
-    fn definition(&mut self, ident: &Identifier, value: &Expression, ctx: IRContext) -> Vec<IR> {
-        if matches!(value.kind, ExpressionKind::Function { .. }) {
-            let var = self.var();
-            self.variables.push(Variable {
-                name: ident.name.clone(),
-                namespace: ctx.namespace,
-                var,
-            });
+    fn definition(&mut self, var: Var, value: &Expression, ctx: IRContext) -> Vec<IR> {
+        if matches!(value, Expression::Function { .. }) {
             let (mut code, _) = self.expression(&value, ctx);
             if let IR::Function(_, args) = &code[0] {
                 code[0] = IR::Function(var, args.clone());
             } else {
                 unreachable!();
             }
-
             code
         } else {
-            let (code, var) = self.expression(&value, ctx);
-            self.variables.push(Variable {
-                name: ident.name.clone(),
-                namespace: ctx.namespace,
-                var,
-            });
-            code
+            let (code, tmp) = self.expression(&value, ctx);
+            [vec![IR::Define(var)], code, vec![IR::Assign(var, tmp)]].concat()
         }
     }
 
     fn statement(&mut self, stmt: &Statement, ctx: IRContext) -> Vec<IR> {
-        match &stmt.kind {
-            StatementKind::Assignment { kind, target, value } => {
+        use Expression as E;
+        use Statement as S;
+        match &stmt {
+            S::Assignment { op, target, value, .. } => {
                 let res = self.var();
-                let (pre_code, current, post_code) = match &target.kind {
-                    AssignableKind::Read(_) => {
-                        let (_, var) = self.assignable(target, ctx);
-                        (Vec::new(), var, vec![IR::Assign(var, res)])
+                let (pre_code, current, post_code) = match &target {
+                    E::Read { var, .. } => {
+                        (Vec::new(), Var(*var), vec![IR::Assign(Var(*var), res)])
                     }
-                    AssignableKind::Index(ass, expr) => {
-                        let (aops, a) = self.assignable(ass, ctx);
-                        let (bops, b) = self.expression(expr, ctx);
+                    E::Index { value, index, .. } => {
+                        let (aops, a) = self.expression(value, ctx);
+                        let (bops, b) = self.expression(index, ctx);
                         let c = self.var();
 
                         (
@@ -649,57 +495,51 @@ impl<'a> IRCodeGen<'a> {
                             vec![IR::AssignIndex(a, b, res)],
                         )
                     }
-                    AssignableKind::Access(ass, ident) => match self.namespace_chain(ass, ctx) {
-                        Some(ctx) => {
-                            let a = self.lookup(&ident.name, ctx.namespace).unwrap();
-                            (Vec::new(), a, vec![IR::Assign(a, res)])
-                        }
-                        None => {
-                            let (code, a) = self.assignable(ass, ctx);
-                            let b = self.var();
-                            (
-                                [code, vec![IR::Access(b, a, ident.name.clone())]].concat(),
-                                b,
-                                vec![IR::AssignAccess(a, ident.name.clone(), res)],
-                            )
-                        }
-                    },
-                    AssignableKind::Expression(..)
-                    | AssignableKind::Variant { .. }
-                    | AssignableKind::Call(..)
-                    | AssignableKind::ArrowCall(..) => unreachable!(),
+                    E::BlobAccess { value, field, .. } => {
+                        let (code, a) = self.expression(value, ctx);
+                        let b = self.var();
+                        (
+                            [code, vec![IR::Access(b, a, field.clone())]].concat(),
+                            b,
+                            vec![IR::AssignAccess(a, field.clone(), res)],
+                        )
+                    }
+                    _ => unreachable!(),
                 };
                 let (code, var) = self.expression(&value, ctx);
                 [
                     pre_code,
                     code,
-                    vec![match kind {
-                        ParserOp::Nop => IR::Assign(res, var),
-                        ParserOp::Add => IR::Add(res, current, var),
-                        ParserOp::Sub => IR::Sub(res, current, var),
-                        ParserOp::Mul => IR::Mul(res, current, var),
-                        ParserOp::Div => IR::Div(res, current, var),
+                    vec![match op {
+                        BinOp::Nop => IR::Assign(res, var),
+                        BinOp::Add => IR::Add(res, current, var),
+                        BinOp::Sub => IR::Sub(res, current, var),
+                        BinOp::Mul => IR::Mul(res, current, var),
+                        BinOp::Div => IR::Div(res, current, var),
+                        _ => unreachable!(),
                     }],
                     post_code,
                 ]
                 .concat()
             }
-            StatementKind::Definition { ident, value, .. } => self.definition(ident, value, ctx),
-            StatementKind::Block { statements } => {
-                let ss = self.variables.len();
+            S::Definition { var, value, .. } => self.definition(Var(*var), value, ctx),
+            S::Block { statements, .. } => {
                 let stmt_code = statements
                     .iter()
                     .map(|stmt| self.statement(stmt, ctx))
                     .flatten()
                     .collect();
-                self.variables.truncate(ss);
                 stmt_code
             }
 
-            StatementKind::Loop { condition, body } => {
+            S::Loop { condition, body, .. } => {
                 let (cops, c) = self.expression(&condition, ctx);
                 let l = self.label();
-                let body = self.statement(&body, IRContext { closest_loop: l, ..ctx });
+                let body = body
+                    .iter()
+                    .map(|stmt| self.statement(&stmt, IRContext { closest_loop: l, ..ctx }))
+                    .flatten()
+                    .collect();
 
                 [
                     vec![IR::Loop, IR::Label(l)],
@@ -710,116 +550,62 @@ impl<'a> IRCodeGen<'a> {
                 ]
                 .concat()
             }
-            StatementKind::Break => vec![IR::Break],
-            StatementKind::Continue => vec![IR::Goto(ctx.closest_loop)],
-            StatementKind::Ret { value: Some(value) } => {
+            S::Break(..) => vec![IR::Break],
+            S::Continue(..) => vec![IR::Goto(ctx.closest_loop)],
+            S::Ret { value: Some(value), .. } => {
                 let (aops, a) = self.expression(&value, ctx);
                 [aops, vec![IR::Return(a)]].concat()
             }
-            StatementKind::Ret { value: None } => {
+            S::Ret { value: None, .. } => {
                 // NOTE: In the runtime, we compile void to unit - don't tell Filip!
                 let a = self.var();
                 vec![IR::Nil(a), IR::Return(a)]
             }
-            StatementKind::Unreachable => {
+            S::Unreachable(span) => {
                 vec![IR::HaltAndCatchFire(format!(
                     "Reached unreachable code on line {}",
-                    stmt.span.line_start
+                    span.line_start
                 ))]
             }
 
-            StatementKind::StatementExpression { value } => self.expression(value, ctx).0,
+            S::StatementExpression { value, .. } => self.expression(value, ctx).0,
 
-            StatementKind::EmptyStatement => Vec::new(),
-
-            StatementKind::Blob { .. }
-            | StatementKind::Enum { .. }
-            | StatementKind::ExternalDefinition { .. }
-            | StatementKind::FromUse { .. }
-            | StatementKind::Use { .. } => unreachable!(),
+            S::Blob { .. } | S::Enum { .. } | S::ExternalDefinition { .. } => unreachable!(),
         }
     }
 
-    fn globals(&mut self, stmt: &Statement, namespace: NamespaceID) {
-        match &stmt.kind {
-            StatementKind::Use { name, file, .. } => {
-                let other_namspace = self.typechecker.file_to_namespace[file];
-
-                self.namespaces.push(Namespace {
-                    name: name.name().into(),
-                    namespace,
-                    points_to: other_namspace,
-                });
+    fn compile(&mut self, stmt: &Statement) -> Vec<IR> {
+        use Statement as S;
+        let ctx = IRContext::new();
+        match &stmt {
+            S::ExternalDefinition { name, var, .. } => {
+                vec![IR::External(Var(*var), name.clone())]
             }
 
-            _ => {}
-        }
-    }
-
-    fn compile(&mut self, stmt: &Statement, namespace: NamespaceID) -> Vec<IR> {
-        let ctx = IRContext::from_namespace(namespace);
-        match &stmt.kind {
-            StatementKind::FromUse { imports, file, .. } => {
-                let other_namspace = self.typechecker.file_to_namespace[file];
-
-                imports.iter().for_each(|(other_name, maybe_rename)| {
-                    // TODO(ed): From import namespaces
-                    let var = match self.lookup(&other_name.name, other_namspace) {
-                        Some(var) => var,
-                        None => return, // Ignore Blobs and Enums
-                    };
-                    let name = match maybe_rename {
-                        Some(rename) => rename.name.clone(),
-                        None => other_name.name.clone(),
-                    };
-                    self.variables.push(Variable { name, namespace, var });
-                });
-
-                Vec::new()
-            }
-
-            StatementKind::ExternalDefinition { ident, .. } => {
-                let var = self.var();
-                self.variables.push(Variable {
-                    name: ident.name.clone(),
-                    namespace: ctx.namespace,
-                    var,
-                });
-                vec![IR::External(var, ident.name.clone())]
-            }
-
-            StatementKind::Definition { value, ident, .. } => self.definition(ident, value, ctx),
+            S::Definition { value, var, .. } => self.definition(Var(*var), value, ctx),
 
             // Invalid statements should be caught in the typechecker
-            // TODO: Specify the unreachable things here
             _ => Vec::new(),
         }
     }
 }
 
 #[cfg_attr(timed, sylt_macro::timed("intermediate::compile"))]
-pub(crate) fn compile(
-    typechecker: &TypeChecker,
-    statements: &Vec<(Statement, NamespaceID)>,
-) -> Vec<IR> {
+pub(crate) fn compile(typechecker: &TypeChecker, statements: &Vec<Statement>) -> Vec<IR> {
     let mut gen = IRCodeGen::new(typechecker);
-
-    statements
-        .iter()
-        .for_each(|(stmt, namespace)| gen.globals(stmt, *namespace));
 
     let mut code: Vec<IR> = statements
         .iter()
-        .map(|(stmt, namespace)| gen.compile(stmt, *namespace))
+        .map(|stmt| gen.compile(stmt))
         .flatten()
         .collect();
 
-    let start = gen
+    let start = Var(typechecker
         .variables
         .iter()
-        .find(|Variable { name, namespace, .. }| namespace == &0 && name == &"start")
+        .find(|x| &x.name == "start" && x.is_global)
         .unwrap()
-        .var;
+        .id);
 
     let tmp = gen.var();
     code.push(IR::Call(tmp, start, Vec::new()));
