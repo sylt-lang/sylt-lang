@@ -12,3 +12,7 @@ start :: fn do
     f(A { value: 1 })
     _b.value <=> 200
 end
+
+// todo(ed): I've changed the behaviour here - it now resolved the `_b` in `f`
+// to the namespace, maybe we don't want this?
+// error: Runtime

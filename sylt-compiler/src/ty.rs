@@ -1,7 +1,6 @@
-use crate::NamespaceID;
 use std::collections::BTreeMap;
 use sylt_common::TyID;
-use sylt_parser::{Identifier, Span};
+use sylt_parser::Span;
 
 #[derive(Debug, Clone)]
 pub enum Purity {
@@ -30,12 +29,13 @@ pub enum Type {
     Set(TyID),
     Dict(TyID, TyID),
     Function(Vec<TyID>, TyID, Purity),
-    Blob(Identifier, BTreeMap<String, (Span, TyID)>, Vec<TyID>),
+    Blob(String, Span, BTreeMap<String, (Span, TyID)>, Vec<TyID>),
     ExternBlob(
-        Identifier,
+        String,
+        Span,
         BTreeMap<String, (Span, TyID)>,
         Vec<TyID>,
-        NamespaceID,
+        usize,
     ),
-    Enum(Identifier, BTreeMap<String, (Span, TyID)>, Vec<TyID>),
+    Enum(String, Span, BTreeMap<String, (Span, TyID)>, Vec<TyID>),
 }

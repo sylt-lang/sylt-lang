@@ -1,4 +1,4 @@
 f :: fn -> int do end
 
 start :: fn do end
-// error: return type isn't explicitly set to `void`
+// error: return type is explicitly set to

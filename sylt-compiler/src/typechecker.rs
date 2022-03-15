@@ -1,12 +1,9 @@
 use std::collections::HashMap;
 use sylt_common::error::{Error, Helper, TypeError};
 use sylt_common::{FileOrLib, TyID, Type as RuntimeType};
-use sylt_parser::{
-    expression::ComparisonKind, Assignable, AssignableKind, Expression, ExpressionKind, Identifier,
-    Op as ParserOp, Span, Statement, StatementKind, Type as ParserType, TypeAssignable,
-    TypeAssignableKind, TypeConstraint, TypeKind, VarKind,
-};
+use sylt_parser::{Span, TypeConstraint, VarKind};
 
+use crate::name_resolution::{Type as ResolverType, *};
 use crate::ty::Purity;
 use crate::{ty::Type, NamespaceID};
 use std::collections::{BTreeMap, BTreeSet};
@@ -99,14 +96,10 @@ macro_rules! bin_op {
         $self.check_constraints($span, $ctx, b)?;
         with_ret($self.unify_option($span, $ctx, a_ret, b_ret)?, a)
     }};
-}
-
-#[derive(Clone, Debug)]
-struct Variable {
-    ident: Identifier,
-    ty: TyID,
-    kind: VarKind,
-    span: Span,
+    ($self:expr, $span:expr, $ctx:expr, $a:expr, $b:expr, $con:expr, $ret:expr) => {{
+        let (ret, _) = bin_op!($self, $span, $ctx, $a, $b, $con)?;
+        with_ret(ret, $self.push_type($ret))
+    }};
 }
 
 #[derive(Clone, Debug)]
@@ -160,10 +153,22 @@ enum Constraint {
     Variable,
 }
 
+#[derive(Clone, Debug)]
+pub struct TypeVariable {
+    #[allow(unused)]
+    pub name: String,
+    #[allow(unused)]
+    pub id: usize,
+    #[allow(unused)]
+    pub definition: Span,
+    pub is_global: bool,
+    pub kind: VarKind,
+    pub ty: TyID,
+}
+
 pub struct TypeChecker {
-    globals: HashMap<(NamespaceID, String), Name>,
-    stack: Vec<Variable>,
     types: Vec<TypeNode>,
+    pub variables: Vec<TypeVariable>,
     namespace_to_file: HashMap<NamespaceID, FileOrLib>,
     // TODO(ed): This can probably be removed via some trickery
     pub file_to_namespace: HashMap<FileOrLib, NamespaceID>,
@@ -173,12 +178,11 @@ pub struct TypeChecker {
 struct TypeCtx {
     inside_loop: bool,
     inside_pure: bool,
-    namespace: NamespaceID,
 }
 
 impl TypeCtx {
-    fn namespace(namespace: NamespaceID) -> Self {
-        Self { inside_loop: false, inside_pure: false, namespace }
+    fn new() -> Self {
+        Self { inside_loop: false, inside_pure: false }
     }
 
     fn enter_loop(self) -> Self {
@@ -190,25 +194,29 @@ impl TypeCtx {
     }
 }
 
-#[derive(Debug, Clone)]
-enum Name {
-    Type(TyID),
-    Global(Variable),
-    Namespace(NamespaceID),
-}
-
 impl TypeChecker {
-    fn new(namespace_to_file: &HashMap<NamespaceID, FileOrLib>) -> Self {
-        Self {
-            globals: HashMap::new(),
-            stack: Vec::new(),
+    fn new(variables: &[Var], namespace_to_file: &HashMap<NamespaceID, FileOrLib>) -> Self {
+        let mut res = Self {
             types: Vec::new(),
+            variables: Vec::new(),
             namespace_to_file: namespace_to_file.clone(),
             file_to_namespace: namespace_to_file
                 .iter()
                 .map(|(a, b)| (b.clone(), a.clone()))
                 .collect(),
+        };
+        for var in variables {
+            let ty = res.push_type(Type::Unknown);
+            res.variables.push(TypeVariable {
+                name: var.name.clone(),
+                id: var.id,
+                is_global: var.is_global,
+                definition: var.definition,
+                kind: var.kind,
+                ty,
+            })
         }
+        res
     }
 
     fn push_type(&mut self, ty: Type) -> TyID {
@@ -222,164 +230,9 @@ impl TypeChecker {
         ty_id
     }
 
-    fn namespace_chain(&self, assignable: &Assignable, ctx: TypeCtx) -> Option<TypeCtx> {
-        match &assignable.kind {
-            AssignableKind::Read(ident) => {
-                if let Some(_) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
-                    None
-                } else {
-                    match self
-                        .globals
-                        .get(&(ctx.namespace, ident.name.clone()))
-                        .cloned()
-                    {
-                        Some(Name::Namespace(namespace)) => Some(TypeCtx { namespace, ..ctx }),
-                        _ => None,
-                    }
-                }
-            }
-
-            AssignableKind::Access(ass, ident) => {
-                let ctx = self.namespace_chain(ass, ctx)?;
-                match self
-                    .globals
-                    .get(&(ctx.namespace, ident.name.clone()))
-                    .cloned()
-                {
-                    Some(Name::Namespace(namespace)) => Some(TypeCtx { namespace, ..ctx }),
-                    _ => None,
-                }
-            }
-
-            AssignableKind::Variant { .. }
-            | AssignableKind::Call(..)
-            | AssignableKind::ArrowCall(..)
-            | AssignableKind::Index(..)
-            | AssignableKind::Expression(..) => None,
-        }
-    }
-
-    fn type_namespace_chain(
-        &self,
-        assignable: &TypeAssignable,
-        ctx: TypeCtx,
-    ) -> TypeResult<TypeCtx> {
-        match &assignable.kind {
-            TypeAssignableKind::Read(ident) => {
-                if let Some(_) = self.stack.iter().rfind(|v| v.ident.name == ident.name) {
-                    err_type_error! {
-                        self,
-                        ident.span,
-                        TypeError::Exotic,
-                        "'{}' is a local variable, not a namespace",
-                        ident.name
-                    }
-                } else {
-                    match self
-                        .globals
-                        .get(&(ctx.namespace, ident.name.clone()))
-                        .cloned()
-                    {
-                        Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
-                        _ => err_type_error! {
-                            self,
-                            ident.span,
-                            TypeError::UnresolvedName(ident.name.clone()),
-                            "Did you forget an import?"
-                        },
-                    }
-                }
-            }
-
-            TypeAssignableKind::Access(ass, ident) => {
-                let ctx = self.type_namespace_chain(ass, ctx)?;
-                match self
-                    .globals
-                    .get(&(ctx.namespace, ident.name.clone()))
-                    .cloned()
-                {
-                    Some(Name::Namespace(namespace)) => Ok(TypeCtx { namespace, ..ctx }),
-                    None => {
-                        err_type_error!(
-                            self,
-                            ident.span,
-                            TypeError::UnresolvedName(ident.name.clone()),
-                            "Did you forget an import?"
-                        )
-                    }
-                    _ => err_type_error! {
-                        self,
-                        ident.span,
-                        TypeError::Exotic,
-                        "'{}' should be a namespace or a blob but it's a global",
-                        ident.name
-                    },
-                }
-            }
-        }
-    }
-
-    fn type_assignable(&mut self, ctx: TypeCtx, assignable: &TypeAssignable) -> TypeResult<TyID> {
-        match &assignable.kind {
-            TypeAssignableKind::Read(ident) => match self
-                .globals
-                .get(&(ctx.namespace, ident.name.clone()))
-                .cloned()
-            {
-                Some(Name::Type(ty)) if matches!(self.find_type(ty), Type::Unknown) => Ok(ty),
-                Some(Name::Type(ty)) => Ok(self.copy(ty)),
-                None => {
-                    err_type_error!(
-                        self,
-                        ident.span,
-                        TypeError::UnresolvedName(ident.name.clone()),
-                        "Expected a blob or an enum"
-                    )
-                }
-                _ => {
-                    err_type_error!(
-                        self,
-                        ident.span,
-                        TypeError::Exotic,
-                        "Expected a blob but got '{}'",
-                        ident.name
-                    )
-                }
-            },
-
-            TypeAssignableKind::Access(ass, ident) => {
-                let ctx = self.type_namespace_chain(ass, ctx)?;
-                match self
-                    .globals
-                    .get(&(ctx.namespace, ident.name.clone()))
-                    .cloned()
-                {
-                    Some(Name::Type(ty)) if matches!(self.find_type(ty), Type::Unknown) => Ok(ty),
-                    Some(Name::Type(ty)) => Ok(self.copy(ty)),
-                    None => {
-                        err_type_error!(
-                            self,
-                            ident.span,
-                            TypeError::UnresolvedName(ident.name.clone()),
-                            "Expected a blob"
-                        )
-                    }
-                    _ => {
-                        err_type_error!(
-                            self,
-                            ident.span,
-                            TypeError::Exotic,
-                            "Expected a blob but got '{}'",
-                            ident.name
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    fn resolve_type(&mut self, span: Span, ctx: TypeCtx, ty: &ParserType) -> TypeResult<TyID> {
-        self.inner_resolve_type(span, ctx, ty, &mut HashMap::new())
+    fn resolve_type(&mut self, ctx: TypeCtx, ty: &ResolverType) -> TypeResult<TyID> {
+        let t = self.inner_resolve_type(ctx, ty, &mut HashMap::new())?;
+        Ok(t)
     }
 
     fn resolve_constraint(
@@ -454,16 +307,15 @@ impl TypeChecker {
 
     fn inner_resolve_type(
         &mut self,
-        span: Span,
         ctx: TypeCtx,
-        ty: &ParserType,
+        ty: &ResolverType,
         seen: &mut HashMap<String, TyID>,
     ) -> TypeResult<TyID> {
-        use TypeKind::*;
-        let ty = match &ty.kind {
-            Implied => Type::Unknown,
+        use ResolverType as T;
+        let ty = match ty {
+            T::Implied(_) => Type::Unknown,
 
-            Resolved(ty) => match ty {
+            T::Resolved(ty, _) => match ty {
                 RuntimeType::Void => Type::Void,
                 RuntimeType::Nil => Type::Nil,
                 RuntimeType::Unknown => Type::Unknown,
@@ -474,41 +326,41 @@ impl TypeChecker {
                 x => unreachable!("Got an unexpected resolved type '{:?}'", x),
             },
 
-            UserDefined(assignable, vars) => {
-                let ty = self.type_assignable(ctx, assignable)?;
+            T::UserType(var, vars, span) => {
+                let ty = self.copy(self.variables[*var].ty);
                 match self.find_type(ty) {
-                    Type::Blob(name, _, sub)
-                    | Type::ExternBlob(name, _, sub, _)
-                    | Type::Enum(name, _, sub) => {
+                    Type::Blob(name, span, _, sub)
+                    | Type::ExternBlob(name, span, _, sub, _)
+                    | Type::Enum(name, span, _, sub) => {
                         for (i, var) in vars.iter().enumerate() {
                             if sub.len() == i {
                                 return err_type_error!(
                                     self,
-                                    var.span,
+                                    var.span(),
                                     TypeError::Exotic,
                                     "The type {} takes at most {} type arguments",
-                                    name.name,
+                                    name,
                                     sub.len()
                                 )
                                 .help(
                                     self,
-                                    name.span,
+                                    span,
                                     "Defined here".into(),
                                 );
                             }
-                            let var_ty = self.inner_resolve_type(var.span, ctx, var, seen)?;
+                            let var_ty = self.inner_resolve_type(ctx, var, seen)?;
                             self.unify(span, ctx, var_ty, sub[i])?;
                         }
                     }
 
-                    // NOTE(ed): Is this going to hant me later?
+                    // NOTE(ed): Is this going to haunt me later?
                     // Gives better errors for recursive types - which are illegal.
                     Type::Unknown => {}
 
                     _ => {
                         return err_type_error!(
                             self,
-                            span,
+                            *span,
                             TypeError::Violating(self.bake_type(ty)),
                             "Only enums and blobs can take type-arguments"
                         );
@@ -517,25 +369,25 @@ impl TypeChecker {
                 return Ok(ty);
             }
 
-            Fn { constraints, params, ret, is_pure } => {
+            T::Fn { constraints, params, ret, is_pure, span } => {
                 let params = params
                     .iter()
-                    .map(|t| self.inner_resolve_type(span, ctx, t, seen))
+                    .map(|t| self.inner_resolve_type(ctx, t, seen))
                     .collect::<TypeResult<Vec<_>>>()?;
-                let ret = self.inner_resolve_type(span, ctx, ret, seen)?;
+                let ret = self.inner_resolve_type(ctx, ret, seen)?;
                 for (var, constraints) in constraints.iter() {
                     match seen.get(var) {
                         Some(var) => {
                             // NOTE(ed): This disallowes type-variables that are only used for
                             // constraints.
                             for constraint in constraints.iter() {
-                                self.resolve_constraint(span, *var, constraint, seen)?;
+                                self.resolve_constraint(*span, *var, constraint, seen)?;
                             }
                         }
                         None => {
                             return err_type_error!(
                                 self,
-                                span,
+                                *span,
                                 TypeError::UnresolvedName(var.clone()),
                                 "Unused type-variable. (Only usages in the function signature are counted)"
                             );
@@ -546,27 +398,23 @@ impl TypeChecker {
                 Type::Function(params, ret, purity)
             }
 
-            Tuple(fields) => Type::Tuple(
+            T::Tuple(fields, _) => Type::Tuple(
                 fields
                     .iter()
-                    .map(|t| self.inner_resolve_type(span, ctx, t, seen))
+                    .map(|t| self.inner_resolve_type(ctx, t, seen))
                     .collect::<TypeResult<Vec<_>>>()?,
             ),
 
-            List(kind) => Type::List(self.inner_resolve_type(span, ctx, kind, seen)?),
+            T::List(kind, _) => Type::List(self.inner_resolve_type(ctx, kind, seen)?),
 
-            Set(kind) => Type::Set(self.inner_resolve_type(span, ctx, kind, seen)?),
+            T::Set(kind, _) => Type::Set(self.inner_resolve_type(ctx, kind, seen)?),
 
-            Dict(key, value) => Type::Dict(
-                self.inner_resolve_type(span, ctx, key, seen)?,
-                self.inner_resolve_type(span, ctx, value, seen)?,
+            T::Dict(key, value, _) => Type::Dict(
+                self.inner_resolve_type(ctx, key, seen)?,
+                self.inner_resolve_type(ctx, value, seen)?,
             ),
 
-            Grouping(ty) => {
-                return self.inner_resolve_type(span, ctx, ty, seen);
-            }
-
-            Generic(name) => {
+            T::Generic(name, _) => {
                 return Ok(*seen
                     .entry(name.clone())
                     .or_insert_with(|| self.push_type(Type::Unknown)))
@@ -575,90 +423,155 @@ impl TypeChecker {
         Ok(self.push_type(ty))
     }
 
-    fn statement(&mut self, statement: &mut Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
-        let span = statement.span;
-        match &mut statement.kind {
-            StatementKind::Ret { value: Some(value) } => Ok(Some({
+    // TODO(ed): ctx can be removed in some places? :O
+    fn type_from_function(
+        &mut self,
+        ctx: TypeCtx,
+        params: &[(String, usize, Span, ResolverType)],
+        ret: &ResolverType,
+        pure: bool,
+    ) -> TypeResult<(TyID, TyID)> {
+        let mut args = Vec::new();
+        let mut seen = HashMap::new();
+        for (_name, var, span, ty) in params.iter() {
+            let var_ty = self.variables[*var].ty;
+            let ty = self.inner_resolve_type(ctx, &ty, &mut seen)?;
+            args.push(self.unify(*span, ctx, var_ty, ty)?);
+        }
+        let ret = self.inner_resolve_type(ctx, &ret, &mut seen)?;
+        let purity = if pure { Purity::Pure } else { Purity::Impure };
+        let f = self.push_type(Type::Function(args, ret, purity));
+        Ok((f, ret))
+    }
+
+    fn definition(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
+        use Expression as E;
+        use Statement as S;
+        if let S::Definition { var, ty, value, span, kind, .. } = statement {
+            if ctx.inside_pure && !kind.immutable() {
+                return err_type_error!(
+                    self,
+                    *span,
+                    TypeError::Impurity,
+                    "Cannot make mutable declarations in pure functions"
+                );
+            }
+            let var_ty = self.variables[*var].ty;
+            if let E::Function { params, ret, pure, .. } = value {
+                let (f_ty, _) = self.type_from_function(ctx, params, ret, *pure)?;
+                self.unify(*span, ctx, var_ty, f_ty)?;
+            }
+            let ty = self.resolve_type(ctx, ty)?;
+            self.add_constraint(ty, *span, Constraint::Variable);
+            self.unify(*span, ctx, var_ty, ty)?;
+            // TODO(ed): Make sure the option is void or none - you cannot return otherwise.
+            // But this might be caught somewhere else?
+            let (value_ret, value_ty) = self.expression(value, ctx)?;
+            self.unify(*span, ctx, var_ty, value_ty)?;
+            Ok(value_ret)
+        } else {
+            unreachable!("Not a definition!");
+        }
+    }
+
+    fn statement(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
+        use Statement as S;
+        let span = statement.span();
+        match &statement {
+            S::Ret { value: Some(value), span } => Ok(Some({
                 let (ret, value) = self.expression(value, ctx)?;
                 match ret {
-                    Some(ret) => self.unify(span, ctx, value, ret)?,
+                    Some(ret) => self.unify(*span, ctx, value, ret)?,
                     None => value,
                 }
             })),
-            StatementKind::Ret { value: None } => Ok(Some(self.push_type(Type::Void))),
+            S::Ret { value: None, .. } => Ok(Some(self.push_type(Type::Void))),
 
-            StatementKind::Block { statements } => {
-                let (ret, _expr) = self.expression_block(span, statements, ctx)?;
+            S::Block { statements, span } => {
+                let (ret, _expr) = self.expression_block(*span, statements, ctx)?;
                 Ok(ret)
             }
 
-            StatementKind::StatementExpression { value } => {
-                let (ret, _) = self.expression(value, ctx)?;
-                Ok(ret)
-            }
+            S::StatementExpression { value, .. } => Ok(self.expression(&value, ctx)?.0),
 
-            StatementKind::Assignment { kind, target, value } => {
-                self.can_assign(span, ctx, target)?;
+            S::Assignment { op, target, value, span } => {
+                self.can_assign(*span, target)?;
 
                 if ctx.inside_pure {
                     return err_type_error!(
                         self,
-                        span,
+                        *span,
                         TypeError::Exotic,
                         "Cannot make assignments in pure functions"
                     );
                 }
 
-                let (expression_ret, expression_ty) = self.expression(value, ctx)?;
-                let (target_ret, target_ty) = self.assignable(target, ctx)?;
-                match kind {
-                    ParserOp::Nop => {}
-                    ParserOp::Add => {
-                        self.add_constraint(expression_ty, span, Constraint::Add(target_ty));
-                        self.add_constraint(target_ty, span, Constraint::Add(expression_ty));
+                let (expression_ret, expression_ty) = self.expression(&value, ctx)?;
+                let (target_ret, target_ty) = self.expression(&target, ctx)?;
+                match op {
+                    BinOp::And
+                    | BinOp::AssertEq
+                    | BinOp::Equals
+                    | BinOp::Greater
+                    | BinOp::GreaterEqual
+                    | BinOp::In
+                    | BinOp::Less
+                    | BinOp::LessEqual
+                    | BinOp::NotEquals
+                    | BinOp::Or => {}
+
+                    BinOp::Nop => {}
+                    BinOp::Add => {
+                        self.add_constraint(expression_ty, *span, Constraint::Add(target_ty));
+                        self.add_constraint(target_ty, *span, Constraint::Add(expression_ty));
                     }
-                    ParserOp::Sub => {
-                        self.add_constraint(expression_ty, span, Constraint::Sub(target_ty));
-                        self.add_constraint(target_ty, span, Constraint::Sub(expression_ty));
+                    BinOp::Sub => {
+                        self.add_constraint(expression_ty, *span, Constraint::Sub(target_ty));
+                        self.add_constraint(target_ty, *span, Constraint::Sub(expression_ty));
                     }
-                    ParserOp::Mul => {
-                        self.add_constraint(expression_ty, span, Constraint::Mul(target_ty));
-                        self.add_constraint(target_ty, span, Constraint::Mul(expression_ty));
+                    BinOp::Mul => {
+                        self.add_constraint(expression_ty, *span, Constraint::Mul(target_ty));
+                        self.add_constraint(target_ty, *span, Constraint::Mul(expression_ty));
                     }
-                    ParserOp::Div => {
+                    BinOp::Div => {
                         let float_ty = self.push_type(Type::Float);
-                        self.unify(span, ctx, target_ty, float_ty)?;
-                        self.add_constraint(expression_ty, span, Constraint::Div(target_ty));
-                        self.add_constraint(target_ty, span, Constraint::Div(expression_ty));
+                        self.unify(*span, ctx, target_ty, float_ty)?;
+                        self.add_constraint(expression_ty, *span, Constraint::Div(target_ty));
+                        self.add_constraint(target_ty, *span, Constraint::Div(expression_ty));
                     }
                 };
-                self.unify(span, ctx, expression_ty, target_ty)?;
-                self.unify_option(span, ctx, expression_ret, target_ret)
+                self.unify(*span, ctx, expression_ty, target_ty)?;
+                self.unify_option(*span, ctx, expression_ret, target_ret)
             }
 
-            StatementKind::Definition { .. } => self.definition(statement, false, ctx),
+            S::Definition { .. } => self.definition(statement, ctx),
 
-            StatementKind::Loop { condition, body } => {
-                let (ret, condition) = self.expression(condition, ctx)?;
+            S::Loop { condition, body, span } => {
+                let (ret, condition) = self.expression(&condition, ctx)?;
                 let boolean = self.push_type(Type::Bool);
-                self.unify(span, ctx, boolean, condition)?;
+                self.unify(*span, ctx, boolean, condition)?;
 
-                let body_ret = self.statement(body, ctx.enter_loop())?;
-                self.unify_option(span, ctx, ret, body_ret)
+                let (body_ret, _) = self.expression_block(*span, &body, ctx.enter_loop())?;
+                self.unify_option(*span, ctx, ret, body_ret)
             }
 
-            StatementKind::Break => {
+            S::Break(span) => {
                 if !ctx.inside_loop {
-                    err_type_error!(self, span, TypeError::Exotic, "`break` only works in loops")
+                    err_type_error!(
+                        self,
+                        *span,
+                        TypeError::Exotic,
+                        "`break` only works in loops"
+                    )
                 } else {
                     Ok(None)
                 }
             }
-            StatementKind::Continue => {
+            S::Continue(span) => {
                 if !ctx.inside_loop {
                     err_type_error!(
                         self,
-                        span,
+                        *span,
                         TypeError::Exotic,
                         "`continue` only works in loops"
                     )
@@ -667,14 +580,9 @@ impl TypeChecker {
                 }
             }
 
-            StatementKind::Unreachable => Ok(None),
-            StatementKind::EmptyStatement => Ok(None),
+            S::Unreachable(_) => Ok(None),
 
-            StatementKind::Use { .. }
-            | StatementKind::FromUse { .. }
-            | StatementKind::Blob { .. }
-            | StatementKind::Enum { .. }
-            | StatementKind::ExternalDefinition { .. } => {
+            S::Blob { .. } | S::Enum { .. } | S::ExternalDefinition { .. } => {
                 unreachable!(
                     "Illegal inner statement at {:?}! Parser should have caught this",
                     span
@@ -683,154 +591,109 @@ impl TypeChecker {
         }
     }
 
-    fn outer_statement(&mut self, statement: &mut Statement, ctx: TypeCtx) -> TypeResult<()> {
-        let span = statement.span;
-        match &statement.kind {
-            StatementKind::Use { name, file, .. } => {
-                let ident = name.ident();
-                let other = self.file_to_namespace[file];
-                self.globals
-                    .insert((ctx.namespace, ident.name.clone()), Name::Namespace(other));
-            }
-
-            StatementKind::FromUse { imports, file, .. } => {
-                // TODO(ed): This shouldn't be nessecary since the namespace
-                // should be set up correctly already.
-                let other = self.file_to_namespace[file];
-                for (ident, alias) in imports.iter() {
-                    let name = self.globals[&(other, ident.name.clone())].clone();
-                    let ident_name = &alias.as_ref().unwrap_or(ident).name;
-
-                    match name {
-                        Name::Global(other_var) => {
-                            let var = Variable {
-                                ident: alias.as_ref().unwrap_or(ident).clone(),
-                                ty: self.push_type(Type::Unknown),
-                                kind: VarKind::Const,
-                                span,
-                            };
-                            self.unify(span, ctx, var.ty, other_var.ty)?;
-                            self.globals
-                                .insert((ctx.namespace, ident_name.clone()), Name::Global(var));
-                        }
-
-                        Name::Type(_) => {
-                            self.globals
-                                .insert((ctx.namespace, ident_name.clone()), name.clone());
-                        }
-
-                        Name::Namespace(_) => {
-                            return err_type_error!(
-                                self,
-                                span,
-                                TypeError::Exotic,
-                                "From import of namespaces is not implemented"
-                            );
-                        }
-                    }
-                }
-            }
-            StatementKind::Enum { name, variants, variables } => {
-                let enum_ty = self.push_type(Type::Unknown);
-                self.globals
-                    .insert((ctx.namespace, name.name.clone()), Name::Type(enum_ty));
+    fn outer_statement(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<()> {
+        use Statement as S;
+        match &statement {
+            S::Enum { name, var, span, variants, variables } => {
+                let enum_ty = self.variables[*var].ty;
                 let mut resolved_variants = BTreeMap::new();
                 let mut type_params = Vec::new();
                 let mut seen = HashMap::new();
                 for v in variables.iter() {
                     let ty = self.push_type(Type::Unknown);
                     type_params.push(ty);
-                    seen.insert(v.name.clone(), ty);
+                    seen.insert(v.clone(), ty);
                 }
                 let num_vars = seen.len();
-                for (k, t) in variants.iter() {
+                for (k, (k_span, t)) in variants.iter() {
                     resolved_variants.insert(
-                        k.name.clone(),
-                        (k.span, self.inner_resolve_type(span, ctx, t, &mut seen)?),
+                        k.clone(),
+                        (*k_span, self.inner_resolve_type(ctx, t, &mut seen)?),
                     );
 
                     if num_vars != seen.len() {
                         return err_type_error!(
                             self,
-                            k.span,
+                            *k_span,
                             TypeError::Exotic,
-                            "Unknown generic {}",
+                            "Unknown generic {:?}",
                             t
                         )
-                        .help(self, span, "While defining".to_string())
+                        .help(self, *span, "While defining".to_string())
                         .help_no_span(format!(
-                            "Generics have the be defined before use, like this: `{} :: enum({})`",
-                            name.name, t
+                            "Generics have the be defined before use, like this: `{} :: enum({:?})`",
+                            name, t
                         ));
                     }
                 }
-                let ty = self.push_type(Type::Enum(name.clone(), resolved_variants, type_params));
-                self.unify(span, ctx, ty, enum_ty)?;
+                let ty = self.push_type(Type::Enum(
+                    name.clone(),
+                    *span,
+                    resolved_variants,
+                    type_params,
+                ));
+                self.unify(*span, ctx, ty, enum_ty)?;
             }
 
-            StatementKind::Blob { name, fields, variables, external } => {
-                let blob_ty = self.push_type(Type::Unknown);
-                self.globals
-                    .insert((ctx.namespace, name.name.clone()), Name::Type(blob_ty));
+            S::Blob { name, var, fields, variables, external, span } => {
+                let blob_ty = self.variables[*var].ty;
                 let mut resolved_fields = BTreeMap::new();
                 let mut type_params = Vec::new();
                 let mut seen = HashMap::new();
                 for v in variables.iter() {
                     let ty = self.push_type(Type::Unknown);
                     type_params.push(ty);
-                    seen.insert(v.name.clone(), ty);
+                    seen.insert(v.clone(), ty);
                 }
                 let num_vars = seen.len();
-                for (k, t) in fields.iter() {
+                for (k, (k_span, t)) in fields.iter() {
                     resolved_fields.insert(
-                        k.name.clone(),
-                        (k.span, self.inner_resolve_type(span, ctx, t, &mut seen)?),
+                        k.clone(),
+                        (*k_span, self.inner_resolve_type(ctx, t, &mut seen)?),
                     );
 
                     if num_vars != seen.len() {
                         return err_type_error!(
                             self,
-                            k.span,
+                            *k_span,
                             TypeError::Exotic,
-                            "Unknown generic {}",
+                            "Unknown generic {:?}",
                             t
                         )
-                        .help(self, span, "While defining".to_string())
+                        .help(self, *span, "While defining".to_string())
                         .help_no_span(format!(
-                            "Generics have the be defined before use, like this: `{} :: blob({})`",
-                            name.name, t
+                            "Generics have the be defined before use, like this: `{} :: blob({:?})`",
+                            name, t
                         ));
                     }
                 }
                 let ty = self.push_type(match external {
                     true => {
-                        Type::ExternBlob(name.clone(), resolved_fields, type_params, ctx.namespace)
+                        Type::ExternBlob(name.clone(), *span, resolved_fields, type_params, *var)
                     }
-                    false => Type::Blob(name.clone(), resolved_fields, type_params),
+                    false => Type::Blob(name.clone(), *span, resolved_fields, type_params),
                 });
-                self.unify(span, ctx, ty, blob_ty)?;
+                self.unify(*span, ctx, ty, blob_ty)?;
             }
 
-            StatementKind::Definition { .. } => {
-                self.definition(statement, true, ctx)?;
+            S::Definition { .. } => {
+                self.definition(statement, ctx)?;
             }
 
-            StatementKind::ExternalDefinition { ident, kind, ty } => {
-                let ty = self.resolve_type(span, ctx, ty)?;
-                let var = Variable { ident: ident.clone(), ty, kind: *kind, span };
-                self.globals
-                    .insert((ctx.namespace, ident.name.clone()), Name::Global(var));
+            S::ExternalDefinition { var, ty, span, .. } => {
+                let ty = self.resolve_type(ctx, ty)?;
+                self.unify(*span, ctx, self.variables[*var].ty, ty)?;
             }
 
-            StatementKind::Assignment { .. }
-            | StatementKind::Loop { .. }
-            | StatementKind::Break
-            | StatementKind::Continue
-            | StatementKind::Ret { .. }
-            | StatementKind::Block { .. }
-            | StatementKind::StatementExpression { .. }
-            | StatementKind::Unreachable
-            | StatementKind::EmptyStatement => {
+            S::Assignment { .. }
+            | S::Loop { .. }
+            | S::Break(..)
+            | S::Continue(..)
+            | S::Ret { .. }
+            | S::Block { .. }
+            | S::StatementExpression { .. }
+            | S::Unreachable(..) => {
+                let span = statement.span();
                 unreachable!(
                     "Illegal outer statement between lines {} and {} in '{:?}'! Parser should have caught this",
                     span.line_start,
@@ -842,139 +705,65 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn assignable(&mut self, assignable: &mut Assignable, ctx: TypeCtx) -> TypeResult<RetNValue> {
-        let span = assignable.span;
-        // FIXME: Functions are copied since they may be specialized
-        // several times, this does not work properly when functions are
-        // passed to an unknown function parameter.
-        let ty = match &mut assignable.kind {
-            AssignableKind::Variant { enum_ass, variant, value } => {
-                let (ctx, enum_name) = match &enum_ass.kind {
-                    AssignableKind::Read(enum_name) => (ctx, enum_name),
-                    AssignableKind::Access(chain, enum_name) => match self.namespace_chain(chain, ctx) {
-                        Some(ctx) => (ctx, enum_name),
-                        None => return err_type_error!(
-                            self,
-                            span,
-                            TypeError::Exotic,
-                            "Not all accesses are namespace accesses\nsince enums cannot be stored anywhere"
-                        ),
-                    }
+    fn expression_block(
+        &mut self,
+        span: Span,
+        statements: &Vec<Statement>,
+        ctx: TypeCtx,
+    ) -> TypeResult<(Option<TyID>, Option<TyID>)> {
+        // Left this for Gustav
+        let mut ret = None;
+        for stmt in statements.iter() {
+            let stmt_ret = self.statement(stmt, ctx)?;
+            ret = self.unify_option(span, ctx, ret, stmt_ret)?;
+        }
+        // We typecheck the last statement twice sometimes, doesn't matter though.
+        let value = if let Some(Statement::StatementExpression { value, .. }) = statements.last() {
+            let (value_ret, value) = self.expression(value, ctx)?;
+            ret = self.unify_option(span, ctx, ret, value_ret)?;
+            Some(value)
+        } else {
+            None
+        };
+        Ok((ret, value))
+    }
 
-                    AssignableKind::Call(_, _)
-                    | AssignableKind::Variant { .. }
-                    | AssignableKind::ArrowCall(_, _, _)
-                    | AssignableKind::Index(_, _)
-                    | AssignableKind::Expression(_) => unreachable!(),
-                };
-                match self.stack.iter().rfind(|v| v.ident.name == enum_name.name) {
-                    Some(var) => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::Exotic,
-                            "Expected an enum - but the local variable '{}'",
-                            var.ident.name
-                        )
-                        .help(
-                            self,
-                            var.span,
-                            format!("'{}' was declared here", var.ident.name),
-                        )?
-                    }
-                    None => {}
-                };
-                let ty = match self.globals.get(&(ctx.namespace, enum_name.name.clone())) {
-                    Some(Name::Type(ty)) => {
-                        // NOTE(ed): This allows generics, which is always fun!
-                        let ty = *ty;
-                        let ty = self.copy(ty);
-                        self.copy(ty)
-                    }
-                    _ => {
-                        return err_type_error!(
-                            self,
-                            span,
-                            TypeError::UnresolvedName(enum_name.name.clone())
-                        )
-                    }
-                };
-
-                let (enum_name, variants) = match self.find_type(ty) {
-                    Type::Enum(name, variants, _) => (name, variants),
-                    Type::Unknown => todo!("Should this ever happen?"),
-                    _ => {
-                        return err_type_error!(
-                            self,
-                            variant.span,
-                            TypeError::Violating(self.bake_type(ty)),
-                            "Is not an enum-variant"
-                        )
-                    }
-                };
-                // Only unify this variant with the expression
-                let (ret, expr_ty) = self.expression(value, ctx)?;
-                match variants.get(&variant.name) {
-                    Some((span, field_ty)) => self.unify(*span, ctx, *field_ty, expr_ty)?,
-                    None => {
-                        return err_type_error!(
-                            self,
-                            variant.span,
-                            TypeError::UnknownVariant(enum_name.name.clone(), variant.name.clone())
-                        )
-                        .help(
-                            self,
-                            enum_name.span,
-                            "Defined here".to_string(),
-                        )
-                    }
-                };
-                with_ret(ret, ty)
-            }
-
-            AssignableKind::Read(ident) => {
-                if let Some(var) = self
-                    .stack
-                    .iter()
-                    .rfind(|v| v.ident.name == ident.name)
-                    .cloned()
-                {
-                    no_ret(var.ty)
-                } else {
-                    match self
-                        .globals
-                        .get(&(ctx.namespace, ident.name.clone()))
-                        .cloned()
-                    {
-                        Some(Name::Global(var)) => {
-                            if ctx.inside_pure && matches!(var.kind, VarKind::Mutable) {
-                                err_type_error!(
-                                    self,
-                                    span,
-                                    TypeError::Impurity,
-                                    "Cannot access mutable variables from pure functions"
-                                )
-                            } else {
-                                no_ret(var.ty)
-                            }
-                        }
-                        _ => err_type_error!(
-                            self,
-                            span,
-                            TypeError::UnresolvedName(ident.name.clone())
-                        ),
-                    }
+    fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> TypeResult<RetNValue> {
+        use Expression as E;
+        let (expr_ret, expr) = match expression {
+            E::Read { var, span, .. } => {
+                let var = &self.variables[*var];
+                let immutable = var.kind.immutable();
+                if ctx.inside_pure && !immutable {
+                    return err_type_error!(
+                        self,
+                        *span,
+                        TypeError::Impurity,
+                        "Cannot access mutable variables from pure functions"
+                    );
                 }
+                no_ret(var.ty)
             }
-
-            AssignableKind::Call(f, args) => {
-                let (ret, f) = self.assignable(f, ctx)?;
-                match self.find_type(f) {
+            E::Variant { ty, variant, value, span } => {
+                let (value_ret, value) = self.expression(value, ctx)?;
+                // TODO[ed]: We should be able to do without this!
+                let enum_ty = self.copy(self.variables[*ty].ty);
+                self.add_constraint(
+                    enum_ty,
+                    *span,
+                    Constraint::Variant(variant.clone(), Some(value)),
+                );
+                self.check_constraints(*span, ctx, enum_ty)?;
+                with_ret(value_ret, enum_ty)
+            }
+            E::Call { function, args, span } => {
+                let (ret, function) = self.expression(function, ctx)?;
+                match self.find_type(function) {
                     Type::Function(params, ret_ty, purity) => {
                         if args.len() != params.len() {
                             return err_type_error!(
                                 self,
-                                span,
+                                *span,
                                 TypeError::WrongArity { got: args.len(), expected: params.len() }
                             );
                         }
@@ -982,7 +771,7 @@ impl TypeChecker {
                         if ctx.inside_pure && !matches!(purity, Purity::Pure) {
                             return err_type_error!(
                                 self,
-                                span,
+                                *span,
                                 TypeError::Impurity,
                                 "Cannot call impure functions from pure functions"
                             );
@@ -990,247 +779,122 @@ impl TypeChecker {
 
                         // TODO(ed): Annotate the errors?
                         let mut ret = ret;
-                        for (a, p) in args.iter_mut().zip(params.iter()) {
-                            let span = a.span;
+                        for (a, p) in args.iter().zip(params.iter()) {
+                            let span = a.span();
                             let (a_ret, a) = self.expression(a, ctx)?;
                             self.unify(span, ctx, *p, a)?;
                             self.add_constraint(a, span, Constraint::Variable);
                             self.check_constraints(span, ctx, a)?;
                             ret = self.unify_option(span, ctx, ret, a_ret)?;
                         }
+                        self.check_constraints(*span, ctx, ret_ty)?;
 
                         with_ret(ret, ret_ty)
                     }
                     Type::Unknown => err_type_error!(
                         self,
-                        span,
-                        TypeError::Violating(self.bake_type(f)),
+                        *span,
+                        TypeError::Violating(self.bake_type(function)),
                         "Unknown types cannot be called"
                     ),
                     _ => err_type_error!(
                         self,
-                        span,
-                        TypeError::Violating(self.bake_type(f)),
+                        *span,
+                        TypeError::Violating(self.bake_type(function)),
                         "Not callable"
                     ),
                 }
             }
-
-            AssignableKind::ArrowCall(pre_arg, f, args) => {
-                let mut args = args.clone();
-                args.insert(0, Expression::clone(pre_arg));
-                let mut mapped_assignable =
-                    Assignable { span, kind: AssignableKind::Call(f.clone(), args) };
-                self.assignable(&mut mapped_assignable, ctx)
+            E::BlobAccess { value, field, span } => {
+                let (outer_ret, outer) = self.expression(value, ctx)?;
+                let field_ty = self.push_type(Type::Unknown);
+                self.add_constraint(outer, *span, Constraint::Field(field.clone(), field_ty));
+                self.check_constraints(*span, ctx, outer)?;
+                // TODO(ed): Don't we do this further down? Do we need this code?
+                // We copy functions
+                let field_ty = match self.find_type(outer) {
+                    Type::Function(_, _, _) => self.copy(field_ty),
+                    _ => field_ty,
+                };
+                with_ret(outer_ret, field_ty)
             }
-
-            AssignableKind::Access(outer, ident) => match self.namespace_chain(outer, ctx) {
-                Some(ctx) => self.assignable(
-                    &mut Assignable { span, kind: AssignableKind::Read(ident.clone()) },
-                    ctx,
-                ),
-                None => {
-                    let (outer_ret, outer) = self.assignable(outer, ctx)?;
-                    let field = self.push_type(Type::Unknown);
-                    self.add_constraint(outer, span, Constraint::Field(ident.name.clone(), field));
-                    self.check_constraints(span, ctx, outer)?;
-                    // TODO(ed): Don't we do this further down? Do we need this code?
-                    // We copy functions
-                    let field = match self.find_type(outer) {
-                        Type::Function(_, _, _) => self.copy(field),
-                        _ => field,
-                    };
-                    with_ret(outer_ret, field)
-                }
-            },
-
-            AssignableKind::Index(outer, syn_index) => {
-                let (outer_ret, outer) = self.assignable(outer, ctx)?;
-                let (index_ret, index) = self.expression(syn_index, ctx)?;
+            E::Index { value, index: index_syn, span } => {
+                let (value_ret, value) = self.expression(value, ctx)?;
+                let (index_ret, index) = self.expression(index_syn, ctx)?;
                 let expr = self.push_type(Type::Unknown);
-                match syn_index.kind {
-                    ExpressionKind::Int(index) => {
-                        self.add_constraint(outer, span, Constraint::ConstantIndex(index, expr));
+                let index_span = index_syn.span();
+                match **index_syn {
+                    E::Int(i, _) => {
+                        self.add_constraint(value, *span, Constraint::ConstantIndex(i, expr));
                     }
                     _ => {
-                        self.add_constraint(index, span, Constraint::Indexes(outer));
-                        self.add_constraint(outer, span, Constraint::IndexedBy(index));
-                        self.add_constraint(outer, span, Constraint::IndexingGives(expr));
-                        self.add_constraint(expr, span, Constraint::GivenByIndex(outer));
+                        self.add_constraint(index, index_span, Constraint::Indexes(value));
+                        self.add_constraint(value, index_span, Constraint::IndexedBy(index));
+                        self.add_constraint(value, index_span, Constraint::IndexingGives(expr));
+                        self.add_constraint(expr, index_span, Constraint::GivenByIndex(value));
                     }
                 }
-
-                self.check_constraints(span, ctx, outer)?;
-                self.check_constraints(span, ctx, index)?;
-                let ret = self.unify_option(span, ctx, outer_ret, index_ret)?;
+                self.check_constraints(*span, ctx, value)?;
+                self.check_constraints(*span, ctx, index)?;
+                let ret = self.unify_option(*span, ctx, value_ret, index_ret)?;
                 with_ret(ret, expr)
             }
 
-            AssignableKind::Expression(expression) => self.expression(expression, ctx),
-        };
-        let (ret, ty) = ty?;
-        let ty = match self.find_type(ty) {
-            Type::Function(..) => self.copy(ty),
-            _ => ty,
-        };
-        with_ret(ret, ty)
-    }
-
-    fn expression_block(
-        &mut self,
-        span: Span,
-        statements: &mut Vec<Statement>,
-        ctx: TypeCtx,
-    ) -> TypeResult<(Option<TyID>, Option<TyID>)> {
-        // Left this for Gustav
-        let ss = self.stack.len();
-        let mut ret = None;
-        for stmt in statements.iter_mut() {
-            let stmt_ret = self.statement(stmt, ctx)?;
-            ret = self.unify_option(span, ctx, ret, stmt_ret)?;
-        }
-        // We typecheck the last statement twice sometimes, doesn't matter though.
-        let value = if let Some(Statement {
-            kind: StatementKind::StatementExpression { value },
-            ..
-        }) = statements.last_mut()
-        {
-            let (value_ret, value) = self.expression(value, ctx)?;
-            ret = self.unify_option(span, ctx, ret, value_ret)?;
-            Some(value)
-        } else {
-            None
-        };
-        self.stack.truncate(ss);
-        Ok((ret, value))
-    }
-
-    fn expression(&mut self, expression: &mut Expression, ctx: TypeCtx) -> TypeResult<RetNValue> {
-        let span = expression.span;
-        let res = match &mut expression.kind {
-            ExpressionKind::Get(ass) => self.assignable(ass, ctx),
-
-            ExpressionKind::Add(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Add),
-            ExpressionKind::Sub(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Sub),
-            ExpressionKind::Mul(a, b) => bin_op!(self, span, ctx, a, b, Constraint::Mul),
-            ExpressionKind::Div(a, b) => {
-                let (ret, _) = bin_op!(self, span, ctx, a, b, Constraint::Div)?;
-                with_ret(ret, self.push_type(Type::Float))
-            }
-
-            ExpressionKind::Comparison(a, comp, b) => match comp {
-                ComparisonKind::NotEquals | ComparisonKind::Equals => {
-                    let (ret, _) = bin_op!(self, span, ctx, a, b, Constraint::Equ)?;
-                    with_ret(ret, self.push_type(Type::Bool))
+            E::BinOp { a, b, op, span } => match op {
+                BinOp::Nop => unreachable!(),
+                BinOp::Equals | BinOp::AssertEq | BinOp::NotEquals => {
+                    bin_op!(self, *span, ctx, a, b, Constraint::Equ, Type::Bool)
                 }
-                ComparisonKind::Less | ComparisonKind::Greater => {
-                    let (ret, _) = bin_op!(self, span, ctx, a, b, Constraint::Cmp)?;
-                    with_ret(ret, self.push_type(Type::Bool))
+                BinOp::Greater | BinOp::Less => {
+                    bin_op!(self, *span, ctx, a, b, Constraint::Cmp, Type::Bool)
                 }
-                ComparisonKind::LessEqual | ComparisonKind::GreaterEqual => {
-                    let (ret, _) = bin_op!(self, span, ctx, a, b, Constraint::CmpEqu)?;
-                    with_ret(ret, self.push_type(Type::Bool))
+                BinOp::GreaterEqual | BinOp::LessEqual => {
+                    bin_op!(self, *span, ctx, a, b, Constraint::CmpEqu, Type::Bool)
                 }
-
-                ComparisonKind::In => {
+                BinOp::In => {
                     let (a_ret, a) = self.expression(a, ctx)?;
                     let (b_ret, b) = self.expression(b, ctx)?;
-                    self.add_constraint(a, span, Constraint::IsContainedIn(b));
-                    self.add_constraint(b, span, Constraint::Contains(a));
-                    self.check_constraints(span, ctx, a)?;
-                    self.check_constraints(span, ctx, b)?;
+                    self.add_constraint(a, *span, Constraint::IsContainedIn(b));
+                    self.add_constraint(b, *span, Constraint::Contains(a));
+                    self.check_constraints(*span, ctx, a)?;
+                    self.check_constraints(*span, ctx, b)?;
                     with_ret(
-                        self.unify_option(span, ctx, a_ret, b_ret)?,
+                        self.unify_option(*span, ctx, a_ret, b_ret)?,
                         self.push_type(Type::Bool),
                     )
                 }
+                BinOp::Add => bin_op!(self, *span, ctx, a, b, Constraint::Add),
+                BinOp::Sub => bin_op!(self, *span, ctx, a, b, Constraint::Sub),
+                BinOp::Mul => bin_op!(self, *span, ctx, a, b, Constraint::Mul),
+                BinOp::Div => bin_op!(self, *span, ctx, a, b, Constraint::Mul, Type::Float),
+                BinOp::And | BinOp::Or => {
+                    let (a_ret, a) = self.expression(a, ctx)?;
+                    let (b_ret, b) = self.expression(b, ctx)?;
+                    let boolean = self.push_type(Type::Bool);
+                    self.unify(*span, ctx, a, boolean)?;
+                    self.unify(*span, ctx, b, boolean)?;
+                    with_ret(self.unify_option(*span, ctx, a_ret, b_ret)?, a)
+                }
+            },
+            E::UniOp { a, op, span } => match op {
+                UniOp::Neg => {
+                    let (a_ret, a) = self.expression(a, ctx)?;
+                    self.add_constraint(a, *span, Constraint::Neg);
+                    with_ret(a_ret, a)
+                }
+                UniOp::Not => {
+                    let (a_ret, a) = self.expression(a, ctx)?;
+                    let boolean = self.push_type(Type::Bool);
+                    with_ret(a_ret, self.unify(*span, ctx, a, boolean)?)
+                }
             },
 
-            ExpressionKind::AssertEq(a, b) => {
-                let (ret, _) = bin_op!(self, span, ctx, a, b, Constraint::Equ)?;
-                with_ret(ret, self.push_type(Type::Bool))
-            }
-
-            ExpressionKind::Or(a, b) | ExpressionKind::And(a, b) => {
-                let (a_ret, a) = self.expression(a, ctx)?;
-                let (b_ret, b) = self.expression(b, ctx)?;
-                let boolean = self.push_type(Type::Bool);
-                self.unify(span, ctx, a, boolean)?;
-                self.unify(span, ctx, b, boolean)?;
-                with_ret(self.unify_option(span, ctx, a_ret, b_ret)?, a)
-            }
-
-            ExpressionKind::Neg(a) => {
-                let (a_ret, a) = self.expression(a, ctx)?;
-                self.add_constraint(a, span, Constraint::Neg);
-                with_ret(a_ret, a)
-            }
-
-            ExpressionKind::Not(a) => {
-                let (a_ret, a) = self.expression(a, ctx)?;
-                let boolean = self.push_type(Type::Bool);
-                with_ret(a_ret, self.unify(span, ctx, a, boolean)?)
-            }
-
-            ExpressionKind::Parenthesis(expr) => self.expression(expr, ctx),
-
-            ExpressionKind::Case { to_match, branches, fall_through } => {
-                let (ret, to_match) = self.expression(to_match, ctx)?;
-                self.add_constraint(to_match, span, Constraint::Enum);
-
-                let mut ret = ret;
-                let mut value = None;
-                let mut branch_names = BTreeSet::new();
-                let ss = self.stack.len();
-                for branch in branches.iter_mut() {
-                    let name = branch.pattern.name.clone();
-                    let constraint = if let Some(var) = &branch.variable {
-                        let var = Variable {
-                            ident: var.clone(),
-                            ty: self.push_type(Type::Unknown),
-                            kind: VarKind::Const,
-                            span,
-                        };
-                        let constraint = Some(var.ty);
-                        self.stack.push(var);
-                        constraint
-                    } else {
-                        None
-                    };
-                    self.add_constraint(
-                        to_match,
-                        span,
-                        Constraint::Variant(name.clone(), constraint),
-                    );
-                    // NOTE(ed): This unifies the variable with the enum, so it injects a function
-                    // - for example - this makes it more permissive than if you place it after the
-                    // `self.expression_block`.
-                    self.check_constraints(span, ctx, to_match)?;
-                    let (branch_ret, branch) =
-                        self.expression_block(span, &mut branch.body, ctx)?;
-                    value = self.unify_option(span, ctx, value, branch)?;
-                    ret = self.unify_option(span, ctx, ret, branch_ret)?;
-                    self.stack.truncate(ss);
-                    branch_names.insert(name.clone());
-                }
-
-                if let Some(fall_through) = fall_through {
-                    let (fall_ret, fall) = self.expression_block(span, fall_through, ctx)?;
-                    ret = self.unify_option(span, ctx, fall_ret, ret)?;
-                    value = self.unify_option(span, ctx, fall, value)?;
-                } else {
-                    self.add_constraint(to_match, span, Constraint::TotalEnum(branch_names));
-                    self.check_constraints(span, ctx, to_match)?;
-                }
-                with_ret(ret, value.unwrap_or_else(|| self.push_type(Type::Void)))
-            }
-
-            ExpressionKind::If(branches) => {
+            E::If { branches, span } => {
                 let tys = branches
-                    .iter_mut()
+                    .iter()
                     .map(|branch| {
-                        let condition_ret = if let Some(condition) = &mut branch.condition {
-                            let span = condition.span;
+                        let condition_ret = if let Some(condition) = &branch.condition {
+                            let span = condition.span();
                             let (ret, condition) = self.expression(condition, ctx)?;
                             let boolean = self.push_type(Type::Bool);
                             self.unify(span, ctx, boolean, condition)?;
@@ -1239,10 +903,10 @@ impl TypeChecker {
                             None
                         };
                         let (block_ret, block_value) =
-                            self.expression_block(span, &mut branch.body, ctx)?;
+                            self.expression_block(*span, &branch.body, ctx)?;
                         Ok((
                             span,
-                            self.unify_option(span, ctx, condition_ret, block_ret)?,
+                            self.unify_option(*span, ctx, condition_ret, block_ret)?,
                             block_value,
                         ))
                     })
@@ -1263,13 +927,13 @@ impl TypeChecker {
                         // TODO(ed): These are bad errors, they're easy to confuse. A better
                         // formulation?
                         ret = self
-                            .unify_option(*span, ctx, *branch_ret, ret)
+                            .unify_option(**span, ctx, *branch_ret, ret)
                             .help_no_span(
                                 "The return from this block doesn't match the earlier branches"
                                     .into(),
                             )?;
                         value = self
-                            .unify_option(*span, ctx, *branch_value, value)
+                            .unify_option(**span, ctx, *branch_value, value)
                             .help_no_span(
                                 "The value from this block doesn't match the earlier branches"
                                     .into(),
@@ -1280,82 +944,94 @@ impl TypeChecker {
                 with_ret(ret, value.unwrap_or_else(|| self.push_type(Type::Void)))
             }
 
-            ExpressionKind::Function { name: _, params, ret, body, pure } => {
-                let ss = self.stack.len();
-                let mut args = Vec::new();
-                let mut seen = HashMap::new();
-                for (ident, ty) in params.iter() {
-                    let ty = self.inner_resolve_type(span, ctx, ty, &mut seen)?;
-                    args.push(ty);
+            E::Case { to_match, branches, fall_through, span } => {
+                let (ret, to_match) = self.expression(to_match, ctx)?;
+                self.add_constraint(to_match, *span, Constraint::Enum);
 
-                    let var = Variable {
-                        ident: ident.clone(),
-                        ty,
-                        kind: VarKind::Const,
-                        span,
-                    };
-                    self.stack.push(var);
+                let mut ret = ret;
+                let mut value = None;
+                let mut branch_names = BTreeSet::new();
+                for branch in branches.iter() {
+                    let name = branch.pattern.name.clone();
+                    let constraint = &branch.variable.map(|var| self.variables[var].ty);
+                    self.add_constraint(
+                        to_match,
+                        *span,
+                        Constraint::Variant(name.clone(), *constraint),
+                    );
+                    // NOTE(ed): This unifies the variable with the enum, so it injects a function
+                    // - for example - this makes it more permissive than if you place it after the
+                    // `self.expression_block`.
+                    self.check_constraints(*span, ctx, to_match)?;
+                    let (branch_ret, branch) = self.expression_block(*span, &branch.body, ctx)?;
+                    value = self.unify_option(*span, ctx, value, branch)?;
+                    ret = self.unify_option(*span, ctx, ret, branch_ret)?;
+                    branch_names.insert(name.clone());
                 }
 
-                let returns_something = ret.kind != TypeKind::Resolved(RuntimeType::Void);
-                let ret_ty = self.inner_resolve_type(span, ctx, ret, &mut seen)?;
+                if let Some(fall_through) = fall_through {
+                    let (fall_ret, fall) = self.expression_block(*span, fall_through, ctx)?;
+                    ret = self.unify_option(*span, ctx, fall_ret, ret)?;
+                    value = self.unify_option(*span, ctx, fall, value)?;
+                } else {
+                    self.add_constraint(to_match, *span, Constraint::TotalEnum(branch_names));
+                    self.check_constraints(*span, ctx, to_match)?;
+                }
+                with_ret(ret, value.unwrap_or_else(|| self.push_type(Type::Void)))
+            }
+
+            E::Function { name: _, params, ret, body, pure, span } => {
+                let (f_ty, ret_ty) = self.type_from_function(ctx, params, ret, *pure)?;
 
                 let ctx = if *pure { ctx.enter_pure() } else { ctx };
-
-                let (actual_ret, implicit_ret) = self.expression_block(span, body, ctx)?;
-
-                let actual_ret = if returns_something {
-                    self.unify_option(span, ctx, actual_ret, implicit_ret)
-                        .help_no_span("The implicit and explicit return types differ".into())?
-                } else {
+                let (actual_ret, implicit_ret) = self.expression_block(*span, body, ctx)?;
+                let actual_ret = if ret.is_void() {
                     let void = Some(self.push_type(Type::Void));
-                    self.unify_option(span, ctx, actual_ret, void)?
+                    self.unify_option(*span, ctx, actual_ret, void)?
+                } else {
+                    self.unify_option(*span, ctx, actual_ret, implicit_ret)
+                        .help_no_span("The implicit and explicit return types differ".into())?
                 };
-                self.unify_option(span, ctx, Some(ret_ty), actual_ret)
+                self.unify_option(*span, ctx, Some(ret_ty), actual_ret)
                     .help_no_span(
                         "The actual return type and the specified return type differ!".into(),
                     )?;
 
-                if actual_ret.map(|x| self.is_void(x)).unwrap_or(true) && returns_something {
+                if actual_ret.map(|x| self.is_void(x)).unwrap_or(true) && !ret.is_void() {
                     return err_type_error!(
                         self,
-                        ret.span,
+                        ret.span(),
                         TypeError::Exotic,
-                        "The return type isn't explicitly set to `void`, but the function doesn't return anything"
+                        "The return type is explicitly set to `void`, but the function returns something"
                     );
                 }
 
-                self.unify_option(span, ctx, Some(ret_ty), actual_ret)
+                self.unify_option(*span, ctx, Some(ret_ty), actual_ret)
                     .help(
                         self,
-                        ret.span,
+                        ret.span(),
                         "The actual return type differs from the specified return type".into(),
                     )?;
 
-                self.stack.truncate(ss);
-
                 // Functions are the only expressions that we cannot return out of when evaluating.
-                let purity = if *pure { Purity::Pure } else { Purity::Impure };
-                let f = self.push_type(Type::Function(args, ret_ty, purity));
-                no_ret(f)
+                no_ret(f_ty)
             }
 
-            ExpressionKind::Blob { blob, fields } => {
-                let blob_ty = self.type_assignable(ctx, blob)?;
-
+            E::Blob { blob, fields, span, .. } => {
+                let blob_ty = self.copy(self.variables[*blob].ty);
                 let (blob_name, blob_fields, blob_args) = match self.find_type(blob_ty) {
-                    Type::Blob(name, fields, args) => (name, fields, args),
-                    Type::ExternBlob(name, _, _, _) => {
+                    Type::Blob(name, _, fields, args) => (name, fields, args),
+                    Type::ExternBlob(name, _, _, _, _) => {
                         return err_type_error!(
                             self,
-                            span,
-                            TypeError::ExternBlobInstance { name: name.name.clone() }
+                            *span,
+                            TypeError::ExternBlobInstance { name: name.clone() }
                         );
                     }
                     _ => {
                         return err_type_error!(
                             self,
-                            span,
+                            *span,
                             TypeError::Violating(self.bake_type(blob_ty)),
                             "A blob type was expected, but the given type isn't a blob"
                         )
@@ -1365,7 +1041,7 @@ impl TypeChecker {
                 let given_fields: BTreeMap<_, _> = fields
                     .iter()
                     .map(|(key, expr)| {
-                        Ok((key.clone(), (expr.span, self.push_type(Type::Unknown))))
+                        Ok((key.clone(), (expr.span(), self.push_type(Type::Unknown))))
                     })
                     .collect::<TypeResult<_>>()?;
 
@@ -1374,9 +1050,9 @@ impl TypeChecker {
                     if !given_fields.contains_key(field) {
                         errors.push(type_error!(
                             self,
-                            span,
+                            *span,
                             TypeError::MissingField {
-                                blob: blob_name.name.clone(),
+                                blob: blob_name.clone(),
                                 field: field.clone(),
                             }
                         ));
@@ -1389,7 +1065,7 @@ impl TypeChecker {
                             self,
                             *span,
                             TypeError::UnknownField {
-                                blob: blob_name.name.clone(),
+                                blob: blob_name.clone(),
                                 field: field.clone(),
                             }
                         ));
@@ -1406,153 +1082,79 @@ impl TypeChecker {
                     .collect::<BTreeMap<_, _>>();
                 let given_blob = self.push_type(Type::Blob(
                     blob_name.clone(),
+                    *span,
                     fields_and_types.clone(),
                     blob_args.clone(),
                 ));
 
                 // Unify the fields with their real types
-                let ss = self.stack.len();
                 let ret = Some(self.push_type(Type::Unknown));
                 for (key, expr) in fields {
-                    if matches!(expr.kind, ExpressionKind::Function { .. }) {
-                        self.stack.push(Variable {
-                            ident: Identifier { name: "self".to_string(), span },
-                            kind: VarKind::Const,
-                            ty: given_blob,
-                            span,
-                        });
-                    }
                     let (inner_ret, expr_ty) = self.expression(expr, ctx)?;
-                    self.unify_option(span, ctx, ret, inner_ret)?;
-                    self.unify(expr.span, ctx, expr_ty, fields_and_types[key].1)?;
-                    self.stack.truncate(ss);
+                    self.unify_option(*span, ctx, ret, inner_ret)?;
+                    self.unify(expr.span(), ctx, expr_ty, fields_and_types[key].1)?;
                 }
 
-                with_ret(ret, self.unify(span, ctx, given_blob, blob_ty)?)
+                with_ret(ret, self.unify(*span, ctx, given_blob, blob_ty)?)
             }
 
-            ExpressionKind::Tuple(exprs) => {
+            E::Collection { collection: Collection::Tuple, values, span } => {
                 let mut tys = Vec::new();
                 let ret = Some(self.push_type(Type::Unknown));
-                for expr in exprs.iter_mut() {
+                for expr in values.iter() {
                     let (inner_ret, ty) = self.expression(expr, ctx)?;
                     tys.push(ty);
-                    self.unify_option(span, ctx, ret, inner_ret)?;
+                    self.unify_option(*span, ctx, ret, inner_ret)?;
                 }
                 with_ret(ret, self.push_type(Type::Tuple(tys)))
             }
 
-            ExpressionKind::List(exprs) => {
+            E::Collection { collection: Collection::List, values, span } => {
                 let inner_ty = self.push_type(Type::Unknown);
                 let ret = Some(self.push_type(Type::Unknown));
-                for expr in exprs.iter_mut() {
+                for expr in values.iter() {
                     let (e_ret, e) = self.expression(expr, ctx)?;
-                    self.unify(span, ctx, inner_ty, e)?;
-                    self.unify_option(span, ctx, ret, e_ret)?;
+                    self.unify(*span, ctx, inner_ty, e)?;
+                    self.unify_option(*span, ctx, ret, e_ret)?;
                 }
                 with_ret(ret, self.push_type(Type::List(inner_ty)))
             }
 
-            ExpressionKind::Set(exprs) => {
+            E::Collection { collection: Collection::Set, values, span } => {
                 let inner_ty = self.push_type(Type::Unknown);
                 let ret = Some(self.push_type(Type::Unknown));
-                for expr in exprs.iter_mut() {
+                for expr in values.iter() {
                     let (e_ret, e) = self.expression(expr, ctx)?;
-                    self.unify(span, ctx, inner_ty, e)?;
-                    self.unify_option(span, ctx, ret, e_ret)?;
+                    self.unify(*span, ctx, inner_ty, e)?;
+                    self.unify_option(*span, ctx, ret, e_ret)?;
                 }
                 with_ret(ret, self.push_type(Type::Set(inner_ty)))
             }
 
-            ExpressionKind::Dict(exprs) => {
+            E::Collection { collection: Collection::Dict, values, span } => {
                 let key_ty = self.push_type(Type::Unknown);
                 let value_ty = self.push_type(Type::Unknown);
                 let ret = Some(self.push_type(Type::Unknown));
-                for (i, x) in exprs.iter_mut().enumerate() {
+                for (i, x) in values.iter().enumerate() {
                     let (e_ret, e) = self.expression(x, ctx)?;
                     // Even indexes are keys, odd are the values.
                     let ty = if i % 2 == 0 { key_ty } else { value_ty };
-                    self.unify(span, ctx, ty, e)?;
-                    self.unify_option(span, ctx, e_ret, ret)?;
+                    self.unify(*span, ctx, ty, e)?;
+                    self.unify_option(*span, ctx, e_ret, ret)?;
                 }
                 with_ret(ret, self.push_type(Type::Dict(key_ty, value_ty)))
             }
 
-            ExpressionKind::Int(_) => no_ret(self.push_type(Type::Int)),
-            ExpressionKind::Float(_) => no_ret(self.push_type(Type::Float)),
-            ExpressionKind::Str(_) => no_ret(self.push_type(Type::Str)),
-            ExpressionKind::Bool(_) => no_ret(self.push_type(Type::Bool)),
-            ExpressionKind::Nil => no_ret(self.push_type(Type::Nil)),
+            E::Float(_, _) => no_ret(self.push_type(Type::Float)),
+            E::Int(_, _) => no_ret(self.push_type(Type::Int)),
+            E::Str(_, _) => no_ret(self.push_type(Type::Str)),
+            E::Bool(_, _) => no_ret(self.push_type(Type::Bool)),
+            E::Nil(_) => no_ret(self.push_type(Type::Nil)),
         }?;
-        expression.ty = Some(res.1);
-        Ok(res)
-    }
-
-    fn definition(
-        &mut self,
-        statement: &mut Statement,
-        global: bool,
-        ctx: TypeCtx,
-    ) -> TypeResult<Option<TyID>> {
-        let span = statement.span;
-        let (ident, kind, ty, value) = match &mut statement.kind {
-            StatementKind::Definition { ident, kind, ty, value } => {
-                if ctx.inside_pure && !kind.immutable() {
-                    return err_type_error!(
-                        self,
-                        span,
-                        TypeError::Impurity,
-                        "Cannot make mutable declarations in pure functions"
-                    );
-                }
-                (ident.clone(), *kind, ty, value)
-            }
-            _ => unreachable!(),
-        };
-        let global_name = (ctx.namespace, ident.name.clone());
-        let defined_ty = self.resolve_type(span, ctx, &ty)?;
-        self.add_constraint(defined_ty, span, Constraint::Variable);
-
-        match &value.kind {
-            ExpressionKind::Function { params, pure, .. } => {
-                // Special case for functions
-                let args = params
-                    .iter()
-                    .map(|_| self.push_type(Type::Unknown))
-                    .collect();
-                let ret = self.push_type(Type::Unknown);
-                let purity = pure.then(|| Purity::Pure).unwrap_or(Purity::Impure);
-                let fn_ty = self.push_type(Type::Function(args, ret, purity));
-                self.unify(span, ctx, defined_ty, fn_ty)?;
-                let var = Variable { ident, ty: fn_ty, kind, span };
-                if global {
-                    self.globals.insert(global_name, Name::Global(var));
-                } else {
-                    self.stack.push(var);
-                }
-
-                let (ret_expression, expression_ty) = self.expression(value, ctx)?;
-                self.unify(span, ctx, defined_ty, expression_ty)?;
-                // Re-check the function body, this catches type-errors from recursion.
-                self.expression(value, ctx)?;
-
-                Ok(ret_expression)
-            }
-
-            _ => {
-                // 'Normal' variables
-                let (ret_expression, expression_ty) = self.expression(value, ctx)?;
-                self.unify(span, ctx, defined_ty, expression_ty)?;
-
-                let var = Variable { ident, ty: defined_ty, kind, span };
-                if global {
-                    self.globals.insert(global_name, Name::Global(var));
-                } else {
-                    self.stack.push(var);
-                }
-
-                Ok(ret_expression)
-            }
+        // TODO[ed]: Don't agressively copy function! D:
+        match self.find_type(expr) {
+            Type::Function { .. } => with_ret(expr_ret, self.copy(expr)),
+            _ => with_ret(expr_ret, expr),
         }
     }
 
@@ -1624,28 +1226,28 @@ impl TypeChecker {
                 Box::new(self.inner_bake_type(ret, seen)),
             ),
             // TODO(ed): Should we print out the arguments to the blob instead?
-            Type::Blob(name, fields, _) => RuntimeType::Blob(
-                name.name.clone(),
+            Type::Blob(name, _, fields, _) => RuntimeType::Blob(
+                name.clone(),
                 fields
                     .iter()
                     .map(|(name, ty)| (name.clone(), self.inner_bake_type(ty.1, seen)))
                     .collect(),
             ),
             // TODO(ed): Should we print out the arguments to the external blob instead?
-            Type::ExternBlob(name, fields, _, namespace) => RuntimeType::ExternBlob(
-                name.name.clone(),
+            Type::ExternBlob(name, span, fields, _, _) => RuntimeType::ExternBlob(
+                name.clone(),
                 fields
                     .iter()
                     .map(|(name, ty)| (name.clone(), self.inner_bake_type(ty.1, seen)))
                     .collect(),
-                match self.namespace_to_file.get(&namespace).unwrap() {
+                match self.namespace_to_file.get(&span.file_id).unwrap() {
                     FileOrLib::Lib(name) => name.to_string(),
                     FileOrLib::File(path) => path.to_string_lossy().to_string(),
                 },
             ),
             // TODO(ed): Should we print out the arguments to the enum instead?
-            Type::Enum(name, variants, _) => RuntimeType::Enum(
-                name.name.clone(),
+            Type::Enum(name, _, variants, _) => RuntimeType::Enum(
+                name.clone(),
                 variants
                     .iter()
                     .map(|(name, ty)| (name.clone(), self.inner_bake_type(ty.1, seen)))
@@ -1697,8 +1299,8 @@ impl TypeChecker {
 
                 Constraint::Field(name, expected_ty) => match self.find_type(a).clone() {
                     Type::Unknown => Ok(()),
-                    Type::ExternBlob(blob_name, fields, _, _)
-                    | Type::Blob(blob_name, fields, _) => match fields.get(name) {
+                    Type::ExternBlob(blob_name, blob_span, fields, _, _)
+                    | Type::Blob(blob_name, blob_span, fields, _) => match fields.get(name) {
                         Some((span, actual_ty)) => {
                             self.unify(*span, ctx, *expected_ty, *actual_ty).map(|_| ())
                         }
@@ -1706,15 +1308,11 @@ impl TypeChecker {
                             self,
                             span,
                             TypeError::MissingField {
-                                blob: blob_name.name.clone(),
+                                blob: blob_name.clone(),
                                 field: name.clone(),
                             }
                         )
-                        .help(
-                            self,
-                            blob_name.span,
-                            "Defined here".to_string(),
-                        ),
+                        .help(self, blob_span, "Defined here".to_string()),
                     },
                     _ => err_type_error!(
                         self,
@@ -1781,22 +1379,24 @@ impl TypeChecker {
                 Constraint::Variant(var, maybe_v_b) => match self.find_type(a) {
                     Type::Unknown => Ok(()),
 
-                    Type::Enum(enum_name, variants, _) => match (variants.get(var), maybe_v_b) {
-                        (Some(_), None) => Ok(()),
-                        (Some((_, v_a)), Some(v_b)) => {
-                            self.unify(span, ctx, *v_a, *v_b).map(|_| ())
+                    Type::Enum(enum_name, enum_span, variants, _) => {
+                        match (variants.get(var), maybe_v_b) {
+                            (Some(_), None) => Ok(()),
+                            (Some((_, v_a)), Some(v_b)) => {
+                                self.unify(span, ctx, *v_a, *v_b).map(|_| ())
+                            }
+                            (None, _) => err_type_error!(
+                                self,
+                                span,
+                                TypeError::UnknownVariant(enum_name, var.clone())
+                            )
+                            .help(
+                                self,
+                                enum_span,
+                                "Defined here".to_string(),
+                            ),
                         }
-                        (None, _) => err_type_error!(
-                            self,
-                            span,
-                            TypeError::UnknownVariant(enum_name.name, var.clone())
-                        )
-                        .help(
-                            self,
-                            enum_name.span,
-                            "Defined here".to_string(),
-                        ),
-                    },
+                    }
 
                     _ => err_type_error!(
                         self,
@@ -1810,7 +1410,7 @@ impl TypeChecker {
                 Constraint::TotalEnum(vars) => match self.find_type(a) {
                     Type::Unknown => Ok(()),
 
-                    Type::Enum(enum_name, enum_vars, _) => {
+                    Type::Enum(enum_name, enum_span, enum_vars, _) => {
                         let missing = vars
                             .iter()
                             .cloned()
@@ -1820,11 +1420,11 @@ impl TypeChecker {
                             err_type_error!(
                                 self,
                                 span,
-                                TypeError::MissingVariants(enum_name.name.clone(), missing)
+                                TypeError::MissingVariants(enum_name.clone(), missing)
                             )
                             .help(
                                 self,
-                                enum_name.span,
+                                enum_span,
                                 "Defined here".to_string(),
                             )
                         } else {
@@ -1837,11 +1437,11 @@ impl TypeChecker {
                                 err_type_error!(
                                     self,
                                     span,
-                                    TypeError::ExtraVariants(enum_name.name.clone(), extra)
+                                    TypeError::ExtraVariants(enum_name.clone(), extra)
                                 )
                                 .help(
                                     self,
-                                    enum_name.span,
+                                    enum_span,
                                     "Defined here".to_string(),
                                 )
                             } else {
@@ -2013,20 +1613,23 @@ impl TypeChecker {
                         .help_no_span("While checking return type".into())?;
                 }
 
-                (Type::Blob(a_blob, a_fields, _), Type::Blob(b_blob, b_fields, _)) => {
+                (
+                    Type::Blob(a_blob, a_span, a_fields, _),
+                    Type::Blob(b_blob, b_span, b_fields, _),
+                ) => {
                     for (a_field, _) in a_fields.iter() {
                         if !b_fields.contains_key(a_field) {
                             return err_type_error!(
                                 self,
                                 span,
                                 TypeError::MissingField {
-                                    blob: b_blob.name.clone(),
+                                    blob: b_blob.clone(),
                                     field: a_field.clone()
                                 }
                             )
                             .help(
                                 self,
-                                b_blob.span,
+                                b_span,
                                 "Defined here".to_string(),
                             );
                         };
@@ -2040,13 +1643,13 @@ impl TypeChecker {
                                     self,
                                     span,
                                     TypeError::MissingField {
-                                        blob: a_blob.name.clone(),
+                                        blob: a_blob.clone(),
                                         field: b_field.clone()
                                     }
                                 )
                                 .help(
                                     self,
-                                    a_blob.span,
+                                    a_span,
                                     "Defined here".to_string(),
                                 );
                             }
@@ -2060,26 +1663,29 @@ impl TypeChecker {
                 }
 
                 (
-                    Type::ExternBlob(a_name, _, a_args, a_namespace),
-                    Type::ExternBlob(b_name, _, b_args, b_namespace),
-                ) if a_name == b_name && a_namespace == b_namespace => {
+                    Type::ExternBlob(_, _, _, a_args, a_id),
+                    Type::ExternBlob(_, _, _, b_args, b_id),
+                ) if a_id == b_id => {
                     for (i, (a, b)) in a_args.iter().zip(b_args.iter()).enumerate() {
                         self.sub_unify(span, ctx, *a, *b, seen)
                             .help_no_span(format!("While checking type argument #{}", i))?;
                     }
                 }
 
-                (Type::Enum(a_name, a_variants, _), Type::Enum(b_name, b_variants, _)) => {
+                (
+                    Type::Enum(a_name, a_span, a_variants, _),
+                    Type::Enum(b_name, b_span, b_variants, _),
+                ) => {
                     for (a_var, _) in a_variants.iter() {
                         if !b_variants.contains_key(a_var) {
                             return err_type_error!(
                                 self,
                                 span,
-                                TypeError::UnknownVariant(b_name.name.clone(), a_var.clone())
+                                TypeError::UnknownVariant(b_name.clone(), a_var.clone())
                             )
                             .help(
                                 self,
-                                b_name.span,
+                                b_span,
                                 "Defined here".to_string(),
                             );
                         }
@@ -2091,11 +1697,11 @@ impl TypeChecker {
                                 return err_type_error!(
                                     self,
                                     span,
-                                    TypeError::UnknownVariant(a_name.name.clone(), b_var.clone())
+                                    TypeError::UnknownVariant(a_name.clone(), b_var.clone())
                                 )
                                 .help(
                                     self,
-                                    a_name.span,
+                                    a_span,
                                     "Defined here".to_string(),
                                 );
                             }
@@ -2225,8 +1831,9 @@ impl TypeChecker {
                 purity,
             ),
 
-            Type::ExternBlob(name, fields, args, namespace) => Type::ExternBlob(
+            Type::ExternBlob(name, span, fields, args, namespace) => Type::ExternBlob(
                 name.clone(),
+                span,
                 fields
                     .iter()
                     .map(|(name, (span, ty))| (name.clone(), (*span, self.inner_copy(*ty, seen))))
@@ -2236,8 +1843,9 @@ impl TypeChecker {
             ),
 
             // TODO(ed): We can cheat here and just copy the table directly.
-            Type::Blob(name, fields, args) => Type::Blob(
+            Type::Blob(name, span, fields, args) => Type::Blob(
                 name.clone(),
+                span,
                 fields
                     .iter()
                     .map(|(name, (span, ty))| (name.clone(), (*span, self.inner_copy(*ty, seen))))
@@ -2245,8 +1853,9 @@ impl TypeChecker {
                 args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
             ),
 
-            Type::Enum(name, variants, args) => Type::Enum(
+            Type::Enum(name, span, variants, args) => Type::Enum(
                 name.clone(),
+                span,
                 variants
                     .iter()
                     .map(|(name, (span, ty))| (name.clone(), (*span, self.inner_copy(*ty, seen))))
@@ -2262,84 +1871,44 @@ impl TypeChecker {
         self.inner_copy(ty, &mut seen)
     }
 
-    fn can_assign(&mut self, span: Span, ctx: TypeCtx, assignable: &Assignable) -> TypeResult<()> {
-        match &assignable.kind {
-            AssignableKind::Variant { .. } => {
-                err_type_error!(
+    fn can_assign(&mut self, span: Span, assignable: &Expression) -> TypeResult<()> {
+        use Expression as E;
+        match &assignable {
+            E::Read { var, span } => {
+                if self.variables[*var].kind.immutable() {
+                    return err_type_error!(
+                        self,
+                        *span,
+                        TypeError::Assignability,
+                        "Cannot assign to constants"
+                    );
+                }
+            }
+            E::BlobAccess { .. } | E::Index { .. } => {}
+
+            E::Variant { .. }
+            | E::Call { .. }
+            | E::BinOp { .. }
+            | E::UniOp { .. }
+            | E::If { .. }
+            | E::Case { .. }
+            | E::Function { .. }
+            | E::Blob { .. }
+            | E::Collection { .. }
+            | E::Float(_, _)
+            | E::Int(_, _)
+            | E::Str(_, _)
+            | E::Bool(_, _)
+            | E::Nil(_) => {
+                return err_type_error!(
                     self,
                     span,
                     TypeError::Assignability,
-                    "Cannot assign to enum-variant"
-                )
+                    "Can only assign to variables, accesses and indexes"
+                );
             }
-            AssignableKind::Read(ident) => {
-                match self.stack.iter().rfind(|v| v.ident.name == ident.name) {
-                    Some(var) if !var.kind.immutable() => Ok(()),
-                    Some(var) => err_type_error!(
-                        self,
-                        span,
-                        TypeError::Assignability,
-                        "Cannot assign to constants"
-                    )
-                    .help(self, var.span, "Originally defined here".into()),
-                    // Not a local variable. Is it a global?
-                    _ => match self.globals.get(&(ctx.namespace, ident.name.clone())) {
-                        Some(Name::Global(var)) => {
-                            if !var.kind.immutable() {
-                                Ok(())
-                            } else {
-                                err_type_error!(
-                                    self,
-                                    span,
-                                    TypeError::Assignability,
-                                    "Cannot assign to constants"
-                                )
-                                .help(
-                                    self,
-                                    var.span,
-                                    "Originally defined here".into(),
-                                )
-                            }
-                        }
-                        Some(_) => err_type_error!(
-                            self,
-                            span,
-                            TypeError::Assignability,
-                            "\"{}\" is not a variable",
-                            ident.name.clone()
-                        ),
-                        _ => err_type_error!(
-                            self,
-                            span,
-                            TypeError::Assignability,
-                            "Variable \"{}\" not found. If declaring, use :=",
-                            ident.name.clone()
-                        ),
-                    },
-                }
-            }
-            AssignableKind::ArrowCall(_, _, _) | AssignableKind::Call(_, _) => err_type_error!(
-                self,
-                span,
-                TypeError::Assignability,
-                "Cannot assign to function calls"
-            ),
-            AssignableKind::Access(outer, ident) => match self.namespace_chain(&outer, ctx) {
-                Some(ctx) => self.can_assign(
-                    span,
-                    ctx,
-                    &Assignable { span, kind: AssignableKind::Read(ident.clone()) },
-                ),
-                None => Ok(()),
-            },
-            AssignableKind::Index(_, _) => Ok(()),
-            AssignableKind::Expression(_) => err_type_error!(
-                self,
-                span,
-                TypeError::Assignability,
-                "Cannot assign to expressions"
-            ),
         }
+        Ok(())
     }
 
     fn add_constraint(&mut self, a: TyID, span: Span, constraint: Constraint) {
@@ -2619,52 +2188,36 @@ impl TypeChecker {
         }
     }
 
-    fn solve(&mut self, statements: &mut Vec<(Statement, NamespaceID)>) -> TypeResult<()> {
-        // Initialize the namespaces first.
-        for (statement, namespace) in statements.iter_mut() {
-            if matches!(statement.kind, StatementKind::Use { .. }) {
-                self.outer_statement(statement, TypeCtx::namespace(*namespace))?;
-            }
+    fn solve(&mut self, statements: &Vec<Statement>, start_var: Option<&Var>) -> TypeResult<()> {
+        let ctx = TypeCtx::new();
+        for statement in statements.iter() {
+            self.outer_statement(statement, ctx)?;
         }
 
-        // Then the rest.
-        for (statement, namespace) in statements.iter_mut() {
-            if !matches!(statement.kind, StatementKind::Use { .. }) {
-                self.outer_statement(statement, TypeCtx::namespace(*namespace))?;
-            }
-        }
-
-        let ctx = TypeCtx::namespace(0);
-        match self.globals.get(&(0, "start".to_string())).cloned() {
-            Some(Name::Global(var)) => {
+        match start_var {
+            Some(var) => {
                 let void = self.push_type(Type::Void);
                 let start = self.push_type(Type::Function(Vec::new(), void, Purity::Undefined));
-                self.unify(var.ident.span, ctx, var.ty, start)
+                let ty = self.variables[var.id].ty;
+                self.unify(var.definition, ctx, ty, start)
                     .map(|_| ())
                     .or_else(|_| {
                         err_type_error!(
                             self,
-                            var.ident.span,
+                            var.definition,
                             TypeError::Mismatch {
-                                got: self.bake_type(var.ty),
+                                got: self.bake_type(ty),
                                 expected: self.bake_type(start),
                             },
                             "The start function has the wrong type"
                         )
                     })
             }
-            Some(_) => {
-                err_type_error!(
-                    self,
-                    Span::zero(ctx.namespace),
-                    TypeError::Exotic,
-                    "Expected a start function in the main module - but it was something else"
-                )
-            }
             None => {
+                // TODO[ed]: Is this unreachable?
                 err_type_error!(
                     self,
-                    Span::zero(ctx.namespace),
+                    Span::zero(0),
                     TypeError::Exotic,
                     "Expected a start function in the main module - but couldn't find it"
                 )
@@ -2679,10 +2232,15 @@ impl TypeChecker {
 
 #[cfg_attr(timed, sylt_macro::timed("typechecker::solve"))]
 pub(crate) fn solve(
-    statements: &mut Vec<(Statement, NamespaceID)>,
+    vars: &Vec<Var>,
+    statements: &Vec<Statement>,
     namespace_to_file: &HashMap<NamespaceID, FileOrLib>,
 ) -> TypeResult<TypeChecker> {
-    let mut tc = TypeChecker::new(namespace_to_file);
-    tc.solve(statements)?;
+    let mut tc = TypeChecker::new(vars, namespace_to_file);
+    // TODO(ed): We assume the first global start we find is the start-function.
+    // We check that there's a "start" in the main file in `name_resolution`.
+    // I hope this is good enough.
+    let start = vars.iter().find(|x| &x.name == "start" && x.is_global);
+    tc.solve(&statements, start)?;
     Ok(tc)
 }
