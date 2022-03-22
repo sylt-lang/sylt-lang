@@ -438,9 +438,11 @@ impl Resolver {
 
     fn lookup(&self, namespace_id: usize, name: &str, span: Span) -> ResolveResult<Ref> {
         // TODO(ed): Find the closest matching name if we don't find anything?
-        for (var_name, var_id) in self.stack.iter().rev() {
-            if var_name == name {
-                return Ok(*var_id);
+        if namespace_id == span.file_id {
+            for (var_name, var_id) in self.stack.iter().rev() {
+                if var_name == name {
+                    return Ok(*var_id);
+                }
             }
         }
         match self.lookup_global(namespace_id, name) {

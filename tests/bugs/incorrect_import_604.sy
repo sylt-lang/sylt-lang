@@ -1,0 +1,6 @@
+use _incorrect_import_604
+
+start :: fn do
+    a := _incorrect_import_604.a'
+    b := _incorrect_import_604.a'
+end
