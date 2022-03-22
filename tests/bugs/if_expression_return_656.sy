@@ -1,4 +1,4 @@
-a :: fn a ->
+aa :: fn a ->
     if a == 0 do
         ret a
     else do
@@ -6,12 +6,20 @@ a :: fn a ->
     end
 end
 
-b :: fn a ->
+ba :: fn a ->
     case a do
         Abc ->
             ret a
         end
         else
+            ret a
+        end
+    end
+end
+
+bb :: fn a ->
+    case a do
+        Abc ->
             ret a
         end
     end
