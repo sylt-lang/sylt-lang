@@ -711,7 +711,6 @@ impl TypeChecker {
         statements: &Vec<Statement>,
         ctx: TypeCtx,
     ) -> TypeResult<(Option<TyID>, Option<TyID>)> {
-        // Left this for Gustav
         let mut ret = None;
         for stmt in statements.iter() {
             let stmt_ret = self.statement(stmt, ctx)?;
@@ -941,7 +940,10 @@ impl TypeChecker {
                     }
                     value
                 };
-                with_ret(ret, value.unwrap_or_else(|| self.push_type(Type::Void)))
+                with_ret(
+                    ret,
+                    value.or(ret).unwrap_or_else(|| self.push_type(Type::Void))
+                )
             }
 
             E::Case { to_match, branches, fall_through, span } => {

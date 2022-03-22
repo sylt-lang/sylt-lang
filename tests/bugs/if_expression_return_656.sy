@@ -7,5 +7,3 @@ a :: fn a ->
 end
 
 start :: fn do end
-
-// error: A 'int' cannot be a 'void'
