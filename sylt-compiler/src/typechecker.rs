@@ -979,7 +979,7 @@ impl TypeChecker {
                     self.add_constraint(to_match, *span, Constraint::TotalEnum(branch_names));
                     self.check_constraints(*span, ctx, to_match)?;
                 }
-                with_ret(ret, value.unwrap_or_else(|| self.push_type(Type::Void)))
+                with_ret(ret, value.or(ret).unwrap_or_else(|| self.push_type(Type::Void)))
             }
 
             E::Function { name: _, params, ret, body, pure, span } => {

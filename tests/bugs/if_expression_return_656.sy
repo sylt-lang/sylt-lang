@@ -6,4 +6,15 @@ a :: fn a ->
     end
 end
 
+b :: fn a ->
+    case a do
+        Abc ->
+            ret a
+        end
+        else
+            ret a
+        end
+    end
+end
+
 start :: fn do end
