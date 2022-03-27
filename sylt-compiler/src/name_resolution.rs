@@ -436,16 +436,14 @@ impl Resolver {
         self.namespaces[namespace].get(name)
     }
 
-    fn lookup(&self, namespace_id: usize, name: &str, span: Span) -> ResolveResult<Ref> {
+    fn lookup(&self, name: &str, span: Span) -> ResolveResult<Ref> {
         // TODO(ed): Find the closest matching name if we don't find anything?
-        if namespace_id == span.file_id {
-            for (var_name, var_id) in self.stack.iter().rev() {
-                if var_name == name {
-                    return Ok(*var_id);
-                }
+        for (var_name, var_id) in self.stack.iter().rev() {
+            if var_name == name {
+                return Ok(*var_id);
             }
         }
-        match self.lookup_global(namespace_id, name) {
+        match self.lookup_global(span.file_id, name) {
             Some(Name::Name(var)) => Ok(*var),
             Some(Name::Namespace(..)) => Err(vec![resolution_error!(
                 self,
@@ -578,7 +576,7 @@ impl Resolver {
         let span = ty_ass.span;
         Ok(match &ty_ass.kind {
             TAK::Read(ident) => Type::UserType(
-                self.lookup(span.file_id, &ident.name, ident.span)?,
+                self.lookup(&ident.name, ident.span)?,
                 Vec::new(),
                 span,
             ),
@@ -609,7 +607,7 @@ impl Resolver {
         let span = assignable.span;
         Ok(match &assignable.kind {
             AK::Read(Identifier { name, span }) => {
-                let var = self.lookup(span.file_id, name, *span)?;
+                let var = self.lookup(name, *span)?;
                 let span = *span;
                 E::Read { var, span }
             }
@@ -646,7 +644,25 @@ impl Resolver {
             }
             AK::Access(assignable, ident) => match self.namespace_list(span.file_id, assignable) {
                 Some(ns) => {
-                    let var = self.lookup(ns, &ident.name, ident.span)?;
+                    let var = match self.lookup_global(ns, &ident.name) {
+                        Some(Name::Name(var)) => *var,
+                        Some(Name::Namespace(..)) => {
+                            return Err(vec![resolution_error!(
+                                self,
+                                span,
+                                "When resolving the name {:?} - a namespace was found",
+                                ident.name
+                            )])
+                        }
+                        None => {
+                            return Err(vec![resolution_error!(
+                                self,
+                                span,
+                                "Failed to resolve {:?} - nothing matched",
+                                ident.name
+                            )])
+                        }
+                    };
                     let span = ident.span;
                     E::Read { var, span }
                 }
@@ -841,7 +857,7 @@ impl Resolver {
             SK::EmptyStatement | SK::FromUse { .. } | SK::Use { .. } => None,
 
             SK::Blob { name, variables, fields, external } => {
-                let var = self.lookup(span.file_id, &name.name, span)?;
+                let var = self.lookup(&name.name, span)?;
                 Some(S::Blob {
                     name: name.name.clone(),
                     var,
@@ -855,7 +871,7 @@ impl Resolver {
                 })
             }
             SK::Enum { name, variables, variants } => {
-                let var = self.lookup(span.file_id, &name.name, span)?;
+                let var = self.lookup(&name.name, span)?;
                 Some(S::Enum {
                     name: name.name.clone(),
                     var,
@@ -870,7 +886,7 @@ impl Resolver {
 
             SK::ExternalDefinition { ident, kind, ty } => Some(S::ExternalDefinition {
                 name: ident.name.clone(),
-                var: self.lookup(span.file_id, &ident.name, span)?,
+                var: self.lookup(&ident.name, span)?,
                 kind: *kind,
                 span: ident.span,
                 ty: self.ty(ty)?,
@@ -888,7 +904,7 @@ impl Resolver {
                     let value = self.expression(value)?;
                     // Clear the stack imediately
                     self.stack.clear();
-                    let var = self.lookup(span.file_id, &ident.name, span)?;
+                    let var = self.lookup(&ident.name, span)?;
                     (value, var)
                 } else if matches!(value.kind, sylt_parser::ExpressionKind::Function { .. }) {
                     // Function, push the var before!
