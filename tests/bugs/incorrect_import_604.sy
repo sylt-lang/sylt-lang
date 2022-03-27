@@ -1,6 +1,10 @@
-use _incorrect_import_604
+use _incorrect_import_604 as x
+
+q :: ""
 
 start :: fn do
-    a := _incorrect_import_604.a'
-    b := _incorrect_import_604.a'
+    a :: x.a'
+    b :: x.a'
+    q :: 1
+    "" + x.x.q
 end
