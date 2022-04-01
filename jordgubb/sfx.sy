@@ -18,15 +18,13 @@ end
 
 soundTypeToStr :: fn ty: SoundType -> str
     case ty do
-        Static ret "static"
-        Stream ret "stream"
-        else do <!> end
+        Static -> "static" end
+        Stream -> "stream" end
     end
-    ret ""
 end
 
-random :: fn lo, hi ->
-    x : fn -> * : unsafe_force(love.math.random)
+random_float :: fn lo, hi ->
+    x : fn -> * : common.unsafe_force(love.math.random)
     x() * (hi - lo) + lo
 end
 
@@ -39,9 +37,10 @@ soundFromSource :: fn source ->
         end,
         playp: fn vol, pitch do
             // TODO(ed): This is wrong... :((((
-            source.setVolume' source, vol[0] + random(-0.5, 0.5) * vol[1]
-            source.setPitch' source, pitch[0] + random(-0.5, 0.5) * pitch[1]
-            self.play'
+            source.setVolume' source, vol[0] + random_float(-0.5, 0.5) * vol[1]
+            source.setPitch' source, pitch[0] + random_float(-0.5, 0.5) * pitch[1]
+            play : fn -> * : common.unsafe_force(self.play)
+            play'
         end,
         pause: fn do
             love.audio.pause' source
