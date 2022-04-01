@@ -575,11 +575,9 @@ impl Resolver {
         use sylt_parser::TypeAssignableKind as TAK;
         let span = ty_ass.span;
         Ok(match &ty_ass.kind {
-            TAK::Read(ident) => Type::UserType(
-                self.lookup(&ident.name, ident.span)?,
-                Vec::new(),
-                span,
-            ),
+            TAK::Read(ident) => {
+                Type::UserType(self.lookup(&ident.name, ident.span)?, Vec::new(), span)
+            }
             TAK::Access(namespace, ty) => {
                 let new_namespace = self.namespace_type_list(span.file_id, &namespace)?;
                 match self.lookup_global(new_namespace, &ty.name) {
