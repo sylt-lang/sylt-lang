@@ -72,68 +72,65 @@ strToKeyDict :: {
 
 keyToStr :: fn k ->
     case k do
-        A ret "a"
-        B ret "b"
-        C ret "c"
-        D ret "d"
-        E ret "e"
-        F ret "f"
-        G ret "g"
-        H ret "h"
-        I ret "i"
-        J ret "j"
-        K ret "k"
-        L ret "l"
-        M ret "m"
-        N ret "n"
-        O ret "o"
-        P ret "p"
-        Q ret "q"
-        R ret "r"
-        S ret "s"
-        T ret "t"
-        U ret "u"
-        V ret "v"
-        W ret "w"
-        X ret "x"
-        Y ret "y"
-        Z ret "z"
+        A -> "a" end
+        B -> "b" end
+        C -> "c" end
+        D -> "d" end
+        E -> "e" end
+        F -> "f" end
+        G -> "g" end
+        H -> "h" end
+        I -> "i" end
+        J -> "j" end
+        K -> "k" end
+        L -> "l" end
+        M -> "m" end
+        N -> "n" end
+        O -> "o" end
+        P -> "p" end
+        Q -> "q" end
+        R -> "r" end
+        S -> "s" end
+        T -> "t" end
+        U -> "u" end
+        V -> "v" end
+        W -> "w" end
+        X -> "x" end
+        Y -> "y" end
+        Z -> "z" end
 
-        N1 ret "1"
-        N2 ret "2"
-        N3 ret "3"
-        N4 ret "4"
-        N5 ret "5"
-        N6 ret "6"
-        N7 ret "7"
-        N8 ret "8"
-        N9 ret "9"
-        N0 ret "0"
+        N1 -> "1" end
+        N2 -> "2" end
+        N3 -> "3" end
+        N4 -> "4" end
+        N5 -> "5" end
+        N6 -> "6" end
+        N7 -> "7" end
+        N8 -> "8" end
+        N9 -> "9" end
+        N0 -> "0" end
 
-        Return ret "return"
-        Escape ret "escape"
-        Backspace ret "backspace"
-        Tab ret "tab"
-        Space ret "space"
+        Return -> "return" end
+        Escape -> "escape" end
+        Backspace -> "backspace" end
+        Tab -> "tab" end
+        Space -> "space" end
 
-        LCtrl ret "lctrl"
-        LShift ret "lshift"
-        LAlt ret "lalt"
-        LGui ret "lgui"
+        LCtrl -> "lctrl" end
+        LShift -> "lshift" end
+        LAlt -> "lalt" end
+        LGui -> "lgui" end
 
-        RCtrl ret "rctrl"
-        RShift ret "rshift"
-        RAlt ret "ralt"
-        RGui ret "rgui"
+        RCtrl -> "rctrl" end
+        RShift -> "rshift" end
+        RAlt -> "ralt" end
+        RGui -> "rgui" end
 
-        Up ret "up"
-        Down ret "down"
-        Left ret "left"
-        Right ret "right"
-
-        else do <!> end
+        Up -> "up" end
+        Down -> "down" end
+        Left -> "left" end
+        Right -> "right" end
     end
-    ret ""
 end
 
 isKeyDown :: fn key ->
@@ -144,12 +141,10 @@ MouseButton :: enum Left, Right, Middle end
 
 mouseButtonToInt :: fn m ->
     case m do
-        Left ret 0
-        Right ret 1
-        Middle ret 2
-        else do <!> end
+        Left -> 0 end
+        Right -> 1 end
+        Middle -> 2 end
     end
-    ret 0
 end
 
 mouseButtonDown :: fn button ->
@@ -163,6 +158,6 @@ mousePos :: fn ->
     (x, y)
 end
 
-placeMouse :: fn pos ->
+placeMouse :: fn pos do
     love.mouse.setPosition' pos[0], pos[1]
 end
