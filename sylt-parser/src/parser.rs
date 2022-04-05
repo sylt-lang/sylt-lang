@@ -860,7 +860,7 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
                     [T::Newline, T::Comma] => ctx.skip(2),
                     [T::Comma, T::Newline] => ctx.skip(2),
                     [T::Comma, ..] => ctx.skip(1),
-                    _ => ctx,
+                    _ => break,
                 };
             }
         }
@@ -870,6 +870,9 @@ fn assignable_call<'t>(ctx: Context<'t>, callee: Assignable) -> ParseResult<'t, 
     let ctx = if !primer {
         expect!(ctx, T::RightParen, "Expected ')' after calling function")
     } else {
+        if expression(ctx).is_ok() {
+            // raise_syntax_error!(ctx, "Expected comma between arguments. Maybe you forgot a comma?");
+        }
         ctx
     };
 
