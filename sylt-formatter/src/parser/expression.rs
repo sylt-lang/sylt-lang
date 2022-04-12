@@ -156,9 +156,16 @@ pub enum Expression {
     Parenthesis { span: Span, expr: Box<Expression> },
 }
 
-/// Parse an expression
-pub fn parse<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
-    parse_precedence(ctx, Prec::No)
+impl Expression {
+    /// Parse an expression
+    pub fn parse<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
+        parse_precedence(ctx, Prec::No)
+    }
+
+    /// The span of the expression
+    pub fn span<'a>(&'a self) -> &'a Span {
+        expr_span(self)
+    }
 }
 
 /// Parse an expression with infixes
