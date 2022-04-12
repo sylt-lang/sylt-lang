@@ -226,11 +226,11 @@ fn prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
 
             let negated = match h {
                 T::Minus => Expression::Negative {
-                    span: prefix_span.start..expr_span(&expr).end,
+                    span: prefix_span.start..expr.span().end,
                     value: Box::new(expr),
                 },
                 T::Not => Expression::Negated {
-                    span: prefix_span.start..expr_span(&expr).end,
+                    span: prefix_span.start..expr.span().end,
                     value: Box::new(expr),
                 },
                 _ => unreachable!(),
@@ -546,10 +546,7 @@ fn expr_span<'a>(expr: &'a Expression) -> &'a Span {
 
 /// Combine the spans of two expressions, from the beginning of first to the end of second.
 fn combine_expr_spans<'a>(first: &'a Expression, second: &'a Expression) -> Span {
-    let first_span = expr_span(first);
-    let second_span = expr_span(second);
-
-    first_span.start..second_span.end
+    first.span().start..second.span().end
 }
 
 pub trait Next {
