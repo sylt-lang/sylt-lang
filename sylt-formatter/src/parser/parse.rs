@@ -45,6 +45,11 @@ impl<'a> Context<'a> {
         self.span_ahead(0)
     }
 
+    /// Peek at the span of one token ahead
+    pub fn peek_span(self) -> &'a Span {
+        self.span_ahead(1)
+    }
+
     /// Get the span of a few tokens ahead
     pub fn span_ahead(self, lookahead: usize) -> &'a Range<usize> {
         self.get_span(self.position + lookahead)
@@ -114,6 +119,16 @@ macro_rules! expect {
             ));
         };
     };
+}
+
+#[macro_export]
+macro_rules! step_expect {
+    ($ctx:expr, $($tokens:pat)|+) => {
+        {
+            expect!($ctx, $($tokens)|+);
+            $ctx.step()
+        }
+    }
 }
 
 #[derive(Debug)]

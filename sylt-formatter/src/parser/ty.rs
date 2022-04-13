@@ -1,23 +1,36 @@
 use sylt_tokenizer::Token as T;
 
-use crate::expect;
+use crate::{expect, step_expect};
 
 use super::{Context, ParseResult, Span};
 
 #[derive(Debug, Clone)]
 pub enum Type {
     /// The void type
-    Void { span: Span },
+    Void {
+        span: Span,
+    },
     /// The integer type
-    Int { span: Span },
+    Int {
+        span: Span,
+    },
     /// The float type
-    Float { span: Span },
+    Float {
+        span: Span,
+    },
     /// The boolean type
-    Bool { span: Span },
+    Bool {
+        span: Span,
+    },
     /// The string type
-    String { span: Span },
+    String {
+        span: Span,
+    },
 
-    Tuple { span: Span, types: Vec<Type>},
+    Tuple {
+        span: Span,
+        types: Vec<Type>,
+    },
 }
 
 impl<'a> Type {
@@ -37,7 +50,7 @@ impl<'a> Type {
 
             T::LeftBracket => list(old_ctx),
             T::LeftBrace => set_or_dict(old_ctx),
-            T::LeftParen => tuple(old_ctx),
+            T::LeftParen => tuple_or_type(old_ctx),
 
             _ => panic!(),
         }
@@ -51,42 +64,71 @@ impl<'a> Type {
 
 /// Parse a tuple
 ///
-/// Example context
+/// # Tuple
 /// ```
 /// ( int, int )
 /// ^
 /// ```
-fn tuple<'a>(ctx: Context<'a>) -> ParseResult<'a, Type> {
-    expect!(ctx, T::LeftParen);
+/// ```
+/// (int,)
+/// ^
+/// ```
+///
+/// # Type
+/// ```
+/// (int)
+/// ^
+/// ```
+fn tuple_or_type<'a>(ctx: Context<'a>) -> ParseResult<'a, Type> {
     let start_span = ctx.span();
-    let ctx = ctx.step();
 
-    let mut types: Vec<Type> = Vec::new();
+    let mut ctx = step_expect!(ctx, T::LeftParen);
 
-    let mut ctx = ctx;
-
-    while !matches!(ctx.token(), T::RightParen) {
-        if !types.is_empty() {
-            expect!(ctx, T::Comma);
-            ctx = ctx.step();
-        }
-
-        if matches!(ctx.token(), T::RightParen) {
-            break;
-        }
-
-        let (next_ctx, ty) = Type::parse(ctx)?;
-        types.push(ty);
-        ctx = next_ctx;
+    // If right paren, empty tuple
+    if matches!(ctx.token(), T::RightParen) {
+        let (ctx, _, end_span) = ctx.eat();
+        return Ok((
+            ctx,
+            Type::Tuple {
+                span: start_span.start..end_span.end,
+                types: Vec::new(),
+            },
+        ));
     }
 
-    let (ctx, token, end_span) = ctx.eat();
-    assert!(matches!(token, T::RightParen));
+    // Get all types in tuple
+    let mut types: Vec<Type> = Vec::new();
+    loop {
+        // Parse the type
+        let (next_ctx, ty) = Type::parse(ctx)?;
+        ctx = next_ctx;
+        types.push(ty);
 
-    Ok((ctx, Type::Tuple {
-        types,
-        span: start_span.start..end_span.end,
-    }))
+        // Eat the next token
+        let (next_ctx, token, span) = ctx.eat();
+        ctx = next_ctx;
+
+        // If we have a comma => may be trailing or loop again
+        if matches!(token, T::Comma) {
+            // It might be a trailing comma, check it
+            if matches!(ctx.token(), T::RightParen) {
+                let (ctx, token, end_span) = ctx.eat();
+                return Ok((
+                    ctx,
+                    Type::Tuple { span: start_span.start..end_span.end, types },
+                ));
+            }
+        } else if matches!(token, T::RightParen) {
+            // The tuple is terminated, but may be single type
+            if types.len() == 1 {
+                return Ok((ctx, types.pop().unwrap()));
+            } else {
+                return Ok((ctx, Type::Tuple { span: start_span.start..span.end, types }));
+            }
+        } else {
+            todo!("No separator or tuple termination")
+        }
+    }
 }
 
 /// Parse a set or a dict
