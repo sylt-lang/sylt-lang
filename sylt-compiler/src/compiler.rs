@@ -63,7 +63,12 @@ impl Compiler {
     }
 
     #[cfg_attr(timed, sylt_macro::timed("compile"))]
-    fn compile(&mut self, lua_file: &mut dyn Write, tree: AST, require: Option<&String>) -> Result<(), Vec<Error>> {
+    fn compile(
+        &mut self,
+        lua_file: &mut dyn Write,
+        tree: AST,
+        require: Option<&String>,
+    ) -> Result<(), Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
 
         self.extract_namespaces(&tree);
@@ -133,6 +138,10 @@ impl Compiler {
     }
 }
 
-pub fn compile(lua_file: &mut dyn Write, prog: AST, require: Option<&String>) -> Result<(), Vec<Error>> {
+pub fn compile(
+    lua_file: &mut dyn Write,
+    prog: AST,
+    require: Option<&String>,
+) -> Result<(), Vec<Error>> {
     Compiler::new().compile(lua_file, prog, require)
 }

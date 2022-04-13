@@ -84,7 +84,11 @@ impl<'a, 'b> Generator<'a, 'b> {
     pub fn generate(&mut self, ir: &Vec<IR>, require: Option<&String>) {
         write!(self.out, include_str!("preamble.lua"));
         if let Some(file) = require {
-            write!(self.out, "require \"{}\"", file.strip_suffix(".lua").unwrap_or(file));
+            write!(
+                self.out,
+                "require \"{}\"",
+                file.strip_suffix(".lua").unwrap_or(file)
+            );
         }
 
         let mut depth = 0;
@@ -302,6 +306,11 @@ impl<'a, 'b> Generator<'a, 'b> {
 }
 
 #[cfg_attr(timed, sylt_macro::timed("lua::generate"))]
-pub fn generate(ir: &Vec<IR>, usage_count: &HashMap<Var, usize>, out: &mut dyn Write, require: Option<&String>) {
+pub fn generate(
+    ir: &Vec<IR>,
+    usage_count: &HashMap<Var, usize>,
+    out: &mut dyn Write,
+    require: Option<&String>,
+) {
     Generator::new(usage_count, out).generate(ir, require);
 }
