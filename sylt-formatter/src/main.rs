@@ -1,8 +1,7 @@
 use std::fs;
 
+use parser::module::Module;
 use sylt_formatter::Args;
-
-use crate::parser::{Module, ParseErr};
 
 mod lib;
 mod parser;
@@ -16,7 +15,7 @@ fn main() {
 
     let tokens: Vec<_> = sylt_tokenizer::spanned_lexer(&content).collect();
 
-    let res = parser::parse_module(&tokens);
+    let res = Module::parse(&tokens);
 
     match res {
         Ok((_ctx, module)) => {

@@ -62,6 +62,7 @@ fn tuple<'a>(ctx: Context<'a>) -> ParseResult<'a, Type> {
     let mut types: Vec<Type> = Vec::new();
 
     let mut ctx = ctx;
+
     while !matches!(ctx.token(), T::RightParen) {
         if !types.is_empty() {
             expect!(ctx, T::Comma);
