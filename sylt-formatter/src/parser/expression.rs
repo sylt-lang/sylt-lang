@@ -174,7 +174,7 @@ fn parse_precedence<'a>(ctx: Context<'a>, prec: Prec) -> ParseResult<'a, Express
     let (mut ctx, mut expr) = prefix(ctx)?;
 
     while {
-        let token = ctx.peek();
+        let token = ctx.token();
         prec <= precedence(token) && valid_infix(token)
     } {
         let (_ctx, _expr) = infix(ctx, expr)?;
@@ -219,7 +219,7 @@ fn precedence(token: &T) -> Prec {
 
 /// Parse an expression that may be prefixed
 fn prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
-    match ctx.peek() {
+    match ctx.token() {
         h @ T::Minus | h @ T::Not => {
             let prefix_span = ctx.span();
             let (ctx, expr) = non_prefix(ctx.forward(1))?;
@@ -245,7 +245,7 @@ fn prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
 
 /// Parse an expression that is not prefixed
 fn non_prefix<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
-    match ctx.peek() {
+    match ctx.token() {
         //T::Fn | T::Pu => function(ctx),
         //T::If => if_expression(ctx),
         //T::Case => case_expression(ctx),
@@ -312,16 +312,16 @@ fn parenthesis_or_tuple<'a>(ctx: Context<'a>) -> ParseResult<'a, Expression> {
 
     let (ctx, first_inner) = parse_precedence(ctx, Prec::No)?;
 
-    match ctx.peek() {
+    match ctx.token() {
         T::Comma => {
             let mut inner_expressions: Vec<Expression> = Vec::new();
             inner_expressions.push(first_inner);
 
             let mut outer_ctx = ctx;
-            while matches!(outer_ctx.peek(), T::Comma) {
+            while matches!(outer_ctx.token(), T::Comma) {
                 outer_ctx = outer_ctx.forward(1);
 
-                if matches!(outer_ctx.peek(), T::RightParen) {
+                if matches!(outer_ctx.token(), T::RightParen) {
                     break;
                 }
 

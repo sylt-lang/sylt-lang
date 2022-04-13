@@ -25,8 +25,12 @@ impl<'a> Context<'a> {
     }
 
     /// Peek at the current token
-    pub fn peek(self) -> &'a Token {
+    pub fn token(self) -> &'a Token {
         self.peek_ahead(0)
+    }
+
+    pub fn peek(self) -> &'a Token {
+        self.peek_ahead(1)
     }
 
     /// Peek a some tokens ahead
@@ -49,9 +53,13 @@ impl<'a> Context<'a> {
     pub fn eat(self) -> (Self, &'a Token, &'a Range<usize>) {
         (
             Self { position: self.position + 1, tokens: self.tokens },
-            self.peek(),
+            self.token(),
             self.span(),
         )
+    }
+
+    pub fn step(self) -> Self {
+        self.forward(1)
     }
 
     pub fn forward(self, steps: usize) -> Self {
@@ -60,6 +68,21 @@ impl<'a> Context<'a> {
             tokens: self.tokens,
         }
     }
+}
+
+#[macro_export]
+macro_rules! expect {
+    ($ctx:expr, $tokens:pat) => {
+        if !matches!($ctx.token(), $tokens) {
+            return Err((
+                $ctx,
+                crate::parser::ParseErr {
+                    err_type: crate::parser::ParseErrType::Undefined { message: format!("Expected {:?}, got {:?}", stringify!($tokens), $ctx.token()) },
+                    inner_span: $ctx.span().clone(),
+                },
+            ));
+        };
+    };
 }
 
 /// A sylt module (a sylt file)
@@ -71,6 +94,7 @@ pub struct Module<'a> {
 #[derive(Debug)]
 pub enum ParseErrType {
     Undefined { message: String },
+    UnexpectedToken { expected: Token, got: Token },
 }
 
 /// A parse error
@@ -82,8 +106,14 @@ pub struct ParseErr {
 
 impl ParseErr {
     pub fn message(&self) -> String {
+        use ParseErrType as PET;
+
         match &self.err_type {
-            ParseErrType::Undefined { message } => message.clone(),
+            PET::Undefined { message } => message.clone(),
+            // TODO(emanuel): Use nicer way of displaying unexpected token.
+            PET::UnexpectedToken { expected, got, .. } => {
+                format!("Unexpected token. Expected {:?}, got {:?}", expected, got)
+            }
         }
     }
 }
