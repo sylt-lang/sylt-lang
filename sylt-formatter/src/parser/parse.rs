@@ -6,6 +6,7 @@ use std::ops::Range;
 
 use sylt_tokenizer::Token;
 
+/// The zero span, from 0 to 0, used as a placeholder for non-existant tokesn
 const zero_span: Span = 0..0;
 
 /// The context of the parser.
@@ -24,16 +25,17 @@ impl<'a> Context<'a> {
         Self { position: 0, tokens }
     }
 
-    /// Peek at the current token
+    /// Get the current token of the context
     pub fn token(self) -> &'a Token {
         self.peek_ahead(0)
     }
 
+    /// Peek at the next token
     pub fn peek(self) -> &'a Token {
         self.peek_ahead(1)
     }
 
-    /// Peek a some tokens ahead
+    /// Peek a number of tokens ahead
     pub fn peek_ahead(self, lookahead: usize) -> &'a Token {
         self.get_token(self.position + lookahead)
     }
@@ -48,8 +50,7 @@ impl<'a> Context<'a> {
         self.get_span(self.position + lookahead)
     }
 
-    /// Return a context advanced by 1 token as well as the token and span
-    /// advanced
+    /// Return a context advanced by 1 token as well as the token and span advanced
     pub fn eat(self) -> (Self, &'a Token, &'a Range<usize>) {
         (
             Self { position: self.position + 1, tokens: self.tokens },
@@ -58,10 +59,12 @@ impl<'a> Context<'a> {
         )
     }
 
+    /// The context forwarded by 1 token
     pub fn step(self) -> Self {
         self.forward(1)
     }
 
+    /// The context forwarded by a number of tokens
     pub fn forward(self, steps: usize) -> Self {
         Self {
             position: self.position + steps,
@@ -69,6 +72,7 @@ impl<'a> Context<'a> {
         }
     }
 
+    /// Get the next context with a non-white space token
     pub fn skip_ws(self) -> Self {
         let mut i = self.position;
         while matches!(self.get_token(i), Token::Newline) {
@@ -77,19 +81,23 @@ impl<'a> Context<'a> {
         Self { position: i, ..self }
     }
 
+    /// Get the current token
     fn get_token(self, i: usize) -> &'a Token {
         &self.get(i).0
     }
 
+    /// Get the current span
     fn get_span(self, i: usize) -> &'a Span {
         &self.get(i).1
     }
 
+    /// Get the current token and span
     fn get(self, i: usize) -> &'a (Token, Span) {
         &self.tokens.get(i).unwrap_or(&(Token::EOF, zero_span))
     }
 }
 
+/// Expect a token pattern at the current token of the context
 #[macro_export]
 macro_rules! expect {
     ($ctx:expr, $($tokens:pat)|+ ) => {
@@ -97,12 +105,9 @@ macro_rules! expect {
             return Err((
                 $ctx,
                 crate::parser::ParseErr {
-                    err_type: crate::parser::ParseErrType::Undefined {
-                        message: format!(
-                            "Expected {:?}, got {:?}",
-                            stringify!($($tokens)|+),
-                            $ctx.token()
-                        ),
+                    err_type: crate::parser::ParseErrType::UnexpectedToken {
+                        got: format!("{:?}", $ctx.token()),
+                        expected: String::from(stringify!($($tokens)|+)),
                     },
                     inner_span: $ctx.span().clone(),
                 },
@@ -113,8 +118,11 @@ macro_rules! expect {
 
 #[derive(Debug)]
 pub enum ParseErrType {
+    /// Undefined parse error type, this should be avoided
     Undefined { message: String },
-    UnexpectedToken { expected: Token, got: Token },
+
+    /// An unexpected token was reached
+    UnexpectedToken { got: String, expected: String },
 }
 
 /// A parse error
@@ -130,10 +138,10 @@ impl ParseErr {
 
         match &self.err_type {
             PET::Undefined { message } => message.clone(),
-            // TODO(emanuel): Use nicer way of displaying unexpected token.
-            PET::UnexpectedToken { expected, got, .. } => {
-                format!("Unexpected token. Expected {:?}, got {:?}", expected, got)
-            }
+            PET::UnexpectedToken { got, expected } => format!(
+                "Found unexpected token. Got {:?}, expected {:?}",
+                got, expected
+            ),
         }
     }
 }

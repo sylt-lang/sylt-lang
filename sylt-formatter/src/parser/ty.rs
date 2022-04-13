@@ -21,6 +21,7 @@ pub enum Type {
 }
 
 impl<'a> Type {
+    /// Parse a type
     pub fn parse(ctx: Context<'a>) -> ParseResult<'a, Type> {
         let old_ctx = ctx;
         let (ctx, token, span) = ctx.eat();
@@ -42,6 +43,7 @@ impl<'a> Type {
         }
     }
 
+    /// Get the span of the type
     pub fn span(&'a self) -> &'a Span {
         type_span(self)
     }
@@ -120,6 +122,7 @@ fn function<'a>(ctx: Context<'a>) -> ParseResult<'a, Type> {
     todo!()
 }
 
+/// Get the span of the type
 fn type_span<'a>(ty: &'a Type) -> &'a Span {
     match ty {
         Type::Void { span } => span,

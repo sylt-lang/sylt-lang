@@ -21,14 +21,15 @@ pub enum Statement<'a> {
 }
 
 impl<'a> Statement<'a> {
+    /// Parse a statement
     pub fn parse(ctx: Context<'a>) -> ParseResult<'a, Statement> {
         let old_ctx = ctx;
 
-        let (ctx, token, name_span) = ctx.eat();
+        let (ctx, token, _) = ctx.eat();
 
         match token {
-            T::Identifier(name) => {
-                let (ctx, token, name_space) = ctx.eat();
+            T::Identifier(_name) => {
+                let token = ctx.token();
 
                 match token {
                     T::Colon | T::ColonColon | T::ColonEqual => definition(old_ctx),
