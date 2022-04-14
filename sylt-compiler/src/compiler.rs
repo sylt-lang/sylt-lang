@@ -63,7 +63,12 @@ impl Compiler {
     }
 
     #[cfg_attr(timed, sylt_macro::timed("compile"))]
-    fn compile(&mut self, lua_file: &mut dyn Write, tree: AST) -> Result<(), Vec<Error>> {
+    fn compile(
+        &mut self,
+        lua_file: &mut dyn Write,
+        tree: AST,
+        require: Option<&String>,
+    ) -> Result<(), Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
 
         self.extract_namespaces(&tree);
@@ -108,7 +113,7 @@ impl Compiler {
         let ir = intermediate::compile(&typechecker, &statements);
         let usage_count = intermediate::count_usages(&ir);
 
-        lua::generate(&ir, &usage_count, lua_file);
+        lua::generate(&ir, &usage_count, lua_file, require);
 
         Ok(())
     }
@@ -133,6 +138,10 @@ impl Compiler {
     }
 }
 
-pub fn compile(lua_file: &mut dyn Write, prog: AST) -> Result<(), Vec<Error>> {
-    Compiler::new().compile(lua_file, prog)
+pub fn compile(
+    lua_file: &mut dyn Write,
+    prog: AST,
+    require: Option<&String>,
+) -> Result<(), Vec<Error>> {
+    Compiler::new().compile(lua_file, prog, require)
 }
