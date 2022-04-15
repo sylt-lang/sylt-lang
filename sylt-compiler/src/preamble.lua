@@ -99,11 +99,19 @@ __TUPLE_META.__sub = function(a, b)
     return __TUPLE(out)
 end
 __TUPLE_META.__div = function(a, b)
-    local out = {}
-    for x = 1, #a, 1 do
-        out[x] = a[x] / b[x]
+    if type(b) == "table" then
+        local out = {}
+        for x = 1, #a, 1 do
+            out[x] = a[x] / b[x]
+        end
+        return __TUPLE(out)
+    else
+        local out = {}
+        for x = 1, #a, 1 do
+            out[x] = a[x] / b
+        end
+        return __TUPLE(out)
     end
-    return __TUPLE(out)
 end
 __TUPLE_META.__mul = function(a, b)
     local out = {}
