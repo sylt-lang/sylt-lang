@@ -25,12 +25,13 @@ pub enum FileOrLib {
 
 /// The standard library
 const STD_LIB_FILES: &[(&str, &str)] = &[
-    ("preamble", include_str!("../../std/preamble.sy")),
     ("common", include_str!("../../std/common.sy")),
     ("container", include_str!("../../std/container.sy")),
+    ("dict", include_str!("../../std/dict.sy")),
     ("list", include_str!("../../std/list.sy")),
     ("math", include_str!("../../std/math.sy")),
     ("maybe", include_str!("../../std/maybe.sy")),
+    ("preamble", include_str!("../../std/preamble.sy")),
 ];
 
 pub fn library_name(name: &str) -> Option<&'static str> {

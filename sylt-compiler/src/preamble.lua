@@ -224,7 +224,7 @@ __DICT_META.__eq = function(a, b)
     return true
 end
 __DICT_META.__tostring = function(a)
-    local out = "{"
+    local out = "dict {"
     local first = true
     for k, v in pairs(a) do
         if not first then
@@ -232,9 +232,6 @@ __DICT_META.__tostring = function(a)
         end
         first = false
         out = out .. tostring(k) .. ": " .. tostring(v)
-    end
-    if #a == 0 then
-        out = out .. ":"
     end
     out = out .. "}"
     return out
@@ -493,5 +490,78 @@ end
 
 random = math.random
 randint = math.random
+
+-- Dict
+__LUA_DICT_META = { _type = "dict" }
+__LUA_DICT_META.__eq = function(a, b)
+    for k, v in pairs(a) do
+        if not (v == b[k]) then
+            return false
+        end
+    end
+    for k, v in pairs(b) do
+        if not (v == a[k]) then
+            return false
+        end
+    end
+    return true
+end
+__LUA_DICT_META.__tostring = function(a)
+    local out = "dict {"
+    local first = true
+    for _k, v in pairs(a) do
+        if not first then
+            out = out .. ", "
+        end
+        first = false
+        out = out .. tostring(v[1]) .. ": " .. tostring(v[2])
+    end
+    out = out .. "}"
+    return out
+end
+
+function dict_new()
+    return setmetatable({}, __LUA_DICT_META)
+end
+
+function dict_from_list(l)
+    local out = dict_new()
+    for _, e in pairs(l) do
+        dict_update(out, e[1], e[2])
+    end
+    return out
+end
+
+function dict_update(dict, k, v)
+    dict[tostring(k)] = __TUPLE {k, v}
+end
+
+function dict_remove(dict, k)
+    dict[k] = nil
+end
+
+function dict_get(dict, k)
+    local x = dict[k]
+    if x ~= nil then
+       return __VARIANT({"Just", x[2]})
+    else
+       return __VARIANT({"None", nil})
+    end
+end
+
+function dict_for_each(dict, f)
+    for _k, v in pairs(dict) do
+        f(v)
+    end
+end
+
+function dict_map(dict, f)
+    local out = dict_new()
+    for _k, v in pairs(dict) do
+        x = f(v)
+        dict_update(out, x[1], x[2])
+    end
+    return out
+end
 
 -- End Sylt preamble
