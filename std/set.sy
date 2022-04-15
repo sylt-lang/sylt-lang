@@ -2,12 +2,12 @@ Set :: blob(*V) {
     __PHANTOM_VALUE: *V
 }
 
-set_new : pu -> Set(*V) : external
-set_add : fn Set(*V), *V -> void : external
-set_remove : fn Set(*V), *V -> void : external
+set_new : pu<V: CmpEqu> -> Set(*V) : external
+set_add : fn<V: CmpEqu> Set(*V), *V -> void : external
+set_remove : fn<V: CmpEqu> Set(*V), *V -> void : external
 
 // We have to sacrefice purity for this to work in Sylt - so I wrote it in Lua.
-set_from_list : pu [*V] -> Set(*V) : external
+set_from_list : pu<V: CmpEqu> [*V] -> Set(*V) : external
 
 from_list :: set_from_list
 
@@ -15,12 +15,12 @@ new :: set_new
 add :: set_add
 remove :: set_remove
 
-set_map : pu Set(*KA), (pu *KA -> *KB) -> Set(*KB) : external
-set_for_each : fn Set(*KA), (fn *KA -> void) -> void : external
+set_map : pu<VA: CmpEqu, VB: CmpEqu> Set(*VA), (pu *VA -> *VB) -> Set(*VB) : external
+set_for_each : fn<V: CmpEqu> Set(*V), (fn *V -> void) -> void : external
 
 map :: set_map
 for_each :: set_for_each
 
-set_contains : pu Set(*V), *K -> bool : external
+set_contains : pu<V: CmpEqu> Set(*V), *V -> bool : external
 
 contains :: set_contains
