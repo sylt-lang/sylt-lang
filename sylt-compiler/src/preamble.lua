@@ -413,7 +413,7 @@ function as_char(s)
    if char ~= nil then
       return __VARIANT({"Just", char})
    else
-      return __VARIANT({"None"})
+      return __VARIANT({"None", nil})
    end
 end
 function as_chars(s)
