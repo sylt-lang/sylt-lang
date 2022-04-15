@@ -22,7 +22,7 @@ dict_get : pu Dict(*K, *V), *K -> Maybe(*V) : external
 get :: dict_get
 
 dict_map : pu Dict(*KA, *VA), (pu (*KA, *VA) -> (*KB, *VB)) -> Dict(*KB, *VB) : external
-dict_for_each : fn Dict(*KA, *VA), (fn (*KA, *VA) -> void) -> Dict(*KB, *VB) : external
+dict_for_each : fn Dict(*KA, *VA), (fn (*KA, *VA) -> void) -> void : external
 
 map :: dict_map
 for_each :: dict_for_each

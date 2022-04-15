@@ -32,6 +32,7 @@ const STD_LIB_FILES: &[(&str, &str)] = &[
     ("math", include_str!("../../std/math.sy")),
     ("maybe", include_str!("../../std/maybe.sy")),
     ("preamble", include_str!("../../std/preamble.sy")),
+    ("set", include_str!("../../std/set.sy")),
 ];
 
 pub fn library_name(name: &str) -> Option<&'static str> {

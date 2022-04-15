@@ -224,7 +224,7 @@ __DICT_META.__eq = function(a, b)
     return true
 end
 __DICT_META.__tostring = function(a)
-    local out = "dict {"
+    local out = "{"
     local first = true
     for k, v in pairs(a) do
         if not first then
@@ -563,5 +563,75 @@ function dict_map(dict, f)
     end
     return out
 end
+
+
+-- Set
+__LUA_SET_META = { _type = "set" }
+__LUA_SET_META.__eq = function(a, b)
+    for k, v in pairs(a) do
+        if not (v == b[k]) then
+            return false
+        end
+    end
+    for k, v in pairs(b) do
+        if not (v == a[k]) then
+            return false
+        end
+    end
+    return true
+end
+__LUA_SET_META.__tostring = function(a)
+    local out = "set {"
+    local first = true
+    for _k, v in pairs(a) do
+        if not first then
+            out = out .. ", "
+        end
+        first = false
+        out = out .. tostring(v)
+    end
+    out = out .. "}"
+    return out
+end
+
+function set_new()
+    return setmetatable({}, __LUA_SET_META)
+end
+
+function set_from_list(l)
+    local out = set_new()
+    for _, e in pairs(l) do
+        set_add(out, e)
+    end
+    return out
+end
+
+function set_add(set, k)
+    set[tostring(k)] = k
+end
+
+function set_remove(set, k)
+    set[tostring(k)] = nil
+end
+
+function set_contains(set, k)
+    return set[tostring(k)] ~= nil
+end
+
+function set_for_each(set, f)
+    for _k, v in pairs(set) do
+        f(v)
+    end
+end
+
+function set_map(set, f)
+    local out = dict_new()
+    for _k, v in pairs(set) do
+        x = f(v)
+        set_add(out, x)
+    end
+    return out
+end
+
 
 -- End Sylt preamble

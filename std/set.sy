@@ -1,0 +1,26 @@
+Set :: blob(*V) {
+    __PHANTOM_VALUE: *V
+}
+
+set_new : pu -> Set(*V) : external
+set_add : fn Set(*V), *V -> void : external
+set_remove : fn Set(*V), *V -> void : external
+
+// We have to sacrefice purity for this to work in Sylt - so I wrote it in Lua.
+set_from_list : pu [*V] -> Set(*V) : external
+
+from_list :: set_from_list
+
+new :: set_new
+add :: set_add
+remove :: set_remove
+
+set_map : pu Set(*KA), (pu *KA -> *KB) -> Set(*KB) : external
+set_for_each : fn Set(*KA), (fn *KA -> void) -> void : external
+
+map :: set_map
+for_each :: set_for_each
+
+set_contains : pu Set(*V), *K -> bool : external
+
+contains :: set_contains
