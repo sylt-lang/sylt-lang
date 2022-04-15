@@ -1,6 +1,5 @@
-
-Maybe :: enum
-    Just *
+Maybe :: enum(*V)
+    Just *V
     None
 end
 
