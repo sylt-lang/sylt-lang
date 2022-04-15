@@ -1,0 +1,7 @@
+use set
+
+start :: fn do
+    set.add' set.new(), set.new()
+end
+
+// error: < is not defined for 'Set' and 'Set'
