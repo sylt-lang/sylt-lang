@@ -881,10 +881,7 @@ impl TypeChecker {
                     self.check_constraints(*span, ctx, a)?;
                     self.check_constraints(*span, ctx, b)?;
                     self.check_constraints(*span, ctx, c)?;
-                    with_ret(
-                        self.unify_option(*span, ctx, a_ret, b_ret)?,
-                        c,
-                    )
+                    with_ret(self.unify_option(*span, ctx, a_ret, b_ret)?, c)
                 }
                 BinOp::And | BinOp::Or => {
                     let (a_ret, a) = self.expression(a, ctx)?;
