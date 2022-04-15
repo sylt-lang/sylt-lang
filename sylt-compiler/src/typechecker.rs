@@ -2036,7 +2036,8 @@ impl TypeChecker {
             (Type::Float, Type::Float)
             | (Type::Int, Type::Int)
             | (Type::Int, Type::Float)
-            | (Type::Float, Type::Int) => Ok(()),
+            | (Type::Float, Type::Int)
+            | (Type::Str, Type::Str) => Ok(()),
 
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
                 for (a, b) in a.iter().zip(b.iter()) {
