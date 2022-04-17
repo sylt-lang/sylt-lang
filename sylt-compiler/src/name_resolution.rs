@@ -62,7 +62,7 @@ impl<T> Help for ResolveResult<T> {
         match &mut self {
             Ok(_) => {}
             Err(errs) => match &mut errs.last_mut() {
-                Some(Error::TypeError { helpers, .. }) => {
+                Some(Error::CompileError { helpers, .. }) => {
                     helpers.push(Helper { at: None, message });
                 }
                 _ => panic!("Cannot help on this error since the error is empty"),
@@ -429,6 +429,11 @@ impl Resolver {
     fn add_help(&self, err: Error, span: Span, msg: String) -> Error {
         let wrapper: ResolveResult<()> = Err(vec![err]);
         wrapper.help(self, span, msg).unwrap_err()[0].clone()
+    }
+
+    fn add_help_no_span(&self, err: Error, msg: String) -> Error {
+        let wrapper: ResolveResult<()> = Err(vec![err]);
+        wrapper.help_no_span(msg).unwrap_err()[0].clone()
     }
 
     fn lookup_global(&self, namespace_id: usize, name: &str) -> Option<&Name> {
@@ -1094,9 +1099,14 @@ impl Resolver {
                                 self,
                                 stmt.span,
                                 "Name collision - duplicate definitions of {:?}",
-                                name
+                                name.name()
                             );
-                            errs.push(self.add_help(err, span, "First definition is here".into()));
+                            let err = self.add_help_no_span(
+                                err,
+                                format!("Maybe {:?} is already imported?", name.name()),
+                            );
+                            let err = self.add_help(err, span, "First definition is here".into());
+                            errs.push(err);
                         }
                         Entry::Occupied(_) => { /* We allow importing the same thing multiple times */
                         }
@@ -1144,7 +1154,7 @@ impl Resolver {
                                 let err = resolution_error!(
                                     self,
                                     var.span,
-                                    "Name collision - duplicate definitions of {:?}",
+                                    "A Name collision - duplicate definitions of {:?}",
                                     var.name
                                 );
                                 errs.push(self.add_help(
