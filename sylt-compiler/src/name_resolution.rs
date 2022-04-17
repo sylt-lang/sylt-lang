@@ -479,14 +479,12 @@ impl Resolver {
                 name
             )]),
             None => {
-                let err = resolution_error!(
-                    self,
-                    span,
-                    "Failed to resolve {:?} - nothing matched",
-                    name
-                );
+                let err =
+                    resolution_error!(self, span, "Failed to resolve {:?} - nothing matched", name);
                 let err = match self.find_similar_name(span.file_id, name) {
-                    Some((distance, name)) if distance < 8 => self.add_help_no_span(err, format!("Maybe you ment {:?}?", name)),
+                    Some((distance, name)) if distance < 8 => {
+                        self.add_help_no_span(err, format!("Maybe you ment {:?}?", name))
+                    }
                     _ => err,
                 };
 
