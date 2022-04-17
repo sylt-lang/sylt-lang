@@ -1,13 +1,14 @@
 from container use add
 from list use push, pop
+from common use unsafe_force
 
 A :: blob {
     b: float,
     a: int,
 }
-//B :: blob {
-//    _self: B,
-//}
+B :: blob {
+    _self: B,
+}
 start :: fn do
     // Basic types
     as_str(-1) <=> "-1"
@@ -30,12 +31,12 @@ start :: fn do
         b: 5.3,
     })
     print(ab)
-    //b: B = unsafe_force(nil)
-    //b = B {
-    //    _self: b,
-    //}
-    //b._self = b
-    //print(b)
+    b: B = unsafe_force(nil)
+    b = B {
+        _self: b,
+    }
+    b._self = b
+    print(b)
     // Functions
     d :: fn x: int, y: int -> int do
         ret x + y
