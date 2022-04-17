@@ -11,6 +11,9 @@ use sylt_parser::{
 
 use crate::NamespaceID;
 
+extern crate levenshtein;
+use levenshtein::levenshtein;
+
 type ResolveResult<T> = Result<T, Vec<Error>>;
 type Ref = usize;
 
@@ -436,13 +439,32 @@ impl Resolver {
         wrapper.help_no_span(msg).unwrap_err()[0].clone()
     }
 
+    fn find_similar_name(&self, namespace_id: usize, name: &str) -> Option<(usize, String)> {
+        let best_stack = self
+            .stack
+            .iter()
+            .rev()
+            .map(|(var_name, _)| (levenshtein(var_name, name), var_name.clone()))
+            .min();
+
+        let namespace = &self.namespace_to_file[&namespace_id];
+        let best_global = self.namespaces[namespace]
+            .keys()
+            .map(|var_name| (levenshtein(var_name, name), var_name.clone()))
+            .min();
+
+        IntoIterator::into_iter([best_stack, best_global])
+            .min()
+            .unwrap()
+            .clone()
+    }
+
     fn lookup_global(&self, namespace_id: usize, name: &str) -> Option<&Name> {
         let namespace = &self.namespace_to_file[&namespace_id];
         self.namespaces[namespace].get(name)
     }
 
     fn lookup(&self, name: &str, span: Span) -> ResolveResult<Ref> {
-        // TODO(ed): Find the closest matching name if we don't find anything?
         for (var_name, var_id) in self.stack.iter().rev() {
             if var_name == name {
                 return Ok(*var_id);
@@ -456,12 +478,20 @@ impl Resolver {
                 "When resolving the name {:?} - a namespace was found",
                 name
             )]),
-            None => Err(vec![resolution_error!(
-                self,
-                span,
-                "Failed to resolve {:?} - nothing matched",
-                name
-            )]),
+            None => {
+                let err = resolution_error!(
+                    self,
+                    span,
+                    "Failed to resolve {:?} - nothing matched",
+                    name
+                );
+                let err = match self.find_similar_name(span.file_id, name) {
+                    Some((distance, name)) if distance < 8 => self.add_help_no_span(err, format!("Maybe you ment {:?}?", name)),
+                    _ => err,
+                };
+
+                Err(vec![err])
+            }
         }
     }
 
