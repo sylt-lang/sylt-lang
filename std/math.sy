@@ -1,3 +1,8 @@
+// Constants
+tau :: pi * 2.0
+pi :: 3.1415926535897
+e :: 2.718281828459045235360
+
 abs : pu<N: Num> *N -> *N: pu n ->
     if n < 0 do
         -n
