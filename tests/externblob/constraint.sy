@@ -1,3 +1,5 @@
+from unsafe use unsafe_force
+
 Foo :: externblob {
   bar: int
 }
@@ -11,7 +13,7 @@ get_bar :: fn f -> int
 end
 
 start :: fn do
-  foo: Foo : common.unsafe_force' Hack { bar: 7 }
+  foo: Foo : unsafe_force' Hack { bar: 7 }
 
   (get_bar' foo) <=> 7
 end
