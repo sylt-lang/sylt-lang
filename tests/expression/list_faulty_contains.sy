@@ -1,7 +1,7 @@
 start :: fn do
     a :: [1, 2, 3]
-    (0 in a) <=> false
-    ("123" in a) <=> true
-    (2 in a) <=> "123"
+    (list.contains' a, 0) <=> false
+    (list.contains' a, "123") <=> true
+    (list.contains' a, 2) <=> "123"
 end
 // error: $Mismatch

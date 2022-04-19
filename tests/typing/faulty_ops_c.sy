@@ -1,5 +1,5 @@
 start :: fn do
-    1 in {1, 2, 3}
-    1 in {"abc", "abc"}
+    set.contains' (set.from_list' [1, 2, 3]), 1
+    set.contains' (set.from_list' ["abc", "abc"]), 1
 end
 // error: $Mismatch

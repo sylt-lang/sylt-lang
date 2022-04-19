@@ -1,6 +1,6 @@
 start :: fn do
-    a :: {"abc": 1, "bcd": 2}
-    a["abc"] + 123
+    a :: dict.from_list' [("abc", 1), ("bcd", 2)]
+    dict.get(a, "abc") -> maybe.orDefault' 0 + 123
     a["qqq"] + 123
     a[123] + 123
 end

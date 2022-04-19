@@ -1,6 +1,6 @@
 start :: fn do
-    a :: {1: 1, 2: 2}
-    a[1] <=> 1
-    a[2] <=> 2
+    a :: dict.from_list' [(1, 1), (2, 2)]
+    dict.get(a, 1) <=> maybe.Maybe.Just 1
+    dict.get(a, 2) <=> maybe.Maybe.Just 2
 end
 

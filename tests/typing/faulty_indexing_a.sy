@@ -3,4 +3,4 @@ start :: fn do
     a[0]
     a["abc"]
 end
-// error: $BinOp
+// error: A 'str' cannot be a 'int'

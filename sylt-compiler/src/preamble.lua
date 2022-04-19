@@ -382,6 +382,16 @@ function list_prepend(l, v)
     list_push(l, 1, v)
 end
 
+function list_contains(l, a)
+    for _, v in pairs(l) do
+        if v == a then
+            return true
+        end
+    end
+    return false
+end
+
+
 function xx_len(c)
     local s = 0
     for _ in pairs(c) do
@@ -468,25 +478,6 @@ print = print
 function dbg(x) print(x); return x end
 
 unsafe_force = __IDENTITY
-
-function __CONTAINS(a, b)
-    local ty = getmetatable(b)._type
-    if ty == "list" then
-        for _, v in pairs(b) do
-            if v == a then
-                return true
-            end
-        end
-        return false
-    end
-    if ty == "dict" then
-        return b[a] ~= nil
-    end
-    if ty == "set" then
-        return b[a] ~= nil
-    end
-    assert(false, "Invalid contains!")
-end
 
 random = math.random
 randint = math.random

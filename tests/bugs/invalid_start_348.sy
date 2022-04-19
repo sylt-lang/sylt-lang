@@ -1,2 +1,2 @@
-start :: {}
+start :: []
 // error: $Mismatch

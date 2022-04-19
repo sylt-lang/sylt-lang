@@ -1,4 +1,4 @@
 start :: fn do
-    ((1,) in {(1,2)}) <=> true
+    set.contains' (set.from_list' [(1, 2)]), (1,)
 end
 // error: $TupleLengthMismatch

@@ -28,6 +28,9 @@ pop :: list_pop
 xx_len: fn [*ITEM] -> int : external
 len :: xx_len
 
+list_contains: fn [*ITEM], *ITEM -> bool : external
+contains :: list_contains
+
 last :: fn l: [*ITEM] -> *ITEM
     l[len(l) - 1]
 end
