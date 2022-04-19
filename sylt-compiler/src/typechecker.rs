@@ -125,7 +125,9 @@ enum Constraint {
     Add(TyID),
     Sub(TyID),
     Mul(TyID),
-    Div(TyID),
+    DivTop(TyID),
+    DivBot(TyID),
+    DivRes(TyID),
     Equ(TyID),
     Cmp(TyID),
     CmpEqu(TyID),
@@ -537,14 +539,18 @@ impl TypeChecker {
                         self.add_constraint(expression_ty, *span, Constraint::Mul(target_ty));
                         self.add_constraint(target_ty, *span, Constraint::Mul(expression_ty));
                     }
-                    BinOp::Div => {
-                        let float_ty = self.push_type(Type::Float);
-                        self.unify(*span, ctx, target_ty, float_ty)?;
-                        self.add_constraint(expression_ty, *span, Constraint::Div(target_ty));
-                        self.add_constraint(target_ty, *span, Constraint::Div(expression_ty));
-                    }
+                    BinOp::Div => { /* Very special case below */ }
                 };
-                self.unify(*span, ctx, expression_ty, target_ty)?;
+
+                if matches!(op, BinOp::Div) {
+                    self.add_constraint(expression_ty, *span, Constraint::DivBot(target_ty));
+                    self.add_constraint(target_ty, *span, Constraint::DivRes(target_ty));
+                    self.add_constraint(target_ty, *span, Constraint::DivTop(expression_ty));
+                    self.check_constraints(*span, ctx, expression_ty)?;
+                    self.check_constraints(*span, ctx, target_ty)?;
+                } else {
+                    self.unify(*span, ctx, expression_ty, target_ty)?;
+                }
                 self.unify_option(*span, ctx, expression_ret, target_ret)
             }
 
@@ -869,7 +875,18 @@ impl TypeChecker {
                 BinOp::Add => bin_op!(self, *span, ctx, a, b, Constraint::Add),
                 BinOp::Sub => bin_op!(self, *span, ctx, a, b, Constraint::Sub),
                 BinOp::Mul => bin_op!(self, *span, ctx, a, b, Constraint::Mul),
-                BinOp::Div => bin_op!(self, *span, ctx, a, b, Constraint::Mul, Type::Float),
+                BinOp::Div => {
+                    let (a_ret, a) = self.expression(a, ctx)?;
+                    let (b_ret, b) = self.expression(b, ctx)?;
+                    self.add_constraint(a, *span, Constraint::DivTop(b));
+                    self.add_constraint(b, *span, Constraint::DivBot(a));
+                    let c = self.push_type(Type::Unknown);
+                    self.add_constraint(c, *span, Constraint::DivRes(a));
+                    self.check_constraints(*span, ctx, a)?;
+                    self.check_constraints(*span, ctx, b)?;
+                    self.check_constraints(*span, ctx, c)?;
+                    with_ret(self.unify_option(*span, ctx, a_ret, b_ret)?, c)
+                }
                 BinOp::And | BinOp::Or => {
                     let (a_ret, a) = self.expression(a, ctx)?;
                     let (b_ret, b) = self.expression(b, ctx)?;
@@ -1282,7 +1299,9 @@ impl TypeChecker {
                 Constraint::Add(b) => self.add(span, ctx, a, *b),
                 Constraint::Sub(b) => self.sub(span, ctx, a, *b),
                 Constraint::Mul(b) => self.mul(span, ctx, a, *b),
-                Constraint::Div(b) => self.div(span, ctx, a, *b),
+                Constraint::DivTop(b) => self.div(span, ctx, a, *b), // NOTE(ed): Arguments are flipped
+                Constraint::DivBot(b) => self.div(span, ctx, *b, a), // NOTE(ed): Arguments are flipped
+                Constraint::DivRes(b) => self.div_res(span, ctx, *b, a),
                 Constraint::Equ(b) => self.equ(span, ctx, a, *b),
                 Constraint::Cmp(b) => self.cmp(span, ctx, a, *b),
                 Constraint::CmpEqu(b) => self.equ(span, ctx, a, *b).and(self.cmp(span, ctx, a, *b)),
@@ -1783,7 +1802,9 @@ impl TypeChecker {
                         C::Add(x) => C::Add(self.inner_copy(*x, seen)),
                         C::Sub(x) => C::Sub(self.inner_copy(*x, seen)),
                         C::Mul(x) => C::Mul(self.inner_copy(*x, seen)),
-                        C::Div(x) => C::Div(self.inner_copy(*x, seen)),
+                        C::DivTop(x) => C::DivTop(self.inner_copy(*x, seen)),
+                        C::DivBot(x) => C::DivBot(self.inner_copy(*x, seen)),
+                        C::DivRes(x) => C::DivRes(self.inner_copy(*x, seen)),
                         C::Equ(x) => C::Equ(self.inner_copy(*x, seen)),
                         C::Cmp(x) => C::Cmp(self.inner_copy(*x, seen)),
                         C::CmpEqu(x) => C::CmpEqu(self.inner_copy(*x, seen)),
@@ -2009,6 +2030,13 @@ impl TypeChecker {
 
             (Type::Float | Type::Int, Type::Float | Type::Int) => Ok(()),
 
+            (Type::Tuple(a), Type::Float | Type::Int) => {
+                for a in a.iter() {
+                    self.div(span, ctx, *a, b)?;
+                }
+                Ok(())
+            }
+
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
                 for (a, b) in a.iter().zip(b.iter()) {
                     self.div(span, ctx, *a, *b)?;
@@ -2024,6 +2052,44 @@ impl TypeChecker {
                     rhs: self.bake_type(b),
                     op: "/".to_string(),
                 }
+            ),
+        }
+    }
+
+    fn div_res(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<()> {
+        match (self.find_type(a), self.find_type(b)) {
+            (Type::Float | Type::Int, Type::Float) => Ok(()),
+
+            (Type::Unknown, _) => Ok(()),
+
+            (Type::Float | Type::Int, _) => {
+                let float = self.push_type(Type::Float);
+                self.unify(span, ctx, b, float)?;
+                Ok(())
+            }
+
+            (Type::Tuple(xs), Type::Unknown) => {
+                let tys = xs.iter().map(|_| self.push_type(Type::Unknown)).collect();
+                let tuple = self.push_type(Type::Tuple(tys));
+                self.unify(span, ctx, b, tuple)?;
+                // Retry with the new info
+                self.div_res(span, ctx, a, b)
+            }
+
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
+                for (a, b) in a.iter().zip(b.iter()) {
+                    self.div_res(span, ctx, *a, *b)?;
+                }
+                Ok(())
+            }
+
+            _ => err_type_error!(
+                self,
+                span,
+                TypeError::Exotic,
+                "Dividing {} cannot result in {}",
+                self.bake_type(a),
+                self.bake_type(b)
             ),
         }
     }

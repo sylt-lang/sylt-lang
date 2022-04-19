@@ -1,0 +1,5 @@
+start :: fn do
+  14.0 / 2 <=> 7
+end
+
+// error: A 'float' cannot be a 'int'
