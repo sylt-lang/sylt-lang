@@ -240,8 +240,6 @@ pub enum Type {
     Generic(String, Span),
     Tuple(Vec<Type>, Span),
     List(Box<Type>, Span),
-    Set(Box<Type>, Span),
-    Dict(Box<Type>, Box<Type>, Span),
     Fn {
         constraints: BTreeMap<String, Vec<TypeConstraint>>,
         params: Vec<Type>,
@@ -260,8 +258,6 @@ impl Type {
             | Type::Generic(_, span)
             | Type::Tuple(_, span)
             | Type::List(_, span)
-            | Type::Set(_, span)
-            | Type::Dict(_, _, span)
             | Type::Fn { span, .. } => *span,
         }
     }
@@ -564,8 +560,6 @@ impl Resolver {
             },
             TK::Tuple(gs) => T::Tuple(self.type_vec(gs)?, span),
             TK::List(t) => T::List(Box::new(self.ty(t)?), span),
-            TK::Set(t) => T::Set(Box::new(self.ty(t)?), span),
-            TK::Dict(k, v) => T::Dict(Box::new(self.ty(k)?), Box::new(self.ty(v)?), span),
             TK::Generic(name) => T::Generic(name.clone(), span),
             TK::Grouping(t) => self.ty(t)?,
         })

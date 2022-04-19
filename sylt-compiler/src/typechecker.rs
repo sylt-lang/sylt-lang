@@ -413,13 +413,6 @@ impl TypeChecker {
 
             T::List(kind, _) => Type::List(self.inner_resolve_type(ctx, kind, seen)?),
 
-            T::Set(kind, _) => Type::Set(self.inner_resolve_type(ctx, kind, seen)?),
-
-            T::Dict(key, value, _) => Type::Dict(
-                self.inner_resolve_type(ctx, key, seen)?,
-                self.inner_resolve_type(ctx, value, seen)?,
-            ),
-
             T::Generic(name, _) => {
                 return Ok(*seen
                     .entry(name.clone())

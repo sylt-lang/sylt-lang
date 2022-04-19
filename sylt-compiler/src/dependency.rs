@@ -62,8 +62,6 @@ fn ty_dependency(ty: &Type) -> BTreeSet<usize> {
         }
         Type::Tuple(ts, _) => ts.iter().map(|x| ty_dependency(x)).flatten().collect(),
         Type::List(t, _) => ty_dependency(t),
-        Type::Set(t, _) => ty_dependency(t),
-        Type::Dict(k, b, _) => ty_dependency(k).union(&ty_dependency(b)).cloned().collect(),
         Type::Fn { params, ret, .. } => params
             .iter()
             .map(|x| ty_dependency(x).into_iter())
