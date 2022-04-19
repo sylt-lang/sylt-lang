@@ -134,8 +134,6 @@ enum Constraint {
 
     Neg,
 
-    Indexes(TyID),
-    IndexedBy(TyID),
     IndexingGives(TyID),
     GivenByIndex(TyID),
     ConstantIndex(i64, TyID),
@@ -822,15 +820,13 @@ impl TypeChecker {
             E::Index { value, index: index_syn, span } => {
                 let (value_ret, value) = self.expression(value, ctx)?;
                 let (index_ret, index) = self.expression(index_syn, ctx)?;
-                let expr = self.push_type(Type::Unknown);
+                let expr = self.push_type(Type::Int);
                 let index_span = index_syn.span();
                 match **index_syn {
                     E::Int(i, _) => {
                         self.add_constraint(value, *span, Constraint::ConstantIndex(i, expr));
                     }
                     _ => {
-                        self.add_constraint(index, index_span, Constraint::Indexes(value));
-                        self.add_constraint(value, index_span, Constraint::IndexedBy(index));
                         self.add_constraint(value, index_span, Constraint::IndexingGives(expr));
                         self.add_constraint(expr, index_span, Constraint::GivenByIndex(value));
                     }
@@ -1264,9 +1260,6 @@ impl TypeChecker {
                         TypeError::UniOp { val: self.bake_type(a), op: "-".to_string() }
                     ),
                 },
-
-                Constraint::IndexedBy(b) => self.is_indexed_by(span, ctx, a, *b),
-                Constraint::Indexes(b) => self.is_indexed_by(span, ctx, *b, a),
 
                 Constraint::IndexingGives(b) => self.is_given_by_indexing(span, ctx, a, *b),
                 Constraint::GivenByIndex(b) => self.is_given_by_indexing(span, ctx, *b, a),
@@ -1747,8 +1740,6 @@ impl TypeChecker {
                         C::Cmp(x) => C::Cmp(self.inner_copy(*x, seen)),
                         C::CmpEqu(x) => C::CmpEqu(self.inner_copy(*x, seen)),
                         C::Neg => C::Neg,
-                        C::Indexes(x) => C::Indexes(self.inner_copy(*x, seen)),
-                        C::IndexedBy(x) => C::IndexedBy(self.inner_copy(*x, seen)),
                         C::IndexingGives(x) => C::IndexingGives(self.inner_copy(*x, seen)),
                         C::GivenByIndex(x) => C::GivenByIndex(self.inner_copy(*x, seen)),
                         C::ConstantIndex(i, x) => C::ConstantIndex(*i, self.inner_copy(*x, seen)),
@@ -2057,26 +2048,6 @@ impl TypeChecker {
                     lhs: self.bake_type(a),
                     rhs: self.bake_type(b),
                     op: "<".to_string(),
-                }
-            ),
-        }
-    }
-
-    fn is_indexed_by(&mut self, span: Span, _ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<()> {
-        match (self.find_type(a), self.find_type(b)) {
-            (Type::Unknown, _) => Ok(()),
-            (_, Type::Unknown) => Ok(()),
-
-            (Type::List(_), Type::Int) => Ok(()),
-            (Type::Tuple(_), Type::Int) => Ok(()),
-
-            _ => err_type_error!(
-                self,
-                span,
-                TypeError::BinOp {
-                    lhs: self.bake_type(a),
-                    rhs: self.bake_type(b),
-                    op: "Indexing".to_string(),
                 }
             ),
         }
