@@ -1,14 +1,32 @@
-from container use len
+list_random_choice: fn [*ITEM] -> *ITEM : external
+random_choice :: list_random_choice
 
-random_choice: fn [*ITEM] -> *ITEM : external
-for_each: fn [*ITEM], fn *ITEM -> void -> void : external
-map: pu [*ITEM], pu *ITEM -> *OUT -> [*OUT] : external
-reduce: pu [*ITEM], (pu *ITEM, *ITEM -> *OUT) -> *OUT : external
-fold: pu [*ITEM], *OUT, (pu *ITEM, *OUT -> *OUT) -> *OUT : external
-filter: pu [*ITEM], pu *ITEM -> bool -> [*ITEM] : external
-push: fn [*ITEM], *ITEM -> void : external
-prepend: fn [*ITEM], *ITEM -> void : external
-pop: fn [*ITEM] -> *ITEM : external
+list_for_each: fn [*ITEM], fn *ITEM -> void -> void : external
+for_each :: list_for_each
+
+list_map: pu [*ITEM], pu *ITEM -> *OUT -> [*OUT] : external
+map :: list_map
+
+list_reduce: pu [*ITEM], (pu *ITEM, *ITEM -> *OUT) -> *OUT : external
+reduce :: list_reduce
+
+list_fold: pu [*ITEM], *OUT, (pu *ITEM, *OUT -> *OUT) -> *OUT : external
+fold :: list_fold
+
+list_filter: pu [*ITEM], pu *ITEM -> bool -> [*ITEM] : external
+filter :: list_filter
+
+list_push: fn [*ITEM], *ITEM -> void : external
+push :: list_push
+
+list_prepend: fn [*ITEM], *ITEM -> void : external
+prepend :: list_prepend
+
+list_pop: fn [*ITEM] -> *ITEM : external
+pop :: list_pop
+
+xx_len: fn [*ITEM] -> int : external
+len :: xx_len
 
 last :: fn l: [*ITEM] -> *ITEM
     l[len(l) - 1]

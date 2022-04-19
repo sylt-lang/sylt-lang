@@ -1,4 +1,4 @@
 start :: fn do
-    a: {int} = [2, 2]
+    a: set.Set(int) = [2, 2]
 end
 // error: $Mismatch

@@ -1,4 +1,4 @@
-from list use (push)
+from list use (push, len)
 
 start :: fn do
     a := [1, 2]

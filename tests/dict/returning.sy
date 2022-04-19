@@ -1,17 +1,20 @@
-q :: fn -> {int: bool} do
-    g :: {0: true}
-    ret g
+from maybe use Maybe
+
+q :: fn -> dict.Dict(int, bool) do
+    dict.from_list' [(0, true)]
 end
 
-h :: fn -> {int: str} do
-    g :: {0: "a"}
-    ret g
+h :: fn -> dict.Dict(int, str) do
+    dict.from_list' [(0, "a")]
 end
 
 start :: fn do
     g :: q()
-    g[0] <=> true
+    print' g
+    print' dict.get(g, 0)
+    dict.get(g, 0) <=> Maybe.Just true
     h :: h()
-    h[0] <=> "a"
+    print' h
+    dict.get(h, 0) <=> Maybe.Just "a"
 end
 

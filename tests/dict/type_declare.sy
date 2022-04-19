@@ -1,5 +1,5 @@
 start :: fn do
     q := 1
-    a: {int: int} = {q + q: q}
+    a: dict.Dict(int, int) = dict.from_list' [(q + q, q)]
 end
 

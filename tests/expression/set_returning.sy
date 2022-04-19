@@ -1,11 +1,11 @@
-q :: fn -> {int} do
-    g :: {0}
+q :: fn -> set.Set(int) do
+    g :: set.from_list' [0]
     ret g
 end
 
 start :: fn do
     g :: q()
-    (0 in g) <=> true
-    false <=> (1 in g)
+    (set.contains' g, 0) <=> true
+    false <=> (set.contains' g, 1)
 end
 
