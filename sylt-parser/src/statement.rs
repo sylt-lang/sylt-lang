@@ -768,7 +768,7 @@ mod test {
     test!(statement, statement_const_type_declaration: "a :int: 1 + 1\n" => _);
     test!(statement, statement_if: "if 1 do a end\n" => _);
     test!(statement, statement_if_else: "if 1 do a else do b end\n" => _);
-    test!(statement, statement_loop: "loop 1 { a }\n" => _);
+    test!(statement, statement_loop: "loop 1 do a end\n" => _);
     test!(statement, statement_loop_no_condition: "loop do a end\n" => _);
     test!(statement, statement_ret: "ret 1 + 1\n" => _);
     test!(statement, statement_ret_newline: "ret \n" => _);
@@ -790,8 +790,6 @@ mod test {
 
     test!(statement, statement_skip_newline: "(1 \n\n+\n 1\n\n)\n" => _);
     test!(statement, statement_skip_newline_list: "[\n\n 1 \n\n,\n 1\n\n,]\n" => _);
-    test!(statement, statement_skip_newline_set: "{\n\n 1 \n\n,\n 1\n\n,}\n" => _);
-    test!(statement, statement_skip_newline_dict: "{\n\n 1: \n3\n,\n 1\n\n:1,}\n" => _);
 
     test!(outer_statement, outer_statement_blob: "B :: blob {}\n" => _);
     test!(outer_statement, outer_statement_blob_no_last_comma: "B :: blob { \na: A\n }\n" => _);

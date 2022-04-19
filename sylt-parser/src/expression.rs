@@ -782,8 +782,6 @@ mod test {
     test!(expression, tuple_empty: "()" => Tuple(_));
     test!(expression, list: "[0, 0]" => List(_));
 
-    test!(expression, in_grouping: "1 + 2 in b" => Add(_, _));
-
     test!(expression, call_simple_paren: "a()" => Get(_));
     test!(expression, call_call: "a()()" => Get(_));
     test!(expression, call_simple_bang: "a'" => Get(_));
@@ -802,7 +800,6 @@ mod test {
     test!(expression, assignable_expression_blob: "A {}.a" => Get(_));
     test!(expression, assignable_expression_fn: "(fn do 2 end)()" => Get(_));
     test!(expression, assignable_expression_fn_no_paren: "fn do 2 end()" => Get(_));
-    test!(expression, assignable_expression_dict: "{1:2}[1]" => Get(_));
 
     // TODO(ed): This is controverisal
     test!(expression, call_args_chaining_bang: "a' 1, 2, 3 .b" => Get(_));
