@@ -1,6 +1,6 @@
 from container use add
 from list use push, pop
-from common use unsafe_force
+from unsafe use unsafe_force
 
 A :: blob {
     b: float,
