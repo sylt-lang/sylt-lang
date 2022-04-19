@@ -764,7 +764,6 @@ pub fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 mod test {
     use super::ExpressionKind::*;
     use crate::expression;
-    use crate::expression::ComparisonKind;
     use crate::Assignable;
     use crate::AssignableKind::*;
     use crate::{fail, test};
@@ -783,10 +782,7 @@ mod test {
     test!(expression, tuple_empty: "()" => Tuple(_));
     test!(expression, list: "[0, 0]" => List(_));
 
-    test!(expression, in_list: "a in [1, 2, 3]" => Comparison(_, ComparisonKind::In, _));
-    test!(expression, in_set: "2 in {1, 1, 2}" => Comparison(_, ComparisonKind::In, _));
     test!(expression, in_grouping: "1 + 2 in b" => Add(_, _));
-    test!(expression, in_grouping_paren: "(1 + 2) in b" => Comparison(_, ComparisonKind::In, _));
 
     test!(expression, call_simple_paren: "a()" => Get(_));
     test!(expression, call_call: "a()()" => Get(_));

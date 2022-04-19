@@ -114,8 +114,8 @@ struct TypeNode {
 ///
 /// Most constraints force `Unknown` types into becoming a certain type and causes a `TypeError`
 /// otherwise. Constraints applied to two or more type variables need to make sure all variables
-/// have the constraint in some way. For example, if some type has the `Contains` constraint, the
-/// contained type must have the `IsContainedIn` constraint. If this is not the case, the
+/// have the constraint in some way. For example, if some type has the `DivTop` constraint, the
+/// divisor type must have the `DivBot` constraint. If this is not the case, the
 /// typechecker may miss some constraints when unifying.
 ///
 /// In theory, `Unknown` is the only type that can have a constraint. In practice, concrete types
@@ -141,10 +141,6 @@ enum Constraint {
     Field(String, TyID),
 
     Num,
-    Container,
-    SameContainer(TyID),
-    Contains(TyID),
-    IsContainedIn(TyID),
 
     Enum,
     Variant(String, Option<TyID>),
@@ -240,7 +236,6 @@ impl TypeChecker {
         span: Span,
         var: TyID,
         constraint: &TypeConstraint,
-        seen: &HashMap<String, TyID>,
     ) -> TypeResult<()> {
         fn check_constraint_arity(
             typechecker: &TypeChecker,
@@ -260,24 +255,6 @@ impl TypeChecker {
             }
         }
 
-        fn parse_constraint_arg(
-            typechecker: &TypeChecker,
-            span: Span,
-            name: &str,
-            seen: &HashMap<String, TyID>,
-        ) -> TypeResult<TyID> {
-            match seen.get(name) {
-                Some(x) => Ok(*x),
-                _ => {
-                    err_type_error!(
-                        typechecker,
-                        span,
-                        TypeError::UnknownConstraintArgument(name.into())
-                    )
-                }
-            }
-        }
-
         let num_args = constraint.args.len();
         match constraint.name.name.as_str() {
             "Num" => {
@@ -287,22 +264,6 @@ impl TypeChecker {
             "CmpEqu" => {
                 check_constraint_arity(self, span, "Num", num_args, 0)?;
                 self.add_constraint(var, span, Constraint::CmpEqu(var));
-            }
-            "Container" => {
-                check_constraint_arity(self, span, "Container", num_args, 0)?;
-                self.add_constraint(var, span, Constraint::Container);
-            }
-            "SameContainer" => {
-                check_constraint_arity(self, span, "SameContainer", num_args, 1)?;
-                let a = parse_constraint_arg(self, span, &constraint.args[0].name, seen)?;
-                self.add_constraint(var, span, Constraint::SameContainer(a));
-                self.add_constraint(a, span, Constraint::SameContainer(var));
-            }
-            "Contains" => {
-                check_constraint_arity(self, span, "Contains", num_args, 1)?;
-                let a = parse_constraint_arg(self, span, &constraint.args[0].name, seen)?;
-                self.add_constraint(var, span, Constraint::Contains(a));
-                self.add_constraint(a, span, Constraint::IsContainedIn(var));
             }
             x => return err_type_error!(self, span, TypeError::UnknownConstraint(x.into())),
         }
@@ -385,7 +346,7 @@ impl TypeChecker {
                             // NOTE(ed): This disallowes type-variables that are only used for
                             // constraints.
                             for constraint in constraints.iter() {
-                                self.resolve_constraint(*span, *var, constraint, seen)?;
+                                self.resolve_constraint(*span, *var, constraint)?;
                             }
                         }
                         None => {
@@ -820,7 +781,9 @@ impl TypeChecker {
             E::Index { value, index: index_syn, span } => {
                 let (value_ret, value) = self.expression(value, ctx)?;
                 let (index_ret, index) = self.expression(index_syn, ctx)?;
-                let expr = self.push_type(Type::Int);
+                let int_type = self.push_type(Type::Int);
+                self.unify(*span, ctx, index, int_type)?;
+                let expr = self.push_type(Type::Unknown);
                 let index_span = index_syn.span();
                 match **index_syn {
                     E::Int(i, _) => {
@@ -1305,35 +1268,6 @@ impl TypeChecker {
                     ),
                 },
 
-                Constraint::Container => match self.find_type(a) {
-                    Type::Unknown | Type::List(..) => Ok(()),
-                    _ => err_type_error!(
-                        self,
-                        span,
-                        TypeError::Violating(self.bake_type(a)),
-                        "The Container constraint forces set, list or dict"
-                    ),
-                },
-
-                Constraint::SameContainer(b) => match (self.find_type(a), self.find_type(*b)) {
-                    (Type::Unknown, _)
-                    | (_, Type::Unknown)
-                    | (Type::List(..), Type::List(..)) => Ok(()),
-
-                    _ => err_type_error!(
-                        self,
-                        span,
-                        TypeError::Mismatch {
-                            got: self.bake_type(a),
-                            expected: self.bake_type(*b)
-                        },
-                        "The SameContainer constraint forces the outer containers to match"
-                    ),
-                },
-
-                Constraint::Contains(b) => self.contains(span, ctx, a, *b),
-                Constraint::IsContainedIn(b) => self.contains(span, ctx, *b, a),
-
                 Constraint::Enum => match self.find_type(a) {
                     Type::Unknown | Type::Enum(..) => Ok(()),
 
@@ -1745,10 +1679,6 @@ impl TypeChecker {
                         C::ConstantIndex(i, x) => C::ConstantIndex(*i, self.inner_copy(*x, seen)),
                         C::Field(f, x) => C::Field(f.clone(), self.inner_copy(*x, seen)),
                         C::Num => C::Num,
-                        C::Container => C::Container,
-                        C::SameContainer(x) => C::SameContainer(self.inner_copy(*x, seen)),
-                        C::Contains(x) => C::Contains(self.inner_copy(*x, seen)),
-                        C::IsContainedIn(x) => C::IsContainedIn(self.inner_copy(*x, seen)),
                         C::Enum => C::Enum,
                         C::Variant(v, x) => {
                             C::Variant(v.clone(), x.map(|y| self.inner_copy(y, seen)))
@@ -2116,24 +2046,6 @@ impl TypeChecker {
                 TypeError::Violating(self.bake_type(a)),
                 "This type cannot be indexed with the constant index {}",
                 index
-            ),
-        }
-    }
-
-    fn contains(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<()> {
-        match (self.find_type(a), self.find_type(b)) {
-            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
-
-            (Type::List(x), _) => self.unify(span, ctx, x, b).map(|_| ()),
-
-            _ => err_type_error!(
-                self,
-                span,
-                TypeError::Mismatch {
-                    got: self.bake_type(a),
-                    expected: self.bake_type(b)
-                },
-                "The Contains constraint forces a container"
             ),
         }
     }
