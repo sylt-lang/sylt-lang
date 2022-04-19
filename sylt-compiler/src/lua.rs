@@ -122,41 +122,9 @@ impl<'a, 'b> Generator<'a, 'b> {
                 IR::Greater(t, a, b) => ii!(self, t, "({} > {})", a, b),
                 IR::NotEquals(t, a, b) => ii!(self, t, "({} ~= {})", a, b),
 
-                IR::In(t, a, b) => ii!(self, t, "__CONTAINS({}, {})", a, b),
-
                 IR::Not(t, a) => ii!(self, t, "(not {})", a),
 
                 IR::List(t, exprs) => iis!(self, t, "__LIST{{ {} }}", self.comma_sep(exprs)),
-
-                IR::Set(t, exprs) => iis!(
-                    self,
-                    t,
-                    "__SET{{ {} }}",
-                    exprs
-                        .iter()
-                        .map(|v| format!("[{}] = true", self.expand(v)))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-
-                IR::Dict(t, exprs) => iis!(
-                    self,
-                    t,
-                    "__DICT{{ {} }}",
-                    exprs
-                        .windows(2)
-                        .step_by(2)
-                        .map(|v| match v {
-                            [k, v] => {
-                                let k = self.expand(k).to_string();
-                                let v = self.expand(v);
-                                format!("[{}] = {}", k, v)
-                            }
-                            _ => unreachable!(),
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
 
                 IR::Blob(t, fields) => iis!(
                     self,

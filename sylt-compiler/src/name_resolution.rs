@@ -87,7 +87,6 @@ pub enum BinOp {
     Less,
     LessEqual,
     // Misc
-    In,
     AssertEq,
     // Mul
     Add,
@@ -109,8 +108,6 @@ pub enum UniOp {
 pub enum Collection {
     Tuple,
     List,
-    Set,
-    Dict,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -802,7 +799,6 @@ impl Resolver {
                 CK::GreaterEqual => self.binop(BinOp::GreaterEqual, a, b, span)?,
                 CK::Less => self.binop(BinOp::Less, a, b, span)?,
                 CK::LessEqual => self.binop(BinOp::LessEqual, a, b, span)?,
-                CK::In => self.binop(BinOp::In, a, b, span)?,
             },
             EK::AssertEq(a, b) => self.binop(BinOp::AssertEq, a, b, span)?,
             EK::And(a, b) => self.binop(BinOp::And, a, b, span)?,
@@ -863,8 +859,6 @@ impl Resolver {
             }
             EK::Tuple(values) => self.collection(Collection::Tuple, &values, span)?,
             EK::List(values) => self.collection(Collection::List, &values, span)?,
-            EK::Set(values) => self.collection(Collection::Set, &values, span)?,
-            EK::Dict(values) => self.collection(Collection::Dict, &values, span)?,
             EK::Float(f) => E::Float(*f, span),
             EK::Int(i) => E::Int(*i, span),
             EK::Str(s) => E::Str(s.clone(), span),

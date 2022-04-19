@@ -513,7 +513,6 @@ impl TypeChecker {
                     | BinOp::Equals
                     | BinOp::Greater
                     | BinOp::GreaterEqual
-                    | BinOp::In
                     | BinOp::Less
                     | BinOp::LessEqual
                     | BinOp::NotEquals
@@ -853,18 +852,6 @@ impl TypeChecker {
                 BinOp::GreaterEqual | BinOp::LessEqual => {
                     bin_op!(self, *span, ctx, a, b, Constraint::CmpEqu, Type::Bool)
                 }
-                BinOp::In => {
-                    let (a_ret, a) = self.expression(a, ctx)?;
-                    let (b_ret, b) = self.expression(b, ctx)?;
-                    self.add_constraint(a, *span, Constraint::IsContainedIn(b));
-                    self.add_constraint(b, *span, Constraint::Contains(a));
-                    self.check_constraints(*span, ctx, a)?;
-                    self.check_constraints(*span, ctx, b)?;
-                    with_ret(
-                        self.unify_option(*span, ctx, a_ret, b_ret)?,
-                        self.push_type(Type::Bool),
-                    )
-                }
                 BinOp::Add => bin_op!(self, *span, ctx, a, b, Constraint::Add),
                 BinOp::Sub => bin_op!(self, *span, ctx, a, b, Constraint::Sub),
                 BinOp::Mul => bin_op!(self, *span, ctx, a, b, Constraint::Mul),
@@ -1139,31 +1126,6 @@ impl TypeChecker {
                 with_ret(ret, self.push_type(Type::List(inner_ty)))
             }
 
-            E::Collection { collection: Collection::Set, values, span } => {
-                let inner_ty = self.push_type(Type::Unknown);
-                let ret = Some(self.push_type(Type::Unknown));
-                for expr in values.iter() {
-                    let (e_ret, e) = self.expression(expr, ctx)?;
-                    self.unify(*span, ctx, inner_ty, e)?;
-                    self.unify_option(*span, ctx, ret, e_ret)?;
-                }
-                with_ret(ret, self.push_type(Type::Set(inner_ty)))
-            }
-
-            E::Collection { collection: Collection::Dict, values, span } => {
-                let key_ty = self.push_type(Type::Unknown);
-                let value_ty = self.push_type(Type::Unknown);
-                let ret = Some(self.push_type(Type::Unknown));
-                for (i, x) in values.iter().enumerate() {
-                    let (e_ret, e) = self.expression(x, ctx)?;
-                    // Even indexes are keys, odd are the values.
-                    let ty = if i % 2 == 0 { key_ty } else { value_ty };
-                    self.unify(*span, ctx, ty, e)?;
-                    self.unify_option(*span, ctx, e_ret, ret)?;
-                }
-                with_ret(ret, self.push_type(Type::Dict(key_ty, value_ty)))
-            }
-
             E::Float(_, _) => no_ret(self.push_type(Type::Float)),
             E::Int(_, _) => no_ret(self.push_type(Type::Int)),
             E::Str(_, _) => no_ret(self.push_type(Type::Str)),
@@ -1233,11 +1195,6 @@ impl TypeChecker {
                     .collect(),
             ),
             Type::List(ty) => RuntimeType::List(Box::new(self.inner_bake_type(ty, seen))),
-            Type::Set(ty) => RuntimeType::Set(Box::new(self.inner_bake_type(ty, seen))),
-            Type::Dict(ty_k, ty_v) => RuntimeType::Dict(
-                Box::new(self.inner_bake_type(ty_k, seen)),
-                Box::new(self.inner_bake_type(ty_v, seen)),
-            ),
             Type::Function(args, ret, _) => RuntimeType::Function(
                 args.iter()
                     .map(|ty| self.inner_bake_type(*ty, seen))
@@ -1356,7 +1313,7 @@ impl TypeChecker {
                 },
 
                 Constraint::Container => match self.find_type(a) {
-                    Type::Unknown | Type::Set(..) | Type::List(..) | Type::Dict(..) => Ok(()),
+                    Type::Unknown | Type::List(..) => Ok(()),
                     _ => err_type_error!(
                         self,
                         span,
@@ -1368,9 +1325,7 @@ impl TypeChecker {
                 Constraint::SameContainer(b) => match (self.find_type(a), self.find_type(*b)) {
                     (Type::Unknown, _)
                     | (_, Type::Unknown)
-                    | (Type::Set(..), Type::Set(..))
-                    | (Type::List(..), Type::List(..))
-                    | (Type::Dict(..), Type::Dict(..)) => Ok(()),
+                    | (Type::List(..), Type::List(..)) => Ok(()),
 
                     _ => err_type_error!(
                         self,
@@ -1576,16 +1531,6 @@ impl TypeChecker {
                 (Type::List(a), Type::List(b)) => {
                     self.sub_unify(span, ctx, a, b, seen)
                         .help_no_span("While checking list".into())?;
-                }
-                (Type::Set(a), Type::Set(b)) => {
-                    self.sub_unify(span, ctx, a, b, seen)
-                        .help_no_span("While checking set".into())?;
-                }
-                (Type::Dict(a_k, a_v), Type::Dict(b_k, b_v)) => {
-                    self.sub_unify(span, ctx, a_k, b_k, seen)
-                        .help_no_span("While checking dictionary key".into())?;
-                    self.sub_unify(span, ctx, a_v, b_v, seen)
-                        .help_no_span("While checking dictionary value".into())?;
                 }
 
                 (Type::Tuple(a), Type::Tuple(b)) => {
@@ -1842,11 +1787,6 @@ impl TypeChecker {
             }
 
             Type::List(ty) => Type::List(self.inner_copy(ty, seen)),
-            Type::Set(ty) => Type::Set(self.inner_copy(ty, seen)),
-
-            Type::Dict(ty_k, ty_v) => {
-                Type::Dict(self.inner_copy(ty_k, seen), self.inner_copy(ty_v, seen))
-            }
 
             Type::Function(args, ret, purity) => Type::Function(
                 args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
@@ -2122,18 +2062,13 @@ impl TypeChecker {
         }
     }
 
-    fn is_indexed_by(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<()> {
+    fn is_indexed_by(&mut self, span: Span, _ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<()> {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) => Ok(()),
             (_, Type::Unknown) => Ok(()),
 
             (Type::List(_), Type::Int) => Ok(()),
             (Type::Tuple(_), Type::Int) => Ok(()),
-            // TODO(ed): Sets!
-            (Type::Dict(k, _), _) => {
-                self.unify(span, ctx, k, b)?;
-                Ok(())
-            }
 
             _ => err_type_error!(
                 self,
@@ -2171,11 +2106,6 @@ impl TypeChecker {
                 self.unify(span, ctx, given, b)?;
                 Ok(())
             }
-            // TODO(ed): Sets!
-            Type::Dict(_, given) => {
-                self.unify(span, ctx, given, b)?;
-                Ok(())
-            }
 
             _ => err_type_error!(
                 self,
@@ -2208,12 +2138,7 @@ impl TypeChecker {
                 ),
             },
             Type::List(ty) => self.unify(span, ctx, ty, ret).map(|_| ()),
-            Type::Dict(key_ty, value_ty) => {
-                let int_ty = self.push_type(Type::Int);
-                self.unify(span, ctx, key_ty, int_ty)?;
-                self.unify(span, ctx, value_ty, ret)?;
-                Ok(())
-            }
+
             _ => err_type_error!(
                 self,
                 span,
@@ -2228,22 +2153,7 @@ impl TypeChecker {
         match (self.find_type(a), self.find_type(b)) {
             (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
 
-            (Type::Set(x), _) | (Type::List(x), _) => self.unify(span, ctx, x, b).map(|_| ()),
-
-            (Type::Dict(kx, vx), Type::Tuple(ys)) => {
-                if ys.len() == 2 {
-                    self.unify(span, ctx, kx, ys[0])?;
-                    self.unify(span, ctx, vx, ys[1]).map(|_| ())
-                } else {
-                    err_type_error!(
-                        self,
-                        span,
-                        TypeError::Violating(self.bake_type(b)),
-                        "Expected length of tuple to be 2 but it was {}",
-                        ys.len()
-                    )
-                }
-            }
+            (Type::List(x), _) => self.unify(span, ctx, x, b).map(|_| ()),
 
             _ => err_type_error!(
                 self,

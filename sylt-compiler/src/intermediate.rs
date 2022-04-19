@@ -46,13 +46,10 @@ pub enum IR {
     GreaterEqual(Var, Var, Var),
     Less(Var, Var, Var),
     LessEqual(Var, Var, Var),
-    In(Var, Var, Var),
 
     Assert(Var),
 
     List(Var, Vec<Var>),
-    Set(Var, Vec<Var>),
-    Dict(Var, Vec<Var>),
     Tuple(Var, Vec<Var>),
     Blob(Var, Vec<(String, Var)>),
     Variant(Var, String, Var),
@@ -247,7 +244,6 @@ impl<'a> IRCodeGen<'a> {
                     BinOp::GreaterEqual => vec![IR::GreaterEqual(c, a, b)],
                     BinOp::Less => vec![IR::Less(c, a, b)],
                     BinOp::LessEqual => vec![IR::LessEqual(c, a, b)],
-                    BinOp::In => vec![IR::In(c, a, b)],
                     _ => unreachable!(),
                 };
                 ([aops, bops, ops].concat(), c)
@@ -374,24 +370,6 @@ impl<'a> IRCodeGen<'a> {
                 let var = self.var();
 
                 ([code, vec![IR::List(var, values)]].concat(), var)
-            }
-
-            E::Collection { collection: Collection::Set, values, .. } => {
-                let (code, values): (Vec<_>, Vec<_>) =
-                    values.iter().map(|expr| self.expression(expr, ctx)).unzip();
-                let code = code.concat();
-                let var = self.var();
-
-                ([code, vec![IR::Set(var, values)]].concat(), var)
-            }
-
-            E::Collection { collection: Collection::Dict, values, .. } => {
-                let (code, values): (Vec<_>, Vec<_>) =
-                    values.iter().map(|expr| self.expression(expr, ctx)).unzip();
-                let code = code.concat();
-                let var = self.var();
-
-                ([code, vec![IR::Dict(var, values)]].concat(), var)
             }
 
             E::Collection { collection: Collection::Tuple, values, .. } => {
@@ -649,7 +627,6 @@ pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
             | IR::Less(_, a, b)
             | IR::LessEqual(_, a, b)
             | IR::Index(_, a, b)
-            | IR::In(_, a, b)
             | IR::Assign(a, b)
             | IR::AssignAccess(a, _, b)
             | IR::AssignIndex(_, a, b) => {
@@ -673,7 +650,7 @@ pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
                     *table.entry(*b).or_insert(0) += 1;
                 }
             }
-            IR::List(_, xs) | IR::Set(_, xs) | IR::Dict(_, xs) | IR::Tuple(_, xs) => {
+            IR::List(_, xs) | IR::Tuple(_, xs) => {
                 for x in xs.iter() {
                     *table.entry(*x).or_insert(0) += 1;
                 }

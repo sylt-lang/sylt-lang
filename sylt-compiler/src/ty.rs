@@ -26,8 +26,6 @@ pub enum Type {
     Str,
     Tuple(Vec<TyID>),
     List(TyID),
-    Set(TyID),
-    Dict(TyID, TyID),
     Function(Vec<TyID>, TyID, Purity),
     Blob(String, Span, BTreeMap<String, (Span, TyID)>, Vec<TyID>),
     ExternBlob(
