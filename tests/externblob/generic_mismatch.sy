@@ -1,3 +1,5 @@
+from unsafe use unsafe_force
+
 Foo :: externblob(*T) {
   bar: *T
 }
@@ -7,8 +9,8 @@ Hack :: blob(*T) {
 }
 
 start :: fn do
-  a: Foo(str) : common.unsafe_force' Hack { bar: "hello" }
-  b: Foo(int) : common.unsafe_force' Hack { bar: 7 }
+  a: Foo(str) : unsafe_force' Hack { bar: "hello" }
+  b: Foo(int) : unsafe_force' Hack { bar: 7 }
 
   x := a
   x = b

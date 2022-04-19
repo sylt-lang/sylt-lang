@@ -11,7 +11,6 @@ spy :: pu tag: str, x ->
     x
 end
 
-unsafe_force: pu *X -> *Y : external
 split: pu str -> [str] : external
 
 as_float: pu int -> float : external
