@@ -284,6 +284,10 @@ impl TypeChecker {
                 check_constraint_arity(self, span, "Num", num_args, 0)?;
                 self.add_constraint(var, span, Constraint::Num);
             }
+            "CmpEqu" => {
+                check_constraint_arity(self, span, "Num", num_args, 0)?;
+                self.add_constraint(var, span, Constraint::CmpEqu(var));
+            }
             "Container" => {
                 check_constraint_arity(self, span, "Container", num_args, 0)?;
                 self.add_constraint(var, span, Constraint::Container);
@@ -2036,7 +2040,8 @@ impl TypeChecker {
             (Type::Float, Type::Float)
             | (Type::Int, Type::Int)
             | (Type::Int, Type::Float)
-            | (Type::Float, Type::Int) => Ok(()),
+            | (Type::Float, Type::Int)
+            | (Type::Str, Type::Str) => Ok(()),
 
             (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
                 for (a, b) in a.iter().zip(b.iter()) {

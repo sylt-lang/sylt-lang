@@ -6,9 +6,9 @@ A :: blob {
     b: float,
     a: int,
 }
-//B :: blob {
-//    _self: B,
-//}
+B :: blob {
+    _self: B,
+}
 start :: fn do
     // Basic types
     as_str(-1) <=> "-1"
@@ -24,32 +24,19 @@ start :: fn do
     as_str(a) <=> "[[...]]"
     as_str(()) <=> "()"
     as_str((1,)) <=> "(1,)"
-    // Set
     as_str((1, 2)) <=> "(1, 2)"
-    as_str({}) <=> "{}"
-    as_str({1}) <=> "{1}"
-    s :: as_str({1, 2})
-    (s == "{1, 2}" or s == "{2, 1}") <=> true
-    c :: {}
-    c -> add(c)
-    // Dict
-    as_str(c) <=> "{{...}}"
-    as_str({:}) <=> "{:}"
-    as_str({1: 2}) <=> "{1: 2}"
-    d :: as_str({1: 2, 3: 4})
     // Blobs
-    (d == "{1: 2, 3: 4}" or d == "{3: 4, 1: 2}") <=> true
     ab :: as_str(A {
         a: 100,
         b: 5.3,
     })
     print(ab)
-    //b: B = unsafe_force(nil)
-    //b = B {
-    //    _self: b,
-    //}
-    //b._self = b
-    //print(b)
+    b: B = unsafe_force(nil)
+    b = B {
+        _self: b,
+    }
+    b._self = b
+    print(b)
     // Functions
     d :: fn x: int, y: int -> int do
         ret x + y
