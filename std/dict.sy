@@ -9,7 +9,7 @@ dict_new : pu<K: CmpEqu> -> Dict(*K, *V) : external
 dict_update : fn<K: CmpEqu> Dict(*K, *V), *K, *V -> void : external
 dict_remove : fn<K: CmpEqu> Dict(*K, *V), *K -> void : external
 
-// We have to sacrefice purity for this to work in Sylt - so I wrote it in Lua.
+// We have to sacrifice purity for this to work in Sylt, so I wrote it in Lua.
 dict_from_list : pu<K: CmpEqu> [(*K, *V)] -> Dict(*K, *V) : external
 
 from_list :: dict_from_list
