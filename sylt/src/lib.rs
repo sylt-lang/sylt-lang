@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use sylt_common::error::Error;
 
+sylt_macro::timed_init!();
+
 #[cfg(test)]
 pub mod test;
 
@@ -14,6 +16,7 @@ pub fn read_file(path: &Path) -> Result<String, Error> {
     std::fs::read_to_string(path).map_err(|_| Error::FileNotFound(path.to_path_buf()))
 }
 
+#[sylt_macro::timed()]
 pub fn compile_with_reader_to_writer<R>(
     args: &Args,
     reader: R,
@@ -58,7 +61,7 @@ where
             }
         }
 
-        Some(s) if s == "-" => {
+        Some(s) if s == &Path::new("-") => {
             use std::io;
             // NOTE(ed): Lack of running
             compile_with_reader_to_writer(args, reader, io::stdout().by_ref())?;
@@ -70,8 +73,8 @@ where
             // NOTE(ed): Lack of running
             compile_with_reader_to_writer(args, reader, buf.by_ref())?;
 
-            File::create(PathBuf::from(s))
-                .expect(&format!("Failed to create file: {}", s))
+            File::create(s)
+                .expect(&format!("Failed to create file: {}", s.display()))
                 .write(&buf)
                 .map_err(|e| vec![Error::IOError(Rc::new(e))])?;
         }
@@ -93,9 +96,16 @@ pub struct Args {
         long = "output",
         short = "o",
         meta = "FILE",
-        help = "Output a compiled lua file, '-' for stdout"
+        help = "Output a compiled lua file. '-' for stdout."
     )]
-    pub output: Option<String>,
+    pub output: Option<PathBuf>,
+
+    #[cfg(feature = "timed")]
+    #[options(
+        long = "trace",
+        help = "Output a tracing log to a file. '-' for stderr."
+    )]
+    pub trace_output: Option<PathBuf>,
 
     #[options(
         long = "require",

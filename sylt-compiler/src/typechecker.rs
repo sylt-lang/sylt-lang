@@ -483,6 +483,8 @@ impl TypeChecker {
     fn statement(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
         use Statement as S;
         let span = statement.span();
+        let _handle =
+            sylt_macro::timed_handle!("typecheck::statement", line_start = span.line_start);
         match &statement {
             S::Ret { value: Some(value), span } => Ok(Some({
                 let (ret, value) = self.expression(value, ctx)?;
@@ -603,6 +605,8 @@ impl TypeChecker {
 
     fn outer_statement(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<()> {
         use Statement as S;
+        let _handle =
+            sylt_macro::timed_handle!("typecheck::outer_statement", line = span.line_start);
         match &statement {
             S::Enum { name, var, span, variants, variables } => {
                 let enum_ty = self.variables[*var].ty;
@@ -715,6 +719,7 @@ impl TypeChecker {
         Ok(())
     }
 
+    #[sylt_macro::timed]
     fn expression_block(
         &mut self,
         span: Span,
@@ -2264,6 +2269,7 @@ impl TypeChecker {
         }
     }
 
+    #[sylt_macro::timed("typechecker::solve")]
     fn solve(&mut self, statements: &Vec<Statement>, start_var: Option<&Var>) -> TypeResult<()> {
         let ctx = TypeCtx::new();
         for statement in statements.iter() {
@@ -2306,7 +2312,6 @@ impl TypeChecker {
     }
 }
 
-#[cfg_attr(timed, sylt_macro::timed("typechecker::solve"))]
 pub(crate) fn solve(
     vars: &Vec<Var>,
     statements: &Vec<Statement>,

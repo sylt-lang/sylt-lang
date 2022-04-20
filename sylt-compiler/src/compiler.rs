@@ -15,6 +15,8 @@ mod typechecker;
 
 type NamespaceID = usize;
 
+sylt_macro::timed_init!();
+
 struct Compiler {
     namespace_id_to_file: HashMap<NamespaceID, FileOrLib>,
 
@@ -62,7 +64,7 @@ impl Compiler {
         self.namespace_id_to_file.get(&namespace).unwrap()
     }
 
-    #[cfg_attr(timed, sylt_macro::timed("compile"))]
+    #[sylt_macro::timed()]
     fn compile(
         &mut self,
         lua_file: &mut dyn Write,
@@ -118,6 +120,7 @@ impl Compiler {
         Ok(())
     }
 
+    #[sylt_macro::timed()]
     fn extract_namespaces(&mut self, tree: &AST) {
         // Find all files and map them to their namespace
         let mut include_to_namespace = HashMap::new();

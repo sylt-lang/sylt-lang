@@ -590,7 +590,7 @@ impl<'a> IRCodeGen<'a> {
     }
 }
 
-#[cfg_attr(timed, sylt_macro::timed("intermediate::compile"))]
+#[sylt_macro::timed("intermediate::compile")]
 pub(crate) fn compile(typechecker: &TypeChecker, statements: &Vec<Statement>) -> Vec<IR> {
     let mut gen = IRCodeGen::new(typechecker);
 

@@ -81,6 +81,7 @@ impl<'a, 'b> Generator<'a, 'b> {
         self.lut.insert(var, value);
     }
 
+    #[sylt_macro::timed("lua::generate")]
     pub fn generate(&mut self, ir: &Vec<IR>, require: Option<&String>) {
         write!(self.out, include_str!("preamble.lua"));
         if let Some(file) = require {
@@ -93,6 +94,8 @@ impl<'a, 'b> Generator<'a, 'b> {
 
         let mut depth = 0;
         for instruction in ir.iter() {
+            //TODO(gu): which instruction?
+            let _handle = sylt_macro::timed_handle!("lua::generate instruction");
             depth += match instruction {
                 IR::Else | IR::End => -1,
                 _ => 0,
@@ -305,7 +308,7 @@ impl<'a, 'b> Generator<'a, 'b> {
     }
 }
 
-#[cfg_attr(timed, sylt_macro::timed("lua::generate"))]
+#[sylt_macro::timed("lua::generate")]
 pub fn generate(
     ir: &Vec<IR>,
     usage_count: &HashMap<Var, usize>,

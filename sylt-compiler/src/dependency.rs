@@ -183,6 +183,7 @@ fn dependencies(expression: &Expression) -> BTreeSet<usize> {
     }
 }
 
+#[sylt_macro::timed()]
 fn order<'a>(
     to_order: BTreeMap<usize, (BTreeSet<usize>, &'a Statement)>,
 ) -> Result<Vec<&'a Statement>, Vec<&'a Statement>> {
@@ -234,6 +235,7 @@ fn order<'a>(
     Ok(ordered)
 }
 
+#[sylt_macro::timed()]
 pub(crate) fn initialization_order<'a>(
     statements: &'a [Statement],
 ) -> Result<Vec<&'a Statement>, Vec<&'a Statement>> {
@@ -247,7 +249,6 @@ pub(crate) fn initialization_order<'a>(
             | S::Enum { var, .. } => {
                 to_order.insert(*var, (statement_dependencies(statement), statement));
             }
-
             _ => {}
         }
     }
