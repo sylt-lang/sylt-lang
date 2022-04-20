@@ -1,0 +1,12 @@
+f :: fn a ->
+    if a == 1 do
+        "a"
+    elif a == 2 do
+        "b"
+    end
+end
+
+start :: fn do
+end
+
+// error: The return type is explicitly set to

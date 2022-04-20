@@ -1,6 +1,6 @@
-Maybe :: enum
-    Just *a,
-    Other *a,
+Maybe :: enum(*A)
+    Just *A,
+    Other *A,
     Nothing,
 end
 

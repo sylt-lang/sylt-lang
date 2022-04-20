@@ -26,13 +26,11 @@ pub trait Numbered {
     fn to_number(&self) -> usize;
 }
 
-/// Contains modules.
 #[derive(Debug, Clone)]
 pub struct AST {
     pub modules: Vec<(FileOrLib, Module)>,
 }
 
-/// Contains statements.
 #[derive(Debug, Clone)]
 pub struct Module {
     pub span: Span,
@@ -85,7 +83,7 @@ pub enum Op {
     Div,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, Hash)]
 pub struct Identifier {
     pub span: Span,
     pub name: String,
@@ -97,9 +95,27 @@ impl Identifier {
     }
 }
 
+impl PartialOrd for Identifier {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.name.cmp(&other.name))
+    }
+}
+
+impl Ord for Identifier {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+
 impl PartialEq for Identifier {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
+    }
+}
+
+impl Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{}", self.name, self.span.line_start)
     }
 }
 
@@ -184,12 +200,13 @@ pub enum TypeKind {
     /// A specified type by the user.
     Resolved(RuntimeType),
     /// I.e. blobs.
-    UserDefined(TypeAssignable),
+    UserDefined(TypeAssignable, Vec<Type>),
     /// `(params, return)`.
     Fn {
         constraints: BTreeMap<String, Vec<TypeConstraint>>,
         params: Vec<Type>,
         ret: Box<Type>,
+        is_pure: bool,
     },
     /// Tuples can mix types since the length is constant.
     Tuple(Vec<Type>),
@@ -383,6 +400,54 @@ impl<'a> Context<'a> {
     fn eat(&self) -> (&T, Span, Self) {
         (self.token(), self.span(), self.skip(1))
     }
+}
+
+fn parse_sep_end_by<'t, Item>(
+    ctx: Context<'t>,
+    sep: impl Fn(Context<'t>) -> ParseResult<'t, ()>,
+    end: impl Fn(Context<'t>) -> ParseResult<'t, bool>,
+    item: impl Fn(Context<'t>) -> ParseResult<'t, Item>,
+) -> ParseResult<'t, Vec<Item>> {
+    let (end_ctx, is_end) = end(ctx)?;
+    if is_end {
+        return Ok((end_ctx, vec![]));
+    }
+    let (ctx, i) = item(ctx)?;
+    let (end_ctx, is_end) = end(ctx)?;
+    if is_end {
+        return Ok((end_ctx, vec![i]));
+    }
+    let (ctx, _) = sep(ctx)?;
+    let (ctx, mut res) = parse_sep_end_by(ctx, sep, end, item)?;
+    res.insert(0, i);
+    Ok((ctx, res))
+}
+
+#[macro_export]
+macro_rules! parse_beg_end_comma_sep {
+    ($ctx:expr,
+    $beg_token: pat,
+    $end_token: pat,
+    $item:expr) => {
+        if matches!($ctx.token(), $beg_token) {
+            let sep =
+                |ctx: Context<'t>| Ok((expect!(ctx, T::Comma, "Expected ',' as seperator"), ()));
+
+            let end = |ctx: Context<'t>| {
+                Ok((
+                    if matches!(ctx.token(), $end_token) {
+                        ctx.skip(1)
+                    } else {
+                        ctx
+                    },
+                    matches!(ctx.token(), $end_token),
+                ))
+            };
+            parse_sep_end_by($ctx.skip(1), &sep, &end, $item)
+        } else {
+            Ok(($ctx, Vec::new()))
+        }
+    };
 }
 
 /// Add more text to an error message after it has been created.
@@ -589,7 +654,9 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
 
         T::Identifier(_) => {
             let (ctx, ass) = type_assignable(ctx)?;
-            (ctx, UserDefined(ass))
+            let (ctx, vars) =
+                parse_beg_end_comma_sep!(ctx, T::LeftParen, T::RightParen, &parse_type)?;
+            (ctx, UserDefined(ass, vars))
         }
 
         T::Star => {
@@ -601,10 +668,11 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         }
 
         // Function type
-        T::Fn => {
+        ty @ T::Fn | ty @ T::Pu => {
             let ctx = ctx.skip(1);
 
             let mut constraints = BTreeMap::new();
+
             let ctx = if matches!(ctx.token(), T::Less) {
                 let mut ctx = ctx.skip(1);
                 'outer: loop {
@@ -677,7 +745,15 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                     }
                 }
             };
-            (ctx, Fn { constraints, params, ret: Box::new(ret) })
+            (
+                ctx,
+                Fn {
+                    constraints,
+                    params,
+                    ret: Box::new(ret),
+                    is_pure: matches!(ty, T::Pu),
+                },
+            )
         }
 
         // Tuple
@@ -1223,7 +1299,9 @@ mod test {
         test!(parse_type, type_int: "int" => Resolved(RT::Int));
         test!(parse_type, type_float: "float" => Resolved(RT::Float));
         test!(parse_type, type_str: "str" => Resolved(RT::String));
-        test!(parse_type, type_unknown: "Blargh" => UserDefined(_));
+        test!(parse_type, type_userdefined: "Blargh" => UserDefined(_, _));
+        test!(parse_type, type_userdefined_int_int: "A(int, int)" => UserDefined(_, _));
+        test!(parse_type, type_userdefined_int_unknown: "B(int, *)" => UserDefined(_, _));
 
         test!(parse_type, type_fn_no_params: "fn ->" => Fn{ .. });
         test!(parse_type, type_fn_one_param: "fn int -> bool" => Fn{ .. });
@@ -1296,8 +1374,13 @@ impl PrettyPrint for Statement {
                     write!(f, "\n")?;
                 }
             }
-            SK::Enum { name, variants } => {
-                write!(f, "<Enum> {} {{ ", name)?;
+            SK::Enum { name, variants, variables } => {
+                let args_string = variables
+                    .iter()
+                    .map(|x| format!("{}", x))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "<Enum> {} {} {{ ", name.name, args_string)?;
                 for (i, (name, ty)) in variants.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;
@@ -1306,8 +1389,16 @@ impl PrettyPrint for Statement {
                 }
                 write!(f, " }}")?;
             }
-            SK::Blob { name, fields } => {
-                write!(f, "<Blob> {} {{ ", name)?;
+            SK::Blob { name, fields, variables, external } => {
+                let args_string = variables
+                    .iter()
+                    .map(|x| format!("{}", x))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                match external {
+                    true => write!(f, "<ExternBlob> {} {} {{ ", name, args_string)?,
+                    false => write!(f, "<Blob> {} {} {{ ", name, args_string)?,
+                };
                 for (i, (name, ty)) in fields.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;
@@ -1382,13 +1473,23 @@ impl Display for Type {
             TypeKind::Resolved(ty) => {
                 write!(f, "{}", ty)?;
             }
-            TypeKind::UserDefined(name) => {
+            TypeKind::UserDefined(name, args) => {
                 write!(f, "User(")?;
                 name.pretty_print(f, 0)?;
                 write!(f, ")")?;
+                write!(f, "(")?;
+                for arg in args.iter() {
+                    write!(f, "{}, ", arg)?;
+                    // Self::pretty_print(arg, f, 0)?;
+                }
+                write!(f, ")")?;
             }
-            TypeKind::Fn { constraints, params, ret } => {
-                write!(f, "Fn ")?;
+            TypeKind::Fn { constraints, params, ret, is_pure: pure } => {
+                if *pure {
+                    write!(f, "Pu ")?;
+                } else {
+                    write!(f, "Fn ")?;
+                }
                 if constraints.len() > 0 {
                     write!(f, "<")?;
                     for (var, constraints) in constraints.iter() {

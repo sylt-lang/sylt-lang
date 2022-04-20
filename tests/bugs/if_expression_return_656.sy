@@ -1,4 +1,4 @@
-a :: fn a ->
+aa :: fn a ->
     if a == 0 do
         ret a
     else do
@@ -6,6 +6,23 @@ a :: fn a ->
     end
 end
 
-start :: fn do end
+ba :: fn a ->
+    case a do
+        Abc ->
+            ret a
+        end
+        else
+            ret a
+        end
+    end
+end
 
-// error: A 'int' cannot be a 'void'
+bb :: fn a ->
+    case a do
+        Abc ->
+            ret a
+        end
+    end
+end
+
+start :: fn do end

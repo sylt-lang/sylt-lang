@@ -99,11 +99,19 @@ __TUPLE_META.__sub = function(a, b)
     return __TUPLE(out)
 end
 __TUPLE_META.__div = function(a, b)
-    local out = {}
-    for x = 1, #a, 1 do
-        out[x] = a[x] / b[x]
+    if type(b) == "table" then
+        local out = {}
+        for x = 1, #a, 1 do
+            out[x] = a[x] / b[x]
+        end
+        return __TUPLE(out)
+    else
+        local out = {}
+        for x = 1, #a, 1 do
+            out[x] = a[x] / b
+        end
+        return __TUPLE(out)
     end
-    return __TUPLE(out)
 end
 __TUPLE_META.__mul = function(a, b)
     local out = {}
@@ -232,9 +240,6 @@ __DICT_META.__tostring = function(a)
         end
         first = false
         out = out .. tostring(k) .. ": " .. tostring(v)
-    end
-    if #a == 0 then
-        out = out .. ":"
     end
     out = out .. "}"
     return out
@@ -408,7 +413,14 @@ function as_int(x)
     return f
 end
 floor = math.floor
-as_char = string.byte
+function as_char(s)
+   char = string.byte(s)
+   if char ~= nil then
+      return __VARIANT({"Just", char})
+   else
+      return __VARIANT({"None", nil})
+   end
+end
 function as_chars(s)
     local chars = {}
     local len = string.len(s)
@@ -461,6 +473,7 @@ end
 
 as_str = tostring
 print = print
+function dbg(x) print(x); return x end
 
 unsafe_force = __IDENTITY
 
@@ -482,5 +495,151 @@ function __CONTAINS(a, b)
     end
     assert(false, "Invalid contains!")
 end
+
+random = math.random
+randint = math.random
+
+-- Dict
+__LUA_DICT_META = { _type = "dict" }
+__LUA_DICT_META.__eq = function(a, b)
+    for k, v in pairs(a) do
+        if not (v == b[k]) then
+            return false
+        end
+    end
+    for k, v in pairs(b) do
+        if not (v == a[k]) then
+            return false
+        end
+    end
+    return true
+end
+__LUA_DICT_META.__tostring = function(a)
+    local out = "dict {"
+    local first = true
+    for _k, v in pairs(a) do
+        if not first then
+            out = out .. ", "
+        end
+        first = false
+        out = out .. tostring(v[1]) .. ": " .. tostring(v[2])
+    end
+    out = out .. "}"
+    return out
+end
+
+function dict_new()
+    return setmetatable({}, __LUA_DICT_META)
+end
+
+function dict_from_list(l)
+    local out = dict_new()
+    for _, e in pairs(l) do
+        dict_update(out, e[1], e[2])
+    end
+    return out
+end
+
+function dict_update(dict, k, v)
+    dict[tostring(k)] = __TUPLE {k, v}
+end
+
+function dict_remove(dict, k)
+    dict[k] = nil
+end
+
+function dict_get(dict, k)
+    local x = dict[k]
+    if x ~= nil then
+       return __VARIANT({"Just", x[2]})
+    else
+       return __VARIANT({"None", nil})
+    end
+end
+
+function dict_for_each(dict, f)
+    for _k, v in pairs(dict) do
+        f(v)
+    end
+end
+
+function dict_map(dict, f)
+    local out = dict_new()
+    for _k, v in pairs(dict) do
+        x = f(v)
+        dict_update(out, x[1], x[2])
+    end
+    return out
+end
+
+
+-- Set
+__LUA_SET_META = { _type = "set" }
+__LUA_SET_META.__eq = function(a, b)
+    for k, v in pairs(a) do
+        if not (v == b[k]) then
+            return false
+        end
+    end
+    for k, v in pairs(b) do
+        if not (v == a[k]) then
+            return false
+        end
+    end
+    return true
+end
+__LUA_SET_META.__tostring = function(a)
+    local out = "set {"
+    local first = true
+    for _k, v in pairs(a) do
+        if not first then
+            out = out .. ", "
+        end
+        first = false
+        out = out .. tostring(v)
+    end
+    out = out .. "}"
+    return out
+end
+
+function set_new()
+    return setmetatable({}, __LUA_SET_META)
+end
+
+function set_from_list(l)
+    local out = set_new()
+    for _, e in pairs(l) do
+        set_add(out, e)
+    end
+    return out
+end
+
+function set_add(set, k)
+    set[tostring(k)] = k
+end
+
+function set_remove(set, k)
+    set[tostring(k)] = nil
+end
+
+function set_contains(set, k)
+    return set[tostring(k)] ~= nil
+end
+
+function set_for_each(set, f)
+    for _k, v in pairs(set) do
+        f(v)
+    end
+end
+
+function set_map(set, f)
+    local out = dict_new()
+    for _k, v in pairs(set) do
+        x = f(v)
+        set_add(out, x)
+    end
+    return out
+end
+
 
 -- End Sylt preamble

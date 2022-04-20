@@ -90,7 +90,9 @@ fn write_enum_variants<W: Write>(
     mut variants: Vec<(String, Type)>,
 ) -> fmt::Result {
     match variants.len() {
-        0 => {}
+        0 => {
+            write!(dest, "\n")?;
+        }
         1 => {
             let (var, ty) = variants.pop().unwrap();
             write!(dest, " {} ", var)?;
@@ -137,9 +139,23 @@ fn write_type<W: Write>(dest: &mut W, indent: u32, ty: Type) -> fmt::Result {
     match ty.kind {
         TypeKind::Implied => unreachable!(),
         TypeKind::Resolved(ty) => write!(dest, "{}", ty),
-        TypeKind::UserDefined(assignable) => write_type_assignable(dest, indent, assignable),
-        TypeKind::Fn { constraints, params, ret } => {
-            write!(dest, "fn")?;
+        TypeKind::UserDefined(assignable, args) => {
+            write_type_assignable(dest, indent, assignable)?;
+            write!(dest, "(")?;
+            write_comma_separated!(
+                dest,
+                indent,
+                &|dest: &mut W, _, arg| write_type(dest, indent, arg),
+                args
+            );
+            write!(dest, ")")
+        }
+        TypeKind::Fn { constraints, params, ret, is_pure } => {
+            if is_pure {
+                write!(dest, "pu")?;
+            } else {
+                write!(dest, "fn")?;
+            }
             if !constraints.is_empty() {
                 write!(dest, "<")?;
                 write_comma_separated!(dest, indent, write_constraint, constraints);
@@ -308,23 +324,30 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             write_expression(dest, indent, *expr)?;
             write!(dest, ")")?;
         }
-        ExpressionKind::If { condition, pass, fail } => {
-            write!(dest, "if ")?;
-            write_expression(dest, indent, *condition)?;
-            write!(dest, " do\n")?;
-            for stmt in pass.into_iter() {
-                write_statement(dest, indent + 1, stmt)?;
-            }
-
-            if fail.len() != 0 {
-                write_indents(dest, indent)?;
-                write!(dest, "else do\n")?;
-                for stmt in fail.into_iter() {
+        ExpressionKind::If(branches) => {
+            for (i, branch) in branches.into_iter().enumerate() {
+                match (branch.condition, i == 0) {
+                    (Some(expr), true) => {
+                        write!(dest, "if ")?;
+                        write_expression(dest, indent, expr)?;
+                        write!(dest, " do\n")?;
+                    }
+                    (None, true) => unreachable!("The parser should never return this"),
+                    (Some(expr), _) => {
+                        write!(dest, "elif ")?;
+                        write_expression(dest, indent, expr)?;
+                        write!(dest, " do\n")?;
+                    }
+                    (None, _) => {
+                        write!(dest, "else\n")?;
+                    }
+                }
+                for stmt in branch.body {
                     write_statement(dest, indent + 1, stmt)?;
                 }
             }
             write_indents(dest, indent)?;
-            write!(dest, "end")?;
+            write!(dest, "end\n")?;
         }
         ExpressionKind::Case { to_match, branches, fall_through } => {
             write!(dest, "case ")?;
@@ -356,8 +379,12 @@ fn write_expression<W: Write>(dest: &mut W, indent: u32, expression: Expression)
             write_indents(dest, indent)?;
             write!(dest, "end\n")?;
         }
-        ExpressionKind::Function { name: _, params, ret, body } => {
-            write!(dest, "fn")?;
+        ExpressionKind::Function { name: _, params, ret, body, pure } => {
+            if pure {
+                write!(dest, "pu")?;
+            } else {
+                write!(dest, "fn")?;
+            }
             if !params.is_empty() {
                 write!(dest, " ")?;
             }
@@ -464,16 +491,39 @@ fn write_statement<W: Write>(dest: &mut W, indent: u32, statement: Statement) ->
             write_indents(dest, indent)?;
             write!(dest, "end")?
         }
-        StatementKind::Blob { name, fields } => {
+        StatementKind::Blob { name, fields, variables, external } => {
             write_indents(dest, indent)?;
-            write!(dest, "{} :: blob", name)?;
-            let fields_as_tuples = fields.into_iter().collect();
+            match external {
+                true => write!(dest, "{} :: externblob", name)?,
+                false => write!(dest, "{} :: blob", name)?,
+            };
+            if variables.len() > 0 {
+                write!(dest, "(")?;
+                write_comma_separated!(
+                    dest,
+                    indent,
+                    &|dest: &mut W, _, var: Identifier| write!(dest, "*{}", var.name),
+                    variables
+                );
+                write!(dest, ")")?;
+            }
+            let fields_as_tuples = fields.into_iter().map(|(k, v)| (k.name, v)).collect();
             write_blob_fields(dest, indent + 1, fields_as_tuples, write_type)?;
         }
-        StatementKind::Enum { name, variants } => {
+        StatementKind::Enum { name, variants, variables } => {
             write_indents(dest, indent)?;
-            write!(dest, "{} :: enum", name)?;
-            let variants_as_tuples = variants.into_iter().collect();
+            write!(dest, "{} :: enum", name.name)?;
+            if variables.len() > 0 {
+                write!(dest, "(")?;
+                write_comma_separated!(
+                    dest,
+                    indent,
+                    &|dest: &mut W, _, var: Identifier| write!(dest, "*{}", var.name),
+                    variables
+                );
+                write!(dest, ")")?;
+            }
+            let variants_as_tuples = variants.into_iter().map(|(k, v)| (k.name, v)).collect();
             write_enum_variants(dest, indent + 1, variants_as_tuples)?;
         }
         StatementKind::Break => {

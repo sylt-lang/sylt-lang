@@ -9,7 +9,7 @@ Color :: blob {
 }
 
 clearShader :: fn do
-    x : fn -> void : unsafe_force' love.graphics.setShader
+    x : fn -> void : common.unsafe_force' love.graphics.setShader
     x'
 end
 
@@ -67,7 +67,7 @@ drawRect :: fn color, p, dim do
 end
 
 drawRectCentered :: fn color, p, dim do
-    drawRect' color, p - dim / (2., 2.), dim
+    drawRect' color, p - (dim[0] / 2., dim[1] / 2.), dim
 end
 
 drawRectOutline :: fn color, p, dim do
@@ -76,7 +76,7 @@ drawRectOutline :: fn color, p, dim do
 end
 
 drawRectCenteredOutline :: fn color, p, dim do
-    drawRectOutline' color, p - dim / (2., 2.), dim
+    drawRectOutline' color, p - (dim[0] / 2., dim[1] / 2.), dim
 end
 
 Alignment :: enum
@@ -87,12 +87,10 @@ end
 
 alignmentToStr :: fn a ->
     case a do
-        Center ret "center"
-        Left ret "left"
-        Right ret "right"
-        else do <!> end
+        Center -> "center" end
+        Left -> "left" end
+        Right -> "right" end
     end
-    ret ""
 end
 
 Font :: blob {
@@ -209,9 +207,9 @@ newImplicitSpriteSheet :: fn img: Image, spriteDim: (int, int) ->
     quads :: []
     // TODO(ed): Maybe remove the remained so we only get full tiles?
     // TODO(ed): Maybe add a divisibility test here?
-    for_range' 0, as_int(img.getWidth()), w, fn x -> do
-        for_range' 0, as_int(img.getHeight()), h, fn y -> do
-            quads -> push' ((x, y), (w, h))
+    for_range' 0, as_int(img.getWidth()), w, fn x do
+        for_range' 0, as_int(img.getHeight()), h, fn y do
+            quads -> list.push' ((x, y), (w, h))
         end
     end
     newSpriteSheetFromQuads' img, quads
@@ -219,8 +217,10 @@ end
 
 // ((x, y), (w, h)) - all in pixels
 newSpriteSheetFromQuads :: fn img: Image, quads: [((int, int), (int, int))] ->
-    lquads :: quads -> map' fn quad -> do
-        love.graphics.newQuad' quad[0][0], quad[0][1], quad[1][0], quad[1][1], img.img
+    lquads :: []
+    quads -> for_each' fn quad do
+        q :: love.graphics.newQuad' quad[0][0], quad[0][1], quad[1][0], quad[1][1], img.img
+        list.push' lquads, q
     end
     SpriteSheet {
         img: img,
@@ -229,16 +229,16 @@ newSpriteSheetFromQuads :: fn img: Image, quads: [((int, int), (int, int))] ->
 
         draw: fn tint, sprite, pos, rot, scale do
             setColor' tint
-            x: fn l.ImageData, l.Quad, float, float, float, float, float -> void: unsafe_force' love.graphics.draw
+            x: fn l.ImageData, l.Quad, float, float, float, float, float -> void: common.unsafe_force' love.graphics.draw
             lq :: lquads[sprite]
             x' img.img, lq, pos[0], pos[1], rot, scale[0], scale[1]
         end,
         drawCenterd: fn tint, sprite, pos, rot, scale do
             setColor' tint
-            x: fn l.ImageData, l.Quad, float, float, float, float, float, int, int -> void: unsafe_force' love.graphics.draw
+            x: fn l.ImageData, l.Quad, float, float, float, float, float, int, int -> void: common.unsafe_force' love.graphics.draw
             lq :: lquads[sprite]
             q :: quads[sprite]
-            x' img.img, lq, pos[0], pos[1], rot, scale[0], scale[1], q[1][0] / 2, q[1][1] / 2
+            x' img.img, lq, pos[0], pos[1], rot, scale[0], scale[1], as_int(q[1][0] / 2), as_int(q[1][1] / 2)
         end,
     }
 end
@@ -319,12 +319,12 @@ newParticles :: fn image: Image ->
         end,
         draw: fn tint do
             setColor' tint
-            x: fn * -> void: unsafe_force' love.graphics.draw
+            x: fn * -> void: common.unsafe_force' love.graphics.draw
             x' particles
         end,
         drawAt: fn tint, pos do
             setColor' tint
-            x: fn *, float, float -> void: unsafe_force' love.graphics.draw
+            x: fn *, float, float -> void: common.unsafe_force' love.graphics.draw
             x' particles, pos[0], pos[1]
         end,
     }

@@ -2,4 +2,4 @@ start :: fn do
     a = 2
 end
 
-// error: $Assignability
+// error: Failed to resolve "a"

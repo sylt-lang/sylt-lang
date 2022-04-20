@@ -7,8 +7,6 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use sylt_common::error::Error;
 
-pub mod formatter;
-
 sylt_macro::timed_init!();
 
 #[cfg(test)]
@@ -28,11 +26,11 @@ where
     R: Fn(&Path) -> Result<String, Error>,
 {
     let file = PathBuf::from(args.args.first().expect("No file to run"));
-    let tree = sylt_parser::tree(&file, reader, true)?;
+    let tree = sylt_parser::tree(&file, reader, !args.no_std)?;
     if args.dump_tree {
         println!("{}", tree);
     }
-    sylt_compiler::compile(write_file, tree)
+    sylt_compiler::compile(write_file, tree, args.require.as_ref())
 }
 
 // TODO(ed): This name isn't true anymore - since it can compile
@@ -109,14 +107,19 @@ pub struct Args {
     )]
     pub trace_output: Option<PathBuf>,
 
+    #[options(
+        long = "require",
+        short = "r",
+        meta = "FILE",
+        help = "A lua file to require, usefull for external code. The argument is placed directly in a \"require\""
+    )]
+    pub require: Option<String>,
+
+    #[options(long = "no-std", help = "Don't include the sylt-std files")]
+    pub no_std: bool,
+
     #[options(short = "v", no_long, count, help = "Increase verbosity (max 2)")]
     pub verbosity: u32,
-
-    #[options(
-        long = "format",
-        help = "Format the file and write the result to stdout"
-    )]
-    pub format: bool,
 
     #[options(help = "Print this help")]
     pub help: bool,

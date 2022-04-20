@@ -1,0 +1,23 @@
+from unsafe use unsafe_force
+
+Foo :: externblob(*T) {
+  bar: *T
+}
+
+Hack :: blob(*T) {
+  bar: *T
+}
+
+get_bar :: fn f ->
+  f.bar
+end
+
+start :: fn do
+  a: Foo(int) : unsafe_force' Hack { bar: 7 }
+  seven: int : get_bar' a
+  seven <=> 7
+
+  b: Foo(str) : unsafe_force' Hack { bar: "hello" }
+  hello: str : get_bar' b
+  hello <=> "hello"
+end

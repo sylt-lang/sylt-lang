@@ -4,4 +4,4 @@ start :: fn do
     b: a.b.c.D = 0
 end
 
-// error: $UnresolvedName
+// error: No type named "a"

@@ -19,7 +19,7 @@ start :: fn do
     s :: sfx.newSound' "res/bloop.wav", false, sfx.SoundType.Static
 
     updates := []
-    updates -> push' fn delta do
+    updates -> list.push' fn delta do
         if not input.isKeyDown' input.Key.A do
             r += delta
         end
@@ -27,7 +27,7 @@ start :: fn do
             sfx.cloneSound(s).playp' (1.0, 0.8), (1.0, 0.8)
         end
     end
-    updates -> push' fn delta do
+    updates -> list.push' fn delta do
         pos :: input.mousePos'
         ps.setPosition' (cos(r) * 300., sin(r) * 100.) + pos
         ps.update(delta)

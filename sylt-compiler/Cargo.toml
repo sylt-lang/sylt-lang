@@ -20,6 +20,7 @@ sylt-tokenizer = { version = "0.2.0", path = "../sylt-tokenizer" }
 sylt-parser = { version = "0.2.0", path = "../sylt-parser" }
 sylt-macro = { version = "0.2.0", path = "../sylt-macro" }
 
-[features]
+levenshtein = "1.0.5"
 
+[features]
 timed = []

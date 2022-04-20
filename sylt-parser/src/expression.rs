@@ -22,6 +22,13 @@ pub struct CaseBranch {
     pub body: Vec<Statement>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfBranch {
+    pub condition: Option<Expression>,
+    pub body: Vec<Statement>,
+    pub span: Span,
+}
+
 /// The different kinds of [Expression]s.
 ///
 /// Expressions are recursive and evaluate to some kind of value.
@@ -59,11 +66,7 @@ pub enum ExpressionKind {
     /// Makes your code go either here or there.
     ///
     /// `if <expression> <statement> [else <statement>]`.
-    If {
-        condition: Box<Expression>,
-        pass: Vec<Statement>,
-        fail: Vec<Statement>,
-    },
+    If(Vec<IfBranch>),
 
     /// A super branchy branch.
     ///
@@ -81,6 +84,7 @@ pub enum ExpressionKind {
         ret: Type,
 
         body: Vec<Statement>,
+        pure: bool,
     },
     /// A blob instantiation.
     Blob {
@@ -129,8 +133,12 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use RuntimeType::{Unknown, Void};
     use TypeKind::Resolved;
 
-    let span = ctx.span();
-    let mut ctx = expect!(ctx, T::Fn, "Expected 'fn' for function expression");
+    let (fn_type, span, mut ctx) = ctx.eat();
+    match fn_type {
+        T::Fn | T::Pu => (),
+        _ => raise_syntax_error!(ctx, "Expected 'fn' or 'pu' for function expression."),
+    }
+
     let mut params = Vec::new();
     // Parameters
     let ret = loop {
@@ -203,6 +211,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         params,
         ret,
         body: statements,
+        pure: matches!(fn_type, T::Pu),
     };
 
     Ok((ctx, Expression::new(span, function)))
@@ -281,7 +290,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use ExpressionKind::Get;
 
     match ctx.token() {
-        T::Fn => function(ctx),
+        T::Fn | T::Pu => function(ctx),
         T::If => if_expression(ctx),
         T::Case => case_expression(ctx),
 
@@ -411,26 +420,41 @@ fn case_expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 fn if_expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let span = ctx.span();
     let ctx = expect!(ctx, T::If, "Expected 'if' at start of if-expression");
-
     let (ctx, old_skip) = ctx.push_skip_newlines(true);
     let (ctx, condition) = expression(ctx)?;
     let ctx = ctx.pop_skip_newlines(old_skip);
+    let (ctx, body) = block(expect!(ctx, T::Do, "Expected 'do' after if condition"))?;
+    let condition = Some(condition);
 
-    let condition = Box::new(condition);
+    let mut branches = vec![{ IfBranch { span, condition, body } }];
 
-    let (ctx, pass) = block(expect!(ctx, T::Do, "Expected 'do' after if condition"))?;
+    let mut ctx = ctx;
+    while matches!(ctx.token(), T::Elif) {
+        let (_ctx, branch) = {
+            let span = ctx.span();
+            let ctx = expect!(ctx, T::Elif);
+            let (ctx, old_skip) = ctx.push_skip_newlines(true);
+            let (ctx, condition) = expression(ctx)?;
+            let ctx = ctx.pop_skip_newlines(old_skip);
+            let (ctx, body) = block(expect!(ctx, T::Do, "Expected 'do' after elif condition"))?;
+            let condition = Some(condition);
+            (ctx, IfBranch { span, condition, body })
+        };
+        ctx = _ctx;
+        branches.push(branch);
+    }
 
-    let (ctx, fail) = if matches!(ctx.token(), T::Else) {
-        block(ctx.skip(1))?
+    let ctx = if matches!(ctx.token(), T::Else) {
+        let span = ctx.span();
+        let ctx = expect!(ctx, T::Else);
+        let (ctx, body) = block(ctx)?;
+        branches.push(IfBranch { span, condition: None, body });
+        ctx
     } else {
-        // No else so we insert an empty statement instead.
-        (ctx, Vec::new())
+        ctx
     };
 
-    Ok((
-        ctx,
-        Expression::new(span, ExpressionKind::If { condition, pass, fail }),
-    ))
+    Ok((ctx, Expression::new(span, ExpressionKind::If(branches))))
 }
 
 fn arrow_call<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> {
@@ -913,6 +937,9 @@ mod test {
 
     test!(expression, if_expr: "if a do b else c end" => If { .. });
     test!(expression, if_expr_more: "1 + 1 + if a do b else 2 end + 2 + 2" => _);
+    test!(expression, if_elif_else_expr: "if a do b elif c do d else e end" => If { .. });
+    test!(expression, if_elif_expr: "if a do b elif c do d end" => If { .. });
+    test!(expression, if_only_if_expr: "if a do b end" => If { .. });
 
     test!(expression, fn_implicit_unknown_1: "fn a do 1 end" => _);
     test!(expression, fn_implicit_unknown_2: "fn a, b do 1 end" => _);
@@ -1019,24 +1046,29 @@ impl PrettyPrint for Expression {
                 }
                 return Ok(());
             }
-            EK::If { condition, pass, fail } => {
+            EK::If(branches) => {
+                write_indent(f, indent)?;
                 write!(f, "If\n")?;
-                write_indent(f, indent)?;
-                write!(f, "condition:\n")?;
-                condition.pretty_print(f, indent + 1)?;
-                write_indent(f, indent)?;
-                write!(f, "pass:\n")?;
-                for stmt in pass.iter() {
-                    stmt.pretty_print(f, indent + 1)?;
-                }
-                write_indent(f, indent)?;
-                write!(f, "fail:\n")?;
-                for stmt in fail.iter() {
-                    stmt.pretty_print(f, indent + 1)?;
+                for IfBranch { span: _, condition, body } in branches {
+                    write_indent(f, indent)?;
+                    if let Some(cond) = condition {
+                        write!(f, "Branch:\n")?;
+                        cond.pretty_print(f, indent + 1)?;
+                    } else {
+                        write!(f, "Else:")?;
+                    }
+                    for stmt in body.iter() {
+                        stmt.pretty_print(f, indent + 1)?;
+                    }
                 }
             }
-            EK::Function { name, params, ret, body } => {
-                write!(f, "Fn {} ", name)?;
+            EK::Function { name, params, ret, body, pure } => {
+                if *pure {
+                    write!(f, "Pu {} ", name)?;
+                } else {
+                    write!(f, "Fn {} ", name)?;
+                }
+
                 for (i, (name, ty)) in params.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;

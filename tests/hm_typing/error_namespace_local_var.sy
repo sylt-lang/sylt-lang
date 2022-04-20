@@ -3,4 +3,4 @@ start :: fn do
     b: a.A = 0
 end
 
-// error: $Exotic
+// error: No type named "a"

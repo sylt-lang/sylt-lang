@@ -158,6 +158,10 @@ pub enum TypeError {
         field: String,
     },
 
+    ExternBlobInstance {
+        name: String,
+    },
+
     // TODO(ed): got and expected doesn't make sense - we don't know what we expect!
     TupleIndexOutOfRange {
         got: i64,
@@ -185,6 +189,8 @@ pub enum TypeError {
     ExtraVariants(String, Vec<String>),
 
     ExpectVoid(Type),
+
+    Impurity,
 }
 
 // TODO(ed): Switch to spans for the whole compiler?
@@ -204,19 +210,19 @@ pub enum Error {
         message: String,
     },
 
-    TypeError {
-        kind: TypeError,
+    CompileError {
         file: FileOrLib,
         span: Span,
         message: Option<String>,
         helpers: Vec<Helper>,
     },
 
-    // TODO(ed): Remove this! They should be panics, and be caught in the type-checker.
-    CompileError {
+    TypeError {
+        kind: TypeError,
         file: FileOrLib,
         span: Span,
         message: Option<String>,
+        helpers: Vec<Helper>,
     },
 
     RuntimeError,
@@ -295,17 +301,29 @@ impl fmt::Display for Error {
                 }
                 Ok(())
             }
-            Error::CompileError { file, span, message } => {
+            Error::CompileError { file, span, message, helpers } => {
                 write!(f, "{}: ", "compile error".red())?;
                 write!(f, "{}\n", file_line_display(file, span.line_start))?;
-                write!(f, "{}Failed to compile line {}\n", INDENT, span.line_start)?;
 
                 if let Some(message) = message {
                     for line in message.split('\n') {
                         write!(f, "{}{}\n", INDENT, line)?;
                     }
                 }
-                write_source_span_at(f, file, *span)
+                write_source_span_at(f, file, *span)?;
+
+                if !helpers.is_empty() {
+                    // TODO(ed): Might be helpful to not write all the errors?
+                    write!(f, "{}\n", "help:".yellow())?;
+                    for Helper { message, at } in helpers.iter() {
+                        write!(f, "{}{}\n", INDENT, message)?;
+                        match at {
+                            Some((file, span)) => write_source_span_at(f, file, *span)?,
+                            None => {}
+                        }
+                    }
+                }
+                Ok(())
             }
         }
     }
@@ -372,6 +390,14 @@ impl fmt::Display for TypeError {
                 write!(f, "Blob instance lacks field '{}.{}'", blob, field)
             }
 
+            TypeError::ExternBlobInstance { name } => {
+                write!(
+                    f,
+                    "'{}' is an externally defined blob and cannot be instantiated",
+                    name
+                )
+            }
+
             TypeError::TupleIndexOutOfRange { length, got } => {
                 write!(f, "A tuple of length {} has no element {}", length, got)
             }
@@ -431,6 +457,8 @@ impl fmt::Display for TypeError {
                     ty
                 )
             }
+
+            TypeError::Impurity => Ok(()),
         }
     }
 }

@@ -1,4 +1,9 @@
-abs : fn<N: Num> *N -> *N: fn n ->
+// Constants
+tau :: pi * 2.0
+pi :: 3.1415926535897
+e :: 2.718281828459045235360
+
+abs : pu<N: Num> *N -> *N: pu n ->
     if n < 0 do
         -n
     else do
@@ -6,18 +11,18 @@ abs : fn<N: Num> *N -> *N: fn n ->
     end
 end
 
-atan2: fn float, float -> float : external
-sin: fn float -> float : external
-cos: fn float -> float : external
-floor: fn<N: Num> *N -> int : external
-sqrt: fn float -> float : external
-sign: fn<N: Num> *N -> *N : external
+atan2: pu float, float -> float : external
+sin: pu float -> float : external
+cos: pu float -> float : external
+floor: pu<N: Num> *N -> int : external
+sqrt: pu float -> float : external
+sign: pu<N: Num> *N -> *N : external
 
-clamp :: fn x, lo, hi ->
+clamp :: pu x, lo, hi ->
     min(hi, max(x, lo))
 end
 
-min : fn<N: Num> *N, *N -> *N : fn a, b ->
+min : pu<N: Num> *N, *N -> *N : pu a, b ->
     if a < b do
         a
     else do
@@ -25,35 +30,41 @@ min : fn<N: Num> *N, *N -> *N : fn a, b ->
     end
 end
 
-max : fn<N: Num> *N, *N -> *N : fn a, b ->
+max : pu<N: Num> *N, *N -> *N : pu a, b ->
     if a > b do a
     else do b
     end
 end
 
-rem: fn<N: Num> *N, *N -> *N : external
-pow: fn float, float -> float : external
-div: fn int, int -> int : external
+rem: pu<N: Num> *N, *N -> *N : external
+pow: pu float, float -> float : external
+div: pu int, int -> int : external
 
-angle :: fn v: (float, float) -> float
+angle :: pu v: (float, float) -> float
     atan2(v[0], v[1])
 end
 
-magnitude_squared :: fn v: (float, float) -> float
+magnitude_squared :: pu v: (float, float) -> float
     dot(v, v)
 end
 
-magnitude :: fn v: (float, float) -> float
+magnitude :: pu v: (float, float) -> float
     sqrt(magnitude_squared(v))
 end
 
-normalize :: fn v: (float, float) -> (float, float)
+normalize :: pu v: (float, float) -> (float, float)
     mag :: magnitude(v)
     (v[0] / mag, v[1] / mag)
 end
 
-reflect: fn (float, float), (float, float) -> (float, float) : external
+reflect: pu (float, float), (float, float) -> (float, float) : external
 
-dot :: fn v1: (float, float), v2: (float, float) -> float
+dot :: pu v1: (float, float), v2: (float, float) -> float
     v1[0] * v2[0] + v1[1] * v2[1]
 end
+
+random : fn -> float : external
+
+/// args: min, max
+/// error if max < min
+randint : fn int, int -> int : external

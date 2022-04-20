@@ -1,30 +1,24 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::HashMap;
 use std::io::Write;
 use sylt_common::error::Error;
 use sylt_common::FileOrLib;
-use sylt_parser::{Identifier, StatementKind, AST};
+use sylt_parser::AST;
+
+use crate::name_resolution::Statement;
 
 mod dependency;
 mod intermediate;
 mod lua;
+mod name_resolution;
 mod ty;
 mod typechecker;
 
-type Namespace = HashMap<String, Name>;
 type NamespaceID = usize;
 
 sylt_macro::timed_init!();
 
-#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-enum Name {
-    Name,
-    Namespace(NamespaceID),
-}
-
 struct Compiler {
     namespace_id_to_file: HashMap<NamespaceID, FileOrLib>,
-
-    namespaces: Vec<Namespace>,
 
     panic: bool,
     errors: Vec<Error>,
@@ -41,6 +35,7 @@ macro_rules! error {
                 file: $compiler.file_from_namespace($span.file_id).clone(),
                 span: $span,
                 message: Some(msg),
+                helpers: Vec::new(),
             };
             $compiler.errors.push(err);
         }
@@ -48,19 +43,18 @@ macro_rules! error {
 }
 
 macro_rules! error_no_panic {
-    ($compiler:expr, $span:expr, $( $msg:expr ),+ ) => {
-        {
-            error!($compiler, $span, $( $msg ),*);
-            $compiler.panic = false;
-        }
-    };
+     ($compiler:expr, $span:expr, $( $msg:expr ),+ ) => {
+         {
+             error!($compiler, $span, $( $msg ),*);
+             $compiler.panic = false;
+         }
+     };
 }
+
 impl Compiler {
     fn new() -> Self {
         Self {
             namespace_id_to_file: HashMap::new(),
-            namespaces: Vec::new(),
-
             panic: false,
             errors: Vec::new(),
         }
@@ -71,47 +65,70 @@ impl Compiler {
     }
 
     #[sylt_macro::timed()]
-    fn compile(mut self, lua_file: &mut dyn Write, tree: AST) -> Result<(), Vec<Error>> {
+    fn compile(
+        &mut self,
+        lua_file: &mut dyn Write,
+        tree: AST,
+        require: Option<&String>,
+    ) -> Result<(), Vec<Error>> {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
 
-        self.extract_globals(&tree);
+        self.extract_namespaces(&tree);
+        let (vars, statements) = name_resolution::resolve(&tree, &self.namespace_id_to_file)?;
 
-        let mut statements = match dependency::initialization_order(&tree, &self) {
+        // TODO[ed]: These clones are unneeded!
+        let statements = match dependency::initialization_order(&statements) {
             // TODO(ed): This clone can probably be removed.
-            Ok(statements) => statements
-                .into_iter()
-                .map(|(a, b)| (a.clone(), b))
-                .collect(),
+            Ok(statements) => statements,
             Err(statements) => {
-                statements.iter().for_each(|(statement, _)| {
-                    error_no_panic!(self, statement.span, "Dependency cycle")
+                statements.iter().for_each(|statement| {
+                    error_no_panic!(self, statement.span(), "Dependency cycle")
                 });
-                return Err(self.errors);
+                return Err(self.errors.clone());
             }
         };
         if !self.errors.is_empty() {
-            return Err(self.errors);
+            return Err(self.errors.clone());
         }
 
-        let typechecker = typechecker::solve(&mut statements, &self.namespace_id_to_file)?;
+        let mut statements: Vec<Statement> = statements.iter().map(|s| (*s).clone()).collect();
+
+        // NOTE(ed): SOMEHOW! The blobs aren't placed at the start - it frustrates me. So there's
+        // something wrong in the dependency checker - but I don't know anymore.
+        statements.sort_by_key(|s| match s {
+            Statement::Blob { .. } | Statement::Enum { .. } => 0,
+
+            Statement::Assignment { .. }
+            | Statement::Definition { .. }
+            | Statement::ExternalDefinition { .. }
+            | Statement::Loop { .. }
+            | Statement::Break(_)
+            | Statement::Continue(_)
+            | Statement::Ret { .. }
+            | Statement::Block { .. }
+            | Statement::StatementExpression { .. }
+            | Statement::Unreachable(_) => 1,
+        });
+
+        let typechecker = typechecker::solve(&vars, &statements, &self.namespace_id_to_file)?;
 
         let ir = intermediate::compile(&typechecker, &statements);
         let usage_count = intermediate::count_usages(&ir);
 
-        lua::generate(&ir, &usage_count, lua_file);
+        lua::generate(&ir, &usage_count, lua_file, require);
 
         Ok(())
     }
 
     #[sylt_macro::timed()]
-    fn extract_globals(&mut self, tree: &AST) {
+    fn extract_namespaces(&mut self, tree: &AST) {
         // Find all files and map them to their namespace
         let mut include_to_namespace = HashMap::new();
         for (path, module) in tree.modules.iter() {
-            let slot = module.file_id;
-            self.namespaces.push(Namespace::new());
-
-            if include_to_namespace.insert(path.clone(), slot).is_some() {
+            if include_to_namespace
+                .insert(path.clone(), module.file_id)
+                .is_some()
+            {
                 unreachable!("File was read twice!?");
             }
         }
@@ -121,96 +138,13 @@ impl Compiler {
             .iter()
             .map(|(a, b): (&FileOrLib, &usize)| (*b, (*a).clone()))
             .collect();
-
-        let mut from_statements = Vec::new();
-
-        // Find all globals in all files and declare them. The globals are
-        // initialized at a later stage.
-        for (_, module) in tree.modules.iter() {
-            let slot = module.file_id;
-
-            let mut namespace = Namespace::new();
-            for statement in module.statements.iter() {
-                use StatementKind::*;
-                let (name, ident_name, span) = match &statement.kind {
-                    FromUse { .. } => {
-                        // We cannot resolve this here since the namespace
-                        // might not be loaded yet. We process these after.
-                        from_statements.push((slot, statement.clone()));
-                        continue;
-                    }
-                    Use { name, file, .. } => {
-                        let ident = name.ident();
-                        let other = include_to_namespace[file];
-                        (Name::Namespace(other), ident.name.clone(), ident.span)
-                    }
-                    Enum { name, .. }
-                    | Blob { name, .. }
-                    | Definition { ident: Identifier { name, .. }, .. }
-                    | ExternalDefinition { ident: Identifier { name, .. }, .. } => {
-                        (Name::Name, name.clone(), statement.span)
-                    }
-
-                    // Handled later since we need type information.
-                    EmptyStatement => continue,
-
-                    _ => {
-                        error!(self, statement.span, "Invalid outer statement");
-                        continue;
-                    }
-                };
-                match namespace.entry(ident_name.to_owned()) {
-                    Entry::Vacant(vac) => {
-                        vac.insert(name);
-                    }
-                    Entry::Occupied(_) => {
-                        error!(
-                            self,
-                            span, "A global variable with the name '{}' already exists", ident_name
-                        );
-                    }
-                }
-            }
-            self.namespaces[slot] = namespace;
-        }
-
-        for (slot, from_stmt) in from_statements.into_iter() {
-            match from_stmt.kind {
-                StatementKind::FromUse { imports, file, .. } => {
-                    let from_slot = include_to_namespace[&file];
-                    for (ident, alias) in imports.iter() {
-                        let name = match self.namespaces[from_slot].get(&ident.name) {
-                            Some(name) => *name,
-                            None => {
-                                error!(
-                                    self,
-                                    ident.span, "Nothing named '{}' in '{:?}'", ident.name, file
-                                );
-                                continue;
-                            }
-                        };
-                        let real_ident = alias.as_ref().unwrap_or(ident);
-                        match self.namespaces[slot].entry(real_ident.name.clone()) {
-                            Entry::Vacant(vac) => {
-                                vac.insert(name);
-                            }
-                            Entry::Occupied(_) => {
-                                error!(
-                                    self,
-                                    real_ident.span,
-                                    "A global variable with the name '{}' already exists",
-                                    real_ident.name
-                                );
-                            }
-                        }
-                    }
-                }
-                _ => unreachable!(),
-            }
-        }
     }
 }
 
-pub fn compile(lua_file: &mut dyn Write, prog: AST) -> Result<(), Vec<Error>> {
-    Compiler::new().compile(lua_file, prog)
+pub fn compile(
+    lua_file: &mut dyn Write,
+    prog: AST,
+    require: Option<&String>,
+) -> Result<(), Vec<Error>> {
+    Compiler::new().compile(lua_file, prog, require)
 }

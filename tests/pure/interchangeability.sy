@@ -1,0 +1,10 @@
+a : [fn -> void] : [
+    fn do end,
+    pu do end,
+]
+
+start :: fn do
+    for_each(a, fn f: fn -> void do f() end)
+end
+
+// error:

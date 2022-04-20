@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use sylt::{Args, Options};
 
 sylt_macro::timed_init!();
@@ -15,18 +14,7 @@ fn main() -> Result<(), String> {
     }
 
     sylt_macro::timed_set_t0!();
-
-    let errs = if args.format {
-        match sylt::formatter::format(&PathBuf::from(args.args.first().unwrap())) {
-            Ok(formatted) => {
-                print!("{}", formatted);
-                Vec::new()
-            }
-            Err(errs) => errs,
-        }
-    } else {
-        sylt::run_file(&args).err().unwrap_or_else(Vec::new)
-    };
+    let errs = sylt::run_file(&args).err().unwrap_or_else(Vec::new);
 
     #[cfg(feature = "timed")]
     if let Some(outfile) = &args.trace_output {

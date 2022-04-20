@@ -6,4 +6,4 @@ start :: fn do
     b: faulty_namespace_access_blob.B = 0
 end
 
-// error: $Exotic
+// error: Only enums and blobs can take type-arguments
