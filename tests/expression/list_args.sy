@@ -1,8 +1,10 @@
 from list use (push)
 
 a :: fn b: [int] -> int do
-    a: int = b[0] + b[1]
-    ret a
+    (
+        (b -> list.get(0) -> maybe.orDefault(0))
+        + (b -> list.get(1) -> maybe.orDefault(0))
+    )
 end
 
 start :: fn do

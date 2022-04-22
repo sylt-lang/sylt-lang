@@ -1,16 +1,16 @@
-Maybe :: enum
+Oop :: enum
     Just *,
     Nothing,
 end
 
 start :: fn do
-    a := Maybe.Just 1
+    a := Oop.Just 1
     print' a
-    a = Maybe.Nothing
+    a = Oop.Nothing
     print' a
 
-    b := Maybe.Just "abc"
+    b := Oop.Just "abc"
     print' b
-    b = Maybe.Nothing
+    b = Oop.Nothing
     print' b
 end

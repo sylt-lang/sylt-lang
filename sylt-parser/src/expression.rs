@@ -773,8 +773,11 @@ mod test {
     test!(expression, mul: "\"abc\" * \"abc\"" => Mul(_, _));
     test!(expression, ident: "a" => Get(Assignable { kind: Read(_), .. }));
     test!(expression, access: "a.b" => Get(Assignable { kind: Access(_, _), .. }));
-    test!(expression, index_ident: "a[a]" => Get(Assignable { kind: Index(_, _), .. }));
-    test!(expression, index_expr: "a[1 + 2 + 3]" => Get(Assignable { kind: Index(_, _), .. }));
+
+    test!(expression, index_int: "a[1]" => _);
+    fail!(expression, index_ident: "a[a]" => _);
+    fail!(expression, index_expr: "a[1 + 2 + 3]" => _);
+
     test!(expression, grouping: "(0 * 0) + 1" => Add(_, _));
     test!(expression, grouping_one: "(0)" => Parenthesis(_));
     test!(expression, tuple: "(0, 0)" => Tuple(_));

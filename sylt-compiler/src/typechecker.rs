@@ -1990,14 +1990,14 @@ impl TypeChecker {
                     TypeError::TupleIndexOutOfRange { got: index, length: tys.len() }
                 ),
             },
-            Type::List(ty) => self.unify(span, ctx, ty, ret).map(|_| ()),
 
             _ => err_type_error!(
                 self,
                 span,
                 TypeError::Violating(self.bake_type(a)),
-                "This type cannot be indexed with the constant index {}",
-                index
+                "This type cannot be indexed with the constant index {}\n{}",
+                index,
+                "Only tuples can be indexed like this"
             ),
         }
     }

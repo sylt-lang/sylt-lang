@@ -1,10 +1,10 @@
 start :: fn do
     a :: [1, 2, 3]
-    a[0] == "str"
-    a[0] == 0.1
+    list.get(a, 0) == Maybe.Just "str"
+    list.get(a, 0) == Maybe.Just 0.1
     b :: ["str", 2, 3]
-    b[0] == "str"
+    list.get(b, 0) == Maybe.Just "str"
     c :: [1, 0.1]
-    c[0] == "str"
+    list.get(c, 0) == Maybe.Just "str"
 end
 // error: $Mismatch

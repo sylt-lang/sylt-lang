@@ -5,10 +5,10 @@ start :: fn do
     push(a, 3)
     push(a, 4)
     len(a) <=> 4
-    a[0] <=> 1
-    a[1] <=> 2
-    a[2] <=> 3
-    a[3] <=> 4
+    (list.get' a, 0) <=> Maybe.Just 1
+    (list.get' a, 1) <=> Maybe.Just 2
+    (list.get' a, 2) <=> Maybe.Just 3
+    (list.get' a, 3) <=> Maybe.Just 4
     b: [str] = []
     q :: fn do
         push(b, "a")
