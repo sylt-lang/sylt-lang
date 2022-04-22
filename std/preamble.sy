@@ -32,7 +32,6 @@ from math use (
 from list use (
     for_each,
     map,
-    reduce,
     fold,
     filter,
 )

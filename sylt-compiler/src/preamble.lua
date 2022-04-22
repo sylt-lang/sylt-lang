@@ -324,7 +324,7 @@ end
 -- std-sylt
 
 function atan2(x, y) return math.atan2(y, x) end
-function list_random_choice(l) return l[math.random(1, #l)] end
+function list_random_choice(l) return list_get(l, math.random(0, #l - 1)) end
 
 function varargs(f)
     return function(xs)
@@ -346,17 +346,19 @@ function list_map(l, f)
     return __LIST(o)
 end
 
-function list_reduce(l, f)
-    if #l == 0 then
-        return __NIL
+function list_get(l, i)
+    x = l[i+1]
+    if x ~= nil then
+        return __VARIANT({"Just", x})
+    else
+        return __VARIANT({"None", nil})
     end
-    local a = l[1]
-    for k, v in pairs(l) do
-        if k ~= 1 then
-            a = f(a, v)
-        end
+end
+
+function list_set(l, i, x)
+    if #l > i then
+        l[i+1] = x
     end
-    return a
 end
 
 function list_fold(l, a, f)
@@ -382,15 +384,14 @@ function list_prepend(l, v)
     list_push(l, 1, v)
 end
 
-function list_contains(l, a)
-    for _, v in pairs(l) do
-        if v == a then
-            return true
+function list_find(l, p)
+    for _, x in pairs(l) do
+        if p(x) then
+            return __VARIANT({"Just", x})
         end
     end
-    return false
+    return __VARIANT({"None", nil})
 end
-
 
 function xx_len(c)
     local s = 0
@@ -468,8 +469,8 @@ debug_assertions = __CRASH("debug_assertions is not implemented")
 thread_sleep = __CRASH("thread_sleep is not implemented")
 
 function list_pop(l)
-    local popped = l[#l]
-    l[#l] = nil
+    local popped = list_get(l, #l - 1)
+    list_set(l, #l - 1, nil)
     return popped
 end
 
