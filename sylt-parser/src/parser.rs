@@ -861,8 +861,13 @@ fn assignable_index<'t>(ctx: Context<'t>, indexed: Assignable) -> ParseResult<'t
     let span = ctx.span();
     let mut ctx = expect!(ctx, T::LeftBracket, "Expected '[' when indexing");
 
-    let (_ctx, expr) = expression(ctx)?;
-    ctx = _ctx; // assign to outer
+    let expr =
+        if let (_ctx, expr @ Expression { kind: ExpressionKind::Int(_), .. }) = expression(ctx)? {
+            ctx = _ctx; // assign to outer
+            expr
+        } else {
+            raise_syntax_error!(ctx, "Expected 'int' when parsing tuple indexing");
+        };
     let ctx = expect!(ctx, T::RightBracket, "Expected ']' after index");
 
     use AssignableKind::Index;

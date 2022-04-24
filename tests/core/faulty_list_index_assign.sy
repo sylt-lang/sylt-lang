@@ -4,6 +4,6 @@ Q :: blob {
 
 start :: fn do
     q :: Q { a: [4] }
-    q.a[0] = "fail"
+    list.set' q.a, 0, "fail"
 end
 // error: $Mismatch

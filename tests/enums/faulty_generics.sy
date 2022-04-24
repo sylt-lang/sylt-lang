@@ -1,12 +1,12 @@
-Maybe :: enum(*A)
+Oop :: enum(*A)
     Just *A,
     Other *A,
     Nothing,
 end
 
 start :: fn do
-    a := Maybe.Just 1
-    a = Maybe.Other "abc"
+    a := Oop.Just 1
+    a = Oop.Other "abc"
 end
 
 // error: $Mismatch

@@ -6,15 +6,15 @@ Q :: blob {
 start :: fn do
     a :: [1]
     push(a, 3)
-    a[1] = 4
+    list.set' a, 1, 4
     push(a, 3)
-    a[1] <=> 4
+    (list.get' a, 1) <=> Maybe.Just 4
     q :: Q {
         a: [4],
     }
     push(q.a, 3)
-    q.a[1] = 1
+    (list.set' q.a, 1, 1)
     push(q.a, 3)
-    q.a[1] <=> 1
+    (list.get' q.a, 1) <=> Maybe.Just 1
 end
 

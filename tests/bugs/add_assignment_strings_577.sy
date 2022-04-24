@@ -5,9 +5,10 @@ start :: fn do
     a += "abc"
     a <=> "abcabc"
 
-    b :: ["abc"]
-    b[0] += "abc"
-    b[0] <=> "abcabc"
+    // TODO[ed]: Disallow this!!!
+    // b :: ("abc",)
+    // b[0] += "abc"
+    // b[0] <=> "abcabc"
 
     c :: A { a: "abc" }
     c.a += "abc"

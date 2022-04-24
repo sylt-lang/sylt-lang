@@ -1,4 +1,4 @@
-from _enum use Maybe as Will
+from _enum use Mbe as Will
 
 start :: fn do
     stygg_alfons := Will.Just "leka med sågen"

@@ -134,8 +134,6 @@ enum Constraint {
 
     Neg,
 
-    IndexingGives(TyID),
-    GivenByIndex(TyID),
     ConstantIndex(i64, TyID),
 
     Field(String, TyID),
@@ -784,15 +782,11 @@ impl TypeChecker {
                 let int_type = self.push_type(Type::Int);
                 self.unify(*span, ctx, index, int_type)?;
                 let expr = self.push_type(Type::Unknown);
-                let index_span = index_syn.span();
                 match **index_syn {
                     E::Int(i, _) => {
-                        self.add_constraint(value, *span, Constraint::ConstantIndex(i, expr));
+                        self.add_constraint(value, *span, Constraint::ConstantIndex(i, expr))
                     }
-                    _ => {
-                        self.add_constraint(value, index_span, Constraint::IndexingGives(expr));
-                        self.add_constraint(expr, index_span, Constraint::GivenByIndex(value));
-                    }
+                    _ => unreachable!("Should be handled in parser"),
                 }
                 self.check_constraints(*span, ctx, value)?;
                 self.check_constraints(*span, ctx, index)?;
@@ -1223,9 +1217,6 @@ impl TypeChecker {
                         TypeError::UniOp { val: self.bake_type(a), op: "-".to_string() }
                     ),
                 },
-
-                Constraint::IndexingGives(b) => self.is_given_by_indexing(span, ctx, a, *b),
-                Constraint::GivenByIndex(b) => self.is_given_by_indexing(span, ctx, *b, a),
 
                 Constraint::ConstantIndex(index, ret) => {
                     self.constant_index(span, ctx, a, *index, *ret)
@@ -1674,8 +1665,6 @@ impl TypeChecker {
                         C::Cmp(x) => C::Cmp(self.inner_copy(*x, seen)),
                         C::CmpEqu(x) => C::CmpEqu(self.inner_copy(*x, seen)),
                         C::Neg => C::Neg,
-                        C::IndexingGives(x) => C::IndexingGives(self.inner_copy(*x, seen)),
-                        C::GivenByIndex(x) => C::GivenByIndex(self.inner_copy(*x, seen)),
                         C::ConstantIndex(i, x) => C::ConstantIndex(*i, self.inner_copy(*x, seen)),
                         C::Field(f, x) => C::Field(f.clone(), self.inner_copy(*x, seen)),
                         C::Num => C::Num,
@@ -1983,43 +1972,6 @@ impl TypeChecker {
         }
     }
 
-    fn is_given_by_indexing(
-        &mut self,
-        span: Span,
-        ctx: TypeCtx,
-        a: TyID,
-        b: TyID,
-    ) -> TypeResult<()> {
-        match self.find_type(a) {
-            Type::Unknown => Ok(()),
-
-            Type::Tuple(_) => {
-                // NOTE(ed): If we get here - it means we're checking the constraint, but the
-                // constraint shouldn't be added because we only ever check constants.
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::Exotic,
-                    "Tuples can only be indexed by positive integer constants"
-                );
-            }
-            Type::List(given) => {
-                self.unify(span, ctx, given, b)?;
-                Ok(())
-            }
-
-            _ => err_type_error!(
-                self,
-                span,
-                TypeError::BinOp {
-                    lhs: self.bake_type(a),
-                    rhs: self.bake_type(b),
-                    op: "Indexing".to_string(),
-                }
-            ),
-        }
-    }
-
     fn constant_index(
         &mut self,
         span: Span,
@@ -2038,14 +1990,14 @@ impl TypeChecker {
                     TypeError::TupleIndexOutOfRange { got: index, length: tys.len() }
                 ),
             },
-            Type::List(ty) => self.unify(span, ctx, ty, ret).map(|_| ()),
 
             _ => err_type_error!(
                 self,
                 span,
                 TypeError::Violating(self.bake_type(a)),
-                "This type cannot be indexed with the constant index {}",
-                index
+                "This type cannot be indexed with the constant index {}\n{}",
+                index,
+                "Only tuples can be indexed like this"
             ),
         }
     }
