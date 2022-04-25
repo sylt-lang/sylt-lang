@@ -1,4 +1,0 @@
-add: fn {*ITEM}, *ITEM -> void : external
-remove: fn {*ITEM}, *ITEM -> void : external
-len: pu<C: Container> *C -> int : external
-clear: fn<C: Container> *C -> void : external

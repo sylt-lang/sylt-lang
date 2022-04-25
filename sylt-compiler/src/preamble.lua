@@ -324,7 +324,7 @@ end
 -- std-sylt
 
 function atan2(x, y) return math.atan2(y, x) end
-function random_choice(l) return l[math.random(1, #l)] end
+function list_random_choice(l) return list_get(l, math.random(0, #l - 1)) end
 
 function varargs(f)
     return function(xs)
@@ -332,13 +332,13 @@ function varargs(f)
     end
 end
 
-function for_each(l, f)
+function list_for_each(l, f)
     for _, v in pairs(l) do
         f(v)
     end
 end
 
-function map(l, f)
+function list_map(l, f)
     local o = {}
     for k, v in pairs(l) do
         o[k] = f(v)
@@ -346,27 +346,29 @@ function map(l, f)
     return __LIST(o)
 end
 
-function reduce(l, f)
-    if #l == 0 then
-        return __NIL
+function list_get(l, i)
+    x = l[i+1]
+    if x ~= nil then
+        return __VARIANT({"Just", x})
+    else
+        return __VARIANT({"None", nil})
     end
-    local a = l[1]
-    for k, v in pairs(l) do
-        if k ~= 1 then
-            a = f(a, v)
-        end
-    end
-    return a
 end
 
-function fold(l, a, f)
+function list_set(l, i, x)
+    if #l > i then
+        l[i+1] = x
+    end
+end
+
+function list_fold(l, a, f)
     for _, v in pairs(l) do
         a = f(v, a)
     end
     return a
 end
 
-function filter(l, f)
+function list_filter(l, f)
     local o = {}
     for _, v in pairs(l) do
         if f(v) then
@@ -376,21 +378,22 @@ function filter(l, f)
     return __LIST(o)
 end
 
-push = table.insert
+list_push = table.insert
 
-function prepend(l, v)
-    table.insert(l, 1, v)
+function list_prepend(l, v)
+    list_push(l, 1, v)
 end
 
-function add(s, v)
-    s[v] = true
+function list_find(l, p)
+    for _, x in pairs(l) do
+        if p(x) then
+            return __VARIANT({"Just", x})
+        end
+    end
+    return __VARIANT({"None", nil})
 end
 
-function remove(s, v)
-    s[v] = nil
-end
-
-function len(c)
+function xx_len(c)
     local s = 0
     for _ in pairs(c) do
         s = s + 1
@@ -465,9 +468,9 @@ reflect = __CRASH("reflect is not implemented")
 debug_assertions = __CRASH("debug_assertions is not implemented")
 thread_sleep = __CRASH("thread_sleep is not implemented")
 
-function pop(l)
-    local popped = l[#l]
-    l[#l] = nil
+function list_pop(l)
+    local popped = list_get(l, #l - 1)
+    list_set(l, #l - 1, nil)
     return popped
 end
 
@@ -476,25 +479,6 @@ print = print
 function dbg(x) print(x); return x end
 
 unsafe_force = __IDENTITY
-
-function __CONTAINS(a, b)
-    local ty = getmetatable(b)._type
-    if ty == "list" then
-        for _, v in pairs(b) do
-            if v == a then
-                return true
-            end
-        end
-        return false
-    end
-    if ty == "dict" then
-        return b[a] ~= nil
-    end
-    if ty == "set" then
-        return b[a] ~= nil
-    end
-    assert(false, "Invalid contains!")
-end
 
 random = math.random
 randint = math.random
@@ -549,11 +533,11 @@ function dict_remove(dict, k)
 end
 
 function dict_get(dict, k)
-    local x = dict[k]
-    if x ~= nil then
-       return __VARIANT({"Just", x[2]})
-    else
+    local x = dict[tostring(k)]
+    if x == nil then
        return __VARIANT({"None", nil})
+    else
+       return __VARIANT({"Just", x[2]})
     end
 end
 

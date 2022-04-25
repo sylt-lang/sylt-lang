@@ -1,9 +1,9 @@
 start :: fn do
-    a :: {1, 2, 3, 1}
-    (1 in a) <=> true
-    (2 in a) <=> true
-    (3 in a) <=> true
-    (0 in a) <=> false
-    false <=> (4 in a)
+    a :: set.from_list' [1, 2, 3, 1]
+    (set.contains' a, 1) <=> true
+    (set.contains' a, 2) <=> true
+    (set.contains' a, 3) <=> true
+    (set.contains' a, 0) <=> false
+    false <=> (set.contains' a, 4)
 end
 

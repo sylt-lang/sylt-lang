@@ -114,8 +114,8 @@ struct TypeNode {
 ///
 /// Most constraints force `Unknown` types into becoming a certain type and causes a `TypeError`
 /// otherwise. Constraints applied to two or more type variables need to make sure all variables
-/// have the constraint in some way. For example, if some type has the `Contains` constraint, the
-/// contained type must have the `IsContainedIn` constraint. If this is not the case, the
+/// have the constraint in some way. For example, if some type has the `DivTop` constraint, the
+/// divisor type must have the `DivBot` constraint. If this is not the case, the
 /// typechecker may miss some constraints when unifying.
 ///
 /// In theory, `Unknown` is the only type that can have a constraint. In practice, concrete types
@@ -134,19 +134,11 @@ enum Constraint {
 
     Neg,
 
-    Indexes(TyID),
-    IndexedBy(TyID),
-    IndexingGives(TyID),
-    GivenByIndex(TyID),
     ConstantIndex(i64, TyID),
 
     Field(String, TyID),
 
     Num,
-    Container,
-    SameContainer(TyID),
-    Contains(TyID),
-    IsContainedIn(TyID),
 
     Enum,
     Variant(String, Option<TyID>),
@@ -242,7 +234,6 @@ impl TypeChecker {
         span: Span,
         var: TyID,
         constraint: &TypeConstraint,
-        seen: &HashMap<String, TyID>,
     ) -> TypeResult<()> {
         fn check_constraint_arity(
             typechecker: &TypeChecker,
@@ -262,24 +253,6 @@ impl TypeChecker {
             }
         }
 
-        fn parse_constraint_arg(
-            typechecker: &TypeChecker,
-            span: Span,
-            name: &str,
-            seen: &HashMap<String, TyID>,
-        ) -> TypeResult<TyID> {
-            match seen.get(name) {
-                Some(x) => Ok(*x),
-                _ => {
-                    err_type_error!(
-                        typechecker,
-                        span,
-                        TypeError::UnknownConstraintArgument(name.into())
-                    )
-                }
-            }
-        }
-
         let num_args = constraint.args.len();
         match constraint.name.name.as_str() {
             "Num" => {
@@ -289,22 +262,6 @@ impl TypeChecker {
             "CmpEqu" => {
                 check_constraint_arity(self, span, "Num", num_args, 0)?;
                 self.add_constraint(var, span, Constraint::CmpEqu(var));
-            }
-            "Container" => {
-                check_constraint_arity(self, span, "Container", num_args, 0)?;
-                self.add_constraint(var, span, Constraint::Container);
-            }
-            "SameContainer" => {
-                check_constraint_arity(self, span, "SameContainer", num_args, 1)?;
-                let a = parse_constraint_arg(self, span, &constraint.args[0].name, seen)?;
-                self.add_constraint(var, span, Constraint::SameContainer(a));
-                self.add_constraint(a, span, Constraint::SameContainer(var));
-            }
-            "Contains" => {
-                check_constraint_arity(self, span, "Contains", num_args, 1)?;
-                let a = parse_constraint_arg(self, span, &constraint.args[0].name, seen)?;
-                self.add_constraint(var, span, Constraint::Contains(a));
-                self.add_constraint(a, span, Constraint::IsContainedIn(var));
             }
             x => return err_type_error!(self, span, TypeError::UnknownConstraint(x.into())),
         }
@@ -387,7 +344,7 @@ impl TypeChecker {
                             // NOTE(ed): This disallowes type-variables that are only used for
                             // constraints.
                             for constraint in constraints.iter() {
-                                self.resolve_constraint(*span, *var, constraint, seen)?;
+                                self.resolve_constraint(*span, *var, constraint)?;
                             }
                         }
                         None => {
@@ -412,13 +369,6 @@ impl TypeChecker {
             ),
 
             T::List(kind, _) => Type::List(self.inner_resolve_type(ctx, kind, seen)?),
-
-            T::Set(kind, _) => Type::Set(self.inner_resolve_type(ctx, kind, seen)?),
-
-            T::Dict(key, value, _) => Type::Dict(
-                self.inner_resolve_type(ctx, key, seen)?,
-                self.inner_resolve_type(ctx, value, seen)?,
-            ),
 
             T::Generic(name, _) => {
                 return Ok(*seen
@@ -522,7 +472,6 @@ impl TypeChecker {
                     | BinOp::Equals
                     | BinOp::Greater
                     | BinOp::GreaterEqual
-                    | BinOp::In
                     | BinOp::Less
                     | BinOp::LessEqual
                     | BinOp::NotEquals
@@ -835,18 +784,14 @@ impl TypeChecker {
             E::Index { value, index: index_syn, span } => {
                 let (value_ret, value) = self.expression(value, ctx)?;
                 let (index_ret, index) = self.expression(index_syn, ctx)?;
+                let int_type = self.push_type(Type::Int);
+                self.unify(*span, ctx, index, int_type)?;
                 let expr = self.push_type(Type::Unknown);
-                let index_span = index_syn.span();
                 match **index_syn {
                     E::Int(i, _) => {
-                        self.add_constraint(value, *span, Constraint::ConstantIndex(i, expr));
+                        self.add_constraint(value, *span, Constraint::ConstantIndex(i, expr))
                     }
-                    _ => {
-                        self.add_constraint(index, index_span, Constraint::Indexes(value));
-                        self.add_constraint(value, index_span, Constraint::IndexedBy(index));
-                        self.add_constraint(value, index_span, Constraint::IndexingGives(expr));
-                        self.add_constraint(expr, index_span, Constraint::GivenByIndex(value));
-                    }
+                    _ => unreachable!("Should be handled in parser"),
                 }
                 self.check_constraints(*span, ctx, value)?;
                 self.check_constraints(*span, ctx, index)?;
@@ -864,18 +809,6 @@ impl TypeChecker {
                 }
                 BinOp::GreaterEqual | BinOp::LessEqual => {
                     bin_op!(self, *span, ctx, a, b, Constraint::CmpEqu, Type::Bool)
-                }
-                BinOp::In => {
-                    let (a_ret, a) = self.expression(a, ctx)?;
-                    let (b_ret, b) = self.expression(b, ctx)?;
-                    self.add_constraint(a, *span, Constraint::IsContainedIn(b));
-                    self.add_constraint(b, *span, Constraint::Contains(a));
-                    self.check_constraints(*span, ctx, a)?;
-                    self.check_constraints(*span, ctx, b)?;
-                    with_ret(
-                        self.unify_option(*span, ctx, a_ret, b_ret)?,
-                        self.push_type(Type::Bool),
-                    )
                 }
                 BinOp::Add => bin_op!(self, *span, ctx, a, b, Constraint::Add),
                 BinOp::Sub => bin_op!(self, *span, ctx, a, b, Constraint::Sub),
@@ -1151,31 +1084,6 @@ impl TypeChecker {
                 with_ret(ret, self.push_type(Type::List(inner_ty)))
             }
 
-            E::Collection { collection: Collection::Set, values, span } => {
-                let inner_ty = self.push_type(Type::Unknown);
-                let ret = Some(self.push_type(Type::Unknown));
-                for expr in values.iter() {
-                    let (e_ret, e) = self.expression(expr, ctx)?;
-                    self.unify(*span, ctx, inner_ty, e)?;
-                    self.unify_option(*span, ctx, ret, e_ret)?;
-                }
-                with_ret(ret, self.push_type(Type::Set(inner_ty)))
-            }
-
-            E::Collection { collection: Collection::Dict, values, span } => {
-                let key_ty = self.push_type(Type::Unknown);
-                let value_ty = self.push_type(Type::Unknown);
-                let ret = Some(self.push_type(Type::Unknown));
-                for (i, x) in values.iter().enumerate() {
-                    let (e_ret, e) = self.expression(x, ctx)?;
-                    // Even indexes are keys, odd are the values.
-                    let ty = if i % 2 == 0 { key_ty } else { value_ty };
-                    self.unify(*span, ctx, ty, e)?;
-                    self.unify_option(*span, ctx, e_ret, ret)?;
-                }
-                with_ret(ret, self.push_type(Type::Dict(key_ty, value_ty)))
-            }
-
             E::Float(_, _) => no_ret(self.push_type(Type::Float)),
             E::Int(_, _) => no_ret(self.push_type(Type::Int)),
             E::Str(_, _) => no_ret(self.push_type(Type::Str)),
@@ -1245,11 +1153,6 @@ impl TypeChecker {
                     .collect(),
             ),
             Type::List(ty) => RuntimeType::List(Box::new(self.inner_bake_type(ty, seen))),
-            Type::Set(ty) => RuntimeType::Set(Box::new(self.inner_bake_type(ty, seen))),
-            Type::Dict(ty_k, ty_v) => RuntimeType::Dict(
-                Box::new(self.inner_bake_type(ty_k, seen)),
-                Box::new(self.inner_bake_type(ty_v, seen)),
-            ),
             Type::Function(args, ret, _) => RuntimeType::Function(
                 args.iter()
                     .map(|ty| self.inner_bake_type(*ty, seen))
@@ -1320,12 +1223,6 @@ impl TypeChecker {
                     ),
                 },
 
-                Constraint::IndexedBy(b) => self.is_indexed_by(span, ctx, a, *b),
-                Constraint::Indexes(b) => self.is_indexed_by(span, ctx, *b, a),
-
-                Constraint::IndexingGives(b) => self.is_given_by_indexing(span, ctx, a, *b),
-                Constraint::GivenByIndex(b) => self.is_given_by_indexing(span, ctx, *b, a),
-
                 Constraint::ConstantIndex(index, ret) => {
                     self.constant_index(span, ctx, a, *index, *ret)
                 }
@@ -1366,37 +1263,6 @@ impl TypeChecker {
                         "The Num constraint forces int or float"
                     ),
                 },
-
-                Constraint::Container => match self.find_type(a) {
-                    Type::Unknown | Type::Set(..) | Type::List(..) | Type::Dict(..) => Ok(()),
-                    _ => err_type_error!(
-                        self,
-                        span,
-                        TypeError::Violating(self.bake_type(a)),
-                        "The Container constraint forces set, list or dict"
-                    ),
-                },
-
-                Constraint::SameContainer(b) => match (self.find_type(a), self.find_type(*b)) {
-                    (Type::Unknown, _)
-                    | (_, Type::Unknown)
-                    | (Type::Set(..), Type::Set(..))
-                    | (Type::List(..), Type::List(..))
-                    | (Type::Dict(..), Type::Dict(..)) => Ok(()),
-
-                    _ => err_type_error!(
-                        self,
-                        span,
-                        TypeError::Mismatch {
-                            got: self.bake_type(a),
-                            expected: self.bake_type(*b)
-                        },
-                        "The SameContainer constraint forces the outer containers to match"
-                    ),
-                },
-
-                Constraint::Contains(b) => self.contains(span, ctx, a, *b),
-                Constraint::IsContainedIn(b) => self.contains(span, ctx, *b, a),
 
                 Constraint::Enum => match self.find_type(a) {
                     Type::Unknown | Type::Enum(..) => Ok(()),
@@ -1588,16 +1454,6 @@ impl TypeChecker {
                 (Type::List(a), Type::List(b)) => {
                     self.sub_unify(span, ctx, a, b, seen)
                         .help_no_span("While checking list".into())?;
-                }
-                (Type::Set(a), Type::Set(b)) => {
-                    self.sub_unify(span, ctx, a, b, seen)
-                        .help_no_span("While checking set".into())?;
-                }
-                (Type::Dict(a_k, a_v), Type::Dict(b_k, b_v)) => {
-                    self.sub_unify(span, ctx, a_k, b_k, seen)
-                        .help_no_span("While checking dictionary key".into())?;
-                    self.sub_unify(span, ctx, a_v, b_v, seen)
-                        .help_no_span("While checking dictionary value".into())?;
                 }
 
                 (Type::Tuple(a), Type::Tuple(b)) => {
@@ -1814,17 +1670,9 @@ impl TypeChecker {
                         C::Cmp(x) => C::Cmp(self.inner_copy(*x, seen)),
                         C::CmpEqu(x) => C::CmpEqu(self.inner_copy(*x, seen)),
                         C::Neg => C::Neg,
-                        C::Indexes(x) => C::Indexes(self.inner_copy(*x, seen)),
-                        C::IndexedBy(x) => C::IndexedBy(self.inner_copy(*x, seen)),
-                        C::IndexingGives(x) => C::IndexingGives(self.inner_copy(*x, seen)),
-                        C::GivenByIndex(x) => C::GivenByIndex(self.inner_copy(*x, seen)),
                         C::ConstantIndex(i, x) => C::ConstantIndex(*i, self.inner_copy(*x, seen)),
                         C::Field(f, x) => C::Field(f.clone(), self.inner_copy(*x, seen)),
                         C::Num => C::Num,
-                        C::Container => C::Container,
-                        C::SameContainer(x) => C::SameContainer(self.inner_copy(*x, seen)),
-                        C::Contains(x) => C::Contains(self.inner_copy(*x, seen)),
-                        C::IsContainedIn(x) => C::IsContainedIn(self.inner_copy(*x, seen)),
                         C::Enum => C::Enum,
                         C::Variant(v, x) => {
                             C::Variant(v.clone(), x.map(|y| self.inner_copy(y, seen)))
@@ -1854,11 +1702,6 @@ impl TypeChecker {
             }
 
             Type::List(ty) => Type::List(self.inner_copy(ty, seen)),
-            Type::Set(ty) => Type::Set(self.inner_copy(ty, seen)),
-
-            Type::Dict(ty_k, ty_v) => {
-                Type::Dict(self.inner_copy(ty_k, seen), self.inner_copy(ty_v, seen))
-            }
 
             Type::Function(args, ret, purity) => Type::Function(
                 args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
@@ -2134,73 +1977,6 @@ impl TypeChecker {
         }
     }
 
-    fn is_indexed_by(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<()> {
-        match (self.find_type(a), self.find_type(b)) {
-            (Type::Unknown, _) => Ok(()),
-            (_, Type::Unknown) => Ok(()),
-
-            (Type::List(_), Type::Int) => Ok(()),
-            (Type::Tuple(_), Type::Int) => Ok(()),
-            // TODO(ed): Sets!
-            (Type::Dict(k, _), _) => {
-                self.unify(span, ctx, k, b)?;
-                Ok(())
-            }
-
-            _ => err_type_error!(
-                self,
-                span,
-                TypeError::BinOp {
-                    lhs: self.bake_type(a),
-                    rhs: self.bake_type(b),
-                    op: "Indexing".to_string(),
-                }
-            ),
-        }
-    }
-
-    fn is_given_by_indexing(
-        &mut self,
-        span: Span,
-        ctx: TypeCtx,
-        a: TyID,
-        b: TyID,
-    ) -> TypeResult<()> {
-        match self.find_type(a) {
-            Type::Unknown => Ok(()),
-
-            Type::Tuple(_) => {
-                // NOTE(ed): If we get here - it means we're checking the constraint, but the
-                // constraint shouldn't be added because we only ever check constants.
-                return err_type_error!(
-                    self,
-                    span,
-                    TypeError::Exotic,
-                    "Tuples can only be indexed by positive integer constants"
-                );
-            }
-            Type::List(given) => {
-                self.unify(span, ctx, given, b)?;
-                Ok(())
-            }
-            // TODO(ed): Sets!
-            Type::Dict(_, given) => {
-                self.unify(span, ctx, given, b)?;
-                Ok(())
-            }
-
-            _ => err_type_error!(
-                self,
-                span,
-                TypeError::BinOp {
-                    lhs: self.bake_type(a),
-                    rhs: self.bake_type(b),
-                    op: "Indexing".to_string(),
-                }
-            ),
-        }
-    }
-
     fn constant_index(
         &mut self,
         span: Span,
@@ -2219,52 +1995,14 @@ impl TypeChecker {
                     TypeError::TupleIndexOutOfRange { got: index, length: tys.len() }
                 ),
             },
-            Type::List(ty) => self.unify(span, ctx, ty, ret).map(|_| ()),
-            Type::Dict(key_ty, value_ty) => {
-                let int_ty = self.push_type(Type::Int);
-                self.unify(span, ctx, key_ty, int_ty)?;
-                self.unify(span, ctx, value_ty, ret)?;
-                Ok(())
-            }
+
             _ => err_type_error!(
                 self,
                 span,
                 TypeError::Violating(self.bake_type(a)),
-                "This type cannot be indexed with the constant index {}",
-                index
-            ),
-        }
-    }
-
-    fn contains(&mut self, span: Span, ctx: TypeCtx, a: TyID, b: TyID) -> TypeResult<()> {
-        match (self.find_type(a), self.find_type(b)) {
-            (Type::Unknown, _) | (_, Type::Unknown) => Ok(()),
-
-            (Type::Set(x), _) | (Type::List(x), _) => self.unify(span, ctx, x, b).map(|_| ()),
-
-            (Type::Dict(kx, vx), Type::Tuple(ys)) => {
-                if ys.len() == 2 {
-                    self.unify(span, ctx, kx, ys[0])?;
-                    self.unify(span, ctx, vx, ys[1]).map(|_| ())
-                } else {
-                    err_type_error!(
-                        self,
-                        span,
-                        TypeError::Violating(self.bake_type(b)),
-                        "Expected length of tuple to be 2 but it was {}",
-                        ys.len()
-                    )
-                }
-            }
-
-            _ => err_type_error!(
-                self,
-                span,
-                TypeError::Mismatch {
-                    got: self.bake_type(a),
-                    expected: self.bake_type(b)
-                },
-                "The Contains constraint forces a container"
+                "This type cannot be indexed with the constant index {}\n{}",
+                index,
+                "Only tuples can be indexed like this"
             ),
         }
     }

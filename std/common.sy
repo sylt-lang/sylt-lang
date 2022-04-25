@@ -1,8 +1,9 @@
 from maybe use (Maybe)
+from dict use (Dict)
 
 dbg : pu *X -> *X : external
 
-args: fn -> {str:str} : external
+args: fn -> Dict(str, str) : external
 thread_sleep: fn float -> void : external
 print: fn *X -> void : external
 

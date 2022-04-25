@@ -1,9 +1,0 @@
-f :: fn a: *, b: * -> *
-    a in b
-end
-
-start :: fn do
-    true <=> f' 1, [1, 2, 3]
-    true <=> f' 1, {1, 2, 3}
-    false <=> f' 0, {1, 2, 3}
-end

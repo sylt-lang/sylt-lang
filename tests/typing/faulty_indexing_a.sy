@@ -1,6 +1,5 @@
 start :: fn do
     a :: [1, 2, 3]
-    a[0]
-    a["abc"]
+    a[1]
 end
-// error: $BinOp
+// error: Got '[int]', which it cannot be

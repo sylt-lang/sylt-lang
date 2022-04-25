@@ -2,6 +2,10 @@ Set :: blob(*V) {
     __PHANTOM_VALUE: *V
 }
 
+// Sneaky reuse
+xx_len : pu Set(*V) -> int : external
+len :: xx_len
+
 set_new : pu<V: CmpEqu> -> Set(*V) : external
 set_add : fn<V: CmpEqu> Set(*V), *V -> void : external
 set_remove : fn<V: CmpEqu> Set(*V), *V -> void : external

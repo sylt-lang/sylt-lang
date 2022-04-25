@@ -1,15 +1,45 @@
-from container use len
+from maybe use (Maybe, isJust)
 
-random_choice: fn [*ITEM] -> *ITEM : external
-for_each: fn [*ITEM], fn *ITEM -> void -> void : external
-map: pu [*ITEM], pu *ITEM -> *OUT -> [*OUT] : external
-reduce: pu [*ITEM], (pu *ITEM, *ITEM -> *OUT) -> *OUT : external
-fold: pu [*ITEM], *OUT, (pu *ITEM, *OUT -> *OUT) -> *OUT : external
-filter: pu [*ITEM], pu *ITEM -> bool -> [*ITEM] : external
-push: fn [*ITEM], *ITEM -> void : external
-prepend: fn [*ITEM], *ITEM -> void : external
-pop: fn [*ITEM] -> *ITEM : external
+list_random_choice: fn [*ITEM] -> Maybe(*ITEM) : external
+random_choice :: list_random_choice
 
-last :: fn l: [*ITEM] -> *ITEM
-    l[len(l) - 1]
+list_for_each: fn [*ITEM], fn *ITEM -> void -> void : external
+for_each :: list_for_each
+
+list_map: pu [*ITEM], pu *ITEM -> *OUT -> [*OUT] : external
+map :: list_map
+
+list_get: pu [*ITEM], int -> Maybe(*ITEM) : external
+get :: list_get
+
+list_set: pu [*ITEM], int, *ITEM -> void : external
+set :: list_set
+
+list_fold: pu [*ITEM], *OUT, (pu *ITEM, *OUT -> *OUT) -> *OUT : external
+fold :: list_fold
+
+list_filter: pu [*ITEM], pu *ITEM -> bool -> [*ITEM] : external
+filter :: list_filter
+
+list_push: fn [*ITEM], *ITEM -> void : external
+push :: list_push
+
+list_prepend: fn [*ITEM], *ITEM -> void : external
+prepend :: list_prepend
+
+list_pop: fn [*ITEM] -> Maybe(*ITEM) : external
+pop :: list_pop
+
+xx_len: fn [*ITEM] -> int : external
+len :: xx_len
+
+list_find: fn [*ITEM], (pu *ITEM -> bool) -> Maybe(*ITEM) : external
+find :: list_find
+
+contains :: fn l: [*ITEM], x: *ITEM -> bool
+    (find' l, pu y -> y == x end) -> isJust'
+end
+
+last :: fn l: [*ITEM] -> Maybe(*ITEM)
+    get' l, len(l) - 1
 end

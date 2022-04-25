@@ -1,5 +1,5 @@
-from _enum use Maybe
+from _enum use Mbe
 
 start :: fn do
-    just_one := Maybe.Just 1
+    just_one := Mbe.Just 1
 end

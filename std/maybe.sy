@@ -10,6 +10,13 @@ orDefault :: pu maybe, a ->
     end
 end
 
+andThen :: pu maybe: Maybe(*V), f: (pu *V -> Maybe(*W)) -> Maybe(*W)
+    case maybe do
+        Just x -> f(x) end
+        None -> Maybe.None end
+    end
+end
+
 flatten :: pu maybe ->
     case maybe do
         Just x -> x end

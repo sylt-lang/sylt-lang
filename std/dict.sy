@@ -5,6 +5,10 @@ Dict :: blob(*K, *V) {
     __PHANTOM_VALUE: *V
 }
 
+// Sneaky reuse
+xx_len : pu Dict(*K, *V) -> int : external
+len :: xx_len
+
 dict_new : pu<K: CmpEqu> -> Dict(*K, *V) : external
 dict_update : fn<K: CmpEqu> Dict(*K, *V), *K, *V -> void : external
 dict_remove : fn<K: CmpEqu> Dict(*K, *V), *K -> void : external

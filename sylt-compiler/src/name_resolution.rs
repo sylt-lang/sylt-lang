@@ -87,7 +87,6 @@ pub enum BinOp {
     Less,
     LessEqual,
     // Misc
-    In,
     AssertEq,
     // Mul
     Add,
@@ -109,8 +108,6 @@ pub enum UniOp {
 pub enum Collection {
     Tuple,
     List,
-    Set,
-    Dict,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -240,8 +237,6 @@ pub enum Type {
     Generic(String, Span),
     Tuple(Vec<Type>, Span),
     List(Box<Type>, Span),
-    Set(Box<Type>, Span),
-    Dict(Box<Type>, Box<Type>, Span),
     Fn {
         constraints: BTreeMap<String, Vec<TypeConstraint>>,
         params: Vec<Type>,
@@ -260,8 +255,6 @@ impl Type {
             | Type::Generic(_, span)
             | Type::Tuple(_, span)
             | Type::List(_, span)
-            | Type::Set(_, span)
-            | Type::Dict(_, _, span)
             | Type::Fn { span, .. } => *span,
         }
     }
@@ -564,8 +557,6 @@ impl Resolver {
             },
             TK::Tuple(gs) => T::Tuple(self.type_vec(gs)?, span),
             TK::List(t) => T::List(Box::new(self.ty(t)?), span),
-            TK::Set(t) => T::Set(Box::new(self.ty(t)?), span),
-            TK::Dict(k, v) => T::Dict(Box::new(self.ty(k)?), Box::new(self.ty(v)?), span),
             TK::Generic(name) => T::Generic(name.clone(), span),
             TK::Grouping(t) => self.ty(t)?,
         })
@@ -808,7 +799,6 @@ impl Resolver {
                 CK::GreaterEqual => self.binop(BinOp::GreaterEqual, a, b, span)?,
                 CK::Less => self.binop(BinOp::Less, a, b, span)?,
                 CK::LessEqual => self.binop(BinOp::LessEqual, a, b, span)?,
-                CK::In => self.binop(BinOp::In, a, b, span)?,
             },
             EK::AssertEq(a, b) => self.binop(BinOp::AssertEq, a, b, span)?,
             EK::And(a, b) => self.binop(BinOp::And, a, b, span)?,
@@ -869,8 +859,6 @@ impl Resolver {
             }
             EK::Tuple(values) => self.collection(Collection::Tuple, &values, span)?,
             EK::List(values) => self.collection(Collection::List, &values, span)?,
-            EK::Set(values) => self.collection(Collection::Set, &values, span)?,
-            EK::Dict(values) => self.collection(Collection::Dict, &values, span)?,
             EK::Float(f) => E::Float(*f, span),
             EK::Int(i) => E::Int(*i, span),
             EK::Str(s) => E::Str(s.clone(), span),

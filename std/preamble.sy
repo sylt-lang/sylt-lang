@@ -29,18 +29,20 @@ from math use (
     randint,
 )
 
-from container use len
-
 from list use (
     for_each,
     map,
-    reduce,
     fold,
     filter,
 )
 
+use set
+use dict
+use list
+
 use common
 use container
-use list
 use math
+
 use maybe
+from maybe use Maybe

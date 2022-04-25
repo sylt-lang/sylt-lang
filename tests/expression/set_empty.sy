@@ -1,5 +1,5 @@
 start :: fn do
-    a :: {}
+    a :: set.new'
     a
 end
 

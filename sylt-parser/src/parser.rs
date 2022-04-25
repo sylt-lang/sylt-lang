@@ -212,10 +212,6 @@ pub enum TypeKind {
     Tuple(Vec<Type>),
     /// Lists only contain a single type.
     List(Box<Type>),
-    /// Sets only contain a single type.
-    Set(Box<Type>),
-    /// `(key, value)`.
-    Dict(Box<Type>, Box<Type>),
     /// A generic type
     Generic(String),
     /// `(inner_type)` - useful for correcting ambiguous types
@@ -798,24 +794,6 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
             (ctx, List(Box::new(ty)))
         }
 
-        // Dict or set
-        T::LeftBrace => {
-            // { a } -> set
-            // { a: b } -> dict
-            // This means we can parse the first type unambiguously.
-            let (ctx, ty) = parse_type(ctx.skip(1))?;
-            if matches!(ctx.token(), T::Colon) {
-                // Dict, parse another type.
-                let (ctx, value) = parse_type(ctx.skip(1))?;
-                let ctx = expect!(ctx, T::RightBrace, "Expected '}}' after dict type");
-                (ctx, Dict(Box::new(ty), Box::new(value)))
-            } else {
-                // Set, done.
-                let ctx = expect!(ctx, T::RightBrace, "Expected '}}' after set type");
-                (ctx, Set(Box::new(ty)))
-            }
-        }
-
         t => {
             raise_syntax_error!(ctx, "No type starts with '{:?}'", t);
         }
@@ -885,8 +863,13 @@ fn assignable_index<'t>(ctx: Context<'t>, indexed: Assignable) -> ParseResult<'t
     let span = ctx.span();
     let mut ctx = expect!(ctx, T::LeftBracket, "Expected '[' when indexing");
 
-    let (_ctx, expr) = expression(ctx)?;
-    ctx = _ctx; // assign to outer
+    let expr =
+        if let (_ctx, expr @ Expression { kind: ExpressionKind::Int(_), .. }) = expression(ctx)? {
+            ctx = _ctx; // assign to outer
+            expr
+        } else {
+            raise_syntax_error!(ctx, "Expected 'int' when parsing tuple indexing");
+        };
     let ctx = expect!(ctx, T::RightBracket, "Expected ']' after index");
 
     use AssignableKind::Index;
@@ -1315,10 +1298,6 @@ mod test {
         test!(parse_type, type_tuple_complex: "(int, str, str,)" => Tuple(_));
 
         test!(parse_type, type_list_one: "[int]" => List(_));
-
-        test!(parse_type, type_set_one: "{int}" => Set(_));
-
-        test!(parse_type, type_dict_one: "{int : int}" => Dict(_, _));
     }
 }
 
@@ -1527,12 +1506,6 @@ impl Display for Type {
             }
             TypeKind::List(ty) => {
                 write!(f, "[{}]", ty)?;
-            }
-            TypeKind::Set(ty) => {
-                write!(f, "{{{}}}", ty)?;
-            }
-            TypeKind::Dict(k, v) => {
-                write!(f, "{{{}:{}}}", k, v)?;
             }
             TypeKind::Generic(name) => {
                 write!(f, "*{}", name)?;

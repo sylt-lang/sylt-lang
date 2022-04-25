@@ -12,7 +12,6 @@ pub enum ComparisonKind {
     GreaterEqual,
     Less,
     LessEqual,
-    In,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -95,11 +94,6 @@ pub enum ExpressionKind {
     Tuple(Vec<Expression>),
     /// `[a, b, ..]`
     List(Vec<Expression>),
-    /// `{a, b, ..}`
-    Set(Vec<Expression>),
-    /// `{ a: b, c: d, .. }`
-    // Has to have even length, listed { k1, v1, k2, v2 }
-    Dict(Vec<Expression>),
 
     Float(f64),
     Int(i64),
@@ -258,8 +252,6 @@ fn precedence(token: &T) -> Prec {
         T::And => Prec::BoolAnd,
         T::Or => Prec::BoolOr,
 
-        T::In => Prec::Index,
-
         T::AssertEqual => Prec::Assert,
 
         T::Arrow => Prec::Arrow,
@@ -296,7 +288,6 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
         T::LeftParen => grouping_or_tuple(ctx),
         T::LeftBracket => list(ctx),
-        T::LeftBrace => set_or_dict(ctx),
 
         T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
         T::Minus | T::Not => unary(ctx),
@@ -510,7 +501,6 @@ fn valid_infix<'t>(ctx: Context<'t>) -> bool {
             | T::And
             | T::Or
             | T::AssertEqual
-            | T::In
             | T::Arrow
             | T::Prime
             | T::LeftParen
@@ -567,8 +557,7 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
         | T::LessEqual
         | T::And
         | T::Or
-        | T::AssertEqual
-        | T::In => {}
+        | T::AssertEqual => {}
 
         // Unknown infix operator.
         _ => {
@@ -597,7 +586,6 @@ fn infix<'t>(ctx: Context<'t>, lhs: &Expression) -> ParseResult<'t, Expression> 
         T::GreaterEqual => Comparison(lhs, GreaterEqual, rhs),
         T::Less => Comparison(lhs, Less, rhs),
         T::LessEqual => Comparison(lhs, LessEqual, rhs),
-        T::In => Comparison(lhs, In, rhs),
 
         // Boolean operators.
         T::And => And(lhs, rhs),
@@ -759,83 +747,6 @@ fn list<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     Ok((ctx, Expression::new(span, List(exprs))))
 }
 
-/// Parse either a set or dict expression.
-///
-/// `{:}` is parsed as the empty dict and {} is parsed as the empty set.
-fn set_or_dict<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-    let span = ctx.span();
-    let ctx = expect!(ctx, T::LeftBrace, "Expected '{{'");
-    let (mut ctx, skip_newlines) = ctx.push_skip_newlines(true);
-
-    // The inner values of the set or dict.
-    let mut exprs = Vec::new();
-    // None => we don't know. Some(b) => we know b.
-    let mut is_dict = None;
-    loop {
-        match ctx.token() {
-            // Done.
-            T::EOF | T::RightBrace => {
-                break;
-            }
-
-            // Free-standing colon, i.e. "empty dict pair".
-            T::Colon => {
-                // Only valid if we don't know yet.
-                if let Some(is_dict) = is_dict {
-                    raise_syntax_error!(
-                        ctx,
-                        "Empty dict pair is invalid in a {}",
-                        if is_dict { "dict" } else { "set" }
-                    );
-                }
-                is_dict = Some(true);
-                ctx = ctx.skip(1).skip_if(T::Comma);
-            }
-
-            // Something that's part of an inner expression.
-            _ => {
-                // Parse the expression.
-                let (ctx_, expr) =
-                    detail_if_error!(expression(ctx), "failed to parse dict or set")?;
-                ctx = ctx_; // assign to outer
-                exprs.push(expr);
-
-                // If a) we know we're a dict or b) the next token is a colon, parse the value of the dict.
-                // Also, if we didn't know previously, store whether we're a dict or not.
-                if *is_dict.get_or_insert_with(|| matches!(ctx.token(), T::Colon)) {
-                    ctx = expect!(ctx, T::Colon, "Expected ':' for dict pair");
-                    // Parse value expression.
-                    let (ctx_, expr) = expression(ctx)?;
-                    ctx = ctx_; // assign to outer
-                    exprs.push(expr);
-                }
-
-                if !matches!(ctx.token(), T::Comma | T::RightBrace) {
-                    raise_syntax_error!(
-                        ctx,
-                        "Expected an element delimiter ',' but got {:?}",
-                        ctx.token()
-                    );
-                }
-                ctx = ctx.skip_if(T::Comma);
-            }
-        }
-    }
-
-    let ctx = ctx.pop_skip_newlines(skip_newlines);
-    let ctx = expect!(ctx, T::RightBrace, "Expected '}}'");
-
-    use ExpressionKind::{Dict, Set};
-    // If we still don't know, assume we're a set.
-    let kind = if is_dict.unwrap_or(false) {
-        Dict(exprs)
-    } else {
-        Set(exprs)
-    };
-
-    Ok((ctx, Expression::new(span, kind)))
-}
-
 /// Parse a single expression.
 ///
 /// An expression is either a function expression or a "normal"
@@ -853,7 +764,6 @@ pub fn expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 mod test {
     use super::ExpressionKind::*;
     use crate::expression;
-    use crate::expression::ComparisonKind;
     use crate::Assignable;
     use crate::AssignableKind::*;
     use crate::{fail, test};
@@ -863,23 +773,17 @@ mod test {
     test!(expression, mul: "\"abc\" * \"abc\"" => Mul(_, _));
     test!(expression, ident: "a" => Get(Assignable { kind: Read(_), .. }));
     test!(expression, access: "a.b" => Get(Assignable { kind: Access(_, _), .. }));
-    test!(expression, index_ident: "a[a]" => Get(Assignable { kind: Index(_, _), .. }));
-    test!(expression, index_expr: "a[1 + 2 + 3]" => Get(Assignable { kind: Index(_, _), .. }));
+
+    test!(expression, index_int: "a[1]" => _);
+    fail!(expression, index_ident: "a[a]" => _);
+    fail!(expression, index_expr: "a[1 + 2 + 3]" => _);
+
     test!(expression, grouping: "(0 * 0) + 1" => Add(_, _));
     test!(expression, grouping_one: "(0)" => Parenthesis(_));
     test!(expression, tuple: "(0, 0)" => Tuple(_));
     test!(expression, tuple_one: "(0,)" => Tuple(_));
     test!(expression, tuple_empty: "()" => Tuple(_));
     test!(expression, list: "[0, 0]" => List(_));
-    test!(expression, set: "{1, 1}" => Set(_));
-    test!(expression, dict: "{1: 1}" => Dict(_));
-    test!(expression, zero_set: "{}" => Set(_));
-    test!(expression, zero_dict: "{:}" => Dict(_));
-
-    test!(expression, in_list: "a in [1, 2, 3]" => Comparison(_, ComparisonKind::In, _));
-    test!(expression, in_set: "2 in {1, 1, 2}" => Comparison(_, ComparisonKind::In, _));
-    test!(expression, in_grouping: "1 + 2 in b" => Add(_, _));
-    test!(expression, in_grouping_paren: "(1 + 2) in b" => Comparison(_, ComparisonKind::In, _));
 
     test!(expression, call_simple_paren: "a()" => Get(_));
     test!(expression, call_call: "a()()" => Get(_));
@@ -899,7 +803,6 @@ mod test {
     test!(expression, assignable_expression_blob: "A {}.a" => Get(_));
     test!(expression, assignable_expression_fn: "(fn do 2 end)()" => Get(_));
     test!(expression, assignable_expression_fn_no_paren: "fn do 2 end()" => Get(_));
-    test!(expression, assignable_expression_dict: "{1:2}[1]" => Get(_));
 
     // TODO(ed): This is controverisal
     test!(expression, call_args_chaining_bang: "a' 1, 2, 3 .b" => Get(_));
@@ -1099,18 +1002,6 @@ impl PrettyPrint for Expression {
             }
             EK::List(values) => {
                 write!(f, "List\n")?;
-                values
-                    .iter()
-                    .try_for_each(|v| v.pretty_print(f, indent + 1))?;
-            }
-            EK::Set(values) => {
-                write!(f, "Set\n")?;
-                values
-                    .iter()
-                    .try_for_each(|v| v.pretty_print(f, indent + 1))?;
-            }
-            EK::Dict(values) => {
-                write!(f, "Dict\n")?;
                 values
                     .iter()
                     .try_for_each(|v| v.pretty_print(f, indent + 1))?;

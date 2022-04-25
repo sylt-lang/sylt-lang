@@ -2,17 +2,21 @@ A :: blob {
     a: int,
 }
 start :: fn do
-    [1][0] + 1 <=> 2
-    {1: 1}[1] <=> 1
+    (list.get' [1], 0) <=> Maybe.Just 1
+
     A {
         a: 1,
     }.a <=> 1
+
     (fn -> int do
         ret 2
     end)() <=> 2
+
     a :: [1]
-    // fn { 1 }'
-    // fn { 1 }()
-    [a][0][0] <=> 1
+    x :: ([a]
+     -> list.get(0)
+     -> maybe.andThen(pu x -> list.get(x, 0) end)
+    )
+    x <=> Maybe.Just 1
 end
 

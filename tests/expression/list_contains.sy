@@ -1,10 +1,10 @@
 start :: fn do
     a :: [1, 2, 3]
-    (0 in a) <=> false
-    (1 in a) <=> true
-    (2 in a) <=> true
-    (3 in a) <=> true
-    (4 in a) <=> false
-    (1231 in a) <=> false
+    (list.contains' a, 0) <=> false
+    (list.contains' a, 1) <=> true
+    (list.contains' a, 2) <=> true
+    (list.contains' a, 3) <=> true
+    (list.contains' a, 4) <=> false
+    (list.contains' a, 1231) <=> false
 end
 

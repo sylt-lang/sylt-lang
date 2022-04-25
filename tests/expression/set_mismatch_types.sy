@@ -1,5 +1,5 @@
 start :: fn do
-    a: {int} = {1, "abc", 1.0}
+    a :: set.from_list' [1, "abc", 1.0]
     a
 end
 // error: $Mismatch
