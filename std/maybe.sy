@@ -34,3 +34,11 @@ end
 isNone :: pu maybe -> bool
     not isJust' maybe
 end
+
+map :: pu a: Maybe(*A), f: (pu *A -> *B) -> Maybe(*B)
+    case a do
+        Just x -> Maybe.Just (f' x) end
+        None -> Maybe.None end
+    end
+end
+
