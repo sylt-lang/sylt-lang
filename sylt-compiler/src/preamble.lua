@@ -426,6 +426,11 @@ function as_int(x)
     return f
 end
 floor = math.floor
+ceil = math.ceil
+function round(x)
+    return floor(x + 0.5)
+end
+
 function as_char(s)
    char = string.byte(s)
    if char ~= nil then

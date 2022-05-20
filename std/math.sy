@@ -15,6 +15,8 @@ atan2: pu float, float -> float : external
 sin: pu float -> float : external
 cos: pu float -> float : external
 floor: pu<N: Num> *N -> int : external
+round: pu<N: Num> *N -> int : external
+ceil: pu<N: Num> *N -> int : external
 sqrt: pu float -> float : external
 sign: pu<N: Num> *N -> *N : external
 
