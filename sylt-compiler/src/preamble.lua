@@ -393,6 +393,16 @@ function list_find(l, p)
     return __VARIANT({"None", nil})
 end
 
+function list_range(l, h)
+    local output = {}
+    while l < h do
+        table.insert(output, l)
+        l = l + 1
+    end
+    return __LIST(output)
+end
+
+
 function xx_len(c)
     local s = 0
     for _ in pairs(c) do

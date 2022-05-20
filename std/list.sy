@@ -36,6 +36,9 @@ len :: xx_len
 list_find: fn [*ITEM], (pu *ITEM -> bool) -> Maybe(*ITEM) : external
 find :: list_find
 
+list_range: pu int, int -> [int] : external
+range :: list_range
+
 contains :: fn l: [*ITEM], x: *ITEM -> bool
     (find' l, pu y -> y == x end) -> isJust'
 end
