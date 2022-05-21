@@ -59,6 +59,10 @@ normalize :: pu v: (float, float) -> (float, float)
     (v[0] / mag, v[1] / mag)
 end
 
+distance :: pu a: (float, float), b: (float, float) -> float
+    magnitude' a - b
+end
+
 reflect: pu (float, float), (float, float) -> (float, float) : external
 
 dot :: pu v1: (float, float), v2: (float, float) -> float
