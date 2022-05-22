@@ -12,19 +12,19 @@ macro_rules! write {
 }
 
 macro_rules! ii {
-    ( $self:expr, $var:expr, $fmt:literal, $a:expr ) => {
-        iis!($self, $var, $fmt, $self.expand($a))
+    ( $self:expr, $depth:expr, $var:expr, $fmt:literal, $a:expr ) => {
+        iis!($self, $depth, $var, $fmt, $self.expand($a))
     };
 
-    ( $self:expr, $var:expr, $fmt:literal, $a:expr, $b:expr ) => {{
+    ( $self:expr, $depth:expr, $var:expr, $fmt:literal, $a:expr, $b:expr ) => {{
         let a = $self.expand($a).to_string();
         let b = $self.expand($b);
-        iis!($self, $var, $fmt, a, b)
+        iis!($self, $depth, $var, $fmt, a, b)
     }};
 }
 
 macro_rules! iis {
-    ( $self:expr, $var:expr, $fmt:literal, $( $dep:expr ),* ) => {
+    ( $self:expr, $depth:expr, $var:expr, $fmt:literal, $( $dep:expr ),* ) => {
         {
             let var = $var;
             let value = format!($fmt, $( $dep ),*);
@@ -32,12 +32,15 @@ macro_rules! iis {
                 0 => {},
                 1 => $self.define(*var, value),
                 _ => {
-                    write!($self.out, "local {} = {}", var.format(), value);
+                    if $depth > 0 {
+                        write!($self.out, "local ");
+                    }
+                    write!($self.out, "{} = {}", var.format(), value);
                 }
             }
         }
     };
-    ( $self:expr, $var:expr, $fmt:literal) => {
+    ( $self:expr, $depth:expr, $var:expr, $fmt:literal) => {
         {
             let var = $var;
             let value = $fmt.to_string();
@@ -45,7 +48,10 @@ macro_rules! iis {
                 0 => {},
                 1 => $self.define(*var, value),
                 _ => {
-                    write!($self.out, "local {} = {}", var.format(), value);
+                    if $depth > 0 {
+                        write!($self.out, "local ");
+                    }
+                    write!($self.out, "{} = {}", var.format(), value);
                 }
             }
         }
@@ -105,32 +111,33 @@ impl<'a, 'b> Generator<'a, 'b> {
                 write!(self.out, "  ");
             }
             match instruction {
-                IR::Nil(t) => iis!(self, t, "__NIL"),
-                IR::Int(t, i) => iis!(self, t, "{}", i),
-                IR::Bool(t, b) => iis!(self, t, "{}", b),
-                IR::Add(t, a, b) => ii!(self, t, "__ADD({}, {})", a, b),
-                IR::Sub(t, a, b) => ii!(self, t, "({} - {})", a, b),
-                IR::Mul(t, a, b) => ii!(self, t, "({} * {})", a, b),
-                IR::Div(t, a, b) => ii!(self, t, "({} / {})", a, b),
+                IR::Nil(t) => iis!(self, depth, t, "__NIL"),
+                IR::Int(t, i) => iis!(self, depth, t, "{}", i),
+                IR::Bool(t, b) => iis!(self, depth, t, "{}", b),
+                IR::Add(t, a, b) => ii!(self, depth, t, "__ADD({}, {})", a, b),
+                IR::Sub(t, a, b) => ii!(self, depth, t, "({} - {})", a, b),
+                IR::Mul(t, a, b) => ii!(self, depth, t, "({} * {})", a, b),
+                IR::Div(t, a, b) => ii!(self, depth, t, "({} / {})", a, b),
 
-                IR::Neg(t, a) => ii!(self, t, "(-{})", a),
+                IR::Neg(t, a) => ii!(self, depth, t, "(-{})", a),
 
-                IR::Str(t, s) => iis!(self, t, "\"{}\"", s),
-                IR::Float(t, f) => iis!(self, t, "{:?}", f),
+                IR::Str(t, s) => iis!(self, depth, t, "\"{}\"", s),
+                IR::Float(t, f) => iis!(self, depth, t, "{:?}", f),
 
-                IR::Equals(t, a, b) => ii!(self, t, "({} == {})", a, b),
-                IR::LessEqual(t, a, b) => ii!(self, t, "({} <= {})", a, b),
-                IR::Less(t, a, b) => ii!(self, t, "({} < {})", a, b),
-                IR::GreaterEqual(t, a, b) => ii!(self, t, "({} >= {})", a, b),
-                IR::Greater(t, a, b) => ii!(self, t, "({} > {})", a, b),
-                IR::NotEquals(t, a, b) => ii!(self, t, "({} ~= {})", a, b),
+                IR::Equals(t, a, b) => ii!(self, depth, t, "({} == {})", a, b),
+                IR::LessEqual(t, a, b) => ii!(self, depth, t, "({} <= {})", a, b),
+                IR::Less(t, a, b) => ii!(self, depth, t, "({} < {})", a, b),
+                IR::GreaterEqual(t, a, b) => ii!(self, depth, t, "({} >= {})", a, b),
+                IR::Greater(t, a, b) => ii!(self, depth, t, "({} > {})", a, b),
+                IR::NotEquals(t, a, b) => ii!(self, depth, t, "({} ~= {})", a, b),
 
-                IR::Not(t, a) => ii!(self, t, "(not {})", a),
+                IR::Not(t, a) => ii!(self, depth, t, "(not {})", a),
 
-                IR::List(t, exprs) => iis!(self, t, "__LIST{{ {} }}", self.comma_sep(exprs)),
+                IR::List(t, exprs) => iis!(self, depth, t, "__LIST{{ {} }}", self.comma_sep(exprs)),
 
                 IR::Blob(t, fields) => iis!(
                     self,
+                    depth,
                     t,
                     "__BLOB{{ {} }}",
                     fields
@@ -140,16 +147,18 @@ impl<'a, 'b> Generator<'a, 'b> {
                         .join(", ")
                 ),
 
-                IR::Tuple(t, exprs) => iis!(self, t, "__TUPLE{{ {} }}", self.comma_sep(exprs)),
+                IR::Tuple(t, exprs) => iis!(self, depth, t, "__TUPLE{{ {} }}", self.comma_sep(exprs)),
 
                 IR::Variant(t, v, a) => {
-                    iis!(self, t, "__VARIANT{{ \"{}\", {} }}", v, self.expand(a))
+                    iis!(self, depth, t, "__VARIANT{{ \"{}\", {} }}", v, self.expand(a))
                 }
 
-                IR::Index(t, a, i) => ii!(self, t, "__INDEX({}, {})", a, i),
+                IR::Index(t, a, i) => ii!(self, depth, t, "__INDEX({}, {})", a, i),
 
                 IR::Function(f, params) => {
-                    write!(self.out, "local ");
+                    if depth != 0 {
+                        write!(self.out, "local ");
+                    }
                     write!(self.out, "function ");
                     let f = self.expand(f);
                     write!(self.out, "{}", f);
@@ -175,7 +184,9 @@ impl<'a, 'b> Generator<'a, 'b> {
                 }
 
                 IR::Call(t, f, args) => {
-                    write!(self.out, "local ");
+                    if depth != 0 {
+                        write!(self.out, "local ");
+                    }
                     let t = self.expand(t);
                     write!(self.out, "{}", t);
                     write!(self.out, " = ");
@@ -192,7 +203,9 @@ impl<'a, 'b> Generator<'a, 'b> {
 
                 IR::Define(t) => {
                     if self.usage_count.get(t).unwrap_or(&0) > &0 {
-                        write!(self.out, "local ");
+                        if depth != 0 {
+                            write!(self.out, "local ");
+                        }
                         let t = self.expand(t);
                         write!(self.out, "{}", t);
                         write!(self.out, " = ");
@@ -230,7 +243,7 @@ impl<'a, 'b> Generator<'a, 'b> {
                     write!(self.out, "__CRASH(\"{}\")()", msg);
                 }
 
-                IR::Access(t, a, f) => iis!(self, t, "{}.{}", self.expand(a), f),
+                IR::Access(t, a, f) => iis!(self, depth, t, "{}.{}", self.expand(a), f),
 
                 IR::Copy(t, a) => {
                     if self.usage_count.get(t).unwrap_or(&0) > &0 {
