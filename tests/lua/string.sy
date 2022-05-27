@@ -1,0 +1,6 @@
+a : str : `return "quotation: \" <-"`
+b :: "quotation: \" <-"
+
+start :: fn do
+    a <=> b
+end
