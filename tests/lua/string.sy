@@ -1,6 +1,16 @@
-a : str : `return "quotation: \" <-"`
-b :: "quotation: \" <-"
+lua1 : str : `return "quotation: \" <-"`
+sylt1 :: "quotation: \" <-"
+
+lua2 : str : `return "newline: \n"`
+sylt2 : str : "newline: \n"
+
+lua3 : str : `return [[multi
+line]]`
+sylt3 : str : "multi
+line"
 
 start :: fn do
-    a <=> b
+    lua1 <=> sylt1
+    lua2 <=> sylt2
+    lua3 <=> sylt3
 end

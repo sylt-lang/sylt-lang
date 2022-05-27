@@ -115,7 +115,9 @@ impl<'a, 'b> Generator<'a, 'b> {
 
                 IR::Neg(t, a) => ii!(self, t, "(-{})", a),
 
-                IR::Str(t, s) => iis!(self, t, "\"{}\"", s),
+                // Replace newlines in strings with \n in lua, since lua strings don't continue on
+                // the next line
+                IR::Str(t, s) => iis!(self, t, "\"{}\"", s.replace("\n", r"\n")),
                 IR::Float(t, f) => iis!(self, t, "{:?}", f),
 
                 IR::Equals(t, a, b) => ii!(self, t, "({} == {})", a, b),
