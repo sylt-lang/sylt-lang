@@ -317,6 +317,15 @@ pub enum Statement {
         span: Span,
     },
 
+    LuaDefinition {
+        name: String,
+        var: Ref,
+        kind: VarKind,
+        ty: Type,
+        span: Span,
+        lua: String,
+    },
+
     /// Do something as long as something else evaluates to true.
     ///
     /// `loop <expression> <statement>`.
@@ -372,6 +381,7 @@ impl Statement {
             | Statement::Definition { span, .. }
             | Statement::Enum { span, .. }
             | Statement::ExternalDefinition { span, .. }
+            | Statement::LuaDefinition { span, .. }
             | Statement::Loop { span, .. }
             | Statement::Ret { span, .. }
             | Statement::StatementExpression { span, .. }
@@ -911,6 +921,15 @@ impl Resolver {
                 ty: self.ty(ty)?,
             }),
 
+            SK::LuaDefinition { ident, kind, ty, lua } => Some(S::LuaDefinition {
+                name: ident.name.clone(),
+                var: self.lookup(&ident.name, span)?,
+                kind: *kind,
+                span: ident.span,
+                ty: self.ty(ty)?,
+                lua: lua.clone(),
+            }),
+
             SK::Definition { ident, kind, ty, value } => {
                 let (value, var) = if self.stack.is_empty() {
                     // Outer statement - it's a global so just evaluate the value and push a dummy
@@ -1005,6 +1024,7 @@ impl Resolver {
                 }
 
                 sylt_parser::StatementKind::ExternalDefinition { ident, kind, .. }
+                | sylt_parser::StatementKind::LuaDefinition { ident, kind, .. }
                 | sylt_parser::StatementKind::Definition { ident, kind, .. } => {
                     let var = self.new_global(ident, *kind);
                     (ident.name.clone(), Name::Name(var))
@@ -1194,6 +1214,7 @@ impl Resolver {
                 | sylt_parser::StatementKind::EmptyStatement
                 | sylt_parser::StatementKind::Enum { .. }
                 | sylt_parser::StatementKind::ExternalDefinition { .. }
+                | sylt_parser::StatementKind::LuaDefinition { .. }
                 | sylt_parser::StatementKind::Loop { .. }
                 | sylt_parser::StatementKind::Ret { .. }
                 | sylt_parser::StatementKind::StatementExpression { .. }

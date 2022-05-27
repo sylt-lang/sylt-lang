@@ -174,6 +174,13 @@ impl<'a, 'b> Generator<'a, 'b> {
                     write!(self.out, e);
                 }
 
+                IR::Lua(t, lua) => {
+                    let t = self.expand(t);
+                    write!(self.out, "{}", t);
+                    write!(self.out, " = ");
+                    write!(self.out, "(function () {} end)()", lua);
+                }
+
                 IR::Call(t, f, args) => {
                     write!(self.out, "local ");
                     let t = self.expand(t);

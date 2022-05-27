@@ -541,6 +541,8 @@ impl TypeChecker {
                 }
             }
 
+            S::LuaDefinition { var, ty, span, .. } => self.external_definition(ctx, var, ty, span),
+
             S::Unreachable(_) => Ok(None),
 
             S::Blob { .. } | S::Enum { .. } | S::ExternalDefinition { .. } => {
@@ -644,8 +646,11 @@ impl TypeChecker {
             }
 
             S::ExternalDefinition { var, ty, span, .. } => {
-                let ty = self.resolve_type(ctx, ty)?;
-                self.unify(*span, ctx, self.variables[*var].ty, ty)?;
+                self.external_definition(ctx, var, ty, span)?;
+            }
+
+            S::LuaDefinition { var, ty, span, .. } => {
+                self.external_definition(ctx, var, ty, span)?;
             }
 
             S::Assignment { .. }
@@ -2047,6 +2052,17 @@ impl TypeChecker {
 
     fn span_file(&self, span: &Span) -> FileOrLib {
         self.namespace_to_file[&span.file_id].clone()
+    }
+
+    fn external_definition(
+        &mut self,
+        ctx: TypeCtx,
+        var: &usize,
+        ty: &ResolverType,
+        span: &Span,
+    ) -> TypeResult<Option<TyID>> {
+        let ty = self.resolve_type(ctx, ty)?;
+        Ok(Some(self.unify(*span, ctx, self.variables[*var].ty, ty)?))
     }
 }
 

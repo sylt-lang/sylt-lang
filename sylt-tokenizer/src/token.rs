@@ -163,6 +163,9 @@ pub enum Token {
     #[token("external")]
     External,
 
+    #[regex(r"`[^`]*`", |lex| { let mut s = lex.slice().to_string(); s.remove(0); s.pop(); s })]
+    Lua(String),
+
     #[token("<<<<<<<")]
     GitConflictBegin,
     #[token(">>>>>>>")]

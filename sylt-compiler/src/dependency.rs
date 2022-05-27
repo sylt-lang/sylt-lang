@@ -43,6 +43,7 @@ fn statement_dependencies(statement: &Statement) -> BTreeSet<usize> {
         S::Blob { .. }
         | S::Enum { .. }
         | S::ExternalDefinition { .. }
+        | S::LuaDefinition { .. }
         | S::Break(..)
         | S::Continue(..)
         | S::Unreachable(..) => BTreeSet::new(),
@@ -242,6 +243,7 @@ pub(crate) fn initialization_order<'a>(
         use Statement as S;
         match &statement {
             S::ExternalDefinition { var, .. }
+            | S::LuaDefinition { var, .. }
             | S::Definition { var, .. }
             | S::Blob { var, .. }
             | S::Enum { var, .. } => {

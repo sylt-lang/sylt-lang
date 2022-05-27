@@ -102,7 +102,7 @@ pub enum StatementKind {
         value: Expression,
     },
 
-    /// Defines a an external variable - here the type is required.
+    /// Defines an external variable - here the type is required.
     ///
     /// Example: `a: int = external`.
     ///
@@ -111,6 +111,23 @@ pub enum StatementKind {
         ident: Identifier,
         kind: VarKind,
         ty: Type,
+    },
+
+    /// Defines a variable with result of lua code (wrapped in a function).
+    ///
+    /// Example:
+    /// ```
+    /// v: void : lua
+    ///     local v = 1
+    ///     print("side effect")
+    ///     return function() print("hello") end
+    /// luaend
+    /// ```
+    LuaDefinition {
+        ident: Identifier,
+        kind: VarKind,
+        ty: Type,
+        lua: String,
     },
 
     /// Do something as long as something else evaluates to true.
@@ -671,6 +688,11 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
 
             if matches!(ctx.token(), T::External) {
                 (ctx.skip(1), ExternalDefinition { ident, kind, ty })
+            } else if let T::Lua(lua) = ctx.token() {
+                (
+                    ctx.skip(1),
+                    LuaDefinition { ident, kind, ty, lua: lua.clone() },
+                )
             } else {
                 // The value to define the variable to.
                 let (ctx, value) = expression(ctx)?;
@@ -745,6 +767,7 @@ pub fn outer_statement<'t>(ctx: Context<'t>) -> ParseResult<Statement> {
         | Enum { .. }
         | Definition { .. }
         | ExternalDefinition { .. }
+        | LuaDefinition { .. }
         | Use { .. }
         | FromUse { .. }
         | EmptyStatement

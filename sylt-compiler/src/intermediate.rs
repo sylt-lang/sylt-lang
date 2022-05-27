@@ -38,6 +38,7 @@ pub enum IR {
     Not(Var, Var),
 
     External(Var, String),
+    Lua(Var, String),
     Call(Var, Var, Vec<Var>),
 
     Equals(Var, Var, Var),
@@ -548,7 +549,10 @@ impl<'a> IRCodeGen<'a> {
 
             S::StatementExpression { value, .. } => self.expression(value, ctx).0,
 
-            S::Blob { .. } | S::Enum { .. } | S::ExternalDefinition { .. } => unreachable!(),
+            S::Blob { .. }
+            | S::Enum { .. }
+            | S::ExternalDefinition { .. }
+            | S::LuaDefinition { .. } => unreachable!(),
         }
     }
 
@@ -558,6 +562,10 @@ impl<'a> IRCodeGen<'a> {
         match &stmt {
             S::ExternalDefinition { name, var, .. } => {
                 vec![IR::External(Var(*var), name.clone())]
+            }
+
+            S::LuaDefinition { var, lua, .. } => {
+                vec![IR::Lua(Var(*var), lua.clone())]
             }
 
             S::Definition { value, var, .. } => self.definition(Var(*var), value, ctx),
@@ -607,6 +615,7 @@ pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
             | IR::Else
             | IR::End
             | IR::External(_, _)
+            | IR::Lua(_, _)
             | IR::Label(_)
             | IR::Goto(_)
             | IR::HaltAndCatchFire(_) => {}

@@ -1,0 +1,5 @@
+a : int : `return 1`
+
+start :: fn do
+    1 <=> a
+end

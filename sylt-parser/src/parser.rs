@@ -1395,6 +1395,10 @@ impl PrettyPrint for Statement {
                 write!(f, "<ExtDef> {} {:?} {}\n", ident.name, kind, ty)?;
                 return Ok(());
             }
+            SK::LuaDefinition { ident, kind, ty, lua } => {
+                write!(f, "<LuaDef> {} {:?} {} `{}`\n", ident.name, kind, ty, lua)?;
+                return Ok(());
+            }
             SK::Assignment { kind, target, value } => {
                 write!(f, "<Ass> {:?}\n", kind)?;
                 target.pretty_print(f, indent + 1)?;

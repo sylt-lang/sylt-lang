@@ -101,6 +101,7 @@ impl Compiler {
             Statement::Assignment { .. }
             | Statement::Definition { .. }
             | Statement::ExternalDefinition { .. }
+            | Statement::LuaDefinition { .. }
             | Statement::Loop { .. }
             | Statement::Break(_)
             | Statement::Continue(_)
@@ -109,6 +110,7 @@ impl Compiler {
             | Statement::StatementExpression { .. }
             | Statement::Unreachable(_) => 1,
         });
+
 
         let typechecker = typechecker::solve(&vars, &statements, &self.namespace_id_to_file)?;
 

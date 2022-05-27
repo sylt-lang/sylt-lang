@@ -1,0 +1,10 @@
+a : bool : `
+    local a = 2
+    local b = 3
+    
+    return a < b
+`
+
+start :: fn do
+    a <=> true
+end
