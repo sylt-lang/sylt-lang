@@ -111,7 +111,6 @@ impl Compiler {
             | Statement::Unreachable(_) => 1,
         });
 
-
         let typechecker = typechecker::solve(&vars, &statements, &self.namespace_id_to_file)?;
 
         let ir = intermediate::compile(&typechecker, &statements);
