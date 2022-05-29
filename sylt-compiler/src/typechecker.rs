@@ -541,11 +541,12 @@ impl TypeChecker {
                 }
             }
 
-            S::LuaDefinition { var, ty, span, .. } => self.external_definition(ctx, var, ty, span),
-
             S::Unreachable(_) => Ok(None),
 
-            S::Blob { .. } | S::Enum { .. } | S::ExternalDefinition { .. } => {
+            S::Blob { .. }
+            | S::Enum { .. }
+            | S::ExternalDefinition { .. }
+            | S::LuaDefinition { .. } => {
                 unreachable!(
                     "Illegal inner statement at {:?}! Parser should have caught this",
                     span
@@ -645,12 +646,10 @@ impl TypeChecker {
                 self.definition(statement, ctx)?;
             }
 
-            S::ExternalDefinition { var, ty, span, .. } => {
-                self.external_definition(ctx, var, ty, span)?;
-            }
-
-            S::LuaDefinition { var, ty, span, .. } => {
-                self.external_definition(ctx, var, ty, span)?;
+            S::ExternalDefinition { var, ty, span, .. }
+            | S::LuaDefinition { var, ty, span, .. } => {
+                let ty = self.resolve_type(ctx, ty)?;
+                self.unify(*span, ctx, self.variables[*var].ty, ty)?;
             }
 
             S::Assignment { .. }
@@ -2052,17 +2051,6 @@ impl TypeChecker {
 
     fn span_file(&self, span: &Span) -> FileOrLib {
         self.namespace_to_file[&span.file_id].clone()
-    }
-
-    fn external_definition(
-        &mut self,
-        ctx: TypeCtx,
-        var: &usize,
-        ty: &ResolverType,
-        span: &Span,
-    ) -> TypeResult<Option<TyID>> {
-        let ty = self.resolve_type(ctx, ty)?;
-        Ok(Some(self.unify(*span, ctx, self.variables[*var].ty, ty)?))
     }
 }
 

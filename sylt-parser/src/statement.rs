@@ -117,11 +117,11 @@ pub enum StatementKind {
     ///
     /// Example:
     /// ```
-    /// v: void : lua
+    /// v: void : `
     ///     local v = 1
     ///     print("side effect")
     ///     return function() print("hello") end
-    /// luaend
+    /// `
     /// ```
     LuaDefinition {
         ident: Identifier,
@@ -686,18 +686,18 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 (ctx.skip(1), kind, ty)
             };
 
-            if matches!(ctx.token(), T::External) {
-                (ctx.skip(1), ExternalDefinition { ident, kind, ty })
-            } else if let T::Lua(lua) = ctx.token() {
-                (
+            match ctx.token() {
+                T::External => (ctx.skip(1), ExternalDefinition { ident, kind, ty }),
+                T::Lua(lua) => (
                     ctx.skip(1),
                     LuaDefinition { ident, kind, ty, lua: lua.clone() },
-                )
-            } else {
-                // The value to define the variable to.
-                let (ctx, value) = expression(ctx)?;
+                ),
+                _ => {
+                    // The value to define the variable to.
+                    let (ctx, value) = expression(ctx)?;
 
-                (ctx, Definition { ident, kind, ty, value })
+                    (ctx, Definition { ident, kind, ty, value })
+                }
             }
         }
 

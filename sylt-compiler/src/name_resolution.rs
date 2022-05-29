@@ -304,7 +304,7 @@ pub enum Statement {
         span: Span,
     },
 
-    /// Defines a an external variable - here the type is required.
+    /// Defines an external variable - here the type is required.
     ///
     /// Example: `a: int = external`.
     ///
@@ -317,6 +317,16 @@ pub enum Statement {
         span: Span,
     },
 
+    /// Defines a variable with result of lua code (wrapped in a function).
+    ///
+    /// Example:
+    /// ```
+    /// v: void : `
+    ///     local v = 1
+    ///     print("side effect")
+    ///     return function() print("hello") end
+    /// `
+    /// ```
     LuaDefinition {
         name: String,
         var: Ref,
