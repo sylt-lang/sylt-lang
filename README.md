@@ -19,7 +19,7 @@ The short version:
  - Simplicity in the syntax
  - C-style syntax with the taste of functional
 
-Sylt has become a mix of functional-programming concepts 
+Sylt has become a mix of functional-programming concepts
 mixed with more procedural code. The language itself is very small
 but still expressive. The typechecker is what sets it apart from
 Python and Lua, which usually end up being used for similar use-cases.
@@ -30,7 +30,7 @@ the typechecker will be all fine with it.
 
 This is meant to give the same rapid iteration speed as working in something
 like Python or Lua, but with the added peace of mind a strict static
-typechecker gives you. 
+typechecker gives you.
 
 # Sylt and game jams
 The language is made for game jams, and has been used in multiple. Unfortunately
