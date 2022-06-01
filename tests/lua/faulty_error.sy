@@ -1,0 +1,17 @@
+a : bool : `
+    local a = true
+    return true
+`
+
+b : bool : `
+    local x = true
+    `
+    return x
+`
+
+start :: fn do
+    print' a
+end
+
+// error: @4
+// error: @5
