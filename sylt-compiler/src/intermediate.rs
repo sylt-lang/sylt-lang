@@ -7,8 +7,11 @@ use crate::typechecker::TypeChecker;
 pub struct Var(pub usize);
 
 impl Var {
-    pub fn format(self) -> String {
-        format!("V{}", self.0)
+    pub fn format(self, var_to_name: &HashMap<Var, String>) -> String {
+        match var_to_name.get(&self) {
+            Some(name) => format!("V{}_{}", self.0, name),
+            None => format!("V{}", self.0),
+        }
     }
 }
 
@@ -92,6 +95,7 @@ struct IRCodeGen<'a> {
     #[allow(unused)]
     typechecker: &'a TypeChecker,
 
+    var_to_name: HashMap<Var, String>,
     counter: usize,
 }
 
@@ -100,8 +104,13 @@ impl<'a> IRCodeGen<'a> {
         Self {
             // Temporary variables are placed after the stack allocated ones
             counter: typechecker.variables.len() + 1,
+            var_to_name: HashMap::new(),
             typechecker,
         }
+    }
+
+    fn name_var(&mut self, var: Var, name: String) {
+        self.var_to_name.insert(var, name);
     }
 
     fn var(&mut self) -> Var {
@@ -145,9 +154,11 @@ impl<'a> IRCodeGen<'a> {
         use Expression as E;
         use Statement as S;
         match &expr {
-            E::Read { var, .. } => {
+            E::Read { var, name, .. } => {
                 let source = Var(*var);
+                self.name_var(source, name.clone());
                 let dest = self.var();
+                self.name_var(dest, name.clone());
                 (vec![IR::Copy(dest, source)], dest)
             }
 
@@ -569,7 +580,10 @@ impl<'a> IRCodeGen<'a> {
 }
 
 #[sylt_macro::timed("intermediate::compile")]
-pub(crate) fn compile(typechecker: &TypeChecker, statements: &Vec<Statement>) -> Vec<IR> {
+pub(crate) fn compile(
+    typechecker: &TypeChecker,
+    statements: &Vec<Statement>,
+) -> (Vec<IR>, HashMap<Var, String>) {
     let mut gen = IRCodeGen::new(typechecker);
 
     let mut code: Vec<IR> = statements
@@ -587,7 +601,7 @@ pub(crate) fn compile(typechecker: &TypeChecker, statements: &Vec<Statement>) ->
 
     let tmp = gen.var();
     code.push(IR::Call(tmp, start, Vec::new()));
-    code
+    (code, gen.var_to_name)
 }
 
 // TODO(ed): We could remove more dead-code if we built a dependency-graph

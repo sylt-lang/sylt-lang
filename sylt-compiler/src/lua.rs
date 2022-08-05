@@ -32,7 +32,7 @@ macro_rules! iis {
                 0 => {},
                 1 => $self.define(*var, value),
                 _ => {
-                    write!($self.out, "local {} = {}", var.format(), value);
+                    write!($self.out, "local {} = {}", var.format($self.var_to_name), value);
                 }
             }
         }
@@ -45,22 +45,24 @@ macro_rules! iis {
                 0 => {},
                 1 => $self.define(*var, value),
                 _ => {
-                    write!($self.out, "local {} = {}", var.format(), value);
+                    write!($self.out, "local {} = {}", var.format($self.var_to_name), value);
                 }
             }
         }
     };
 }
 
-struct Generator<'a, 'b> {
+struct Generator<'a, 'b, 'c> {
     usage_count: &'a HashMap<Var, usize>,
-    out: &'b mut dyn Write,
     lut: HashMap<Var, String>,
+    out: &'b mut dyn Write,
+    //
+    var_to_name: &'c HashMap<Var, String>,
 }
 
-impl<'a, 'b> Generator<'a, 'b> {
-    pub fn new(usage_count: &'a HashMap<Var, usize>, out: &'b mut dyn Write) -> Self {
-        Self { usage_count, out, lut: HashMap::new() }
+impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
+    pub fn new(usage_count: &'a HashMap<Var, usize>, var_to_name: &'c HashMap<Var, String>, out: &'b mut dyn Write) -> Self {
+        Self { usage_count, out, lut: HashMap::new(), var_to_name }
     }
 
     fn comma_sep(&mut self, vars: &[Var]) -> String {
@@ -73,7 +75,7 @@ impl<'a, 'b> Generator<'a, 'b> {
     fn expand(&mut self, var: &Var) -> String {
         match self.lut.get(var) {
             Some(var) => var.into(),
-            None => var.format(),
+            None => var.format(self.var_to_name),
         }
     }
 
@@ -159,7 +161,7 @@ impl<'a, 'b> Generator<'a, 'b> {
                         "{}",
                         params
                             .iter()
-                            .map(|v| v.format())
+                            .map(|v| v.format(self.var_to_name))
                             .collect::<Vec<_>>()
                             .join(", ")
                     );
@@ -279,9 +281,10 @@ impl<'a, 'b> Generator<'a, 'b> {
 #[sylt_macro::timed("lua::generate")]
 pub fn generate(
     ir: &Vec<IR>,
+    var_to_name: &HashMap<Var, String>,
     usage_count: &HashMap<Var, usize>,
     out: &mut dyn Write,
     require: Option<&String>,
 ) {
-    Generator::new(usage_count, out).generate(ir, require);
+    Generator::new(usage_count, var_to_name, out).generate(ir, require);
 }

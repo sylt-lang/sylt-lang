@@ -1752,13 +1752,14 @@ impl TypeChecker {
     fn can_assign(&mut self, span: Span, assignable: &Expression) -> TypeResult<()> {
         use Expression as E;
         match &assignable {
-            E::Read { var, span } => {
+            E::Read { var, name, span } => {
                 if self.variables[*var].kind.immutable() {
                     return err_type_error!(
                         self,
                         *span,
                         TypeError::Assignability,
-                        "Cannot assign to constants"
+                        "Cannot assign to constants {:?}",
+                        name
                     );
                 }
             }

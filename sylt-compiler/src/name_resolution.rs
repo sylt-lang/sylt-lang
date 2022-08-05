@@ -129,6 +129,7 @@ pub struct CaseBranch {
 pub enum Expression {
     Read {
         var: Ref,
+        name: String,
         span: Span,
     },
     Variant {
@@ -176,6 +177,7 @@ pub enum Expression {
         span: Span,
     },
     Function {
+        // TODO[et]: We want to know what upvalues we have.
         name: String,
         params: Vec<(String, Ref, Span, Type)>,
         ret: Type,
@@ -631,7 +633,7 @@ impl Resolver {
             AK::Read(Identifier { name, span }) => {
                 let var = self.lookup(name, *span)?;
                 let span = *span;
-                E::Read { var, span }
+                E::Read { var, name: name.clone(), span }
             }
             AK::Variant { enum_ass, variant, value } => {
                 // Checking that this is a valid type, should be done in the typechecker
@@ -686,7 +688,7 @@ impl Resolver {
                         }
                     };
                     let span = ident.span;
-                    E::Read { var, span }
+                    E::Read { var, name: "access".to_string(), span }
                 }
                 None => {
                     let value = Box::new(self.assignable(assignable)?);

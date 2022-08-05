@@ -112,10 +112,10 @@ impl Compiler {
 
         let typechecker = typechecker::solve(&vars, &statements, &self.namespace_id_to_file)?;
 
-        let ir = intermediate::compile(&typechecker, &statements);
+        let (ir, var_to_name) = intermediate::compile(&typechecker, &statements);
         let usage_count = intermediate::count_usages(&ir);
 
-        lua::generate(&ir, &usage_count, lua_file, require);
+        lua::generate(&ir, &var_to_name, &usage_count, lua_file, require);
 
         Ok(())
     }
