@@ -944,7 +944,7 @@ impl TypeChecker {
                 )
             }
 
-            E::Function { name: _, params, ret, body, pure, span } => {
+            E::Function { name: _, params, ret, body, pure, span, upvalues: _ } => {
                 let (f_ty, ret_ty) = self.type_from_function(ctx, params, ret, *pure)?;
 
                 let ctx = if *pure { ctx.enter_pure() } else { ctx };

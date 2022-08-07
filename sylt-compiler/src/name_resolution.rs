@@ -1,5 +1,5 @@
-use std::collections::BTreeMap;
 use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use sylt_common::Type as RuntimeType;
 use sylt_common::{error::Helper, Error, FileOrLib};
 use sylt_parser::{
@@ -16,6 +16,9 @@ use levenshtein::levenshtein;
 
 type ResolveResult<T> = Result<T, Vec<Error>>;
 type Ref = usize;
+
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]
+pub struct StackFrameId(usize);
 
 macro_rules! raise_resolution_error {
     ($self:expr, $span:expr, $( $msg:expr ),* ) => {
@@ -179,6 +182,7 @@ pub enum Expression {
     Function {
         // TODO[et]: We want to know what upvalues we have.
         name: String,
+        upvalues: BTreeSet<Ref>,
         params: Vec<(String, Ref, Span, Type)>,
         ret: Type,
 
@@ -387,8 +391,12 @@ pub struct Var {
     pub id: Ref,
     pub name: String,
     pub definition: Span,
-    pub is_global: bool,
     pub kind: VarKind,
+
+    pub captured_by: BTreeSet<StackFrameId>,
+
+    // This flag is only used to check if start is infact global...
+    pub is_global: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -400,6 +408,8 @@ enum Name {
 struct Resolver {
     namespaces: HashMap<FileOrLib, HashMap<String, Name>>,
     stack: Vec<(String, Ref)>,
+    stack_frames: Vec<StackFrameId>,
+
     variables: Vec<Var>,
     namespace_to_file: HashMap<NamespaceID, FileOrLib>,
     file_to_namespace: HashMap<FileOrLib, NamespaceID>,
@@ -417,6 +427,7 @@ impl Resolver {
             namespaces: HashMap::new(),
             variables: Vec::new(),
             stack: Vec::new(),
+            stack_frames: Vec::new(),
         }
     }
 
@@ -459,14 +470,23 @@ impl Resolver {
         self.namespaces[namespace].get(name)
     }
 
-    fn lookup(&self, name: &str, span: Span) -> ResolveResult<Ref> {
+    fn lookup(&mut self, name: &str, span: Span) -> ResolveResult<Ref> {
+        let stack_frame_id = self.stack_frames.last().cloned().unwrap_or(StackFrameId(0));
+
         for (var_name, var_id) in self.stack.iter().rev() {
             if var_name == name {
+                self.variables[*var_id].captured_by.insert(stack_frame_id);
                 return Ok(*var_id);
             }
         }
-        match self.lookup_global(span.file_id, name) {
-            Some(Name::Name(var)) => Ok(*var),
+
+        match self.lookup_global(span.file_id, name).clone() {
+            Some(Name::Name(var_id)) => {
+                let var_id = *var_id;
+                self.variables[var_id].captured_by.insert(stack_frame_id);
+
+                Ok(var_id)
+            },
             Some(Name::Namespace(..)) => Err(vec![resolution_error!(
                 self,
                 span,
@@ -515,7 +535,7 @@ impl Resolver {
         .flatten()
     }
 
-    fn type_vec(&self, parser_tys: &[ParserType]) -> ResolveResult<Vec<Type>> {
+    fn type_vec(&mut self, parser_tys: &[ParserType]) -> ResolveResult<Vec<Type>> {
         let mut tys = Vec::new();
         let mut errs = Vec::new();
         for ty in parser_tys.iter() {
@@ -531,7 +551,7 @@ impl Resolver {
         }
     }
 
-    fn ty(&self, ty: &ParserType) -> ResolveResult<Type> {
+    fn ty(&mut self, ty: &ParserType) -> ResolveResult<Type> {
         use sylt_parser::TypeKind as TK;
         use Type as T;
         let span = ty.span;
@@ -597,7 +617,7 @@ impl Resolver {
         })
     }
 
-    fn ty_assignable(&self, ty_ass: &ParserTypeAssignable) -> ResolveResult<Type> {
+    fn ty_assignable(&mut self, ty_ass: &ParserTypeAssignable) -> ResolveResult<Type> {
         use sylt_parser::TypeAssignableKind as TAK;
         let span = ty_ass.span;
         Ok(match &ty_ass.kind {
@@ -827,7 +847,11 @@ impl Resolver {
                 E::Case { to_match, branches, fall_through, span }
             }
             EK::Function { name, params: parser_params, ret, body, pure } => {
+                // Functions are the only things that care about the stackframe
                 let ss = self.stack.len();
+                let stack_frame_id = StackFrameId(self.stack_frames.len() + 1);
+                self.stack_frames.push(stack_frame_id);
+                // ------- //
                 let name = name.clone();
                 let mut params = Vec::new();
                 for (n, t) in parser_params.iter() {
@@ -836,8 +860,26 @@ impl Resolver {
                 }
                 let ret = self.ty(ret)?;
                 let body = self.block(body)?;
+                // ------- //
+
+                self.stack_frames.pop();
                 self.stack.truncate(ss);
-                E::Function { name, params, ret, body, pure: *pure, span }
+                let upvalues = self
+                    .stack
+                    .iter()
+                    .filter(|(_, id)| self.variables.get(*id).unwrap().captured_by.contains(&stack_frame_id))
+                    .map(|(_, id)| id)
+                    .cloned()
+                    .collect();
+                E::Function {
+                    name,
+                    upvalues,
+                    params,
+                    ret,
+                    body,
+                    pure: *pure,
+                    span,
+                }
             }
             EK::Blob { blob, fields: parser_fields } => {
                 let blob = match self.ty_assignable(blob)? {
@@ -1060,6 +1102,8 @@ impl Resolver {
             name: ident.name.clone(),
             definition: ident.span,
             kind,
+
+            captured_by: BTreeSet::new(),
             is_global: false,
         });
         id
@@ -1073,6 +1117,8 @@ impl Resolver {
             name: ident.name.clone(),
             definition: ident.span,
             kind,
+
+            captured_by: BTreeSet::new(),
             is_global: true,
         });
         id
