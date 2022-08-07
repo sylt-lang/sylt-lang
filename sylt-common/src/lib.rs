@@ -21,6 +21,7 @@ impl std::fmt::Display for TyID {
 pub enum FileOrLib {
     File(PathBuf),
     Lib(&'static str),
+    Unresolved,
 }
 
 /// The standard library

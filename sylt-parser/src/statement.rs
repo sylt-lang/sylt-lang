@@ -4,28 +4,24 @@ use super::*;
 #[derive(Debug, Clone, PartialEq)]
 pub enum NameIdentifier {
     /// When the identifier is implicit from the path. For example, `use a/b` introduces `b`.
-    Implicit(Identifier),
+    Implicit(Span, Symbol),
     /// When the identifier is an alias. For example, `use a/b as c` introduces `c`.
-    Alias(Identifier),
+    Alias(Span, Symbol),
 }
 
 impl NameIdentifier {
-    pub fn name(&self) -> &str {
-        &self.ident().name
-    }
-
     pub fn span(&self) -> &Span {
-        &self.ident().span
+        match self {
+            NameIdentifier::Implicit(s, _) | NameIdentifier::Alias(s, _) => &s,
+        }
     }
 
-    pub fn ident(&self) -> &Identifier {
+    pub fn name(&self) -> &Symbol {
         match self {
-            NameIdentifier::Implicit(i) | NameIdentifier::Alias(i) => &i,
+            NameIdentifier::Implicit(_, i) | NameIdentifier::Alias(_, i) => i,
         }
     }
 }
-
-type Alias = Identifier;
 
 /// The different kinds of [Statement]s.
 ///
@@ -46,7 +42,7 @@ pub enum StatementKind {
     /// `use <file> as <alias>`.
     /// `use <folder>/ as <alias>`.
     Use {
-        path: Identifier,
+        path: Path,
         name: NameIdentifier,
         file: FileOrLib,
     },
@@ -58,8 +54,8 @@ pub enum StatementKind {
     /// `from <file> use (<var1>, <var2>)`.
     /// `from <file> use <var1> as <alias>`.
     FromUse {
-        path: Identifier,
-        imports: Vec<(Identifier, Option<Alias>)>,
+        path: Path,
+        imports: Vec<(Identifier, Option<Identifier>)>,
         file: FileOrLib,
     },
 
@@ -172,33 +168,58 @@ impl PartialEq for Statement {
     }
 }
 
-pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
-    let span = ctx.span();
-    let mut ctx = ctx;
-    let mut result = String::new();
-    expect!(
-        ctx,
-        T::Slash | T::Identifier(_),
-        "Expected identifier or slash at start of use path"
-    );
-    if matches!(ctx.token(), T::Slash) {
-        result.push_str("/");
-        ctx = ctx.skip(1);
-    }
-    while let T::Identifier(f) = ctx.token() {
-        result.push_str(f);
-        ctx = ctx.skip(1);
-        if matches!(ctx.token(), T::Slash) {
-            result.push_str("/");
-            ctx = ctx.skip(1);
-        }
-    }
-
-    Ok((ctx, Identifier::new(span, result)))
+#[derive(Debug, Clone, PartialEq)]
+pub struct Path {
+    pub span: Span,
+    pub parts: Vec<Symbol>,
+    pub is_absolute: bool,
+    pub ends_with_slash: bool,
 }
 
+pub fn path<'t>(ctx: Context<'t>) -> ParseResult<'t, Path> {
+    let start_span = ctx.span();
+    let mut ctx = ctx;
+    let mut result = Vec::new();
+    expect!(
+        ctx,
+        T::Slash | T::LowerIdentifier(_) | T::UpperIdentifier(_),
+        "Expected identifier or slash at start of use path"
+    );
+    let is_absolute = matches!(ctx.token(), T::Slash);
+    let mut ends_with_slash = is_absolute;
+    ctx = ctx.skip_if(T::Slash);
+    loop {
+        match ctx.token() {
+            T::LowerIdentifier(f) | T::UpperIdentifier(f) => {
+                result.push(*f);
+                ctx = ctx.skip(1);
+                if matches!(ctx.token(), T::Slash) {
+                    ctx = ctx.skip(1);
+                    ends_with_slash = true;
+                } else {
+                    ends_with_slash = false;
+                    break;
+                }
+            }
+            _ => break,
+        }
+    }
+    let end_span = ctx.span();
+    Ok((
+        ctx,
+        Path {
+            span: start_span.merge(&end_span),
+            parts: result,
+            is_absolute,
+            ends_with_slash,
+        },
+    ))
+}
+
+// TODO(et): This cannot be done here, this needs to be resolved outside of the parser
+/*
 pub fn use_path<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, FileOrLib)> {
-    let (ctx, path_ident) = path(ctx)?;
+    let (ctx, path) = path(ctx)?;
     let path = &path_ident.name;
     let name = path
         .trim_start_matches("/")
@@ -222,7 +243,7 @@ pub fn use_path<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, FileOrLib)
             // in the folder.
             FileOrLib::File(parent.join(if path == "/" {
                 format!("exports.sy")
-            } else if path_ident.name.ends_with("/") {
+            } else if path.ends_with("/") {
                 format!("{}/exports.sy", name)
             } else {
                 format!("{}.sy", name)
@@ -230,8 +251,9 @@ pub fn use_path<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, FileOrLib)
         }
     };
 
-    Ok((ctx, (path_ident, file)))
+    Ok((ctx, file))
 }
+*/
 
 pub fn statement_or_block<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
     if matches!(
@@ -317,43 +339,31 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         // `use path/to/file`
         // `use path/to/file as alias`
         [T::Use, ..] => {
-            let (ctx, (path_ident, file)) = use_path(ctx.skip(1))?;
-            let path = &path_ident.name;
+            let (ctx, path) = path(ctx.skip(1))?;
             let (ctx, alias) = match &ctx.tokens_lookahead::<2>() {
-                [T::As, T::Identifier(alias), ..] => (
-                    ctx.skip(2),
-                    NameIdentifier::Alias(Identifier::new(ctx.skip(1).span(), alias.clone())),
-                ),
+                [T::As, T::LowerIdentifier(alias), ..] | [T::As, T::UpperIdentifier(alias), ..] => {
+                    (
+                        ctx.skip(2),
+                        NameIdentifier::Alias(ctx.skip(1).span(), alias.clone()),
+                    )
+                }
                 [T::As, ..] => raise_syntax_error!(ctx.skip(1), "Expected alias"),
                 [..] => {
-                    if path == "/" {
+                    if path.parts.is_empty() {
                         raise_syntax_error!(ctx, "Using root requires alias");
                     }
-                    let span = if path.ends_with("/") {
-                        ctx.prev().prev().span()
-                    } else {
-                        ctx.prev().span()
-                    };
-                    let name = PathBuf::from(
-                        &path
-                            .trim_start_matches("/")
-                            .trim_end_matches("/")
-                            .to_string(),
+                    (
+                        ctx,
+                        NameIdentifier::Implicit(span, *path.parts.last().unwrap()),
                     )
-                    .file_stem()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .to_string();
-                    (ctx, NameIdentifier::Implicit(Identifier::new(span, name)))
                 }
             };
-            (ctx, Use { path: path_ident, name: alias, file })
+            (ctx, Use { path, name: alias, file: FileOrLib::Unresolved })
         }
 
         // `from path/to/file use var`
         [T::From, ..] => {
-            let (ctx, (path_ident, file)) = use_path(ctx.skip(1))?;
+            let (ctx, path) = path(ctx.skip(1))?;
             let mut ctx = expect!(ctx, T::Use, "Expected 'use' after path");
             let mut imports = Vec::new();
 
@@ -368,13 +378,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             loop {
                 match ctx.token() {
                     T::RightParen | T::Newline => break,
-                    T::Identifier(name) => {
+                    T::LowerIdentifier(name) | T::UpperIdentifier(name) => {
                         let ident = Identifier::new(ctx.span(), name.clone());
                         ctx = ctx.skip(1);
                         let alias = if matches!(ctx.token(), T::As) {
                             ctx = ctx.skip(1);
                             let _alias = match ctx.token() {
-                                T::Identifier(name) => {
+                                T::LowerIdentifier(name) | T::UpperIdentifier(name) => {
                                     Some(Identifier::new(ctx.span(), name.clone()))
                                 }
                                 _ => raise_syntax_error!(ctx, "Expected identifier after 'as'"),
@@ -404,7 +414,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             } else {
                 ctx
             };
-            (ctx, FromUse { path: path_ident, imports, file })
+            (ctx, FromUse { path, imports, file: FileOrLib::Unresolved })
         }
 
         [T::Break, ..] => (ctx.skip(1), Break),
@@ -434,13 +444,12 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // Enum declaration: `Abc :: enum A, B, C end`
-        [T::Identifier(enum_name), T::ColonColon, T::Enum, ..] => {
-            if !is_capitalized(enum_name) {
-                raise_syntax_error!(
-                    ctx,
-                    "User defined types have to start with a capital letter"
-                );
-            }
+        [T::LowerIdentifier(_), T::ColonColon, T::Enum, ..] => raise_syntax_error!(
+            ctx,
+            "User defined types have to start with a capital letter"
+        ),
+
+        [T::UpperIdentifier(enum_name), T::ColonColon, T::Enum, ..] => {
             let enum_name = Identifier::new(ctx.span(), enum_name.clone());
             let ctx = ctx.skip(3);
             let (ctx, skip_newlines) = ctx.push_skip_newlines(false);
@@ -448,7 +457,8 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             fn item<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
                 let ctx = expect!(ctx, T::Star, "Type variables have to start with '*'");
                 match ctx.eat() {
-                    (T::Identifier(variant), span, ctx) => {
+                    (T::UpperIdentifier(variant), span, ctx)
+                    | (T::LowerIdentifier(variant), span, ctx) => {
                         Ok((ctx, Identifier::new(span, variant.clone())))
                     }
                     _ => raise_syntax_error!(
@@ -480,7 +490,8 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 fn item<'t>(ctx: Context<'t>) -> ParseResult<'t, (Identifier, Type)> {
                     let ctx = skip_while!(ctx, T::Newline);
                     let (ctx, variant) = match ctx.eat() {
-                        (T::Identifier(variant), span, ctx) => {
+                        (T::LowerIdentifier(variant), span, ctx)
+                        | (T::UpperIdentifier(variant), span, ctx) => {
                             (ctx, Identifier::new(span, variant.clone()))
                         }
                         _ => raise_syntax_error!(
@@ -488,12 +499,6 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                             "An enum variant has to start with a valid identifier"
                         ),
                     };
-                    if !is_capitalized(&variant.name) {
-                        raise_syntax_error!(
-                            ctx,
-                            "Enum variants have to start with a capital letter"
-                        );
-                    }
                     let (ctx, ty) = if matches!(ctx.token(), T::End | T::Comma | T::Newline) {
                         let ty = Type {
                             span: variant.span,
@@ -519,7 +524,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     let file = ctx.file.clone();
                     let span = variant.span;
                     let message = format!(
-                        "The variant '{}' occures twice in the enum '{}'",
+                        "The variant '{:?}' occures twice in the enum '{:?}'",
                         variant.name, enum_name.name
                     );
                     return Err((ctx, vec![Error::SyntaxError { file, span, message }]));
@@ -531,21 +536,23 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
             (ctx, Enum { name: enum_name, variants, variables })
         }
 
+        [T::LowerIdentifier(_), T::ColonColon, T::Blob | T::ExternBlob, ..] => {
+            raise_syntax_error!(
+                ctx,
+                "User defined types have to start with a capital letter"
+            );
+        }
+
         // Blob declaration: `A :: blob { <fields> }
-        [T::Identifier(name), T::ColonColon, T::Blob | T::ExternBlob, ..] => {
-            if !is_capitalized(name) {
-                raise_syntax_error!(
-                    ctx,
-                    "User defined types have to start with a capital letter"
-                );
-            }
+        [T::UpperIdentifier(name), T::ColonColon, T::Blob | T::ExternBlob, ..] => {
             let name = Identifier::new(ctx.span(), name.clone());
 
             // Parse variables: `blob(*A)`
             fn item<'t>(ctx: Context<'t>) -> ParseResult<'t, Identifier> {
                 let ctx = expect!(ctx, T::Star, "Type variables have to start with '*'");
                 match ctx.eat() {
-                    (T::Identifier(variant), span, ctx) => {
+                    (T::LowerIdentifier(variant), span, ctx)
+                    | (T::UpperIdentifier(variant), span, ctx) => {
                         Ok((ctx, Identifier::new(span, variant.clone())))
                     }
                     _ => raise_syntax_error!(
@@ -577,13 +584,13 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                     }
 
                     // Another one.
-                    T::Identifier(field) => {
+                    T::LowerIdentifier(field) | T::UpperIdentifier(field) => {
                         let field = Identifier::new(ctx.span(), field.clone());
-                        if field.name == "self" {
+                        if field.name == ctx.sym_self {
                             raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
                         }
                         if fields.contains_key(&field) {
-                            raise_syntax_error!(ctx, "Field '{}' is declared twice", field.name);
+                            raise_syntax_error!(ctx, "Field '{:?}' is declared twice", field.name);
                         }
                         ctx = expect!(ctx.skip(1), T::Colon, "Expected ':' after field name");
                         let (_ctx, ty) = parse_type(ctx)?;
@@ -608,11 +615,9 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // Implied type declaration, e.g. `a :: 1` or `a := 1`.
-        [T::Identifier(name), T::ColonColon | T::ColonEqual, ..] => {
-            if is_capitalized(name) {
-                // raise_syntax_error!(ctx, "Variables have to start with a lowercase letter");
-            }
-            if name == "self" {
+        [T::LowerIdentifier(name), T::ColonColon | T::ColonEqual, ..]
+        | [T::UpperIdentifier(name), T::ColonColon | T::ColonEqual, ..] => {
+            if *name == ctx.sym_self {
                 raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
             }
             let ident = Identifier::new(ctx.span(), name.clone());
@@ -641,11 +646,8 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
         }
 
         // Variable declaration with specified type, e.g. `c : int = 3` or `b : int | bool : false`.
-        [T::Identifier(name), T::Colon, ..] => {
-            if is_capitalized(name) {
-                // raise_syntax_error!(ctx, "Variables have to start with a lowercase letter");
-            }
-            if name == "self" {
+        [T::LowerIdentifier(name), T::Colon, ..] | [T::UpperIdentifier(name), T::Colon, ..] => {
+            if *name == ctx.sym_self {
                 raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
             }
             let ident = Identifier::new(ctx.span(), name.clone());
@@ -822,16 +824,16 @@ mod test {
 
 impl Display for NameIdentifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let ident = match &self {
-            NameIdentifier::Implicit(ident) => {
+        let name = match &self {
+            NameIdentifier::Implicit(_, name) => {
                 write!(f, "Implicit(")?;
-                ident
+                name
             }
-            NameIdentifier::Alias(ident) => {
+            NameIdentifier::Alias(_, name) => {
                 write!(f, "Alias(")?;
-                ident
+                name
             }
         };
-        write!(f, "{})", ident.name)
+        write!(f, "{:?})", name)
     }
 }

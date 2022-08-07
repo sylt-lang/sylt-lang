@@ -78,7 +78,7 @@ pub enum ExpressionKind {
 
     /// Functions and closures.
     Function {
-        name: String,
+        name: Symbol,
         params: Vec<(Identifier, Type)>,
         ret: Type,
 
@@ -88,7 +88,7 @@ pub enum ExpressionKind {
     /// A blob instantiation.
     Blob {
         blob: TypeAssignable,
-        fields: Vec<(String, Expression)>, // Keep calling order
+        fields: Vec<(Symbol, Expression)>, // Keep calling order
     },
     /// `(a, b, ..)`
     Tuple(Vec<Expression>),
@@ -97,7 +97,7 @@ pub enum ExpressionKind {
 
     Float(f64),
     Int(i64),
-    Str(String),
+    Str(Symbol),
     Bool(bool),
     Nil,
 }
@@ -137,10 +137,11 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     // Parameters
     let ret = loop {
         match ctx.token() {
-            T::Identifier(name) => {
+            T::UpperIdentifier(name) | T::LowerIdentifier(name) => {
                 // Parameter name
                 let ident = Identifier::new(ctx.span(), name.clone());
-                if name == "self" {
+                // TODO(ed): `self` needs to be part of CTX or a reserved keyword?
+                if *name == ctx.sym_self {
                     raise_syntax_error!(ctx, "\"self\" is a reserved identifier");
                 }
                 ctx = ctx.skip(1);
@@ -201,7 +202,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
     use ExpressionKind::Function;
     let function = Function {
-        name: "lambda".into(),
+        name: ctx.sym_lambda,
         params,
         ret,
         body: statements,
@@ -292,7 +293,7 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
         T::Minus | T::Not => unary(ctx),
 
-        T::Identifier(_) => {
+        T::LowerIdentifier(_) | T::UpperIdentifier(_) => {
             let span = ctx.span();
 
             // Do some probing
@@ -356,15 +357,15 @@ fn case_expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 ctx = ctx.skip(1);
             }
 
-            T::Identifier(pattern) if is_capitalized(pattern) => {
+            T::UpperIdentifier(pattern) => {
                 let pattern = Identifier::new(ctx.span(), pattern.clone());
                 ctx = ctx.skip(1);
                 let (ctx_, variable) = match ctx.token() {
-                    T::Identifier(capture) if !is_capitalized(capture) => (
+                    T::LowerIdentifier(capture) => (
                         ctx.skip(1),
                         Some(Identifier::new(ctx.span(), capture.clone())),
                     ),
-                    T::Identifier(_) => {
+                    T::UpperIdentifier(_) => {
                         raise_syntax_error!(ctx, "Variables have to start with a lowercase letter");
                     }
                     _ => (ctx, None),
@@ -376,7 +377,7 @@ fn case_expression<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
                 branches.push(CaseBranch { pattern, variable, body });
             }
 
-            T::Identifier(_) => {
+            T::LowerIdentifier(_) => {
                 raise_syntax_error!(ctx, "Enum variants have to start with a captial letter");
             }
 
@@ -677,7 +678,7 @@ fn blob<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
             }
 
             // Another field, e.g. `b: 55`.
-            T::Identifier(name) => {
+            T::UpperIdentifier(name) | T::LowerIdentifier(name) => {
                 // Get the field name.
                 let name = name.clone();
 
@@ -932,7 +933,7 @@ impl PrettyPrint for Expression {
                     write_indent(f, indent + 1)?;
                     write!(
                         f,
-                        "{} {:?}\n",
+                        "{:?} {:?}\n",
                         pattern.name,
                         variable.as_ref().map(|x| &x.name)
                     )?;
@@ -967,16 +968,16 @@ impl PrettyPrint for Expression {
             }
             EK::Function { name, params, ret, body, pure } => {
                 if *pure {
-                    write!(f, "Pu {} ", name)?;
+                    write!(f, "Pu {:?} ", name)?;
                 } else {
-                    write!(f, "Fn {} ", name)?;
+                    write!(f, "Fn {:?} ", name)?;
                 }
 
                 for (i, (name, ty)) in params.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}: {}", name.name, ty)?;
+                    write!(f, "{:?}: {}", name.name, ty)?;
                 }
                 write!(f, " -> {}", ret)?;
                 write!(f, "\n")?;
@@ -990,7 +991,7 @@ impl PrettyPrint for Expression {
                 write!(f, "\n")?;
                 for (field, value) in fields.iter() {
                     write_indent(f, indent)?;
-                    write!(f, ".{}:\n", field)?;
+                    write!(f, ".{:?}:\n", field)?;
                     value.pretty_print(f, indent + 1)?;
                 }
             }

@@ -1,9 +1,19 @@
 use logos::Logos;
+use string_interner::symbol::SymbolU32;
 
+pub type Symbol = SymbolU32;
+
+// TODO(ed): Maybe we should duplicate these tokens with the strings interned (including the
+// comments) so the tokens are Copy? Maybe? Maybe not?
 #[derive(Logos, Debug, PartialEq, Clone)]
 pub enum Token {
-    #[regex(r"[A-Za-z_][A-Za-z0-9_]*", |lex| lex.slice().to_string())]
-    Identifier(String),
+    #[regex(r"[A-Z][A-Za-z0-9_]*", |lex| lex.slice().to_string())]
+    UpperIdentifierNotInterned(String),
+    UpperIdentifier(Symbol),
+
+    #[regex(r"[a-z_][A-Za-z0-9_]*", |lex| lex.slice().to_string())]
+    LowerIdentifierNotInterned(String),
+    LowerIdentifier(Symbol),
 
     #[token("void")]
     VoidType,
@@ -17,7 +27,8 @@ pub enum Token {
     StrType,
 
     #[regex(r#""[^"]*""#, |lex| { let mut s = lex.slice().to_string(); s.remove(0); s.pop(); s })]
-    String(String),
+    StringNotInterned(String),
+    String(Symbol),
 
     // `X.`, `.Y`, `X.Y`, `XeY` and `Xe-Y`
     #[regex(r"([\d]+\.[\d]*|[\d]*\.[\d]+)|[\d]+e(-|\+)?[\d]+", |lex| lex.slice().parse(), priority=2)]

@@ -17,6 +17,7 @@ doctest = false
 sylt-common = { version = "0.2.0", path = "../sylt-common" }
 sylt-tokenizer = { version = "0.2.0", path = "../sylt-tokenizer" }
 sylt-macro = { version = "0.2.0", path = "../sylt-macro" }
+string-interner = "0.14"
 
 [features]
 

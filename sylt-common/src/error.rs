@@ -70,6 +70,7 @@ fn write_source_span_at(f: &mut fmt::Formatter<'_>, file: &FileOrLib, span: Span
     match file {
         FileOrLib::File(file) => write_source_line_from_file_at(f, file, span.line_start)?,
         FileOrLib::Lib(lib) => write_source_line_from_stdlib(f, lib, span.line_start)?,
+        FileOrLib::Unresolved => (),
     }
     write!(f, "{}", INDENT)?;
     underline(f, span.col_start, span.col_end - span.col_start)
@@ -82,9 +83,8 @@ fn file_line_display(file: &FileOrLib, line: usize) -> String {
             file.display().to_string().blue(),
             line.to_string().blue(),
         ),
-        FileOrLib::Lib(lib) => {
-            format!("sylt standard library {}:{}", lib, line.to_string().blue(),)
-        }
+        FileOrLib::Lib(lib) => format!("sylt standard library {}:{}", lib, line.to_string().blue()),
+        FileOrLib::Unresolved => "Unknown location".to_string(),
     }
 }
 

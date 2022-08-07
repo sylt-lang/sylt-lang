@@ -2,10 +2,10 @@ use self::expression::expression;
 use self::statement::outer_statement;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{Debug, Display};
-use std::path::{Path, PathBuf};
+use std::path::{Path as FilePath, PathBuf};
 use sylt_common::error::Error;
 use sylt_common::{library_name, library_source, FileOrLib, TyID, Type as RuntimeType};
-use sylt_tokenizer::{string_to_tokens, PlacedToken, Token};
+use sylt_tokenizer::{string_to_tokens, PlacedToken, StringInterner, Symbol, Token};
 
 pub mod expression;
 pub mod statement;
@@ -86,11 +86,11 @@ pub enum Op {
 #[derive(Debug, Clone, Eq, Hash)]
 pub struct Identifier {
     pub span: Span,
-    pub name: String,
+    pub name: Symbol,
 }
 
 impl Identifier {
-    pub fn new(span: Span, name: String) -> Self {
+    pub fn new(span: Span, name: Symbol) -> Self {
         Self { span, name }
     }
 }
@@ -115,7 +115,7 @@ impl PartialEq for Identifier {
 
 impl Display for Identifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}@{}", self.name, self.span.line_start)
+        write!(f, "{:?}@{}", self.name, self.span.line_start)
     }
 }
 
@@ -203,7 +203,7 @@ pub enum TypeKind {
     UserDefined(TypeAssignable, Vec<Type>),
     /// `(params, return)`.
     Fn {
-        constraints: BTreeMap<String, Vec<TypeConstraint>>,
+        constraints: BTreeMap<Symbol, Vec<TypeConstraint>>,
         params: Vec<Type>,
         ret: Box<Type>,
         is_pure: bool,
@@ -213,7 +213,7 @@ pub enum TypeKind {
     /// Lists only contain a single type.
     List(Box<Type>),
     /// A generic type
-    Generic(String),
+    Generic(Symbol),
     /// `(inner_type)` - useful for correcting ambiguous types
     Grouping(Box<Type>),
 }
@@ -260,7 +260,12 @@ pub struct Context<'a> {
     /// The magical id - used later on
     pub file_id: usize,
     /// The source root - the top most folder.
-    pub root: &'a Path,
+    pub root: &'a FilePath,
+
+    // Reserved symbols
+    pub sym_self: Symbol,
+    // Reserved symbols
+    pub sym_lambda: Symbol,
 }
 
 impl<'a> Context<'a> {
@@ -269,7 +274,9 @@ impl<'a> Context<'a> {
         spans: &'a [Span],
         file: &'a FileOrLib,
         file_id: usize,
-        root: &'a Path,
+        root: &'a FilePath,
+        sym_self: Symbol,
+        sym_lambda: Symbol,
     ) -> Self {
         Self {
             skip_newlines: false,
@@ -280,6 +287,8 @@ impl<'a> Context<'a> {
             file,
             file_id,
             root,
+            sym_self,
+            sym_lambda,
         }
     }
 
@@ -557,7 +566,9 @@ pub fn parse_type_constraint_argument<'t>(ctx: Context<'t>) -> ParseResult<'t, V
     let mut ctx = ctx;
     loop {
         match ctx.token() {
-            T::Identifier(var) => args.push(Identifier::new(ctx.span(), var.clone())),
+            T::UpperIdentifier(var) | T::LowerIdentifier(var) => {
+                args.push(Identifier::new(ctx.span(), *var))
+            }
             T::Plus | T::Comma | T::Greater => break,
             _ => {
                 raise_syntax_error!(ctx, "Expected a constraint argument, ',' or '+'");
@@ -572,7 +583,7 @@ pub fn parse_type_constraint_argument<'t>(ctx: Context<'t>) -> ParseResult<'t, V
 pub fn parse_type_constraint<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeConstraint> {
     let span = ctx.span();
     let name = match ctx.token() {
-        T::Identifier(name) => name.clone(),
+        T::UpperIdentifier(name) | T::LowerIdentifier(name) => *name,
         _ => {
             raise_syntax_error!(ctx, "Expected constraint name");
         }
@@ -592,14 +603,16 @@ pub fn type_assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeAssignable> 
     ) -> ParseResult<'t, TypeAssignableKind> {
         let span = ctx.span();
         match ctx.token() {
-            T::Identifier(name) if is_capitalized(name) => {
+            // TODO(ed): Different tokens for capitalized strings and non-capitalized strings would
+            // help here.
+            T::UpperIdentifier(name) => {
                 let ctx = ctx.skip(1);
                 let ident = Identifier::new(span, name.clone());
                 let assignable = TypeAssignable { span, kind: assignable };
                 Ok((ctx, TypeAssignableKind::Access(Box::new(assignable), ident)))
             }
 
-            T::Identifier(name) if !is_capitalized(name) => {
+            T::LowerIdentifier(name) => {
                 let ctx = expect!(ctx.skip(1), T::Dot, "Expected '.' after namespace");
                 let ident = Identifier::new(span, name.clone());
                 let assignable = TypeAssignableKind::Access(
@@ -615,13 +628,13 @@ pub fn type_assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, TypeAssignable> 
 
     let span = ctx.span();
     let (ctx, kind) = match ctx.token() {
-        T::Identifier(name) if is_capitalized(name) => {
+        T::UpperIdentifier(name) => {
             let ctx = ctx.skip(1);
             let ident = Identifier::new(span, name.clone());
             (ctx, TypeAssignableKind::Read(ident))
         }
 
-        T::Identifier(name) if !is_capitalized(name) => {
+        T::LowerIdentifier(name) => {
             let ctx = expect!(ctx.skip(1), T::Dot, "Expected '.' after namespace");
             let outer = TypeAssignableKind::Read(Identifier::new(span, name.clone()));
             type_assignable_inner(ctx, outer)?
@@ -648,7 +661,7 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         T::BoolType => (ctx.skip(1), Resolved(Bool)),
         T::StrType => (ctx.skip(1), Resolved(String)),
 
-        T::Identifier(_) => {
+        T::LowerIdentifier(_) | T::UpperIdentifier(_) => {
             let (ctx, ass) = type_assignable(ctx)?;
             let (ctx, vars) =
                 parse_beg_end_comma_sep!(ctx, T::LeftParen, T::RightParen, &parse_type)?;
@@ -658,7 +671,9 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
         T::Star => {
             let ctx = ctx.skip(1);
             match ctx.token() {
-                T::Identifier(name) => (ctx.skip(1), Generic(name.clone())),
+                T::LowerIdentifier(name) | T::UpperIdentifier(name) => {
+                    (ctx.skip(1), Generic(*name))
+                }
                 _ => (ctx, Resolved(Unknown)),
             }
         }
@@ -673,7 +688,8 @@ pub fn parse_type<'t>(ctx: Context<'t>) -> ParseResult<'t, Type> {
                 let mut ctx = ctx.skip(1);
                 'outer: loop {
                     match ctx.tokens_lookahead::<2>() {
-                        [T::Identifier(ident), T::Colon] => {
+                        [T::LowerIdentifier(ident), T::Colon]
+                        | [T::UpperIdentifier(ident), T::Colon] => {
                             ctx = ctx.skip(2);
                             let mut constraint_list = Vec::new();
                             loop {
@@ -896,35 +912,16 @@ fn assignable_dot_or_variant<'t>(
 /// Parse an [AssignableKind::Variant].
 fn assignable_variant<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t, Assignable> {
     let span = ctx.span();
-    // TODO(ed): We shouldn't have to look at the previous assignables to know if this is valid -
-    // but I guess it's okay since we depend on it anyways?
-    let enum_name = match &accessed.kind {
-        AssignableKind::Read(enum_name) => enum_name,
-        AssignableKind::Access(_, enum_name) => enum_name,
-        AssignableKind::Index(_, _) => {
-            raise_syntax_error!(ctx, "Indexing cannot lead into enum-variant");
-        }
-        AssignableKind::Call(_, _) | AssignableKind::ArrowCall(_, _, _) => {
-            raise_syntax_error!(ctx, "A function call cannot lead into enum-variant");
-        }
-        AssignableKind::Expression(_) | AssignableKind::Variant { .. } => {
-            raise_syntax_error!(ctx, "Expressions cannot lead into enum-variant");
-        }
-    };
-    if !is_capitalized(&enum_name.name) {
-        raise_syntax_error!(ctx, "Enums have to start with a capital letter");
-    }
-    drop(enum_name);
-
     let ctx = expect!(ctx, T::Dot, "Expected '.' after variant name");
-
-    let (ctx, variant) = if let (T::Identifier(name), span, ctx) = ctx.eat() {
-        if !is_capitalized(name) {
-            raise_syntax_error!(ctx, "Enum variants have to start with a capital letter");
+    let (ctx, variant) = match ctx.eat() {
+        (T::UpperIdentifier(name), span, ctx) => (ctx, Identifier::new(span, name.clone())),
+        (T::LowerIdentifier(_), _, ctx) => {
+            raise_syntax_error!(ctx, "Enum variants have to start with a capital letter")
         }
-        (ctx, Identifier::new(span, name.clone()))
-    } else {
-        raise_syntax_error!(ctx, "Expected an identifier after '.' in variant");
+        _ => raise_syntax_error!(
+            ctx,
+            "Expected an identifier after '.' while parsing variant"
+        ),
     };
 
     let (ctx, value) = match expression(ctx) {
@@ -949,20 +946,38 @@ fn assignable_variant<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult
 /// Parse an [AssignableKind::Access]
 fn assignable_dot<'t>(ctx: Context<'t>, accessed: Assignable) -> ParseResult<'t, Assignable> {
     use AssignableKind::Access;
-    let (ctx, ident) = if let (T::Identifier(name), span, ctx) = ctx.skip(1).eat() {
-        (ctx, Identifier::new(span, name.clone()))
-    } else {
-        raise_syntax_error!(
+    match ctx.skip(1).eat() {
+        (T::UpperIdentifier(name), span, ctx) => {
+            let access = Assignable {
+                span: ctx.span(),
+                kind: Access(Box::new(accessed), Identifier::new(span, *name)),
+            };
+            sub_assignable_maybe_variant(ctx, access)
+        }
+
+        (T::LowerIdentifier(name), span, ctx) => {
+            let access = Assignable {
+                span: ctx.span(),
+                kind: Access(Box::new(accessed), Identifier::new(span, *name)),
+            };
+            sub_assignable(ctx, access)
+        }
+        _ => raise_syntax_error!(
             ctx,
             "Assignable expressions have to start with an identifier"
-        );
-    };
+        ),
+    }
+}
 
-    let access = Assignable {
-        span: ctx.span(),
-        kind: Access(Box::new(accessed), ident),
-    };
-    sub_assignable(ctx, access)
+/// Parse a (maybe empty) "sub-assignable" which could be a Variant construction
+fn sub_assignable_maybe_variant<'t>(
+    ctx: Context<'t>,
+    assignable: Assignable,
+) -> ParseResult<'t, Assignable> {
+    match ctx.token() {
+        T::Dot => assignable_dot_or_variant(ctx, assignable),
+        _ => sub_assignable(ctx, assignable),
+    }
 }
 
 /// Parse a (maybe empty) "sub-assignable", i.e. either a call or indexable.
@@ -970,7 +985,7 @@ fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'
     match ctx.token() {
         T::Prime | T::LeftParen => assignable_call(ctx, assignable),
         T::LeftBracket => assignable_index(ctx, assignable),
-        T::Dot => assignable_dot_or_variant(ctx, assignable),
+        T::Dot => assignable_dot(ctx, assignable),
         _ => Ok((ctx, assignable)),
     }
 }
@@ -985,22 +1000,61 @@ fn sub_assignable<'t>(ctx: Context<'t>, assignable: Assignable) -> ParseResult<'
 /// 2. Parse `b(1).c(2, 3)` into `Access(Call(Read(b), [1]), <parsed c(2, 3)>)`.
 /// 3. Parse `a[2].b(1).c(2, 3)` into `Access(Index(Read(a), 2), <parsed b(1).c(2, 3)>)`.
 fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
-    use AssignableKind::*;
-    let outer_span = ctx.span();
+    use AssignableKind::Read;
 
-    // Get the identifier.
-    let ident = if let (T::Identifier(name), span) = (ctx.token(), ctx.span()) {
-        let ident = Identifier::new(span, name.clone());
-        Assignable { span: outer_span, kind: Read(ident) }
-    } else {
-        raise_syntax_error!(
+    match ctx.eat() {
+        (T::UpperIdentifier(name), span, ctx) => {
+            let kind = Read(Identifier::new(span, *name));
+            sub_assignable_maybe_variant(ctx, Assignable { span, kind })
+        }
+
+        (T::LowerIdentifier(name), span, ctx) => {
+            let kind = Read(Identifier::new(span, *name));
+            // Parse chained [], . and ().
+            sub_assignable(ctx, Assignable { span, kind })
+        }
+        _ => raise_syntax_error!(
             ctx,
             "Assignable expressions have to start with an identifier"
-        );
-    };
+        ),
+    }
+}
 
-    // Parse chained [], . and ().
-    sub_assignable(ctx.skip(1), ident)
+fn convert_path_parts_to_file(
+    root: &FilePath,
+    current_file: &FileOrLib,
+    interner: &mut StringInterner,
+    path: &statement::Path,
+) -> FileOrLib {
+
+    let mut out = String::new();
+    for symbol in path.parts.iter() {
+        out.push_str(interner.resolve(*symbol).unwrap());
+        out.push_str("/");
+    }
+    if let Some(name) = library_name(&out) {
+        FileOrLib::Lib(name)
+    } else {
+        let f = if let FileOrLib::File(f) = current_file {
+            f
+        } else {
+            panic!("Cannot import files from the standard library");
+        };
+
+        let parent = if path.is_absolute {
+            root
+        } else {
+            f.parent().unwrap()
+        };
+
+        FileOrLib::File(parent.join(if out == "" && path.is_absolute {
+            format!("exports.sy")
+        } else if path.ends_with_slash {
+            format!("{}/exports.sy", out)
+        } else {
+            format!("{}.sy", out)
+        }))
+    }
 }
 
 /// Parses a file's tokens. Returns a list of files it refers to (via `use`s) and
@@ -1012,17 +1066,21 @@ fn assignable<'t>(ctx: Context<'t>) -> ParseResult<'t, Assignable> {
 /// continuation is performed, so errored statements are skipped until a newline
 /// or EOF.
 fn module(
-    path: &FileOrLib,
+    interner: &mut StringInterner,
+    current_path: &FileOrLib,
     file_id: usize,
-    root: &Path,
+    root: &FilePath,
     token_stream: &[PlacedToken],
 ) -> (Vec<FileOrLib>, Result<Module, Vec<Error>>) {
+    let sym_self = interner.get_or_intern("self");
+    let sym_lambda = interner.get_or_intern("lambda");
+
     let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
     let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
     let mut errors = Vec::new();
     let mut use_files = Vec::new();
     let mut statements = Vec::new();
-    let mut ctx = Context::new(&tokens, &spans, &path, file_id, root);
+    let mut ctx = Context::new(&tokens, &spans, &current_path, file_id, root, sym_self, sym_lambda);
     while !matches!(ctx.token(), T::EOF) {
         // Ignore newlines.
         if matches!(ctx.token(), T::Newline) {
@@ -1032,13 +1090,24 @@ fn module(
 
         // Parse an outer statement.
         ctx = match outer_statement(ctx) {
-            Ok((ctx, statement)) => {
+            Ok((ctx, mut statement)) => {
                 use StatementKind::*;
                 // Get the used files from 'use' and 'from' statements.
-                match &statement.kind {
-                    Use { file, .. } | FromUse { file, .. } => use_files.push(file.clone()),
-                    _ => {}
-                }
+                statement.kind = match statement.kind {
+                    Use { path, name, file: _ } => {
+                        let file = convert_path_parts_to_file(root, current_path, interner, &path);
+                        use_files.push(file.clone());
+                        Use { file, path, name }
+                    }
+
+                    FromUse { path, imports, file: _ } => {
+                        let file = convert_path_parts_to_file(root, current_path, interner, &path);
+                        use_files.push(file.clone());
+                        FromUse { file, path, imports }
+                    }
+
+                    x => x,
+                };
                 statements.push(statement);
                 ctx
             }
@@ -1114,9 +1183,14 @@ pub fn find_conflict_markers(file: &FileOrLib, file_id: usize, source: &str) -> 
 /// Returns any errors that occured when parsing the file(s). Basic error
 /// continuation is performed as documented in [module].
 #[sylt_macro::timed("parser::tree")]
-pub fn tree<F>(path: &Path, reader: F, bundle_std: bool) -> Result<AST, Vec<Error>>
+pub fn tree<F>(
+    path: &FilePath,
+    interner: &mut StringInterner,
+    reader: F,
+    bundle_std: bool,
+) -> Result<AST, Vec<Error>>
 where
-    F: Fn(&Path) -> Result<String, Error>,
+    F: Fn(&FilePath) -> Result<String, Error>,
 {
     // Files we've already parsed. This ensures circular includes don't parse infinitely.
     let mut visited = HashSet::new();
@@ -1148,6 +1222,7 @@ where
                     continue;
                 }
             },
+            FileOrLib::Unresolved => todo!(),
         };
 
         // Look for conflict markers
@@ -1157,9 +1232,9 @@ where
             continue;
         }
 
-        let tokens = string_to_tokens(file_id, &source);
+        let tokens = string_to_tokens(interner, file_id, &source);
         // Parse the module.
-        let (mut next, result) = module(&include, file_id, &root, &tokens);
+        let (mut next, result) = module(interner, &include, file_id, &root, &tokens);
 
         match result {
             Ok(module) => modules.push((include.clone(), module)),
@@ -1173,8 +1248,14 @@ where
             .iter()
             .position(|(f, _)| *f == FileOrLib::Lib("preamble"))
             .expect("Error in the preamble code");
-        let tokens = string_to_tokens(basics_index, library_source("preamble").unwrap());
-        let (_, std) = module(&FileOrLib::Lib("basics"), basics_index, &root, &tokens);
+        let tokens = string_to_tokens(interner, basics_index, library_source("preamble").unwrap());
+        let (_, std) = module(
+            interner,
+            &FileOrLib::Lib("basics"),
+            basics_index,
+            &root,
+            &tokens,
+        );
         let std = std?;
         modules = modules
             .into_iter()
@@ -1184,6 +1265,7 @@ where
                         module.statements.append(&mut std.statements.clone());
                     }
                     FileOrLib::Lib(_) => {}
+                    FileOrLib::Unresolved => {}
                 };
                 (file, module)
             })
@@ -1216,12 +1298,18 @@ mod test {
         ($f:ident, $name:ident: $str:expr => $ans:pat) => {
             #[test]
             fn $name() {
-                let token_stream = ::sylt_tokenizer::string_to_tokens(0, $str);
+                let mut interner = ::sylt_tokenizer::StringInterner::new();
+                let sym_self = interner.get_or_intern("self");
+                let sym_lambda = interner.get_or_intern("lambda");
+
+                let token_stream = ::sylt_tokenizer::string_to_tokens(&mut interner, 0, $str);
                 let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
                 let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
                 let path = ::std::path::PathBuf::from(stringify!($name));
                 let at = ::sylt_common::FileOrLib::File(path.clone());
-                let result = $f($crate::Context::new(&tokens, &spans, &at, 0, &path));
+                let result = $f($crate::Context::new(
+                    &tokens, &spans, &at, 0, &path, sym_self, sym_lambda,
+                ));
                 assert!(
                     result.is_ok(),
                     "\nSyntax tree test didn't parse for:\n{}\nErrs: {:?}",
@@ -1250,12 +1338,18 @@ mod test {
         ($f:ident, $name:ident: $str:expr => $ans:pat) => {
             #[test]
             fn $name() {
-                let token_stream = ::sylt_tokenizer::string_to_tokens(0, $str);
+                let mut interner = ::sylt_tokenizer::StringInterner::new();
+                let sym_self = interner.get_or_intern("self");
+                let sym_lambda = interner.get_or_intern("lambda");
+
+                let token_stream = ::sylt_tokenizer::string_to_tokens(&mut interner, 0, $str);
                 let tokens: Vec<_> = token_stream.iter().map(|p| p.token.clone()).collect();
                 let spans: Vec<_> = token_stream.iter().map(|p| p.span).collect();
                 let path = ::std::path::PathBuf::from(stringify!($name));
                 let at = ::sylt_common::FileOrLib::File(path.clone());
-                let result = $f($crate::Context::new(&tokens, &spans, &at, 0, &path));
+                let result = $f($crate::Context::new(
+                    &tokens, &spans, &at, 0, &path, sym_self, sym_lambda,
+                ));
                 assert!(
                     result.is_err(),
                     "\nSyntax tree test parsed - when it should have failed - for:\n{}\n",
@@ -1340,15 +1434,15 @@ impl PrettyPrint for Statement {
         write!(f, "{} ", self.span.line_start)?;
         match &self.kind {
             SK::Use { path, name, file } => {
-                write!(f, "<Use> {} {}", path.name, name)?;
+                write!(f, "<Use> {:?} {:?}", path, name)?;
                 write!(f, " {:?}", file)?;
             }
             SK::FromUse { path, imports, .. } => {
-                write!(f, "<FromUse> {}\n", path.name)?;
+                write!(f, "<FromUse> {:?}\n", path)?;
                 for (ident, alias) in imports.iter() {
-                    write!(f, "  {}", ident.name)?;
+                    write!(f, "  {:?}", ident.name)?;
                     if let Some(ident) = alias {
-                        write!(f, " as {}", ident.name)?;
+                        write!(f, " as {:?}", ident.name)?;
                     }
                     write!(f, "\n")?;
                 }
@@ -1359,7 +1453,7 @@ impl PrettyPrint for Statement {
                     .map(|x| format!("{}", x))
                     .collect::<Vec<_>>()
                     .join(", ");
-                write!(f, "<Enum> {} {} {{ ", name.name, args_string)?;
+                write!(f, "<Enum> {:?} {} {{ ", name.name, args_string)?;
                 for (i, (name, ty)) in variants.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;
@@ -1387,12 +1481,12 @@ impl PrettyPrint for Statement {
                 write!(f, " }}")?;
             }
             SK::Definition { ident, kind, ty, value } => {
-                write!(f, "<Def> {} {:?} {}\n", ident.name, kind, ty)?;
+                write!(f, "<Def> {:?} {:?} {}\n", ident.name, kind, ty)?;
                 value.pretty_print(f, indent + 1)?;
                 return Ok(());
             }
             SK::ExternalDefinition { ident, kind, ty } => {
-                write!(f, "<ExtDef> {} {:?} {}\n", ident.name, kind, ty)?;
+                write!(f, "<ExtDef> {:?} {:?} {}\n", ident.name, kind, ty)?;
                 return Ok(());
             }
             SK::Assignment { kind, target, value } => {
@@ -1472,14 +1566,14 @@ impl Display for Type {
                 if constraints.len() > 0 {
                     write!(f, "<")?;
                     for (var, constraints) in constraints.iter() {
-                        write!(f, "{}: ", var)?;
+                        write!(f, "{:?}: ", var)?;
                         for (i, constraint) in constraints.iter().enumerate() {
                             if i != 0 {
                                 write!(f, " + ")?;
                             }
-                            write!(f, "{}", constraint.name.name)?;
+                            write!(f, "{:?}", constraint.name.name)?;
                             for arg in constraint.args.iter() {
-                                write!(f, " {}", arg.name)?;
+                                write!(f, " {:?}", arg.name)?;
                             }
                         }
                         write!(f, ",")?;
@@ -1508,7 +1602,7 @@ impl Display for Type {
                 write!(f, "[{}]", ty)?;
             }
             TypeKind::Generic(name) => {
-                write!(f, "*{}", name)?;
+                write!(f, "*{:?}", name)?;
             }
             TypeKind::Grouping(ty) => {
                 write!(f, "({})", ty)?;
@@ -1523,7 +1617,7 @@ impl PrettyPrint for Assignable {
         // Deliberately doesn't write out the indentation
         match &self.kind {
             AssignableKind::Read(ident) => {
-                write!(f, "[Read] {}", ident.name)?;
+                write!(f, "[Read] {:?}", ident.name)?;
             }
             AssignableKind::Call(func, args) => {
                 write!(f, "[Call] ")?;
@@ -1537,7 +1631,7 @@ impl PrettyPrint for Assignable {
             }
             AssignableKind::Variant { enum_ass, variant, value } => {
                 enum_ass.pretty_print(f, indent)?;
-                write!(f, "[Variant] {}", variant.name)?;
+                write!(f, "[Variant] {:?}", variant.name)?;
                 value.pretty_print(f, indent + 1)?;
             }
             AssignableKind::ArrowCall(func, add, args) => {
@@ -1553,7 +1647,7 @@ impl PrettyPrint for Assignable {
             }
             AssignableKind::Access(a, ident) => {
                 a.pretty_print(f, indent)?;
-                write!(f, "[Access] {}", ident.name)?;
+                write!(f, "[Access] {:?}", ident.name)?;
             }
             AssignableKind::Index(a, expr) => {
                 write!(f, "[Index]")?;
@@ -1574,17 +1668,13 @@ impl PrettyPrint for TypeAssignable {
         // Deliberately doesn't write out the indentation
         match &self.kind {
             TypeAssignableKind::Read(ident) => {
-                write!(f, "[Read] {}", ident.name)?;
+                write!(f, "[Read] {:?}", ident.name)?;
             }
             TypeAssignableKind::Access(a, ident) => {
-                write!(f, "[Access] {}", ident.name)?;
+                write!(f, "[Access] {:?}", ident.name)?;
                 a.pretty_print(f, indent)?;
             }
         }
         Ok(())
     }
-}
-
-fn is_capitalized(s: &str) -> bool {
-    char::is_uppercase(s.chars().next().unwrap_or('a'))
 }

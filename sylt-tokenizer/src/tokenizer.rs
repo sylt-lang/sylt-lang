@@ -1,5 +1,7 @@
 use logos::Logos;
-pub use token::Token;
+
+pub use token::{Symbol, Token};
+pub type StringInterner = string_interner::StringInterner<string_interner::DefaultBackend<Symbol>>;
 
 mod token;
 
@@ -28,6 +30,18 @@ impl Span {
             col_end: 0,
         }
     }
+
+    pub fn merge(&self, other: &Self) -> Self {
+        assert!(self.file_id == other.file_id, "Cannot possibly merge spans from different files");
+        Self {
+            file_id: self.file_id,
+            line_start: self.line_start.min(other.line_start),
+            line_end: self.line_end.min(other.line_end),
+            col_start: self.col_start.min(other.col_start),
+            col_end: self.col_end.min(other.col_end),
+
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -36,7 +50,11 @@ pub struct PlacedToken {
     pub span: Span,
 }
 
-pub fn string_to_tokens(file_id: usize, content: &str) -> Vec<PlacedToken> {
+pub fn string_to_tokens(
+    interner: &mut StringInterner,
+    file_id: usize,
+    content: &str,
+) -> Vec<PlacedToken> {
     // A list containing which char index a specific byte index is at.
     //
     // Since &str contains UTF-8, a byte offset (which is what the lexer gives
@@ -65,6 +83,16 @@ pub fn string_to_tokens(file_id: usize, content: &str) -> Vec<PlacedToken> {
         .spanned()
         // Contains side-effects.
         .map(|(token, byte_range)| {
+            let token = match token {
+                Token::UpperIdentifierNotInterned(s) => {
+                    Token::UpperIdentifier(interner.get_or_intern(s))
+                }
+                Token::LowerIdentifierNotInterned(s) => {
+                    Token::LowerIdentifier(interner.get_or_intern(s))
+                }
+                Token::StringNotInterned(s) => Token::String(interner.get_or_intern(s)),
+                x => x,
+            };
             let is_newline = token == Token::Newline;
             let col_start = char_at_byte[byte_range.start].unwrap() - last_newline;
             let col_end = char_at_byte[byte_range.end].unwrap() - last_newline;
