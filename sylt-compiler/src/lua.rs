@@ -61,7 +61,11 @@ struct Generator<'a, 'b, 'c> {
 }
 
 impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
-    pub fn new(usage_count: &'a HashMap<Var, usize>, var_to_name: &'c HashMap<Var, String>, out: &'b mut dyn Write) -> Self {
+    pub fn new(
+        usage_count: &'a HashMap<Var, usize>,
+        var_to_name: &'c HashMap<Var, String>,
+        out: &'b mut dyn Write,
+    ) -> Self {
         Self { usage_count, out, lut: HashMap::new(), var_to_name }
     }
 
