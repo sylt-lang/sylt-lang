@@ -1,4 +1,4 @@
-use crate::intermediate::{Var, IR};
+use crate::intermediate::{Var, VarOrUpvalue, IR};
 use std::{collections::HashMap, io::Write};
 
 macro_rules! write {
@@ -87,6 +87,12 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
         self.lut.insert(var, value);
     }
 
+    fn indent(&mut self, depth: i64) {
+        for _ in 0..depth {
+            write!(self.out, "  ");
+        }
+    }
+
     #[sylt_macro::timed("lua::generate")]
     pub fn generate(&mut self, ir: &Vec<IR>, require: Option<&String>) {
         write!(self.out, include_str!("preamble.lua"));
@@ -106,10 +112,7 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
                 IR::Else | IR::End => -1,
                 _ => 0,
             };
-
-            for _ in 0..depth {
-                write!(self.out, "  ");
-            }
+            self.indent(depth);
             match instruction {
                 IR::Nil(t) => iis!(self, t, "__NIL"),
                 IR::Int(t, i) => iis!(self, t, "{}", i),
@@ -154,7 +157,7 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
 
                 IR::Index(t, a, i) => ii!(self, t, "__INDEX({}, {})", a, i),
 
-                IR::Function(f, params) => {
+                IR::Function(upvalues, f, params) => {
                     write!(self.out, "local ");
                     write!(self.out, "function ");
                     let f = self.expand(f);
@@ -170,7 +173,26 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
                             .join(", ")
                     );
                     write!(self.out, ")");
+                    write!(self.out, "\n");
                     depth += 1;
+
+                    self.indent(depth);
+                    write!(self.out, "local __temp = {");
+                    for u in upvalues {
+                        match u {
+                            VarOrUpvalue::Var(v) => {
+                                let v = self.expand(v);
+                                write!(self.out, "{}", v);
+                            }
+                            VarOrUpvalue::Upvalue(i) => {
+                                write!(self.out, "__upvalues[{}]", i + 1);
+                            }
+                        }
+                        write!(self.out, ", ");
+                    }
+                    write!(self.out, "}\n");
+                    self.indent(depth);
+                    write!(self.out, "local __upvalues = __temp");
                 }
 
                 IR::External(t, e) => {
@@ -243,6 +265,14 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
                         let t = self.expand(t);
                         let a = self.expand(a);
                         write!(self.out, "local {} = {}", t, a);
+                    }
+                }
+
+                IR::CopyUpvalue(t, i, _) => {
+                    if self.usage_count.get(t).unwrap_or(&0) > &0 {
+                        let t = self.expand(t);
+                        // Lua is 1-indexed
+                        write!(self.out, "local {} = __upvalues[{}]", t, i + 1);
                     }
                 }
 

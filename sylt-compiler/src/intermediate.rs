@@ -3,6 +3,12 @@ use std::{collections::HashMap, fmt::Display};
 use crate::name_resolution::*;
 use crate::typechecker::TypeChecker;
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum VarOrUpvalue {
+    Var(Var),
+    Upvalue(usize),
+}
+
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub struct Var(pub usize);
 
@@ -58,7 +64,7 @@ pub enum IR {
     Variant(Var, String, Var),
 
     // Name?
-    Function(Var, Vec<Var>),
+    Function(Vec<VarOrUpvalue>, Var, Vec<Var>),
 
     Index(Var, Var, Var),
     AssignIndex(Var, Var, Var),
@@ -69,7 +75,10 @@ pub enum IR {
     Label(Label),
     Goto(Label),
     Copy(Var, Var),
-    CopyUpvalue(usize, Var),
+    /// Dest, UpvalueIndex, [Source] (Source is only used to count references because it's a lot
+    /// easier.
+    CopyUpvalue(Var, usize, Var),
+
     Define(Var),
     Assign(Var, Var),
     Return(Var),
@@ -103,6 +112,14 @@ struct IRCodeGen<'a> {
 
     var_to_name: HashMap<Var, String>,
     counter: usize,
+}
+
+fn get_upvalue_id(upvalues: &[usize], var: usize) -> Option<usize> {
+    upvalues
+        .iter()
+        .enumerate()
+        .find(|(_, x)| **x == var)
+        .map(|(i, _)| i)
 }
 
 impl<'a> IRCodeGen<'a> {
@@ -161,10 +178,11 @@ impl<'a> IRCodeGen<'a> {
         use Statement as S;
         match &expr {
             E::ReadUpvalue { var, name, .. } => {
-                let upvalue_index = ctx.upvalues.iter().enumerate().find(|(_, x)| *x == var).map(|(i, _)| i).unwrap();
+                let upvalue_index = get_upvalue_id(ctx.upvalues, *var).unwrap();
+                let source = Var(*var);
                 let dest = self.var();
                 self.name_var(dest, name.clone());
-                (vec![IR::CopyUpvalue(upvalue_index, dest)], dest)
+                (vec![IR::CopyUpvalue(dest, upvalue_index, source)], dest)
             }
 
             E::Read { var, name, .. } => {
@@ -425,9 +443,19 @@ impl<'a> IRCodeGen<'a> {
                     Some(stmt) => self.statement(&stmt, inner_ctx),
                     None => Vec::new(),
                 };
+
+                let to_copy_over = upvalues
+                    .iter()
+                    // Is it an upvalue in the CURRENT context?
+                    .map(|var| match get_upvalue_id(ctx.upvalues, *var) {
+                        Some(x) => VarOrUpvalue::Upvalue(x),
+                        None => VarOrUpvalue::Var(Var(*var)),
+                    })
+                    .collect();
+
                 (
                     [
-                        vec![IR::Function(f, params)],
+                        vec![IR::Function(to_copy_over, f, params)],
                         body,
                         last_statement,
                         vec![IR::End],
@@ -466,8 +494,8 @@ impl<'a> IRCodeGen<'a> {
     fn definition(&mut self, var: Var, value: &Expression, ctx: IRContext) -> Vec<IR> {
         if matches!(value, Expression::Function { .. }) {
             let (mut code, _) = self.expression(&value, ctx);
-            if let IR::Function(_, args) = &code[0] {
-                code[0] = IR::Function(var, args.clone());
+            if let IR::Function(upvalues, _, args) = &code[0] {
+                code[0] = IR::Function(upvalues.clone(), var, args.clone());
             } else {
                 unreachable!();
             }
@@ -642,7 +670,17 @@ pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
             | IR::HaltAndCatchFire(_) => {}
 
             // We cannot optimize things that are defined.
-            IR::Function(a, _) | IR::Define(a) => {
+            IR::Function(upvalues, a, _) => {
+                for x in upvalues.iter() {
+                    match x {
+                        VarOrUpvalue::Upvalue(_) => {}
+                        VarOrUpvalue::Var(b) => *table.entry(*b).or_insert(0) += 2,
+                    }
+                }
+                *table.entry(*a).or_insert(0) += 2;
+            }
+
+            IR::Define(a) => {
                 *table.entry(*a).or_insert(0) += 2;
             }
 
@@ -669,6 +707,7 @@ pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
             | IR::Variant(_, _, a)
             | IR::Access(_, a, _)
             | IR::Copy(_, a)
+            | IR::CopyUpvalue(_, _, a)
             | IR::Return(a)
             | IR::If(a) => {
                 *table.entry(*a).or_insert(0) += 1;
