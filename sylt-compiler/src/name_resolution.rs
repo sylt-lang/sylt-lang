@@ -654,7 +654,7 @@ impl Resolver {
     fn is_upvalue(&self, var: Ref) -> bool {
         let stack_frame_id = self.stack_frames.last().cloned().unwrap_or(StackFrameId(0));
         let var = &self.variables[var];
-        return !var.is_global && var.captured_by.contains(&stack_frame_id);
+        return !(var.is_global || var.captured_by.contains(&stack_frame_id));
     }
 
     fn assignable(&mut self, assignable: &ParserAssignable) -> ResolveResult<Expression> {
