@@ -69,6 +69,7 @@ pub enum IR {
     Label(Label),
     Goto(Label),
     Copy(Var, Var),
+    CopyUpvalue(usize, Var),
     Define(Var),
     Assign(Var, Var),
     Return(Var),
@@ -81,13 +82,18 @@ pub enum IR {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct IRContext {
+struct IRContext<'a> {
     closest_loop: Label,
+    upvalues: &'a [usize],
 }
 
-impl IRContext {
-    pub fn new() -> Self {
-        Self { closest_loop: Label(0) }
+impl<'a> IRContext<'a> {
+    pub fn new(upvalues: &'a [usize]) -> Self {
+        Self { closest_loop: Label(0), upvalues }
+    }
+
+    pub fn with_upvalues(self, upvalues: &'a [usize]) -> Self {
+        Self { upvalues, ..self }
     }
 }
 
@@ -154,7 +160,14 @@ impl<'a> IRCodeGen<'a> {
         use Expression as E;
         use Statement as S;
         match &expr {
-            E::Read { var, name, .. } | E::ReadUpvalue { var, name, .. } => {
+            E::ReadUpvalue { var, name, .. } => {
+                let upvalue_index = ctx.upvalues.iter().enumerate().find(|(_, x)| *x == var).map(|(i, _)| i).unwrap();
+                let dest = self.var();
+                self.name_var(dest, name.clone());
+                (vec![IR::CopyUpvalue(upvalue_index, dest)], dest)
+            }
+
+            E::Read { var, name, .. } => {
                 let source = Var(*var);
                 self.name_var(source, name.clone());
                 let dest = self.var();
@@ -392,22 +405,24 @@ impl<'a> IRCodeGen<'a> {
                 ([code, vec![IR::Tuple(var, values)]].concat(), var)
             }
 
-            E::Function { body, params, .. } => {
+            E::Function { body, params, upvalues, .. } => {
                 let mut body = body.clone();
                 let f = self.var();
                 let params = params.iter().map(|(_, var, _, _)| Var(*var)).collect();
                 let last_statement = body.pop();
+                let inner_ctx = ctx.with_upvalues(upvalues.as_slice());
                 let body = body
                     .iter()
-                    .map(|stmt| self.statement(stmt, ctx))
+                    .map(|stmt| self.statement(stmt, inner_ctx))
                     .flatten()
                     .collect();
                 let last_statement = match last_statement {
+                    // TODO[et]: This can be done in `name_resolution`
                     Some(S::StatementExpression { value, .. }) => {
-                        let (ir, ret) = self.expression(&value, ctx);
+                        let (ir, ret) = self.expression(&value, inner_ctx);
                         [ir, vec![IR::Return(ret)]].concat()
                     }
-                    Some(stmt) => self.statement(&stmt, ctx),
+                    Some(stmt) => self.statement(&stmt, inner_ctx),
                     None => Vec::new(),
                 };
                 (
@@ -565,7 +580,8 @@ impl<'a> IRCodeGen<'a> {
 
     fn compile(&mut self, stmt: &Statement) -> Vec<IR> {
         use Statement as S;
-        let ctx = IRContext::new();
+        let upvalues = Vec::new();
+        let ctx = IRContext::new(&upvalues);
         match &stmt {
             S::ExternalDefinition { name, var, .. } => {
                 vec![IR::External(Var(*var), name.clone())]
