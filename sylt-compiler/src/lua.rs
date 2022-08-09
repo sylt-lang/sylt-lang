@@ -109,7 +109,7 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
             //TODO(gu): which instruction?
             let _handle = sylt_macro::timed_handle!("lua::generate instruction");
             depth += match instruction {
-                IR::Else | IR::End => -1,
+                IR::Else | IR::End | IR::EndFunction => -1,
                 _ => 0,
             };
             self.indent(depth);
@@ -159,10 +159,36 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
 
                 IR::Function(upvalues, f, params) => {
                     write!(self.out, "local ");
-                    write!(self.out, "function ");
                     let f = self.expand(f);
                     write!(self.out, "{}", f);
+                    write!(self.out, "=");
+                    write!(self.out, "{");
+                    // Upvalues
+                    write!(self.out, "{");
+                    for (i, u) in upvalues.iter().enumerate() {
+                        if i != 0 {
+                            write!(self.out, ", ");
+                        }
+                        match u {
+                            VarOrUpvalue::Var(v) => {
+                                let v = self.expand(v);
+                                write!(self.out, "{}", v);
+                            }
+                            VarOrUpvalue::Upvalue(i, _) => {
+                                write!(self.out, "__upvalues[{}]", i + 1);
+                            }
+                        }
+                    }
+                    write!(self.out, "}");
+                    //
+                    write!(self.out, " , ");
+                    // Function
+                    write!(self.out, "function ");
                     write!(self.out, "(");
+                    write!(self.out, "__upvalues");
+                    if !params.is_empty() {
+                        write!(self.out, ", ");
+                    }
                     write!(
                         self.out,
                         "{}",
@@ -176,26 +202,35 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
                     write!(self.out, "\n");
                     depth += 1;
 
-                    self.indent(depth);
-                    write!(self.out, "local __temp = {");
-                    for u in upvalues {
-                        match u {
-                            VarOrUpvalue::Var(v) => {
-                                let v = self.expand(v);
-                                write!(self.out, "{}", v);
-                            }
-                            VarOrUpvalue::Upvalue(i) => {
-                                write!(self.out, "__upvalues[{}]", i + 1);
-                            }
-                        }
-                        write!(self.out, ", ");
-                    }
-                    write!(self.out, "}\n");
-                    self.indent(depth);
-                    write!(self.out, "local __upvalues = __temp");
                 }
 
-                IR::External(t, e) => {
+                IR::ExternalFunction(t, e, arity) => {
+                    let t = self.expand(t);
+                    write!(self.out, "{}", t);
+                    write!(self.out, " = ");
+                    write!(self.out, "{ nil, ");
+                    //
+                    write!(self.out, "function(_");
+                    for n in 0..*arity {
+                        write!(self.out, ", ");
+                        write!(self.out, "a_{}", n);
+                    }
+                    write!(self.out, ") ");
+                    write!(self.out, e);
+                    write!(self.out, "(");
+                    for n in 0..*arity {
+                        if n != 0 {
+                            write!(self.out, ", ");
+                        }
+                        write!(self.out, "a_{}", n);
+                    }
+                    write!(self.out, ")");
+                    //
+                    write!(self.out, " end ");
+                    write!(self.out, "}");
+                }
+
+                IR::ExternalVar(t, e) => {
                     let t = self.expand(t);
                     write!(self.out, "{}", t);
                     write!(self.out, " = ");
@@ -208,9 +243,13 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
                     write!(self.out, "{}", t);
                     write!(self.out, " = ");
                     let f = self.expand(f);
-                    write!(self.out, "{}", f);
-                    let args = self.comma_sep(args).to_string();
-                    write!(self.out, "({})", args);
+                    write!(self.out, "{}[2]", f);
+                    if args.is_empty() {
+                        write!(self.out, "({}[1])", f);
+                    } else {
+                        let args = self.comma_sep(args).to_string();
+                        write!(self.out, "({}[1], {})", f, args);
+                    }
                 }
 
                 IR::Assert(v) => {
@@ -241,6 +280,9 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
                 }
                 IR::End => {
                     write!(self.out, "end");
+                }
+                IR::EndFunction => {
+                    write!(self.out, "end }");
                 }
                 IR::Loop => {
                     write!(self.out, "while true do");

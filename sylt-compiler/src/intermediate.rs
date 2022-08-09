@@ -1,12 +1,13 @@
 use std::{collections::HashMap, fmt::Display};
 
 use crate::name_resolution::*;
+use crate::ty::Type;
 use crate::typechecker::TypeChecker;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum VarOrUpvalue {
     Var(Var),
-    Upvalue(usize),
+    Upvalue(usize, Var),
 }
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
@@ -46,7 +47,9 @@ pub enum IR {
 
     Not(Var, Var),
 
-    External(Var, String),
+    /// Variable to store in, function name, arity
+    ExternalFunction(Var, String, usize),
+    ExternalVar(Var, String),
     Call(Var, Var, Vec<Var>),
 
     Equals(Var, Var, Var),
@@ -88,6 +91,7 @@ pub enum IR {
     Break,
     Else,
     End,
+    EndFunction,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -448,17 +452,16 @@ impl<'a> IRCodeGen<'a> {
                     .iter()
                     // Is it an upvalue in the CURRENT context?
                     .map(|var| match get_upvalue_id(ctx.upvalues, *var) {
-                        Some(x) => VarOrUpvalue::Upvalue(x),
+                        Some(x) => VarOrUpvalue::Upvalue(x, Var(*var)),
                         None => VarOrUpvalue::Var(Var(*var)),
                     })
                     .collect();
-
                 (
                     [
                         vec![IR::Function(to_copy_over, f, params)],
                         body,
                         last_statement,
-                        vec![IR::End],
+                        vec![IR::EndFunction],
                     ]
                     .concat(),
                     f,
@@ -612,7 +615,12 @@ impl<'a> IRCodeGen<'a> {
         let ctx = IRContext::new(&upvalues);
         match &stmt {
             S::ExternalDefinition { name, var, .. } => {
-                vec![IR::External(Var(*var), name.clone())]
+                match self.typechecker.get_variable_type(*var) {
+                    Type::Function(args, _, _) => {
+                        vec![IR::ExternalFunction(Var(*var), name.clone(), args.len())]
+                    }
+                    _ => vec![IR::ExternalVar(Var(*var), name.clone())],
+                }
             }
 
             S::Definition { value, var, .. } => self.definition(Var(*var), value, ctx),
@@ -664,7 +672,9 @@ pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
             | IR::Break
             | IR::Else
             | IR::End
-            | IR::External(_, _)
+            | IR::EndFunction
+            | IR::ExternalFunction(_, _, _)
+            | IR::ExternalVar(_, _)
             | IR::Label(_)
             | IR::Goto(_)
             | IR::HaltAndCatchFire(_) => {}
@@ -673,8 +683,9 @@ pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
             IR::Function(upvalues, a, _) => {
                 for x in upvalues.iter() {
                     match x {
-                        VarOrUpvalue::Upvalue(_) => {}
-                        VarOrUpvalue::Var(b) => *table.entry(*b).or_insert(0) += 2,
+                        VarOrUpvalue::Upvalue(_, b) | VarOrUpvalue::Var(b) => {
+                            *table.entry(*b).or_insert(0) += 2
+                        }
                     }
                 }
                 *table.entry(*a).or_insert(0) += 2;

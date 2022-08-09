@@ -667,7 +667,7 @@ impl Resolver {
                 let span = *span;
                 let name = name.clone();
                 if self.is_upvalue(var) {
-                    dbg!(E::ReadUpvalue { var, name, span })
+                    E::ReadUpvalue { var, name, span }
                 } else {
                     E::Read { var, name, span }
                 }

@@ -213,6 +213,10 @@ impl TypeChecker {
         res
     }
 
+    pub fn get_variable_type(&self, var: usize) -> &Type {
+        &self.types[self.variables[var].id].ty
+    }
+
     fn push_type(&mut self, ty: Type) -> TyID {
         let ty_id = TyID(self.types.len());
         self.types.push(TypeNode {
