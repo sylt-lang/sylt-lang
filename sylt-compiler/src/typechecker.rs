@@ -694,7 +694,7 @@ impl TypeChecker {
     fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> TypeResult<RetNValue> {
         use Expression as E;
         let (expr_ret, expr) = match expression {
-            E::Read { var, span, .. } => {
+            E::Read { var, span, .. } | E::ReadUpvalue { var, span, .. } => {
                 let var = &self.variables[*var];
                 let immutable = var.kind.immutable();
                 if ctx.inside_pure && !immutable {
@@ -944,7 +944,15 @@ impl TypeChecker {
                 )
             }
 
-            E::Function { name: _, params, ret, body, pure, span, upvalues: _ } => {
+            E::Function {
+                name: _,
+                params,
+                ret,
+                body,
+                pure,
+                span,
+                upvalues: _,
+            } => {
                 let (f_ty, ret_ty) = self.type_from_function(ctx, params, ret, *pure)?;
 
                 let ctx = if *pure { ctx.enter_pure() } else { ctx };
@@ -1752,7 +1760,7 @@ impl TypeChecker {
     fn can_assign(&mut self, span: Span, assignable: &Expression) -> TypeResult<()> {
         use Expression as E;
         match &assignable {
-            E::Read { var, name, span } => {
+            E::Read { var, name, span } | E::ReadUpvalue { var, name, span } => {
                 if self.variables[*var].kind.immutable() {
                     return err_type_error!(
                         self,

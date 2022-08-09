@@ -135,6 +135,11 @@ pub enum Expression {
         name: String,
         span: Span,
     },
+    ReadUpvalue {
+        var: Ref,
+        name: String,
+        span: Span,
+    },
     Variant {
         ty: Ref,
         variant: String,
@@ -215,6 +220,7 @@ impl Expression {
     pub fn span(&self) -> Span {
         match self {
             Expression::Read { span, .. }
+            | Expression::ReadUpvalue { span, .. }
             | Expression::Variant { span, .. }
             | Expression::Call { span, .. }
             | Expression::BlobAccess { span, .. }

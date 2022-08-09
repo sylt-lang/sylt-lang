@@ -75,7 +75,7 @@ fn ty_dependency(ty: &Type) -> BTreeSet<usize> {
 fn dependencies(expression: &Expression) -> BTreeSet<usize> {
     use Expression as E;
     match &expression {
-        E::Read { var, .. } => [*var].iter().map(|v| *v).collect(),
+        E::Read { var, .. } | E::ReadUpvalue { var, .. } => [*var].iter().map(|v| *v).collect(),
         E::Variant { ty, value, .. } => dependencies(value)
             .iter()
             .chain([*ty].iter())

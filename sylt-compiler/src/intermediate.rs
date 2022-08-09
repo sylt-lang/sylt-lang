@@ -154,7 +154,7 @@ impl<'a> IRCodeGen<'a> {
         use Expression as E;
         use Statement as S;
         match &expr {
-            E::Read { var, name, .. } => {
+            E::Read { var, name, .. } | E::ReadUpvalue { var, name, .. } => {
                 let source = Var(*var);
                 self.name_var(source, name.clone());
                 let dest = self.var();
