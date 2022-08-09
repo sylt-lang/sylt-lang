@@ -187,7 +187,7 @@ pub enum Expression {
     Function {
         // TODO[et]: We want to know what upvalues we have.
         name: String,
-        upvalues: BTreeSet<Ref>,
+        upvalues: Vec<Ref>,
         params: Vec<(String, Ref, Span, Type)>,
         ret: Type,
 
@@ -492,7 +492,7 @@ impl Resolver {
                 self.variables[var_id].captured_by.insert(stack_frame_id);
 
                 Ok(var_id)
-            },
+            }
             Some(Name::Namespace(..)) => Err(vec![resolution_error!(
                 self,
                 span,
@@ -651,6 +651,12 @@ impl Resolver {
         })
     }
 
+    fn is_upvalue(&self, var: Ref) -> bool {
+        let stack_frame_id = self.stack_frames.last().cloned().unwrap_or(StackFrameId(0));
+        let var = &self.variables[var];
+        return !var.is_global && var.captured_by.contains(&stack_frame_id);
+    }
+
     fn assignable(&mut self, assignable: &ParserAssignable) -> ResolveResult<Expression> {
         use sylt_parser::AssignableKind as AK;
         use Expression as E;
@@ -659,7 +665,12 @@ impl Resolver {
             AK::Read(Identifier { name, span }) => {
                 let var = self.lookup(name, *span)?;
                 let span = *span;
-                E::Read { var, name: name.clone(), span }
+                let name = name.clone();
+                if self.is_upvalue(var) {
+                    dbg!(E::ReadUpvalue { var, name, span })
+                } else {
+                    E::Read { var, name, span }
+                }
             }
             AK::Variant { enum_ass, variant, value } => {
                 // Checking that this is a valid type, should be done in the typechecker
@@ -867,16 +878,15 @@ impl Resolver {
                 let ret = self.ty(ret)?;
                 let body = self.block(body)?;
                 // ------- //
-
-                self.stack_frames.pop();
-                self.stack.truncate(ss);
                 let upvalues = self
                     .stack
                     .iter()
-                    .filter(|(_, id)| self.variables.get(*id).unwrap().captured_by.contains(&stack_frame_id))
-                    .map(|(_, id)| id)
+                    .filter(|(_, var)| { self.is_upvalue(*var) })
+                    .map(|(_, var)| var)
                     .cloned()
                     .collect();
+                self.stack_frames.pop();
+                self.stack.truncate(ss);
                 E::Function {
                     name,
                     upvalues,
