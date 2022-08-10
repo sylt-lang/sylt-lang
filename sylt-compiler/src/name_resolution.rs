@@ -415,6 +415,7 @@ struct Resolver {
     namespaces: HashMap<FileOrLib, HashMap<String, Name>>,
     stack: Vec<(String, Ref)>,
     stack_frames: Vec<StackFrameId>,
+    stack_frame_counter: usize,
 
     variables: Vec<Var>,
     namespace_to_file: HashMap<NamespaceID, FileOrLib>,
@@ -433,7 +434,8 @@ impl Resolver {
             namespaces: HashMap::new(),
             variables: Vec::new(),
             stack: Vec::new(),
-            stack_frames: Vec::new(),
+            stack_frames: vec![StackFrameId(0)],
+            stack_frame_counter: 0,
         }
     }
 
@@ -477,11 +479,11 @@ impl Resolver {
     }
 
     fn lookup(&mut self, name: &str, span: Span) -> ResolveResult<Ref> {
-        let stack_frame_id = self.stack_frames.last().cloned().unwrap_or(StackFrameId(0));
+        let sf = self.stack_frames.last().cloned().unwrap();
 
         for (var_name, var_id) in self.stack.iter().rev() {
             if var_name == name {
-                self.variables[*var_id].captured_by.insert(stack_frame_id);
+                self.variables[*var_id].captured_by.insert(sf);
                 return Ok(*var_id);
             }
         }
@@ -489,7 +491,7 @@ impl Resolver {
         match self.lookup_global(span.file_id, name).clone() {
             Some(Name::Name(var_id)) => {
                 let var_id = *var_id;
-                self.variables[var_id].captured_by.insert(stack_frame_id);
+                self.variables[var_id].captured_by.insert(sf);
 
                 Ok(var_id)
             }
@@ -652,9 +654,9 @@ impl Resolver {
     }
 
     fn is_upvalue(&self, var: Ref) -> bool {
-        let stack_frame_id = self.stack_frames.last().cloned().unwrap_or(StackFrameId(0));
+        let sf = self.stack_frames.last().cloned().unwrap();
         let var = &self.variables[var];
-        return !(var.is_global || var.captured_by.contains(&stack_frame_id));
+        return !var.is_global && var.captured_by.contains(&sf);
     }
 
     fn assignable(&mut self, assignable: &ParserAssignable) -> ResolveResult<Expression> {
@@ -866,8 +868,7 @@ impl Resolver {
             EK::Function { name, params: parser_params, ret, body, pure } => {
                 // Functions are the only things that care about the stackframe
                 let ss = self.stack.len();
-                let stack_frame_id = StackFrameId(self.stack_frames.len() + 1);
-                self.stack_frames.push(stack_frame_id);
+                let sf = self.push_stack_frame();
                 // ------- //
                 let name = name.clone();
                 let mut params = Vec::new();
@@ -885,7 +886,7 @@ impl Resolver {
                     .map(|(_, var)| var)
                     .cloned()
                     .collect();
-                self.stack_frames.pop();
+                self.pop_stack_frame(sf);
                 self.stack.truncate(ss);
                 E::Function {
                     name,
@@ -1144,6 +1145,17 @@ impl Resolver {
         let var = self.new_var(ident, kind);
         self.stack.push((ident.name.clone(), var));
         var
+    }
+
+    fn push_stack_frame(&mut self) -> StackFrameId {
+        let  stack_frame = StackFrameId(self.stack_frame_counter);
+        self.stack_frame_counter += 1;
+        self.stack_frames.push(stack_frame);
+        stack_frame
+    }
+
+    fn pop_stack_frame(&mut self, last: StackFrameId) {
+        assert!(self.stack_frames.pop() == Some(last));
     }
 
     fn resolve_global_variables(
