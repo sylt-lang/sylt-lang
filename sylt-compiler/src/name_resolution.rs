@@ -400,6 +400,7 @@ pub struct Var {
     pub kind: VarKind,
 
     pub captured_by: BTreeSet<StackFrameId>,
+    pub stack_frame: StackFrameId,
 
     // This flag is only used to check if start is infact global...
     pub is_global: bool,
@@ -654,9 +655,11 @@ impl Resolver {
     }
 
     fn is_upvalue(&self, var: Ref) -> bool {
-        let sf = self.stack_frames.last().cloned().unwrap();
         let var = &self.variables[var];
-        return !var.is_global && var.captured_by.contains(&sf);
+        if var.is_global { return false; }
+        let sf = self.stack_frames.last().cloned().unwrap();
+        if var.stack_frame == sf { return false; }
+        return var.captured_by.contains(&sf);
     }
 
     fn assignable(&mut self, assignable: &ParserAssignable) -> ResolveResult<Expression> {
@@ -886,6 +889,8 @@ impl Resolver {
                     .map(|(_, var)| var)
                     .cloned()
                     .collect();
+                dbg!(&name);
+                dbg!(&upvalues);
                 self.pop_stack_frame(sf);
                 self.stack.truncate(ss);
                 E::Function {
@@ -1113,6 +1118,7 @@ impl Resolver {
 
     fn new_var(&mut self, ident: &Identifier, kind: VarKind) -> Ref {
         let id = self.variables.len();
+        let stack_frame = *self.stack_frames.last().unwrap();
 
         self.variables.push(Var {
             id,
@@ -1121,6 +1127,8 @@ impl Resolver {
             kind,
 
             captured_by: BTreeSet::new(),
+            stack_frame,
+
             is_global: false,
         });
         id
@@ -1128,6 +1136,7 @@ impl Resolver {
 
     fn new_global(&mut self, ident: &Identifier, kind: VarKind) -> Ref {
         let id = self.variables.len();
+        let stack_frame = *self.stack_frames.last().unwrap();
 
         self.variables.push(Var {
             id,
@@ -1136,6 +1145,8 @@ impl Resolver {
             kind,
 
             captured_by: BTreeSet::new(),
+            stack_frame,
+
             is_global: true,
         });
         id
