@@ -208,8 +208,10 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
                 IR::ExternalFunction(t, e, arity) => {
                     let t = self.expand(t);
                     write!(self.out, "{}", t);
-                    write!(self.out, " = ");
-                    write!(self.out, "{ nil, ");
+                    write!(self.out, "=");
+                    write!(self.out, "{");
+                    write!(self.out, "nil");
+                    write!(self.out, ", ");
                     //
                     write!(self.out, "function(_");
                     for n in 0..*arity {
