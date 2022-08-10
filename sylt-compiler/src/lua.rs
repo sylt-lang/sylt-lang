@@ -219,6 +219,7 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
                         write!(self.out, "a_{}", n);
                     }
                     write!(self.out, ") ");
+                    write!(self.out, "return ");
                     write!(self.out, e);
                     write!(self.out, "(");
                     for n in 0..*arity {
