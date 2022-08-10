@@ -158,8 +158,9 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
                 IR::Index(t, a, i) => ii!(self, t, "__INDEX({}, {})", a, i),
 
                 IR::Function(upvalues, f, params) => {
-                    write!(self.out, "local ");
                     let f = self.expand(f);
+                    write!(self.out, "local {} = nil\n", f);
+                    self.indent(depth);
                     write!(self.out, "{}", f);
                     write!(self.out, "=");
                     write!(self.out, "{");
