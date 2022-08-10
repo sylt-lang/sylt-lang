@@ -326,22 +326,16 @@ end
 function atan2(x, y) return math.atan2(y, x) end
 function list_random_choice(l) return list_get(l, math.random(0, #l - 1)) end
 
-function varargs(f)
-    return function(xs)
-        return f(unpack(xs))
-    end
-end
-
 function list_for_each(l, f)
     for _, v in pairs(l) do
-        f(v)
+        f[2](f[1], v)
     end
 end
 
 function list_map(l, f)
     local o = {}
     for k, v in pairs(l) do
-        o[k] = f(v)
+        o[k] = f[2](f[1], v)
     end
     return __LIST(o)
 end
@@ -363,7 +357,7 @@ end
 
 function list_fold(l, a, f)
     for _, v in pairs(l) do
-        a = f(v, a)
+        a = f[2](f[1], v, a)
     end
     return a
 end
@@ -371,7 +365,7 @@ end
 function list_filter(l, f)
     local o = {}
     for _, v in pairs(l) do
-        if f(v) then
+        if f[2](f[1], v) then
             table.insert(o, v)
         end
     end
@@ -386,7 +380,7 @@ end
 
 function list_find(l, p)
     for _, x in pairs(l) do
-        if p(x) then
+        if p[2](p[1], x) then
             return __VARIANT({"Just", x})
         end
     end
@@ -543,14 +537,14 @@ end
 
 function dict_for_each(dict, f)
     for _k, v in pairs(dict) do
-        f(v)
+        f[2](f[1], v)
     end
 end
 
 function dict_map(dict, f)
     local out = dict_new()
     for _k, v in pairs(dict) do
-        x = f(v)
+        x = f[2](f[1], v)
         dict_update(out, x[1], x[2])
     end
     return out
@@ -612,14 +606,14 @@ end
 
 function set_for_each(set, f)
     for _k, v in pairs(set) do
-        f(v)
+        f[2](f[1], v)
     end
 end
 
 function set_map(set, f)
     local out = dict_new()
     for _k, v in pairs(set) do
-        x = f(v)
+        x = f[2](f[1], v)
         set_add(out, x)
     end
     return out
