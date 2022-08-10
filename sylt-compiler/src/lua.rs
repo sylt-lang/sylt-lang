@@ -172,7 +172,7 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
                         match u {
                             VarOrUpvalue::Var(v) => {
                                 let v = self.expand(v);
-                                write!(self.out, "{}", v);
+                                write!(self.out, "(function(x) if x == nil then return {} else {} = x end end)", v, v);
                             }
                             VarOrUpvalue::Upvalue(i, _) => {
                                 write!(self.out, "__upvalues[{}]", i + 1);
@@ -314,7 +314,7 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
                     if self.usage_count.get(t).unwrap_or(&0) > &0 {
                         let t = self.expand(t);
                         // Lua is 1-indexed
-                        write!(self.out, "local {} = __upvalues[{}]", t, i + 1);
+                        write!(self.out, "local {} = __upvalues[{}]()", t, i + 1);
                     }
                 }
 
@@ -328,7 +328,7 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
                 }
                 IR::AssignUpvalue(_, i, a) => {
                     let a = self.expand(a);
-                    write!(self.out, "__upvalues[{}] = {}", i + 1, a);
+                    write!(self.out, "__upvalues[{}]({})", i + 1, a);
                 }
                 IR::AssignIndex(t, i, a) => {
                     if self.usage_count.get(t).unwrap_or(&0) > &0 {
