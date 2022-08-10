@@ -525,7 +525,11 @@ impl<'a> IRCodeGen<'a> {
                         let source = Var(*var);
                         let dest = self.var();
                         self.name_var(dest, name.clone());
-                        (vec![IR::CopyUpvalue(dest, upvalue_index, source)], dest, vec![IR::AssignUpvalue(Var(*var), upvalue_index, res)])
+                        (
+                            vec![IR::CopyUpvalue(dest, upvalue_index, source)],
+                            dest,
+                            vec![IR::AssignUpvalue(Var(*var), upvalue_index, res)],
+                        )
                     }
                     E::Index { value, index, .. } => {
                         let (aops, a) = self.expression(value, ctx);

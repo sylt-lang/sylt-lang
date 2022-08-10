@@ -656,9 +656,13 @@ impl Resolver {
 
     fn is_upvalue(&self, var: Ref) -> bool {
         let var = &self.variables[var];
-        if var.is_global { return false; }
+        if var.is_global {
+            return false;
+        }
         let sf = self.stack_frames.last().cloned().unwrap();
-        if var.stack_frame == sf { return false; }
+        if var.stack_frame == sf {
+            return false;
+        }
         return var.captured_by.contains(&sf);
     }
 
@@ -885,7 +889,7 @@ impl Resolver {
                 let upvalues = self
                     .stack
                     .iter()
-                    .filter(|(_, var)| { self.is_upvalue(*var) })
+                    .filter(|(_, var)| self.is_upvalue(*var))
                     .map(|(_, var)| var)
                     .cloned()
                     .collect();
@@ -1159,7 +1163,7 @@ impl Resolver {
     }
 
     fn push_stack_frame(&mut self) -> StackFrameId {
-        let  stack_frame = StackFrameId(self.stack_frame_counter);
+        let stack_frame = StackFrameId(self.stack_frame_counter);
         self.stack_frame_counter += 1;
         self.stack_frames.push(stack_frame);
         stack_frame

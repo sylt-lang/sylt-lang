@@ -173,7 +173,11 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
                         match u {
                             VarOrUpvalue::Var(v) => {
                                 let v = self.expand(v);
-                                write!(self.out, "(function(x) if x == nil then return {} else {} = x end end)", v, v);
+                                write!(
+                                    self.out,
+                                    "(function(x) if x == nil then return {} else {} = x end end)",
+                                    v, v
+                                );
                             }
                             VarOrUpvalue::Upvalue(i, _) => {
                                 write!(self.out, "__upvalues[{}]", i + 1);
@@ -202,7 +206,6 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
                     write!(self.out, ")");
                     write!(self.out, "\n");
                     depth += 1;
-
                 }
 
                 IR::ExternalFunction(t, e, arity) => {
