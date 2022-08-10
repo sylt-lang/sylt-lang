@@ -326,6 +326,10 @@ impl<'a, 'b, 'c> Generator<'a, 'b, 'c> {
                         write!(self.out, "{} = {}", t, a);
                     }
                 }
+                IR::AssignUpvalue(_, i, a) => {
+                    let a = self.expand(a);
+                    write!(self.out, "__upvalues[{}] = {}", i + 1, a);
+                }
                 IR::AssignIndex(t, i, a) => {
                     if self.usage_count.get(t).unwrap_or(&0) > &0 {
                         let a = self.expand(a);

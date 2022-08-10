@@ -84,6 +84,7 @@ pub enum IR {
 
     Define(Var),
     Assign(Var, Var),
+    AssignUpvalue(Var, usize, Var),
     Return(Var),
     If(Var),
     HaltAndCatchFire(String),
@@ -519,6 +520,13 @@ impl<'a> IRCodeGen<'a> {
                     E::Read { var, .. } => {
                         (Vec::new(), Var(*var), vec![IR::Assign(Var(*var), res)])
                     }
+                    E::ReadUpvalue { var, name, .. } => {
+                        let upvalue_index = get_upvalue_id(ctx.upvalues, *var).unwrap();
+                        let source = Var(*var);
+                        let dest = self.var();
+                        self.name_var(dest, name.clone());
+                        (vec![IR::CopyUpvalue(dest, upvalue_index, source)], dest, vec![IR::AssignUpvalue(Var(*var), upvalue_index, res)])
+                    }
                     E::Index { value, index, .. } => {
                         let (aops, a) = self.expression(value, ctx);
                         let (bops, b) = self.expression(index, ctx);
@@ -539,7 +547,22 @@ impl<'a> IRCodeGen<'a> {
                             vec![IR::AssignAccess(a, field.clone(), res)],
                         )
                     }
-                    _ => unreachable!(),
+                    E::Variant { .. }
+                    | E::Call { .. }
+                    | E::BinOp { .. }
+                    | E::UniOp { .. }
+                    | E::If { .. }
+                    | E::Case { .. }
+                    | E::Function { .. }
+                    | E::Blob { .. }
+                    | E::Collection { .. }
+                    | E::Float(_, _)
+                    | E::Int(_, _)
+                    | E::Str(_, _)
+                    | E::Bool(_, _)
+                    | E::Nil(_) => {
+                        unreachable!("Not assignable, should be caught in the name_resolver")
+                    }
                 };
                 let (code, var) = self.expression(&value, ctx);
                 [
@@ -707,6 +730,7 @@ pub(crate) fn count_usages(ops: &[IR]) -> HashMap<Var, usize> {
             | IR::LessEqual(_, a, b)
             | IR::Index(_, a, b)
             | IR::Assign(a, b)
+            | IR::AssignUpvalue(a, _, b)
             | IR::AssignAccess(a, _, b)
             | IR::AssignIndex(_, a, b) => {
                 *table.entry(*a).or_insert(0) += 1;
