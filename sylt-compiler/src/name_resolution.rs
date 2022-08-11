@@ -959,8 +959,6 @@ impl Resolver {
                     .map(|(_, var)| var)
                     .cloned()
                     .collect();
-                dbg!(&name);
-                dbg!(&upvalues);
                 self.pop_stack_frame(sf);
                 self.stack.truncate(ss);
                 E::Function {
