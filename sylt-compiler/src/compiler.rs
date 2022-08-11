@@ -74,7 +74,7 @@ impl Compiler {
         assert!(!tree.modules.is_empty(), "Cannot compile an empty program");
 
         self.extract_namespaces(&tree);
-        let (vars, statements) = name_resolution::resolve(&tree, &self.namespace_id_to_file)?;
+        let (vars, num_types, statements) = name_resolution::resolve(&tree, &self.namespace_id_to_file)?;
 
         // TODO[ed]: These clones are unneeded!
         let statements = match dependency::initialization_order(&statements) {
@@ -110,7 +110,7 @@ impl Compiler {
             | Statement::Unreachable(_) => 1,
         });
 
-        let typechecker = typechecker::solve(&vars, &mut statements, &self.namespace_id_to_file)?;
+        let typechecker = typechecker::solve(&vars, num_types, &statements, &self.namespace_id_to_file)?;
 
         let (ir, var_to_name) = intermediate::compile(&typechecker, &statements);
         let usage_count = intermediate::count_usages(&ir);

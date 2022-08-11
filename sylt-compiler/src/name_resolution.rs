@@ -113,12 +113,6 @@ pub enum Collection {
     List,
 }
 
-type Ty = Option<TyID>;
-
-fn empty_ty() -> Ty {
-    None
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfBranch {
     pub condition: Option<Expression>,
@@ -140,38 +134,38 @@ pub enum Expression {
         var: Ref,
         name: String,
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
     ReadUpvalue {
         var: Ref,
         name: String,
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
     Variant {
         enum_ty: Ref,
         variant: String,
         value: Box<Expression>,
         span: Span,
-        ty_: Ty,
+        ty_: TyID,
     },
     Call {
         function: Box<Expression>,
         args: Vec<Expression>,
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
     BlobAccess {
         value: Box<Expression>,
         field: String,
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
     Index {
         value: Box<Expression>,
         index: Box<Expression>,
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
 
     BinOp {
@@ -179,26 +173,26 @@ pub enum Expression {
         b: Box<Expression>,
         op: BinOp,
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
     UniOp {
         a: Box<Expression>,
         op: UniOp,
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
 
     If {
         branches: Vec<IfBranch>,
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
     Case {
         to_match: Box<Expression>,
         branches: Vec<CaseBranch>,
         fall_through: Option<Vec<Statement>>,
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
     Function {
         // TODO[et]: We want to know what upvalues we have.
@@ -211,46 +205,46 @@ pub enum Expression {
         pure: bool,
 
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
     Blob {
         blob: Ref,
         fields: Vec<(String, Expression)>, // Keep calling order
         self_var: Ref,
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
 
     Collection {
         collection: Collection,
         values: Vec<Expression>,
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
 
     Float {
         value: f64,
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
     Int {
         value: i64,
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
     Str {
         value: String,
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
     Bool {
         value: bool,
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
     Nil {
         span: Span,
-        ty: Ty,
+        ty_id: TyID,
     },
 }
 
@@ -436,6 +430,7 @@ pub struct Var {
     pub name: String,
     pub definition: Span,
     pub kind: VarKind,
+    pub ty_id: TyID,
 
     pub captured_by: BTreeSet<StackFrameId>,
     pub stack_frame: StackFrameId,
@@ -459,6 +454,8 @@ struct Resolver {
     variables: Vec<Var>,
     namespace_to_file: HashMap<NamespaceID, FileOrLib>,
     file_to_namespace: HashMap<FileOrLib, NamespaceID>,
+
+    num_types: usize,
 }
 
 impl Resolver {
@@ -475,7 +472,14 @@ impl Resolver {
             stack: Vec::new(),
             stack_frames: vec![StackFrameId(0)],
             stack_frame_counter: 0,
+            num_types: 0,
         }
+    }
+
+    fn new_type(&mut self) -> TyID {
+        let id = TyID(self.num_types);
+        self.num_types += 1;
+        id
     }
 
     fn span_file(&self, span: &Span) -> FileOrLib {
@@ -708,7 +712,7 @@ impl Resolver {
         use sylt_parser::AssignableKind as AK;
         use Expression as E;
         let span = assignable.span;
-        let ty = empty_ty();
+        let ty_id = self.new_type();
 
         Ok(match &assignable.kind {
             AK::Read(Identifier { name, span }) => {
@@ -716,9 +720,9 @@ impl Resolver {
                 let span = *span;
                 let name = name.clone();
                 if self.is_upvalue(var) {
-                    E::ReadUpvalue { var, name, span, ty }
+                    E::ReadUpvalue { var, name, span, ty_id }
                 } else {
-                    E::Read { var, name, span, ty }
+                    E::Read { var, name, span, ty_id }
                 }
             }
             AK::Variant { enum_ass, variant, value } => {
@@ -738,7 +742,7 @@ impl Resolver {
                     variant: variant.name.clone(),
                     value,
                     span,
-                    ty_: empty_ty(),
+                    ty_: self.new_type(),
                 }
             }
             AK::Call(function, parser_args) => {
@@ -747,7 +751,7 @@ impl Resolver {
                 for arg in parser_args.iter() {
                     args.push(self.expression(arg)?);
                 }
-                E::Call { function, args, span, ty }
+                E::Call { function, args, span, ty_id }
             }
             AK::ArrowCall(extra_arg, function, parser_args) => {
                 let extra_arg = self.expression(extra_arg)?;
@@ -756,7 +760,7 @@ impl Resolver {
                 for arg in parser_args.iter() {
                     args.push(self.expression(arg)?);
                 }
-                E::Call { function, args, span, ty }
+                E::Call { function, args, span, ty_id }
             }
             AK::Access(assignable, ident) => match self.namespace_list(span.file_id, assignable) {
                 Some(ns) => {
@@ -780,12 +784,7 @@ impl Resolver {
                         }
                     };
                     let span = ident.span;
-                    E::Read {
-                        var,
-                        name: "access".to_string(),
-                        span,
-                        ty,
-                    }
+                    E::Read { var, name: "access".to_string(), span, ty_id }
                 }
                 None => {
                     let value = Box::new(self.assignable(assignable)?);
@@ -793,14 +792,14 @@ impl Resolver {
                         value,
                         field: ident.name.clone(),
                         span: ident.span,
-                        ty,
+                        ty_id,
                     }
                 }
             },
             AK::Index(assignable, index) => {
                 let value = Box::new(self.assignable(assignable)?);
                 let index = Box::new(self.expression(index)?);
-                E::Index { value, index, span, ty }
+                E::Index { value, index, span, ty_id }
             }
             AK::Expression(value) => self.expression(value)?,
         })
@@ -816,8 +815,8 @@ impl Resolver {
         for e in expr.iter() {
             values.push(self.expression(e)?);
         }
-        let ty = empty_ty();
-        Ok(Expression::Collection { collection, values, span, ty })
+        let ty_id = self.new_type();
+        Ok(Expression::Collection { collection, values, span, ty_id })
     }
 
     fn binop(
@@ -829,14 +828,14 @@ impl Resolver {
     ) -> ResolveResult<Expression> {
         let a = Box::new(self.expression(a)?);
         let b = Box::new(self.expression(b)?);
-        let ty = empty_ty();
-        Ok(Expression::BinOp { op, a, b, span, ty })
+        let ty_id = self.new_type();
+        Ok(Expression::BinOp { op, a, b, span, ty_id })
     }
 
     fn uniop(&mut self, op: UniOp, a: &ParserExpression, span: Span) -> ResolveResult<Expression> {
         let a = Box::new(self.expression(a)?);
-        let ty = empty_ty();
-        Ok(Expression::UniOp { op, a, span, ty })
+        let ty_id = self.new_type();
+        Ok(Expression::UniOp { op, a, span, ty_id })
     }
 
     fn if_branch(&mut self, branch: &ParserIfBranch) -> ResolveResult<IfBranch> {
@@ -850,10 +849,11 @@ impl Resolver {
     }
 
     fn case_branch(&mut self, branch: &ParserCaseBranch) -> ResolveResult<CaseBranch> {
+        let ty_id = self.new_type();
         let variable = &branch
             .variable
             .as_ref()
-            .map(|var| self.push_var(var, VarKind::Const));
+            .map(|var| self.push_var(ty_id, var, VarKind::Const));
         let mut body = Vec::new();
         for stmt in branch.body.iter() {
             match self.statement(stmt)? {
@@ -891,7 +891,7 @@ impl Resolver {
         use sylt_parser::ExpressionKind as EK;
         use Expression as E;
         let span = expr.span;
-        let ty = empty_ty();
+        let ty_id = self.new_type();
 
         Ok(match &expr.kind {
             EK::Get(g) => self.assignable(g)?,
@@ -918,7 +918,7 @@ impl Resolver {
                 for branch in parser_branches.iter() {
                     branches.push(self.if_branch(branch)?);
                 }
-                E::If { branches, span, ty }
+                E::If { branches, span, ty_id }
             }
             EK::Case { to_match, branches: parser_branches, fall_through } => {
                 let to_match = Box::new(self.expression(to_match)?);
@@ -930,13 +930,7 @@ impl Resolver {
                     Some(x) => Some(self.block(x)?),
                     None => None,
                 };
-                E::Case {
-                    to_match,
-                    branches,
-                    fall_through,
-                    span,
-                    ty,
-                }
+                E::Case { to_match, branches, fall_through, span, ty_id }
             }
             EK::Function { name, params: parser_params, ret, body, pure } => {
                 // Functions are the only things that care about the stackframe
@@ -946,7 +940,8 @@ impl Resolver {
                 let name = name.clone();
                 let mut params = Vec::new();
                 for (n, t) in parser_params.iter() {
-                    let var = self.push_var(n, VarKind::Const);
+                    let ty_id = self.new_type();
+                    let var = self.push_var(ty_id, n, VarKind::Const);
                     params.push((n.name.clone(), var, n.span, self.ty(t)?));
                 }
                 let ret = self.ty(ret)?;
@@ -969,7 +964,7 @@ impl Resolver {
                     body,
                     pure: *pure,
                     span,
-                    ty,
+                    ty_id,
                 }
             }
             EK::Blob { blob, fields: parser_fields } => {
@@ -979,6 +974,7 @@ impl Resolver {
                 };
                 let mut fields = Vec::new();
                 let self_var = self.new_var(
+                    ty_id,
                     &Identifier { name: "self".to_string(), span },
                     VarKind::Mutable,
                 );
@@ -990,15 +986,15 @@ impl Resolver {
                     fields.push((name.clone(), self.expression(field)?));
                     self.stack.truncate(ss);
                 }
-                E::Blob { blob, fields, self_var, span, ty }
+                E::Blob { blob, fields, self_var, span, ty_id }
             }
             EK::Tuple(values) => self.collection(Collection::Tuple, &values, span)?,
             EK::List(values) => self.collection(Collection::List, &values, span)?,
-            EK::Float(value) => E::Float { value: *value, span, ty },
-            EK::Int(value) => E::Int { value: *value, span, ty },
-            EK::Str(value) => E::Str { value: value.clone(), span, ty },
-            EK::Bool(value) => E::Bool { value: *value, span, ty },
-            EK::Nil => E::Nil { span, ty },
+            EK::Float(value) => E::Float { value: *value, span, ty_id },
+            EK::Int(value) => E::Int { value: *value, span, ty_id },
+            EK::Str(value) => E::Str { value: value.clone(), span, ty_id },
+            EK::Bool(value) => E::Bool { value: *value, span, ty_id },
+            EK::Nil => E::Nil { span, ty_id },
         })
     }
 
@@ -1047,6 +1043,7 @@ impl Resolver {
             }),
 
             SK::Definition { ident, kind, ty, value } => {
+                let ty_id = self.new_type();
                 let (value, var) = if self.stack.is_empty() {
                     // Outer statement - it's a global so just evaluate the value and push a dummy
                     // value on the stack.
@@ -1054,7 +1051,7 @@ impl Resolver {
                         name: format!("== STACK BEGIN {:?} ==", ident.name),
                         span: ident.span,
                     };
-                    self.push_var(&fake_ident, *kind);
+                    self.push_var(ty_id, &fake_ident, *kind);
                     let value = self.expression(value)?;
                     // Clear the stack imediately
                     self.stack.clear();
@@ -1062,13 +1059,13 @@ impl Resolver {
                     (value, var)
                 } else if matches!(value.kind, sylt_parser::ExpressionKind::Function { .. }) {
                     // Function, push the var before!
-                    let var = self.push_var(ident, *kind);
+                    let var = self.push_var(ty_id, ident, *kind);
                     let value = self.expression(value)?;
                     (value, var)
                 } else {
                     // Value, push the var after!
                     let value_maybe = self.expression(value);
-                    let var = self.push_var(ident, *kind);
+                    let var = self.push_var(ty_id, ident, *kind);
                     (value_maybe?, var)
                 };
                 Some(S::Definition {
@@ -1135,13 +1132,15 @@ impl Resolver {
             let (name, var) = match &stmt.kind {
                 sylt_parser::StatementKind::Blob { name, .. }
                 | sylt_parser::StatementKind::Enum { name, .. } => {
-                    let var = self.new_global(name, VarKind::Const);
+                    let ty_id = self.new_type();
+                    let var = self.new_global(ty_id, name, VarKind::Const);
                     (name.name.clone(), Name::Name(var))
                 }
 
                 sylt_parser::StatementKind::ExternalDefinition { ident, kind, .. }
                 | sylt_parser::StatementKind::Definition { ident, kind, .. } => {
-                    let var = self.new_global(ident, *kind);
+                    let ty_id = self.new_type();
+                    let var = self.new_global(ty_id, ident, *kind);
                     (ident.name.clone(), Name::Name(var))
                 }
 
@@ -1185,7 +1184,7 @@ impl Resolver {
         }
     }
 
-    fn new_var(&mut self, ident: &Identifier, kind: VarKind) -> Ref {
+    fn new_var(&mut self, ty_id: TyID, ident: &Identifier, kind: VarKind) -> Ref {
         let id = self.variables.len();
         let stack_frame = *self.stack_frames.last().unwrap();
 
@@ -1194,6 +1193,7 @@ impl Resolver {
             name: ident.name.clone(),
             definition: ident.span,
             kind,
+            ty_id,
 
             captured_by: BTreeSet::new(),
             stack_frame,
@@ -1203,7 +1203,7 @@ impl Resolver {
         id
     }
 
-    fn new_global(&mut self, ident: &Identifier, kind: VarKind) -> Ref {
+    fn new_global(&mut self, ty_id: TyID, ident: &Identifier, kind: VarKind) -> Ref {
         let id = self.variables.len();
         let stack_frame = *self.stack_frames.last().unwrap();
 
@@ -1212,6 +1212,7 @@ impl Resolver {
             name: ident.name.clone(),
             definition: ident.span,
             kind,
+            ty_id,
 
             captured_by: BTreeSet::new(),
             stack_frame,
@@ -1221,8 +1222,8 @@ impl Resolver {
         id
     }
 
-    fn push_var(&mut self, ident: &Identifier, kind: VarKind) -> usize {
-        let var = self.new_var(ident, kind);
+    fn push_var(&mut self, ty_id: TyID, ident: &Identifier, kind: VarKind) -> usize {
+        let var = self.new_var(ty_id, ident, kind);
         self.stack.push((ident.name.clone(), var));
         var
     }
@@ -1367,7 +1368,7 @@ impl Resolver {
 pub fn resolve<'a>(
     tree: &'a ParserAST,
     namespace_to_file: &HashMap<NamespaceID, FileOrLib>,
-) -> ResolveResult<(Vec<Var>, Vec<Statement>)> {
+) -> ResolveResult<(Vec<Var>, usize, Vec<Statement>)> {
     let mut resolver = Resolver::new(namespace_to_file.clone());
 
     // Create namespaces and insert the variables in them
@@ -1393,5 +1394,5 @@ pub fn resolve<'a>(
             "Expected a start function in the main module - but couldn't find it"
         }
     }
-    Ok((resolver.variables, out))
+    Ok((resolver.variables, resolver.num_types, out))
 }
