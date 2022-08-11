@@ -1,7 +1,7 @@
 use std::collections::{hash_map::Entry, HashMap};
 use std::collections::{BTreeMap, BTreeSet};
-use sylt_common::Type as RuntimeType;
 use sylt_common::{error::Helper, Error, FileOrLib};
+use sylt_common::{TyID, Type as RuntimeType};
 use sylt_parser::{
     expression::CaseBranch as ParserCaseBranch, expression::IfBranch as ParserIfBranch,
     Assignable as ParserAssignable, Expression as ParserExpression, Identifier, Span,
@@ -113,6 +113,12 @@ pub enum Collection {
     List,
 }
 
+type Ty = Option<TyID>;
+
+fn empty_ty() -> Ty {
+    None
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfBranch {
     pub condition: Option<Expression>,
@@ -134,32 +140,38 @@ pub enum Expression {
         var: Ref,
         name: String,
         span: Span,
+        ty: Ty,
     },
     ReadUpvalue {
         var: Ref,
         name: String,
         span: Span,
+        ty: Ty,
     },
     Variant {
-        ty: Ref,
+        enum_ty: Ref,
         variant: String,
         value: Box<Expression>,
         span: Span,
+        ty_: Ty,
     },
     Call {
         function: Box<Expression>,
         args: Vec<Expression>,
         span: Span,
+        ty: Ty,
     },
     BlobAccess {
         value: Box<Expression>,
         field: String,
         span: Span,
+        ty: Ty,
     },
     Index {
         value: Box<Expression>,
         index: Box<Expression>,
         span: Span,
+        ty: Ty,
     },
 
     BinOp {
@@ -167,22 +179,26 @@ pub enum Expression {
         b: Box<Expression>,
         op: BinOp,
         span: Span,
+        ty: Ty,
     },
     UniOp {
         a: Box<Expression>,
         op: UniOp,
         span: Span,
+        ty: Ty,
     },
 
     If {
         branches: Vec<IfBranch>,
         span: Span,
+        ty: Ty,
     },
     Case {
         to_match: Box<Expression>,
         branches: Vec<CaseBranch>,
         fall_through: Option<Vec<Statement>>,
         span: Span,
+        ty: Ty,
     },
     Function {
         // TODO[et]: We want to know what upvalues we have.
@@ -195,25 +211,47 @@ pub enum Expression {
         pure: bool,
 
         span: Span,
+        ty: Ty,
     },
     Blob {
         blob: Ref,
         fields: Vec<(String, Expression)>, // Keep calling order
         self_var: Ref,
         span: Span,
+        ty: Ty,
     },
 
     Collection {
         collection: Collection,
         values: Vec<Expression>,
         span: Span,
+        ty: Ty,
     },
 
-    Float(f64, Span),
-    Int(i64, Span),
-    Str(String, Span),
-    Bool(bool, Span),
-    Nil(Span),
+    Float {
+        value: f64,
+        span: Span,
+        ty: Ty,
+    },
+    Int {
+        value: i64,
+        span: Span,
+        ty: Ty,
+    },
+    Str {
+        value: String,
+        span: Span,
+        ty: Ty,
+    },
+    Bool {
+        value: bool,
+        span: Span,
+        ty: Ty,
+    },
+    Nil {
+        span: Span,
+        ty: Ty,
+    },
 }
 
 impl Expression {
@@ -232,11 +270,11 @@ impl Expression {
             | Expression::Function { span, .. }
             | Expression::Blob { span, .. }
             | Expression::Collection { span, .. }
-            | Expression::Float(_, span)
-            | Expression::Int(_, span)
-            | Expression::Str(_, span)
-            | Expression::Bool(_, span)
-            | Expression::Nil(span) => *span,
+            | Expression::Float { span, .. }
+            | Expression::Int { span, .. }
+            | Expression::Str { span, .. }
+            | Expression::Bool { span, .. }
+            | Expression::Nil { span, .. } => *span,
         }
     }
 }
@@ -670,20 +708,22 @@ impl Resolver {
         use sylt_parser::AssignableKind as AK;
         use Expression as E;
         let span = assignable.span;
+        let ty = empty_ty();
+
         Ok(match &assignable.kind {
             AK::Read(Identifier { name, span }) => {
                 let var = self.lookup(name, *span)?;
                 let span = *span;
                 let name = name.clone();
                 if self.is_upvalue(var) {
-                    E::ReadUpvalue { var, name, span }
+                    E::ReadUpvalue { var, name, span, ty }
                 } else {
-                    E::Read { var, name, span }
+                    E::Read { var, name, span, ty }
                 }
             }
             AK::Variant { enum_ass, variant, value } => {
                 // Checking that this is a valid type, should be done in the typechecker
-                let ty = if let E::Read { var, .. } = self.assignable(enum_ass)? {
+                let enum_ty = if let E::Read { var, .. } = self.assignable(enum_ass)? {
                     var
                 } else {
                     raise_resolution_error! {
@@ -693,7 +733,13 @@ impl Resolver {
                     };
                 };
                 let value = Box::new(self.expression(value)?);
-                E::Variant { ty, variant: variant.name.clone(), value, span }
+                E::Variant {
+                    enum_ty,
+                    variant: variant.name.clone(),
+                    value,
+                    span,
+                    ty_: empty_ty(),
+                }
             }
             AK::Call(function, parser_args) => {
                 let function = Box::new(self.assignable(function)?);
@@ -701,7 +747,7 @@ impl Resolver {
                 for arg in parser_args.iter() {
                     args.push(self.expression(arg)?);
                 }
-                E::Call { function, args, span }
+                E::Call { function, args, span, ty }
             }
             AK::ArrowCall(extra_arg, function, parser_args) => {
                 let extra_arg = self.expression(extra_arg)?;
@@ -710,7 +756,7 @@ impl Resolver {
                 for arg in parser_args.iter() {
                     args.push(self.expression(arg)?);
                 }
-                E::Call { function, args, span }
+                E::Call { function, args, span, ty }
             }
             AK::Access(assignable, ident) => match self.namespace_list(span.file_id, assignable) {
                 Some(ns) => {
@@ -734,17 +780,27 @@ impl Resolver {
                         }
                     };
                     let span = ident.span;
-                    E::Read { var, name: "access".to_string(), span }
+                    E::Read {
+                        var,
+                        name: "access".to_string(),
+                        span,
+                        ty,
+                    }
                 }
                 None => {
                     let value = Box::new(self.assignable(assignable)?);
-                    E::BlobAccess { value, field: ident.name.clone(), span: ident.span }
+                    E::BlobAccess {
+                        value,
+                        field: ident.name.clone(),
+                        span: ident.span,
+                        ty,
+                    }
                 }
             },
             AK::Index(assignable, index) => {
                 let value = Box::new(self.assignable(assignable)?);
                 let index = Box::new(self.expression(index)?);
-                E::Index { value, index, span }
+                E::Index { value, index, span, ty }
             }
             AK::Expression(value) => self.expression(value)?,
         })
@@ -760,7 +816,8 @@ impl Resolver {
         for e in expr.iter() {
             values.push(self.expression(e)?);
         }
-        Ok(Expression::Collection { collection, values, span })
+        let ty = empty_ty();
+        Ok(Expression::Collection { collection, values, span, ty })
     }
 
     fn binop(
@@ -772,12 +829,14 @@ impl Resolver {
     ) -> ResolveResult<Expression> {
         let a = Box::new(self.expression(a)?);
         let b = Box::new(self.expression(b)?);
-        Ok(Expression::BinOp { op, a, b, span })
+        let ty = empty_ty();
+        Ok(Expression::BinOp { op, a, b, span, ty })
     }
 
     fn uniop(&mut self, op: UniOp, a: &ParserExpression, span: Span) -> ResolveResult<Expression> {
         let a = Box::new(self.expression(a)?);
-        Ok(Expression::UniOp { op, a, span })
+        let ty = empty_ty();
+        Ok(Expression::UniOp { op, a, span, ty })
     }
 
     fn if_branch(&mut self, branch: &ParserIfBranch) -> ResolveResult<IfBranch> {
@@ -832,6 +891,7 @@ impl Resolver {
         use sylt_parser::ExpressionKind as EK;
         use Expression as E;
         let span = expr.span;
+        let ty = empty_ty();
 
         Ok(match &expr.kind {
             EK::Get(g) => self.assignable(g)?,
@@ -858,7 +918,7 @@ impl Resolver {
                 for branch in parser_branches.iter() {
                     branches.push(self.if_branch(branch)?);
                 }
-                E::If { branches, span }
+                E::If { branches, span, ty }
             }
             EK::Case { to_match, branches: parser_branches, fall_through } => {
                 let to_match = Box::new(self.expression(to_match)?);
@@ -870,7 +930,13 @@ impl Resolver {
                     Some(x) => Some(self.block(x)?),
                     None => None,
                 };
-                E::Case { to_match, branches, fall_through, span }
+                E::Case {
+                    to_match,
+                    branches,
+                    fall_through,
+                    span,
+                    ty,
+                }
             }
             EK::Function { name, params: parser_params, ret, body, pure } => {
                 // Functions are the only things that care about the stackframe
@@ -905,6 +971,7 @@ impl Resolver {
                     body,
                     pure: *pure,
                     span,
+                    ty,
                 }
             }
             EK::Blob { blob, fields: parser_fields } => {
@@ -925,15 +992,15 @@ impl Resolver {
                     fields.push((name.clone(), self.expression(field)?));
                     self.stack.truncate(ss);
                 }
-                E::Blob { blob, fields, self_var, span }
+                E::Blob { blob, fields, self_var, span, ty }
             }
             EK::Tuple(values) => self.collection(Collection::Tuple, &values, span)?,
             EK::List(values) => self.collection(Collection::List, &values, span)?,
-            EK::Float(f) => E::Float(*f, span),
-            EK::Int(i) => E::Int(*i, span),
-            EK::Str(s) => E::Str(s.clone(), span),
-            EK::Bool(b) => E::Bool(*b, span),
-            EK::Nil => E::Nil(span),
+            EK::Float(value) => E::Float { value: *value, span, ty },
+            EK::Int(value) => E::Int { value: *value, span, ty },
+            EK::Str(value) => E::Str { value: value.clone(), span, ty },
+            EK::Bool(value) => E::Bool { value: *value, span, ty },
+            EK::Nil => E::Nil { span, ty },
         })
     }
 

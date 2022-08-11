@@ -110,7 +110,7 @@ impl Compiler {
             | Statement::Unreachable(_) => 1,
         });
 
-        let typechecker = typechecker::solve(&vars, &statements, &self.namespace_id_to_file)?;
+        let typechecker = typechecker::solve(&vars, &mut statements, &self.namespace_id_to_file)?;
 
         let (ir, var_to_name) = intermediate::compile(&typechecker, &statements);
         let usage_count = intermediate::count_usages(&ir);

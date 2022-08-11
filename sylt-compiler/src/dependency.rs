@@ -76,9 +76,9 @@ fn dependencies(expression: &Expression) -> BTreeSet<usize> {
     use Expression as E;
     match &expression {
         E::Read { var, .. } | E::ReadUpvalue { var, .. } => [*var].iter().map(|v| *v).collect(),
-        E::Variant { ty, value, .. } => dependencies(value)
+        E::Variant { enum_ty, value, .. } => dependencies(value)
             .iter()
-            .chain([*ty].iter())
+            .chain([*enum_ty].iter())
             .cloned()
             .collect(),
         E::Call { function, args, .. } => dependencies(function)
@@ -177,7 +177,9 @@ fn dependencies(expression: &Expression) -> BTreeSet<usize> {
             .collect(),
 
         // No dependencies
-        E::Float(_, _) | E::Int(_, _) | E::Str(_, _) | E::Bool(_, _) | E::Nil(_) => BTreeSet::new(),
+        E::Float { .. } | E::Int { .. } | E::Str { .. } | E::Bool { .. } | E::Nil { .. } => {
+            BTreeSet::new()
+        }
     }
 }
 

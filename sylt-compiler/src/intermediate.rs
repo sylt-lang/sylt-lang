@@ -469,26 +469,26 @@ impl<'a> IRCodeGen<'a> {
                 )
             }
 
-            E::Float(a, _) => {
+            E::Float { value, .. } => {
                 let var = self.var();
-                (vec![IR::Float(var, *a)], var)
+                (vec![IR::Float(var, *value)], var)
             }
-            E::Str(a, _) => {
+            E::Str { value, .. } => {
                 let var = self.var();
-                (vec![IR::Str(var, a.into())], var)
+                (vec![IR::Str(var, value.into())], var)
             }
 
-            E::Bool(b, _) => {
+            E::Bool { value, .. } => {
                 let a = self.var();
-                (vec![IR::Bool(a, *b)], a)
+                (vec![IR::Bool(a, *value)], a)
             }
 
-            E::Int(i, _) => {
+            E::Int { value, .. } => {
                 let a = self.var();
-                (vec![IR::Int(a, *i)], a)
+                (vec![IR::Int(a, *value)], a)
             }
 
-            E::Nil(_) => {
+            E::Nil { .. } => {
                 let a = self.var();
                 (vec![IR::Nil(a)], a)
             }
@@ -560,11 +560,11 @@ impl<'a> IRCodeGen<'a> {
                     | E::Function { .. }
                     | E::Blob { .. }
                     | E::Collection { .. }
-                    | E::Float(_, _)
-                    | E::Int(_, _)
-                    | E::Str(_, _)
-                    | E::Bool(_, _)
-                    | E::Nil(_) => {
+                    | E::Float { .. }
+                    | E::Int { .. }
+                    | E::Str { .. }
+                    | E::Bool { .. }
+                    | E::Nil { .. } => {
                         unreachable!("Not assignable, should be caught in the name_resolver")
                     }
                 };

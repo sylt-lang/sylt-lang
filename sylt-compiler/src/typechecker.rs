@@ -12,11 +12,13 @@ type TypeResult<T> = Result<T, Vec<Error>>;
 
 type RetNValue = (Option<TyID>, TyID);
 
-fn no_ret(value: TyID) -> TypeResult<RetNValue> {
+fn no_ret(value: TyID, ty: &mut Option<TyID>) -> TypeResult<RetNValue> {
+    *ty = Some(value);
     Ok((None, value))
 }
 
-fn with_ret(ret: Option<TyID>, value: TyID) -> TypeResult<RetNValue> {
+fn with_ret(ret: Option<TyID>, value: TyID, ty: &mut Option<TyID>) -> TypeResult<RetNValue> {
+    *ty = Some(value);
     Ok((ret, value))
 }
 
@@ -87,18 +89,19 @@ macro_rules! type_error {
 }
 
 macro_rules! bin_op {
-    ($self:expr, $span:expr, $ctx:expr, $a:expr, $b:expr, $con:expr) => {{
+    ($self:expr, $span:expr, $ctx:expr, $a:expr, $b:expr, $con:expr, $ty:expr) => {{
         let (a_ret, a) = $self.expression($a, $ctx)?;
         let (b_ret, b) = $self.expression($b, $ctx)?;
         $self.add_constraint(a, $span, $con(b));
         $self.add_constraint(b, $span, $con(a));
         $self.check_constraints($span, $ctx, a)?;
         $self.check_constraints($span, $ctx, b)?;
-        with_ret($self.unify_option($span, $ctx, a_ret, b_ret)?, a)
+        let value = $self.unify_option($span, $ctx, a_ret, b_ret)?;
+        with_ret(value, a, $ty)
     }};
-    ($self:expr, $span:expr, $ctx:expr, $a:expr, $b:expr, $con:expr, $ret:expr) => {{
-        let (ret, _) = bin_op!($self, $span, $ctx, $a, $b, $con)?;
-        with_ret(ret, $self.push_type($ret))
+    ($self:expr, $span:expr, $ctx:expr, $a:expr, $b:expr, $con:expr, $ret:expr, $ty:expr) => {{
+        let (ret, _) = bin_op!($self, $span, $ctx, $a, $b, $con, $ty)?;
+        with_ret(ret, $self.push_type($ret), $ty)
     }};
 }
 
@@ -404,7 +407,7 @@ impl TypeChecker {
         Ok((f, ret))
     }
 
-    fn definition(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
+    fn definition(&mut self, statement: &mut Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
         use Expression as E;
         use Statement as S;
         if let S::Definition { var, ty, value, span, kind, .. } = statement {
@@ -434,12 +437,12 @@ impl TypeChecker {
         }
     }
 
-    fn statement(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
+    fn statement(&mut self, statement: &mut Statement, ctx: TypeCtx) -> TypeResult<Option<TyID>> {
         use Statement as S;
         let span = statement.span();
         let _handle =
             sylt_macro::timed_handle!("typecheck::statement", line_start = span.line_start);
-        match &statement {
+        match statement {
             S::Ret { value: Some(value), span } => Ok(Some({
                 let (ret, value) = self.expression(value, ctx)?;
                 match ret {
@@ -454,7 +457,7 @@ impl TypeChecker {
                 Ok(ret)
             }
 
-            S::StatementExpression { value, .. } => Ok(self.expression(&value, ctx)?.0),
+            S::StatementExpression { value, .. } => Ok(self.expression(value, ctx)?.0),
 
             S::Assignment { op, target, value, span } => {
                 self.can_assign(*span, target)?;
@@ -468,8 +471,8 @@ impl TypeChecker {
                     );
                 }
 
-                let (expression_ret, expression_ty) = self.expression(&value, ctx)?;
-                let (target_ret, target_ty) = self.expression(&target, ctx)?;
+                let (expression_ret, expression_ty) = self.expression(value, ctx)?;
+                let (target_ret, target_ty) = self.expression(target, ctx)?;
                 match op {
                     BinOp::And
                     | BinOp::AssertEq
@@ -512,11 +515,11 @@ impl TypeChecker {
             S::Definition { .. } => self.definition(statement, ctx),
 
             S::Loop { condition, body, span } => {
-                let (ret, condition) = self.expression(&condition, ctx)?;
+                let (ret, condition) = self.expression(condition, ctx)?;
                 let boolean = self.push_type(Type::Bool);
                 self.unify(*span, ctx, boolean, condition)?;
 
-                let (body_ret, _) = self.expression_block(*span, &body, ctx.enter_loop())?;
+                let (body_ret, _) = self.expression_block(*span, body, ctx.enter_loop())?;
                 self.unify_option(*span, ctx, ret, body_ret)
             }
 
@@ -556,7 +559,7 @@ impl TypeChecker {
         }
     }
 
-    fn outer_statement(&mut self, statement: &Statement, ctx: TypeCtx) -> TypeResult<()> {
+    fn outer_statement(&mut self, statement: &mut Statement, ctx: TypeCtx) -> TypeResult<()> {
         use Statement as S;
         let _handle =
             sylt_macro::timed_handle!("typecheck::outer_statement", line = span.line_start);
@@ -676,16 +679,16 @@ impl TypeChecker {
     fn expression_block(
         &mut self,
         span: Span,
-        statements: &Vec<Statement>,
+        statements: &mut Vec<Statement>,
         ctx: TypeCtx,
     ) -> TypeResult<(Option<TyID>, Option<TyID>)> {
         let mut ret = None;
-        for stmt in statements.iter() {
+        for stmt in statements.iter_mut() {
             let stmt_ret = self.statement(stmt, ctx)?;
             ret = self.unify_option(span, ctx, ret, stmt_ret)?;
         }
         // We typecheck the last statement twice sometimes, doesn't matter though.
-        let value = if let Some(Statement::StatementExpression { value, .. }) = statements.last() {
+        let value = if let Some(Statement::StatementExpression { value, .. }) = statements.last_mut() {
             let (value_ret, value) = self.expression(value, ctx)?;
             ret = self.unify_option(span, ctx, ret, value_ret)?;
             Some(value)
@@ -695,10 +698,10 @@ impl TypeChecker {
         Ok((ret, value))
     }
 
-    fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> TypeResult<RetNValue> {
+    fn expression(&mut self, expression: &mut Expression, ctx: TypeCtx) -> TypeResult<RetNValue> {
         use Expression as E;
         let (expr_ret, expr) = match expression {
-            E::Read { var, span, .. } | E::ReadUpvalue { var, span, .. } => {
+            E::Read { var, span, ty, name: _ } | E::ReadUpvalue { var, span, ty, name: _ } => {
                 let var = &self.variables[*var];
                 let immutable = var.kind.immutable();
                 if ctx.inside_pure && !immutable {
@@ -709,21 +712,21 @@ impl TypeChecker {
                         "Cannot access mutable variables from pure functions"
                     );
                 }
-                no_ret(var.ty)
+                no_ret(var.ty, ty)
             }
-            E::Variant { ty, variant, value, span } => {
+            E::Variant { enum_ty, variant, value, span, ty_ } => {
                 let (value_ret, value) = self.expression(value, ctx)?;
                 // TODO[ed]: We should be able to do without this!
-                let enum_ty = self.copy(self.variables[*ty].ty);
+                let enum_ty = self.copy(self.variables[*enum_ty].ty);
                 self.add_constraint(
                     enum_ty,
                     *span,
                     Constraint::Variant(variant.clone(), Some(value)),
                 );
                 self.check_constraints(*span, ctx, enum_ty)?;
-                with_ret(value_ret, enum_ty)
+                with_ret(value_ret, enum_ty, ty_)
             }
-            E::Call { function, args, span } => {
+            E::Call { function, args, span, ty } => {
                 let (ret, function) = self.expression(function, ctx)?;
                 match self.find_type(function) {
                     Type::Function(params, ret_ty, purity) => {
@@ -746,7 +749,7 @@ impl TypeChecker {
 
                         // TODO(ed): Annotate the errors?
                         let mut ret = ret;
-                        for (a, p) in args.iter().zip(params.iter()) {
+                        for (a, p) in args.iter_mut().zip(params.iter()) {
                             let span = a.span();
                             let (a_ret, a) = self.expression(a, ctx)?;
                             self.unify(span, ctx, *p, a)?;
@@ -755,8 +758,7 @@ impl TypeChecker {
                             ret = self.unify_option(span, ctx, ret, a_ret)?;
                         }
                         self.check_constraints(*span, ctx, ret_ty)?;
-
-                        with_ret(ret, ret_ty)
+                        with_ret(ret, ret_ty, ty)
                     }
                     Type::Unknown => err_type_error!(
                         self,
@@ -772,7 +774,7 @@ impl TypeChecker {
                     ),
                 }
             }
-            E::BlobAccess { value, field, span } => {
+            E::BlobAccess { value, field, span, ty } => {
                 let (outer_ret, outer) = self.expression(value, ctx)?;
                 let field_ty = self.push_type(Type::Unknown);
                 self.add_constraint(outer, *span, Constraint::Field(field.clone(), field_ty));
@@ -783,16 +785,16 @@ impl TypeChecker {
                     Type::Function(_, _, _) => self.copy(field_ty),
                     _ => field_ty,
                 };
-                with_ret(outer_ret, field_ty)
+                with_ret(outer_ret, field_ty, ty)
             }
-            E::Index { value, index: index_syn, span } => {
+            E::Index { value, index: index_syn, span, ty } => {
                 let (value_ret, value) = self.expression(value, ctx)?;
                 let (index_ret, index) = self.expression(index_syn, ctx)?;
                 let int_type = self.push_type(Type::Int);
                 self.unify(*span, ctx, index, int_type)?;
                 let expr = self.push_type(Type::Unknown);
                 match **index_syn {
-                    E::Int(i, _) => {
+                    E::Int { value: i, .. } => {
                         self.add_constraint(value, *span, Constraint::ConstantIndex(i, expr))
                     }
                     _ => unreachable!("Should be handled in parser"),
@@ -800,23 +802,23 @@ impl TypeChecker {
                 self.check_constraints(*span, ctx, value)?;
                 self.check_constraints(*span, ctx, index)?;
                 let ret = self.unify_option(*span, ctx, value_ret, index_ret)?;
-                with_ret(ret, expr)
+                with_ret(ret, expr, ty)
             }
 
-            E::BinOp { a, b, op, span } => match op {
+            E::BinOp { a, b, op, span, ty } => match op {
                 BinOp::Nop => unreachable!(),
                 BinOp::Equals | BinOp::AssertEq | BinOp::NotEquals => {
-                    bin_op!(self, *span, ctx, a, b, Constraint::Equ, Type::Bool)
+                    bin_op!(self, *span, ctx, a, b, Constraint::Equ, Type::Bool, ty)
                 }
                 BinOp::Greater | BinOp::Less => {
-                    bin_op!(self, *span, ctx, a, b, Constraint::Cmp, Type::Bool)
+                    bin_op!(self, *span, ctx, a, b, Constraint::Cmp, Type::Bool, ty)
                 }
                 BinOp::GreaterEqual | BinOp::LessEqual => {
-                    bin_op!(self, *span, ctx, a, b, Constraint::CmpEqu, Type::Bool)
+                    bin_op!(self, *span, ctx, a, b, Constraint::CmpEqu, Type::Bool, ty)
                 }
-                BinOp::Add => bin_op!(self, *span, ctx, a, b, Constraint::Add),
-                BinOp::Sub => bin_op!(self, *span, ctx, a, b, Constraint::Sub),
-                BinOp::Mul => bin_op!(self, *span, ctx, a, b, Constraint::Mul),
+                BinOp::Add => bin_op!(self, *span, ctx, a, b, Constraint::Add, ty),
+                BinOp::Sub => bin_op!(self, *span, ctx, a, b, Constraint::Sub, ty),
+                BinOp::Mul => bin_op!(self, *span, ctx, a, b, Constraint::Mul, ty),
                 BinOp::Div => {
                     let (a_ret, a) = self.expression(a, ctx)?;
                     let (b_ret, b) = self.expression(b, ctx)?;
@@ -827,7 +829,7 @@ impl TypeChecker {
                     self.check_constraints(*span, ctx, a)?;
                     self.check_constraints(*span, ctx, b)?;
                     self.check_constraints(*span, ctx, c)?;
-                    with_ret(self.unify_option(*span, ctx, a_ret, b_ret)?, c)
+                    with_ret(self.unify_option(*span, ctx, a_ret, b_ret)?, c, ty)
                 }
                 BinOp::And | BinOp::Or => {
                     let (a_ret, a) = self.expression(a, ctx)?;
@@ -835,27 +837,28 @@ impl TypeChecker {
                     let boolean = self.push_type(Type::Bool);
                     self.unify(*span, ctx, a, boolean)?;
                     self.unify(*span, ctx, b, boolean)?;
-                    with_ret(self.unify_option(*span, ctx, a_ret, b_ret)?, a)
+                    with_ret(self.unify_option(*span, ctx, a_ret, b_ret)?, a, ty)
                 }
             },
-            E::UniOp { a, op, span } => match op {
+            E::UniOp { a, op, span, ty } => match op {
                 UniOp::Neg => {
                     let (a_ret, a) = self.expression(a, ctx)?;
                     self.add_constraint(a, *span, Constraint::Neg);
-                    with_ret(a_ret, a)
+                    with_ret(a_ret, a, ty)
                 }
                 UniOp::Not => {
                     let (a_ret, a) = self.expression(a, ctx)?;
                     let boolean = self.push_type(Type::Bool);
-                    with_ret(a_ret, self.unify(*span, ctx, a, boolean)?)
+                    with_ret(a_ret, self.unify(*span, ctx, a, boolean)?, ty)
                 }
             },
 
-            E::If { branches, span } => {
+            E::If { branches, span, ty } => {
+                let span = *span;
                 let tys = branches
-                    .iter()
+                    .iter_mut()
                     .map(|branch| {
-                        let condition_ret = if let Some(condition) = &branch.condition {
+                        let condition_ret = if let Some(condition) = &mut branch.condition {
                             let span = condition.span();
                             let (ret, condition) = self.expression(condition, ctx)?;
                             let boolean = self.push_type(Type::Bool);
@@ -865,10 +868,10 @@ impl TypeChecker {
                             None
                         };
                         let (block_ret, block_value) =
-                            self.expression_block(*span, &branch.body, ctx)?;
+                            self.expression_block(span, &mut branch.body, ctx)?;
                         Ok((
                             span,
-                            self.unify_option(*span, ctx, condition_ret, block_ret)?,
+                            self.unify_option(span, ctx, condition_ret, block_ret)?,
                             block_value,
                         ))
                     })
@@ -889,13 +892,13 @@ impl TypeChecker {
                         // TODO(ed): These are bad errors, they're easy to confuse. A better
                         // formulation?
                         ret = self
-                            .unify_option(**span, ctx, *branch_ret, ret)
+                            .unify_option(*span, ctx, *branch_ret, ret)
                             .help_no_span(
                                 "The return from this block doesn't match the earlier branches"
                                     .into(),
                             )?;
                         value = self
-                            .unify_option(**span, ctx, *branch_value, value)
+                            .unify_option(*span, ctx, *branch_value, value)
                             .help_no_span(
                                 "The value from this block doesn't match the earlier branches"
                                     .into(),
@@ -906,17 +909,18 @@ impl TypeChecker {
                 with_ret(
                     ret,
                     value.or(ret).unwrap_or_else(|| self.push_type(Type::Void)),
+                    ty
                 )
             }
 
-            E::Case { to_match, branches, fall_through, span } => {
+            E::Case { to_match, branches, fall_through, span, ty } => {
                 let (ret, to_match) = self.expression(to_match, ctx)?;
                 self.add_constraint(to_match, *span, Constraint::Enum);
 
                 let mut ret = ret;
                 let mut value = None;
                 let mut branch_names = BTreeSet::new();
-                for branch in branches.iter() {
+                for branch in branches.iter_mut() {
                     let name = branch.pattern.name.clone();
                     let constraint = &branch.variable.map(|var| self.variables[var].ty);
                     self.add_constraint(
@@ -928,7 +932,7 @@ impl TypeChecker {
                     // - for example - this makes it more permissive than if you place it after the
                     // `self.expression_block`.
                     self.check_constraints(*span, ctx, to_match)?;
-                    let (branch_ret, branch) = self.expression_block(*span, &branch.body, ctx)?;
+                    let (branch_ret, branch) = self.expression_block(*span, &mut branch.body, ctx)?;
                     value = self.unify_option(*span, ctx, value, branch)?;
                     ret = self.unify_option(*span, ctx, ret, branch_ret)?;
                     branch_names.insert(name.clone());
@@ -945,6 +949,7 @@ impl TypeChecker {
                 with_ret(
                     ret,
                     value.or(ret).unwrap_or_else(|| self.push_type(Type::Void)),
+                    ty
                 )
             }
 
@@ -956,6 +961,7 @@ impl TypeChecker {
                 pure,
                 span,
                 upvalues: _,
+                ty,
             } => {
                 let (f_ty, ret_ty) = self.type_from_function(ctx, params, ret, *pure)?;
 
@@ -990,10 +996,10 @@ impl TypeChecker {
                     )?;
 
                 // Functions are the only expressions that we cannot return out of when evaluating.
-                no_ret(f_ty)
+                no_ret(f_ty, ty)
             }
 
-            E::Blob { blob, fields, span, .. } => {
+            E::Blob { blob, fields, span, ty, self_var: _ } => {
                 let blob_ty = self.copy(self.variables[*blob].ty);
                 let (blob_name, blob_fields, blob_args) = match self.find_type(blob_ty) {
                     Type::Blob(name, _, fields, args) => (name, fields, args),
@@ -1071,41 +1077,41 @@ impl TypeChecker {
                     self.unify(expr.span(), ctx, expr_ty, fields_and_types[key].1)?;
                 }
 
-                with_ret(ret, self.unify(*span, ctx, given_blob, blob_ty)?)
+                with_ret(ret, self.unify(*span, ctx, given_blob, blob_ty)?, ty)
             }
 
-            E::Collection { collection: Collection::Tuple, values, span } => {
+            E::Collection { collection: Collection::Tuple, values, span, ty } => {
                 let mut tys = Vec::new();
                 let ret = Some(self.push_type(Type::Unknown));
-                for expr in values.iter() {
+                for expr in values.iter_mut() {
                     let (inner_ret, ty) = self.expression(expr, ctx)?;
                     tys.push(ty);
                     self.unify_option(*span, ctx, ret, inner_ret)?;
                 }
-                with_ret(ret, self.push_type(Type::Tuple(tys)))
+                with_ret(ret, self.push_type(Type::Tuple(tys)), ty)
             }
 
-            E::Collection { collection: Collection::List, values, span } => {
+            E::Collection { collection: Collection::List, values, span, ty} => {
                 let inner_ty = self.push_type(Type::Unknown);
                 let ret = Some(self.push_type(Type::Unknown));
-                for expr in values.iter() {
+                for expr in values.iter_mut() {
                     let (e_ret, e) = self.expression(expr, ctx)?;
                     self.unify(*span, ctx, inner_ty, e)?;
                     self.unify_option(*span, ctx, ret, e_ret)?;
                 }
-                with_ret(ret, self.push_type(Type::List(inner_ty)))
+                with_ret(ret, self.push_type(Type::List(inner_ty)), ty)
             }
 
-            E::Float(_, _) => no_ret(self.push_type(Type::Float)),
-            E::Int(_, _) => no_ret(self.push_type(Type::Int)),
-            E::Str(_, _) => no_ret(self.push_type(Type::Str)),
-            E::Bool(_, _) => no_ret(self.push_type(Type::Bool)),
-            E::Nil(_) => no_ret(self.push_type(Type::Nil)),
+            E::Float { ty, .. } => no_ret(self.push_type(Type::Float), ty),
+            E::Int { ty, .. } => no_ret(self.push_type(Type::Int), ty),
+            E::Str { ty, .. } => no_ret(self.push_type(Type::Str), ty),
+            E::Bool { ty, .. } => no_ret(self.push_type(Type::Bool), ty),
+            E::Nil { ty, .. } => no_ret(self.push_type(Type::Nil), ty),
         }?;
         // TODO[ed]: Don't agressively copy function! D:
         match self.find_type(expr) {
-            Type::Function { .. } => with_ret(expr_ret, self.copy(expr)),
-            _ => with_ret(expr_ret, expr),
+            Type::Function { .. } => with_ret(expr_ret, self.copy(expr), &mut None),
+            _ => with_ret(expr_ret, expr, &mut None),
         }
     }
 
@@ -1764,7 +1770,7 @@ impl TypeChecker {
     fn can_assign(&mut self, span: Span, assignable: &Expression) -> TypeResult<()> {
         use Expression as E;
         match &assignable {
-            E::Read { var, name, span } | E::ReadUpvalue { var, name, span } => {
+            E::Read { var, name, span, ty: _ } | E::ReadUpvalue { var, name, span, ty: _ } => {
                 if self.variables[*var].kind.immutable() {
                     return err_type_error!(
                         self,
@@ -1786,11 +1792,11 @@ impl TypeChecker {
             | E::Function { .. }
             | E::Blob { .. }
             | E::Collection { .. }
-            | E::Float(_, _)
-            | E::Int(_, _)
-            | E::Str(_, _)
-            | E::Bool(_, _)
-            | E::Nil(_) => {
+            | E::Float { .. }
+            | E::Int { .. }
+            | E::Str { .. }
+            | E::Bool { .. }
+            | E::Nil { .. } => {
                 return err_type_error!(
                     self,
                     span,
@@ -2021,9 +2027,9 @@ impl TypeChecker {
     }
 
     #[sylt_macro::timed("typechecker::solve")]
-    fn solve(&mut self, statements: &Vec<Statement>, start_var: Option<&Var>) -> TypeResult<()> {
+    fn solve(&mut self, statements: &mut Vec<Statement>, start_var: Option<&Var>) -> TypeResult<()> {
         let ctx = TypeCtx::new();
-        for statement in statements.iter() {
+        for statement in statements.iter_mut() {
             self.outer_statement(statement, ctx)?;
         }
 
@@ -2065,7 +2071,7 @@ impl TypeChecker {
 
 pub(crate) fn solve(
     vars: &Vec<Var>,
-    statements: &Vec<Statement>,
+    statements: &mut Vec<Statement>,
     namespace_to_file: &HashMap<NamespaceID, FileOrLib>,
 ) -> TypeResult<TypeChecker> {
     let mut tc = TypeChecker::new(vars, namespace_to_file);
@@ -2073,6 +2079,6 @@ pub(crate) fn solve(
     // We check that there's a "start" in the main file in `name_resolution`.
     // I hope this is good enough.
     let start = vars.iter().find(|x| &x.name == "start" && x.is_global);
-    tc.solve(&statements, start)?;
+    tc.solve(statements, start)?;
     Ok(tc)
 }
