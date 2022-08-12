@@ -113,7 +113,7 @@ impl<'a> IRContext<'a> {
 
 struct IRCodeGen<'a> {
     #[allow(unused)]
-    typechecker: &'a TypeChecker,
+    typechecker: &'a mut TypeChecker,
 
     var_to_name: HashMap<Var, String>,
     counter: usize,
@@ -128,7 +128,7 @@ fn get_upvalue_id(upvalues: &[usize], var: usize) -> Option<usize> {
 }
 
 impl<'a> IRCodeGen<'a> {
-    fn new(typechecker: &'a TypeChecker) -> Self {
+    fn new(typechecker: &'a mut TypeChecker) -> Self {
         Self {
             // Temporary variables are placed after the stack allocated ones
             counter: typechecker.variables.len() + 1,
@@ -642,8 +642,8 @@ impl<'a> IRCodeGen<'a> {
         let ctx = IRContext::new(&upvalues);
         match &stmt {
             S::ExternalDefinition { name, var, .. } => {
-                match self.typechecker.get_variable_type(*var) {
-                    Type::Function(args, _, _) => {
+                match self.typechecker.find_var_type(*var) {
+                    Type::Function(args, _, _, _) => {
                         vec![IR::ExternalFunction(Var(*var), name.clone(), args.len())]
                     }
                     _ => vec![IR::ExternalVar(Var(*var), name.clone())],
@@ -660,9 +660,16 @@ impl<'a> IRCodeGen<'a> {
 
 #[sylt_macro::timed("intermediate::compile")]
 pub(crate) fn compile(
-    typechecker: &TypeChecker,
+    typechecker: &mut TypeChecker,
     statements: &Vec<Statement>,
 ) -> (Vec<IR>, HashMap<Var, String>) {
+    let start = Var(typechecker
+        .variables
+        .iter()
+        .find(|x| &x.name == "start" && x.is_global)
+        .unwrap()
+        .id);
+
     let mut gen = IRCodeGen::new(typechecker);
 
     let mut code: Vec<IR> = statements
@@ -670,13 +677,6 @@ pub(crate) fn compile(
         .map(|stmt| gen.compile(stmt))
         .flatten()
         .collect();
-
-    let start = Var(typechecker
-        .variables
-        .iter()
-        .find(|x| &x.name == "start" && x.is_global)
-        .unwrap()
-        .id);
 
     let tmp = gen.var();
     code.push(IR::Call(tmp, start, Vec::new()));

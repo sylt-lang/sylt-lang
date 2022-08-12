@@ -110,9 +110,9 @@ impl Compiler {
             | Statement::Unreachable(_) => 1,
         });
 
-        let typechecker = typechecker::solve(&vars, num_types, &statements, &self.namespace_id_to_file)?;
+        let mut typechecker = typechecker::solve(&vars, num_types, &statements, &self.namespace_id_to_file)?;
 
-        let (ir, var_to_name) = intermediate::compile(&typechecker, &statements);
+        let (ir, var_to_name) = intermediate::compile(&mut typechecker, &statements);
         let usage_count = intermediate::count_usages(&ir);
 
         lua::generate(&ir, &var_to_name, &usage_count, lua_file, require);

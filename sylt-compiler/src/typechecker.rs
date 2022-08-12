@@ -222,14 +222,6 @@ impl TypeChecker {
         res
     }
 
-    pub fn get_variable_type(&self, var: usize) -> &Type {
-        &self.find_no_mut(self.variables[var].ty).ty
-    }
-
-    pub fn get_type(&self, ty: TyID) -> &Type {
-        &self.find_no_mut(ty).ty
-    }
-
     fn push_type(&mut self, ty: Type) -> TyID {
         let ty_id = TyID(self.types.len());
         self.types.push(TypeNode {
@@ -375,7 +367,7 @@ impl TypeChecker {
                     }
                 }
                 let purity = is_pure.then(|| Purity::Pure).unwrap_or(Purity::Undefined);
-                Type::Function(params, ret, purity)
+                Type::Function(params, ret, purity, Vec::new())
             }
 
             T::Tuple(fields, _) => Type::Tuple(
@@ -413,7 +405,7 @@ impl TypeChecker {
         }
         let ret = self.inner_resolve_type(ctx, &ret, &mut seen)?;
         let purity = if pure { Purity::Pure } else { Purity::Impure };
-        let f = self.push_type(Type::Function(args, ret, purity));
+        let f = self.push_type(Type::Function(args, ret, purity, Vec::new()));
         Ok((f, ret))
     }
 
@@ -710,7 +702,7 @@ impl TypeChecker {
 
     fn expression(&mut self, expression: &Expression, ctx: TypeCtx) -> TypeResult<RetNValue> {
         use Expression as E;
-        let (expr_ret, expr) = match expression {
+        match expression {
             E::Read { var, span, .. } | E::ReadUpvalue { var, span, .. } => {
                 let var = &self.variables[*var];
                 let immutable = var.kind.immutable();
@@ -739,9 +731,10 @@ impl TypeChecker {
             }
             E::Call { function, args, span, ty_id } => {
                 let (ret, function) = self.expression(function, ctx)?;
-                match self.find_type(function) {
-                    Type::Function(params, ret_ty, purity) => {
-                        self.unify(*span, ctx, ret_ty, *ty_id)?;
+                let function_copy = self.copy(function);
+                match self.find_type(function_copy) {
+                    Type::Function(params, ret_ty, purity, _) => {
+                        // Copy so we can add to instances later
                         if args.len() != params.len() {
                             return err_type_error!(
                                 self,
@@ -759,6 +752,8 @@ impl TypeChecker {
                             );
                         }
 
+                        self.unify(*span, ctx, ret_ty, *ty_id)?;
+
                         // TODO(ed): Annotate the errors?
                         let mut ret = ret;
                         for (a, p) in args.iter().zip(params.iter()) {
@@ -771,6 +766,10 @@ impl TypeChecker {
                         }
                         self.check_constraints(*span, ctx, ret_ty)?;
 
+                        match &mut self.find_node_mut(function).ty {
+                            Type::Function(_, _, _, instances) => instances.push((params, ret_ty)),
+                            _ => unreachable!(),
+                        }
                         with_ret(ret, ret_ty)
                     }
                     Type::Unknown => err_type_error!(
@@ -792,12 +791,6 @@ impl TypeChecker {
                 let field_ty = *field_ty;
                 self.add_constraint(outer, *span, Constraint::Field(field.clone(), field_ty));
                 self.check_constraints(*span, ctx, outer)?;
-                // TODO(ed): Don't we do this further down? Do we need this code?
-                // We copy functions
-                let field_ty = match self.find_type(outer) {
-                    Type::Function(_, _, _) => self.copy(field_ty),
-                    _ => field_ty,
-                };
                 with_ret(outer_ret, field_ty)
             }
             E::Index { value, index: index_syn, span, ty_id: expr } => {
@@ -1137,11 +1130,6 @@ impl TypeChecker {
             E::Str { .. } => no_ret(self.push_type(Type::Str)),
             E::Bool { .. } => no_ret(self.push_type(Type::Bool)),
             E::Nil { .. } => no_ret(self.push_type(Type::Nil)),
-        }?;
-        // TODO[ed]: Don't agressively copy function! D:
-        match self.find_type(expr) {
-            Type::Function { .. } => with_ret(expr_ret, self.copy(expr)),
-            _ => with_ret(expr_ret, expr),
         }
     }
 
@@ -1179,7 +1167,11 @@ impl TypeChecker {
         &mut self.types[ta]
     }
 
-    fn find_type(&mut self, a: TyID) -> Type {
+    pub fn find_var_type(&mut self, var: usize) -> Type {
+        self.find_type(self.variables[var].ty)
+    }
+
+    pub fn find_type(&mut self, a: TyID) -> Type {
         self.find_node(a).ty.clone()
     }
 
@@ -1210,7 +1202,7 @@ impl TypeChecker {
                     .collect(),
             ),
             Type::List(ty) => RuntimeType::List(Box::new(self.inner_bake_type(ty, seen))),
-            Type::Function(args, ret, _) => RuntimeType::Function(
+            Type::Function(args, ret, _, _) => RuntimeType::Function(
                 args.iter()
                     .map(|ty| self.inner_bake_type(*ty, seen))
                     .collect(),
@@ -1252,7 +1244,7 @@ impl TypeChecker {
         res
     }
 
-    fn bake_type(&mut self, a: TyID) -> RuntimeType {
+    pub fn bake_type(&mut self, a: TyID) -> RuntimeType {
         self.inner_bake_type(a, &mut HashMap::new())
     }
 
@@ -1528,8 +1520,8 @@ impl TypeChecker {
                 }
 
                 (
-                    Type::Function(a_args, a_ret, a_purity),
-                    Type::Function(b_args, b_ret, b_purity),
+                    Type::Function(a_args, a_ret, a_purity, _),
+                    Type::Function(b_args, b_ret, b_purity, _),
                 ) => {
                     // TODO: Make sure there is one place this is checked.
                     match (a_purity, b_purity) {
@@ -1760,10 +1752,12 @@ impl TypeChecker {
 
             Type::List(ty) => Type::List(self.inner_copy(ty, seen)),
 
-            Type::Function(args, ret, purity) => Type::Function(
+            // TODO(ed): Delete instances on copy? It's a new function?
+            Type::Function(args, ret, purity, instances) => Type::Function(
                 args.iter().map(|ty| self.inner_copy(*ty, seen)).collect(),
                 self.inner_copy(ret, seen),
                 purity,
+                instances,
             ),
 
             Type::ExternBlob(name, span, fields, args, namespace) => Type::ExternBlob(
@@ -2075,7 +2069,7 @@ impl TypeChecker {
         match start_var {
             Some(var) => {
                 let void = self.push_type(Type::Void);
-                let start = self.push_type(Type::Function(Vec::new(), void, Purity::Undefined));
+                let start = self.push_type(Type::Function(Vec::new(), void, Purity::Undefined, Vec::new()));
                 let ty = self.variables[var.id].ty;
                 self.unify(var.definition, ctx, ty, start)
                     .map(|_| ())
