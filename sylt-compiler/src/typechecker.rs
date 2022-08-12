@@ -94,14 +94,14 @@ macro_rules! bin_op {
         $self.add_constraint(b, $span, $con(a));
         $self.check_constraints($span, $ctx, a)?;
         $self.check_constraints($span, $ctx, b)?;
-        $self.unify($span, $ctx, $ty_id, a);
+        $self.unify($span, $ctx, $ty_id, a)?;
         with_ret($self.unify_option($span, $ctx, a_ret, b_ret)?, a)
     }};
     ($self:expr, $span:expr, $ctx:expr, $a:expr, $b:expr, $con:expr, $ret:expr, $ty_id:expr) => {{
         let no = $self.push_type(Type::Unknown);
         let (ret, _) = bin_op!($self, $span, $ctx, $a, $b, $con, no)?;
         let x = $self.push_type($ret);
-        $self.unify($span, $ctx, $ty_id, x);
+        $self.unify($span, $ctx, $ty_id, x)?;
         with_ret(ret, x)
     }};
 }
@@ -205,34 +205,29 @@ impl TypeChecker {
                 .collect(),
         };
         // Assume everything is expressions
-        for id in 0..num_types {
-            let ty = res.push_type(Type::Unknown);
-            res.variables.push(TypeVariable {
-                name: "?".into(),
-                id,
-                is_global: false,
-                definition: Span::zero(0),
-                kind: VarKind::Const,
-                ty,
-            })
+        for _id in 0..num_types {
+            let _ = res.push_type(Type::Unknown);
         }
         for var in variables {
-            let TyID(i) = var.ty_id;
-            let mut v = &mut res.variables[i];
-            v.name = var.name.clone();
-            v.is_global = var.is_global;
-            v.definition = var.definition;
-            v.kind = var.kind;
+            let ty = res.push_type(Type::Unknown);
+            res.variables.push(TypeVariable {
+                name: var.name.clone(),
+                id: var.id,
+                is_global: var.is_global,
+                definition: var.definition,
+                kind: var.kind,
+                ty,
+            })
         }
         res
     }
 
     pub fn get_variable_type(&self, var: usize) -> &Type {
-        &self.types[self.variables[var].id].ty
+        &self.find_no_mut(self.variables[var].ty).ty
     }
 
-    pub fn get_type(&self, TyID(ty): &TyID) -> &Type {
-        &self.types[*ty].ty
+    pub fn get_type(&self, ty: TyID) -> &Type {
+        &self.find_no_mut(ty).ty
     }
 
     fn push_type(&mut self, ty: Type) -> TyID {
@@ -1148,6 +1143,15 @@ impl TypeChecker {
             Type::Function { .. } => with_ret(expr_ret, self.copy(expr)),
             _ => with_ret(expr_ret, expr),
         }
+    }
+
+    fn find_no_mut(&self, TyID(a): TyID) -> &TypeNode {
+        let mut root = a;
+        while let Some(TyID(next)) = self.types[root].parent {
+            root = next;
+        }
+
+        &self.types[root]
     }
 
     fn find(&mut self, TyID(a): TyID) -> TyID {
