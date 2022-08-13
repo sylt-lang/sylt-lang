@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::{collections::HashMap, fmt::Display};
 
 use crate::name_resolution::*;
@@ -428,7 +429,27 @@ impl<'a> IRCodeGen<'a> {
                 ([code, vec![IR::Tuple(var, values)]].concat(), var)
             }
 
-            E::Function { body, params, upvalues, .. } => {
+            E::Function { body, params, upvalues, ty_id, .. } => {
+                // Automatic dead-code elimination, if the function isn't called, we never generate
+                // an instance.
+                let instances = match self.typechecker.find_type(*ty_id) {
+                    Type::Function(_, _, _, instances) => instances,
+                    _ => unreachable!("Compiling a function that doesn't have a function type?"),
+                };
+
+                let instances: BTreeSet<_> = instances
+                    .iter()
+                    .map(|(params, ret)| {
+                        let params: Vec<_> = params
+                            .iter()
+                            .map(|p| self.typechecker.bake_type(*p))
+                            .collect();
+                        let ret = self.typechecker.bake_type(*ret);
+                        (params, ret)
+                    })
+                    .collect();
+                dbg!(instances);
+
                 let mut body = body.clone();
                 let f = self.var();
                 let params = params.iter().map(|(_, var, _, _)| Var(*var)).collect();
@@ -641,14 +662,12 @@ impl<'a> IRCodeGen<'a> {
         let upvalues = Vec::new();
         let ctx = IRContext::new(&upvalues);
         match &stmt {
-            S::ExternalDefinition { name, var, .. } => {
-                match self.typechecker.find_var_type(*var) {
-                    Type::Function(args, _, _, _) => {
-                        vec![IR::ExternalFunction(Var(*var), name.clone(), args.len())]
-                    }
-                    _ => vec![IR::ExternalVar(Var(*var), name.clone())],
+            S::ExternalDefinition { name, var, .. } => match self.typechecker.find_var_type(*var) {
+                Type::Function(args, _, _, _) => {
+                    vec![IR::ExternalFunction(Var(*var), name.clone(), args.len())]
                 }
-            }
+                _ => vec![IR::ExternalVar(Var(*var), name.clone())],
+            },
 
             S::Definition { value, var, .. } => self.definition(Var(*var), value, ctx),
 

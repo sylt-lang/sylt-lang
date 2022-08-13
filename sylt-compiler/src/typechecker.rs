@@ -1142,7 +1142,7 @@ impl TypeChecker {
         &self.types[root]
     }
 
-    fn find(&mut self, TyID(a): TyID) -> TyID {
+    pub fn find(&mut self, TyID(a): TyID) -> TyID {
         let mut root = a;
         while let Some(TyID(next)) = self.types[root].parent {
             root = next;
