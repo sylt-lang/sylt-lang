@@ -1158,6 +1158,10 @@ impl TypeChecker {
         &mut self.types[ta]
     }
 
+    pub fn find_var(&mut self, var: usize) -> TyID {
+        self.find(self.variables[var].ty)
+    }
+
     pub fn find_var_type(&mut self, var: usize) -> Type {
         self.find_type(self.variables[var].ty)
     }

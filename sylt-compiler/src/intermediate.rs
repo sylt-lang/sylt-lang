@@ -432,12 +432,12 @@ impl<'a> IRCodeGen<'a> {
             E::Function { body, params, upvalues, ty_id, .. } => {
                 // Automatic dead-code elimination, if the function isn't called, we never generate
                 // an instance.
-                let instances = match self.typechecker.find_type(*ty_id) {
-                    Type::Function(_, _, _, instances) => instances,
+                let (args, ret, instances) = match self.typechecker.find_type(*ty_id) {
+                    Type::Function(args, ret, _, instances) => (args, ret, instances),
                     _ => unreachable!("Compiling a function that doesn't have a function type?"),
                 };
 
-                let instances: BTreeSet<_> = instances
+                let baked_instances: BTreeSet<_> = instances
                     .iter()
                     .map(|(params, ret)| {
                         let params: Vec<_> = params
@@ -448,7 +448,52 @@ impl<'a> IRCodeGen<'a> {
                         (params, ret)
                     })
                     .collect();
-                dbg!(instances);
+
+                let args: Vec<_> = args
+                    .iter()
+                    .map(|x| self.typechecker.find(*x))
+                    .collect();
+                dbg!(&args);
+                let ups: Vec<_> = upvalues
+                    .iter()
+                    .map(|u| {
+                        self.typechecker.find_var(*u)
+                    })
+                    .collect();
+                dbg!(&ups);
+                let ret = self.typechecker.find(ret);
+                dbg!(&ret);
+
+                //
+                // Some toughts:
+                // Generating more functions.
+                // 
+                // I want to make sure I only generate each function once. I need to know all
+                // instances of a function. When a function is returned as a value, it's not made
+                // into an instance (maybe it should be?).
+                // 
+                // Functions inside functions needs to be generated in another way. To make sure
+                // nothing is duplicated the types of the upvalues must be part of the key.
+                // 
+                // Maybe a stack of variables and their "known" types can solve this. We want to
+                // generate code with these known types anyways.
+                // 
+                // These code-generation rules apply for built in opperators as well. Forexample `a
+                // + b` should generate `a + b` and `strconcat(a, b, c)` depending on the context
+                //
+                // I also want to avoid propogating these types for each function and the like. The
+                // typechecker already does this. Maybe the idea is tua actually use these types
+                // from the typechecker somehow? This state needs to be copied somehow, and it
+                // would be great if these states were combined eagerly (the way function calls
+                // work probably cause a lot of the scaling errors in the typechecker.
+                //
+                // In short. I think there's a way to speed up the typechecker and get the
+                // information I need. And I don't think it requires a lot of work. I just don't
+                // know how to do it yet.
+
+                // dbg!(&instances);
+                // dbg!(&baked_instances);
+                // TODO[et]: Check if there are Unknowns there
 
                 let body = body.clone();
                 let f = self.var();
