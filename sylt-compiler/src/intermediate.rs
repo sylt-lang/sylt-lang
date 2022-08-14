@@ -450,25 +450,15 @@ impl<'a> IRCodeGen<'a> {
                     .collect();
                 dbg!(instances);
 
-                let mut body = body.clone();
+                let body = body.clone();
                 let f = self.var();
                 let params = params.iter().map(|(_, var, _, _)| Var(*var)).collect();
-                let last_statement = body.pop();
                 let inner_ctx = ctx.with_upvalues(upvalues.as_slice());
                 let body = body
                     .iter()
                     .map(|stmt| self.statement(stmt, inner_ctx))
                     .flatten()
                     .collect();
-                let last_statement = match last_statement {
-                    // TODO[et]: This can be done in `name_resolution`
-                    Some(S::StatementExpression { value, .. }) => {
-                        let (ir, ret) = self.expression(&value, inner_ctx);
-                        [ir, vec![IR::Return(ret)]].concat()
-                    }
-                    Some(stmt) => self.statement(&stmt, inner_ctx),
-                    None => Vec::new(),
-                };
 
                 let to_copy_over = upvalues
                     .iter()
@@ -482,7 +472,6 @@ impl<'a> IRCodeGen<'a> {
                     [
                         vec![IR::Function(to_copy_over, f, params)],
                         body,
-                        last_statement,
                         vec![IR::EndFunction],
                     ]
                     .concat(),

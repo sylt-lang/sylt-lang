@@ -945,7 +945,19 @@ impl Resolver {
                     params.push((n.name.clone(), var, n.span, self.ty(t)?));
                 }
                 let ret = self.ty(ret)?;
-                let body = self.block(body)?;
+                let mut body = self.block(body)?;
+
+                if !ret.is_void() {
+                    if let Some(last) = body.last_mut() {
+                        match last {
+                            Statement::StatementExpression { value, span } => {
+                                *last = Statement::Ret { value: Some(value.clone()), span: *span };
+                            }
+                            _ => {}
+                        }
+                    };
+                }
+
                 // ------- //
                 let upvalues = self
                     .stack
