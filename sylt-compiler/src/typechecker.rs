@@ -1133,15 +1133,6 @@ impl TypeChecker {
         }
     }
 
-    fn find_no_mut(&self, TyID(a): TyID) -> &TypeNode {
-        let mut root = a;
-        while let Some(TyID(next)) = self.types[root].parent {
-            root = next;
-        }
-
-        &self.types[root]
-    }
-
     pub fn find(&mut self, TyID(a): TyID) -> TyID {
         let mut root = a;
         while let Some(TyID(next)) = self.types[root].parent {
