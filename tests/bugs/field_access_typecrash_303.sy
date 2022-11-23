@@ -1,6 +1,0 @@
-start :: fn do
-    a := 1
-    a.a
-    a
-end
-// error: $Exotic

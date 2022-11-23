@@ -1,4 +1,0 @@
-start :: fn do
-    <!>
-end
-// error: #Unreachable

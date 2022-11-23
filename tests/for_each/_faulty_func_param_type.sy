@@ -1,9 +1,0 @@
-from std use (for_each, print)
-
-g :: fn a:float {
-    print a
-}
-start :: fn {
-    [1, 2] -> for_each(g)
-}
-// error: _

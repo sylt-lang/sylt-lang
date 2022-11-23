@@ -1,6 +1,0 @@
-start :: fn do
-    a :: 0
-    b: a.A = 0
-end
-
-// error: No type named "a"

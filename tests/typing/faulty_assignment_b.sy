@@ -1,5 +1,0 @@
-start :: fn do
-    b :: "abc"
-    b = "abc"
-end
-// error: $Assignability

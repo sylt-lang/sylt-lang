@@ -1,9 +1,0 @@
-a :: fn f: fn -> void do
-end
-
-start :: fn do
-    a(fn do
-    end)
-    1
-end
-

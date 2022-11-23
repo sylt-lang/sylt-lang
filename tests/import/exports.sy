@@ -1,7 +1,0 @@
-use / as root
-
-text :: "Bottom text"
-
-start :: fn do
-    root.root.root.root.text <=> "Bottom text"
-end

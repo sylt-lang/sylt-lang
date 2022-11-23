@@ -1,6 +1,0 @@
-Mbe :: enum
-    Just *,
-    Nothing,
-end
-
-just_true := Mbe.Just true

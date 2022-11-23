@@ -1,5 +1,0 @@
-start :: fn do
-    a :: dict.new'
-    a
-end
-

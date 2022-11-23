@@ -1,5 +1,0 @@
-use _enum
-
-start :: fn do
-    just_zero := _enum.Maybe.Just 0
-end

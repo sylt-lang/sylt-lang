@@ -1,8 +1,0 @@
-a := [ 1
-     , 2
-     , 3
-     ]
-start :: fn do
-    list.get(a, 1) <=> Maybe.Just 2
-end
-

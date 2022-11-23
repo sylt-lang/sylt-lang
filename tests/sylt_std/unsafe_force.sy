@@ -1,5 +1,0 @@
-from unsafe use unsafe_force
-
-start :: fn do
-    a: int = unsafe_force([])
-end

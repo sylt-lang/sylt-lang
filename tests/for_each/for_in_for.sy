@@ -1,9 +1,0 @@
-start :: fn do
-    values := [1, 2, 3, 4]
-    values -> for_each(fn a: int do
-        values -> for_each(fn b: int do
-            print((a, b))
-        end)
-    end)
-end
-

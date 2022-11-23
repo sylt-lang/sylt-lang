@@ -1,4 +1,0 @@
-start :: fn do
-    as_char(0)
-end
-// error: $A 'str' cannot be a 'int'

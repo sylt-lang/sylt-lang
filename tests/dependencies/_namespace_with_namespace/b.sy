@@ -1,6 +1,0 @@
-use c
-a :: 1
-f :: fn do
-    a :: 2
-    c.a
-end

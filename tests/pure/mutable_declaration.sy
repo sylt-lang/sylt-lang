@@ -1,5 +1,0 @@
-start :: pu do
-    a := 1
-end
-
-// error: Cannot make mutable declarations in pure functions

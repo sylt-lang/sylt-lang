@@ -1,5 +1,0 @@
-start :: fn do
-    a = 2
-end
-
-// error: Failed to resolve "a"

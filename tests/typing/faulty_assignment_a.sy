@@ -1,6 +1,0 @@
-start :: fn do
-    a := 1
-    a = 3
-    a = "abc"
-end
-// error: $Mismatch

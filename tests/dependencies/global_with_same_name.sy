@@ -1,3 +1,0 @@
-a :: 0
-a :: 0
-// error: Name collision - duplicate definitions of the namespace "a"

@@ -1,7 +1,0 @@
-use subdir/_numbers
-use subdir/subsubdir/_strings
-
-start :: fn do
-    _numbers.one <=> 1
-    _strings.hello <=> "hello"
-end

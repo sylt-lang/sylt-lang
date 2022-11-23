@@ -1,4 +1,0 @@
-start :: fn do
-    loop true ret
-end
-

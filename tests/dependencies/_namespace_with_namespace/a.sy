@@ -1,6 +1,0 @@
-use b
-use c
-start :: fn do
-    b.a
-    b.c.a
-end

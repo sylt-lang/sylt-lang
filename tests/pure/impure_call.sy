@@ -1,9 +1,0 @@
-f :: fn ->
-    1
-end
-
-start :: pu do
-    f'
-end
-
-// error: Cannot call impure functions from pure functions

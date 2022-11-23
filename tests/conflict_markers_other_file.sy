@@ -1,5 +1,0 @@
-use conflict_markers
-
-start :: fn do end
-
-// error: GitConflictError

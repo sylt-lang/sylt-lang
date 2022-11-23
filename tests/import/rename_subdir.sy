@@ -1,5 +1,0 @@
-use subdir/_numbers as nums
-
-start :: fn do
-    nums.one <=> 1
-end

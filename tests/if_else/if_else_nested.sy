@@ -1,4 +1,0 @@
-start :: fn do
-    if false do nil else do nil end
-end
-

@@ -1,9 +1,0 @@
-Q :: blob {
-    a : [int],
-}
-
-start :: fn do
-    q :: Q { a: [4] }
-    list.set' q.a, 0, "fail"
-end
-// error: $Mismatch

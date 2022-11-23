@@ -1,7 +1,0 @@
-start :: fn do
-    f := fn a: int, b: int do
-        b <=> 3
-    end
-    f(1, 1 + 2)
-end
-

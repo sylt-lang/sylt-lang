@@ -1,4 +1,0 @@
-use incorrect_import_604 as x
-a :: fn -> float do
-    ret .5
-end

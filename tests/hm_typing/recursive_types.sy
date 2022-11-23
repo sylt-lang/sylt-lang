@@ -1,9 +1,0 @@
-A :: enum
-    Q A
-    Z
-end
-
-start :: fn do
-    a :: A.Q A.Z
-    print' a
-end

@@ -1,7 +1,0 @@
-from _blob use Bob
-
-start :: fn do
-    bob := Bob {
-        builder: true,
-    }
-end
