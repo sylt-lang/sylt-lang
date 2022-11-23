@@ -1,12 +1,7 @@
-[workspace]
+[package]
+name = "sylt-lang"
+version = "0.3.0"
+edition = "2021"
 
-members = [
-    "sylt",
-    "sylt-common",
-    "sylt-compiler",
-    "sylt-parser",
-    "sylt-tokenizer",
-]
-
-[profile.release]
-lto = "thin"
+[dependencies]
+pom = "3.2.0"

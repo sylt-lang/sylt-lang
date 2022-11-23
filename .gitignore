@@ -3,3 +3,8 @@ cobertura.xml
 coverage-*
 target
 tags
+
+
+# Added by cargo
+
+/target
