@@ -46,14 +46,13 @@ pub enum BinOp {
 
 #[derive(Debug, Clone)]
 pub enum Type {
-    TInt,
-    TFloat,
-    TString,
     TCustom(ProperName, Vec<Type>),
+    TFunction(Box<Type>, Box<Type>),
 }
 
+// TODO: Switch to unstable toolchain to get traits in type aliases and concat_ident
 pub fn parser() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
-    parse_type()
+    parse_type().then_ignore(parse_expr())
 }
 
 pub fn name() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
@@ -81,12 +80,19 @@ pub fn proper_name() -> impl Parser<char, ProperName, Error = Simple<char>> + Cl
 }
 
 pub fn parse_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
-    choice((
-        just("Int").map(|_| Type::TInt),
-        just("Float").map(|_| Type::TFloat),
-        just("String").map(|_| Type::TString),
-    ))
-    .then_ignore(end())
+    let ty = recursive(|ty| {
+        let term = choice((
+            proper_name()
+                .then(ty.clone().padded().repeated())
+                .padded()
+                .map(|(name, args)| Type::TCustom(name, args)),
+            ty.clone().delimited_by(just("("), just(")")).padded(),
+        ));
+        term.clone()
+            .then(just("->").padded().ignore_then(ty.clone()))
+            .map(|(a, b)| Type::TFunction(Box::new(a), Box::new(b)))
+    });
+    ty
 }
 
 pub fn parse_expr() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
@@ -137,7 +143,7 @@ pub fn parse_expr() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
         choice((call, sum))
     });
 
-    expr.then_ignore(end())
+    expr
 }
 
 #[cfg(test)]
@@ -151,7 +157,7 @@ mod test {
             #[test]
             fn $name() {
                 let src = $src;
-                let res = parse_expr().parse(src);
+                let res = parse_expr().then_ignore(end()).parse(src);
                 assert!(
                     res.is_ok(),
                     "ERR EXPR:\n{:?}\ngave:\n{:?}\nbut expected OK\n-----------\n",
@@ -167,7 +173,7 @@ mod test {
             #[test]
             fn $name() {
                 let src = $src;
-                let res = parse_expr().parse(src);
+                let res = parse_expr().then_ignore(end()).parse(src);
                 assert!(
                     res.is_err(),
                     "NO ERR EXPR:\n{:?}\ngave:\n{:?}\nbut expected ERROR\n-----------\n",
@@ -219,7 +225,7 @@ mod test {
             #[test]
             fn $name() {
                 let src = $src;
-                let res = parse_type().parse(src);
+                let res = parse_type().then_ignore(end()).parse(src);
                 assert!(
                     res.is_ok(),
                     "ERR TYPE:\n{:?}\ngave:\n{:?}\nbut expected OK\n-----------\n",
@@ -230,6 +236,33 @@ mod test {
         };
     }
 
+    macro_rules! no_type_t {
+        ($name:ident, $src:literal) => {
+            #[test]
+            fn $name() {
+                let src = $src;
+                let res = parse_type().then_ignore(end()).parse(src);
+                assert!(
+                    res.is_err(),
+                    "ERR TYPE:\n{:?}\ngave:\n{:?}\nbut expected ERR\n-----------\n",
+                    src,
+                    res
+                );
+            }
+        };
+    }
+
     type_t!(t_int, "Int");
     type_t!(t_float, "Float");
+    type_t!(t_string, "String");
+    type_t!(t_custom, "Array Int");
+    type_t!(t_custom_nested, "Array Float Int");
+    type_t!(t_with_paren1, "A (B) C");
+    type_t!(t_with_paren2, "A (B C)");
+    type_t!(t_function, "A -> B -> C");
+    type_t!(t_function_nested, "A -> (fn B F -> D) -> C");
+
+    type_t!(t_function_nested1, "a");
+    no_type_t!(ill_t_function_nested, "a");
+    no_type_t!(ill_paren, "(");
 }
