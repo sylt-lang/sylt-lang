@@ -1,26 +1,31 @@
 use chumsky::prelude::*;
 
-#[derive(Debug, Clone)]
-pub struct Module {
-    name: Ident,
-    body: Vec<Def>,
-}
+// #[derive(Debug, Clone)]
+// pub struct Module {
+//     name: Ident,
+//     body: Vec<Def>,
+// }
 
 #[derive(Debug, Clone)]
-pub struct Ident {
+pub struct Name {
     str: String,
 }
 
 #[derive(Debug, Clone)]
-pub enum Def {
-    Const { name: Ident, ty: Type, value: Expr },
+pub struct ProperName {
+    str: String,
 }
+
+// #[derive(Debug, Clone)]
+// pub enum Def {
+//     Const { name: Ident, ty: Type, value: Expr },
+// }
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-    Int(i64),
-    Var(Ident),
-    Call(Ident, Vec<Expr>),
+    EInt(i64),
+    Var(Name),
+    Call(Name, Vec<Expr>),
 
     Un(UnOp, Box<Expr>),
     Bin(BinOp, Box<Expr>, Box<Expr>),
@@ -41,35 +46,65 @@ pub enum BinOp {
 
 #[derive(Debug, Clone)]
 pub enum Type {
-    Int,
+    TInt,
+    TFloat,
+    TString,
+    TCustom(ProperName, Vec<Type>),
 }
 
-pub fn parser() -> impl Parser<char, Expr, Error = Simple<char>> {
-    parse_expr()
+pub fn parser() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
+    parse_type()
 }
 
-pub fn parse_expr() -> impl Parser<char, Expr, Error = Simple<char>> {
-    let name = filter(|c: &char| (c.is_alphabetic() && c.is_lowercase()) || c == &'_')
-        .then(filter(|c: &char| (c.is_alphanumeric() && c.is_ascii_alphabetic()) || c == &'_').repeated())
+pub fn name() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
+    filter(|c: &char| (c.is_alphabetic() && c.is_lowercase()) || c == &'_')
+        .then(
+            filter(|c: &char| (c.is_alphanumeric() && c.is_ascii_alphabetic()) || c == &'_')
+                .repeated(),
+        )
         .map(|(c, mut cs)| {
             cs.insert(0, c);
-            Ident { str: cs.into_iter().collect() }
-        });
+            Name { str: cs.into_iter().collect() }
+        })
+}
+
+pub fn proper_name() -> impl Parser<char, ProperName, Error = Simple<char>> + Clone {
+    filter(|c: &char| (c.is_alphabetic() && c.is_uppercase()) || c == &'_')
+        .then(
+            filter(|c: &char| (c.is_alphanumeric() && c.is_ascii_alphabetic()) || c == &'_')
+                .repeated(),
+        )
+        .map(|(c, mut cs)| {
+            cs.insert(0, c);
+            ProperName { str: cs.into_iter().collect() }
+        })
+}
+
+pub fn parse_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
+    choice((
+        just("Int").map(|_| Type::TInt),
+        just("Float").map(|_| Type::TFloat),
+        just("String").map(|_| Type::TString),
+    ))
+    .then_ignore(end())
+}
+
+pub fn parse_expr() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
+    let int = text::int(10)
+        .padded()
+        .map(|s: String| s.parse::<i64>().unwrap())
+        .map(|s: i64| Expr::EInt(s));
+
+    let op = |c| just(c).padded();
 
     let expr = recursive(|expr| {
-        let int = text::int(10)
-            .padded()
-            .map(|s: String| s.parse::<i64>().unwrap())
-            .map(|s: i64| Expr::Int(s));
-
         let term = choice((
             int,
-            name.map(|n| Expr::Var(n)),
+            name().map(|n| Expr::Var(n)),
             expr.clone().delimited_by(just("("), just(")")).padded(),
         ));
 
-        let op = |c| just(c).padded();
-
+        // Maybe a pipe function? :o
         let unary = op('!')
             .repeated()
             .then(term)
@@ -95,9 +130,9 @@ pub fn parse_expr() -> impl Parser<char, Expr, Error = Simple<char>> {
             )
             .foldl(|lhs, (op, rhs)| Expr::Bin(op, Box::new(lhs), Box::new(rhs)));
 
-        let call =
-            name.then(expr.padded().repeated().at_least(1))
-                .map(|(f, args)| Expr::Call(f, args) );
+        let call = name()
+            .then(expr.padded().repeated().at_least(1))
+            .map(|(f, args)| Expr::Call(f, args));
 
         choice((call, sum))
     });
@@ -108,43 +143,37 @@ pub fn parse_expr() -> impl Parser<char, Expr, Error = Simple<char>> {
 #[cfg(test)]
 mod test {
 
-    use super::parse_expr;
+    use super::*;
     use chumsky::Parser;
-
-    fn check_expr_no_syntax_error(src: &str) {
-        let res = parse_expr().parse(src);
-        assert!(
-            res.is_ok(),
-            "ERR:\n{:?}\ngave:\n{:?}\nbut expected OK\n-----------\n",
-            src,
-            res
-        );
-    }
 
     macro_rules! expr_t {
         ($name:ident, $src:literal) => {
             #[test]
             fn $name() {
-                check_expr_no_syntax_error($src);
+                let src = $src;
+                let res = parse_expr().parse(src);
+                assert!(
+                    res.is_ok(),
+                    "ERR EXPR:\n{:?}\ngave:\n{:?}\nbut expected OK\n-----------\n",
+                    src,
+                    res
+                );
             }
         };
-    }
-
-    fn check_expr_and_expect_syntax_error(src: &str) {
-        let res = parse_expr().parse(src);
-        assert!(
-            res.is_err(),
-            "ERR:\n{:?}\ngave:\n{:?}\nbut expected ERROR\n-----------\n",
-            src,
-            res
-        );
     }
 
     macro_rules! no_expr_t {
         ($name:ident, $src:literal) => {
             #[test]
             fn $name() {
-                check_expr_and_expect_syntax_error($src);
+                let src = $src;
+                let res = parse_expr().parse(src);
+                assert!(
+                    res.is_err(),
+                    "NO ERR EXPR:\n{:?}\ngave:\n{:?}\nbut expected ERROR\n-----------\n",
+                    src,
+                    res
+                );
             }
         };
     }
@@ -184,4 +213,23 @@ mod test {
     no_expr_t!(il_call1, "(a + a) a b c");
     no_expr_t!(il_call2, "(f) a b c");
     no_expr_t!(il_call3, "1 + f a b");
+
+    macro_rules! type_t {
+        ($name:ident, $src:literal) => {
+            #[test]
+            fn $name() {
+                let src = $src;
+                let res = parse_type().parse(src);
+                assert!(
+                    res.is_ok(),
+                    "ERR TYPE:\n{:?}\ngave:\n{:?}\nbut expected OK\n-----------\n",
+                    src,
+                    res
+                );
+            }
+        };
+    }
+
+    type_t!(t_int, "Int");
+    type_t!(t_float, "Float");
 }
