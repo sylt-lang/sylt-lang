@@ -173,11 +173,15 @@ mod test {
     expr_t!(mixed_ws1, "1*(    2 +  3  )+1");
     expr_t!(mixed_ws2, "1   *    (    2        +3)+1");
 
-    // Probably controversial!
+    // Probably controversial! This is a good idea, since now functions cannot be whatever they
+    // want to be.
     expr_t!(call1, "a 1 2 3");
     expr_t!(call2, "a (1 + 2 + 3) (2 * 3) 3");
     expr_t!(call3, "f a + 1 b");
 
     no_expr_t!(il_ident1, "A");
     no_expr_t!(il_ident2, "Abcedef");
+    no_expr_t!(il_call1, "(a + a) a b c");
+    no_expr_t!(il_call2, "(f) a b c");
+    no_expr_t!(il_call3, "1 + f a b");
 }
