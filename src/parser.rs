@@ -46,6 +46,7 @@ pub enum BinOp {
 
 #[derive(Debug, Clone)]
 pub enum Type {
+    TEmpty,
     TCustom(ProperName, Vec<Type>),
     TFunction(Box<Type>, Box<Type>),
 }
@@ -68,7 +69,7 @@ pub fn name() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
 }
 
 pub fn proper_name() -> impl Parser<char, ProperName, Error = Simple<char>> + Clone {
-    filter(|c: &char| (c.is_alphabetic() && c.is_uppercase()) || c == &'_')
+    filter(|c: &char| c.is_alphabetic() && c.is_uppercase())
         .then(
             filter(|c: &char| (c.is_alphanumeric() && c.is_ascii_alphabetic()) || c == &'_')
                 .repeated(),
@@ -82,6 +83,7 @@ pub fn proper_name() -> impl Parser<char, ProperName, Error = Simple<char>> + Cl
 pub fn parse_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
     let ty = recursive(|ty| {
         let term = choice((
+            just("_").padded().to(Type::TEmpty),
             proper_name()
                 .then(ty.clone().padded().repeated())
                 .padded()
@@ -263,7 +265,9 @@ mod test {
     type_t!(t_with_paren1, "A (B) C");
     type_t!(t_with_paren2, "A (B C)");
     type_t!(t_function, "A -> B -> C");
-    type_t!(t_function_nested, "A -> (B F -> D) -> C");
+    type_t!(t_function_nested1, "A -> (B F -> D) -> C");
+    type_t!(t_function_nested2, "A -> _");
+    type_t!(t_function_nested3, "A -> (B _)");
 
     no_type_t!(ill_t_function_nested, "a");
     no_type_t!(ill_paren, "(");
