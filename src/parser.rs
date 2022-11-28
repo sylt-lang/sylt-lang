@@ -88,9 +88,12 @@ pub fn parse_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
                 .map(|(name, args)| Type::TCustom(name, args)),
             ty.clone().delimited_by(just("("), just(")")).padded(),
         ));
-        term.clone()
-            .then(just("->").padded().ignore_then(ty.clone()))
-            .map(|(a, b)| Type::TFunction(Box::new(a), Box::new(b)))
+        choice((
+            term.clone()
+                .then(just("->").padded().ignore_then(ty.clone()))
+                .map(|(a, b)| Type::TFunction(Box::new(a), Box::new(b))),
+            term,
+        ))
     });
     ty
 }
@@ -260,9 +263,8 @@ mod test {
     type_t!(t_with_paren1, "A (B) C");
     type_t!(t_with_paren2, "A (B C)");
     type_t!(t_function, "A -> B -> C");
-    type_t!(t_function_nested, "A -> (fn B F -> D) -> C");
+    type_t!(t_function_nested, "A -> (B F -> D) -> C");
 
-    type_t!(t_function_nested1, "a");
     no_type_t!(ill_t_function_nested, "a");
     no_type_t!(ill_paren, "(");
 }
