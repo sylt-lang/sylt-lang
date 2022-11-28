@@ -16,10 +16,20 @@ pub struct ProperName {
     str: String,
 }
 
-// #[derive(Debug, Clone)]
-// pub enum Def {
-//     Const { name: Ident, ty: Type, value: Expr },
-// }
+#[derive(Debug, Clone)]
+pub enum Def {
+    Def {
+        ty: Type,
+        name: Name,
+        args: Vec<Name>,
+        value: Expr,
+    },
+    Type {
+        name: ProperName,
+        args: Vec<Name>,
+        ty: Type,
+    },
+}
 
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -48,10 +58,10 @@ pub enum BinOp {
 pub enum Type {
     TEmpty,
     TCustom(ProperName, Vec<Type>),
+    TVar(Name),
     TFunction(Box<Type>, Box<Type>),
 }
 
-// TODO: Switch to unstable toolchain to get traits in type aliases and concat_ident
 pub fn parser() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
     parse_type().then_ignore(parse_expr())
 }
@@ -80,10 +90,30 @@ pub fn proper_name() -> impl Parser<char, ProperName, Error = Simple<char>> + Cl
         })
 }
 
+pub fn parse_def() -> impl Parser<char, Def, Error = Simple<char>> + Clone {
+    let def = just("def")
+        .padded()
+        .ignore_then(name())
+        .then(just(":").padded().ignore_then(parse_type().or(empty().to(Type::TEmpty))).then_ignore(just(":").padded()))
+        .then(name().padded().repeated())
+        .then(just("=").padded().ignore_then(parse_expr()))
+        .map(|(((name, ty), args), value)| Def::Def { name, ty, args, value });
+
+    let ty = just("type")
+        .padded()
+        .ignore_then(proper_name())
+        .then(name().padded().repeated())
+        .then(just("=").padded().ignore_then(parse_type()))
+        .map(|((name, args), ty)| Def::Type { name, ty, args });
+
+    choice((def, ty))
+}
+
 pub fn parse_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
     recursive(|ty| {
         let term = choice((
             just("_").padded().to(Type::TEmpty),
+            name().map(|var| Type::TVar(var)),
             proper_name()
                 .then(ty.clone().padded().repeated())
                 .padded()
@@ -265,8 +295,35 @@ mod test {
     type_t!(t_function_nested1, "A -> (B F -> D) -> C");
     type_t!(t_function_nested2, "A -> _");
     type_t!(t_function_nested3, "A -> (B _)");
+    type_t!(t_function_nested4, "a -> b");
+    type_t!(t_function_nested5, "A a B");
 
-    type_t!(t_function_nested1, "a");
-    no_type_t!(ill_t_function_nested, "a");
     no_type_t!(ill_paren, "(");
+
+    macro_rules! def_t {
+        ($name:ident, $src:literal) => {
+            #[test]
+            fn $name() {
+                let src = $src;
+                let res = parse_def().then_ignore(end()).parse(src);
+                assert!(
+                    res.is_ok(),
+                    "ERR DEF:\n{:?}\ngave:\n{:?}\nbut expected OK\n-----------\n",
+                    src,
+                    res
+                );
+            }
+        };
+    }
+
+    def_t!(d_var1, "def a : Int : = 1");
+    def_t!(d_var2, "def a : Int : = 1 + 1");
+    def_t!(d_fun1, "def a : Int -> Int : a = 1 + a");
+    def_t!(d_fun2, "def a : Array a -> List a : a = a - a");
+    def_t!(d_fun3, "def a : Array a -> List a : a b c d e f = 1");
+    def_t!(d_fun4, "def a\n:    Array a   \n -> List a : \n a b \n c d e f \n = 1");
+
+    def_t!(d_ty1, "type Abc = Int");
+    def_t!(d_ty2, "type Abc a = Int");
+    def_t!(d_ty3, "type Abc a b c d e = Int");
 }
