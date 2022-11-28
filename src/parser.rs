@@ -94,7 +94,12 @@ pub fn parse_def() -> impl Parser<char, Def, Error = Simple<char>> + Clone {
     let def = just("def")
         .padded()
         .ignore_then(name())
-        .then(just(":").padded().ignore_then(parse_type().or(empty().to(Type::TEmpty))).then_ignore(just(":").padded()))
+        .then(
+            just(":")
+                .padded()
+                .ignore_then(parse_type().or(empty().to(Type::TEmpty)))
+                .then_ignore(just(":").padded()),
+        )
         .then(name().padded().repeated())
         .then(just("=").padded().ignore_then(parse_expr()))
         .map(|(((name, ty), args), value)| Def::Def { name, ty, args, value });
@@ -321,7 +326,10 @@ mod test {
     def_t!(d_fun1, "def a : Int -> Int : a = 1 + a");
     def_t!(d_fun2, "def a : Array a -> List a : a = a - a");
     def_t!(d_fun3, "def a : Array a -> List a : a b c d e f = 1");
-    def_t!(d_fun4, "def a\n:    Array a   \n -> List a : \n a b \n c d e f \n = 1");
+    def_t!(
+        d_fun4,
+        "def a\n:    Array a   \n -> List a : \n a b \n c d e f \n = 1"
+    );
 
     def_t!(d_ty1, "type Abc = Int");
     def_t!(d_ty2, "type Abc a = Int");
