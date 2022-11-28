@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use chumsky::prelude::*;
 
 // #[derive(Debug, Clone)]
@@ -6,14 +8,18 @@ use chumsky::prelude::*;
 //     body: Vec<Def>,
 // }
 
+type Span = Range<usize>;
+
 #[derive(Debug, Clone)]
 pub struct Name {
     str: String,
+    span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct ProperName {
     str: String,
+    span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -23,43 +29,49 @@ pub enum Def {
         name: Name,
         args: Vec<Name>,
         value: Expr,
+        span: Span,
     },
     Type {
         name: ProperName,
         args: Vec<Name>,
         ty: Type,
+        span: Span,
     },
 }
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-    EInt(i64),
-    Var(Name),
-    Call(Name, Vec<Expr>),
+    EInt(i64, Span),
+    Var(Name, Span),
+    Call(Name, Vec<Expr>, Span),
 
     Un(UnOp, Box<Expr>),
     Bin(BinOp, Box<Expr>, Box<Expr>),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub enum UnOp {
-    Neg,
+    Neg(Span),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub enum BinOp {
-    Add,
-    Sub,
-    Div,
-    Mul,
+    Add(Span),
+    Sub(Span),
+    Div(Span),
+    Mul(Span),
 }
 
 #[derive(Debug, Clone)]
 pub enum Type {
-    TEmpty,
-    TCustom(ProperName, Vec<Type>),
-    TVar(Name),
-    TFunction(Box<Type>, Box<Type>),
+    TEmpty(Span),
+    TCustom {
+        name: ProperName,
+        args: Vec<Type>,
+        span: Span,
+    },
+    TVar(Name, Span),
+    TFunction(Box<Type>, Box<Type>, Span),
 }
 
 pub fn parser() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
@@ -72,9 +84,9 @@ pub fn name() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
             filter(|c: &char| (c.is_alphanumeric() && c.is_ascii_alphabetic()) || c == &'_')
                 .repeated(),
         )
-        .map(|(c, mut cs)| {
+        .map_with_span(|(c, mut cs), span| {
             cs.insert(0, c);
-            Name { str: cs.into_iter().collect() }
+            Name { str: cs.into_iter().collect(), span }
         })
 }
 
@@ -84,9 +96,9 @@ pub fn proper_name() -> impl Parser<char, ProperName, Error = Simple<char>> + Cl
             filter(|c: &char| (c.is_alphanumeric() && c.is_ascii_alphabetic()) || c == &'_')
                 .repeated(),
         )
-        .map(|(c, mut cs)| {
+        .map_with_span(|(c, mut cs), span| {
             cs.insert(0, c);
-            ProperName { str: cs.into_iter().collect() }
+            ProperName { str: cs.into_iter().collect(), span }
         })
 }
 
@@ -97,19 +109,19 @@ pub fn parse_def() -> impl Parser<char, Def, Error = Simple<char>> + Clone {
         .then(
             just(":")
                 .padded()
-                .ignore_then(parse_type().or(empty().to(Type::TEmpty)))
+                .ignore_then(parse_type().or(empty().map_with_span(|_, span| Type::TEmpty(span))))
                 .then_ignore(just(":").padded()),
         )
         .then(name().padded().repeated())
         .then(just("=").padded().ignore_then(parse_expr()))
-        .map(|(((name, ty), args), value)| Def::Def { name, ty, args, value });
+        .map_with_span(|(((name, ty), args), value), span| Def::Def { name, ty, args, value, span });
 
     let ty = just("type")
         .padded()
         .ignore_then(proper_name())
         .then(name().padded().repeated())
         .then(just("=").padded().ignore_then(parse_type()))
-        .map(|((name, args), ty)| Def::Type { name, ty, args });
+        .map_with_span(|((name, args), ty), span| Def::Type { name, ty, args, span });
 
     choice((def, ty))
 }
@@ -117,18 +129,18 @@ pub fn parse_def() -> impl Parser<char, Def, Error = Simple<char>> + Clone {
 pub fn parse_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
     recursive(|ty| {
         let term = choice((
-            just("_").padded().to(Type::TEmpty),
-            name().map(|var| Type::TVar(var)),
+            just("_").padded().map_with_span(|_, span| Type::TEmpty(span)),
+            name().map_with_span(|var, span| Type::TVar(var, span)),
             proper_name()
                 .then(ty.clone().padded().repeated())
                 .padded()
-                .map(|(name, args)| Type::TCustom(name, args)),
+                .map_with_span(|(name, args), span| Type::TCustom { name, args, span }),
             ty.clone().delimited_by(just("("), just(")")).padded(),
         ));
         choice((
             term.clone()
                 .then(just("->").padded().ignore_then(ty.clone()))
-                .map(|(a, b)| Type::TFunction(Box::new(a), Box::new(b))),
+                .map_with_span(|(a, b), span| Type::TFunction(Box::new(a), Box::new(b), span)),
             term,
         ))
     })
@@ -137,29 +149,28 @@ pub fn parse_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
 pub fn parse_expr() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
     let int = text::int(10)
         .padded()
-        .map(|s: String| s.parse::<i64>().unwrap())
-        .map(|s: i64| Expr::EInt(s));
+        .map_with_span(|s: String, span| Expr::EInt(s.parse::<i64>().unwrap(), span));
 
     let op = |c| just(c).padded();
 
     recursive(|expr| {
         let term = choice((
             int,
-            name().map(|n| Expr::Var(n)),
+            name().map_with_span(|n, span| Expr::Var(n, span)),
             expr.clone().delimited_by(just("("), just(")")).padded(),
         ));
 
         // Maybe a pipe function? :o
-        let unary = op('!')
+        let unary = op('!').map_with_span(|_, span| UnOp::Neg(span))
             .repeated()
             .then(term)
-            .foldr(|_op, rhs| Expr::Un(UnOp::Neg, Box::new(rhs)));
+            .foldr(|op, rhs| Expr::Un(op, Box::new(rhs)));
 
         let product = unary
             .clone()
             .then(
-                (op('*').to(BinOp::Mul))
-                    .or(op('/').to(BinOp::Div))
+                (op('*').map_with_span(|_, span| BinOp::Mul(span)))
+                    .or(op('/').map_with_span(|_, span| BinOp::Div(span)))
                     .then(unary)
                     .repeated(),
             )
@@ -168,8 +179,8 @@ pub fn parse_expr() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
         let sum = product
             .clone()
             .then(
-                (op('+').to(BinOp::Add))
-                    .or(op('-').to(BinOp::Sub))
+                (op('+').map_with_span(|_, span| BinOp::Add(span)))
+                    .or(op('-').map_with_span(|_, span| BinOp::Sub(span)))
                     .then(product)
                     .repeated(),
             )
@@ -177,7 +188,7 @@ pub fn parse_expr() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
 
         let call = name()
             .then(expr.padded().repeated().at_least(1))
-            .map(|(f, args)| Expr::Call(f, args));
+            .map_with_span(|(f, args), span| Expr::Call(f, args, span));
 
         choice((call, sum))
     })
