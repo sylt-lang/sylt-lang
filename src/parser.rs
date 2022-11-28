@@ -81,7 +81,7 @@ pub fn proper_name() -> impl Parser<char, ProperName, Error = Simple<char>> + Cl
 }
 
 pub fn parse_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
-    let ty = recursive(|ty| {
+    recursive(|ty| {
         let term = choice((
             just("_").padded().to(Type::TEmpty),
             proper_name()
@@ -96,8 +96,7 @@ pub fn parse_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
                 .map(|(a, b)| Type::TFunction(Box::new(a), Box::new(b))),
             term,
         ))
-    });
-    ty
+    })
 }
 
 pub fn parse_expr() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
@@ -108,7 +107,7 @@ pub fn parse_expr() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
 
     let op = |c| just(c).padded();
 
-    let expr = recursive(|expr| {
+    recursive(|expr| {
         let term = choice((
             int,
             name().map(|n| Expr::Var(n)),
@@ -146,9 +145,7 @@ pub fn parse_expr() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
             .map(|(f, args)| Expr::Call(f, args));
 
         choice((call, sum))
-    });
-
-    expr
+    })
 }
 
 #[cfg(test)]
@@ -269,6 +266,7 @@ mod test {
     type_t!(t_function_nested2, "A -> _");
     type_t!(t_function_nested3, "A -> (B _)");
 
+    type_t!(t_function_nested1, "a");
     no_type_t!(ill_t_function_nested, "a");
     no_type_t!(ill_paren, "(");
 }
