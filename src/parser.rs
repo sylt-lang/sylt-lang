@@ -1,4 +1,7 @@
+use logos::Logos;
 use std::ops::Range;
+
+use crate::lexer::Token;
 
 use chumsky::prelude::*;
 
@@ -37,6 +40,19 @@ pub enum Def {
         ty: Type,
         span: Span,
     },
+    Enum {
+        name: ProperName,
+        args: Vec<Name>,
+        constructors: Vec<EnumConst>,
+        span: Span,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumConst {
+    name: ProperName,
+    ty: Type,
+    span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -114,7 +130,13 @@ pub fn parse_def() -> impl Parser<char, Def, Error = Simple<char>> + Clone {
         )
         .then(name().padded().repeated())
         .then(just("=").padded().ignore_then(parse_expr()))
-        .map_with_span(|(((name, ty), args), value), span| Def::Def { name, ty, args, value, span });
+        .map_with_span(|(((name, ty), args), value), span| Def::Def {
+            name,
+            ty,
+            args,
+            value,
+            span,
+        });
 
     let ty = just("type")
         .padded()
@@ -123,13 +145,22 @@ pub fn parse_def() -> impl Parser<char, Def, Error = Simple<char>> + Clone {
         .then(just("=").padded().ignore_then(parse_type()))
         .map_with_span(|((name, args), ty), span| Def::Type { name, ty, args, span });
 
-    choice((def, ty))
+    let en = just("enum")
+        .padded()
+        .ignore_then(proper_name())
+        .then(name().padded().repeated())
+        .then(just("=").padded().ignore_then(parse_type()))
+        .map_with_span(|((name, args), ty), span| Def::Type { name, ty, args, span });
+
+    choice((def, ty, en))
 }
 
 pub fn parse_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
     recursive(|ty| {
         let term = choice((
-            just("_").padded().map_with_span(|_, span| Type::TEmpty(span)),
+            just("_")
+                .padded()
+                .map_with_span(|_, span| Type::TEmpty(span)),
             name().map_with_span(|var, span| Type::TVar(var, span)),
             proper_name()
                 .then(ty.clone().padded().repeated())
@@ -161,7 +192,8 @@ pub fn parse_expr() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
         ));
 
         // Maybe a pipe function? :o
-        let unary = op('!').map_with_span(|_, span| UnOp::Neg(span))
+        let unary = op('!')
+            .map_with_span(|_, span| UnOp::Neg(span))
             .repeated()
             .then(term)
             .foldr(|op, rhs| Expr::Un(op, Box::new(rhs)));
@@ -193,6 +225,7 @@ pub fn parse_expr() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
         choice((call, sum))
     })
 }
+
 
 #[cfg(test)]
 mod test {

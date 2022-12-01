@@ -1,5 +1,7 @@
 use chumsky::Parser;
+mod lexer;
 mod parser;
+mod parser_new;
 mod ast;
 
 
