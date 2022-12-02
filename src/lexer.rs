@@ -2,91 +2,90 @@ use logos::Logos;
 
 #[derive(Logos, Debug, PartialEq, Clone, Copy)]
 pub enum Token<'t> {
-    #[regex("[a-z_][a-zA-Z0-9_]*", |lex| lex.slice())]
-    Name(&'t str),
+  #[regex("[a-z_][a-zA-Z0-9_]*", |lex| lex.slice())]
+  Name(&'t str),
 
-    #[regex("[A-Z][a-zA-Z0-9_]*", |lex| lex.slice())]
-    ProperName(&'t str),
+  #[regex("[A-Z][a-zA-Z0-9_]*", |lex| lex.slice())]
+  ProperName(&'t str),
 
-    // `X.`, `.Y`, `X.Y`, `XeY` and `Xe-Y`
-    #[regex(r"([\d]+\.[\d]*|[\d]*\.[\d]+)|[\d]+e(-|\+)?[\d]+", |lex| lex.slice(), priority=2)]
-    Float(&'t str),
+  // `X.`, `.Y`, `X.Y`, `XeY` and `Xe-Y`
+  #[regex(r"([\d]+\.[\d]*|[\d]*\.[\d]+)|[\d]+e(-|\+)?[\d]+", |lex| lex.slice(), priority=2)]
+  Float(&'t str),
 
-    #[regex(r"[\d]+", |lex| lex.slice())]
-    Int(&'t str),
+  #[regex(r"[\d]+", |lex| lex.slice())]
+  Int(&'t str),
 
-    // Keywords
-    #[token("->")]
-    KwArrow,
-    #[token("def")]
-    KwDef,
-    #[token("enum")]
-    KwEnum,
-    #[token("type")]
-    KwType,
+  // Keywords
+  #[token("->")]
+  KwArrow,
+  #[token("def")]
+  KwDef,
+  #[token("enum")]
+  KwEnum,
+  #[token("type")]
+  KwType,
 
-    // Operators
-    #[token("!")]
-    OpNeg,
-    #[token("+")]
-    OpAdd,
-    #[token("-")]
-    OpSub,
-    #[token("*")]
-    OpMul,
-    #[token("/")]
-    OpDiv,
-    #[token("'")]
-    OpCall,
+  // Operators
+  #[token("!")]
+  OpNeg,
+  #[token("+")]
+  OpAdd,
+  #[token("-")]
+  OpSub,
+  #[token("*")]
+  OpMul,
+  #[token("/")]
+  OpDiv,
+  #[token("'")]
+  OpCall,
 
-    #[token("(")]
-    LParen,
-    #[token(")")]
-    RParen,
+  #[token("(")]
+  LParen,
+  #[token(")")]
+  RParen,
 
-    #[token(".")]
-    Period,
-    #[token(":")]
-    Colon,
-    #[token("=")]
-    Equal,
-    #[token("|")]
-    Pipe,
+  #[token(".")]
+  Period,
+  #[token(":")]
+  Colon,
+  #[token("=")]
+  Equal,
+  #[token("|")]
+  Pipe,
 
-    #[regex(r"[ \t\n\f]+", logos::skip)]
-    #[error]
-    Error,
+  #[regex(r"[ \t\n\f]+", logos::skip)]
+  #[error]
+  Error,
 }
 
 impl<'t> Token<'t> {
-    pub fn describe(&self) -> String {
-        match self {
-            Token::Name(n) => format!("name {:?}", n),
-            Token::ProperName(n) => format!("proper name {:?}", n),
-            Token::Float(n) => format!("float {:?}", n),
-            Token::Int(n) => format!("int {:?}", n),
+  pub fn describe(&self) -> String {
+    match self {
+      Token::Name(n) => format!("name {:?}", n),
+      Token::ProperName(n) => format!("proper name {:?}", n),
+      Token::Float(n) => format!("float {:?}", n),
+      Token::Int(n) => format!("int {:?}", n),
 
-            Token::KwArrow => "keyword `->`".to_string(),
-            Token::KwDef => "keyword `def`".to_string(),
-            Token::KwEnum => "keyword `enum`".to_string(),
-            Token::KwType => "keyword `type`".to_string(),
+      Token::KwArrow => "keyword `->`".to_string(),
+      Token::KwDef => "keyword `def`".to_string(),
+      Token::KwEnum => "keyword `enum`".to_string(),
+      Token::KwType => "keyword `type`".to_string(),
 
-            Token::OpNeg => "operator `!`".to_string(),
-            Token::OpAdd => "operator `+`".to_string(),
-            Token::OpSub => "operator `-`".to_string(),
-            Token::OpMul => "operator `*`".to_string(),
-            Token::OpDiv => "operator `/`".to_string(),
-            Token::OpCall => "operator `'`".to_string(),
+      Token::OpNeg => "operator `!`".to_string(),
+      Token::OpAdd => "operator `+`".to_string(),
+      Token::OpSub => "operator `-`".to_string(),
+      Token::OpMul => "operator `*`".to_string(),
+      Token::OpDiv => "operator `/`".to_string(),
+      Token::OpCall => "operator `'`".to_string(),
 
-            Token::LParen => "a `(`".to_string(),
-            Token::RParen => "a `)`".to_string(),
-            Token::Period => "a `.`".to_string(),
-            Token::Colon => "a `:`".to_string(),
-            Token::Equal => "a `=`".to_string(),
-            Token::Pipe => "a `|`".to_string(),
+      Token::LParen => "a `(`".to_string(),
+      Token::RParen => "a `)`".to_string(),
+      Token::Period => "a `.`".to_string(),
+      Token::Colon => "a `:`".to_string(),
+      Token::Equal => "a `=`".to_string(),
+      Token::Pipe => "a `|`".to_string(),
 
-            Token::Error => "ERROR!".to_string(),
-        }
+      Token::Error => "ERROR!".to_string(),
     }
+  }
 }
-
