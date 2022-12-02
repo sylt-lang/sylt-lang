@@ -1,68 +1,59 @@
-use logos::Logos;
-use std::ops::Range;
-
 use crate::lexer::Token;
+use logos::Logos;
 
-use chumsky::prelude::*;
+#[derive(Debug, Clone, Copy)]
+pub struct Span(usize, usize);
 
-// #[derive(Debug, Clone)]
-// pub struct Module {
-//     name: Ident,
-//     body: Vec<Def>,
-// }
-
-type Span = Range<usize>;
-
-#[derive(Debug, Clone)]
-pub struct Name {
-  str: String,
-  span: Span,
+impl Span {
+  pub fn merge(self, other: Self) -> Self {
+    Self(self.0.min(other.0), self.1.max(other.1))
+  }
 }
 
 #[derive(Debug, Clone)]
-pub struct ProperName {
-  str: String,
-  span: Span,
-}
+pub struct Name<'t>(&'t str, Span);
 
 #[derive(Debug, Clone)]
-pub enum Def {
+pub struct ProperName<'t>(&'t str, Span);
+
+#[derive(Debug, Clone)]
+pub enum Def<'t> {
   Def {
-    ty: Type,
-    name: Name,
-    args: Vec<Name>,
-    value: Expr,
+    ty: Type<'t>,
+    name: Name<'t>,
+    args: Vec<Name<'t>>,
+    body: Expr<'t>,
     span: Span,
   },
   Type {
-    name: ProperName,
-    args: Vec<Name>,
-    ty: Type,
+    name: ProperName<'t>,
+    args: Vec<Name<'t>>,
+    body: Type<'t>,
     span: Span,
   },
   Enum {
-    name: ProperName,
-    args: Vec<Name>,
-    constructors: Vec<EnumConst>,
+    name: ProperName<'t>,
+    args: Vec<Name<'t>>,
+    constructors: Vec<EnumConst<'t>>,
     span: Span,
   },
 }
 
 #[derive(Debug, Clone)]
-pub struct EnumConst {
-  name: ProperName,
-  ty: Type,
+pub struct EnumConst<'t> {
+  name: ProperName<'t>,
+  ty: Option<Type<'t>>,
   span: Span,
 }
 
 #[derive(Debug, Clone)]
-pub enum Expr {
+pub enum Expr<'t> {
   EInt(i64, Span),
-  Var(Name, Span),
-  Call(Name, Vec<Expr>, Span),
+  Var(Name<'t>, Span),
+  Call(Name<'t>, Vec<Expr<'t>>, Span),
 
-  Un(UnOp, Box<Expr>),
-  Bin(BinOp, Box<Expr>, Box<Expr>),
+  Un(UnOp, Box<Expr<'t>>),
+  Bin(BinOp, Box<Expr<'t>>, Box<Expr<'t>>),
 }
 
 #[derive(Debug, Clone)]
@@ -70,254 +61,482 @@ pub enum UnOp {
   Neg(Span),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum BinOp {
   Add(Span),
   Sub(Span),
   Div(Span),
   Mul(Span),
+  Call(Span),
 }
 
 #[derive(Debug, Clone)]
-pub enum Type {
+pub enum Type<'t> {
   TEmpty(Span),
   TCustom {
-    name: ProperName,
-    args: Vec<Type>,
+    name: ProperName<'t>,
+    args: Vec<Type<'t>>,
     span: Span,
   },
-  TVar(Name, Span),
-  TFunction(Box<Type>, Box<Type>, Span),
+  TVar(Name<'t>, Span),
+  TFunction(Box<Type<'t>>, Box<Type<'t>>, Span),
 }
 
-pub fn parser() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
-  parse_type().then_ignore(parse_expr())
+#[derive(Clone, Debug)]
+pub enum Error {
+  Msg {
+    msg: &'static str,
+    span: Span,
+    token: Option<String>,
+    annotations: Vec<String>,
+  },
+
+  EoF {
+    span: Span,
+    annotations: Vec<String>,
+  },
+}
+fn err_eof<'t, A>(span: Span) -> Parseresult<A> {
+  Err(Error::EoF { span, annotations: vec![] })
 }
 
-pub fn name() -> impl Parser<char, Name, Error = Simple<char>> + Clone {
-  filter(|c: &char| (c.is_alphabetic() && c.is_lowercase()) || c == &'_')
-    .then(
-      filter(|c: &char| (c.is_alphanumeric() && c.is_ascii_alphabetic()) || c == &'_').repeated(),
-    )
-    .map_with_span(|(c, mut cs), span| {
-      cs.insert(0, c);
-      Name { str: cs.into_iter().collect(), span }
-    })
+fn err_msg<'t, A>(msg: &'static str, span: Span) -> Parseresult<A> {
+  err_msg_token(msg, None, span)
 }
 
-pub fn proper_name() -> impl Parser<char, ProperName, Error = Simple<char>> + Clone {
-  filter(|c: &char| c.is_alphabetic() && c.is_uppercase())
-    .then(
-      filter(|c: &char| (c.is_alphanumeric() && c.is_ascii_alphabetic()) || c == &'_').repeated(),
-    )
-    .map_with_span(|(c, mut cs), span| {
-      cs.insert(0, c);
-      ProperName { str: cs.into_iter().collect(), span }
-    })
-}
-
-pub fn parse_def() -> impl Parser<char, Def, Error = Simple<char>> + Clone {
-  let def = just("def")
-    .padded()
-    .ignore_then(name())
-    .then(
-      just(":")
-        .padded()
-        .ignore_then(parse_type().or(empty().map_with_span(|_, span| Type::TEmpty(span))))
-        .then_ignore(just(":").padded()),
-    )
-    .then(name().padded().repeated())
-    .then(just("=").padded().ignore_then(parse_expr()))
-    .map_with_span(|(((name, ty), args), value), span| Def::Def { name, ty, args, value, span });
-
-  let ty = just("type")
-    .padded()
-    .ignore_then(proper_name())
-    .then(name().padded().repeated())
-    .then(just("=").padded().ignore_then(parse_type()))
-    .map_with_span(|((name, args), ty), span| Def::Type { name, ty, args, span });
-
-  let en = just("enum")
-    .padded()
-    .ignore_then(proper_name())
-    .then(name().padded().repeated())
-    .then(just("=").padded().ignore_then(parse_type()))
-    .map_with_span(|((name, args), ty), span| Def::Type { name, ty, args, span });
-
-  choice((def, ty, en))
-}
-
-pub fn parse_type() -> impl Parser<char, Type, Error = Simple<char>> + Clone {
-  recursive(|ty| {
-    let term = choice((
-      just("_")
-        .padded()
-        .map_with_span(|_, span| Type::TEmpty(span)),
-      name().map_with_span(|var, span| Type::TVar(var, span)),
-      proper_name()
-        .then(ty.clone().padded().repeated())
-        .padded()
-        .map_with_span(|(name, args), span| Type::TCustom { name, args, span }),
-      ty.clone().delimited_by(just("("), just(")")).padded(),
-    ));
-    choice((
-      term
-        .clone()
-        .then(just("->").padded().ignore_then(ty.clone()))
-        .map_with_span(|(a, b), span| Type::TFunction(Box::new(a), Box::new(b), span)),
-      term,
-    ))
+fn err_msg_token<'t, A>(msg: &'static str, token: Option<Token<'t>>, span: Span) -> Parseresult<A> {
+  Err(Error::Msg {
+    msg,
+    span,
+    token: token.map(|t| t.describe()),
+    annotations: vec![],
   })
 }
 
-pub fn parse_expr() -> impl Parser<char, Expr, Error = Simple<char>> + Clone {
-  let int = text::int(10)
-    .padded()
-    .map_with_span(|s: String, span| Expr::EInt(s.parse::<i64>().unwrap(), span));
+pub struct Lex<'t> {
+  lexer: logos::Lexer<'t, Token<'t>>,
+  buffer: (Span, Option<Token<'t>>),
+}
 
-  let op = |c| just(c).padded();
+impl<'t> Lex<'t> {
+  pub fn new(lexer: logos::Lexer<'t, Token<'t>>) -> Self {
+    let mut lexer = Self { lexer, buffer: (Span(0, 0), None) };
+    lexer.feed();
+    lexer
+  }
 
-  recursive(|expr| {
-    let term = choice((
-      int,
-      name().map_with_span(|n, span| Expr::Var(n, span)),
-      expr.clone().delimited_by(just("("), just(")")).padded(),
-    ));
+  fn feed(&mut self) -> (Span, Option<Token<'t>>) {
+    let t = self.lexer.next();
+    let s = {
+      let s = self.lexer.span();
+      Span(s.start, s.end)
+    };
+    let out = self.buffer;
+    self.buffer = (s, t);
+    out
+  }
 
-    // Maybe a pipe function? :o
-    let unary = op('!')
-      .map_with_span(|_, span| UnOp::Neg(span))
-      .repeated()
-      .then(term)
-      .foldr(|op, rhs| Expr::Un(op, Box::new(rhs)));
+  pub fn span(&self) -> Span {
+    self.buffer.0
+  }
 
-    let product = unary
-      .clone()
-      .then(
-        (op('*').map_with_span(|_, span| BinOp::Mul(span)))
-          .or(op('/').map_with_span(|_, span| BinOp::Div(span)))
-          .then(unary)
-          .repeated(),
-      )
-      .foldl(|lhs, (op, rhs)| Expr::Bin(op, Box::new(lhs), Box::new(rhs)));
+  pub fn token(&self) -> Option<Token<'t>> {
+    self.buffer.1
+  }
 
-    let sum = product
-      .clone()
-      .then(
-        (op('+').map_with_span(|_, span| BinOp::Add(span)))
-          .or(op('-').map_with_span(|_, span| BinOp::Sub(span)))
-          .then(product)
-          .repeated(),
-      )
-      .foldl(|lhs, (op, rhs)| Expr::Bin(op, Box::new(lhs), Box::new(rhs)));
+  pub fn peek(&self) -> (Span, Option<Token<'t>>) {
+    self.buffer
+  }
 
-    let call = name()
-      .then(expr.padded().repeated().at_least(1))
-      .map_with_span(|(f, args), span| Expr::Call(f, args, span));
+  pub fn next(&mut self) -> (Span, Option<Token<'t>>) {
+    if self.buffer.1.is_none() {
+      self.feed();
+    }
+    self.feed()
+  }
 
-    choice((call, sum))
-  })
+  pub fn is_eof(&self) -> bool {
+    self.buffer.1.is_none()
+  }
+}
+
+pub type Parseresult<A> = Result<A, Error>;
+
+macro_rules! expect {
+  ($lex:expr, $pat:pat, $msg:literal) => {{
+    if !matches!($lex.token(), Some($pat)) {
+      return err_msg_token($msg, $lex.token(), $lex.span());
+    }
+    $lex.feed()
+  }};
+}
+
+macro_rules! some {
+  ($lex:expr, $expr:expr, $msg:literal) => {
+    match $expr {
+      Some(x) => x,
+      None => return err_msg_token($msg, $lex.token(), $lex.span()),
+    }
+  };
+}
+
+#[derive(PartialEq, PartialOrd, Clone, Copy, Debug)]
+enum Prec {
+  // Highest
+  Factor,
+  Term,
+  Comp,
+  BoolAnd,
+  BoolOr,
+  Call,
+
+  No,
+  // Lowest
+}
+
+fn next_prec(p: Prec) -> Prec {
+  match p {
+    Prec::Factor => Prec::Term,
+    Prec::Term => Prec::Comp,
+    Prec::Comp => Prec::BoolAnd,
+    Prec::BoolAnd => Prec::BoolOr,
+    Prec::BoolOr => Prec::Call,
+
+    Prec::Call => Prec::No,
+
+    Prec::No => Prec::No,
+  }
+}
+
+fn op_to_prec(t: BinOp) -> Prec {
+  match t {
+    BinOp::Add(_) => Prec::Factor,
+    BinOp::Sub(_) => Prec::Factor,
+
+    BinOp::Mul(_) => Prec::Term,
+    BinOp::Div(_) => Prec::Term,
+
+    BinOp::Call(_) => Prec::Call,
+  }
+}
+
+pub fn parse<'t>(source: &'t str) -> Result<Vec<Def<'t>>, Vec<Error>> {
+  let mut lex = Lex::new(Token::lexer(source));
+  let mut errs = vec![];
+  let mut defs = vec![];
+  while !lex.is_eof() {
+    match def(&mut lex) {
+      Err(err) => {
+        errs.push(err);
+        while !matches!(
+          lex.token(),
+          None | Some(Token::KwDef | Token::KwType | Token::KwEnum)
+        ) {
+          lex.next();
+        }
+      }
+      Ok(def) => defs.push(def),
+    }
+  }
+  if errs.is_empty() {
+    Ok(defs)
+  } else {
+    Err(errs)
+  }
+}
+
+pub fn expr<'t>(lex: &mut Lex<'t>) -> Parseresult<Expr<'t>> {
+  fn parse_precedence<'t>(lex: &mut Lex<'t>, prec: Prec) -> Parseresult<Expr<'t>> {
+    fn prefix<'t>(lex: &mut Lex<'t>) -> Parseresult<Expr<'t>> {
+      let (span, token) = lex.next();
+      Ok(match token {
+        None => return err_eof(span),
+        Some(Token::OpNeg) => Expr::Un(UnOp::Neg(span), Box::new(prefix(lex)?)),
+        Some(Token::Name(str)) => Expr::Var(Name(str, span), span),
+        Some(Token::Int(i)) => Expr::EInt(i.parse().expect("Error in Int regex!"), span),
+        Some(Token::LParen) => {
+          let expr = expr(lex)?;
+          expect!(
+            lex,
+            Token::RParen,
+            "Expected a closing parenthasis after the inner expression"
+          );
+          expr
+        }
+        t => return err_msg_token("Not a valid start of the expression", t, span),
+      })
+    }
+
+    fn maybe_op<'t>(span: Span, token: &Token<'t>) -> Option<BinOp> {
+      Some(match token {
+        Token::OpAdd => BinOp::Add(span),
+        Token::OpSub => BinOp::Sub(span),
+
+        Token::OpMul => BinOp::Mul(span),
+        Token::OpDiv => BinOp::Div(span),
+        Token::OpCall => BinOp::Call(span),
+
+        _ => return None,
+      })
+    }
+
+    let mut lhs = prefix(lex)?;
+    loop {
+      let (span, token) = lex.peek();
+      match token.as_ref().and_then(|t| maybe_op(span, t)) {
+        Some(op) if op_to_prec(op) <= prec => {
+          lex.next();
+          let rhs = parse_precedence(lex, next_prec(op_to_prec(op)))?;
+          lhs = Expr::Bin(op, Box::new(lhs), Box::new(rhs));
+        }
+        _ => {
+          break Ok(lhs);
+        }
+      }
+    }
+  }
+
+  parse_precedence(lex, Prec::No)
+}
+
+pub fn type_<'t>(lex: &mut Lex<'t>) -> Parseresult<Option<Type<'t>>> {
+  fn peek_term<'t>(lex: &mut Lex<'t>) -> Parseresult<Option<Type<'t>>> {
+    let (span, head) = lex.peek();
+    Ok(Some(match head {
+      Some(Token::Name("_")) => {
+        lex.next();
+
+        Type::TEmpty(span)
+      }
+      Some(Token::Name(name)) => {
+        lex.next();
+
+        let name = Name(name, span);
+        Type::TVar(name, span)
+      }
+      Some(Token::ProperName(name)) => {
+        lex.next();
+
+        let name = ProperName(name, span);
+        let mut args = vec![];
+
+        loop {
+          match peek_term(lex)? {
+            None => break,
+            Some(res) => args.push(res),
+          }
+        }
+
+        Type::TCustom { name, args, span }
+      }
+      Some(Token::LParen) => {
+        lex.next();
+        let inner = some!(
+          lex,
+          type_(lex)?,
+          "Expected a type inside parentheses after seeing `(`"
+        );
+        expect!(
+          lex,
+          Token::RParen,
+          "Expected a closing parenthasis after the inner type"
+        );
+        inner
+      }
+
+      _ => return Ok(None),
+    }))
+  }
+
+  let start = lex.span();
+  let mut ty = match peek_term(lex)? {
+    Some(ty) => ty,
+    None => return Ok(None),
+  };
+  while let (span, Some(Token::KwArrow)) = lex.peek() {
+    lex.next();
+    let res = some!(lex, type_(lex)?, "Expected a type to follow `->`");
+    ty = Type::TFunction(Box::new(ty), Box::new(res), span);
+  }
+  Ok(Some(ty))
+}
+
+pub fn def<'t>(lex: &mut Lex<'t>) -> Parseresult<Def<'t>> {
+  fn def_<'t>(lex: &mut Lex<'t>) -> Parseresult<Option<Def<'t>>> {
+    let start = lex.span();
+    if !matches!(lex.token(), Some(Token::KwDef)) {
+      return Ok(None);
+    };
+    lex.next();
+
+    let name = match expect!(lex, Token::Name(_), "Expected a name for the def") {
+      (span, Some(Token::Name(str))) => Name(str, span),
+      _ => unreachable!("Checked in the expect before"),
+    };
+
+    expect!(lex, Token::Colon, "Expected a `:` after the def name");
+    let ty = if matches!(lex.token(), Some(Token::Colon)) {
+      Type::TEmpty(lex.span())
+    } else {
+      some!(lex, type_(lex)?, "Expected a type or `:` for the def")
+    };
+    expect!(lex, Token::Colon, "Expected a `:` after the def type");
+    let mut args = vec![];
+    loop {
+      match lex.peek() {
+        (span, Some(Token::Name(str))) => {
+          args.push(Name(str, span));
+          lex.next();
+        }
+        _ => break,
+      }
+    }
+
+    expect!(lex, Token::Equal, "Expected a `=` to start the def body");
+
+    let body = expr(lex)?;
+
+    let end = lex.span();
+    let span = start.merge(end);
+    Ok(Some(Def::Def { name, ty, args, body, span }))
+  }
+
+  fn ty_<'t>(lex: &mut Lex<'t>) -> Parseresult<Option<Def<'t>>> {
+    let start = lex.span();
+    if !matches!(lex.token(), Some(Token::KwType)) {
+      return Ok(None);
+    };
+    lex.next();
+
+    let name = match expect!(
+      lex,
+      Token::ProperName(_),
+      "Expected a proper name for the type"
+    ) {
+      (span, Some(Token::ProperName(str))) => ProperName(str, span),
+      _ => unreachable!("Checked in the expect before"),
+    };
+
+    let mut args = vec![];
+    loop {
+      match lex.peek() {
+        (span, Some(Token::Name(str))) => {
+          args.push(Name(str, span));
+          lex.next();
+        }
+        _ => break,
+      }
+    }
+
+    expect!(lex, Token::Equal, "Expected a `=` to start the type body");
+
+    let body = some!(lex, type_(lex)?, "Expected a type for the body");
+
+    let end = lex.span();
+    let span = start.merge(end);
+    Ok(Some(Def::Type { name, args, body, span }))
+  }
+
+  fn enum_<'t>(lex: &mut Lex<'t>) -> Parseresult<Option<Def<'t>>> {
+    let start = lex.span();
+    if !matches!(lex.token(), Some(Token::KwEnum)) {
+      return Ok(None);
+    };
+    lex.next();
+
+    let name = match expect!(
+      lex,
+      Token::ProperName(_),
+      "Expected a proper name for the enum"
+    ) {
+      (span, Some(Token::ProperName(str))) => ProperName(str, span),
+      _ => unreachable!("Checked in the expect before"),
+    };
+
+    let mut args = vec![];
+    loop {
+      match lex.peek() {
+        (span, Some(Token::Name(str))) => {
+          args.push(Name(str, span));
+          lex.next();
+        }
+        _ => break,
+      }
+    }
+
+    expect!(lex, Token::Equal, "Expected a `=` to start the enum body");
+
+    fn enum_const<'t>(lex: &mut Lex<'t>) -> Parseresult<EnumConst<'t>> {
+      let start = lex.span();
+      let name = match expect!(
+        lex,
+        Token::ProperName(_),
+        "Enum constructors have to start with a proper name"
+      ) {
+        (span, Some(Token::ProperName(str))) => ProperName(str, span),
+        _ => unreachable!("Checked in the expect before"),
+      };
+
+      let ty = type_(lex)?;
+
+      let end = lex.span();
+      let span = start.merge(end);
+      Ok(EnumConst { name, ty, span })
+    }
+
+    let mut constructors = vec![enum_const(lex)?];
+    while let Some(Token::Pipe) = lex.token() {
+      lex.next();
+      constructors.push(enum_const(lex)?);
+    }
+
+    let end = lex.span();
+    let span = start.merge(end);
+    Ok(Some(Def::Enum { name, args, constructors, span }))
+  }
+
+  Ok(some!(
+    lex,
+    def_(lex)?.or(ty_(lex)?).or(enum_(lex)?).or(enum_(lex)?),
+    "Expected a def, but this isn't that"
+  ))
 }
 
 #[cfg(test)]
 mod test {
 
   use super::*;
-  use chumsky::Parser;
+  use logos::Logos;
 
-  macro_rules! expr_t {
-    ($name:ident, $src:literal) => {
+  macro_rules! test_p {
+    ($name:ident, $parse:expr, $src:literal) => {
       #[test]
       fn $name() {
         let src = $src;
-        let res = parse_expr().then_ignore(end()).parse(src);
+        let mut lex = Lex::new(Token::lexer($src));
+        let res = $parse(&mut lex);
+        assert!(res.is_ok(), "\n{:?} should parse\ngave:\n{:?}", src, res);
         assert!(
-          res.is_ok(),
-          "ERR EXPR:\n{:?}\ngave:\n{:?}\nbut expected OK\n-----------\n",
+          lex.is_eof(),
+          "\nDidn't parse to end of input! {:?} - {:?}\nGot: {:?}",
           src,
-          res
+          lex.next(),
+          res,
         );
       }
     };
   }
 
-  macro_rules! no_expr_t {
-    ($name:ident, $src:literal) => {
+  macro_rules! no_test_p {
+    ($name:ident, $parse:expr, $src:literal) => {
       #[test]
       fn $name() {
         let src = $src;
-        let res = parse_expr().then_ignore(end()).parse(src);
-        assert!(
-          res.is_err(),
-          "NO ERR EXPR:\n{:?}\ngave:\n{:?}\nbut expected ERROR\n-----------\n",
-          src,
-          res
-        );
-      }
-    };
-  }
-
-  expr_t!(int, "1");
-  expr_t!(large_int, "123123");
-  expr_t!(ident, "a");
-  expr_t!(long_ident1, "abcde");
-  expr_t!(long_ident2, "a_b_c");
-  expr_t!(long_ident3, "_a_b_c");
-  expr_t!(long_ident4, "snakeCase");
-  expr_t!(neg1, "!1");
-  expr_t!(neg2, "!(1 + 1)");
-  expr_t!(add1, "1 + 1");
-  expr_t!(add2, "1 + 1 + 1 + 1");
-  expr_t!(sub1, "1 - 1");
-  expr_t!(sub2, "1 - 1 - 1 - 1");
-  expr_t!(mul1, "1 * 1");
-  expr_t!(mul2, "1 * 1 * 1 * 1");
-  expr_t!(div1, "1 / 1");
-  expr_t!(div2, "1 / 1 / 1 / 1");
-  expr_t!(mixed1, "1 * (2 + 3)");
-  expr_t!(mixed2, "1 * (2 + 3) + 1");
-  expr_t!(mixed3, "1 * (2 + 3) + 1");
-  expr_t!(mixed4, "a * (a + 3) + a");
-  expr_t!(mixed_ws1, "1*(    2 +  3  )+1");
-  expr_t!(mixed_ws2, "1   *    (    2        +3)+1");
-
-  // Probably controversial! This is a good idea, since now functions cannot be whatever they
-  // want to be.
-  expr_t!(call1, "a 1 2 3");
-  expr_t!(call2, "a (1 + 2 + 3) (2 * 3) 3");
-  expr_t!(call3, "f a + 1 b");
-
-  no_expr_t!(il_ident1, "A");
-  no_expr_t!(il_ident2, "Abcedef");
-  no_expr_t!(il_call1, "(a + a) a b c");
-  no_expr_t!(il_call2, "(f) a b c");
-  no_expr_t!(il_call3, "1 + f a b");
-
-  macro_rules! type_t {
-    ($name:ident, $src:literal) => {
-      #[test]
-      fn $name() {
-        let src = $src;
-        let res = parse_type().then_ignore(end()).parse(src);
-        assert!(
-          res.is_ok(),
-          "ERR TYPE:\n{:?}\ngave:\n{:?}\nbut expected OK\n-----------\n",
-          src,
-          res
-        );
-      }
-    };
-  }
-
-  macro_rules! no_type_t {
-    ($name:ident, $src:literal) => {
-      #[test]
-      fn $name() {
-        let src = $src;
-        let res = parse_type().then_ignore(end()).parse(src);
+        let mut lex = Lex::new(Token::lexer($src));
+        let res = $parse(&mut lex);
         assert!(
           res.is_err(),
-          "ERR TYPE:\n{:?}\ngave:\n{:?}\nbut expected ERR\n-----------\n",
+          "\n{:?} should NOT parse\ngave:\n{:?}\n",
           src,
           res
         );
@@ -325,49 +544,77 @@ mod test {
     };
   }
 
-  type_t!(t_int, "Int");
-  type_t!(t_float, "Float");
-  type_t!(t_string, "String");
-  type_t!(t_custom, "Array Int");
-  type_t!(t_custom_nested, "Array Float Int");
-  type_t!(t_with_paren1, "A (B) C");
-  type_t!(t_with_paren2, "A (B C)");
-  type_t!(t_function, "A -> B -> C");
-  type_t!(t_function_nested1, "A -> (B F -> D) -> C");
-  type_t!(t_function_nested2, "A -> _");
-  type_t!(t_function_nested3, "A -> (B _)");
-  type_t!(t_function_nested4, "a -> b");
-  type_t!(t_function_nested5, "A a B");
+  test_p!(int, expr, "1");
+  test_p!(large_int, expr, "123123");
+  test_p!(ident, expr, "a");
+  test_p!(long_ident1, expr, "abcde");
+  test_p!(long_ident2, expr, "a_b_c");
+  test_p!(long_ident3, expr, "_a_b_c");
+  test_p!(long_ident4, expr, "snakeCase");
+  test_p!(neg1, expr, "!1");
+  test_p!(neg2, expr, "!(1 + 1)");
+  test_p!(add1, expr, "1 + 1");
+  test_p!(add2, expr, "1 + 1 + 1 + 1");
+  test_p!(sub1, expr, "1 - 1");
+  test_p!(sub2, expr, "1 - 1 - 1 - 1");
+  test_p!(mul1, expr, "1 * 1");
+  test_p!(mul2, expr, "1 * 1 * 1 * 1");
+  test_p!(div1, expr, "1 / 1");
+  test_p!(div2, expr, "1 / 1 / 1 / 1");
+  test_p!(mixed1, expr, "1 * (2 + 3)");
+  test_p!(mixed2, expr, "1 * (2 + 3) + 1");
+  test_p!(mixed3, expr, "1 * (2 + 3) + 1");
+  test_p!(mixed4, expr, "a * (a + 3) + a");
+  test_p!(mixed_ws1, expr, "1*(    2 +  3  )+1");
+  test_p!(mixed_ws2, expr, "1   *    (    2        +3)+1");
 
-  no_type_t!(ill_paren, "(");
+  // :O
+  test_p!(call1, expr, "a ' 1 ' 2 ' 3");
+  test_p!(call2, expr, "a ' (1 + 2 + 3) ' (2 * 3) ' 3");
+  test_p!(call3, expr, "f ' a + 1 ' b");
+  test_p!(call4, expr, "1 + f ' a ' b");
 
-  macro_rules! def_t {
-    ($name:ident, $src:literal) => {
-      #[test]
-      fn $name() {
-        let src = $src;
-        let res = parse_def().then_ignore(end()).parse(src);
-        assert!(
-          res.is_ok(),
-          "ERR DEF:\n{:?}\ngave:\n{:?}\nbut expected OK\n-----------\n",
-          src,
-          res
-        );
-      }
-    };
-  }
+  no_test_p!(il_ident1, expr, "A");
+  no_test_p!(il_ident2, expr, "Abcedef");
 
-  def_t!(d_var1, "def a : Int : = 1");
-  def_t!(d_var2, "def a : Int : = 1 + 1");
-  def_t!(d_fun1, "def a : Int -> Int : a = 1 + a");
-  def_t!(d_fun2, "def a : Array a -> List a : a = a - a");
-  def_t!(d_fun3, "def a : Array a -> List a : a b c d e f = 1");
-  def_t!(
+  test_p!(t_int, type_, "Int");
+  test_p!(t_float, type_, "Float");
+  test_p!(t_string, type_, "String");
+  test_p!(t_custom, type_, "Array Int");
+  test_p!(t_custom_nested, type_, "Array Float Int");
+  test_p!(t_with_paren1, type_, "A (B) C");
+  test_p!(t_with_paren2, type_, "A (B C)");
+  test_p!(t_function, type_, "A -> B -> C");
+  test_p!(t_function_nested1, type_, "A -> (B F -> D) -> C");
+  test_p!(t_function_nested2, type_, "A -> _");
+  test_p!(t_function_nested3, type_, "A -> (B _)");
+  test_p!(t_function_nested4, type_, "a -> b");
+  test_p!(t_function_nested5, type_, "A a B");
+
+  no_test_p!(ill_paren, type_, "(");
+
+  test_p!(d_var1, def, "def a : Int : = 1");
+  test_p!(d_var2, def, "def a : Int : = 1 + 1");
+  test_p!(d_fun1, def, "def a : Int -> Int : a = 1 + a");
+  test_p!(d_fun2, def, "def a : Array a -> List a : a = a - a");
+  test_p!(d_fun3, def, "def a : Array a -> List a : a b c d e f = 1");
+  test_p!(
     d_fun4,
+    def,
     "def a\n:    Array a   \n -> List a : \n a b \n c d e f \n = 1"
   );
+  test_p!(d_ty1, def, "type Abc = Int");
+  test_p!(d_ty2, def, "type Abc a = Int");
+  test_p!(d_ty3, def, "type Abc a b c d e = Int");
+  test_p!(d_ty4, def, "type A a b = B a C b");
+  test_p!(d_ty5, def, "type    A long_name   b =    B long_name C b");
 
-  def_t!(d_ty1, "type Abc = Int");
-  def_t!(d_ty2, "type Abc a = Int");
-  def_t!(d_ty3, "type Abc a b c d e = Int");
+  test_p!(d_enum1, def, "enum Maybe a = Just a | None");
+  test_p!(d_enum2, def, "enum Either l r = Left l | Rights r");
+  test_p!(d_enum3, def, "enum One = One");
+  test_p!(
+    d_enum4,
+    def,
+    "enum One a b c d e f g = One (Q a b c d e f g H) | QQ a"
+  );
 }
