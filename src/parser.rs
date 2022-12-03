@@ -21,10 +21,6 @@ fn err_eof<'t, A>(span: Span) -> Parseresult<A> {
   Err(Error::EoF { span, annotations: vec![] })
 }
 
-fn err_msg<'t, A>(msg: &'static str, span: Span) -> Parseresult<A> {
-  err_msg_token(msg, None, span)
-}
-
 fn err_msg_token<'t, A>(msg: &'static str, token: Option<Token<'t>>, span: Span) -> Parseresult<A> {
   Err(Error::Msg {
     msg,
@@ -269,14 +265,14 @@ pub fn type_<'t>(lex: &mut Lex<'t>) -> Parseresult<Option<Type<'t>>> {
     }))
   }
 
-  let start = lex.span();
   let mut ty = match peek_term(lex)? {
     Some(ty) => ty,
     None => return Ok(None),
   };
-  while let (span, Some(Token::KwArrow)) = lex.peek() {
+  while let Some(Token::KwArrow) = lex.token() {
     lex.next();
     let res = some!(lex, type_(lex)?, "Expected a type to follow `->`");
+    let span = ty.span().merge(res.span());
     ty = Type::TFunction(Box::new(ty), Box::new(res), span);
   }
   Ok(Some(ty))

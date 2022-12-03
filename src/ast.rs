@@ -78,4 +78,13 @@ pub enum Type<'t> {
   TFunction(Box<Type<'t>>, Box<Type<'t>>, Span),
 }
 
-
+impl<'t> Type<'t> {
+  pub fn span(&self) -> Span {
+    match self {
+      Type::TEmpty(span)
+      | Type::TCustom { span, .. }
+      | Type::TVar(_, span)
+      | Type::TFunction(_, _, span) => *span,
+    }
+  }
+}
