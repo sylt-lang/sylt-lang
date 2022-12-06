@@ -15,12 +15,24 @@ pub enum Def<'t> {
     body: Expr<'t>,
     span: Span,
   },
+  ForiegnDef {
+    ty: Type<'t>,
+    name: Name<'t>,
+    span: Span,
+  },
   Type {
     name: ProperName<'t>,
     args: Vec<Name<'t>>,
     body: Type<'t>,
     span: Span,
   },
+  ForiegnType {
+    name: ProperName<'t>,
+    args: Vec<Name<'t>>,
+    span: Span,
+  },
+
+  // Later
   Enum {
     name: ProperName<'t>,
     args: Vec<Name<'t>>,
@@ -30,17 +42,13 @@ pub enum Def<'t> {
 }
 
 impl<'t> Def<'t> {
-  pub fn span(&self) -> Span {
-    match self {
-      Def::Def { span, .. } | Def::Type { span, .. } | Def::Enum { span, .. } => *span,
-    }
-  }
-
   pub fn name(&self) -> (&'t str, Span) {
     match self {
       Def::Def { name: Name(str, span), .. }
+      | Def::ForiegnDef { name: Name(str, span), .. }
       | Def::Type { name: ProperName(str, span), .. }
-      | Def::Enum { name: ProperName(str, span), .. } => (str, *span),
+      | Def::Enum { name: ProperName(str, span), .. }
+      | Def::ForiegnType { name: ProperName(str, span), .. } => (str, *span),
     }
   }
 }

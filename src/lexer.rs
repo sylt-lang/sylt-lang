@@ -24,6 +24,8 @@ pub enum Token<'t> {
   KwEnum,
   #[token("type")]
   KwType,
+  #[token("foreign")]
+  KwForiegn,
 
   // Operators
   #[token("!")]
@@ -70,6 +72,7 @@ impl<'t> Token<'t> {
       Token::KwDef => "keyword `def`".to_string(),
       Token::KwEnum => "keyword `enum`".to_string(),
       Token::KwType => "keyword `type`".to_string(),
+      Token::KwForiegn => "keyword `foreign`".to_string(),
 
       Token::OpNeg => "operator `!`".to_string(),
       Token::OpAdd => "operator `+`".to_string(),

@@ -7,46 +7,39 @@ use crate::ast;
 use crate::error::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct VarId(usize);
+pub struct NameId(usize);
 
 #[derive(Debug)]
 pub struct StackFrame(usize);
 
 #[derive(Debug, Clone)]
-pub struct Var<'t> {
+pub struct Name<'t> {
   global: bool,
   name: &'t str,
   def_at: Span,
-  id: VarId,
+  id: NameId,
   usages: Vec<Span>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Def {
   Def {
-    name: VarId,
-    args: Vec<VarId>,
+    name: NameId,
+    args: Vec<NameId>,
     body: Expr,
     span: Span,
   },
-  Type {
-    // thing: TypeId,
-    // args: Vec<TypeId>,
-    // body: TypeId,
-    // span: Span,
+  ForiegnDef {
+    name: NameId,
+    span: Span,
   },
-  Enum {
-    // thing: TypeId,
-    // args: Vec<VarId>,
-    // // constructors: Vec<EnumConst<'t>>,
-    // span: Span,
-  },
+  Type {},
 }
 
 #[derive(Debug, Clone)]
 pub enum Expr {
   EInt(i64, Span),
-  Var(VarId, Span),
+  Var(NameId, Span),
 
   Un(ast::UnOp, Box<Expr>),
   Bin(ast::BinOp, Box<Expr>, Box<Expr>),
@@ -54,46 +47,46 @@ pub enum Expr {
 
 #[derive(Debug, Clone)]
 pub struct Ctx<'t> {
-  vars: Vec<Var<'t>>,
-  stack: Vec<VarId>,
+  names: Vec<Name<'t>>, // TODO: Lookups can be done in almost constant time compared to linear time
+  stack: Vec<NameId>,
 }
 
 impl<'t> Ctx<'t> {
   fn new() -> Self {
-    Self { vars: vec![], stack: vec![] }
+    Self { names: vec![], stack: vec![] }
   }
 
-  fn push_var(&mut self, global: bool, name: &'t str, def_at: Span) -> VarId {
-    let id = VarId(self.vars.len());
+  fn push_var(&mut self, global: bool, name: &'t str, def_at: Span) -> NameId {
+    let id = NameId(self.names.len());
     self
-      .vars
-      .push(Var { global, name, def_at, id, usages: vec![] });
+      .names
+      .push(Name { global, name, def_at, id, usages: vec![] });
     self.stack.push(id);
     id
   }
 
-  fn push_local_var(&mut self, name: &'t str, def_at: Span) -> VarId {
+  fn push_local_name(&mut self, name: &'t str, def_at: Span) -> NameId {
     self.push_var(false, name, def_at)
   }
 
-  fn push_global_var(&mut self, name: &'t str, def_at: Span) -> VarId {
+  fn push_global_name(&mut self, name: &'t str, def_at: Span) -> NameId {
     self.push_var(true, name, def_at)
   }
 
-  fn read_var(&mut self, name: &'t str, at: Span) -> Option<VarId> {
-    match self.find_var(name) {
-      Some(VarId(v)) => {
-        self.vars[v].usages.push(at);
-        return Some(VarId(v));
+  fn read_name(&mut self, name: &'t str, at: Span) -> Option<NameId> {
+    match self.find_name(name) {
+      Some(NameId(v)) => {
+        self.names[v].usages.push(at);
+        return Some(NameId(v));
       }
       None => None,
     }
   }
 
-  fn find_var(&mut self, name: &'t str) -> Option<VarId> {
-    for VarId(v) in self.stack.iter().rev() {
-      if self.vars[*v].name == name {
-        return Some(VarId(*v));
+  fn find_name(&mut self, name: &'t str) -> Option<NameId> {
+    for NameId(v) in self.stack.iter().rev() {
+      if self.names[*v].name == name {
+        return Some(NameId(*v));
       }
     }
     None
@@ -123,7 +116,7 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
   Ok(match def {
     ast::Expr::EInt(value, span) => Expr::EInt(value, span),
     ast::Expr::Var(ast::Name(name, at), span) => Expr::Var(
-      match ctx.read_var(name, at) {
+      match ctx.read_name(name, at) {
         Some(var) => var,
         None => return error_no_var(name, at),
       },
@@ -140,19 +133,24 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
 
 fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
   Ok(match def {
-    ast::Def::Def { ty: _, name: ast::Name(name, at), args, body, span } => {
-      let name = ctx.find_var(name).unwrap();
+    ast::Def::Def { ty: _, name: ast::Name(name, _), args, body, span } => {
+      let name = ctx.find_name(name).unwrap();
       let frame = ctx.push_frame();
       let args = args
         .into_iter()
-        .map(|ast::Name(name, at)| ctx.push_local_var(name, at))
+        .map(|ast::Name(name, at)| ctx.push_local_name(name, at))
         .collect();
       let body = resolve_expr(ctx, body)?;
       ctx.pop_frame(frame);
       Def::Def { name, args, body, span }
     }
-    ast::Def::Type { name, args, body, span } => todo!(),
-    ast::Def::Enum { name, args, constructors, span } => todo!(),
+    ast::Def::ForiegnDef { ty: _, name: ast::Name(name, _), span } => {
+      let name = ctx.find_name(name).unwrap();
+      Def::ForiegnDef { name, span }
+    }
+    ast::Def::Type { .. } 
+    | ast::Def::ForiegnType { .. } 
+    | ast::Def::Enum { .. } => Def::Type {} ,
   })
 }
 
@@ -161,9 +159,10 @@ pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Ctx<'t>, Vec<Def>), Vec<E
   let mut out = vec![];
   let mut errs = vec![];
   for (name, at) in defs.iter().map(|d| d.name()) {
-    match ctx.find_var(name) {
-      Some(VarId(old)) => errs.push(error_multiple_def(name, ctx.vars[old].def_at, at)),
-      None => { ctx.push_global_var(name, at); },
+    // TODO, handle type definitions here
+    match ctx.find_name(name) {
+      Some(NameId(old)) => errs.push(error_multiple_def(name, ctx.names[old].def_at, at)),
+      None => { ctx.push_global_name(name, at); },
     }
   }
   for def in defs {

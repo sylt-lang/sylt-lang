@@ -13,16 +13,12 @@ pub fn err_eof<'t, A>(span: Span) -> PRes<A> {
   Err(Error::SynEoF { span })
 }
 
-pub fn err_msg_token<'t, A>(
-  msg: &'static str,
-  token: Option<Token<'t>>,
-  span: Span,
-) -> PRes<A> {
-  Err(Error::SynMsg {
-    msg,
-    span,
-    token: token.map(|t| t.describe()),
-  })
+pub fn err_msg<'t, A>(msg: &'static str, span: Span) -> PRes<A> {
+  Err(Error::SynMsg { msg, span, token: None })
+}
+
+pub fn err_msg_token<'t, A>(msg: &'static str, token: Option<Token<'t>>, span: Span) -> PRes<A> {
+  Err(Error::SynMsg { msg, span, token: token.map(|t| t.describe()) })
 }
 
 impl<'t> Lex<'t> {
@@ -301,11 +297,29 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
 
     expect!(lex, Token::Equal, "Expected a `=` to start the def body");
 
-    let body = expr(lex)?;
+    if matches!(lex.token(), Some(Token::KwForiegn)) {
+      if !args.is_empty() {
+        let span = args
+          .iter()
+          .map(|Name(_, span)| *span)
+          .reduce(|a, b| a.merge(b))
+          .unwrap();
+        return err_msg(
+          "A foreign definition may not take arguments, please remove them",
+          span,
+        );
+      }
+      lex.next();
+      let end = lex.span();
+      let span = start.merge(end);
+      Ok(Some(Def::ForiegnDef { name, ty, span }))
+    } else {
+      let body = expr(lex)?;
 
-    let end = lex.span();
-    let span = start.merge(end);
-    Ok(Some(Def::Def { name, ty, args, body, span }))
+      let end = lex.span();
+      let span = start.merge(end);
+      Ok(Some(Def::Def { name, ty, args, body, span }))
+    }
   }
 
   fn ty_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Def<'t>>> {
@@ -337,11 +351,18 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
 
     expect!(lex, Token::Equal, "Expected a `=` to start the type body");
 
-    let body = some!(lex, type_(lex)?, "Expected a type for the body");
+    if matches!(lex.token(), Some(Token::KwForiegn)) {
+      lex.next();
+      let end = lex.span();
+      let span = start.merge(end);
+      Ok(Some(Def::ForiegnType { name, args, span }))
+    } else {
+      let body = some!(lex, type_(lex)?, "Expected a type for the body");
 
-    let end = lex.span();
-    let span = start.merge(end);
-    Ok(Some(Def::Type { name, args, body, span }))
+      let end = lex.span();
+      let span = start.merge(end);
+      Ok(Some(Def::Type { name, args, body, span }))
+    }
   }
 
   fn enum_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Def<'t>>> {
@@ -510,11 +531,17 @@ mod test {
     def,
     "def a\n:    Array a   \n -> List a : \n a b \n c d e f \n = 1"
   );
+  test_p!(d_fun5, def, "def a : Array a -> List a : = foreign");
+
+  no_test_p!(il_d_fun1, def, "def a : Array a -> List a : a b c d = foreign");
+
   test_p!(d_ty1, def, "type Abc = Int");
   test_p!(d_ty2, def, "type Abc a = Int");
   test_p!(d_ty3, def, "type Abc a b c d e = Int");
   test_p!(d_ty4, def, "type A a b = B a C b");
   test_p!(d_ty5, def, "type    A long_name   b =    B long_name C b");
+  test_p!(d_ty6, def, "type Int = foreign");
+  test_p!(d_ty7, def, "type Int a b c = foreign");
 
   test_p!(d_enum1, def, "enum Maybe a = Just a | None");
   test_p!(d_enum2, def, "enum Either l r = Left l | Rights r");
