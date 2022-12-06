@@ -533,7 +533,11 @@ mod test {
   );
   test_p!(d_fun5, def, "def a : Array a -> List a : = foreign");
 
-  no_test_p!(il_d_fun1, def, "def a : Array a -> List a : a b c d = foreign");
+  no_test_p!(
+    il_d_fun1,
+    def,
+    "def a : Array a -> List a : a b c d = foreign"
+  );
 
   test_p!(d_ty1, def, "type Abc = Int");
   test_p!(d_ty2, def, "type Abc a = Int");

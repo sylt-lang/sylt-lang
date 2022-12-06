@@ -111,7 +111,6 @@ fn error_multiple_def<'t>(name: &'t str, original: Span, new: Span) -> Error {
   Error::ResMultiple { name: name.to_string(), original, new }
 }
 
-
 fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
   Ok(match def {
     ast::Expr::EInt(value, span) => Expr::EInt(value, span),
@@ -148,9 +147,7 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       let name = ctx.find_name(name).unwrap();
       Def::ForiegnDef { name, span }
     }
-    ast::Def::Type { .. } 
-    | ast::Def::ForiegnType { .. } 
-    | ast::Def::Enum { .. } => Def::Type {} ,
+    ast::Def::Type { .. } | ast::Def::ForiegnType { .. } | ast::Def::Enum { .. } => Def::Type {},
   })
 }
 
@@ -162,7 +159,9 @@ pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Ctx<'t>, Vec<Def>), Vec<E
     // TODO, handle type definitions here
     match ctx.find_name(name) {
       Some(NameId(old)) => errs.push(error_multiple_def(name, ctx.names[old].def_at, at)),
-      None => { ctx.push_global_name(name, at); },
+      None => {
+        ctx.push_global_name(name, at);
+      }
     }
   }
   for def in defs {
