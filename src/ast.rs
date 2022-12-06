@@ -1,11 +1,4 @@
-#[derive(Debug, Clone, Copy)]
-pub struct Span(pub usize, pub usize);
-
-impl Span {
-  pub fn merge(self, other: Self) -> Self {
-    Self(self.0.min(other.0), self.1.max(other.1))
-  }
-}
+use crate::error::*;
 
 #[derive(Debug, Clone)]
 pub struct Name<'t>(pub &'t str, pub Span);
@@ -34,6 +27,22 @@ pub enum Def<'t> {
     constructors: Vec<EnumConst<'t>>,
     span: Span,
   },
+}
+
+impl<'t> Def<'t> {
+  pub fn span(&self) -> Span {
+    match self {
+      Def::Def { span, .. } | Def::Type { span, .. } | Def::Enum { span, .. } => *span,
+    }
+  }
+
+  pub fn name(&self) -> (&'t str, Span) {
+    match self {
+      Def::Def { name: Name(str, span), .. }
+      | Def::Type { name: ProperName(str, span), .. }
+      | Def::Enum { name: ProperName(str, span), .. } => (str, *span),
+    }
+  }
 }
 
 #[derive(Debug, Clone)]

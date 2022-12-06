@@ -1,38 +1,28 @@
 use crate::ast::*;
+use crate::error::*;
 use crate::lexer::Token;
 
 use logos::Logos;
 
-#[derive(Clone, Debug)]
-pub enum Error {
-  Msg {
-    msg: &'static str,
-    span: Span,
-    token: Option<String>,
-    annotations: Vec<String>,
-  },
-
-  EoF {
-    span: Span,
-    annotations: Vec<String>,
-  },
-}
-fn err_eof<'t, A>(span: Span) -> Parseresult<A> {
-  Err(Error::EoF { span, annotations: vec![] })
-}
-
-fn err_msg_token<'t, A>(msg: &'static str, token: Option<Token<'t>>, span: Span) -> Parseresult<A> {
-  Err(Error::Msg {
-    msg,
-    span,
-    token: token.map(|t| t.describe()),
-    annotations: vec![],
-  })
-}
-
 pub struct Lex<'t> {
   lexer: logos::Lexer<'t, Token<'t>>,
   buffer: (Span, Option<Token<'t>>),
+}
+
+pub fn err_eof<'t, A>(span: Span) -> PRes<A> {
+  Err(Error::SynEoF { span })
+}
+
+pub fn err_msg_token<'t, A>(
+  msg: &'static str,
+  token: Option<Token<'t>>,
+  span: Span,
+) -> PRes<A> {
+  Err(Error::SynMsg {
+    msg,
+    span,
+    token: token.map(|t| t.describe()),
+  })
 }
 
 impl<'t> Lex<'t> {
@@ -77,7 +67,7 @@ impl<'t> Lex<'t> {
   }
 }
 
-pub type Parseresult<A> = Result<A, Error>;
+pub type PRes<A> = Result<A, Error>;
 
 macro_rules! expect {
   ($lex:expr, $pat:pat, $msg:literal) => {{
@@ -162,9 +152,9 @@ pub fn parse<'t>(source: &'t str) -> Result<Vec<Def<'t>>, Vec<Error>> {
   }
 }
 
-pub fn expr<'t>(lex: &mut Lex<'t>) -> Parseresult<Expr<'t>> {
-  fn parse_precedence<'t>(lex: &mut Lex<'t>, prec: Prec) -> Parseresult<Expr<'t>> {
-    fn prefix<'t>(lex: &mut Lex<'t>) -> Parseresult<Expr<'t>> {
+pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
+  fn parse_precedence<'t>(lex: &mut Lex<'t>, prec: Prec) -> PRes<Expr<'t>> {
+    fn prefix<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
       let (span, token) = lex.next();
       Ok(match token {
         None => return err_eof(span),
@@ -216,8 +206,8 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> Parseresult<Expr<'t>> {
   parse_precedence(lex, Prec::No)
 }
 
-pub fn type_<'t>(lex: &mut Lex<'t>) -> Parseresult<Option<Type<'t>>> {
-  fn peek_term<'t>(lex: &mut Lex<'t>) -> Parseresult<Option<Type<'t>>> {
+pub fn type_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {
+  fn peek_term<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {
     let (span, head) = lex.peek();
     Ok(Some(match head {
       Some(Token::Name("_")) => {
@@ -278,8 +268,8 @@ pub fn type_<'t>(lex: &mut Lex<'t>) -> Parseresult<Option<Type<'t>>> {
   Ok(Some(ty))
 }
 
-pub fn def<'t>(lex: &mut Lex<'t>) -> Parseresult<Def<'t>> {
-  fn def_<'t>(lex: &mut Lex<'t>) -> Parseresult<Option<Def<'t>>> {
+pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
+  fn def_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Def<'t>>> {
     let start = lex.span();
     if !matches!(lex.token(), Some(Token::KwDef)) {
       return Ok(None);
@@ -318,7 +308,7 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> Parseresult<Def<'t>> {
     Ok(Some(Def::Def { name, ty, args, body, span }))
   }
 
-  fn ty_<'t>(lex: &mut Lex<'t>) -> Parseresult<Option<Def<'t>>> {
+  fn ty_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Def<'t>>> {
     let start = lex.span();
     if !matches!(lex.token(), Some(Token::KwType)) {
       return Ok(None);
@@ -354,7 +344,7 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> Parseresult<Def<'t>> {
     Ok(Some(Def::Type { name, args, body, span }))
   }
 
-  fn enum_<'t>(lex: &mut Lex<'t>) -> Parseresult<Option<Def<'t>>> {
+  fn enum_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Def<'t>>> {
     let start = lex.span();
     if !matches!(lex.token(), Some(Token::KwEnum)) {
       return Ok(None);
@@ -383,7 +373,7 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> Parseresult<Def<'t>> {
 
     expect!(lex, Token::Equal, "Expected a `=` to start the enum body");
 
-    fn enum_const<'t>(lex: &mut Lex<'t>) -> Parseresult<EnumConst<'t>> {
+    fn enum_const<'t>(lex: &mut Lex<'t>) -> PRes<EnumConst<'t>> {
       let start = lex.span();
       let name = match expect!(
         lex,
