@@ -24,16 +24,39 @@ pub struct Name<'t> {
 #[derive(Debug, Clone)]
 pub enum Def {
   Def {
+    ty: Type,
     name: NameId,
     args: Vec<NameId>,
     body: Expr,
     span: Span,
   },
   ForiegnDef {
+    ty: Type,
     name: NameId,
     span: Span,
   },
-  Type {},
+  Type {
+    name: NameId,
+    args: Vec<NameId>,
+    body: Type,
+    span: Span,
+  },
+  ForeignType {
+    name: NameId,
+    args: Vec<NameId>,
+    span: Span,
+  },
+}
+
+#[derive(Debug, Clone)]
+pub enum Type {
+  TCustom {
+    name: NameId,
+    args: Vec<Type>,
+    span: Span,
+  },
+  TVar(NameId, Span),
+  TFunction(Box<Type>, Box<Type>, Span),
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +134,35 @@ fn error_multiple_def<'t>(name: &'t str, original: Span, new: Span) -> Error {
   Error::ResMultiple { name: name.to_string(), original, new }
 }
 
+fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
+  Ok(match ty {
+    ast::Type::TEmpty(at) => Type::TVar(ctx.push_local_name("_FILLED_IN_", at), at),
+    ast::Type::TCustom { name: ast::ProperName(name, at), args, span } => {
+      let name = match ctx.read_name(name, at) {
+        Some(var) => var,
+        None => return error_no_var(name, at),
+      };
+      let args = args
+        .into_iter()
+        .map(|arg| resolve_ty(ctx, arg))
+        .collect::<RRes<Vec<Type>>>()?;
+      Type::TCustom { name, args, span }
+    }
+    ast::Type::TVar(ast::Name(name, at), span) => Type::TVar(
+      match ctx.read_name(name, at) {
+        Some(var) => var,
+        None => return error_no_var(name, at),
+      },
+      span,
+    ),
+    ast::Type::TFunction(a, b, span) => Type::TFunction(
+      Box::new(resolve_ty(ctx, *a)?),
+      Box::new(resolve_ty(ctx, *b)?),
+      span,
+    ),
+  })
+}
+
 fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
   Ok(match def {
     ast::Expr::EInt(value, span) => Expr::EInt(value, span),
@@ -132,7 +184,8 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
 
 fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
   Ok(match def {
-    ast::Def::Def { ty: _, name: ast::Name(name, _), args, body, span } => {
+    ast::Def::Def { ty, name: ast::Name(name, _), args, body, span } => {
+      let ty = resolve_ty(ctx, ty)?;
       let name = ctx.find_name(name).unwrap();
       let frame = ctx.push_frame();
       let args = args
@@ -141,13 +194,41 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
         .collect();
       let body = resolve_expr(ctx, body)?;
       ctx.pop_frame(frame);
-      Def::Def { name, args, body, span }
+      Def::Def { ty, name, args, body, span }
     }
-    ast::Def::ForiegnDef { ty: _, name: ast::Name(name, _), span } => {
+    ast::Def::ForiegnDef { ty, name: ast::Name(name, _), span } => {
+      let ty = resolve_ty(ctx, ty)?;
       let name = ctx.find_name(name).unwrap();
-      Def::ForiegnDef { name, span }
+      Def::ForiegnDef { ty, name, span }
     }
-    ast::Def::Type { .. } | ast::Def::ForiegnType { .. } | ast::Def::Enum { .. } => Def::Type {},
+    ast::Def::Type { name: ast::ProperName(name, _), args, body, span } => {
+      let name = ctx.find_name(name).unwrap();
+
+      let frame = ctx.push_frame();
+      let args = args
+        .into_iter()
+        .map(|ast::Name(name, at)| ctx.push_local_name(name, at))
+        .collect();
+      let body = resolve_ty(ctx, body)?;
+      ctx.pop_frame(frame);
+
+      Def::Type { name, args, body, span }
+    }
+
+    ast::Def::ForiegnType { name: ast::ProperName(name, _), args, span } => {
+      let name = ctx.find_name(name).unwrap();
+
+      let frame = ctx.push_frame();
+      let args = args
+        .into_iter()
+        .map(|ast::Name(name, at)| ctx.push_local_name(name, at))
+        .collect();
+      ctx.pop_frame(frame);
+
+      Def::ForeignType { name, args, span }
+    }
+
+    ast::Def::Enum { .. } => todo!(),
   })
 }
 
@@ -158,7 +239,9 @@ pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Ctx<'t>, Vec<Def>), Vec<E
   for (name, at) in defs.iter().map(|d| d.name()) {
     // TODO, handle type definitions here
     match ctx.find_name(name) {
-      Some(NameId(old)) => errs.push(error_multiple_def(name, ctx.names[old].def_at, at)),
+      Some(NameId(old)) => {
+        errs.push(error_multiple_def(name, ctx.names[old].def_at, at));
+      }
       None => {
         ctx.push_global_name(name, at);
       }
