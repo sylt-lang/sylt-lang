@@ -3,6 +3,7 @@ mod error;
 mod lexer;
 mod name_resolution;
 mod parser;
+mod type_checker;
 
 fn main() {
   let src = std::fs::read_to_string(std::env::args().nth(1).unwrap()).unwrap();
@@ -10,13 +11,19 @@ fn main() {
   println!("src: {}", src);
 
   let ast = match parser::parse(&src) {
-    Err(err) => return println!("err: {:?}", err),
+    Err(err) => return println!("parse err: {:?}", err),
     Ok(a) => a,
   };
 
-  let resolved = match name_resolution::resolve(ast) {
-    Err(err) => return println!("err: {:?}", err),
+  let (names, named_ast) = match name_resolution::resolve(ast) {
+    Err(err) => return println!("name err: {:?}", err),
     Ok(a) => a,
   };
-  println!("OUT: {:?}", resolved);
+
+  let types = match type_checker::check(&names, &named_ast) {
+    Err(err) => return println!("name err: {:?}", err),
+    Ok(a) => a,
+  };
+
+  println!("OUT: {:?}", types);
 }

@@ -352,10 +352,21 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
     expect!(lex, Token::Equal, "Expected a `=` to start the type body");
 
     if matches!(lex.token(), Some(Token::KwForiegn)) {
+      if !args.is_empty() {
+        let span = args
+          .iter()
+          .map(|Name(_, span)| *span)
+          .reduce(|a, b| a.merge(b))
+          .unwrap();
+        return err_msg(
+          "A foreign type may not take arguments, please remove them",
+          span,
+        );
+      }
       lex.next();
       let end = lex.span();
       let span = start.merge(end);
-      Ok(Some(Def::ForiegnType { name, args, span }))
+      Ok(Some(Def::ForiegnType { name, span }))
     } else {
       let body = some!(lex, type_(lex)?, "Expected a type for the body");
 

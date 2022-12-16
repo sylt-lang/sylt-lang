@@ -2,7 +2,6 @@
 // Type check - needs to be memory efficient
 // Two scopes? Module and function?
 
-#![allow(dead_code)]
 use crate::ast;
 use crate::error::*;
 
@@ -14,11 +13,10 @@ pub struct StackFrame(usize);
 
 #[derive(Debug, Clone)]
 pub struct Name<'t> {
-  global: bool,
-  name: &'t str,
-  def_at: Span,
-  id: NameId,
-  usages: Vec<Span>,
+  pub name: &'t str,
+  pub is_type: bool,
+  pub def_at: Span,
+  pub usages: Vec<Span>,
 }
 
 #[derive(Debug, Clone)]
@@ -43,19 +41,15 @@ pub enum Def {
   },
   ForeignType {
     name: NameId,
-    args: Vec<NameId>,
     span: Span,
   },
 }
 
 #[derive(Debug, Clone)]
 pub enum Type {
-  TCustom {
-    name: NameId,
-    args: Vec<Type>,
-    span: Span,
-  },
-  TVar(NameId, Span),
+  TApply(Box<Type>, Box<Type>, Span),
+
+  TNode(NameId, Span),
   TFunction(Box<Type>, Box<Type>, Span),
 }
 
@@ -79,21 +73,29 @@ impl<'t> Ctx<'t> {
     Self { names: vec![], stack: vec![] }
   }
 
-  fn push_var(&mut self, global: bool, name: &'t str, def_at: Span) -> NameId {
+  fn push_var(&mut self, _global: bool, is_type: bool, name: &'t str, def_at: Span) -> NameId {
     let id = NameId(self.names.len());
     self
       .names
-      .push(Name { global, name, def_at, id, usages: vec![] });
+      .push(Name { is_type, name, def_at, usages: vec![] });
     self.stack.push(id);
     id
   }
 
-  fn push_local_name(&mut self, name: &'t str, def_at: Span) -> NameId {
-    self.push_var(false, name, def_at)
+  fn push_local_var(&mut self, name: &'t str, def_at: Span) -> NameId {
+    self.push_var(false, false, name, def_at)
   }
 
-  fn push_global_name(&mut self, name: &'t str, def_at: Span) -> NameId {
-    self.push_var(true, name, def_at)
+  fn push_global_var(&mut self, name: &'t str, def_at: Span) -> NameId {
+    self.push_var(true, false, name, def_at)
+  }
+
+  fn push_local_type(&mut self, name: &'t str, def_at: Span) -> NameId {
+    self.push_var(false, true, name, def_at)
+  }
+
+  fn push_global_type(&mut self, name: &'t str, def_at: Span) -> NameId {
+    self.push_var(true, true, name, def_at)
   }
 
   fn read_name(&mut self, name: &'t str, at: Span) -> Option<NameId> {
@@ -136,19 +138,33 @@ fn error_multiple_def<'t>(name: &'t str, original: Span, new: Span) -> Error {
 
 fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
   Ok(match ty {
-    ast::Type::TEmpty(at) => Type::TVar(ctx.push_local_name("_FILLED_IN_", at), at),
+    ast::Type::TEmpty(at) => {
+      let frame = ctx.push_frame();
+      let node = ctx.push_local_type("_FILLED_IN_", at);
+      ctx.pop_frame(frame);
+      Type::TNode(node, at)
+    }
     ast::Type::TCustom { name: ast::ProperName(name, at), args, span } => {
-      let name = match ctx.read_name(name, at) {
-        Some(var) => var,
+      let node = match ctx.read_name(name, at) {
+        Some(var) => Type::TNode(var, at),
         None => return error_no_var(name, at),
       };
-      let args = args
-        .into_iter()
-        .map(|arg| resolve_ty(ctx, arg))
-        .collect::<RRes<Vec<Type>>>()?;
-      Type::TCustom { name, args, span }
+      if args.is_empty() {
+        node
+      } else {
+        let mut args = args
+          .into_iter()
+          .map(|arg| resolve_ty(ctx, arg))
+          .collect::<RRes<Vec<Type>>>()?;
+
+        let mut acc = args.pop().unwrap();
+        while !args.is_empty() {
+          acc = Type::TApply(Box::new(args.pop().unwrap()), Box::new(acc), span);
+        }
+        Type::TApply(Box::new(node), Box::new(acc), span)
+      }
     }
-    ast::Type::TVar(ast::Name(name, at), span) => Type::TVar(
+    ast::Type::TVar(ast::Name(name, at), span) => Type::TNode(
       match ctx.read_name(name, at) {
         Some(var) => var,
         None => return error_no_var(name, at),
@@ -190,7 +206,7 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       let frame = ctx.push_frame();
       let args = args
         .into_iter()
-        .map(|ast::Name(name, at)| ctx.push_local_name(name, at))
+        .map(|ast::Name(name, at)| ctx.push_local_var(name, at))
         .collect();
       let body = resolve_expr(ctx, body)?;
       ctx.pop_frame(frame);
@@ -207,7 +223,7 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       let frame = ctx.push_frame();
       let args = args
         .into_iter()
-        .map(|ast::Name(name, at)| ctx.push_local_name(name, at))
+        .map(|ast::Name(name, at)| ctx.push_local_type(name, at))
         .collect();
       let body = resolve_ty(ctx, body)?;
       ctx.pop_frame(frame);
@@ -215,17 +231,10 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       Def::Type { name, args, body, span }
     }
 
-    ast::Def::ForiegnType { name: ast::ProperName(name, _), args, span } => {
+    ast::Def::ForiegnType { name: ast::ProperName(name, _), span } => {
       let name = ctx.find_name(name).unwrap();
 
-      let frame = ctx.push_frame();
-      let args = args
-        .into_iter()
-        .map(|ast::Name(name, at)| ctx.push_local_name(name, at))
-        .collect();
-      ctx.pop_frame(frame);
-
-      Def::ForeignType { name, args, span }
+      Def::ForeignType { name, span }
     }
 
     ast::Def::Enum { .. } => todo!(),
@@ -236,14 +245,18 @@ pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Vec<Name<'t>>, Vec<Def>),
   let mut ctx = Ctx::new();
   let mut out = vec![];
   let mut errs = vec![];
-  for (name, at) in defs.iter().map(|d| d.name()) {
+  for d in defs.iter() {
+    let (name, at) = d.name();
     // TODO, handle type definitions here
-    match ctx.find_name(name) {
-      Some(NameId(old)) => {
+    match (ctx.find_name(name), d) {
+      (Some(NameId(old)), _) => {
         errs.push(error_multiple_def(name, ctx.names[old].def_at, at));
       }
-      None => {
-        ctx.push_global_name(name, at);
+      (None, ast::Def::Def { .. } | ast::Def::ForiegnDef { .. }) => {
+        ctx.push_global_var(name, at);
+      }
+      (None, ast::Def::Type { .. } | ast::Def::ForiegnType { .. } | ast::Def::Enum { .. }) => {
+        ctx.push_global_type(name, at);
       }
     }
   }
