@@ -232,7 +232,7 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
   })
 }
 
-pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Ctx<'t>, Vec<Def>), Vec<Error>> {
+pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Vec<Name<'t>>, Vec<Def>), Vec<Error>> {
   let mut ctx = Ctx::new();
   let mut out = vec![];
   let mut errs = vec![];
@@ -254,7 +254,7 @@ pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Ctx<'t>, Vec<Def>), Vec<E
     }
   }
   if errs.is_empty() {
-    Ok((ctx, out))
+    Ok((ctx.names, out))
   } else {
     Err(errs)
   }
