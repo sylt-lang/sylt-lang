@@ -6,7 +6,7 @@ use crate::ast;
 use crate::error::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct NameId(usize);
+pub struct NameId(pub usize);
 
 #[derive(Debug)]
 pub struct StackFrame(usize);
@@ -51,6 +51,21 @@ pub enum Type {
 
   TNode(NameId, Span),
   TFunction(Box<Type>, Box<Type>, Span),
+
+  TInt(Span),
+  TForeign(Span),
+}
+
+impl Type {
+  pub fn span(&self) -> Span {
+    match self {
+      Type::TApply(_, _, span)
+      | Type::TNode(_, span)
+      | Type::TFunction(_, _, span)
+      | Type::TInt(span)
+      | Type::TForeign(span) => *span,
+    }
+  }
 }
 
 #[derive(Debug, Clone)]
@@ -60,6 +75,16 @@ pub enum Expr {
 
   Un(ast::UnOp, Box<Expr>),
   Bin(ast::BinOp, Box<Expr>, Box<Expr>),
+}
+
+impl Expr {
+  pub fn span(&self) -> Span {
+    match self {
+      Expr::EInt(_, span) | Expr::Var(_, span) => *span,
+      Expr::Un(ast::UnOp::Neg(span), a) => span.merge(a.span()),
+      Expr::Bin(_, a, b) => a.span().merge(b.span()),
+    }
+  }
 }
 
 #[derive(Debug, Clone)]
@@ -143,6 +168,9 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
       let node = ctx.push_local_type("_FILLED_IN_", at);
       ctx.pop_frame(frame);
       Type::TNode(node, at)
+    }
+    ast::Type::TCustom { name: ast::ProperName(name, at), args, span: _ } if name == "Int" && args.len() == 0 => {
+        Type::TInt(at)
     }
     ast::Type::TCustom { name: ast::ProperName(name, at), args, span } => {
       let node = match ctx.read_name(name, at) {

@@ -29,4 +29,17 @@ pub enum Error {
     original: Span,
     new: Span,
   },
+
+  CheckMsg {
+    msg: &'static str,
+    a_span: Span,
+    b_span: Span,
+  },
+
+  CheckUnify {
+    msg: &'static str,
+    a: String,
+    b: String,
+    span: Span,
+  },
 }
