@@ -5,26 +5,26 @@ use crate::error::*;
 use crate::name_resolution::*;
 
 #[derive(Clone, Debug)]
-enum CType {
+enum CType<'t> {
   NodeType(NameId),
   // Type,
   Unknown,
-  Foreign,
+  Foreign(&'t str),
   Int,
   // Alias(Box<CType<'t>>),
   // Custom(Box<CType<'t>>),
-  Apply(Box<CType>, Box<CType>),
-  Function(Box<CType>, Box<CType>),
+  Apply(Box<CType<'t>>, Box<CType<'t>>),
+  Function(Box<CType<'t>>, Box<CType<'t>>),
 }
 
 #[derive(Clone, Debug)]
-enum Node {
+enum Node<'t> {
   Child(NameId),
-  Ty(Box<CType>),
+  Ty(Box<CType<'t>>),
 }
 
-struct Checker {
-  types: Vec<Node>,
+struct Checker<'t> {
+  types: Vec<Node<'t>>,
 }
 
 type TRes<A> = Result<A, Error>;
@@ -34,8 +34,8 @@ pub fn check<'t>(names: &Vec<Name<'t>>, defs: &Vec<Def>) -> TRes<()> {
   let mut checker = Checker {
     types: names
       .iter()
-      .map(|name| match name.is_type {
-        true => Node::Ty(Box::new(CType::Unknown)),
+      .map(|name| match name.is_foreign {
+        true => Node::Ty(Box::new(CType::Foreign(name.name))),
         false => Node::Ty(Box::new(CType::Unknown)),
       })
       .collect(),
@@ -63,11 +63,11 @@ pub fn check<'t>(names: &Vec<Name<'t>>, defs: &Vec<Def>) -> TRes<()> {
   Ok(())
 }
 
-fn bake_type(checker: &mut Checker, ty: CType) -> CType {
+fn bake_type<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> CType<'t> {
   match ty {
     CType::NodeType(id) => resolve_ty(checker, id),
     CType::Unknown => CType::Unknown,
-    CType::Foreign => CType::Foreign,
+    CType::Foreign(nameId) => CType::Foreign(nameId),
     CType::Int => CType::Int,
     CType::Apply(a, b) => CType::Apply(
       Box::new(bake_type(checker, *a)),
@@ -101,7 +101,7 @@ fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
   })
 }
 
-fn unify(checker: &mut Checker, a: CType, b: CType, span: Span) -> TRes<CType> {
+fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) -> TRes<CType<'t>> {
   Ok(match (a, b) {
     (CType::Unknown, b) => b,
     (a, CType::Unknown) => a,
@@ -115,7 +115,15 @@ fn unify(checker: &mut Checker, a: CType, b: CType, span: Span) -> TRes<CType> {
       let c = unify(checker, a, inner_b, span)?;
       inject(checker, b_id, c)
     }
-    (CType::Foreign, CType::Foreign) => CType::Foreign,
+    (CType::Foreign(a), CType::Foreign(b)) if a == b => CType::Foreign(a),
+    (CType::Foreign(a), CType::Foreign(b)) if a != b => {
+      return error_unify(
+        "Failed to merge these two foriegn types types",
+        CType::Foreign(a),
+        CType::Foreign(b),
+        span,
+      )
+    }
     (CType::Int, CType::Int) => CType::Int,
     (CType::Apply(a0, a1), CType::Apply(b0, b1)) => {
       let c0 = unify(checker, *a0, *b0, span)?;
@@ -131,7 +139,7 @@ fn unify(checker: &mut Checker, a: CType, b: CType, span: Span) -> TRes<CType> {
   })
 }
 
-fn check_expr(checker: &mut Checker, body: &Expr) -> TRes<CType> {
+fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
   // TODO
   Ok(match body {
     Expr::EInt(_, _) => CType::Int,
@@ -152,7 +160,7 @@ fn check_expr(checker: &mut Checker, body: &Expr) -> TRes<CType> {
   })
 }
 
-fn resolve(checker: &mut Checker, NameId(slot): &NameId) -> NameId {
+fn resolve<'t>(checker: &mut Checker<'t>, NameId(slot): &NameId) -> NameId {
   // TODO union find
   match checker.types[*slot] {
     Node::Child(parent) => {
@@ -164,7 +172,7 @@ fn resolve(checker: &mut Checker, NameId(slot): &NameId) -> NameId {
   }
 }
 
-fn resolve_ty(checker: &mut Checker, a: NameId) -> CType {
+fn resolve_ty<'t>(checker: &mut Checker<'t>, a: NameId) -> CType<'t> {
   let NameId(slot) = resolve(checker, &a);
   if let Node::Ty(ty) = checker.types[slot].clone() {
     *ty
@@ -173,13 +181,13 @@ fn resolve_ty(checker: &mut Checker, a: NameId) -> CType {
   }
 }
 
-fn inject(checker: &mut Checker, a_id: NameId, c: CType) -> CType {
+fn inject<'t>(checker: &mut Checker<'t>, a_id: NameId, c: CType<'t>) -> CType<'t> {
   let NameId(slot) = resolve(checker, &a_id);
   checker.types[slot] = Node::Ty(Box::new(c.clone()));
   c
 }
 
-fn unify_params(checker: &mut Checker, ty: &Type, args: &[NameId]) -> TRes<(CType, CType)> {
+fn unify_params<'t>(checker: &mut Checker<'t>, ty: &Type, args: &[NameId]) -> TRes<(CType<'t>, CType<'t>)> {
   if args.is_empty() {
     let out = check_type(checker, ty)?;
     Ok((out.clone(), out.clone()))
@@ -194,18 +202,17 @@ fn unify_params(checker: &mut Checker, ty: &Type, args: &[NameId]) -> TRes<(CTyp
         let (def_ty, ret) = unify_params(checker, rest, tail)?;
         Ok((CType::Function(Box::new(param), Box::new(def_ty)), ret))
       }
-      Type::TInt(_) | Type::TForeign(_) | Type::TApply(_, _, _) | Type::TNode(_, _) => {
+      Type::TInt(_) | Type::TApply(_, _, _) | Type::TNode(_, _) => {
         Ok((CType::Unknown, CType::Unknown))
       }
     }
   }
 }
 
-fn check_type(checker: &mut Checker, ty: &Type) -> TRes<CType> {
+fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> TRes<CType<'t>> {
   // TODO
   Ok(match ty {
     Type::TInt(_) => CType::Int,
-    Type::TForeign(_) => CType::Foreign,
     Type::TApply(a, b, _) => {
       let a_ty = check_type(checker, a)?;
       let b_ty = check_type(checker, b)?;
@@ -224,7 +231,7 @@ fn error_msg<A>(msg: &'static str, a_span: Span, b_span: Span) -> TRes<A> {
   Err(Error::CheckMsg { msg, a_span, b_span })
 }
 
-fn error_unify(msg: &'static str, a: CType, b: CType, span: Span) -> Result<CType, Error> {
+fn error_unify<'t>(msg: &'static str, a: CType<'t>, b: CType<'t>, span: Span) -> Result<CType<'t>, Error> {
   Err(Error::CheckUnify {
     msg,
     span,

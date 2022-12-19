@@ -15,6 +15,7 @@ pub struct StackFrame(usize);
 pub struct Name<'t> {
   pub name: &'t str,
   pub is_type: bool,
+  pub is_foreign: bool,
   pub def_at: Span,
   pub usages: Vec<Span>,
 }
@@ -53,7 +54,6 @@ pub enum Type {
   TFunction(Box<Type>, Box<Type>, Span),
 
   TInt(Span),
-  TForeign(Span),
 }
 
 impl Type {
@@ -62,8 +62,7 @@ impl Type {
       Type::TApply(_, _, span)
       | Type::TNode(_, span)
       | Type::TFunction(_, _, span)
-      | Type::TInt(span)
-      | Type::TForeign(span) => *span,
+      | Type::TInt(span) => *span,
     }
   }
 }
@@ -98,29 +97,44 @@ impl<'t> Ctx<'t> {
     Self { names: vec![], stack: vec![] }
   }
 
-  fn push_var(&mut self, _global: bool, is_type: bool, name: &'t str, def_at: Span) -> NameId {
+  fn push_var(
+    &mut self,
+    _global: bool,
+    is_type: bool,
+    is_foreign: bool,
+    name: &'t str,
+    def_at: Span,
+  ) -> NameId {
     let id = NameId(self.names.len());
     self
       .names
-      .push(Name { is_type, name, def_at, usages: vec![] });
+      .push(Name { is_type, is_foreign, name, def_at, usages: vec![] });
     self.stack.push(id);
     id
   }
 
   fn push_local_var(&mut self, name: &'t str, def_at: Span) -> NameId {
-    self.push_var(false, false, name, def_at)
+    self.push_var(false, false, false, name, def_at)
   }
 
   fn push_global_var(&mut self, name: &'t str, def_at: Span) -> NameId {
-    self.push_var(true, false, name, def_at)
+    self.push_var(true, false, false, name, def_at)
   }
 
   fn push_local_type(&mut self, name: &'t str, def_at: Span) -> NameId {
-    self.push_var(false, true, name, def_at)
+    self.push_var(false, true, false, name, def_at)
   }
 
   fn push_global_type(&mut self, name: &'t str, def_at: Span) -> NameId {
-    self.push_var(true, true, name, def_at)
+    self.push_var(true, true, false, name, def_at)
+  }
+
+  fn push_global_type_foreign(&mut self, name: &'t str, def_at: Span) -> NameId {
+    self.push_var(true, true, true, name, def_at)
+  }
+
+  fn push_global_var_foreign(&mut self, name: &'t str, def_at: Span) -> NameId {
+    self.push_var(true, false, true, name, def_at)
   }
 
   fn read_name(&mut self, name: &'t str, at: Span) -> Option<NameId> {
@@ -169,8 +183,10 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
       ctx.pop_frame(frame);
       Type::TNode(node, at)
     }
-    ast::Type::TCustom { name: ast::ProperName(name, at), args, span: _ } if name == "Int" && args.len() == 0 => {
-        Type::TInt(at)
+    ast::Type::TCustom { name: ast::ProperName(name, at), args, span: _ }
+      if name == "Int" && args.len() == 0 =>
+    {
+      Type::TInt(at)
     }
     ast::Type::TCustom { name: ast::ProperName(name, at), args, span } => {
       let node = match ctx.read_name(name, at) {
@@ -280,10 +296,16 @@ pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Vec<Name<'t>>, Vec<Def>),
       (Some(NameId(old)), _) => {
         errs.push(error_multiple_def(name, ctx.names[old].def_at, at));
       }
-      (None, ast::Def::Def { .. } | ast::Def::ForiegnDef { .. }) => {
+      (None, ast::Def::ForiegnDef { .. }) => {
+        ctx.push_global_var_foreign(name, at);
+      }
+      (None, ast::Def::Def { .. }) => {
         ctx.push_global_var(name, at);
       }
-      (None, ast::Def::Type { .. } | ast::Def::ForiegnType { .. } | ast::Def::Enum { .. }) => {
+      (None, ast::Def::ForiegnType { .. }) => {
+        ctx.push_global_type_foreign(name, at);
+      }
+      (None, ast::Def::Type { .. } | ast::Def::Enum { .. }) => {
         ctx.push_global_type(name, at);
       }
     }
