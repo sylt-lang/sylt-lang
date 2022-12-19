@@ -9,7 +9,7 @@ enum CType<'t> {
   NodeType(NameId),
   // Type,
   Unknown,
-  Foreign(&'t str),
+  Foreign(&'t Name<'t>),
   Int,
   // Alias(Box<CType<'t>>),
   // Custom(Box<CType<'t>>),
@@ -35,7 +35,7 @@ pub fn check<'t>(names: &Vec<Name<'t>>, defs: &Vec<Def>) -> TRes<()> {
     types: names
       .iter()
       .map(|name| match name.is_foreign {
-        true => Node::Ty(Box::new(CType::Foreign(name.name))),
+        true => Node::Ty(Box::new(CType::Foreign(name))),
         false => Node::Ty(Box::new(CType::Unknown)),
       })
       .collect(),
@@ -115,8 +115,8 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
       let c = unify(checker, a, inner_b, span)?;
       inject(checker, b_id, c)
     }
-    (CType::Foreign(a), CType::Foreign(b)) if a == b => CType::Foreign(a),
-    (CType::Foreign(a), CType::Foreign(b)) if a != b => {
+    (CType::Foreign(a), CType::Foreign(b)) if a.def_at == b.def_at => CType::Foreign(a),
+    (CType::Foreign(a), CType::Foreign(b)) if a.def_at != b.def_at => {
       return error_unify(
         "Failed to merge these two foriegn types types",
         CType::Foreign(a),
