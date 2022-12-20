@@ -556,7 +556,7 @@ mod test {
   test_p!(d_ty4, def, "type A a b = B a C b");
   test_p!(d_ty5, def, "type    A long_name   b =    B long_name C b");
   test_p!(d_ty6, def, "type Int = foreign");
-  test_p!(d_ty7, def, "type Int a b c = foreign");
+  no_test_p!(d_ty7, def, "type Int a b c = foreign");
 
   test_p!(d_enum1, def, "enum Maybe a = Just a | None");
   test_p!(d_enum2, def, "enum Either l r = Left l | Rights r");

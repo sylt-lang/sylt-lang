@@ -3,5 +3,10 @@ name = "sylt-lang"
 version = "0.3.0"
 edition = "2021"
 
+[[bin]]
+name = "sylt"
+path = "src/main.rs"
+
 [dependencies]
 logos = "0.12.1"
+goldentests = "1.1"

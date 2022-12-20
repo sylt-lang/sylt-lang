@@ -1,4 +1,5 @@
-use std::fs::File;
+use std::io::{BufRead, BufReader, BufWriter};
+use std::process::{Command, Stdio};
 
 mod ast;
 mod codegen;
@@ -14,24 +15,67 @@ fn main() {
   // println!("=src=\n{}", src);
 
   let ast = match parser::parse(&src) {
-    Err(err) => return eprintln!("parse err: {:?}", err),
+    Err(err) => {
+      eprintln!("parse err: {:?}", err);
+      panic!("FAIL");
+    }
     Ok(a) => a,
   };
 
   let (names, named_ast) = match name_resolution::resolve(ast) {
-    Err(err) => return eprintln!("name err: {:?}", err),
+    Err(err) => {
+      eprintln!("name err: {:?}", err);
+      panic!("FAIL");
+    }
     Ok(a) => a,
   };
 
   let types = match type_checker::check(&names, &named_ast) {
-    Err(err) => return eprintln!("check err: {:?}", err),
+    Err(err) => {
+      eprintln!("check err: {:?}", err);
+      panic!("FAIL");
+    }
     Ok(a) => a,
   };
 
-  let mut file = File::create("out.lua").unwrap();
-  let code = match codegen::gen(&mut file, &types, &names, &named_ast) {
-    Err(err) => return eprintln!("file error: {:?}", err),
+  let mut lua = Command::new("lua")
+    .stdin(Stdio::piped())
+    .spawn()
+    .expect("Didn't find a `lua` executable");
+  let mut out = lua.stdin.as_mut().unwrap();
+  let mut code = BufWriter::new(&mut out);
+  match codegen::gen(&mut code, &types, &names, &named_ast) {
+    Err(err) => {
+      eprintln!("file error: {:?}", err);
+      panic!("FAIL");
+    }
     Ok(a) => a,
   };
-  // println!("OUT: {:?}", types);
+  drop(code);
+  drop(out);
+
+  if let Some(ref mut stdout) = lua.stdout {
+    for line in BufReader::new(stdout).lines() {
+      match line {
+        Ok(l) => println!("{}", l),
+        Err(err) => eprintln!("{}", err),
+      }
+    }
+  }
+
+  if let Some(ref mut stderr) = lua.stderr {
+    for line in BufReader::new(stderr).lines() {
+      match line {
+        Ok(l) => eprintln!("{}", l),
+        Err(err) => eprintln!("{}", err),
+      }
+    }
+  }
+  lua.wait().expect("Lua crashed");
+}
+
+#[test]
+fn run_golden_tests() -> goldentests::TestResult<()> {
+  let config = goldentests::TestConfig::new("target/debug/sylt", "tests", "-- ")?;
+  config.run_tests()
 }
