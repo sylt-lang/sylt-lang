@@ -56,6 +56,7 @@ pub enum Token<'t> {
   Pipe,
 
   #[regex(r"[ \t\n\f]+", logos::skip)]
+  #[regex(r"--.*\n", logos::skip)]
   #[error]
   Error,
 }
