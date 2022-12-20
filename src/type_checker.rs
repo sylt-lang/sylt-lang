@@ -5,7 +5,7 @@ use crate::error::*;
 use crate::name_resolution::*;
 
 #[derive(Clone, Debug)]
-enum CType<'t> {
+pub enum CType<'t> {
   NodeType(NameId),
   // Type,
   Unknown,
@@ -18,7 +18,7 @@ enum CType<'t> {
 }
 
 #[derive(Clone, Debug)]
-enum Node<'t> {
+pub enum Node<'t> {
   Child(NameId),
   Ty(Box<CType<'t>>),
 }
@@ -29,45 +29,60 @@ struct Checker<'t> {
 
 type TRes<A> = Result<A, Error>;
 
-pub fn check<'t>(names: &Vec<Name<'t>>, defs: &Vec<Def>) -> TRes<()> {
+pub fn check<'t>(names: &'t Vec<Name<'t>>, defs: &Vec<Def>) -> TRes<Vec<Node<'t>>> {
   // These are the only nodes which should ever be created. Otherwise memory usage will explode.
   let mut checker = Checker {
     types: names
       .iter()
-      .map(|name| match name.is_foreign {
-        true => Node::Ty(Box::new(CType::Foreign(name))),
-        false => Node::Ty(Box::new(CType::Unknown)),
-      })
+      .map(|_| Node::Ty(Box::new(CType::Unknown)))
       .collect(),
   };
+
+  for def in defs {
+    match def {
+      Def::ForiegnDef { name, span, ty, .. } | Def::Def { name, span, ty, .. } => {
+        let ty = check_type(&mut checker, ty)?;
+        let x = CType::NodeType(*name);
+        unify(&mut checker, x, ty, *span)?;
+      }
+
+      Def::ForeignType { name, span } => {
+        let NameId(slot) = name;
+        let x = CType::NodeType(*name);
+        unify(&mut checker, x, CType::Foreign(&names[*slot]), *span)?;
+      }
+
+      Def::Type { .. } => {}
+    }
+  }
 
   for def in defs {
     check_def(&mut checker, def)?;
   }
 
-  for def in defs {
-    match def {
-      Def::Def { name, .. }
-      | Def::ForiegnDef { name, .. }
-      | Def::Type { name, .. }
-      | Def::ForeignType { name, .. } => {
-        let NameId(slot) = *name;
-        let x = resolve_ty(&mut checker, *name);
-        let ty = bake_type(&mut checker, x);
-        let name = names[slot].name;
-        println!("{:?} - {:#?}", name, ty);
-      }
-    }
-  }
+  // for def in defs {
+  //   match def {
+  //     Def::Def { name, .. }
+  //     | Def::ForiegnDef { name, .. }
+  //     | Def::Type { name, .. }
+  //     | Def::ForeignType { name, .. } => {
+  //       let NameId(slot) = *name;
+  //       let x = resolve_ty(&mut checker, *name);
+  //       let ty = bake_type(&mut checker, x);
+  //       let name = names[slot].name;
+  //       println!("{:?} - {:#?}", name, ty);
+  //     }
+  //   }
+  // }
 
-  Ok(())
+  Ok(checker.types)
 }
 
 fn bake_type<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> CType<'t> {
   match ty {
     CType::NodeType(id) => resolve_ty(checker, id),
     CType::Unknown => CType::Unknown,
-    CType::Foreign(nameId) => CType::Foreign(nameId),
+    CType::Foreign(name_id) => CType::Foreign(name_id),
     CType::Int => CType::Int,
     CType::Apply(a, b) => CType::Apply(
       Box::new(bake_type(checker, *a)),
@@ -92,12 +107,10 @@ fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
       let def_ty = check_type(checker, ty)?;
       unify(checker, CType::NodeType(*name), def_ty, *span)?;
     }
-    Def::Type { name, args, body, span } => {
-      // TODO! More needs to be done here, no?
+    Def::Type { .. } => {
+      // TODO! More needs to be done here, mainly with higher order types and stuff
     }
-    Def::ForeignType { name, span } => {
-      // TODO! More needs to be done here, no?
-    }
+    Def::ForeignType { .. } => { /* Do nothing */ }
   })
 }
 
@@ -147,31 +160,45 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
 }
 
 fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
-  // TODO
   Ok(match body {
     Expr::EInt(_, _) => CType::Int,
     Expr::Var(name, _) => CType::NodeType(*name),
-    Expr::Un(_, _) => todo!(),
+    Expr::Un(ast::UnOp::Neg(at), expr) => {
+      let expr_ty = check_expr(checker, expr)?;
+      unify(checker, expr_ty, CType::Int, *at)?
+    }
     Expr::Bin(ast::BinOp::Call(at), f, a) => {
       let f_ty = check_expr(checker, f)?;
       let a_ty = check_expr(checker, a)?;
-      let f_ty = unify(checker, f_ty, CType::Function(Box::new(a_ty), Box::new(CType::Unknown)), *at)?;
+      let f_ty = unify(
+        checker,
+        f_ty,
+        CType::Function(Box::new(a_ty), Box::new(CType::Unknown)),
+        *at,
+      )?;
       let (_arg_ty, ret_ty) = unpack_function(checker, f_ty, *at)?;
       ret_ty
     }
-    Expr::Bin(ast::BinOp::Add(at), a, b) => {
+    Expr::Bin(
+      ast::BinOp::Add(at) | ast::BinOp::Sub(at) | ast::BinOp::Mul(at) ,
+      a,
+      b,
+    ) => {
       let a_ty = check_expr(checker, a)?;
       let b_ty = check_expr(checker, b)?;
       let c_ty = unify(checker, a_ty, b_ty, *at)?;
       unify(checker, c_ty, CType::Int, *at)?
     }
-    Expr::Bin(_, a, b) => {
-      return error_msg(
-        "Do not support other operators than addition!",
-        a.span(),
-        b.span(),
-      )
+
+    Expr::Bin(
+      ast::BinOp::Div(at),
+      a,
+      b,
+    ) => {
+        todo!("Division is currently not supported in the typechecker!");
     }
+
+    
   })
 }
 

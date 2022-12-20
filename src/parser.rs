@@ -91,7 +91,7 @@ enum Prec {
   Comp,
   BoolAnd,
   BoolOr,
-  Call,
+  Call, // TODO: Should be right associative
 
   No,
   // Lowest
