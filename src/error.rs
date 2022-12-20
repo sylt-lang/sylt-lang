@@ -36,6 +36,12 @@ pub enum Error {
     b_span: Span,
   },
 
+  CheckExpected {
+    msg: &'static str,
+    span: Span,
+    a: String,
+  },
+
   CheckUnify {
     msg: &'static str,
     a: String,
