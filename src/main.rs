@@ -17,15 +17,17 @@ fn main() {
   let ast = match parser::parse(&src) {
     Err(err) => {
       eprintln!("parse err: {:?}", err);
-      panic!("FAIL");
+      std::process::exit(1);
     }
     Ok(a) => a,
   };
+  
+  // println!("=ast=\n{:#?}", ast);
 
   let (names, named_ast) = match name_resolution::resolve(ast) {
     Err(err) => {
       eprintln!("name err: {:?}", err);
-      panic!("FAIL");
+      std::process::exit(2);
     }
     Ok(a) => a,
   };
@@ -33,7 +35,7 @@ fn main() {
   let types = match type_checker::check(&names, &named_ast) {
     Err(err) => {
       eprintln!("check err: {:?}", err);
-      panic!("FAIL");
+      std::process::exit(3);
     }
     Ok(a) => a,
   };
@@ -47,7 +49,7 @@ fn main() {
   match codegen::gen(&mut code, &types, &names, &named_ast) {
     Err(err) => {
       eprintln!("file error: {:?}", err);
-      panic!("FAIL");
+      std::process::exit(4);
     }
     Ok(a) => a,
   };

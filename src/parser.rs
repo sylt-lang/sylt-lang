@@ -85,7 +85,7 @@ macro_rules! some {
 
 #[derive(PartialEq, PartialOrd, Clone, Copy, Debug)]
 enum Prec {
-  // Highest
+  // Tightest binding
   Factor,
   Term,
   Comp,
@@ -94,20 +94,21 @@ enum Prec {
   Call, // TODO: Should be right associative
 
   No,
-  // Lowest
+  // Weakest binding
 }
 
 fn next_prec(p: Prec) -> Prec {
+  // To change associativeity, simply change from `Prec::A -> Prec::B` to `Prec::A -> Prec::A`, or vise versa.
   match p {
-    Prec::Factor => Prec::Term,
-    Prec::Term => Prec::Comp,
-    Prec::Comp => Prec::BoolAnd,
-    Prec::BoolAnd => Prec::BoolOr,
-    Prec::BoolOr => Prec::Call,
+    Prec::Factor => Prec::Factor,
+    Prec::Term => Prec::Factor,
+    Prec::Comp => Prec::Term,
+    Prec::BoolAnd => Prec::Comp,
+    Prec::BoolOr => Prec::BoolAnd,
 
-    Prec::Call => Prec::No,
+    Prec::Call => Prec::BoolOr,
 
-    Prec::No => Prec::No,
+    Prec::No => Prec::Call,
   }
 }
 

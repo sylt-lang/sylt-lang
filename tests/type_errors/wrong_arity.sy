@@ -6,8 +6,6 @@ def f
 : Int -> Int -> Int
 : a b = a + b
 
---+ expected exit status: 101
+--+ expected exit status: 3
 --+ expected stderr:
 --+ check err: CheckUnify { msg: "Failed to merge types", a: "Function(Int, Int)", b: "Int", span: Span(0, 38) }
---+ thread 'main' panicked at 'FAIL', src/main.rs:36:7
---+ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
