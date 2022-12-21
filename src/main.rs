@@ -76,6 +76,6 @@ fn main() {
 
 #[test]
 fn run_golden_tests() -> goldentests::TestResult<()> {
-  let config = goldentests::TestConfig::new("target/debug/sylt", "tests", "-- ")?;
+  let config = goldentests::TestConfig::new("target/debug/sylt", "tests", "--+ ")?;
   config.run_tests()
 }
