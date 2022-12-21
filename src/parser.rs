@@ -114,11 +114,11 @@ fn next_prec(p: Prec) -> Prec {
 
 fn op_to_prec(t: BinOp) -> Prec {
   match t {
-    BinOp::Add(_) => Prec::Factor,
-    BinOp::Sub(_) => Prec::Factor,
+    BinOp::Add(_) => Prec::Term,
+    BinOp::Sub(_) => Prec::Comp,
 
-    BinOp::Mul(_) => Prec::Term,
-    BinOp::Div(_) => Prec::Term,
+    BinOp::Mul(_) => Prec::Factor,
+    BinOp::Div(_) => Prec::Factor,
 
     BinOp::Call(_) => Prec::Call,
   }

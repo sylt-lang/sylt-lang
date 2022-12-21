@@ -1,0 +1,6 @@
+def main
+: Int
+: = 5 + 3 * 3
+
+--+ expected stdout:
+--+ 14
