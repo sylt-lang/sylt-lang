@@ -1,0 +1,17 @@
+-- This is a comment
+type A = foreign
+
+def f
+: Int -> Int
+: a = (add ' a) ' a
+
+def add
+: Int -> Int -> Int
+: a b = a * b
+
+def main
+: Int
+: = f ' 4
+
+--+ expected stdout:
+--+ 16

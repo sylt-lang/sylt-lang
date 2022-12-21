@@ -1,0 +1,11 @@
+type A = foreign
+
+def x
+: A -> A
+: a = a + a
+
+--+ expected exit status: 101
+--+ expected stderr:
+--+ check err: CheckUnify { msg: "Failed to merge types", a: "Foreign(Name { name: \"A\", is_type: true, is_foreign: true, def_at: Span(5, 6), usages: [Span(26, 27), Span(31, 32)] })", b: "Int", span: Span(41, 42) }
+--+ thread 'main' panicked at 'FAIL', src/main.rs:36:7
+--+ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

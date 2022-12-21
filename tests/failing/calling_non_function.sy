@@ -1,0 +1,13 @@
+def main
+: Int -> Int
+: a = f ' a
+
+def f
+: Int
+: = 1
+
+--+ expected exit status: 101
+--+ expected stderr:
+--+ check err: CheckUnify { msg: "Failed to merge types", a: "Int", b: "Function(Int, Unknown)", span: Span(30, 31) }
+--+ thread 'main' panicked at 'FAIL', src/main.rs:36:7
+--+ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
