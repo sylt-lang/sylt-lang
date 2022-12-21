@@ -56,17 +56,6 @@ pub enum Type {
   TInt(Span),
 }
 
-impl Type {
-  pub fn span(&self) -> Span {
-    match self {
-      Type::TApply(_, _, span)
-      | Type::TNode(_, span)
-      | Type::TFunction(_, _, span)
-      | Type::TInt(span) => *span,
-    }
-  }
-}
-
 #[derive(Debug, Clone)]
 pub enum Expr {
   EInt(i64, Span),
@@ -74,16 +63,6 @@ pub enum Expr {
 
   Un(ast::UnOp, Box<Expr>),
   Bin(ast::BinOp, Box<Expr>, Box<Expr>),
-}
-
-impl Expr {
-  pub fn span(&self) -> Span {
-    match self {
-      Expr::EInt(_, span) | Expr::Var(_, span) => *span,
-      Expr::Un(ast::UnOp::Neg(span), a) => span.merge(a.span()),
-      Expr::Bin(_, a, b) => a.span().merge(b.span()),
-    }
-  }
 }
 
 #[derive(Debug, Clone)]

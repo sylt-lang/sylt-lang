@@ -191,9 +191,9 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
     }
 
     Expr::Bin(
-      ast::BinOp::Div(at),
-      a,
-      b,
+      ast::BinOp::Div(_at),
+      _a,
+      _b,
     ) => {
         todo!("Division is currently not supported in the typechecker!");
     }

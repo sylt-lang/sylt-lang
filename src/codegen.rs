@@ -8,13 +8,11 @@ use crate::type_checker::*;
 struct GenVar(String);
 
 #[derive(Debug, Copy, Clone)]
-struct Ctx<'a, 't> {
-  types: &'a [Node<'t>],
-  names: &'a [Name<'t>],
+struct Ctx<'a> {
   gen_vars: &'a Vec<GenVar>,
 }
 
-impl<'a, 't> Ctx<'a, 't> {
+impl<'a> Ctx<'a> {
   fn var(&self, NameId(slot): NameId) -> &str {
     let GenVar(s) = &self.gen_vars[slot];
     s
@@ -23,7 +21,7 @@ impl<'a, 't> Ctx<'a, 't> {
 
 pub fn gen<'t>(
   out: &mut dyn Write,
-  types: &[Node<'t>],
+  _types: &[Node<'t>],
   names: &[Name<'t>],
   named_ast: &[Def],
 ) -> Result<()> {
@@ -32,7 +30,7 @@ pub fn gen<'t>(
     .enumerate()
     .map(|(i, name)| GenVar(format!("_{}_{}", i, name.name)))
     .collect();
-  let ctx = Ctx { types, names, gen_vars: &gen_vars };
+  let ctx = Ctx { gen_vars: &gen_vars };
   for def in named_ast {
     gen_def(out, ctx, def)?;
   }
@@ -40,10 +38,13 @@ pub fn gen<'t>(
   for def in named_ast {
     match def {
       // TODO: Fix this
-      Def::Def { name: name@NameId(slot), .. } if names[*slot].name == "main" && names[*slot].is_type == false => {
-          write!(out, "print({}) -- TODO, don't\n", ctx.var(*name))?;
-      },
-      Def::Def { .. } | Def::ForiegnDef { .. } | Def::Type { .. } | Def::ForeignType { .. } => { /* Do nothing */ }
+      Def::Def { name: name @ NameId(slot), .. }
+        if names[*slot].name == "main" && names[*slot].is_type == false =>
+      {
+        write!(out, "print({}) -- TODO, don't\n", ctx.var(*name))?;
+      }
+      Def::Def { .. } | Def::ForiegnDef { .. } | Def::Type { .. } | Def::ForeignType { .. } => { /* Do nothing */
+      }
     }
   }
   Ok(())
