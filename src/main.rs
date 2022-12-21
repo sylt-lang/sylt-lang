@@ -21,7 +21,7 @@ fn main() {
     }
     Ok(a) => a,
   };
-  
+
   // println!("=ast=\n{:#?}", ast);
 
   let (names, named_ast) = match name_resolution::resolve(ast) {
