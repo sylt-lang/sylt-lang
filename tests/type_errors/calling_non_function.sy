@@ -8,4 +8,12 @@ def f
 
 --+ expected exit status: 3
 --+ expected stderr:
---+ check err: CheckUnify { msg: "Failed to merge types", a: "Int", b: "Function(Int, Unknown)", span: Span(30, 31) }
+--+ > Failed to merge types.
+--+ 
+--+ Int
+--+ ----
+--+ Function(Int, Unknown)
+--+ 
+--+   3 | : a = f ' a
+--+                ^
+--+ 
