@@ -76,7 +76,7 @@ impl Error {
         if start_line == end_line =>
       {
         format!(
-          "{:>3} | {}\n       {}{}",
+          "{:>3}| {}\n     {}{}",
           start_line,
           source
             .chars()
@@ -94,12 +94,13 @@ impl Error {
           .chars()
           .enumerate()
           .skip(start_at)
+          // Of-by-one?
           .take_while(|(i, c)| !(*i >= end_at - 1 && *c == '\n'))
           .map(|(_, c)| c)
           .collect::<String>()
           .split('\n')
           .enumerate()
-          .map(|(offset, line)| format!("{:>3} || {}\n", start_line + offset, line))
+          .map(|(offset, line)| format!("{:>3}| {}\n", start_line + offset, line))
           .collect::<String>()
       }
       (_, _) => {

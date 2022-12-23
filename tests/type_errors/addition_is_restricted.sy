@@ -6,12 +6,4 @@ def x
 
 --+ expected exit status: 3
 --+ expected stderr:
---+ > Failed to merge types.
---+ 
---+ Foreign(Name { name: "A", is_type: true, is_foreign: true, def_at: Span(5, 6), usages: [Span(26, 27), Span(31, 32)] })
---+ ----
---+ Int
---+ 
---+   5 | : a = a + a
---+                ^
 --+ 
