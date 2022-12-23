@@ -15,8 +15,10 @@ fn main() {
   // println!("=src=\n{}", src);
 
   let ast = match parser::parse(&src) {
-    Err(err) => {
-      eprintln!("parse err: {:?}", err);
+    Err(errs) => {
+      for e in errs.iter() {
+        eprintln!("{}", e.render(Some(&src)));
+      }
       std::process::exit(1);
     }
     Ok(a) => a,
@@ -25,16 +27,19 @@ fn main() {
   // println!("=ast=\n{:#?}", ast);
 
   let (names, named_ast) = match name_resolution::resolve(ast) {
-    Err(err) => {
-      eprintln!("name err: {:?}", err);
+    Err(errs) => {
+      for e in errs.iter() {
+        eprintln!("{}", e.render(Some(&src)));
+      }
       std::process::exit(2);
     }
     Ok(a) => a,
   };
 
   let types = match type_checker::check(&names, &named_ast) {
-    Err(err) => {
-      eprintln!("check err: {:?}", err);
+    Err(e) => {
+      // TODO: Can this be run per def?
+      eprintln!("{}", e.render(Some(&src)));
       std::process::exit(3);
     }
     Ok(a) => a,

@@ -8,12 +8,16 @@ pub enum Token<'t> {
   #[regex("[A-Z][a-zA-Z0-9_]*", |lex| lex.slice())]
   ProperName(&'t str),
 
-  // `X.`, `.Y`, `X.Y`, `XeY` and `Xe-Y`
-  #[regex(r"([\d]+\.[\d]*|[\d]*\.[\d]+)|[\d]+e(-|\+)?[\d]+", |lex| lex.slice(), priority=2)]
-  Float(&'t str),
-
   #[regex(r"[\d]+", |lex| lex.slice())]
   Int(&'t str),
+
+  // `X.`, `.Y`, `X.Y`, `XeY` and `Xe-Y`
+  #[regex(r"([\d]+\.[\d]*|[\d]*\.[\d]+)|[\d]+e(-|\+)?[\d]+", |lex| lex.slice(), priority=2)]
+  Real(&'t str),
+
+  // TODO replace the \\ and \" with the right strings
+  #[regex("\"([^(\\.)]*)\"", |lex| lex.slice(), priority=2)]
+  Str(&'t str),
 
   // Keywords
   #[token("->")]
@@ -66,8 +70,9 @@ impl<'t> Token<'t> {
     match self {
       Token::Name(n) => format!("name {:?}", n),
       Token::ProperName(n) => format!("proper name {:?}", n),
-      Token::Float(n) => format!("float {:?}", n),
       Token::Int(n) => format!("int {:?}", n),
+      Token::Real(n) => format!("real {:?}", n),
+      Token::Str(s) => format!("str {:?}", s),
 
       Token::KwArrow => "keyword `->`".to_string(),
       Token::KwDef => "keyword `def`".to_string(),

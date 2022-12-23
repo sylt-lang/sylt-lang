@@ -179,26 +179,16 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       let (_arg_ty, ret_ty) = unpack_function(checker, f_ty, *at)?;
       ret_ty
     }
-    Expr::Bin(
-      ast::BinOp::Add(at) | ast::BinOp::Sub(at) | ast::BinOp::Mul(at) ,
-      a,
-      b,
-    ) => {
+    Expr::Bin(ast::BinOp::Add(at) | ast::BinOp::Sub(at) | ast::BinOp::Mul(at), a, b) => {
       let a_ty = check_expr(checker, a)?;
       let b_ty = check_expr(checker, b)?;
       let c_ty = unify(checker, a_ty, b_ty, *at)?;
       unify(checker, c_ty, CType::Int, *at)?
     }
 
-    Expr::Bin(
-      ast::BinOp::Div(_at),
-      _a,
-      _b,
-    ) => {
-        todo!("Division is currently not supported in the typechecker!");
+    Expr::Bin(ast::BinOp::Div(_at), _a, _b) => {
+      todo!("Division is currently not supported in the typechecker!");
     }
-
-    
   })
 }
 
