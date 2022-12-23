@@ -17,6 +17,30 @@ pub enum CType<'t> {
   Function(Box<CType<'t>>, Box<CType<'t>>),
 }
 
+impl<'t> CType<'t> {
+  fn render(&self, checker: &mut Checker<'t>) -> String {
+    match self {
+      CType::NodeType(name) => {
+        let ty = resolve_ty(checker, *name);
+        ty.render(checker)
+      }
+      CType::Unknown => "_".to_string(),
+      CType::Foreign(name) => name.name.to_string(),
+      CType::Int => "Int".to_string(),
+      CType::Apply(a, b) => {
+        let a = a.render(checker);
+        let b = b.render(checker);
+        format!("{} {}", a, b)
+      }
+      CType::Function(a, b) => {
+        let a = a.render(checker);
+        let b = b.render(checker);
+        format!("{} -> {}", a, b)
+      }
+    }
+  }
+}
+
 #[derive(Clone, Debug)]
 pub enum Node<'t> {
   Child(NameId),
@@ -60,7 +84,7 @@ pub fn check<'t>(names: &'t Vec<Name<'t>>, defs: &Vec<Def>) -> TRes<Vec<Node<'t>
     check_def(&mut checker, def)?;
   }
 
-  // for def in defs {
+  // for def in defs}
   //   match def {
   //     Def::Def { name, .. }
   //     | Def::ForiegnDef { name, .. }
@@ -68,7 +92,7 @@ pub fn check<'t>(names: &'t Vec<Name<'t>>, defs: &Vec<Def>) -> TRes<Vec<Node<'t>
   //     | Def::ForeignType { name, .. } => {
   //       let NameId(slot) = *name;
   //       let x = resolve_ty(&mut checker, *name);
-  //       let ty = bake_type(&mut checker, x);
+  //       let ty = x.render(&mut checker);
   //       let name = names[slot].name;
   //       println!("{:?} - {:#?}", name, ty);
   //     }
@@ -76,23 +100,6 @@ pub fn check<'t>(names: &'t Vec<Name<'t>>, defs: &Vec<Def>) -> TRes<Vec<Node<'t>
   // }
 
   Ok(checker.types)
-}
-
-fn bake_type<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> CType<'t> {
-  match ty {
-    CType::NodeType(id) => resolve_ty(checker, id),
-    CType::Unknown => CType::Unknown,
-    CType::Foreign(name_id) => CType::Foreign(name_id),
-    CType::Int => CType::Int,
-    CType::Apply(a, b) => CType::Apply(
-      Box::new(bake_type(checker, *a)),
-      Box::new(bake_type(checker, *b)),
-    ),
-    CType::Function(a, b) => CType::Function(
-      Box::new(bake_type(checker, *a)),
-      Box::new(bake_type(checker, *b)),
-    ),
-  }
 }
 
 fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
@@ -131,9 +138,10 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
     (CType::Foreign(a), CType::Foreign(b)) if a.def_at == b.def_at => CType::Foreign(a),
     (CType::Foreign(a), CType::Foreign(b)) if a.def_at != b.def_at => {
       return error_unify(
+        checker,
         "Failed to merge these two foriegn types types",
-        bake_type(checker, CType::Foreign(a)),
-        bake_type(checker, CType::Foreign(b)),
+        CType::Foreign(a),
+        CType::Foreign(b),
         span,
       )
     }
@@ -150,9 +158,10 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
     }
     (a, b) => {
       return error_unify(
+        checker,
         "Failed to merge types",
-        bake_type(checker, a),
-        bake_type(checker, b),
+        a,
+        b,
         span,
       )
     }
@@ -205,8 +214,9 @@ fn unpack_function<'t>(
     CType::Function(a, r) => (*a, *r),
     CType::Unknown | CType::Foreign(_) | CType::Int | CType::Apply(_, _) => {
       return error_expected(
-        "Expected a function, but got:",
-        bake_type(checker, f_ty),
+          checker, 
+        "Expected a function, but got something else",
+        f_ty,
         at,
       )
     }
@@ -289,11 +299,12 @@ fn error_msg<A>(msg: &'static str, a_span: Span, b_span: Span) -> TRes<A> {
   Err(Error::CheckMsg { msg, a_span, b_span })
 }
 
-fn error_expected<'t, A>(msg: &'static str, a: CType<'t>, span: Span) -> TRes<A> {
-  Err(Error::CheckExpected { msg, span, a: format!("{:?}", a) })
+fn error_expected<'t, A>(checker: &mut Checker<'t>, msg: &'static str, a: CType<'t>, span: Span) -> TRes<A> {
+  Err(Error::CheckExpected { msg, span, a: a.render(checker) })
 }
 
 fn error_unify<'t, A>(
+  checker: &mut Checker<'t>,
   msg: &'static str,
   a: CType<'t>,
   b: CType<'t>,
@@ -302,7 +313,7 @@ fn error_unify<'t, A>(
   Err(Error::CheckUnify {
     msg,
     span,
-    a: format!("{:?}", a),
-    b: format!("{:?}", b),
+    a: a.render(checker),
+    b: b.render(checker),
   })
 }
