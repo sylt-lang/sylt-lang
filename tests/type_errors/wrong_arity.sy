@@ -6,6 +6,7 @@ def f
 : Int -> Int -> Int
 : a b = a + b
 
+-- TODO: Not sure I like the extra lines at the end, maybe shrink the spans whitespace?
 --+ expected exit status: 3
 --+ expected stderr:
 --+ > Failed to merge types.
@@ -18,5 +19,5 @@ def f
 --+   2| : Int -> Int
 --+   3| : a = f ' a
 --+   4| 
---+ 
---+ 
+--+   5| def f
+
