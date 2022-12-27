@@ -62,6 +62,8 @@ pub struct EnumConst<'t> {
 #[derive(Debug, Clone)]
 pub enum Expr<'t> {
   EInt(i64, Span),
+  EReal(f64, Span),
+  EStr(&'t str, Span),
   Var(Name<'t>, Span),
 
   Un(UnOp, Box<Expr<'t>>),

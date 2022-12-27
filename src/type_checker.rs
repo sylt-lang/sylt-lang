@@ -10,7 +10,10 @@ pub enum CType<'t> {
   // Type,
   Unknown,
   Foreign(&'t Name<'t>),
+  // Is this a good idea to code here?
   Int,
+  Real,
+  Str,
   // Alias(Box<CType<'t>>),
   // Custom(Box<CType<'t>>),
   Apply(Box<CType<'t>>, Box<CType<'t>>),
@@ -27,6 +30,8 @@ impl<'t> CType<'t> {
       CType::Unknown => "_".to_string(),
       CType::Foreign(name) => name.name.to_string(),
       CType::Int => "Int".to_string(),
+      CType::Real => "Real".to_string(),
+      CType::Str => "Str".to_string(),
       CType::Apply(a, b) => {
         let a = a.render(checker);
         let b = b.render(checker);
@@ -146,6 +151,8 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
       )
     }
     (CType::Int, CType::Int) => CType::Int,
+    (CType::Real, CType::Real) => CType::Real,
+    (CType::Str, CType::Str) => CType::Str,
     (CType::Apply(a0, a1), CType::Apply(b0, b1)) => {
       let c0 = unify(checker, *a0, *b0, span)?;
       let c1 = unify(checker, *a1, *b1, span)?;
@@ -156,21 +163,15 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
       let c1 = unify(checker, *a1, *b1, span)?;
       CType::Function(Box::new(c0), Box::new(c1))
     }
-    (a, b) => {
-      return error_unify(
-        checker,
-        "Failed to merge types",
-        a,
-        b,
-        span,
-      )
-    }
+    (a, b) => return error_unify(checker, "Failed to merge types", a, b, span),
   })
 }
 
 fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
   Ok(match body {
     Expr::EInt(_, _) => CType::Int,
+    Expr::EReal(_, _) => CType::Real,
+    Expr::EStr(_, _) => CType::Str,
     Expr::Var(name, _) => CType::NodeType(*name),
     Expr::Un(ast::UnOp::Neg(at), expr) => {
       let expr_ty = check_expr(checker, expr)?;
@@ -212,9 +213,14 @@ fn unpack_function<'t>(
       unpack_function(checker, ty, at)?
     }
     CType::Function(a, r) => (*a, *r),
-    CType::Unknown | CType::Foreign(_) | CType::Int | CType::Apply(_, _) => {
+    CType::Unknown
+    | CType::Foreign(_)
+    | CType::Int
+    | CType::Real
+    | CType::Str
+    | CType::Apply(_, _) => {
       return error_expected(
-          checker, 
+        checker,
         "Expected a function, but got something else",
         f_ty,
         at,
@@ -269,7 +275,7 @@ fn unify_params<'t>(
         let (def_ty, ret) = unify_params(checker, rest, tail)?;
         Ok((CType::Function(Box::new(param), Box::new(def_ty)), ret))
       }
-      Type::TInt(_) | Type::TApply(_, _, _) | Type::TNode(_, _) => {
+      Type::TInt(_) | Type::TReal(_) | Type::TStr(_)| Type::TApply(_, _, _) | Type::TNode(_, _) => {
         let out = check_type(checker, ty)?;
         Ok((out.clone(), out.clone()))
       }
@@ -281,6 +287,8 @@ fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> TRes<CType<'t>> {
   // TODO
   Ok(match ty {
     Type::TInt(_) => CType::Int,
+    Type::TReal(_) => CType::Real,
+    Type::TStr(_) => CType::Str,
     Type::TApply(a, b, _) => {
       let a_ty = check_type(checker, a)?;
       let b_ty = check_type(checker, b)?;
@@ -299,7 +307,12 @@ fn error_msg<A>(msg: &'static str, a_span: Span, b_span: Span) -> TRes<A> {
   Err(Error::CheckMsg { msg, a_span, b_span })
 }
 
-fn error_expected<'t, A>(checker: &mut Checker<'t>, msg: &'static str, a: CType<'t>, span: Span) -> TRes<A> {
+fn error_expected<'t, A>(
+  checker: &mut Checker<'t>,
+  msg: &'static str,
+  a: CType<'t>,
+  span: Span,
+) -> TRes<A> {
   Err(Error::CheckExpected { msg, span, a: a.render(checker) })
 }
 

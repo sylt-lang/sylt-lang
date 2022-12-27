@@ -5,7 +5,10 @@ use crate::name_resolution::*;
 use crate::type_checker::*;
 
 #[derive(Debug, Clone)]
-struct GenVar(String);
+struct GenVar {
+  var_name: String,
+  foreign_name: String,
+}
 
 #[derive(Debug, Copy, Clone)]
 struct Ctx<'a> {
@@ -14,10 +17,15 @@ struct Ctx<'a> {
 
 impl<'a> Ctx<'a> {
   fn var(&self, NameId(slot): NameId) -> &str {
-    let GenVar(s) = &self.gen_vars[slot];
-    s
+    &self.gen_vars[slot].var_name
+  }
+
+  fn foreign_name(&self, NameId(slot): NameId) -> &str {
+    &self.gen_vars[slot].foreign_name
   }
 }
+
+const PREAMBLE: &'static str = include_str!("pramble.lua");
 
 pub fn gen<'t>(
   out: &mut dyn Write,
@@ -25,10 +33,14 @@ pub fn gen<'t>(
   names: &[Name<'t>],
   named_ast: &[Def],
 ) -> Result<()> {
+  writeln!(out, "-- BEGIN PRAMBLE\n{}\n-- END PREAMBLE\n\n", PREAMBLE)?;
   let gen_vars = names
     .iter()
     .enumerate()
-    .map(|(i, name)| GenVar(format!("_{}_{}", i, name.name)))
+    .map(|(i, name)| GenVar {
+      var_name: format!("_{}_{}", i, name.name),
+      foreign_name: format!("sy_{}", name.name),
+    })
     .collect();
   let ctx = Ctx { gen_vars: &gen_vars };
   for def in named_ast {
@@ -58,7 +70,14 @@ fn gen_def(out: &mut dyn Write, ctx: Ctx, def: &Def) -> Result<()> {
       gen_function(out, ctx, args, body)?;
       write!(out, "-- END {}\n", ctx.var(*name))?;
     }
-    Def::ForiegnDef { .. } => todo!(),
+    Def::ForiegnDef { name, .. } => {
+      write!(
+        out,
+        "{} = {} -- FOREIGN",
+        ctx.var(*name),
+        ctx.foreign_name(*name)
+      )?;
+    }
     Def::Type { .. } | Def::ForeignType { .. } => (),
   })
 }
@@ -79,6 +98,8 @@ fn gen_function(out: &mut dyn Write, ctx: Ctx, args: &[NameId], body: &Expr) -> 
 fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
   Ok(match body {
     Expr::EInt(i, _) => write!(out, "{}", i)?,
+    Expr::EReal(f, _) => write!(out, "{}", f)?, // TODO: Is this stable?
+    Expr::EStr(s, _) => write!(out, "{:?}", s)?, // TODO: Is this stable?
     Expr::Var(name, _) => write!(out, "{}", ctx.var(*name))?,
     Expr::Un(ast::UnOp::Neg(_), expr) => {
       write!(out, "(-")?;

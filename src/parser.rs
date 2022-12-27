@@ -158,6 +158,8 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
         Some(Token::OpNeg) => Expr::Un(UnOp::Neg(span), Box::new(prefix(lex)?)),
         Some(Token::Name(str)) => Expr::Var(Name(str, span), span),
         Some(Token::Int(i)) => Expr::EInt(i.parse().expect("Error in Int regex!"), span),
+        Some(Token::Real(r)) => Expr::EReal(r.parse().expect("Error in Real regex!"), span),
+        Some(Token::Str(s)) => Expr::EStr(s, span),
         Some(Token::LParen) => {
           let expr = expr(lex)?;
           expect!(

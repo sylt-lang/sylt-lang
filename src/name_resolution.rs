@@ -54,11 +54,15 @@ pub enum Type {
   TFunction(Box<Type>, Box<Type>, Span),
 
   TInt(Span),
+  TReal(Span),
+  TStr(Span),
 }
 
 #[derive(Debug, Clone)]
 pub enum Expr {
   EInt(i64, Span),
+  EReal(f64, Span),
+  EStr(String, Span),
   Var(NameId, Span),
 
   Un(ast::UnOp, Box<Expr>),
@@ -167,6 +171,16 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
     {
       Type::TInt(at)
     }
+    ast::Type::TCustom { name: ast::ProperName(name, at), args, span: _ }
+      if name == "Real" && args.len() == 0 =>
+    {
+      Type::TReal(at)
+    }
+    ast::Type::TCustom { name: ast::ProperName(name, at), args, span: _ }
+      if name == "Str" && args.len() == 0 =>
+    {
+      Type::TStr(at)
+    }
     ast::Type::TCustom { name: ast::ProperName(name, at), args, span } => {
       let node = match ctx.read_name(name, at) {
         Some(var) => Type::TNode(var, at),
@@ -205,6 +219,8 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
 fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
   Ok(match def {
     ast::Expr::EInt(value, span) => Expr::EInt(value, span),
+    ast::Expr::EReal(value, span) => Expr::EReal(value, span),
+    ast::Expr::EStr(value, span) => Expr::EStr(value.to_string(), span),
     ast::Expr::Var(ast::Name(name, at), span) => Expr::Var(
       match ctx.read_name(name, at) {
         Some(var) => var,

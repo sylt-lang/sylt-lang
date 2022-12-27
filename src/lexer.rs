@@ -16,7 +16,7 @@ pub enum Token<'t> {
   Real(&'t str),
 
   // TODO replace the \\ and \" with the right strings
-  #[regex("\"([^(\\.)]*)\"", |lex| lex.slice(), priority=2)]
+  #[regex(r#""[^(\\.)"]*""#, |lex| lex.slice().strip_prefix("\"").unwrap().strip_suffix("\"").unwrap(), priority=2)]
   Str(&'t str),
 
   // Keywords
@@ -94,7 +94,7 @@ impl<'t> Token<'t> {
       Token::Equal => "a `=`".to_string(),
       Token::Pipe => "a `|`".to_string(),
 
-      Token::Error => "ERROR!".to_string(),
+      Token::Error => "invalid token".to_string(),
     }
   }
 }

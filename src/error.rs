@@ -63,10 +63,10 @@ impl Error {
         line_start = i + 1;
       }
       if i == at.0 {
-        span_start = Some((line_nr, line_start, i - line_start));
+        span_start = Some((line_nr, line_start, i - i.min(line_start)));
       }
       if i == at.1 {
-        span_end = Some((line_nr, line_start, i - line_start));
+        span_end = Some((line_nr, line_start, i - i.min(line_start)));
         break;
       }
     }
@@ -89,13 +89,31 @@ impl Error {
             .collect::<String>(),
         )
       }
+      (Some((start_line, start_at, start_offset)), None) =>
+      {
+        let line = 
+          source
+            .chars()
+            .skip(start_at)
+            .take_while(|c| *c != '\n')
+            .collect::<String>();
+        format!(
+          "{:>3}| {}\n     {}{}",
+          start_line,
+          line,
+          (0..start_offset).map(|_| ' ').collect::<String>(),
+          (0..(line.len() - start_offset))
+            .map(|_| '^')
+            .collect::<String>(),
+        )
+      }
       (Some((start_line, start_at, _)), Some((end_line, end_at, _))) if start_line != end_line => {
         source
           .chars()
           .enumerate()
           .skip(start_at)
           // Of-by-one?
-          .take_while(|(i, c)| !(*i >= end_at - 1 && *c == '\n'))
+          .take_while(|(i, c)| !(*i >= end_at && *c == '\n'))
           .map(|(_, c)| c)
           .collect::<String>()
           .split('\n')
@@ -103,8 +121,8 @@ impl Error {
           .map(|(offset, line)| format!("{:>3}| {}\n", start_line + offset, line))
           .collect::<String>()
       }
-      (_, _) => {
-        unreachable!("Passed in the wrong string, didn't find the spans that should exist, please fix the compiler")
+      (a, b) => {
+        unreachable!("Passed in the wrong string, didn't find the spans that should exist, please fix the compiler {:?} {:?}", a, b)
       }
     }
   }
