@@ -42,6 +42,13 @@ pub enum Error {
     a: String,
   },
 
+  CheckReq {
+    msg: &'static str,
+    span: Span,
+    a: String,
+    req: String,
+  },
+
   CheckUnify {
     msg: &'static str,
     a: String,
@@ -89,14 +96,12 @@ impl Error {
             .collect::<String>(),
         )
       }
-      (Some((start_line, start_at, start_offset)), None) =>
-      {
-        let line = 
-          source
-            .chars()
-            .skip(start_at)
-            .take_while(|c| *c != '\n')
-            .collect::<String>();
+      (Some((start_line, start_at, start_offset)), None) => {
+        let line = source
+          .chars()
+          .skip(start_at)
+          .take_while(|c| *c != '\n')
+          .collect::<String>();
         format!(
           "{:>3}| {}\n     {}{}",
           start_line,
@@ -171,6 +176,13 @@ impl Error {
         "> {}. Got {} instead.\n{}\n",
         msg,
         a,
+        Self::maybe_render_context(span, source)
+      ),
+      Error::CheckReq { msg, a, req, span } => format!(
+        "> {}.\n\n{}\nis not\n{:?}\n\n{}",
+        msg,
+        a,
+        req,
         Self::maybe_render_context(span, source)
       ),
       Error::CheckUnify { msg, a, b, span } => format!(

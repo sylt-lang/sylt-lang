@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use std::collections::BTreeSet;
+
 use crate::ast;
 use crate::error::*;
 use crate::name_resolution::*;
@@ -14,6 +16,8 @@ pub enum CType<'t> {
   Int,
   Real,
   Str,
+  //
+  Req(BTreeSet<Requirement>, Box<CType<'t>>),
   // Alias(Box<CType<'t>>),
   // Custom(Box<CType<'t>>),
   Apply(Box<CType<'t>>, Box<CType<'t>>),
@@ -22,6 +26,10 @@ pub enum CType<'t> {
 
 impl<'t> CType<'t> {
   fn render(&self, checker: &mut Checker<'t>) -> String {
+    self.render_inner(checker)
+  }
+
+  fn render_inner(&self, checker: &mut Checker<'t>) -> String {
     match self {
       CType::NodeType(name) => {
         let ty = resolve_ty(checker, *name);
@@ -42,7 +50,31 @@ impl<'t> CType<'t> {
         let b = b.render(checker);
         format!("{} -> {}", a, b)
       }
+
+      CType::Req(r, t) => {
+        let t = t.render(checker);
+        format!("({:?} => {})", r, t)
+      }
     }
+  }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub enum Requirement {
+  Num,
+}
+
+impl Requirement {
+  fn to_name(&self) -> &'static str {
+    match self {
+      Requirement::Num => "Num",
+    }
+  }
+
+  fn to_ctype<'t>(self) -> CType<'t> {
+    let mut reqs = BTreeSet::new();
+    reqs.insert(self);
+    CType::Req(reqs, Box::new(CType::Unknown))
   }
 }
 
@@ -54,6 +86,7 @@ pub enum Node<'t> {
 
 struct Checker<'t> {
   types: Vec<Node<'t>>,
+  names: &'t [Name<'t>],
 }
 
 type TRes<A> = Result<A, Error>;
@@ -65,6 +98,7 @@ pub fn check<'t>(names: &'t Vec<Name<'t>>, defs: &Vec<Def>) -> TRes<Vec<Node<'t>
       .iter()
       .map(|_| Node::Ty(Box::new(CType::Unknown)))
       .collect(),
+    names,
   };
 
   for def in defs {
@@ -130,6 +164,19 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
   Ok(match (a, b) {
     (CType::Unknown, b) => b,
     (a, CType::Unknown) => a,
+    (CType::Req(ar, inner_a), CType::Req(br, inner_b)) => {
+      let c = unify(checker, *inner_a, *inner_b, span)?;
+      let cr = ar.union(&br).cloned().collect();
+      check_requirements(checker, span, cr, c)?
+    }
+    (CType::Req(req, inner_a), inner_b) => {
+      let c = unify(checker, *inner_a, inner_b, span)?;
+      check_requirements(checker, span, req, c)?
+    }
+    (inner_a, CType::Req(req, inner_b)) => {
+      let c = unify(checker, inner_a, *inner_b, span)?;
+      check_requirements(checker, span, req, c)?
+    }
     (CType::NodeType(a_id), b) => {
       let inner_a = resolve_ty(checker, a_id);
       let c = unify(checker, inner_a, b, span)?;
@@ -167,6 +214,61 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
   })
 }
 
+fn check_requirements<'t>(
+  checker: &mut Checker<'t>,
+  span: Span,
+  req: BTreeSet<Requirement>,
+  c: CType<'t>,
+) -> TRes<CType<'t>> {
+  match c {
+    CType::NodeType(name) => {
+      let c = resolve_ty(checker, name);
+      return check_requirements(checker, span, req, c);
+    }
+    CType::Req(other, inner) => {
+      let req = req.union(&other).cloned().collect();
+      return check_requirements(checker, span, req, *inner);
+    }
+    //
+    CType::Foreign(_) => {
+      return error_req(
+        checker,
+        "A Foreign type cannot have requirements",
+        c,
+        &req,
+        span,
+      );
+    }
+    //
+    CType::Unknown => {}
+    CType::Int
+      if req.iter().all(|r| match r {
+        Requirement::Num => true,
+      }) => {}
+    CType::Real
+      if req.iter().all(|r| match r {
+        Requirement::Num => true,
+      }) => {}
+    CType::Str
+      if req.iter().all(|r| match r {
+        Requirement::Num => false,
+      }) => {}
+    //
+    CType::Apply(_, _) => todo!(),
+    CType::Function(_, _) => todo!(),
+    _ => {
+      return error_req(
+        checker,
+        "The requirements are not valid here",
+        c,
+        &req,
+        span,
+      );
+    }
+  }
+  Ok(CType::Req(req, Box::new(c)))
+}
+
 fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
   Ok(match body {
     Expr::EInt(_, _) => CType::Int,
@@ -193,11 +295,14 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       let a_ty = check_expr(checker, a)?;
       let b_ty = check_expr(checker, b)?;
       let c_ty = unify(checker, a_ty, b_ty, *at)?;
-      unify(checker, c_ty, CType::Int, *at)?
+      unify(checker, c_ty, Requirement::Num.to_ctype(), *at)?
     }
 
-    Expr::Bin(ast::BinOp::Div(_at), _a, _b) => {
-      todo!("Division is currently not supported in the typechecker!");
+    Expr::Bin(ast::BinOp::Div(at), a, b) => {
+      let a_ty = check_expr(checker, a)?;
+      let b_ty = check_expr(checker, b)?;
+      let c_ty = unify(checker, a_ty, b_ty, *at)?;
+      unify(checker, c_ty, CType::Real, *at)?
     }
   })
 }
@@ -218,6 +323,7 @@ fn unpack_function<'t>(
     | CType::Int
     | CType::Real
     | CType::Str
+    | CType::Req(_, _)
     | CType::Apply(_, _) => {
       return error_expected(
         checker,
@@ -275,7 +381,11 @@ fn unify_params<'t>(
         let (def_ty, ret) = unify_params(checker, rest, tail)?;
         Ok((CType::Function(Box::new(param), Box::new(def_ty)), ret))
       }
-      Type::TInt(_) | Type::TReal(_) | Type::TStr(_)| Type::TApply(_, _, _) | Type::TNode(_, _) => {
+      Type::TInt(_)
+      | Type::TReal(_)
+      | Type::TStr(_)
+      | Type::TApply(_, _, _)
+      | Type::TNode(_, _) => {
         let out = check_type(checker, ty)?;
         Ok((out.clone(), out.clone()))
       }
@@ -300,6 +410,21 @@ fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> TRes<CType<'t>> {
       let b_ty = check_type(checker, b)?;
       CType::Function(Box::new(a_ty), Box::new(b_ty))
     }
+  })
+}
+
+fn error_req<'t, A>(
+  checker: &mut Checker<'t>,
+  msg: &'static str,
+  a: CType<'t>,
+  req: &BTreeSet<Requirement>,
+  span: Span,
+) -> Result<A, Error> {
+  Err(Error::CheckReq {
+    msg,
+    span,
+    a: a.render(checker),
+    req: format!("{:?}", req),
   })
 }
 

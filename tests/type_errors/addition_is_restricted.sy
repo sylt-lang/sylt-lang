@@ -6,12 +6,12 @@ def x
 
 --+ expected exit status: 3
 --+ expected stderr:
---+ > Failed to merge types.
+--+ > A Foreign type cannot have requirements.
 --+ 
 --+ A
---+ ----
---+ Int
+--+ is not
+--+ "{Num}"
 --+ 
 --+   5| : a = a + a
 --+              ^
---+ 
+
