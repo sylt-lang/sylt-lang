@@ -26,16 +26,14 @@ pub enum Def<'t> {
     body: Type<'t>,
     span: Span,
   },
-  ForiegnType {
-    name: ProperName<'t>,
-    span: Span,
-  },
-
-  // Later
   Enum {
     name: ProperName<'t>,
     args: Vec<Name<'t>>,
     constructors: Vec<EnumConst<'t>>,
+    span: Span,
+  },
+  ForiegnType {
+    name: ProperName<'t>,
     span: Span,
   },
 }
@@ -54,8 +52,8 @@ impl<'t> Def<'t> {
 
 #[derive(Debug, Clone)]
 pub struct EnumConst<'t> {
-  pub name: ProperName<'t>,
-  pub ty: Option<Type<'t>>,
+  pub tag: ProperName<'t>,
+  pub ty: Type<'t>,
   pub span: Span,
 }
 
@@ -64,15 +62,52 @@ pub enum Expr<'t> {
   EInt(i64, Span),
   EReal(f64, Span),
   EStr(&'t str, Span),
+
+  Const {
+    ty_name: ProperName<'t>,
+    const_name: ProperName<'t>,
+    value: Option<Box<Expr<'t>>>,
+  },
+
   Var(Name<'t>, Span),
 
   Un(UnOp, Box<Expr<'t>>),
   Bin(BinOp, Box<Expr<'t>>, Box<Expr<'t>>),
 }
 
-#[derive(Debug, Clone)]
+impl<'t> Expr<'t> {
+  pub fn span(&self) -> Span {
+    match self {
+      Expr::EInt(_, span) | Expr::EReal(_, span) | Expr::EStr(_, span) | Expr::Var(_, span) => *span,
+
+      Expr::Const {
+        ty_name: ProperName(_, ty_span),
+        const_name: ProperName(_, const_span),
+        value,
+      } => {
+        let pre_span = ty_span.merge(*const_span);
+        match value {
+          Some(expr) => pre_span.merge(expr.span()),
+          None => pre_span,
+        }
+      }
+      Expr::Un(op, a) => op.span().merge(a.span()),
+      Expr::Bin(op, a, b) => op.span().merge(a.span()).merge(b.span()),
+    }
+  }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum UnOp {
   Neg(Span),
+}
+
+impl UnOp {
+  pub fn span(&self) -> Span {
+    match self {
+      UnOp::Neg(span) => *span,
+    }
+  }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -82,6 +117,18 @@ pub enum BinOp {
   Div(Span),
   Mul(Span),
   Call(Span),
+}
+
+impl BinOp {
+  pub fn span(&self) -> Span {
+    match self {
+      BinOp::Add(span)
+      | BinOp::Sub(span)
+      | BinOp::Div(span)
+      | BinOp::Mul(span)
+      | BinOp::Call(span) => *span,
+    }
+  }
 }
 
 #[derive(Debug, Clone)]

@@ -160,6 +160,24 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
         Some(Token::Int(i)) => Expr::EInt(i.parse().expect("Error in Int regex!"), span),
         Some(Token::Real(r)) => Expr::EReal(r.parse().expect("Error in Real regex!"), span),
         Some(Token::Str(s)) => Expr::EStr(s, span),
+        Some(Token::ProperName(ty_name)) => {
+          expect!(lex, Token::Colon, "Expected ':' in this enum constructor");
+          if let (inner_span, Some(Token::ProperName(const_name))) = lex.next() {
+            let ty_name = ProperName(ty_name, span);
+            let const_name = ProperName(const_name, inner_span);
+            let value = if let (_, Some(Token::RParen)) = lex.peek() {
+              None
+            } else {
+              Some(Box::new(expr(lex)?))
+            };
+            Expr::Const { ty_name, const_name, value }
+          } else {
+            return err_msg(
+              "Expected another proper name and then a valid expression in this enum constructor",
+              span,
+            );
+          }
+        }
         Some(Token::LParen) => {
           let expr = expr(lex)?;
           expect!(
@@ -410,20 +428,24 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
 
     fn enum_const<'t>(lex: &mut Lex<'t>) -> PRes<EnumConst<'t>> {
       let start = lex.span();
-      let name = match expect!(
+      let tag = match expect!(
         lex,
         Token::ProperName(_),
-        "Enum constructors have to start with a proper name"
+        "Enum constructor tags have to start with a proper name"
       ) {
         (span, Some(Token::ProperName(str))) => ProperName(str, span),
         _ => unreachable!("Checked in the expect before"),
       };
 
-      let ty = type_(lex)?;
+      let ty = type_(lex)?.unwrap_or(Type::TCustom {
+        name: ProperName("Void", start),
+        args: vec![],
+        span: start,
+      });
 
       let end = lex.span();
       let span = start.merge(end);
-      Ok(EnumConst { name, ty, span })
+      Ok(EnumConst { tag, ty, span })
     }
 
     let mut constructors = vec![enum_const(lex)?];

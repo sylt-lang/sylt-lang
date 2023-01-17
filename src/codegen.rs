@@ -55,8 +55,7 @@ pub fn gen<'t>(
       {
         write!(out, "print({}) -- TODO, don't\n", ctx.var(*name))?;
       }
-      Def::Def { .. } | Def::ForiegnDef { .. } | Def::Type { .. } | Def::ForeignType { .. } => { /* Do nothing */
-      }
+      _ => { /* Do nothing */ }
     }
   }
   Ok(())
@@ -78,7 +77,7 @@ fn gen_def(out: &mut dyn Write, ctx: Ctx, def: &Def) -> Result<()> {
         ctx.foreign_name(*name)
       )?;
     }
-    Def::Type { .. } | Def::ForeignType { .. } => (),
+    Def::Enum { .. } | Def::Type { .. } | Def::ForeignType { .. } => (),
   })
 }
 
@@ -101,12 +100,21 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
     Expr::EReal(f, _) => write!(out, "{}", f)?, // TODO: Is this stable?
     Expr::EStr(s, _) => write!(out, "{:?}", s)?, // TODO: Is this stable?
     Expr::Var(name, _) => write!(out, "{}", ctx.var(*name))?,
-    Expr::Un(ast::UnOp::Neg(_), expr) => {
+    Expr::Const { ty_name: _, const_name, value, span: _ } => {
+        if let Some(value) = value {
+            write!(out, "{{ \"{}\", (", ctx.var(*const_name))?;
+            gen_expr(out, ctx, value)?;
+            write!(out, ") }}")?;
+        } else {
+            write!(out, "{{ \"{}\" }}", ctx.var(*const_name))?;
+        }
+    }
+    Expr::Un(ast::UnOp::Neg(_), expr, _) => {
       write!(out, "(-")?;
       gen_expr(out, ctx, expr)?;
       write!(out, ")")?;
     }
-    Expr::Bin(ast::BinOp::Call(_), a, b) => {
+    Expr::Bin(ast::BinOp::Call(_), a, b, _) => {
       write!(out, "(")?;
       write!(out, "(")?;
       gen_expr(out, ctx, a)?;
@@ -116,7 +124,7 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
       write!(out, ")")?;
       write!(out, ")")?;
     }
-    Expr::Bin(op, a, b) => {
+    Expr::Bin(op, a, b, _) => {
       write!(out, "(")?;
       gen_expr(out, ctx, a)?;
       write!(

@@ -40,10 +40,23 @@ pub enum Def {
     body: Type,
     span: Span,
   },
+  Enum {
+    name: NameId,
+    args: Vec<NameId>,
+    constructors: Vec<EnumConst>,
+    span: Span,
+  },
   ForeignType {
     name: NameId,
     span: Span,
   },
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumConst {
+  pub tag: NameId,
+  pub ty: Type,
+  pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -65,14 +78,22 @@ pub enum Expr {
   EStr(String, Span),
   Var(NameId, Span),
 
-  Un(ast::UnOp, Box<Expr>),
-  Bin(ast::BinOp, Box<Expr>, Box<Expr>),
+  Const {
+    ty_name: NameId,
+    const_name: NameId,
+    value: Option<Box<Expr>>,
+    span: Span,
+  },
+
+  Un(ast::UnOp, Box<Expr>, Span),
+  Bin(ast::BinOp, Box<Expr>, Box<Expr>, Span),
 }
 
 #[derive(Debug, Clone)]
 pub struct Ctx<'t> {
   names: Vec<Name<'t>>, // TODO: Lookups can be done in almost constant time compared to linear time
   stack: Vec<NameId>,
+  // NEXT STEP: Add list of constructors for enum types here. Gonna get wacky.
 }
 
 impl<'t> Ctx<'t> {
@@ -228,12 +249,47 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
       },
       span,
     ),
-    ast::Expr::Un(op, expr) => Expr::Un(op, Box::new(resolve_expr(ctx, *expr)?)),
-    ast::Expr::Bin(op, a, b) => Expr::Bin(
-      op,
-      Box::new(resolve_expr(ctx, *a)?),
-      Box::new(resolve_expr(ctx, *b)?),
-    ),
+    ast::Expr::Const {
+      ty_name: ast::ProperName(ty_name, ty_name_at),
+      const_name: ast::ProperName(const_name, const_name_at),
+      value,
+    } => {
+      let ty_name = match ctx.read_name(ty_name, ty_name_at) {
+        Some(t) => t,
+        None => return error_no_var(ty_name, ty_name_at),
+      };
+      let const_name = match ctx.read_name(const_name, const_name_at) {
+        Some(t) => t,
+        None => return error_no_var(const_name, const_name_at),
+      };
+
+      let span = ty_name_at.merge(const_name_at).merge(
+        value
+          .as_ref()
+          .map(|e| e.span().clone())
+          .unwrap_or(const_name_at),
+      );
+
+      let value = value
+        .map(|a| resolve_expr(ctx, *a))
+        .transpose()?
+        .map(Box::new);
+
+      Expr::Const { ty_name, const_name, value, span }
+    }
+    ast::Expr::Un(op, expr) => {
+      let at = op.span().merge(expr.span());
+      Expr::Un(op, Box::new(resolve_expr(ctx, *expr)?), at)
+    }
+    ast::Expr::Bin(op, a, b) => {
+      let at = a.span().merge(b.span());
+      Expr::Bin(
+        op,
+        Box::new(resolve_expr(ctx, *a)?),
+        Box::new(resolve_expr(ctx, *b)?),
+        at,
+      )
+    }
   })
 }
 
@@ -276,7 +332,33 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       Def::ForeignType { name, span }
     }
 
-    ast::Def::Enum { .. } => todo!(),
+    ast::Def::Enum {
+      name: ast::ProperName(name, _),
+      args,
+      constructors,
+      span,
+    } => {
+      let name = ctx.find_name(name).unwrap();
+
+      let frame = ctx.push_frame();
+      let args = args
+        .into_iter()
+        .map(|ast::Name(name, at)| ctx.push_local_type(name, at))
+        .collect();
+      let constructors = constructors
+        .iter()
+        .map(
+          |ast::EnumConst { tag: ast::ProperName(tag, _), ty, span }| {
+            let tag = ctx.find_name(tag).unwrap();
+            let ty = resolve_ty(ctx, ty.clone())?;
+            Ok(EnumConst { tag, ty, span: *span })
+          },
+        )
+        .collect::<RRes<Vec<_>>>()?;
+      ctx.pop_frame(frame);
+
+      Def::Enum { name, args, constructors, span }
+    }
   })
 }
 
@@ -300,8 +382,14 @@ pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Vec<Name<'t>>, Vec<Def>),
       (None, ast::Def::ForiegnType { .. }) => {
         ctx.push_global_type_foreign(name, at);
       }
-      (None, ast::Def::Type { .. } | ast::Def::Enum { .. }) => {
+      (None, ast::Def::Type { .. }) => {
         ctx.push_global_type(name, at);
+      }
+      (None, ast::Def::Enum { constructors, .. }) => {
+        ctx.push_global_type(name, at);
+        for ast::EnumConst { tag: ast::ProperName(tag, at), .. } in constructors.iter() {
+          ctx.push_global_type(tag, *at);
+        }
       }
     }
   }

@@ -5,4 +5,9 @@ function sy_concat(a)
   end
 end
 
+function sy_print_stuff(a)
+  for k, v in pairs(a) do
+    print(k, v)
+  end
+end
 

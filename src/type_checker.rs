@@ -116,6 +116,8 @@ pub fn check<'t>(names: &'t Vec<Name<'t>>, defs: &Vec<Def>) -> TRes<Vec<Node<'t>
       }
 
       Def::Type { .. } => {}
+
+      Def::Enum { .. } => {}
     }
   }
 
@@ -154,6 +156,9 @@ fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
       unify(checker, CType::NodeType(*name), def_ty, *span)?;
     }
     Def::Type { .. } => {
+      // TODO! More needs to be done here, mainly with higher order types and stuff
+    }
+    Def::Enum { .. } => {
       // TODO! More needs to be done here, mainly with higher order types and stuff
     }
     Def::ForeignType { .. } => { /* Do nothing */ }
@@ -275,11 +280,21 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
     Expr::EReal(_, _) => CType::Real,
     Expr::EStr(_, _) => CType::Str,
     Expr::Var(name, _) => CType::NodeType(*name),
-    Expr::Un(ast::UnOp::Neg(at), expr) => {
+    Expr::Const { ty_name, value, const_name: _, span } => {
+        let ty = resolve_ty(checker, *ty_name);
+        match value {
+            Some(expr) => {
+                let expr_ty = check_expr(checker, expr)?;
+                unify(checker, ty, expr_ty, *span)?
+            }
+            None => ty,
+        }
+    }
+    Expr::Un(ast::UnOp::Neg(at), expr, _) => {
       let expr_ty = check_expr(checker, expr)?;
       unify(checker, expr_ty, CType::Int, *at)?
     }
-    Expr::Bin(ast::BinOp::Call(at), f, a) => {
+    Expr::Bin(ast::BinOp::Call(at), f, a, _) => {
       let f_ty = check_expr(checker, f)?;
       let a_ty = check_expr(checker, a)?;
       let f_ty = unify(
@@ -291,14 +306,14 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       let (_arg_ty, ret_ty) = unpack_function(checker, f_ty, *at)?;
       ret_ty
     }
-    Expr::Bin(ast::BinOp::Add(at) | ast::BinOp::Sub(at) | ast::BinOp::Mul(at), a, b) => {
+    Expr::Bin(ast::BinOp::Add(at) | ast::BinOp::Sub(at) | ast::BinOp::Mul(at), a, b, _) => {
       let a_ty = check_expr(checker, a)?;
       let b_ty = check_expr(checker, b)?;
       let c_ty = unify(checker, a_ty, b_ty, *at)?;
       unify(checker, c_ty, Requirement::Num.to_ctype(), *at)?
     }
 
-    Expr::Bin(ast::BinOp::Div(at), a, b) => {
+    Expr::Bin(ast::BinOp::Div(at), a, b, _) => {
       let a_ty = check_expr(checker, a)?;
       let b_ty = check_expr(checker, b)?;
       let c_ty = unify(checker, a_ty, b_ty, *at)?;
