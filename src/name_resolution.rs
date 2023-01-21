@@ -2,7 +2,7 @@
 // Type check - needs to be memory efficient
 // Two scopes? Module and function?
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use crate::ast;
 use crate::error::*;
@@ -57,7 +57,7 @@ pub enum Def {
 #[derive(Debug, Clone)]
 pub struct EnumConst {
   pub tag: NameId,
-  pub ty: Type,
+  pub ty: Option<Type>,
   pub span: Span,
 }
 
@@ -83,7 +83,7 @@ pub enum Expr {
   Const {
     ty_name: NameId,
     const_name: NameId,
-    value: Option<Box<Expr>>,
+    value: Option<(Box<Expr>, Type)>,
     span: Span,
   },
 
@@ -96,7 +96,14 @@ pub struct Ctx<'t> {
   names: Vec<Name<'t>>, // TODO: Lookups can be done in almost constant time compared to linear time
   stack: Vec<NameId>,
 
-  enum_constructors: BTreeMap<NameId, BTreeSet<NameId>>,
+  // NOTE[et]: I think I can do enums better. The type-checker should know as little as possible
+  // about them. This can maybe be done by adding more functions to the syntax-tree? Or maybe I
+  // should use a different approach. Maybe it's better if this is sent to the type-checker so we
+  // don't have to propagate the type of the constructors in the annotated AST. Or maybe I'm
+  // overthinking this?
+  //
+  // Ty -> Const -> Type
+  enum_constructors: BTreeMap<NameId, BTreeMap<NameId, Option<Type>>>,
 }
 
 impl<'t> Ctx<'t> {
@@ -204,6 +211,10 @@ fn error_no_enum<A>(ty_name: &str, ty_name_at: Span) -> RRes<A> {
   Err(Error::ResNoEnum { ty_name: ty_name.to_string(), at: ty_name_at })
 }
 
+fn error_msg<A>(msg: &str, span: Span) -> RRes<A> {
+  Err(Error::ResMsg { msg: msg.to_string(), span })
+}
+
 fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
   Ok(match ty {
     ast::Type::TEmpty(at) => {
@@ -293,8 +304,8 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
         None => return error_no_enum(ty_name_, ty_name_at),
       };
 
-      match cons.get(&const_name) {
-        Some(t) => t,
+      let value_ty = match cons.get(&const_name) {
+        Some(t) => t.clone(),
         None => return error_no_enum_const(ty_name_, ty_name_at, const_name_, const_name_at),
       };
 
@@ -309,6 +320,13 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
         .map(|a| resolve_expr(ctx, *a))
         .transpose()?
         .map(Box::new);
+
+      let value = match (value, value_ty) {
+          (Some(v), Some(t)) => Some((v, t)),
+          (None, None) => None,
+          (Some(_), None) => return error_msg("The type claims no value but a type was given here", span),
+          (None, Some(_)) => return error_msg("The type requires a value but no value was given here", span),
+      };
 
       Expr::Const { ty_name, const_name, value, span }
     }
@@ -385,7 +403,7 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
         .map(
           |ast::EnumConst { tag: ast::ProperName(tag, _), ty, span }| {
             let tag = ctx.find_name(tag).unwrap();
-            let ty = resolve_ty(ctx, ty.clone())?;
+            let ty = ty.as_ref().map(|t| resolve_ty(ctx, t.clone())).transpose()?;
             Ok(EnumConst { tag, ty, span: *span })
           },
         )
@@ -401,6 +419,8 @@ pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Vec<Name<'t>>, Vec<Def>),
   let mut ctx = Ctx::new();
   let mut out = vec![];
   let mut errs = vec![];
+
+  // Top-pass
   for d in defs.iter() {
     let (name, at) = d.name();
     // TODO, handle type definitions here
@@ -420,20 +440,47 @@ pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Vec<Name<'t>>, Vec<Def>),
       (None, ast::Def::Type { .. }) => {
         ctx.push_global_type(name, at);
       }
-      (None, ast::Def::Enum { constructors, .. }) => {
-        let ty = ctx.push_global_type(name, at);
-        let mut names = BTreeSet::new();
-        for ast::EnumConst { tag: ast::ProperName(tag, at), .. } in constructors.iter() {
-          if let Some(NameId(old)) = ctx.find_name(tag) {
-            errs.push(error_multiple_def(name, ctx.names[old].def_at, *at));
-          }
-          let con = ctx.push_global_type(tag, *at);
-          names.insert(con);
-        }
-        ctx.enum_constructors.insert(ty, names);
+      (None, ast::Def::Enum { .. }) => {
+        ctx.push_global_type(name, at);
       }
     }
   }
+
+  for d in defs.iter() {
+    let (name, at) = d.name();
+    // TODO, handle type definitions here
+    match (ctx.find_name(name), d) {
+      (None, _) => unreachable!(),
+      (_, ast::Def::ForiegnDef { .. }) => {}
+      (_, ast::Def::Def { .. }) => {}
+      (_, ast::Def::ForiegnType { .. }) => {
+        ctx.push_global_type_foreign(name, at);
+      }
+      (_, ast::Def::Type { .. }) => {
+        ctx.push_global_type(name, at);
+      }
+      (Some(ty), ast::Def::Enum { constructors, .. }) => {
+        let mut cons = BTreeMap::new();
+        for ast::EnumConst { tag: ast::ProperName(tag, at), ty, span: _ } in constructors.iter() {
+          if let Some(NameId(old)) = ctx.find_name(tag) {
+            errs.push(error_multiple_def(name, ctx.names[old].def_at, *at));
+            continue;
+          }
+          let con = ctx.push_global_type(tag, *at);
+          let ty = match ty.as_ref().map(|t| resolve_ty(&mut ctx, t.clone())).transpose() {
+            Ok(ty) => ty,
+            Err(err) => {
+              errs.push(err);
+              continue;
+            }
+          };
+          cons.insert(con, ty);
+        }
+        ctx.enum_constructors.insert(ty, cons);
+      }
+    }
+  }
+
   for def in defs {
     match resolve_def(&mut ctx, def) {
       Err(err) => errs.push(err),

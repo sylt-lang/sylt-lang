@@ -41,6 +41,11 @@ pub enum Error {
     at: Span,
   },
 
+  ResMsg {
+    msg: String,
+    span: Span,
+  },
+
   CheckMsg {
     msg: &'static str,
     a_span: Span,
@@ -191,6 +196,13 @@ impl Error {
           "> The name {:?} does is not an enum\n{}",
           ty_name,
           Self::maybe_render_context(at, source)
+        )
+      }
+      Error::ResMsg { msg, span } => {
+        format!(
+          "> {}\n{}",
+          msg,
+          Self::maybe_render_context(span, source)
         )
       }
 

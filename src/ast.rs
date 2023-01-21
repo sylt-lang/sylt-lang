@@ -53,7 +53,7 @@ impl<'t> Def<'t> {
 #[derive(Debug, Clone)]
 pub struct EnumConst<'t> {
   pub tag: ProperName<'t>,
-  pub ty: Type<'t>,
+  pub ty: Option<Type<'t>>,
   pub span: Span,
 }
 

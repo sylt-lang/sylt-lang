@@ -437,11 +437,7 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
         _ => unreachable!("Checked in the expect before"),
       };
 
-      let ty = type_(lex)?.unwrap_or(Type::TCustom {
-        name: ProperName("Void", start),
-        args: vec![],
-        span: start,
-      });
+      let ty = type_(lex)?;
 
       let end = lex.span();
       let span = start.merge(end);

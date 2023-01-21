@@ -9,7 +9,7 @@ use crate::name_resolution::*;
 #[derive(Clone, Debug)]
 pub enum CType<'t> {
   NodeType(NameId),
-  // Type,
+  // TODO - add Error type so we can report multiple errors and stuff
   Unknown,
   Foreign(&'t Name<'t>),
   // Is this a good idea to code here?
@@ -117,28 +117,17 @@ pub fn check<'t>(names: &'t Vec<Name<'t>>, defs: &Vec<Def>) -> TRes<Vec<Node<'t>
 
       Def::Type { .. } => {}
 
-      Def::Enum { .. } => {}
+      Def::Enum { name, span, args: _, constructors: _ } => {
+        let NameId(slot) = name;
+        let x = CType::NodeType(*name);
+        unify(&mut checker, x, CType::Foreign(&names[*slot]), *span)?;
+      }
     }
   }
 
   for def in defs {
     check_def(&mut checker, def)?;
   }
-
-  // for def in defs}
-  //   match def {
-  //     Def::Def { name, .. }
-  //     | Def::ForiegnDef { name, .. }
-  //     | Def::Type { name, .. }
-  //     | Def::ForeignType { name, .. } => {
-  //       let NameId(slot) = *name;
-  //       let x = resolve_ty(&mut checker, *name);
-  //       let ty = x.render(&mut checker);
-  //       let name = names[slot].name;
-  //       println!("{:?} - {:#?}", name, ty);
-  //     }
-  //   }
-  // }
 
   Ok(checker.types)
 }
@@ -283,9 +272,12 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
     Expr::Const { ty_name, value, const_name: _, span } => {
       let ty = resolve_ty(checker, *ty_name);
       match value {
-        Some(expr) => {
+        Some((expr, exp_ty)) => {
+          let expeced_ty = check_type(checker, exp_ty)?;
           let expr_ty = check_expr(checker, expr)?;
-          unify(checker, ty, expr_ty, *span)?
+          // TODO: This won't handle generics.
+          unify(checker, expeced_ty, expr_ty, *span)?;
+          ty
         }
         None => ty,
       }
