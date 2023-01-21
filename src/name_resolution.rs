@@ -2,6 +2,8 @@
 // Type check - needs to be memory efficient
 // Two scopes? Module and function?
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use crate::ast;
 use crate::error::*;
 
@@ -93,12 +95,17 @@ pub enum Expr {
 pub struct Ctx<'t> {
   names: Vec<Name<'t>>, // TODO: Lookups can be done in almost constant time compared to linear time
   stack: Vec<NameId>,
-  // NEXT STEP: Add list of constructors for enum types here. Gonna get wacky.
+
+  enum_constructors: BTreeMap<NameId, BTreeSet<NameId>>,
 }
 
 impl<'t> Ctx<'t> {
   fn new() -> Self {
-    Self { names: vec![], stack: vec![] }
+    Self {
+      names: vec![],
+      stack: vec![],
+      enum_constructors: BTreeMap::new(),
+    }
   }
 
   fn push_var(
@@ -179,6 +186,24 @@ fn error_multiple_def<'t>(name: &'t str, original: Span, new: Span) -> Error {
   Error::ResMultiple { name: name.to_string(), original, new }
 }
 
+// TODO[et]: Here we can actually list the closest constructor and be genuinely helpful!
+fn error_no_enum_const<A>(
+  ty_name: &str,
+  ty_name_at: Span,
+  const_name: &str,
+  const_name_at: Span,
+) -> RRes<A> {
+  Err(Error::ResNoEnumConst {
+    ty_name: ty_name.to_string(),
+    at: const_name_at.merge(ty_name_at),
+    const_name: const_name.to_string(),
+  })
+}
+
+fn error_no_enum<A>(ty_name: &str, ty_name_at: Span) -> RRes<A> {
+  Err(Error::ResNoEnum { ty_name: ty_name.to_string(), at: ty_name_at })
+}
+
 fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
   Ok(match ty {
     ast::Type::TEmpty(at) => {
@@ -250,17 +275,27 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
       span,
     ),
     ast::Expr::Const {
-      ty_name: ast::ProperName(ty_name, ty_name_at),
-      const_name: ast::ProperName(const_name, const_name_at),
+      ty_name: ast::ProperName(ty_name_, ty_name_at),
+      const_name: ast::ProperName(const_name_, const_name_at),
       value,
     } => {
-      let ty_name = match ctx.read_name(ty_name, ty_name_at) {
+      let ty_name = match ctx.read_name(ty_name_, ty_name_at) {
         Some(t) => t,
-        None => return error_no_var(ty_name, ty_name_at),
+        None => return error_no_var(ty_name_, ty_name_at),
       };
-      let const_name = match ctx.read_name(const_name, const_name_at) {
+      let const_name = match ctx.read_name(const_name_, const_name_at) {
         Some(t) => t,
-        None => return error_no_var(const_name, const_name_at),
+        None => return error_no_var(const_name_, const_name_at),
+      };
+
+      let cons = match ctx.enum_constructors.get(&ty_name) {
+        Some(t) => t,
+        None => return error_no_enum(ty_name_, ty_name_at),
+      };
+
+      match cons.get(&const_name) {
+        Some(t) => t,
+        None => return error_no_enum_const(ty_name_, ty_name_at, const_name_, const_name_at),
       };
 
       let span = ty_name_at.merge(const_name_at).merge(
@@ -386,10 +421,16 @@ pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Vec<Name<'t>>, Vec<Def>),
         ctx.push_global_type(name, at);
       }
       (None, ast::Def::Enum { constructors, .. }) => {
-        ctx.push_global_type(name, at);
+        let ty = ctx.push_global_type(name, at);
+        let mut names = BTreeSet::new();
         for ast::EnumConst { tag: ast::ProperName(tag, at), .. } in constructors.iter() {
-          ctx.push_global_type(tag, *at);
+          if let Some(NameId(old)) = ctx.find_name(tag) {
+            errs.push(error_multiple_def(name, ctx.names[old].def_at, *at));
+          }
+          let con = ctx.push_global_type(tag, *at);
+          names.insert(con);
         }
+        ctx.enum_constructors.insert(ty, names);
       }
     }
   }

@@ -30,6 +30,17 @@ pub enum Error {
     new: Span,
   },
 
+  ResNoEnumConst {
+    ty_name: String,
+    at: Span,
+    const_name: String,
+  },
+
+  ResNoEnum {
+    ty_name: String,
+    at: Span,
+  },
+
   CheckMsg {
     msg: &'static str,
     a_span: Span,
@@ -153,6 +164,7 @@ impl Error {
         "> I reached the end of the file unexpectedly.\n{}",
         Self::maybe_render_context(span, source)
       ),
+
       Error::ResUnknown { name, span } => format!(
         "> I couldn't figure out what {:?} refernces. Did you make a typo?\n{}",
         name,
@@ -166,6 +178,22 @@ impl Error {
           Self::maybe_render_context(new, source)
         )
       }
+      Error::ResNoEnumConst { ty_name, const_name, at } => {
+        format!(
+          "> The enum {:?} does not have a constructor named {:?}\n{}",
+          ty_name,
+          const_name,
+          Self::maybe_render_context(at, source)
+        )
+      }
+      Error::ResNoEnum { ty_name, at } => {
+        format!(
+          "> The name {:?} does is not an enum\n{}",
+          ty_name,
+          Self::maybe_render_context(at, source)
+        )
+      }
+
       Error::CheckMsg { msg, a_span, b_span } => format!(
         "> {}\n here:\n{}\n and here:\n{}\n",
         msg,
