@@ -1,3 +1,14 @@
+Enum = {}
+
+function Enum.__tostring(t)
+  return tostring(t[1]) .. " " .. tostring(t[2])
+end
+
+function Enum.new(k, v)
+  local e = {k, v}
+  setmetatable(e, Enum)
+  return e
+end
 
 function sy_concat(a)
   return function(b) 

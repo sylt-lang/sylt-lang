@@ -1,0 +1,9 @@
+enum A = B Int
+
+def main
+: A
+:
+= A:B 1
+
+--+ expected stdout: _1_B 1
+

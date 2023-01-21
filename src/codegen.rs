@@ -102,11 +102,11 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
     Expr::Var(name, _) => write!(out, "{}", ctx.var(*name))?,
     Expr::Const { ty_name: _, const_name, value, span: _ } => {
         if let Some(value) = value {
-            write!(out, "{{ \"{}\", (", ctx.var(*const_name))?;
+            write!(out, "Enum.new( \"{}\", (", ctx.var(*const_name))?;
             gen_expr(out, ctx, value)?;
-            write!(out, ") }}")?;
+            write!(out, ") )")?;
         } else {
-            write!(out, "{{ \"{}\" }}", ctx.var(*const_name))?;
+            write!(out, "Enum.new( \"{}\", nil )", ctx.var(*const_name))?;
         }
     }
     Expr::Un(ast::UnOp::Neg(_), expr, _) => {
