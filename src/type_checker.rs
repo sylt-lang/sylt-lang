@@ -281,14 +281,14 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
     Expr::EStr(_, _) => CType::Str,
     Expr::Var(name, _) => CType::NodeType(*name),
     Expr::Const { ty_name, value, const_name: _, span } => {
-        let ty = resolve_ty(checker, *ty_name);
-        match value {
-            Some(expr) => {
-                let expr_ty = check_expr(checker, expr)?;
-                unify(checker, ty, expr_ty, *span)?
-            }
-            None => ty,
+      let ty = resolve_ty(checker, *ty_name);
+      match value {
+        Some(expr) => {
+          let expr_ty = check_expr(checker, expr)?;
+          unify(checker, ty, expr_ty, *span)?
         }
+        None => ty,
+      }
     }
     Expr::Un(ast::UnOp::Neg(at), expr, _) => {
       let expr_ty = check_expr(checker, expr)?;

@@ -78,7 +78,9 @@ pub enum Expr<'t> {
 impl<'t> Expr<'t> {
   pub fn span(&self) -> Span {
     match self {
-      Expr::EInt(_, span) | Expr::EReal(_, span) | Expr::EStr(_, span) | Expr::Var(_, span) => *span,
+      Expr::EInt(_, span) | Expr::EReal(_, span) | Expr::EStr(_, span) | Expr::Var(_, span) => {
+        *span
+      }
 
       Expr::Const {
         ty_name: ProperName(_, ty_span),
