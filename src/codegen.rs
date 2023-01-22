@@ -29,17 +29,31 @@ const PREAMBLE: &'static str = include_str!("pramble.lua");
 
 pub fn gen<'t>(
   out: &mut dyn Write,
+  ast: &[ast::Def<'t>],
   _types: &[Node<'t>],
   names: &[Name<'t>],
   named_ast: &[Def],
 ) -> Result<()> {
-  writeln!(out, "-- BEGIN PRAMBLE\n{}\n-- END PREAMBLE\n\n", PREAMBLE)?;
+  writeln!(out, "-- BEGIN PREAMBLE\n{}\n-- END PREAMBLE\n\n", PREAMBLE)?;
+  for def in ast {
+      match def {
+        ast::Def::Def { .. }
+        | ast::Def::ForiegnDef { .. }
+        | ast::Def::Type { .. }
+        | ast::Def::Enum { .. }
+        | ast::Def::ForiegnType { .. } => { /* Do nothing */ }
+
+        ast::Def::ForeignBlock { source, span: _ } => {
+            write!(out, "-- BEGIN FOREIGN BLOCK\n{}\n-- END FOREIGN BLOCK\n", source)?;
+        }
+    }
+  }
   let gen_vars = names
     .iter()
     .enumerate()
     .map(|(i, name)| GenVar {
       var_name: format!("_{}_{}", i, name.name),
-      foreign_name: format!("sy_{}", name.name),
+      foreign_name: format!("{}", name.name),
     })
     .collect();
   let ctx = Ctx { gen_vars: &gen_vars };
@@ -72,12 +86,13 @@ fn gen_def(out: &mut dyn Write, ctx: Ctx, def: &Def) -> Result<()> {
     Def::ForiegnDef { name, .. } => {
       write!(
         out,
-        "{} = {} -- FOREIGN",
+        "{} = {} -- FOREIGN\n",
         ctx.var(*name),
         ctx.foreign_name(*name)
       )?;
     }
-    Def::Enum { .. } | Def::Type { .. } | Def::ForeignType { .. } => (),
+
+    Def::ForeignBlock | Def::Enum { .. } | Def::Type { .. } | Def::ForeignType { .. } => (),
   })
 }
 

@@ -36,16 +36,23 @@ pub enum Def<'t> {
     name: ProperName<'t>,
     span: Span,
   },
+
+  ForeignBlock {
+    source: &'t str,
+    span: Span,
+  },
 }
 
 impl<'t> Def<'t> {
-  pub fn name(&self) -> (&'t str, Span) {
+  pub fn name(&self) -> Option<(&'t str, Span)> {
     match self {
       Def::Def { name: Name(str, span), .. }
       | Def::ForiegnDef { name: Name(str, span), .. }
       | Def::Type { name: ProperName(str, span), .. }
       | Def::Enum { name: ProperName(str, span), .. }
-      | Def::ForiegnType { name: ProperName(str, span), .. } => (str, *span),
+      | Def::ForiegnType { name: ProperName(str, span), .. } => Some((str, *span)),
+
+      Def::ForeignBlock { .. } => None,
     }
   }
 }

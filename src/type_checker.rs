@@ -122,6 +122,8 @@ pub fn check<'t>(names: &'t Vec<Name<'t>>, defs: &Vec<Def>) -> TRes<Vec<Node<'t>
         let x = CType::NodeType(*name);
         unify(&mut checker, x, CType::Foreign(&names[*slot]), *span)?;
       }
+
+      Def::ForeignBlock { .. } => { /* Do nothing */ }
     }
   }
 
@@ -150,7 +152,9 @@ fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
     Def::Enum { .. } => {
       // TODO! More needs to be done here, mainly with higher order types and stuff
     }
-    Def::ForeignType { .. } => { /* Do nothing */ }
+
+    Def::ForeignType { .. }
+    | Def::ForeignBlock { .. } => { /* Do nothing */ }
   })
 }
 

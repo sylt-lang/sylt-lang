@@ -31,6 +31,17 @@ pub enum Token<'t> {
   #[token("foreign")]
   KwForiegn,
 
+  #[regex(r#"-\[\["#, |lex| {
+      match lex.remainder().find("]]-") {
+          None => Err("Expected a closing ]]-"),
+          Some(end) => {
+              lex.bump(end + 3);
+              Ok(lex.slice().strip_prefix("-[[").unwrap().strip_suffix("]]-").unwrap().trim())
+          }
+      }
+    }, priority=2)]
+  ForiegnBlock(&'t str),
+
   // Operators
   #[token("!")]
   OpNeg,
@@ -79,6 +90,7 @@ impl<'t> Token<'t> {
       Token::KwEnum => "keyword `enum`".to_string(),
       Token::KwType => "keyword `type`".to_string(),
       Token::KwForiegn => "keyword `foreign`".to_string(),
+      Token::ForiegnBlock(_) => "a foreign block".to_string(),
 
       Token::OpNeg => "operator `!`".to_string(),
       Token::OpAdd => "operator `+`".to_string(),

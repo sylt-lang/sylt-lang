@@ -52,6 +52,8 @@ pub enum Def {
     name: NameId,
     span: Span,
   },
+
+  ForeignBlock,
 }
 
 #[derive(Debug, Clone)]
@@ -322,10 +324,17 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
         .map(Box::new);
 
       let value = match (value, value_ty) {
-          (Some(v), Some(t)) => Some((v, t)),
-          (None, None) => None,
-          (Some(_), None) => return error_msg("The type claims no value but a type was given here", span),
-          (None, Some(_)) => return error_msg("The type requires a value but no value was given here", span),
+        (Some(v), Some(t)) => Some((v, t)),
+        (None, None) => None,
+        (Some(_), None) => {
+          return error_msg("The type claims no value but a type was given here", span)
+        }
+        (None, Some(_)) => {
+          return error_msg(
+            "The type requires a value but no value was given here",
+            span,
+          )
+        }
       };
 
       Expr::Const { ty_name, const_name, value, span }
@@ -403,7 +412,10 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
         .map(
           |ast::EnumConst { tag: ast::ProperName(tag, _), ty, span }| {
             let tag = ctx.find_name(tag).unwrap();
-            let ty = ty.as_ref().map(|t| resolve_ty(ctx, t.clone())).transpose()?;
+            let ty = ty
+              .as_ref()
+              .map(|t| resolve_ty(ctx, t.clone()))
+              .transpose()?;
             Ok(EnumConst { tag, ty, span: *span })
           },
         )
@@ -412,6 +424,8 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
 
       Def::Enum { name, args, constructors, span }
     }
+
+    ast::Def::ForeignBlock { .. } => Def::ForeignBlock,
   })
 }
 
@@ -422,7 +436,10 @@ pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Vec<Name<'t>>, Vec<Def>),
 
   // Top-pass
   for d in defs.iter() {
-    let (name, at) = d.name();
+    let (name, at) = match d.name() {
+      None => continue,
+      Some(x) => x,
+    };
     // TODO, handle type definitions here
     match (ctx.find_name(name), d) {
       (Some(NameId(old)), _) => {
@@ -443,22 +460,25 @@ pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Vec<Name<'t>>, Vec<Def>),
       (None, ast::Def::Enum { .. }) => {
         ctx.push_global_type(name, at);
       }
+      (None, ast::Def::ForeignBlock { .. }) => unreachable!(),
     }
   }
 
   for d in defs.iter() {
-    let (name, at) = d.name();
+    let (name, _) = match d.name() {
+      None => continue,
+      Some(x) => x,
+    };
     // TODO, handle type definitions here
     match (ctx.find_name(name), d) {
       (None, _) => unreachable!(),
-      (_, ast::Def::ForiegnDef { .. }) => {}
-      (_, ast::Def::Def { .. }) => {}
-      (_, ast::Def::ForiegnType { .. }) => {
-        ctx.push_global_type_foreign(name, at);
-      }
-      (_, ast::Def::Type { .. }) => {
-        ctx.push_global_type(name, at);
-      }
+      (_, ast::Def::ForeignBlock { .. }) => unreachable!(),
+
+      (_, ast::Def::ForiegnDef { .. })
+      | (_, ast::Def::Def { .. })
+      | (_, ast::Def::ForiegnType { .. })
+      | (_, ast::Def::Type { .. }) => {}
+
       (Some(ty), ast::Def::Enum { constructors, .. }) => {
         let mut cons = BTreeMap::new();
         for ast::EnumConst { tag: ast::ProperName(tag, at), ty, span: _ } in constructors.iter() {
@@ -467,7 +487,11 @@ pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Vec<Name<'t>>, Vec<Def>),
             continue;
           }
           let con = ctx.push_global_type(tag, *at);
-          let ty = match ty.as_ref().map(|t| resolve_ty(&mut ctx, t.clone())).transpose() {
+          let ty = match ty
+            .as_ref()
+            .map(|t| resolve_ty(&mut ctx, t.clone()))
+            .transpose()
+          {
             Ok(ty) => ty,
             Err(err) => {
               errs.push(err);

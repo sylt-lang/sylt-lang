@@ -455,11 +455,42 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
     Ok(Some(Def::Enum { name, args, constructors, span }))
   }
 
-  Ok(some!(
-    lex,
-    def_(lex)?.or(ty_(lex)?).or(enum_(lex)?).or(enum_(lex)?),
-    "Expected a def, but this isn't that"
-  ))
+  fn ffi_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Def<'t>>> {
+    if !matches!(lex.token(), Some(Token::KwForiegn)) {
+      return Ok(None);
+    };
+    lex.next();
+
+    match expect!(
+      lex,
+      Token::ForiegnBlock(_),
+      "A foreign code-block was expected after the foreign keyword"
+    ) {
+      (span, Some(Token::ForiegnBlock(source))) => Ok(Some(Def::ForeignBlock { span, source })),
+      _ => unreachable!("Checked in the expect before"),
+    }
+  }
+
+  let d = (|| {
+    match def_(lex)? {
+      Some(x) => return Ok(Some(x)),
+      None => {}
+    }
+    match ty_(lex)? {
+      Some(x) => return Ok(Some(x)),
+      None => {}
+    }
+    match enum_(lex)? {
+      Some(x) => return Ok(Some(x)),
+      None => {}
+    }
+    match ffi_(lex)? {
+      Some(x) => return Ok(Some(x)),
+      None => {}
+    }
+    Ok(None)
+  })()?;
+  Ok(some!(lex, d, "Expected a def, but this isn't that"))
 }
 
 #[cfg(test)]

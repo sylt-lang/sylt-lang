@@ -26,7 +26,8 @@ fn main() {
 
   // println!("=ast=\n{:#?}", ast);
 
-  let (names, named_ast) = match name_resolution::resolve(ast) {
+  // TODO[et]: How slow is this clone?
+  let (names, named_ast) = match name_resolution::resolve(ast.clone()) {
     Err(errs) => {
       for e in errs.iter() {
         eprintln!("{}", e.render(Some(&src)));
@@ -51,13 +52,14 @@ fn main() {
     .expect("Didn't find a `lua` executable");
   let mut out = lua.stdin.as_mut().unwrap();
   let mut code = BufWriter::new(&mut out);
-  match codegen::gen(&mut code, &types, &names, &named_ast) {
+  match codegen::gen(&mut code, &ast, &types, &names, &named_ast) {
     Err(err) => {
       eprintln!("file error: {:?}", err);
       std::process::exit(4);
     }
     Ok(a) => a,
   };
+  println!("{}", std::str::from_utf8(code.buffer()).unwrap());
   drop(code);
   drop(out);
 
