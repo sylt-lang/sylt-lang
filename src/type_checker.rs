@@ -13,6 +13,7 @@ pub enum CType<'t> {
   Unknown,
   Foreign(&'t Name<'t>),
   // Is this a good idea to code here?
+  Bool,
   Int,
   Real,
   Str,
@@ -37,6 +38,7 @@ impl<'t> CType<'t> {
       }
       CType::Unknown => "_".to_string(),
       CType::Foreign(name) => name.name.to_string(),
+      CType::Bool => "Bool".to_string(),
       CType::Int => "Int".to_string(),
       CType::Real => "Real".to_string(),
       CType::Str => "Str".to_string(),
@@ -269,6 +271,7 @@ fn check_requirements<'t>(
 
 fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
   Ok(match body {
+    Expr::EBool(_, _) => CType::Bool,
     Expr::EInt(_, _) => CType::Int,
     Expr::EReal(_, _) => CType::Real,
     Expr::EStr(_, _) => CType::Str,
@@ -331,6 +334,7 @@ fn unpack_function<'t>(
     CType::Function(a, r) => (*a, *r),
     CType::Unknown
     | CType::Foreign(_)
+    | CType::Bool
     | CType::Int
     | CType::Real
     | CType::Str
@@ -405,8 +409,8 @@ fn unify_params<'t>(
 }
 
 fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> TRes<CType<'t>> {
-  // TODO
   Ok(match ty {
+    Type::TBool(_) => CType::Bool,
     Type::TInt(_) => CType::Int,
     Type::TReal(_) => CType::Real,
     Type::TStr(_) => CType::Str,

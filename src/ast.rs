@@ -58,6 +58,13 @@ impl<'t> Def<'t> {
 }
 
 #[derive(Debug, Clone)]
+pub enum Pattern<'t> {
+    Empty,
+    Pick(Name<'t>, Option<Box<Pattern<'t>>>),
+    Value(Expr<'t>),
+}
+
+#[derive(Debug, Clone)]
 pub struct EnumConst<'t> {
   pub tag: ProperName<'t>,
   pub ty: Option<Type<'t>>,
@@ -66,6 +73,7 @@ pub struct EnumConst<'t> {
 
 #[derive(Debug, Clone)]
 pub enum Expr<'t> {
+  EBool(bool, Span),
   EInt(i64, Span),
   EReal(f64, Span),
   EStr(&'t str, Span),
@@ -77,6 +85,12 @@ pub enum Expr<'t> {
   },
 
   Var(Name<'t>, Span),
+  // Match {
+  //   value: Box<Expr<'t>>,
+  //   
+  //   // Non-empty
+  //   branches: Vec<(Pattern<'t>, Option<Expr<'t>>, Expr<'t>)>,
+  // },
 
   Un(UnOp, Box<Expr<'t>>),
   Bin(BinOp, Box<Expr<'t>>, Box<Expr<'t>>),
@@ -85,7 +99,7 @@ pub enum Expr<'t> {
 impl<'t> Expr<'t> {
   pub fn span(&self) -> Span {
     match self {
-      Expr::EInt(_, span) | Expr::EReal(_, span) | Expr::EStr(_, span) | Expr::Var(_, span) => {
+      Expr::EInt(_, span) | Expr::EReal(_, span) | Expr::EStr(_, span) | Expr::EBool(_, span) | Expr::Var(_, span) => {
         *span
       }
 
@@ -102,6 +116,8 @@ impl<'t> Expr<'t> {
       }
       Expr::Un(op, a) => op.span().merge(a.span()),
       Expr::Bin(op, a, b) => op.span().merge(a.span()).merge(b.span()),
+
+
     }
   }
 }

@@ -111,6 +111,7 @@ fn gen_function(out: &mut dyn Write, ctx: Ctx, args: &[NameId], body: &Expr) -> 
 
 fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
   Ok(match body {
+    Expr::EBool(b, _) => write!(out, "{}", b)?,
     Expr::EInt(i, _) => write!(out, "{}", i)?,
     Expr::EReal(f, _) => write!(out, "{}", f)?, // TODO: Is this stable?
     Expr::EStr(s, _) => write!(out, "{:?}", s)?, // TODO: Is this stable?

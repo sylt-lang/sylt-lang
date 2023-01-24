@@ -73,10 +73,12 @@ pub enum Type {
   TInt(Span),
   TReal(Span),
   TStr(Span),
+  TBool(Span),
 }
 
 #[derive(Debug, Clone)]
 pub enum Expr {
+  EBool(bool, Span),
   EInt(i64, Span),
   EReal(f64, Span),
   EStr(String, Span),
@@ -195,7 +197,7 @@ fn error_multiple_def<'t>(name: &'t str, original: Span, new: Span) -> Error {
   Error::ResMultiple { name: name.to_string(), original, new }
 }
 
-// TODO[et]: Here we can actually list the closest constructor and be genuinely helpful!
+// TODO: Show the best matching enum, to be helpful
 fn error_no_enum_const<A>(
   ty_name: &str,
   ty_name_at: Span,
@@ -240,6 +242,11 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
     {
       Type::TStr(at)
     }
+    ast::Type::TCustom { name: ast::ProperName(name, at), args, span: _ }
+      if name == "Bool" && args.len() == 0 =>
+    {
+      Type::TBool(at)
+    }
     ast::Type::TCustom { name: ast::ProperName(name, at), args, span } => {
       let node = match ctx.read_name(name, at) {
         Some(var) => Type::TNode(var, at),
@@ -277,6 +284,7 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
 
 fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
   Ok(match def {
+    ast::Expr::EBool(value, span) => Expr::EBool(value, span),
     ast::Expr::EInt(value, span) => Expr::EInt(value, span),
     ast::Expr::EReal(value, span) => Expr::EReal(value, span),
     ast::Expr::EStr(value, span) => Expr::EStr(value.to_string(), span),
@@ -517,5 +525,3 @@ pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Vec<Name<'t>>, Vec<Def>),
     Err(errs)
   }
 }
-
-// TODO, translate some programs

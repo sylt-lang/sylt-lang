@@ -15,9 +15,16 @@ pub enum Token<'t> {
   #[regex(r"([\d]+\.[\d]*|[\d]*\.[\d]+)|[\d]+e(-|\+)?[\d]+", |lex| lex.slice(), priority=2)]
   Real(&'t str),
 
-  // TODO replace the \\ and \" with the right strings
+  // TODO replace the \\ and \" with the right strings? Do I need to do this or can I let Lua do
+  // it?
   #[regex(r#""[^(\\.)"]*""#, |lex| lex.slice().strip_prefix("\"").unwrap().strip_suffix("\"").unwrap(), priority=2)]
   Str(&'t str),
+
+  #[token("true")]
+  True,
+
+  #[token("false")]
+  False,
 
   // Keywords
   #[token("->")]
@@ -84,6 +91,8 @@ impl<'t> Token<'t> {
       Token::Int(n) => format!("int {:?}", n),
       Token::Real(n) => format!("real {:?}", n),
       Token::Str(s) => format!("str {:?}", s),
+      Token::True => format!("boolean value 'true'"),
+      Token::False => format!("boolean value 'false'"),
 
       Token::KwArrow => "keyword `->`".to_string(),
       Token::KwDef => "keyword `def`".to_string(),

@@ -91,7 +91,7 @@ enum Prec {
   Comp,
   BoolAnd,
   BoolOr,
-  Call, // TODO: Should be right associative
+  Call,
 
   No,
   // Weakest binding
@@ -157,6 +157,8 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
         None => return err_eof(span),
         Some(Token::OpNeg) => Expr::Un(UnOp::Neg(span), Box::new(prefix(lex)?)),
         Some(Token::Name(str)) => Expr::Var(Name(str, span), span),
+        Some(Token::True) => Expr::EBool(true, span),
+        Some(Token::False) => Expr::EBool(false, span),
         Some(Token::Int(i)) => Expr::EInt(i.parse().expect("Error in Int regex!"), span),
         Some(Token::Real(r)) => Expr::EReal(r.parse().expect("Error in Real regex!"), span),
         Some(Token::Str(s)) => Expr::EStr(s, span),
