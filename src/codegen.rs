@@ -116,7 +116,7 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
     Expr::EReal(f, _) => write!(out, "{}", f)?, // TODO: Is this stable?
     Expr::EStr(s, _) => write!(out, "{:?}", s)?, // TODO: Is this stable?
     Expr::Var(name, _) => write!(out, "{}", ctx.var(*name))?,
-    Expr::Const { ty_name: _, const_name, value, span: _ } => {
+    Expr::EnumConst { ty_name: _, const_name, value, span: _ } => {
       if let Some((value, _)) = value {
         write!(out, "Enum.new( \"{}\", (", ctx.var(*const_name))?;
         gen_expr(out, ctx, value)?;

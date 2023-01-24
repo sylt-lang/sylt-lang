@@ -172,7 +172,7 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
             } else {
               Some(Box::new(expr(lex)?))
             };
-            Expr::Const { ty_name, const_name, value }
+            Expr::EnumConst { ty_name, const_name, value }
           } else {
             return err_msg(
               "Expected another proper name and then a valid expression in this enum constructor",

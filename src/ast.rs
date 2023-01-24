@@ -60,7 +60,7 @@ impl<'t> Def<'t> {
 #[derive(Debug, Clone)]
 pub enum Pattern<'t> {
     Empty,
-    Pick(Name<'t>, Option<Box<Pattern<'t>>>),
+    Var(Name<'t>, Option<Box<Pattern<'t>>>),
     Value(Expr<'t>),
 }
 
@@ -78,7 +78,7 @@ pub enum Expr<'t> {
   EReal(f64, Span),
   EStr(&'t str, Span),
 
-  Const {
+  EnumConst {
     ty_name: ProperName<'t>,
     const_name: ProperName<'t>,
     value: Option<Box<Expr<'t>>>,
@@ -103,7 +103,7 @@ impl<'t> Expr<'t> {
         *span
       }
 
-      Expr::Const {
+      Expr::EnumConst {
         ty_name: ProperName(_, ty_span),
         const_name: ProperName(_, const_span),
         value,

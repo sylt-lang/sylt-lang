@@ -276,7 +276,7 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
     Expr::EReal(_, _) => CType::Real,
     Expr::EStr(_, _) => CType::Str,
     Expr::Var(name, _) => CType::NodeType(*name),
-    Expr::Const { ty_name, value, const_name: _, span } => {
+    Expr::EnumConst { ty_name, value, const_name: _, span } => {
       let ty = resolve_ty(checker, *ty_name);
       match value {
         Some((expr, exp_ty)) => {
@@ -399,6 +399,7 @@ fn unify_params<'t>(
       Type::TInt(_)
       | Type::TReal(_)
       | Type::TStr(_)
+      | Type::TBool(_)
       | Type::TApply(_, _, _)
       | Type::TNode(_, _) => {
         let out = check_type(checker, ty)?;

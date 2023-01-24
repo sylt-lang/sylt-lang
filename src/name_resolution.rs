@@ -84,7 +84,7 @@ pub enum Expr {
   EStr(String, Span),
   Var(NameId, Span),
 
-  Const {
+  EnumConst {
     ty_name: NameId,
     const_name: NameId,
     value: Option<(Box<Expr>, Type)>,
@@ -295,7 +295,7 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
       },
       span,
     ),
-    ast::Expr::Const {
+    ast::Expr::EnumConst {
       ty_name: ast::ProperName(ty_name_, ty_name_at),
       const_name: ast::ProperName(const_name_, const_name_at),
       value,
@@ -345,7 +345,7 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
         }
       };
 
-      Expr::Const { ty_name, const_name, value, span }
+      Expr::EnumConst { ty_name, const_name, value, span }
     }
     ast::Expr::Un(op, expr) => {
       let at = op.span().merge(expr.span());
