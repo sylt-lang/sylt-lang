@@ -59,9 +59,18 @@ impl<'t> Def<'t> {
 
 #[derive(Debug, Clone)]
 pub enum Pattern<'t> {
-    Empty,
-    Var(Name<'t>, Option<Box<Pattern<'t>>>),
-    Value(Expr<'t>),
+  Empty(Span),
+  Var(Name<'t>, Option<Box<Pattern<'t>>>, Span),
+  // Value(Expr<'t>),
+  // EnumConst(ProperName<'t>, ProperName<'t>, Box<Pattern<'t>>),
+}
+
+impl<'t> Pattern<'t> {
+  pub fn span(&self) -> Span {
+    match self {
+      Pattern::Empty(span) | Pattern::Var(_, _, span) => *span,
+    }
+  }
 }
 
 #[derive(Debug, Clone)]
@@ -85,13 +94,18 @@ pub enum Expr<'t> {
   },
 
   Var(Name<'t>, Span),
+  Let {
+    binding: Pattern<'t>,
+    bind_value: Box<Expr<'t>>,
+
+    next_value: Box<Expr<'t>>,
+  },
   // Match {
   //   value: Box<Expr<'t>>,
-  //   
+  //
   //   // Non-empty
   //   branches: Vec<(Pattern<'t>, Option<Expr<'t>>, Expr<'t>)>,
   // },
-
   Un(UnOp, Box<Expr<'t>>),
   Bin(BinOp, Box<Expr<'t>>, Box<Expr<'t>>),
 }
@@ -99,9 +113,13 @@ pub enum Expr<'t> {
 impl<'t> Expr<'t> {
   pub fn span(&self) -> Span {
     match self {
-      Expr::EInt(_, span) | Expr::EReal(_, span) | Expr::EStr(_, span) | Expr::EBool(_, span) | Expr::Var(_, span) => {
-        *span
-      }
+      Expr::EInt(_, span)
+      | Expr::EReal(_, span)
+      | Expr::EStr(_, span)
+      | Expr::EBool(_, span)
+      | Expr::Var(_, span) => *span,
+
+      Expr::Let { binding, bind_value: _, next_value } => next_value.span().merge(binding.span()),
 
       Expr::EnumConst {
         ty_name: ProperName(_, ty_span),
@@ -116,8 +134,6 @@ impl<'t> Expr<'t> {
       }
       Expr::Un(op, a) => op.span().merge(a.span()),
       Expr::Bin(op, a, b) => op.span().merge(a.span()).merge(b.span()),
-
-
     }
   }
 }

@@ -36,16 +36,20 @@ pub fn gen<'t>(
 ) -> Result<()> {
   writeln!(out, "-- BEGIN PREAMBLE\n{}\n-- END PREAMBLE\n\n", PREAMBLE)?;
   for def in ast {
-      match def {
-        ast::Def::Def { .. }
-        | ast::Def::ForiegnDef { .. }
-        | ast::Def::Type { .. }
-        | ast::Def::Enum { .. }
-        | ast::Def::ForiegnType { .. } => { /* Do nothing */ }
+    match def {
+      ast::Def::Def { .. }
+      | ast::Def::ForiegnDef { .. }
+      | ast::Def::Type { .. }
+      | ast::Def::Enum { .. }
+      | ast::Def::ForiegnType { .. } => { /* Do nothing */ }
 
-        ast::Def::ForeignBlock { source, span: _ } => {
-            write!(out, "-- BEGIN FOREIGN BLOCK\n{}\n-- END FOREIGN BLOCK\n", source)?;
-        }
+      ast::Def::ForeignBlock { source, span: _ } => {
+        write!(
+          out,
+          "-- BEGIN FOREIGN BLOCK\n{}\n-- END FOREIGN BLOCK\n",
+          source
+        )?;
+      }
     }
   }
   let gen_vars = names
@@ -109,8 +113,38 @@ fn gen_function(out: &mut dyn Write, ctx: Ctx, args: &[NameId], body: &Expr) -> 
   Ok(())
 }
 
+fn gen_let_binding(
+  out: &mut dyn Write,
+  ctx: Ctx,
+  bind_value: &Expr,
+  binding: &Pattern,
+  next_value: &Expr,
+) -> Result<()> {
+  write!(out, "local ")?;
+  gen_pat(out, ctx, binding)?;
+  write!(out, " = ")?;
+  gen_expr(out, ctx, bind_value)?;
+  write!(out, "\n")?;
+  match next_value {
+    Expr::Let { bind_value, binding, next_value } => {
+      gen_let_binding(out, ctx, bind_value, binding, next_value)
+    }
+    _ => {
+      write!(out, "return ")?;
+      gen_expr(out, ctx, next_value)
+    }
+  }
+}
+
 fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
   Ok(match body {
+    Expr::Let { bind_value, binding, next_value } => {
+      // TODO: Better code-gen for this, all bindings can be moved to the top of the expressions
+      // since there shouldn't be any sideeffects here, right? RIGHT?
+      write!(out, "( function()\n")?;
+      gen_let_binding(out, ctx, bind_value, binding, next_value)?;
+      write!(out, "\nend )()\n")?;
+    }
     Expr::EBool(b, _) => write!(out, "{}", b)?,
     Expr::EInt(i, _) => write!(out, "{}", i)?,
     Expr::EReal(f, _) => write!(out, "{}", f)?, // TODO: Is this stable?
@@ -158,4 +192,17 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
       write!(out, ")")?;
     }
   })
+}
+
+fn gen_pat(out: &mut dyn Write, ctx: Ctx, binding: &Pattern) -> Result<()> {
+  match binding {
+    Pattern::Empty(_) => write!(out, " _ "),
+    Pattern::Var(name, inner, _) => {
+      match inner {
+        Some(_) => panic!(),
+        None => {}
+      }
+      write!(out, " {} ", ctx.var(*name))
+    }
+  }
 }

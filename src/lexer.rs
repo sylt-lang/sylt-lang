@@ -37,6 +37,12 @@ pub enum Token<'t> {
   KwType,
   #[token("foreign")]
   KwForiegn,
+  #[token("let")]
+  KwLet,
+  #[token("in")]
+  KwIn,
+  #[token("@")]
+  KwAtSign,
 
   #[regex(r#"-\[\["#, |lex| {
       match lex.remainder().find("]]-") {
@@ -100,6 +106,9 @@ impl<'t> Token<'t> {
       Token::KwType => "keyword `type`".to_string(),
       Token::KwForiegn => "keyword `foreign`".to_string(),
       Token::ForiegnBlock(_) => "a foreign block".to_string(),
+      Token::KwLet => "keyword `let`".to_string(),
+      Token::KwIn => "keyword `in`".to_string(),
+      Token::KwAtSign => "keyword `@`".to_string(),
 
       Token::OpNeg => "operator `!`".to_string(),
       Token::OpAdd => "operator `+`".to_string(),

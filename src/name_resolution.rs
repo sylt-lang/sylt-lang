@@ -77,6 +77,20 @@ pub enum Type {
 }
 
 #[derive(Debug, Clone)]
+pub enum Pattern {
+  Empty(Span),
+  Var(NameId, Option<Box<Pattern>>, Span),
+}
+
+impl Pattern {
+  pub fn span(&self) -> Span {
+    match self {
+      Pattern::Empty(span) | Pattern::Var(_, _, span) => *span,
+    }
+  }
+}
+
+#[derive(Debug, Clone)]
 pub enum Expr {
   EBool(bool, Span),
   EInt(i64, Span),
@@ -89,6 +103,12 @@ pub enum Expr {
     const_name: NameId,
     value: Option<(Box<Expr>, Type)>,
     span: Span,
+  },
+
+  Let {
+    bind_value: Box<Expr>,
+    binding: Pattern,
+    next_value: Box<Expr>,
   },
 
   Un(ast::UnOp, Box<Expr>, Span),
@@ -284,6 +304,17 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
 
 fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
   Ok(match def {
+    ast::Expr::Let { bind_value, binding, next_value } => {
+      let bind_value = Box::new(resolve_expr(ctx, *bind_value)?);
+
+      let frame = ctx.push_frame();
+      let binding = resolve_pattern(ctx, binding)?;
+      let next_value = Box::new(resolve_expr(ctx, *next_value)?);
+      ctx.pop_frame(frame);
+
+      Expr::Let { bind_value, binding, next_value }
+    }
+
     ast::Expr::EBool(value, span) => Expr::EBool(value, span),
     ast::Expr::EInt(value, span) => Expr::EInt(value, span),
     ast::Expr::EReal(value, span) => Expr::EReal(value, span),
@@ -359,6 +390,20 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
         Box::new(resolve_expr(ctx, *b)?),
         at,
       )
+    }
+  })
+}
+
+fn resolve_pattern<'t>(ctx: &mut Ctx<'t>, pat: ast::Pattern<'t>) -> RRes<Pattern> {
+  Ok(match pat {
+    ast::Pattern::Empty(span) => Pattern::Empty(span),
+    ast::Pattern::Var(ast::Name(var, at), inner, span) => {
+      let var = ctx.push_local_var(var, at);
+      let inner = match inner {
+        Some(inner) => Some(Box::new(resolve_pattern(ctx, *inner)?)),
+        None => None,
+      };
+      Pattern::Var(var, inner, span)
     }
   })
 }

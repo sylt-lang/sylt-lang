@@ -318,7 +318,29 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       let c_ty = unify(checker, a_ty, b_ty, *at)?;
       unify(checker, c_ty, CType::Real, *at)?
     }
+    Expr::Let { bind_value, binding, next_value } => {
+        let bind_value_ty = check_expr(checker, bind_value)?;
+        let binding_ty = check_pattern(checker, binding)?;
+        unify(checker, bind_value_ty, binding_ty, binding.span())?;
+        check_expr(checker, next_value)?
+    }
   })
+}
+
+fn check_pattern<'t>(checker: &mut Checker<'t>, binding: &Pattern) -> TRes<CType<'t>> {
+    Ok(match binding {
+        Pattern::Empty(_) => CType::Unknown,
+        Pattern::Var(var, inner, span) => {
+            let var_ty = CType::NodeType(*var);
+            match inner {
+                Some(inner) => {
+                    let inner_ty = check_pattern(checker, inner)?;
+                    unify(checker, var_ty, inner_ty, *span)?
+                }
+                None => var_ty,
+            }
+        }
+    })
 }
 
 fn unpack_function<'t>(

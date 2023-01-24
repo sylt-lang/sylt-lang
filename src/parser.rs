@@ -189,6 +189,35 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
           );
           expr
         }
+        Some(Token::KwLet) => {
+          let binding = pat(lex)?;
+          expect!(
+            lex,
+            Token::Equal,
+            "Expected `=` after pattern in let-binding"
+          );
+          let bind_value = expr(lex)?;
+          let next_value = match lex.peek() {
+            (_, Some(Token::KwLet)) => expr(lex)?,
+            (_, Some(Token::KwIn)) => {
+              lex.next();
+              expr(lex)?
+            }
+            (at, tok) => {
+              return err_msg_token(
+                "Expected either a new `let` binding or `in` and followed by an expression",
+                tok,
+                at,
+              )
+            }
+          };
+
+          Expr::Let {
+            binding,
+            bind_value: Box::new(bind_value),
+            next_value: Box::new(next_value),
+          }
+        }
         t => return err_msg_token("Not a valid start of the expression", t, span),
       })
     }
@@ -223,6 +252,25 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
   }
 
   parse_precedence(lex, Prec::No)
+}
+
+fn pat<'t>(lex: &mut Lex<'t>) -> PRes<Pattern<'t>> {
+  let (span, token) = lex.next();
+  Ok(match token {
+    Some(Token::Name(str)) if str == "_" => Pattern::Empty(span),
+    Some(Token::Name(str)) if str != "_" => {
+      let name = Name(str, span);
+      let (end, inner) = if matches!(lex.token(), Some(Token::KwAtSign)) {
+        let inner = pat(lex)?;
+        (inner.span(), Some(Box::new(inner)))
+      } else {
+          (span, None)
+      };
+      Pattern::Var(name, inner, span.merge(end))
+    }
+
+    t => return err_msg_token("Not a valid pattern", t, span),
+  })
 }
 
 pub fn type_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {
