@@ -6,5 +6,5 @@ def main
 : Int
 : = add ' 1 ' 1 ' 1 ' 1 ' 1
 
---+ expected stdout:
---+ 5
+--+ expected stdout: 5
+

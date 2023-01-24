@@ -13,5 +13,5 @@ def main
 : Int
 : = f ' 4
 
---+ expected stdout:
---+ 16
+--+ expected stdout: 16
+

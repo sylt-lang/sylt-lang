@@ -1,3 +1,5 @@
+
+foreign -[[ function concat(a) return function(b) return a .. b end end ]]-
 def concat : Str -> Str -> Str := foreign
 
 def main : Str : = concat ' "a" ' "b"

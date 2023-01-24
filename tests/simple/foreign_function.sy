@@ -1,0 +1,9 @@
+enum A = B Int
+
+foreign -[[ function f(x) return "!" .. tostring(x) end ]]-
+def f : Int -> Str : = foreign
+
+def main : Str : = f ' 1
+
+--+ expected stdout: !1
+

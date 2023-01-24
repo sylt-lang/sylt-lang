@@ -59,7 +59,7 @@ fn main() {
     }
     Ok(a) => a,
   };
-  println!("{}", std::str::from_utf8(code.buffer()).unwrap());
+  // println!("{}", std::str::from_utf8(code.buffer()).unwrap());
   drop(code);
   drop(out);
 
