@@ -80,12 +80,19 @@ pub enum Type {
 pub enum Pattern {
   Empty(Span),
   Var(NameId, Option<Box<Pattern>>, Span),
+
+  EnumConst {
+    ty_name: NameId,
+    const_name: NameId,
+    inner: Option<(Box<Pattern>, Type)>,
+    span: Span,
+  },
 }
 
 impl Pattern {
   pub fn span(&self) -> Span {
     match self {
-      Pattern::Empty(span) | Pattern::Var(_, _, span) => *span,
+      Pattern::Empty(span) | Pattern::Var(_, _, span) | Pattern::EnumConst { span, .. } => *span,
     }
   }
 }
@@ -327,28 +334,11 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
       span,
     ),
     ast::Expr::EnumConst {
-      ty_name: ast::ProperName(ty_name_, ty_name_at),
-      const_name: ast::ProperName(const_name_, const_name_at),
+      ty_name: ty_name@ast::ProperName(_, ty_name_at),
+      const_name: const_name@ast::ProperName(_, const_name_at),
       value,
     } => {
-      let ty_name = match ctx.read_name(ty_name_, ty_name_at) {
-        Some(t) => t,
-        None => return error_no_var(ty_name_, ty_name_at),
-      };
-      let const_name = match ctx.read_name(const_name_, const_name_at) {
-        Some(t) => t,
-        None => return error_no_var(const_name_, const_name_at),
-      };
-
-      let cons = match ctx.enum_constructors.get(&ty_name) {
-        Some(t) => t,
-        None => return error_no_enum(ty_name_, ty_name_at),
-      };
-
-      let value_ty = match cons.get(&const_name) {
-        Some(t) => t.clone(),
-        None => return error_no_enum_const(ty_name_, ty_name_at, const_name_, const_name_at),
-      };
+      let (ty_name, const_name, value_ty) = resolve_enum_const(ctx, ty_name, const_name)?;
 
       let span = ty_name_at.merge(const_name_at).merge(
         value
@@ -405,7 +395,50 @@ fn resolve_pattern<'t>(ctx: &mut Ctx<'t>, pat: ast::Pattern<'t>) -> RRes<Pattern
       };
       Pattern::Var(var, inner, span)
     }
+    ast::Pattern::EnumConst { ty_name, const_name, inner, span } => {
+      let (ty_name, const_name, value_ty) = resolve_enum_const(ctx, ty_name, const_name)?;
+
+      let inner = match (inner, value_ty) {
+        (Some(v), Some(t)) => Some((Box::new(resolve_pattern(ctx, *v)?), t)),
+        (None, None) => None,
+        (Some(_), None) => {
+          return error_msg("The type claims no value but a type was given here", span)
+        }
+        (None, Some(_)) => {
+          return error_msg(
+            "The type requires a value but no value was given here",
+            span,
+          )
+        }
+      };
+
+      Pattern::EnumConst { ty_name, const_name, inner, span }
+    }
   })
+}
+
+fn resolve_enum_const<'t>(
+  ctx: &mut Ctx<'t>,
+  ast::ProperName(ty_name_, ty_name_at): ast::ProperName<'t>,
+  ast::ProperName(const_name_, const_name_at): ast::ProperName<'t>,
+) -> RRes<(NameId, NameId, Option<Type>)> {
+  let ty_name = match ctx.read_name(ty_name_, ty_name_at) {
+    Some(t) => t,
+    None => return error_no_var(ty_name_, ty_name_at),
+  };
+  let const_name = match ctx.read_name(const_name_, const_name_at) {
+    Some(t) => t,
+    None => return error_no_var(const_name_, const_name_at),
+  };
+  let cons = match ctx.enum_constructors.get(&ty_name) {
+    Some(t) => t,
+    None => return error_no_enum(ty_name_, ty_name_at),
+  };
+  let value_ty = match cons.get(&const_name) {
+    Some(t) => t.clone(),
+    None => return error_no_enum_const(ty_name_, ty_name_at, const_name_, const_name_at),
+  };
+  Ok((ty_name, const_name, value_ty))
 }
 
 fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {

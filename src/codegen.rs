@@ -1,6 +1,7 @@
 use std::io::{Result, Write};
 
 use crate::ast;
+use crate::error::Span;
 use crate::name_resolution::*;
 use crate::type_checker::*;
 
@@ -8,6 +9,23 @@ use crate::type_checker::*;
 struct GenVar {
   var_name: String,
   foreign_name: String,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct TmpVar(usize);
+
+impl TmpVar {
+  pub fn zero() -> Self {
+    TmpVar(0)
+  }
+
+  pub fn out(&self) -> String {
+    format!("_tmp_{}", self.0)
+  }
+
+  pub fn next(&self) -> TmpVar {
+    TmpVar(self.0 + 1)
+  }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -116,18 +134,19 @@ fn gen_function(out: &mut dyn Write, ctx: Ctx, args: &[NameId], body: &Expr) -> 
 fn gen_let_binding(
   out: &mut dyn Write,
   ctx: Ctx,
+  tmp: TmpVar,
   bind_value: &Expr,
   binding: &Pattern,
   next_value: &Expr,
 ) -> Result<()> {
-  write!(out, "local ")?;
-  gen_pat(out, ctx, binding)?;
+  write!(out, "local {}", tmp.out())?;
   write!(out, " = ")?;
   gen_expr(out, ctx, bind_value)?;
   write!(out, "\n")?;
+  let tmp = gen_pat(out, tmp.out(), tmp.next(), ctx, binding)?;
   match next_value {
     Expr::Let { bind_value, binding, next_value } => {
-      gen_let_binding(out, ctx, bind_value, binding, next_value)
+      gen_let_binding(out, ctx, tmp.next(), bind_value, binding, next_value)
     }
     _ => {
       write!(out, "return ")?;
@@ -136,13 +155,19 @@ fn gen_let_binding(
   }
 }
 
+fn gen_tmp_var(Span(lo, hi): &Span) -> TmpVar {
+  TmpVar(lo ^ hi)
+}
+
 fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
   Ok(match body {
     Expr::Let { bind_value, binding, next_value } => {
       // TODO: Better code-gen for this, all bindings can be moved to the top of the expressions
       // since there shouldn't be any sideeffects here, right? RIGHT?
+      //
+      // ASSUMPTION: Let bindings always open a function and are all at the start of that function
       write!(out, "( function()\n")?;
-      gen_let_binding(out, ctx, bind_value, binding, next_value)?;
+      gen_let_binding(out, ctx, TmpVar::zero(), bind_value, binding, next_value)?;
       write!(out, "\nend )()\n")?;
     }
     Expr::EBool(b, _) => write!(out, "{}", b)?,
@@ -194,15 +219,25 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
   })
 }
 
-fn gen_pat(out: &mut dyn Write, ctx: Ctx, binding: &Pattern) -> Result<()> {
-  match binding {
-    Pattern::Empty(_) => write!(out, " _ "),
+fn gen_pat(
+  out: &mut dyn Write,
+  curr: String,
+  tmp: TmpVar,
+  ctx: Ctx,
+  binding: &Pattern,
+) -> Result<TmpVar> {
+  Ok(match binding {
+    Pattern::Empty(_) => tmp,
     Pattern::Var(name, inner, _) => {
+      write!(out, "local {} = {}\n", ctx.var(*name), curr)?;
       match inner {
-        Some(_) => panic!(),
-        None => {}
+        Some(inner) => gen_pat(out, curr, tmp, ctx, inner)?,
+        None => tmp,
       }
-      write!(out, " {} ", ctx.var(*name))
     }
-  }
+    Pattern::EnumConst { inner: Some(inner), .. } => {
+      gen_pat(out, format!("{}[2]", curr), tmp, ctx, &*inner.0)?
+    }
+    Pattern::EnumConst { inner: None, .. } => tmp,
+  })
 }

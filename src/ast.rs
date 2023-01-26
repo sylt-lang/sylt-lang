@@ -61,14 +61,19 @@ impl<'t> Def<'t> {
 pub enum Pattern<'t> {
   Empty(Span),
   Var(Name<'t>, Option<Box<Pattern<'t>>>, Span),
+  EnumConst {
+    ty_name: ProperName<'t>,
+    const_name: ProperName<'t>,
+    inner: Option<Box<Pattern<'t>>>,
+    span: Span,
+  },
   // Value(Expr<'t>),
-  // EnumConst(ProperName<'t>, ProperName<'t>, Box<Pattern<'t>>),
 }
 
 impl<'t> Pattern<'t> {
   pub fn span(&self) -> Span {
     match self {
-      Pattern::Empty(span) | Pattern::Var(_, _, span) => *span,
+      Pattern::Empty(span) | Pattern::Var(_, _, span) | Pattern::EnumConst { span, .. } => *span,
     }
   }
 }

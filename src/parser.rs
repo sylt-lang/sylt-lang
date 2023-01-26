@@ -190,7 +190,16 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
           expr
         }
         Some(Token::KwLet) => {
-          let binding = pat(lex)?;
+          let binding = match parse_pat(lex)? {
+            Some(binding) => binding,
+            None => {
+              return err_msg_token(
+                "Expected valid pattern after the `let`-keyword",
+                lex.token(),
+                lex.span(),
+              )
+            }
+          };
           expect!(
             lex,
             Token::Equal,
@@ -254,23 +263,49 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
   parse_precedence(lex, Prec::No)
 }
 
-fn pat<'t>(lex: &mut Lex<'t>) -> PRes<Pattern<'t>> {
-  let (span, token) = lex.next();
-  Ok(match token {
-    Some(Token::Name(str)) if str == "_" => Pattern::Empty(span),
+fn parse_pat<'t>(lex: &mut Lex<'t>) -> PRes<Option<Pattern<'t>>> {
+  let (span, token) = lex.peek();
+  Ok(Some(match token {
+    Some(Token::Name(str)) if str == "_" => {
+      lex.next();
+      Pattern::Empty(span)
+    }
     Some(Token::Name(str)) if str != "_" => {
+      lex.next();
       let name = Name(str, span);
       let (end, inner) = if matches!(lex.token(), Some(Token::KwAtSign)) {
-        let inner = pat(lex)?;
+        let inner = match parse_pat(lex)? {
+          Some(inner) => inner,
+          None => {
+            return err_msg_token("Expected a pattern after the '@'", lex.token(), lex.span())
+          }
+        };
         (inner.span(), Some(Box::new(inner)))
       } else {
-          (span, None)
+        (span, None)
       };
       Pattern::Var(name, inner, span.merge(end))
     }
 
+    Some(Token::ProperName(ty_name)) => {
+      lex.next();
+      expect!(lex, Token::Colon, "Expected ':' in this enum constructor");
+      if let (inner_span, Some(Token::ProperName(const_name))) = lex.next() {
+        let ty_name = ProperName(ty_name, span);
+        let const_name = ProperName(const_name, inner_span);
+        let inner = parse_pat(lex)?.map(|p| Box::new(p));
+        let span = span.merge(inner.as_ref().map(|x| x.span()).unwrap_or(inner_span));
+        Pattern::EnumConst { ty_name, const_name, inner, span }
+      } else {
+        return err_msg(
+          "Expected another proper name and then a valid expression in this enum constructor",
+          span,
+        );
+      }
+    }
+
     t => return err_msg_token("Not a valid pattern", t, span),
-  })
+  }))
 }
 
 pub fn type_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {

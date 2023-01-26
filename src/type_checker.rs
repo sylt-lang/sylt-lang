@@ -155,8 +155,7 @@ fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
       // TODO! More needs to be done here, mainly with higher order types and stuff
     }
 
-    Def::ForeignType { .. }
-    | Def::ForeignBlock { .. } => { /* Do nothing */ }
+    Def::ForeignType { .. } | Def::ForeignBlock { .. } => { /* Do nothing */ }
   })
 }
 
@@ -319,28 +318,41 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       unify(checker, c_ty, CType::Real, *at)?
     }
     Expr::Let { bind_value, binding, next_value } => {
-        let bind_value_ty = check_expr(checker, bind_value)?;
-        let binding_ty = check_pattern(checker, binding)?;
-        unify(checker, bind_value_ty, binding_ty, binding.span())?;
-        check_expr(checker, next_value)?
+      let bind_value_ty = check_expr(checker, bind_value)?;
+      let binding_ty = check_pattern(checker, binding)?;
+      unify(checker, bind_value_ty, binding_ty, binding.span())?;
+      check_expr(checker, next_value)?
     }
   })
 }
 
 fn check_pattern<'t>(checker: &mut Checker<'t>, binding: &Pattern) -> TRes<CType<'t>> {
-    Ok(match binding {
-        Pattern::Empty(_) => CType::Unknown,
-        Pattern::Var(var, inner, span) => {
-            let var_ty = CType::NodeType(*var);
-            match inner {
-                Some(inner) => {
-                    let inner_ty = check_pattern(checker, inner)?;
-                    unify(checker, var_ty, inner_ty, *span)?
-                }
-                None => var_ty,
-            }
+  Ok(match binding {
+    Pattern::Empty(_) => CType::Unknown,
+    Pattern::Var(var, inner, span) => {
+      let var_ty = CType::NodeType(*var);
+      match inner {
+        Some(inner) => {
+          let inner_ty = check_pattern(checker, inner)?;
+          unify(checker, var_ty, inner_ty, *span)?
         }
-    })
+        None => var_ty,
+      }
+    }
+    Pattern::EnumConst { ty_name, const_name: _, inner, span } => {
+      let ty = resolve_ty(checker, *ty_name);
+      match inner {
+        Some((pattern, exp_ty)) => {
+          let expeced_ty = check_type(checker, exp_ty)?;
+          let pat_ty = check_pattern(checker, pattern)?;
+          // TODO: This won't handle generics.
+          unify(checker, expeced_ty, pat_ty, *span)?;
+          ty
+        }
+        None => ty,
+      }
+    }
+  })
 }
 
 fn unpack_function<'t>(
