@@ -74,6 +74,14 @@ macro_rules! expect {
   }};
 }
 
+macro_rules! expect_no_feed {
+  ($lex:expr, $pat:pat, $msg:literal) => {{
+    if !matches!($lex.token(), Some($pat)) {
+      return err_msg_token($msg, $lex.token(), $lex.span());
+    }
+  }};
+}
+
 macro_rules! some {
   ($lex:expr, $expr:expr, $msg:literal) => {
     match $expr {
@@ -151,6 +159,44 @@ pub fn parse<'t>(source: &'t str) -> Result<Vec<Def<'t>>, Vec<Error>> {
 
 pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
   fn parse_precedence<'t>(lex: &mut Lex<'t>, prec: Prec) -> PRes<Expr<'t>> {
+    fn record_inner<'t>(lex: &mut Lex<'t>, start: Span) -> PRes<Expr<'t>> {
+      let mut fields = vec![];
+      let (end, to_extend) = loop {
+        match dbg!(lex.next()) {
+          (span, Some(Token::RCurl)) => break (span, None),
+          (span, Some(Token::Pipe)) => {
+            let to_extend = expr(lex)?;
+            expect!(lex, Token::RCurl, "Expected '}' to close the record");
+            break (span, Some(Box::new(to_extend)));
+          }
+          (span, Some(Token::Str(s))) | (span, Some(Token::Name(s))) => {
+            expect!(lex, Token::Colon, "Expected ':' after record label");
+            fields.push(((span, s), expr(lex)?));
+            match lex.peek() {
+              (_, Some(Token::RCurl)) => {}
+              (_, Some(Token::Comma)) => {
+                lex.feed();
+              }
+              (at, token) => {
+                return err_msg_token("Expected '}' or ',' after record label", token, at)
+              }
+            }
+          }
+
+          (at, None) => return err_eof(at),
+          (s, Some(t)) => {
+            return err_msg_token(
+              "Not a valid record field-name, maybe you ment to quote it",
+              Some(t),
+              s,
+            )
+          }
+        }
+      };
+
+      Ok(Expr::Record { fields, to_extend, span: start.merge(end) })
+    }
+
     fn prefix<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
       let (span, token) = lex.next();
       Ok(match token {
@@ -187,6 +233,10 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
             Token::RParen,
             "Expected a closing parenthasis after the inner expression"
           );
+          expr
+        }
+        Some(Token::LCurl) => {
+          let expr = record_inner(lex, span)?;
           expr
         }
         Some(Token::KwLet) => {
@@ -274,6 +324,7 @@ fn parse_pat<'t>(lex: &mut Lex<'t>) -> PRes<Option<Pattern<'t>>> {
       lex.next();
       let name = Name(str, span);
       let (end, inner) = if matches!(lex.token(), Some(Token::KwAtSign)) {
+        lex.next();
         let inner = match parse_pat(lex)? {
           Some(inner) => inner,
           None => {

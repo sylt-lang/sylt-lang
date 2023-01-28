@@ -323,6 +323,8 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       unify(checker, bind_value_ty, binding_ty, binding.span())?;
       check_expr(checker, next_value)?
     }
+    // TODO
+    Expr::Record { to_extend, fields, span } => CType::Unknown,
   })
 }
 

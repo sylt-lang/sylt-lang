@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::{Result, Write};
 
 use crate::ast;
@@ -31,6 +32,8 @@ impl TmpVar {
 #[derive(Debug, Copy, Clone)]
 struct Ctx<'a> {
   gen_vars: &'a Vec<GenVar>,
+
+   fields: &'a BTreeMap<FieldId, &'a str>,
 }
 
 impl<'a> Ctx<'a> {
@@ -41,6 +44,10 @@ impl<'a> Ctx<'a> {
   fn foreign_name(&self, NameId(slot): NameId) -> &str {
     &self.gen_vars[slot].foreign_name
   }
+
+  fn field(&self, slot: FieldId) -> &str {
+    &self.fields[&slot]
+  }
 }
 
 const PREAMBLE: &'static str = include_str!("pramble.lua");
@@ -50,6 +57,7 @@ pub fn gen<'t>(
   ast: &[ast::Def<'t>],
   _types: &[Node<'t>],
   names: &[Name<'t>],
+  fields: &BTreeMap<FieldId, &'t str>,
   named_ast: &[Def],
 ) -> Result<()> {
   writeln!(out, "-- BEGIN PREAMBLE\n{}\n-- END PREAMBLE\n\n", PREAMBLE)?;
@@ -78,7 +86,7 @@ pub fn gen<'t>(
       foreign_name: format!("{}", name.name),
     })
     .collect();
-  let ctx = Ctx { gen_vars: &gen_vars };
+  let ctx = Ctx { gen_vars: &gen_vars, fields };
   for def in named_ast {
     gen_def(out, ctx, def)?;
   }
@@ -161,6 +169,7 @@ fn gen_tmp_var(Span(lo, hi): &Span) -> TmpVar {
 
 fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
   Ok(match body {
+
     Expr::Let { bind_value, binding, next_value } => {
       // TODO: Better code-gen for this, all bindings can be moved to the top of the expressions
       // since there shouldn't be any sideeffects here, right? RIGHT?
@@ -216,6 +225,16 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
       gen_expr(out, ctx, b)?;
       write!(out, ")")?;
     }
+    Expr::Record { to_extend: None, fields, span: _ } => {
+        write!(out, "{{");
+        for ((_, field), value) in fields.iter() {
+            write!(out, "[\"{}\"] = ", ctx.field(*field))?;
+            gen_expr(out, ctx, value)?;
+            write!(out, ",")?;
+        }
+        write!(out, "}}")?;
+    }
+    Expr::Record { to_extend: Some(to_extend), fields, span: _ } => todo!(),
   })
 }
 

@@ -10,6 +10,9 @@ use crate::error::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NameId(pub usize);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FieldId(pub usize);
+
 #[derive(Debug)]
 pub struct StackFrame(usize);
 
@@ -105,6 +108,12 @@ pub enum Expr {
   EStr(String, Span),
   Var(NameId, Span),
 
+  Record {
+    to_extend: Option<Box<Expr>>,
+    fields: Vec<((Span, FieldId), Expr)>,
+    span: Span,
+  },
+
   EnumConst {
     ty_name: NameId,
     const_name: NameId,
@@ -127,6 +136,8 @@ pub struct Ctx<'t> {
   names: Vec<Name<'t>>, // TODO: Lookups can be done in almost constant time compared to linear time
   stack: Vec<NameId>,
 
+  fields: (BTreeMap<FieldId, &'t str>, BTreeMap<&'t str, FieldId>),
+
   // NOTE[et]: I think I can do enums better. The type-checker should know as little as possible
   // about them. This can maybe be done by adding more functions to the syntax-tree? Or maybe I
   // should use a different approach. Maybe it's better if this is sent to the type-checker so we
@@ -142,8 +153,21 @@ impl<'t> Ctx<'t> {
     Self {
       names: vec![],
       stack: vec![],
+      fields: (BTreeMap::new(), BTreeMap::new()),
       enum_constructors: BTreeMap::new(),
     }
+  }
+
+  fn find_field(&mut self, field: &'t str) -> FieldId {
+    match self.fields.1.get(field) {
+      Some(id) => return *id,
+      None => {}
+    }
+
+    let id = FieldId(self.fields.0.len());
+    self.fields.0.insert(id, field);
+    self.fields.1.insert(field, id);
+    id
   }
 
   fn push_var(
@@ -333,9 +357,28 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
       },
       span,
     ),
+    ast::Expr::Record { to_extend, fields, span } => {
+      let to_extend = match to_extend {
+        Some(to_extend) => Some(Box::new(resolve_expr(ctx, *to_extend)?)),
+        None => None,
+      };
+
+      let fields = fields
+        .into_iter()
+        .map(|((at, field), value)| {
+          let field = ctx.find_field(field);
+          match resolve_expr(ctx, value) {
+            Ok(value) => Ok(((at, field), value)),
+            Err(err) => Err(err),
+          }
+        })
+        .collect::<RRes<Vec<_>>>()?;
+
+      Expr::Record { span, to_extend, fields }
+    }
     ast::Expr::EnumConst {
-      ty_name: ty_name@ast::ProperName(_, ty_name_at),
-      const_name: const_name@ast::ProperName(_, const_name_at),
+      ty_name: ty_name @ ast::ProperName(_, ty_name_at),
+      const_name: const_name @ ast::ProperName(_, const_name_at),
       value,
     } => {
       let (ty_name, const_name, value_ty) = resolve_enum_const(ctx, ty_name, const_name)?;
@@ -515,7 +558,7 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
   })
 }
 
-pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Vec<Name<'t>>, Vec<Def>), Vec<Error>> {
+pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Vec<Name<'t>>, BTreeMap<FieldId, &'t str>, Vec<Def>), Vec<Error>> {
   let mut ctx = Ctx::new();
   let mut out = vec![];
   let mut errs = vec![];
@@ -598,7 +641,7 @@ pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Vec<Name<'t>>, Vec<Def>),
     }
   }
   if errs.is_empty() {
-    Ok((ctx.names, out))
+    Ok((ctx.names, ctx.fields.0, out))
   } else {
     Err(errs)
   }

@@ -98,6 +98,12 @@ pub enum Expr<'t> {
     value: Option<Box<Expr<'t>>>,
   },
 
+  Record {
+    to_extend: Option<Box<Expr<'t>>>,
+    fields: Vec<((Span, &'t str), Expr<'t>)>,
+    span: Span,
+  },
+
   Var(Name<'t>, Span),
   Let {
     binding: Pattern<'t>,
@@ -122,7 +128,8 @@ impl<'t> Expr<'t> {
       | Expr::EReal(_, span)
       | Expr::EStr(_, span)
       | Expr::EBool(_, span)
-      | Expr::Var(_, span) => *span,
+      | Expr::Var(_, span)
+      | Expr::Record { span, .. } => *span,
 
       Expr::Let { binding, bind_value: _, next_value } => next_value.span().merge(binding.span()),
 
