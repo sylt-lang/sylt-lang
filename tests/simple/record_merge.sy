@@ -1,0 +1,18 @@
+foreign -[[ function show(a)
+  for k, v in pairs(a) do
+    print(k, v)
+  end
+end
+]]-
+
+def show : _ : = foreign
+
+def a : _ : = { a: 0, c: 1 }
+
+def main : _ : = show ' { a: 999 | a }
+
+--+ expected stdout:
+--+ a	999
+--+ c	1
+--+ nil
+
