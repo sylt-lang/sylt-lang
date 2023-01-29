@@ -71,9 +71,10 @@ impl<'t> CType<'t> {
         format!("{} -> {}", a, b)
       }
 
-      CType::Req(r, t) => {
+      CType::Req(rs, t) => {
         let t = t.render(checker);
-        format!("({:?} => {})", r, t)
+        let rs = rs.iter().map(|r| r.to_name(checker)).collect::<Vec<String>>().join(", ");
+        format!("([{:?}] => {})", rs, t)
       }
     }
   }
@@ -99,10 +100,16 @@ impl PartialOrd for Requirement {
 }
 
 impl Requirement {
-  fn to_name<'t>(&self, checker: &Checker<'t>) -> &'static str {
+  fn to_name<'t>(&self, checker: &mut Checker<'t>) -> String {
     match self {
-      Requirement::Num => "Num",
-      Requirement::Field(_, _) => todo!(),
+      Requirement::Num => "Num".to_owned(),
+      Requirement::Field(field, ty) => {
+        format!(
+          "({}: {})",
+          checker.field(*field),
+          CType::NodeType(*ty).render(checker)
+        )
+      }
     }
   }
 
@@ -247,15 +254,20 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
       let c = unify(checker, *inner_a, *inner_b, span)?;
       let mut cr = ar.clone();
       for bb in br.iter() {
-          match (cr.get(bb), bb) {
-            (Some(Requirement::Field(_, a_id)), Requirement::Field(_, b_id)) => {
-                // TODO: Annotate error with field name
-                unify(checker, CType::NodeType(*a_id), CType::NodeType(*b_id), span)?;
-                cr.insert(*bb);
-            }
-            (None | Some(Requirement::Num | Requirement::Field(_, _)), _) => {
-                cr.insert(*bb);
-            }
+        match (cr.get(bb), bb) {
+          (Some(Requirement::Field(_, a_id)), Requirement::Field(_, b_id)) => {
+            // TODO: Annotate error with field name
+            unify(
+              checker,
+              CType::NodeType(*a_id),
+              CType::NodeType(*b_id),
+              span,
+            )?;
+            cr.insert(*bb);
+          }
+          (None | Some(Requirement::Num | Requirement::Field(_, _)), _) => {
+            cr.insert(*bb);
+          }
         }
       }
       check_requirements(checker, span, cr, c)?
@@ -332,7 +344,7 @@ fn check_requirements<'t>(
       let c = resolve_ty(checker, name);
       return check_requirements(checker, span, req, c);
     }
-    c@CType::Req(_, _) => {
+    c @ CType::Req(_, _) => {
       return unify(checker, c, CType::Req(req, Box::new(CType::Unknown)), span);
     }
     //
