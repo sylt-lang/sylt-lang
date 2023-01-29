@@ -16,7 +16,7 @@ pub struct FieldId(pub usize);
 #[derive(Debug)]
 pub struct StackFrame(usize);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Name<'t> {
   pub name: &'t str,
   pub is_type: bool,

@@ -8,7 +8,7 @@ use crate::ast;
 use crate::error::*;
 use crate::name_resolution::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub enum CType<'t> {
   NodeType(NameId),
   // TODO - add Error type so we can report multiple errors and stuff
@@ -148,6 +148,10 @@ impl<'t> Checker<'t> {
   }
 
   fn raise_to_node(&mut self, ty: CType<'t>) -> NameId {
+    let ty = match ty {
+      CType::NodeType(id) => resolve_ty(self, id),
+      ty => ty,
+    };
     let name = NameId(self.types.len());
     self.types.push(Node::Ty(Box::new(ty)));
     name
@@ -197,10 +201,8 @@ pub fn check<'t>(
     }
   }
 
-  for _ in 0..3 {
-    for def in defs {
-      check_def(&mut checker, def)?;
-    }
+  for def in defs {
+    check_def(&mut checker, def)?;
   }
 
   Ok(checker.types)
@@ -257,9 +259,9 @@ fn record_merge<'t>(
     }
   })
 }
-
 fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) -> TRes<CType<'t>> {
   Ok(match (a, b) {
+    (a, b) if a == b => a,
     (CType::Unknown, b) => b,
     (a, CType::Unknown) => a,
     (CType::Req(ar, inner_a), CType::Req(br, inner_b)) => {
@@ -291,6 +293,11 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
     (inner_a, CType::Req(req, inner_b)) => {
       let c = unify(checker, inner_a, *inner_b, span)?;
       check_requirements(checker, span, req, c)?
+    }
+    (CType::NodeType(a_id), CType::NodeType(b_id))
+      if resolve(checker, &a_id) == resolve(checker, &b_id) =>
+    {
+      CType::NodeType(a_id)
     }
     (CType::NodeType(a_id), b) => {
       let inner_a = resolve_ty(checker, a_id);
@@ -441,14 +448,11 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       unify(checker, c_ty, CType::Real, *at)?
     }
     Expr::Let { bind_value, binding, next_value } => {
+      let out = check_expr(checker, next_value)?;
+
       let bind_value_ty = check_expr(checker, bind_value)?;
       let binding_ty = check_pattern(checker, binding)?;
-      let a = bind_value_ty.render(checker);
-      let b = binding_ty.render(checker);
       unify(checker, bind_value_ty, binding_ty, binding.span())?;
-      let out = check_expr(checker, next_value)?;
-      let c = out.render(checker);
-      println!("{} + {} = {}", a, b, c);
       out
     }
     Expr::Record { to_extend, fields, span } => {
@@ -576,8 +580,12 @@ fn resolve_ty<'t>(checker: &mut Checker<'t>, a: NameId) -> CType<'t> {
 
 fn inject<'t>(checker: &mut Checker<'t>, a_id: NameId, c: CType<'t>) -> CType<'t> {
   let NameId(slot) = resolve(checker, &a_id);
-  checker.types[slot] = Node::Ty(Box::new(c.clone()));
-  CType::NodeType(NameId(slot))
+  match &c {
+    CType::NodeType(c) if c == &a_id => panic!("Typechecker bug!"),
+    CType::NodeType(c) if c != &a_id => checker.types[slot] = Node::Child(*c),
+    c => checker.types[slot] = Node::Ty(Box::new(c.clone())),
+  }
+  c
 }
 
 fn unify_params<'t>(
