@@ -1,0 +1,24 @@
+-- foreign -[[ function show(a)
+--   for k, v in pairs(a) do
+--     print(k, v)
+--   end
+-- end
+-- ]]-
+
+-- def show : _ : = foreign
+
+-- def a : _ : = { a: 0, c: 1 }
+
+def main : _ : = let { a } = { a: "ABC" } in a + 1
+
+--+ expected exit status: 3
+--+ expected stderr:
+--+ > Failed to merge types.
+--+ 
+--+ Str
+--+ ----
+--+ Int
+--+ 
+--+  12| def main : _ : = let { a } = { a: "ABC" } in a + 1
+--+                                                     ^
+

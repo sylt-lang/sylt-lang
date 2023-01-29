@@ -73,14 +73,18 @@ impl<'t> CType<'t> {
 
       CType::Req(rs, t) => {
         let t = t.render(checker);
-        let rs = rs.iter().map(|r| r.to_name(checker)).collect::<Vec<String>>().join(", ");
-        format!("([{:?}] => {})", rs, t)
+        let rs = rs
+          .iter()
+          .map(|r| r.to_name(checker))
+          .collect::<Vec<String>>()
+          .join(", ");
+        format!("([{}] => {})", rs, t)
       }
     }
   }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Requirement {
   Num,
   Field(FieldId, NameId),
@@ -88,6 +92,12 @@ pub enum Requirement {
 
 impl PartialOrd for Requirement {
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl Ord for Requirement {
+  fn cmp(&self, other: &Self) -> Ordering {
     fn to_tuple(s: &Requirement) -> (usize, usize) {
       match s {
         Requirement::Num => (0, 0),
@@ -95,7 +105,7 @@ impl PartialOrd for Requirement {
       }
     }
 
-    Some(to_tuple(self).cmp(&to_tuple(other)))
+    to_tuple(self).cmp(&to_tuple(other))
   }
 }
 
@@ -187,8 +197,10 @@ pub fn check<'t>(
     }
   }
 
-  for def in defs {
-    check_def(&mut checker, def)?;
+  for _ in 0..3 {
+    for def in defs {
+      check_def(&mut checker, def)?;
+    }
   }
 
   Ok(checker.types)
@@ -303,22 +315,6 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
     (CType::Int, CType::Int) => CType::Int,
     (CType::Real, CType::Real) => CType::Real,
     (CType::Str, CType::Str) => CType::Str,
-    // (CType::Record(ax), CType::Record(bx)) => {
-    //   let mut out = vec![];
-    //   for (aa, bb) in ax.iter().zip(bx.iter()) {
-    //     if aa.0 != bb.0 {
-    //       return error_label(
-    //         checker,
-    //         aa.0.max(bb.0),
-    //         &CType::Record(ax),
-    //         &CType::Record(bx),
-    //         span,
-    //       );
-    //     }
-    //     out.push((aa.0, unify(checker, aa.1.clone(), bb.1.clone(), span)?));
-    //   }
-    //   CType::Record(out)
-    // }
     (CType::Apply(a0, a1), CType::Apply(b0, b1)) => {
       let c0 = unify(checker, *a0, *b0, span)?;
       let c1 = unify(checker, *a1, *b1, span)?;
@@ -447,8 +443,13 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
     Expr::Let { bind_value, binding, next_value } => {
       let bind_value_ty = check_expr(checker, bind_value)?;
       let binding_ty = check_pattern(checker, binding)?;
+      let a = bind_value_ty.render(checker);
+      let b = binding_ty.render(checker);
       unify(checker, bind_value_ty, binding_ty, binding.span())?;
-      check_expr(checker, next_value)?
+      let out = check_expr(checker, next_value)?;
+      let c = out.render(checker);
+      println!("{} + {} = {}", a, b, c);
+      out
     }
     Expr::Record { to_extend, fields, span } => {
       let mut reqs = BTreeSet::new();
@@ -502,7 +503,23 @@ fn check_pattern<'t>(checker: &mut Checker<'t>, binding: &Pattern) -> TRes<CType
         None => ty,
       }
     }
-    Pattern::Record(_, _) => CType::Unknown, // todo!(),
+    Pattern::Record(fields, _) => {
+      let mut reqs = BTreeSet::new();
+      for (field, field_span, pat) in fields.iter() {
+        let value_ty = check_pattern(checker, pat)?;
+        let value_node = checker.raise_to_node(value_ty);
+        let field_req = Requirement::Field(*field, value_node);
+        if reqs.contains(&field_req) {
+          panic!(
+            "Multiple of the same field {:?}, {:?}",
+            checker.field(*field),
+            field_span
+          );
+        }
+        reqs.insert(field_req);
+      }
+      CType::Req(reqs, Box::new(CType::Unknown))
+    }
   })
 }
 
@@ -560,7 +577,7 @@ fn resolve_ty<'t>(checker: &mut Checker<'t>, a: NameId) -> CType<'t> {
 fn inject<'t>(checker: &mut Checker<'t>, a_id: NameId, c: CType<'t>) -> CType<'t> {
   let NameId(slot) = resolve(checker, &a_id);
   checker.types[slot] = Node::Ty(Box::new(c.clone()));
-  c
+  CType::NodeType(NameId(slot))
 }
 
 fn unify_params<'t>(
