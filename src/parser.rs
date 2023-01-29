@@ -173,12 +173,12 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
             expect!(lex, Token::Colon, "Expected ':' after record label");
             fields.push(((span, s), expr(lex)?));
             match lex.peek() {
-              (_, Some(Token::RCurl)) => {}
+              (_, Some(Token::RCurl | Token::Pipe)) => {}
               (_, Some(Token::Comma)) => {
                 lex.feed();
               }
               (at, token) => {
-                return err_msg_token("Expected '}' or ',' after record label", token, at)
+                return err_msg_token("Expected '}', '|' or ',' after record label", token, at)
               }
             }
           }

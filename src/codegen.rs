@@ -33,7 +33,7 @@ impl TmpVar {
 struct Ctx<'a> {
   gen_vars: &'a Vec<GenVar>,
 
-   fields: &'a BTreeMap<FieldId, &'a str>,
+  fields: &'a BTreeMap<FieldId, &'a str>,
 }
 
 impl<'a> Ctx<'a> {
@@ -169,7 +169,6 @@ fn gen_tmp_var(Span(lo, hi): &Span) -> TmpVar {
 
 fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
   Ok(match body {
-
     Expr::Let { bind_value, binding, next_value } => {
       // TODO: Better code-gen for this, all bindings can be moved to the top of the expressions
       // since there shouldn't be any sideeffects here, right? RIGHT?
@@ -226,16 +225,30 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
       write!(out, ")")?;
     }
     Expr::Record { to_extend: None, fields, span: _ } => {
-        write!(out, "{{");
-        for ((_, field), value) in fields.iter() {
-            write!(out, "[\"{}\"] = ", ctx.field(*field))?;
-            gen_expr(out, ctx, value)?;
-            write!(out, ",")?;
-        }
-        write!(out, "}}")?;
+        gen_record_constant(out, ctx, fields)?
     }
-    Expr::Record { to_extend: Some(to_extend), fields, span: _ } => todo!(),
+    Expr::Record { to_extend: Some(to_extend), fields, span:_ } => {
+        write!(out, "sy_record_merge( ")?;
+        gen_expr(out, ctx, to_extend)?;
+        write!(out, ", ")?;
+        gen_record_constant(out, ctx, fields)?;
+        write!(out, ")")?
+    }
   })
+}
+
+fn gen_record_constant(
+  out: &mut dyn Write,
+  ctx: Ctx,
+  fields: &[((Span, FieldId), Expr)],
+) -> Result<()> {
+  write!(out, "{{")?;
+  for ((_, field), value) in fields.iter() {
+    write!(out, "[\"{}\"] = ", ctx.field(*field))?;
+    gen_expr(out, ctx, value)?;
+    write!(out, ",")?;
+  }
+  write!(out, "}}")
 }
 
 fn gen_pat(
