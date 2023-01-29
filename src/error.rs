@@ -78,6 +78,11 @@ pub enum Error {
     field: String,
     span: Span,
   },
+
+  CheckField {
+    field: String,
+    inner: Box<Error>,
+  },
 }
 
 impl Error {
@@ -207,11 +212,7 @@ impl Error {
         )
       }
       Error::ResMsg { msg, span } => {
-        format!(
-          "> {}\n{}",
-          msg,
-          Self::maybe_render_context(span, source)
-        )
+        format!("> {}\n{}", msg, Self::maybe_render_context(span, source))
       }
 
       Error::CheckMsg { msg, a_span, b_span } => format!(
@@ -240,7 +241,6 @@ impl Error {
         b,
         Self::maybe_render_context(span, source)
       ),
-    
       Error::CheckExtraLabel { a, b, field, span } => format!(
         "> Found extra label \"{}\" while unifying records.\n\n{}\n----\n{}\n\n{}",
         field,
@@ -248,8 +248,13 @@ impl Error {
         b,
         Self::maybe_render_context(span, source)
       ),
-
-
+      Error::CheckField { field, inner } => {
+        format!(
+          "> While checking label \"{}\".\n{}",
+          field,
+          inner.render(source)
+        )
+      }
     }
   }
 }

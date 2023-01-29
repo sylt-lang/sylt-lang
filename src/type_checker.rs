@@ -269,14 +269,15 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
       let mut cr = ar.clone();
       for bb in br.iter() {
         match (cr.get(bb), bb) {
-          (Some(Requirement::Field(_, a_id)), Requirement::Field(_, b_id)) => {
+          (Some(Requirement::Field(field, a_id)), Requirement::Field(_, b_id)) => {
             // TODO: Annotate error with field name
-            unify(
+            let u = unify(
               checker,
               CType::NodeType(*a_id),
               CType::NodeType(*b_id),
               span,
-            )?;
+            );
+            with_label(checker, *field, u)?;
             cr.insert(*bb);
           }
           (None | Some(Requirement::Num | Requirement::Field(_, _)), _) => {
@@ -696,4 +697,18 @@ fn error_label<'t, A>(
     a: a.render(checker),
     b: b.render(checker),
   })
+}
+
+fn with_label<'t, A>(
+  checker: &Checker<'t>,
+  field: FieldId,
+  curr: Result<A, Error>,
+) -> Result<A, Error> {
+  match curr {
+    Ok(curr) => Ok(curr),
+    Err(inner) => Err(Error::CheckField {
+      field: checker.field(field).to_string(),
+      inner: Box::new(inner),
+    }),
+  }
 }
