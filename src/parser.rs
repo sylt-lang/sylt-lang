@@ -162,7 +162,7 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
     fn record_inner<'t>(lex: &mut Lex<'t>, start: Span) -> PRes<Expr<'t>> {
       let mut fields = vec![];
       let (end, to_extend) = loop {
-        match dbg!(lex.next()) {
+        match lex.next() {
           (span, Some(Token::RCurl)) => break (span, None),
           (span, Some(Token::Pipe)) => {
             let to_extend = expr(lex)?;
