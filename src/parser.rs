@@ -74,14 +74,6 @@ macro_rules! expect {
   }};
 }
 
-macro_rules! expect_no_feed {
-  ($lex:expr, $pat:pat, $msg:literal) => {{
-    if !matches!($lex.token(), Some($pat)) {
-      return err_msg_token($msg, $lex.token(), $lex.span());
-    }
-  }};
-}
-
 macro_rules! some {
   ($lex:expr, $expr:expr, $msg:literal) => {
     match $expr {

@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use crate::ast;
@@ -17,12 +19,26 @@ pub enum CType<'t> {
   Int,
   Real,
   Str,
+  Record,
   //
   Req(BTreeSet<Requirement>, Box<CType<'t>>),
-  // Alias(Box<CType<'t>>),
-  // Custom(Box<CType<'t>>),
   Apply(Box<CType<'t>>, Box<CType<'t>>),
   Function(Box<CType<'t>>, Box<CType<'t>>),
+}
+
+impl<'t> CType<'t> {
+  fn is_same(&self, other: &Self) -> bool {
+    match (self, other) {
+      (CType::Bool, CType::Bool)
+      | (CType::Int, CType::Int)
+      | (CType::Real, CType::Real)
+      | (CType::Str, CType::Str)
+      | (CType::Record, CType::Record)
+      | (CType::Unknown, CType::Unknown) => true,
+      (CType::NodeType(a), CType::NodeType(b)) => a == b,
+      _ => false,
+    }
+  }
 }
 
 impl<'t> CType<'t> {
@@ -42,6 +58,8 @@ impl<'t> CType<'t> {
       CType::Int => "Int".to_string(),
       CType::Real => "Real".to_string(),
       CType::Str => "Str".to_string(),
+      // This isn't good enough
+      CType::Record => "Record".to_string(),
       CType::Apply(a, b) => {
         let a = a.render(checker);
         let b = b.render(checker);
@@ -61,15 +79,30 @@ impl<'t> CType<'t> {
   }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord)]
 pub enum Requirement {
   Num,
+  Field(FieldId, NameId),
+}
+
+impl PartialOrd for Requirement {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    fn to_tuple(s: &Requirement) -> (usize, usize) {
+      match s {
+        Requirement::Num => (0, 0),
+        Requirement::Field(FieldId(n), _) => (1, *n),
+      }
+    }
+
+    Some(to_tuple(self).cmp(&to_tuple(other)))
+  }
 }
 
 impl Requirement {
-  fn to_name(&self) -> &'static str {
+  fn to_name<'t>(&self, checker: &Checker<'t>) -> &'static str {
     match self {
       Requirement::Num => "Num",
+      Requirement::Field(_, _) => todo!(),
     }
   }
 
@@ -89,11 +122,28 @@ pub enum Node<'t> {
 struct Checker<'t> {
   types: Vec<Node<'t>>,
   names: &'t [Name<'t>],
+  fields: &'t BTreeMap<FieldId, &'t str>,
+}
+
+impl<'t> Checker<'t> {
+  fn field(&self, field: FieldId) -> &'t str {
+    &self.fields[&field]
+  }
+
+  fn raise_to_node(&mut self, ty: CType<'t>) -> NameId {
+    let name = NameId(self.types.len());
+    self.types.push(Node::Ty(Box::new(ty)));
+    name
+  }
 }
 
 type TRes<A> = Result<A, Error>;
 
-pub fn check<'t>(names: &'t Vec<Name<'t>>, defs: &Vec<Def>) -> TRes<Vec<Node<'t>>> {
+pub fn check<'t>(
+  names: &'t Vec<Name<'t>>,
+  defs: &Vec<Def>,
+  fields: &'t BTreeMap<FieldId, &'t str>,
+) -> TRes<Vec<Node<'t>>> {
   // These are the only nodes which should ever be created. Otherwise memory usage will explode.
   let mut checker = Checker {
     types: names
@@ -101,6 +151,7 @@ pub fn check<'t>(names: &'t Vec<Name<'t>>, defs: &Vec<Def>) -> TRes<Vec<Node<'t>
       .map(|_| Node::Ty(Box::new(CType::Unknown)))
       .collect(),
     names,
+    fields,
   };
 
   for def in defs {
@@ -159,13 +210,54 @@ fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
   })
 }
 
+fn record_merge<'t>(
+  checker: &mut Checker<'t>,
+  reqs: BTreeSet<Requirement>,
+  extend_ty: CType<'t>,
+  span: Span,
+) -> TRes<CType<'t>> {
+  Ok(match extend_ty {
+    t @ CType::Unknown | t @ CType::Record | t @ CType::NodeType(_) => {
+      CType::Req(reqs, Box::new(t))
+    }
+    CType::Req(inner_reqs, inner) => {
+      let mut new_inner_reqs = inner_reqs.clone();
+      for req in reqs.iter() {
+        // Overwrite all collisions
+        new_inner_reqs.insert(*req);
+      }
+      CType::Req(new_inner_reqs, inner)
+    }
+    _ => {
+      return error_expected(
+        checker,
+        "Expected a record, but this isn't a record",
+        extend_ty,
+        span,
+      );
+    }
+  })
+}
+
 fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) -> TRes<CType<'t>> {
   Ok(match (a, b) {
     (CType::Unknown, b) => b,
     (a, CType::Unknown) => a,
     (CType::Req(ar, inner_a), CType::Req(br, inner_b)) => {
       let c = unify(checker, *inner_a, *inner_b, span)?;
-      let cr = ar.union(&br).cloned().collect();
+      let mut cr = ar.clone();
+      for bb in br.iter() {
+          match (cr.get(bb), bb) {
+            (Some(Requirement::Field(_, a_id)), Requirement::Field(_, b_id)) => {
+                // TODO: Annotate error with field name
+                unify(checker, CType::NodeType(*a_id), CType::NodeType(*b_id), span)?;
+                cr.insert(*bb);
+            }
+            (None | Some(Requirement::Num | Requirement::Field(_, _)), _) => {
+                cr.insert(*bb);
+            }
+        }
+      }
       check_requirements(checker, span, cr, c)?
     }
     (CType::Req(req, inner_a), inner_b) => {
@@ -199,6 +291,22 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
     (CType::Int, CType::Int) => CType::Int,
     (CType::Real, CType::Real) => CType::Real,
     (CType::Str, CType::Str) => CType::Str,
+    // (CType::Record(ax), CType::Record(bx)) => {
+    //   let mut out = vec![];
+    //   for (aa, bb) in ax.iter().zip(bx.iter()) {
+    //     if aa.0 != bb.0 {
+    //       return error_label(
+    //         checker,
+    //         aa.0.max(bb.0),
+    //         &CType::Record(ax),
+    //         &CType::Record(bx),
+    //         span,
+    //       );
+    //     }
+    //     out.push((aa.0, unify(checker, aa.1.clone(), bb.1.clone(), span)?));
+    //   }
+    //   CType::Record(out)
+    // }
     (CType::Apply(a0, a1), CType::Apply(b0, b1)) => {
       let c0 = unify(checker, *a0, *b0, span)?;
       let c1 = unify(checker, *a1, *b1, span)?;
@@ -224,9 +332,8 @@ fn check_requirements<'t>(
       let c = resolve_ty(checker, name);
       return check_requirements(checker, span, req, c);
     }
-    CType::Req(other, inner) => {
-      let req = req.union(&other).cloned().collect();
-      return check_requirements(checker, span, req, *inner);
+    c@CType::Req(_, _) => {
+      return unify(checker, c, CType::Req(req, Box::new(CType::Unknown)), span);
     }
     //
     CType::Foreign(_) => {
@@ -243,14 +350,22 @@ fn check_requirements<'t>(
     CType::Int
       if req.iter().all(|r| match r {
         Requirement::Num => true,
+        Requirement::Field(_, _) => false,
       }) => {}
     CType::Real
       if req.iter().all(|r| match r {
         Requirement::Num => true,
+        Requirement::Field(_, _) => false,
       }) => {}
     CType::Str
       if req.iter().all(|r| match r {
         Requirement::Num => false,
+        Requirement::Field(_, _) => false,
+      }) => {}
+    CType::Record
+      if req.iter().all(|r| match r {
+        Requirement::Num => false,
+        Requirement::Field(_, _) => true,
       }) => {}
     //
     CType::Apply(_, _) => todo!(),
@@ -323,8 +438,29 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       unify(checker, bind_value_ty, binding_ty, binding.span())?;
       check_expr(checker, next_value)?
     }
-    // TODO
-    Expr::Record { to_extend, fields, span } => CType::Unknown,
+    Expr::Record { to_extend, fields, span } => {
+      let mut reqs = BTreeSet::new();
+      for ((span, field), value) in fields.iter() {
+        let value_ty = check_expr(checker, value)?;
+        let value_node = checker.raise_to_node(value_ty);
+        let field_req = Requirement::Field(*field, value_node);
+        if reqs.contains(&field_req) {
+          panic!(
+            "Multiple of the same field {:?}, {:?}",
+            checker.field(*field),
+            span
+          );
+        }
+        reqs.insert(field_req);
+      }
+      match to_extend {
+        None => CType::Req(reqs, Box::new(CType::Record)),
+        Some(to_extend) => {
+          let extend_ty = check_expr(checker, to_extend)?;
+          record_merge(checker, reqs, extend_ty, *span)?
+        }
+      }
+    }
   })
 }
 
@@ -374,6 +510,7 @@ fn unpack_function<'t>(
     | CType::Int
     | CType::Real
     | CType::Str
+    | CType::Record
     | CType::Req(_, _)
     | CType::Apply(_, _) => {
       return error_expected(
@@ -502,6 +639,21 @@ fn error_unify<'t, A>(
 ) -> Result<A, Error> {
   Err(Error::CheckUnify {
     msg,
+    span,
+    a: a.render(checker),
+    b: b.render(checker),
+  })
+}
+
+fn error_label<'t, A>(
+  checker: &mut Checker<'t>,
+  field: FieldId,
+  a: &CType<'t>,
+  b: &CType<'t>,
+  span: Span,
+) -> Result<A, Error> {
+  Err(Error::CheckExtraLabel {
+    field: checker.field(field).to_owned(),
     span,
     a: a.render(checker),
     b: b.render(checker),

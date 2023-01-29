@@ -1,3 +1,5 @@
+#![feature(box_patterns)]
+
 use std::io::{BufRead, BufReader, BufWriter};
 use std::process::{Command, Stdio};
 
@@ -38,7 +40,7 @@ fn main() {
     Ok(a) => a,
   };
 
-  let types = match type_checker::check(&names, &named_ast) {
+  let types = match type_checker::check(&names, &named_ast, &fields) {
     Err(e) => {
       // TODO: Can this be run per def?
       eprintln!("{}", e.render(Some(&src)));

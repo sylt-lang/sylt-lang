@@ -71,6 +71,13 @@ pub enum Error {
     b: String,
     span: Span,
   },
+
+  CheckExtraLabel {
+    a: String,
+    b: String,
+    field: String,
+    span: Span,
+  },
 }
 
 impl Error {
@@ -233,6 +240,16 @@ impl Error {
         b,
         Self::maybe_render_context(span, source)
       ),
+    
+      Error::CheckExtraLabel { a, b, field, span } => format!(
+        "> Found extra label \"{}\" while unifying records.\n\n{}\n----\n{}\n\n{}",
+        field,
+        a,
+        b,
+        Self::maybe_render_context(span, source)
+      ),
+
+
     }
   }
 }
