@@ -90,12 +90,17 @@ pub enum Pattern {
     inner: Option<(Box<Pattern>, Type)>,
     span: Span,
   },
+
+  Record(Vec<(FieldId, Span, Pattern)>, Span),
 }
 
 impl Pattern {
   pub fn span(&self) -> Span {
     match self {
-      Pattern::Empty(span) | Pattern::Var(_, _, span) | Pattern::EnumConst { span, .. } => *span,
+      Pattern::Empty(span)
+      | Pattern::Var(_, _, span)
+      | Pattern::EnumConst { span, .. }
+      | Pattern::Record(_, span) => *span,
     }
   }
 }
@@ -457,6 +462,19 @@ fn resolve_pattern<'t>(ctx: &mut Ctx<'t>, pat: ast::Pattern<'t>) -> RRes<Pattern
 
       Pattern::EnumConst { ty_name, const_name, inner, span }
     }
+    ast::Pattern::Record(fields, span) => {
+      let fields = fields
+        .into_iter()
+        .map(|((span, field), pat)| {
+          let pat = match pat {
+            Some(pat) => resolve_pattern(ctx, pat)?,
+            None => Pattern::Var(ctx.push_local_var(field, span), None, span),
+          };
+          Ok((ctx.find_field(field), span, pat))
+        })
+        .collect::<RRes<Vec<_>>>()?;
+      Pattern::Record(fields, span)
+    }
   })
 }
 
@@ -558,7 +576,9 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
   })
 }
 
-pub fn resolve<'t>(defs: Vec<ast::Def<'t>>) -> Result<(Vec<Name<'t>>, BTreeMap<FieldId, &'t str>, Vec<Def>), Vec<Error>> {
+pub fn resolve<'t>(
+  defs: Vec<ast::Def<'t>>,
+) -> Result<(Vec<Name<'t>>, BTreeMap<FieldId, &'t str>, Vec<Def>), Vec<Error>> {
   let mut ctx = Ctx::new();
   let mut out = vec![];
   let mut errs = vec![];

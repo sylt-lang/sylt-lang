@@ -65,6 +65,14 @@ impl<'t> Lex<'t> {
 
 pub type PRes<A> = Result<A, Error>;
 
+macro_rules! skip {
+  ($lex:expr, $pat:pat) => {{
+    if matches!($lex.token(), Some($pat)) {
+      $lex.feed();
+    }
+  }};
+}
+
 macro_rules! expect {
   ($lex:expr, $pat:pat, $msg:literal) => {{
     if !matches!($lex.token(), Some($pat)) {
@@ -165,9 +173,8 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
             expect!(lex, Token::Colon, "Expected ':' after record label");
             fields.push(((span, s), expr(lex)?));
             match lex.peek() {
-              (_, Some(Token::RCurl | Token::Pipe)) => {}
-              (_, Some(Token::Comma)) => {
-                lex.feed();
+              (_, Some(Token::Comma | Token::RCurl | Token::Pipe)) => {
+                skip!(lex, Token::Comma);
               }
               (at, token) => {
                 return err_msg_token("Expected '}', '|' or ',' after record label", token, at)
@@ -345,6 +352,42 @@ fn parse_pat<'t>(lex: &mut Lex<'t>) -> PRes<Option<Pattern<'t>>> {
           span,
         );
       }
+    }
+
+    Some(Token::LCurl) => {
+      lex.next();
+      let mut fields = vec![];
+      let end = loop {
+        match lex.next() {
+          (end, Some(Token::RCurl)) => break end,
+          (at, Some(Token::Name(name) | Token::Str(name))) => {
+            let pattern = if let Some(Token::Colon) = lex.token() {
+              lex.next();
+              match parse_pat(lex)? {
+                Some(pat) => Some(pat),
+                None => {
+                  return err_msg_token("Expected a valid pattern here", lex.token(), lex.span())
+                }
+              }
+            } else {
+              None
+            };
+            fields.push(((at, name), pattern));
+            match lex.peek() {
+              (_, Some(Token::Comma | Token::RCurl)) => {
+                skip!(lex, Token::Comma);
+              }
+              (s, t) => {
+                return err_msg_token("Expected '}' or ',' after record pattern field", t, s);
+              }
+            }
+          }
+          (at, tok) => {
+            return err_msg_token("Expected '}' or a record entry in record pattern", tok, at);
+          }
+        }
+      };
+      Pattern::Record(fields, span.merge(end))
     }
 
     t => return err_msg_token("Not a valid pattern", t, span),

@@ -67,13 +67,14 @@ pub enum Pattern<'t> {
     inner: Option<Box<Pattern<'t>>>,
     span: Span,
   },
+  Record(Vec<((Span, &'t str), Option<Pattern<'t>>)>, Span),
   // Value(Expr<'t>),
 }
 
 impl<'t> Pattern<'t> {
   pub fn span(&self) -> Span {
     match self {
-      Pattern::Empty(span) | Pattern::Var(_, _, span) | Pattern::EnumConst { span, .. } => *span,
+      Pattern::Empty(span) | Pattern::Var(_, _, span) | Pattern::EnumConst { span, .. } | Pattern::Record(_, span) => *span,
     }
   }
 }

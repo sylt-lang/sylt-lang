@@ -224,15 +224,13 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
       gen_expr(out, ctx, b)?;
       write!(out, ")")?;
     }
-    Expr::Record { to_extend: None, fields, span: _ } => {
-        gen_record_constant(out, ctx, fields)?
-    }
-    Expr::Record { to_extend: Some(to_extend), fields, span:_ } => {
-        write!(out, "sy_record_merge( ")?;
-        gen_expr(out, ctx, to_extend)?;
-        write!(out, ", ")?;
-        gen_record_constant(out, ctx, fields)?;
-        write!(out, ")")?
+    Expr::Record { to_extend: None, fields, span: _ } => gen_record_constant(out, ctx, fields)?,
+    Expr::Record { to_extend: Some(to_extend), fields, span: _ } => {
+      write!(out, "sy_record_merge( ")?;
+      gen_expr(out, ctx, to_extend)?;
+      write!(out, ", ")?;
+      gen_record_constant(out, ctx, fields)?;
+      write!(out, ")")?
     }
   })
 }
@@ -271,5 +269,13 @@ fn gen_pat(
       gen_pat(out, format!("{}[2]", curr), tmp, ctx, &*inner.0)?
     }
     Pattern::EnumConst { inner: None, .. } => tmp,
+    Pattern::Record(fields, _) => {
+      let mut tmp = tmp;
+      for (field, _, pat) in fields {
+        let field = ctx.field(*field);
+        tmp = gen_pat(out, format!("{}[\"{}\"]", curr, field), tmp, ctx, pat)?;
+      }
+      tmp
+    }
   })
 }

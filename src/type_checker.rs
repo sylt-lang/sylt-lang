@@ -502,6 +502,7 @@ fn check_pattern<'t>(checker: &mut Checker<'t>, binding: &Pattern) -> TRes<CType
         None => ty,
       }
     }
+    Pattern::Record(_, _) => CType::Unknown, // todo!(),
   })
 }
 
