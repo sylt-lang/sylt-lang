@@ -42,6 +42,19 @@ impl<'t> CType<'t> {
 }
 
 impl<'t> CType<'t> {
+  // The public function
+  pub fn render_to_string(
+    &self,
+    types: Vec<Node<'t>>,
+    names: &'t Vec<Name<'t>>,
+    fields: &'t BTreeMap<FieldId, &'t str>,
+  ) -> String {
+    // TODO: We need to clone types for now, but we should be able to not clone it later by
+    // having a mutable borrow - preferably CType shouldn't care about Checker.
+    let mut checker = Checker { types, names, fields };
+    self.render(&mut checker)
+  }
+
   fn render(&self, checker: &mut Checker<'t>) -> String {
     self.render_inner(checker)
   }

@@ -279,7 +279,7 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
   Ok(match ty {
     ast::Type::TEmpty(at) => {
       let frame = ctx.push_frame();
-      let node = ctx.push_local_type("_FILLED_IN_", at);
+      let node = ctx.push_local_type("@", at);
       ctx.pop_frame(frame);
       Type::TNode(node, at)
     }

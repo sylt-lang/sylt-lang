@@ -10,3 +10,4 @@ path = "src/main.rs"
 [dependencies]
 logos = "0.12.1"
 goldentests = "1.1"
+gumdrop = "0.8.1"

@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Span(pub usize, pub usize);
 
@@ -5,6 +7,12 @@ impl Span {
   pub fn merge(self, other: Self) -> Self {
     Self(self.0.min(other.0), self.1.max(other.1))
   }
+}
+
+impl Display for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}-{}", self.0, self.1)
+    }
 }
 
 #[derive(Clone, Debug)]
