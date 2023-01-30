@@ -5,7 +5,7 @@ def main
 :
 = A:A 1
 
---+ expected exit status: 2
+--+ expected exit status: 6
 --+ expected stderr:
 --+ > The enum "A" does not have a constructor named "A"
 --+   6| = A:A 1

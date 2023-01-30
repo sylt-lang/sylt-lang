@@ -11,7 +11,7 @@
 
 def main : _ : = let { a } = { a: "ABC" } in a + 1
 
---+ expected exit status: 3
+--+ expected exit status: 7
 --+ expected stderr:
 --+ > While checking label "a".
 --+ > Failed to merge types.

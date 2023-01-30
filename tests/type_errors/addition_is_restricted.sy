@@ -4,7 +4,7 @@ def x
 : A -> A
 : a = a + a
 
---+ expected exit status: 3
+--+ expected exit status: 7
 --+ expected stderr:
 --+ > A Foreign type cannot have requirements.
 --+ 

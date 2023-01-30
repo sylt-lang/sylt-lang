@@ -7,7 +7,8 @@ def f
 : a b = a + b
 
 -- TODO: Not sure I like the extra lines at the end, maybe shrink the spans whitespace?
---+ expected exit status: 3
+
+--+ expected exit status: 7
 --+ expected stderr:
 --+ > Failed to merge types.
 --+ 

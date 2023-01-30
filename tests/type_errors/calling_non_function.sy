@@ -6,7 +6,7 @@ def f
 : Int
 : = 1
 
---+ expected exit status: 3
+--+ expected exit status: 7
 --+ expected stderr:
 --+ > Failed to merge types.
 --+ 
