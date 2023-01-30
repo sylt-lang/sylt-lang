@@ -1,0 +1,29 @@
+-- Should figure out that the type for this function is `Int -> Int`, it doesn't do that
+def id : _ : a = a
+
+def a : Int : = id ' 1
+def b : Str : = id ' 1
+
+--+ args: -o -t -
+--+ expected stdout:
+--+ 000 V "id" @ 93-95
+--+   used at: [Span(125, 127), Span(148, 150)]
+--+   type: #3
+--+   raw: Child(NameId(3))
+--+ 001 V "a" @ 113-114
+--+   used at: []
+--+   type: Int
+--+   raw: Ty(Int)
+--+ 002 V "b" @ 136-137
+--+   used at: []
+--+   type: Str
+--+   raw: Ty(Str)
+--+ 003 V "@" @ 98-99
+--+   used at: []
+--+   type: Int -> _
+--+   raw: Ty(Function(Int, Unknown))
+--+ 004 V "a" @ 102-103
+--+   used at: [Span(106, 107)]
+--+   type: #3
+--+   raw: Child(NameId(3))
+

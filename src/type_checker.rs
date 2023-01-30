@@ -162,13 +162,14 @@ impl<'t> Checker<'t> {
 
   // This function is really expensive memory wise. Removing a call to this function is big profit!
   fn raise_to_node(&mut self, ty: CType<'t>) -> NameId {
-    let ty = match ty {
-      CType::NodeType(id) => resolve_ty(self, id),
-      ty => ty,
-    };
-    let name = NameId(self.types.len());
-    self.types.push(Node::Ty(Box::new(ty)));
-    name
+    match ty {
+      CType::NodeType(id) => id,
+      ty => {
+        let name = NameId(self.types.len());
+        self.types.push(Node::Ty(Box::new(ty)));
+        name
+      }
+    }
   }
 }
 
@@ -284,7 +285,6 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
       for bb in br.iter() {
         match (cr.get(bb), bb) {
           (Some(Requirement::Field(field, a_id)), Requirement::Field(_, b_id)) => {
-            // TODO: Annotate error with field name
             let u = unify(
               checker,
               CType::NodeType(*a_id),
@@ -309,6 +309,7 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
       let c = unify(checker, inner_a, *inner_b, span)?;
       check_requirements(checker, span, req, c)?
     }
+    // Prevents infinite recursion if we've linked a lot of things, which really isn't a problem.
     (CType::NodeType(a_id), CType::NodeType(b_id))
       if resolve(checker, &a_id) == resolve(checker, &b_id) =>
     {
@@ -317,12 +318,14 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
     (CType::NodeType(a_id), b) => {
       let inner_a = resolve_ty(checker, a_id);
       let c = unify(checker, inner_a, b, span)?;
-      inject(checker, a_id, c)
+      inject(checker, a_id, c);
+      CType::NodeType(a_id)
     }
     (a, CType::NodeType(b_id)) => {
       let inner_b = resolve_ty(checker, b_id);
       let c = unify(checker, a, inner_b, span)?;
-      inject(checker, b_id, c)
+      inject(checker, b_id, c);
+      CType::NodeType(b_id)
     }
     (CType::Foreign(a), CType::Foreign(b)) if a.def_at == b.def_at => CType::Foreign(a),
     (CType::Foreign(a), CType::Foreign(b)) if a.def_at != b.def_at => {
@@ -337,10 +340,8 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
     (CType::Int, CType::Int) => CType::Int,
     (CType::Real, CType::Real) => CType::Real,
     (CType::Str, CType::Str) => CType::Str,
-    (CType::Apply(a0, a1), CType::Apply(b0, b1)) => {
-      let c0 = unify(checker, *a0, *b0, span)?;
-      let c1 = unify(checker, *a1, *b1, span)?;
-      CType::Apply(Box::new(c0), Box::new(c1))
+    (CType::Apply(_a0, _a1), CType::Apply(_b0, _b1)) => {
+      todo!();
     }
     (CType::Function(a0, a1), CType::Function(b0, b1)) => {
       let c0 = unify(checker, *a0, *b0, span)?;
@@ -421,7 +422,7 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
     Expr::EStr(_, _) => CType::Str,
     Expr::Var(name, _) => CType::NodeType(*name),
     Expr::EnumConst { ty_name, value, const_name: _, span } => {
-      let ty = resolve_ty(checker, *ty_name);
+      let ty = CType::NodeType(*ty_name);
       match value {
         Some((expr, exp_ty)) => {
           let expeced_ty = check_type(checker, exp_ty)?;
@@ -441,15 +442,22 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       let f_ty = check_expr(checker, f)?;
       let a_ty = check_expr(checker, a)?;
       // Can this be removed?
-      let return_ty = checker.raise_to_node(CType::Unknown);
-      let f_ty = unify(
+      match unify(
         checker,
         f_ty,
-        CType::Function(Box::new(a_ty), Box::new(CType::NodeType(return_ty))),
+        CType::Function(Box::new(a_ty), Box::new(CType::Unknown)),
         *at,
-      )?;
-      let (_arg_ty, ret_ty) = unpack_function(checker, f_ty, *at)?;
-      ret_ty
+      )? {
+        CType::NodeType(name) => {
+          if let CType::Function(_, ret) = resolve_ty(checker, name) {
+            *ret
+          } else {
+            unreachable!()
+          }
+        }
+        CType::Function(_, ret) => *ret,
+        _ => unreachable!(),
+      }
     }
     Expr::Bin(ast::BinOp::Add(at) | ast::BinOp::Sub(at) | ast::BinOp::Mul(at), a, b, _) => {
       let a_ty = check_expr(checker, a)?;
@@ -512,7 +520,7 @@ fn check_pattern<'t>(checker: &mut Checker<'t>, binding: &Pattern) -> TRes<CType
       }
     }
     Pattern::EnumConst { ty_name, const_name: _, inner, span } => {
-      let ty = resolve_ty(checker, *ty_name);
+      let ty = CType::NodeType(*ty_name);
       match inner {
         Some((pattern, exp_ty)) => {
           let expeced_ty = check_type(checker, exp_ty)?;
@@ -544,38 +552,7 @@ fn check_pattern<'t>(checker: &mut Checker<'t>, binding: &Pattern) -> TRes<CType
   })
 }
 
-fn unpack_function<'t>(
-  checker: &mut Checker<'t>,
-  f_ty: CType<'t>,
-  at: Span,
-) -> TRes<(CType<'t>, CType<'t>)> {
-  Ok(match f_ty {
-    CType::NodeType(name) => {
-      let ty = resolve_ty(checker, name);
-      unpack_function(checker, ty, at)?
-    }
-    CType::Function(a, r) => (*a, *r),
-    CType::Unknown
-    | CType::Foreign(_)
-    | CType::Bool
-    | CType::Int
-    | CType::Real
-    | CType::Str
-    | CType::Record
-    | CType::Req(_, _)
-    | CType::Apply(_, _) => {
-      return error_expected(
-        checker,
-        "Expected a function, but got something else",
-        f_ty,
-        at,
-      )
-    }
-  })
-}
-
 fn resolve<'t>(checker: &mut Checker<'t>, NameId(slot): &NameId) -> NameId {
-  // TODO union find
   match checker.types[*slot] {
     Node::Child(parent) => {
       let at = resolve(checker, &parent);
@@ -586,6 +563,7 @@ fn resolve<'t>(checker: &mut Checker<'t>, NameId(slot): &NameId) -> NameId {
   }
 }
 
+// Think twice before using this function, it's usually better to keep thinks linked.
 fn resolve_ty<'t>(checker: &mut Checker<'t>, a: NameId) -> CType<'t> {
   let NameId(slot) = resolve(checker, &a);
   if let Node::Ty(ty) = checker.types[slot].clone() {
@@ -595,14 +573,13 @@ fn resolve_ty<'t>(checker: &mut Checker<'t>, a: NameId) -> CType<'t> {
   }
 }
 
-fn inject<'t>(checker: &mut Checker<'t>, a_id: NameId, c: CType<'t>) -> CType<'t> {
+fn inject<'t>(checker: &mut Checker<'t>, a_id: NameId, c: CType<'t>) {
   let NameId(slot) = resolve(checker, &a_id);
   match &c {
     CType::NodeType(c) if c == &a_id => panic!("Typechecker bug!"),
     CType::NodeType(c) if c != &a_id => checker.types[slot] = Node::Child(*c),
     c => checker.types[slot] = Node::Ty(Box::new(c.clone())),
   }
-  c
 }
 
 fn unify_params<'t>(
@@ -648,7 +625,7 @@ fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> TRes<CType<'t>> {
       let b_ty = check_type(checker, b)?;
       CType::Apply(Box::new(a_ty), Box::new(b_ty))
     }
-    Type::TNode(slot, _) => resolve_ty(checker, *slot),
+    Type::TNode(slot, _) => CType::NodeType(*slot),
     Type::TFunction(a, b, _) => {
       let a_ty = check_type(checker, a)?;
       let b_ty = check_type(checker, b)?;
