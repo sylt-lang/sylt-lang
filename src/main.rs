@@ -115,8 +115,8 @@ fn main() {
         match &names.get(i) {
           Some(name) => writeln!(
             out,
-            "{:03} V {:?} @ {}\n  used at: {:?}\n  type: {}",
-            i, name.name, name.def_at, name.usages, rendered_type
+            "{:03} V {:?} @ {}\n  used at: {:?}\n  type: {}\n  raw: {:?}",
+            i, name.name, name.def_at, name.usages, rendered_type, t
           ),
           None => writeln!(out, "{:03} N {}", i, rendered_type),
         }

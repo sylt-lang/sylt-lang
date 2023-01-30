@@ -160,6 +160,7 @@ impl<'t> Checker<'t> {
     &self.fields[&field]
   }
 
+  // This function is really expensive memory wise. Removing a call to this function is big profit!
   fn raise_to_node(&mut self, ty: CType<'t>) -> NameId {
     let ty = match ty {
       CType::NodeType(id) => resolve_ty(self, id),
@@ -439,10 +440,12 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
     Expr::Bin(ast::BinOp::Call(at), f, a, _) => {
       let f_ty = check_expr(checker, f)?;
       let a_ty = check_expr(checker, a)?;
+      // Can this be removed?
+      let return_ty = checker.raise_to_node(CType::Unknown);
       let f_ty = unify(
         checker,
         f_ty,
-        CType::Function(Box::new(a_ty), Box::new(CType::Unknown)),
+        CType::Function(Box::new(a_ty), Box::new(CType::NodeType(return_ty))),
         *at,
       )?;
       let (_arg_ty, ret_ty) = unpack_function(checker, f_ty, *at)?;
