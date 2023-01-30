@@ -1,32 +1,14 @@
-BUILD := build
-MAIN := main.sy
-RESOURCES := res
+.PHONY: b t r build test run
 
-MAIN_LOVE = $(patsubst %.sy,%.love,$(MAIN))
-SYLT := target/debug/sylt
+r: run
+t: test
+b: build
 
-.PHONY: all clean run $(SYLT)
+run: build
+	cargo run -- a.src
 
-all: $(MAIN_LOVE)
+test: build
+	cargo test --quiet
 
-run: $(MAIN_LOVE)
-	love $<
-
-%.love: %.lua | $(BUILD)
-	mv $< $(BUILD)/main.lua
-	cp -r $(RESOURCES)/* $(BUILD)/
-	zip -9 -j $@ $(BUILD)/*
-
-%.lua: %.sy $(SYLT)
-	$(SYLT) --compile $@ $<
-
-$(SYLT):
-	cargo build
-
-clean:
-	rm -rf *.lua
-	rm -rf *.love
-	rm -rf $(BUILD)
-
-$(BUILD):
-	mkdir -p $@
+build:
+	cargo build 
