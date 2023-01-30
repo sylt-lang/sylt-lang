@@ -226,10 +226,14 @@ pub fn check<'t>(
 fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
   Ok(match def {
     Def::Def { ty, name, args, body, span } => {
-      let (def_ty, ret) = unify_params(checker, ty, args.as_slice())?;
-      unify(checker, CType::NodeType(*name), def_ty, *span)?;
+      let ty = check_type(checker, ty)?;
       let body = check_expr(checker, body)?;
-      unify(checker, body, ret, *span)?;
+      let mut def_ty = body;
+      for arg in args.iter().rev() {
+          def_ty = CType::Function(Box::new(CType::NodeType(*arg)), Box::new(def_ty));
+      }
+      let name_ty = unify(checker, CType::NodeType(*name), def_ty, *span)?;
+      unify(checker, name_ty, ty, *span)?;
     }
     Def::ForiegnDef { ty, name, span } => {
       let def_ty = check_type(checker, ty)?;
@@ -579,38 +583,6 @@ fn inject<'t>(checker: &mut Checker<'t>, a_id: NameId, c: CType<'t>) {
     CType::NodeType(c) if c == &a_id => panic!("Typechecker bug!"),
     CType::NodeType(c) if c != &a_id => checker.types[slot] = Node::Child(*c),
     c => checker.types[slot] = Node::Ty(Box::new(c.clone())),
-  }
-}
-
-fn unify_params<'t>(
-  checker: &mut Checker<'t>,
-  ty: &Type,
-  args: &[NameId],
-) -> TRes<(CType<'t>, CType<'t>)> {
-  if args.is_empty() {
-    let out = check_type(checker, ty)?;
-    Ok((out.clone(), out.clone()))
-  } else {
-    match ty {
-      Type::TFunction(a, rest, at) => {
-        let head = args[0];
-        let tail = &args[1..];
-        let param_node = resolve(checker, &head);
-        let a_ty = check_type(checker, a)?;
-        let param = unify(checker, a_ty, CType::NodeType(param_node), *at)?;
-        let (def_ty, ret) = unify_params(checker, rest, tail)?;
-        Ok((CType::Function(Box::new(param), Box::new(def_ty)), ret))
-      }
-      Type::TInt(_)
-      | Type::TReal(_)
-      | Type::TStr(_)
-      | Type::TBool(_)
-      | Type::TApply(_, _, _)
-      | Type::TNode(_, _) => {
-        let out = check_type(checker, ty)?;
-        Ok((out.clone(), out.clone()))
-      }
-    }
   }
 }
 
