@@ -8,7 +8,8 @@ run: build
 	cargo run -- a.src
 
 test: build
-	cargo test --quiet
+	@cargo test --quiet
+	@echo $(shell echo "Ran `find tests -type f | wc -l` golden tests")
 
 build:
 	cargo build 
