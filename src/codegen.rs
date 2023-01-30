@@ -163,10 +163,6 @@ fn gen_let_binding(
   }
 }
 
-fn gen_tmp_var(Span(lo, hi): &Span) -> TmpVar {
-  TmpVar(lo ^ hi)
-}
-
 fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
   Ok(match body {
     Expr::Let { bind_value, binding, next_value } => {
