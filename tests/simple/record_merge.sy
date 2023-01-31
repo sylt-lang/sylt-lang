@@ -1,11 +1,12 @@
-foreign -[[ function show(a)
+def show : _ : = foreign
+-[[
+function (a)
   for k, v in pairs(a) do
     print(k, v)
   end
 end
 ]]-
 
-def show : _ : = foreign
 
 def a : _ : = { a: 0, c: 1 }
 

@@ -1,7 +1,6 @@
 enum A = B Int
 
-foreign -[[ function f(x) return "!" .. tostring(x) end ]]-
-def f : Int -> Str : = foreign
+def f : Int -> Str : = foreign -[[ function(x) return "!" .. tostring(x) end ]]-
 
 def main : Str : = f ' 1
 
