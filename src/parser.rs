@@ -502,9 +502,18 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
         );
       }
       lex.next();
+
+      let foreign_block = match lex.peek() {
+        (span, Some(Token::ForiegnBlock(source))) => {
+          lex.next();
+          Some((source, span))
+        }
+        _ => None,
+      };
+
       let end = lex.span();
       let span = start.merge(end);
-      Ok(Some(Def::ForiegnDef { name, ty, span }))
+      Ok(Some(Def::ForiegnDef { name, ty, span, foreign_block }))
     } else {
       let body = expr(lex)?;
 
@@ -626,22 +635,6 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
     Ok(Some(Def::Enum { name, args, constructors, span }))
   }
 
-  fn ffi_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Def<'t>>> {
-    if !matches!(lex.token(), Some(Token::KwForiegn)) {
-      return Ok(None);
-    };
-    lex.next();
-
-    match expect!(
-      lex,
-      Token::ForiegnBlock(_),
-      "A foreign code-block was expected after the foreign keyword"
-    ) {
-      (span, Some(Token::ForiegnBlock(source))) => Ok(Some(Def::ForeignBlock { span, source })),
-      _ => unreachable!("Checked in the expect before"),
-    }
-  }
-
   let d = (|| {
     match def_(lex)? {
       Some(x) => return Ok(Some(x)),
@@ -652,10 +645,6 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
       None => {}
     }
     match enum_(lex)? {
-      Some(x) => return Ok(Some(x)),
-      None => {}
-    }
-    match ffi_(lex)? {
       Some(x) => return Ok(Some(x)),
       None => {}
     }

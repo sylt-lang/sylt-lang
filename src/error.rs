@@ -10,9 +10,9 @@ impl Span {
 }
 
 impl Display for Span {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}-{}", self.0, self.1)
-    }
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}-{}", self.0, self.1)
+  }
 }
 
 #[derive(Clone, Debug)]

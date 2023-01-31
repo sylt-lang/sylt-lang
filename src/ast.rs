@@ -19,6 +19,7 @@ pub enum Def<'t> {
     ty: Type<'t>,
     name: Name<'t>,
     span: Span,
+    foreign_block: Option<(&'t str, Span)>,
   },
   Type {
     name: ProperName<'t>,
@@ -36,11 +37,6 @@ pub enum Def<'t> {
     name: ProperName<'t>,
     span: Span,
   },
-
-  ForeignBlock {
-    source: &'t str,
-    span: Span,
-  },
 }
 
 impl<'t> Def<'t> {
@@ -51,8 +47,6 @@ impl<'t> Def<'t> {
       | Def::Type { name: ProperName(str, span), .. }
       | Def::Enum { name: ProperName(str, span), .. }
       | Def::ForiegnType { name: ProperName(str, span), .. } => Some((str, *span)),
-
-      Def::ForeignBlock { .. } => None,
     }
   }
 }
@@ -74,7 +68,10 @@ pub enum Pattern<'t> {
 impl<'t> Pattern<'t> {
   pub fn span(&self) -> Span {
     match self {
-      Pattern::Empty(span) | Pattern::Var(_, _, span) | Pattern::EnumConst { span, .. } | Pattern::Record(_, span) => *span,
+      Pattern::Empty(span)
+      | Pattern::Var(_, _, span)
+      | Pattern::EnumConst { span, .. }
+      | Pattern::Record(_, span) => *span,
     }
   }
 }

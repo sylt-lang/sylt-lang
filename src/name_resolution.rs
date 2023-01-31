@@ -38,6 +38,7 @@ pub enum Def {
     ty: Type,
     name: NameId,
     span: Span,
+    foreign_block: Option<String>,
   },
   Type {
     name: NameId,
@@ -55,8 +56,6 @@ pub enum Def {
     name: NameId,
     span: Span,
   },
-
-  ForeignBlock,
 }
 
 #[derive(Debug, Clone)]
@@ -516,10 +515,11 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       ctx.pop_frame(frame);
       Def::Def { ty, name, args, body, span }
     }
-    ast::Def::ForiegnDef { ty, name: ast::Name(name, _), span } => {
+    ast::Def::ForiegnDef { ty, name: ast::Name(name, _), span, foreign_block } => {
       let ty = resolve_ty(ctx, ty)?;
       let name = ctx.find_name(name).unwrap();
-      Def::ForiegnDef { ty, name, span }
+      let foreign_block = foreign_block.map(|(source, _)| source.to_owned());
+      Def::ForiegnDef { ty, name, span, foreign_block }
     }
     ast::Def::Type { name: ast::ProperName(name, _), args, body, span } => {
       let name = ctx.find_name(name).unwrap();
@@ -571,8 +571,6 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
 
       Def::Enum { name, args, constructors, span }
     }
-
-    ast::Def::ForeignBlock { .. } => Def::ForeignBlock,
   })
 }
 
@@ -609,7 +607,6 @@ pub fn resolve<'t>(
       (None, ast::Def::Enum { .. }) => {
         ctx.push_global_type(name, at);
       }
-      (None, ast::Def::ForeignBlock { .. }) => unreachable!(),
     }
   }
 
@@ -621,7 +618,6 @@ pub fn resolve<'t>(
     // TODO, handle type definitions here
     match (ctx.find_name(name), d) {
       (None, _) => unreachable!(),
-      (_, ast::Def::ForeignBlock { .. }) => unreachable!(),
 
       (_, ast::Def::ForiegnDef { .. })
       | (_, ast::Def::Def { .. })

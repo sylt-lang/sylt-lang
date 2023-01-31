@@ -78,7 +78,7 @@ fn main() {
   }
 
   // TODO[et]: How slow is this clone?
-  let (names, fields, named_ast) = match name_resolution::resolve(ast.clone()) {
+  let (names, fields, named_ast) = match name_resolution::resolve(ast) {
     Err(errs) => {
       for e in errs.iter() {
         eprintln!("{}", e.render(Some(&src)));
@@ -137,7 +137,7 @@ fn main() {
             Box::new(File::create(&path).expect("Failed to write lua to file")) as Box<dyn Write>
           }
         });
-        match codegen::gen(&mut code, &ast, &types, &names, &fields, &named_ast) {
+        match codegen::gen(&mut code, &types, &names, &fields, &named_ast) {
           Err(err) => {
             eprintln!("file error: {:?}", err);
             exit(4);
@@ -153,7 +153,7 @@ fn main() {
       .expect("Didn't find a `lua` executable");
     let mut out = lua.stdin.as_mut().unwrap();
     let mut code = BufWriter::new(&mut out);
-    match codegen::gen(&mut code, &ast, &types, &names, &fields, &named_ast) {
+    match codegen::gen(&mut code, &types, &names, &fields, &named_ast) {
       Err(err) => {
         eprintln!("file error: {:?}", err);
         exit(4);

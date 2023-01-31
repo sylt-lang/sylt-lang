@@ -211,8 +211,6 @@ pub fn check<'t>(
         let x = CType::NodeType(*name);
         unify(&mut checker, x, CType::Foreign(&names[*slot]), *span)?;
       }
-
-      Def::ForeignBlock { .. } => { /* Do nothing */ }
     }
   }
 
@@ -230,12 +228,12 @@ fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
       let body = check_expr(checker, body)?;
       let mut def_ty = body;
       for arg in args.iter().rev() {
-          def_ty = CType::Function(Box::new(CType::NodeType(*arg)), Box::new(def_ty));
+        def_ty = CType::Function(Box::new(CType::NodeType(*arg)), Box::new(def_ty));
       }
       let name_ty = unify(checker, CType::NodeType(*name), def_ty, *span)?;
       unify(checker, name_ty, ty, *span)?;
     }
-    Def::ForiegnDef { ty, name, span } => {
+    Def::ForiegnDef { ty, name, span, foreign_block: _ } => {
       let def_ty = check_type(checker, ty)?;
       unify(checker, CType::NodeType(*name), def_ty, *span)?;
     }
@@ -246,7 +244,7 @@ fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
       // TODO! More needs to be done here, mainly with higher order types and stuff
     }
 
-    Def::ForeignType { .. } | Def::ForeignBlock { .. } => { /* Do nothing */ }
+    Def::ForeignType { .. } => { /* Do nothing */ }
   })
 }
 
