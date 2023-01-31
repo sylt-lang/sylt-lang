@@ -91,6 +91,11 @@ pub enum Pattern {
   },
 
   Record(Vec<(FieldId, Span, Pattern)>, Span),
+
+  PBool(bool, Span),
+  PInt(i64, Span),
+  PReal(f64, Span),
+  PStr(String, Span),
 }
 
 impl Pattern {
@@ -99,6 +104,10 @@ impl Pattern {
       Pattern::Empty(span)
       | Pattern::Var(_, _, span)
       | Pattern::EnumConst { span, .. }
+      | Pattern::PBool(_, span)
+      | Pattern::PInt(_, span)
+      | Pattern::PReal(_, span)
+      | Pattern::PStr(_, span)
       | Pattern::Record(_, span) => *span,
     }
   }
@@ -474,6 +483,10 @@ fn resolve_pattern<'t>(ctx: &mut Ctx<'t>, pat: ast::Pattern<'t>) -> RRes<Pattern
         .collect::<RRes<Vec<_>>>()?;
       Pattern::Record(fields, span)
     }
+    ast::Pattern::PBool(b, span) => Pattern::PBool(b, span),
+    ast::Pattern::PInt(i, span) => Pattern::PInt(i, span),
+    ast::Pattern::PReal(r, span) => Pattern::PReal(r, span),
+    ast::Pattern::PStr(s, span) => Pattern::PStr(s.to_owned(), span),
   })
 }
 

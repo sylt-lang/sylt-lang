@@ -62,6 +62,10 @@ pub enum Pattern<'t> {
     span: Span,
   },
   Record(Vec<((Span, &'t str), Option<Pattern<'t>>)>, Span),
+  PBool(bool, Span),
+  PInt(i64, Span),
+  PReal(f64, Span),
+  PStr(&'t str, Span),
   // Value(Expr<'t>),
 }
 
@@ -71,7 +75,11 @@ impl<'t> Pattern<'t> {
       Pattern::Empty(span)
       | Pattern::Var(_, _, span)
       | Pattern::EnumConst { span, .. }
-      | Pattern::Record(_, span) => *span,
+      | Pattern::Record(_, span)
+      | Pattern::PBool(_, span)
+      | Pattern::PInt(_, span)
+      | Pattern::PReal(_, span)
+      | Pattern::PStr(_, span) => *span,
     }
   }
 }

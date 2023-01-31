@@ -34,3 +34,7 @@ function sy_record_merge(a, b)
   end
   return out
 end
+
+function _sy_intern_check_pattern(kind, expected, given)
+  assert(expected == given, "Invalid pattern match: " .. tostring(expected) .. " != " .. tostring(given))
+end

@@ -551,6 +551,10 @@ fn check_pattern<'t>(checker: &mut Checker<'t>, binding: &Pattern) -> TRes<CType
       }
       CType::Req(reqs, Box::new(CType::Unknown))
     }
+    Pattern::PBool(_, _) => CType::Bool,
+    Pattern::PInt(_, _) => CType::Int,
+    Pattern::PReal(_, _) => CType::Real,
+    Pattern::PStr(_, _) => CType::Str,
   })
 }
 

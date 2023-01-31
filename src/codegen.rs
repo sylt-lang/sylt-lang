@@ -135,7 +135,7 @@ fn gen_let_binding(
   write!(out, " = ")?;
   gen_expr(out, ctx, bind_value)?;
   write!(out, "\n")?;
-  let tmp = gen_pat(out, tmp.out(), tmp.next(), ctx, binding)?;
+  gen_pat(out, tmp.out(), ctx, binding)?;
   match next_value {
     Expr::Let { bind_value, binding, next_value } => {
       gen_let_binding(out, ctx, tmp.next(), bind_value, binding, next_value)
@@ -232,30 +232,31 @@ fn gen_record_constant(
 fn gen_pat(
   out: &mut dyn Write,
   curr: String,
-  tmp: TmpVar,
   ctx: Ctx,
   binding: &Pattern,
-) -> Result<TmpVar> {
+) -> Result<()> {
   Ok(match binding {
-    Pattern::Empty(_) => tmp,
+    Pattern::Empty(_) => (),
     Pattern::Var(name, inner, _) => {
       write!(out, "local {} = {}\n", ctx.var(*name), curr)?;
       match inner {
-        Some(inner) => gen_pat(out, curr, tmp, ctx, inner)?,
-        None => tmp,
+        Some(inner) => gen_pat(out, curr, ctx, inner)?,
+        None => (),
       }
     }
     Pattern::EnumConst { inner: Some(inner), .. } => {
-      gen_pat(out, format!("{}[2]", curr), tmp, ctx, &*inner.0)?
+      gen_pat(out, format!("{}[2]", curr), ctx, &*inner.0)?
     }
-    Pattern::EnumConst { inner: None, .. } => tmp,
+    Pattern::EnumConst { inner: None, .. } => (),
     Pattern::Record(fields, _) => {
-      let mut tmp = tmp;
       for (field, _, pat) in fields {
         let field = ctx.field(*field);
-        tmp = gen_pat(out, format!("{}[\"{}\"]", curr, field), tmp, ctx, pat)?;
+        gen_pat(out, format!("{}[\"{}\"]", curr, field), ctx, pat)?;
       }
-      tmp
     }
+    Pattern::PBool(x, _) => write!(out, "_sy_intern_check_pattern(0, {}, {})\n", x, curr)?,
+    Pattern::PInt(x, _) => write!(out, "_sy_intern_check_pattern(1, {}, {})\n", x, curr)?,
+    Pattern::PReal(x, _) => write!(out, "_sy_intern_check_pattern(2, {}, {})\n", x, curr)?,
+    Pattern::PStr(x, _) => write!(out, "_sy_intern_check_pattern(3, {}, {})\n", x, curr)?,
   })
 }

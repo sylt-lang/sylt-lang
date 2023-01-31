@@ -390,6 +390,27 @@ fn parse_pat<'t>(lex: &mut Lex<'t>) -> PRes<Option<Pattern<'t>>> {
       Pattern::Record(fields, span.merge(end))
     }
 
+    Some(Token::True) => {
+      lex.next();
+      Pattern::PBool(true, span)
+    }
+    Some(Token::False) => {
+      lex.next();
+      Pattern::PBool(false, span)
+    }
+    Some(Token::Int(i)) => {
+      lex.next();
+      Pattern::PInt(i.parse().expect("Error in Int regex!"), span)
+    }
+    Some(Token::Real(r)) => {
+      lex.next();
+      Pattern::PReal(r.parse().expect("Error in Real regex!"), span)
+    }
+    Some(Token::Str(s)) => {
+      lex.next();
+      Pattern::PStr(s, span)
+    }
+
     t => return err_msg_token("Not a valid pattern", t, span),
   }))
 }
