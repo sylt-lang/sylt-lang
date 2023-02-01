@@ -1,0 +1,10 @@
+def fac : Int -> Int : i
+  = match i
+    with 0 -> 1
+    with _ -> i * (fac ' i - 1)
+    end
+
+def main : Int := let 5040 = fac ' 7 in 1
+
+--+ expected stdout: 1
+

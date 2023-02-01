@@ -1,0 +1,11 @@
+def fib : Int -> Int : i
+  = match i
+    with 0 -> 1
+    with 1 -> 1
+    with _ -> (fib ' i - 1) + (fib ' i - 2)
+    end
+
+def main : Int := let 21 = fib ' 7 in 1
+
+--+ expected stdout: 1
+
