@@ -94,7 +94,7 @@ pub enum Error {
 }
 
 impl Error {
-  fn render_context(at: &Span, source: &str) -> String {
+  fn render_context(at: &Span, source: &str) -> Option<String> {
     let mut line_nr = 1;
     let mut line_start = 0;
 
@@ -114,7 +114,7 @@ impl Error {
       }
     }
 
-    match (span_start, span_end) {
+    Some(match (span_start, span_end) {
       (Some((start_line, start_at, start_offset)), Some((end_line, _end_at, end_offset)))
         if start_line == end_line =>
       {
@@ -162,15 +162,15 @@ impl Error {
           .map(|(offset, line)| format!("{:>3}| {}\n", start_line + offset, line))
           .collect::<String>()
       }
-      (a, b) => {
-        unreachable!("Passed in the wrong string, didn't find the spans that should exist, please fix the compiler {:?} {:?}", a, b)
+      _ => {
+        return None;
       }
-    }
+    })
   }
 
   fn maybe_render_context(at: &Span, source: Option<&str>) -> String {
     source
-      .map(|s| Self::render_context(at, s))
+      .map(|s| Self::render_context(at, s).unwrap_or_else(|| "  Reached EoF".to_string()))
       .unwrap_or("".to_string())
   }
 
