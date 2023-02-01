@@ -212,6 +212,9 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
       gen_record_constant(out, ctx, fields)?;
       write!(out, ")")?
     }
+    Expr::Match { value, branches, span } => {
+      todo!();
+    }
   })
 }
 
@@ -229,12 +232,7 @@ fn gen_record_constant(
   write!(out, "}}")
 }
 
-fn gen_pat(
-  out: &mut dyn Write,
-  curr: String,
-  ctx: Ctx,
-  binding: &Pattern,
-) -> Result<()> {
+fn gen_pat(out: &mut dyn Write, curr: String, ctx: Ctx, binding: &Pattern) -> Result<()> {
   Ok(match binding {
     Pattern::Empty(_) => (),
     Pattern::Var(name, inner, _) => {

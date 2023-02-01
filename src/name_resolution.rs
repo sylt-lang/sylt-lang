@@ -114,6 +114,14 @@ impl Pattern {
 }
 
 #[derive(Debug, Clone)]
+pub struct WithBranch {
+  pub pattern: Pattern,
+  pub condition: Option<Expr>,
+  pub value: Expr,
+  pub span: Span,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expr {
   EBool(bool, Span),
   EInt(i64, Span),
@@ -138,6 +146,14 @@ pub enum Expr {
     bind_value: Box<Expr>,
     binding: Pattern,
     next_value: Box<Expr>,
+  },
+
+  Match {
+    value: Box<Expr>,
+
+    // Non-empty
+    branches: Vec<WithBranch>,
+    span: Span,
   },
 
   Un(ast::UnOp, Box<Expr>, Span),
@@ -437,7 +453,24 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
         at,
       )
     }
-    ast::Expr::Match { value, branches, span } => todo!(),
+    ast::Expr::Match { value, branches, span } => {
+      let value = Box::new(resolve_expr(ctx, *value)?);
+
+      let branches = branches
+        .into_iter()
+        .map(|ast::WithBranch { pattern, condition, value, span }| {
+          let frame = ctx.push_frame();
+          let pattern = resolve_pattern(ctx, pattern)?;
+          let condition = condition.map(|c| resolve_expr(ctx, c)).transpose()?;
+          let value = resolve_expr(ctx, value)?;
+          ctx.pop_frame(frame);
+
+          Ok(WithBranch { pattern, condition, value, span })
+        })
+        .collect::<RRes<Vec<WithBranch>>>()?;
+
+      Expr::Match { value, branches, span }
+    }
   })
 }
 

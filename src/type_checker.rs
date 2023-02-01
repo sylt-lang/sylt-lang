@@ -505,6 +505,31 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
         }
       }
     }
+    Expr::Match { value, branches, span: _ } => {
+        let mut outer_match_ty = check_expr(checker, value)?;
+
+        // NOTE[et]: There's different ways of doing this, it might be more nice to depth-first
+        // instead of breath first.
+        for WithBranch { pattern, condition: _, value: _, span } in branches.iter() {
+            let pattern_ty = check_pattern(checker, pattern)?;
+            outer_match_ty = unify(checker, pattern_ty, outer_match_ty, *span)?;
+        }
+
+        for WithBranch { pattern: _, condition, value: _, span } in branches.iter() {
+            if let Some(condition) = condition {
+                let condition_ty = check_expr(checker, condition)?;
+                unify(checker, condition_ty, CType::Bool, *span)?;
+            }
+        }
+
+        let mut ret_ty = CType::Unknown;
+        for WithBranch { pattern: _, condition: _, value, span } in branches.iter() {
+            let value_ty = check_expr(checker, value)?;
+            ret_ty = unify(checker, value_ty, ret_ty, *span)?;
+        }
+
+        ret_ty
+    }
   })
 }
 
