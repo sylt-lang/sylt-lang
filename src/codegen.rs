@@ -212,8 +212,30 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
       gen_record_constant(out, ctx, fields)?;
       write!(out, ")")?
     }
-    Expr::Match { value, branches, span } => {
-      todo!();
+    Expr::Match { value, branches, span: _ } => {
+      write!(out, "(function(match_value)\n")?;
+      write!(out, "local succ = nil\n_msg = nil\n")?;
+      for WithBranch { pattern, condition, value, span: _  } in branches.iter() {
+          write!(out, "succ, _msg = pcall(function()\n    ")?;
+          gen_pat(out, "match_value".to_string(), ctx, pattern)?;
+          write!(out, "end)\n")?;
+          write!(out, "if succ ")?;
+          if let Some(condition) = condition {
+              write!(out, "and (function() return ")?;
+              gen_expr(out, ctx, condition)?;
+              write!(out, " end)() then\n")?;
+          } else {
+              write!(out, "then\n")?;
+          }
+          gen_pat(out, "match_value".to_string(), ctx, pattern)?;
+          write!(out, "return ")?;
+          gen_expr(out, ctx, value)?;
+          write!(out, "\nend\n")?;
+      }
+      write!(out, "print(\"NO BRANCH!\")\n")?;
+      write!(out, "end)(")?;
+      gen_expr(out, ctx, value)?;
+      write!(out, ")\n")?;
     }
   })
 }
