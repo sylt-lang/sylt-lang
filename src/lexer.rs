@@ -43,6 +43,14 @@ pub enum Token<'t> {
   KwIn,
   #[token("@")]
   KwAtSign,
+  #[token("match")]
+  KwMatch,
+  #[token("with")]
+  KwWith,
+  #[token("if")]
+  KwIf,
+  #[token("end")]
+  KwEnd,
 
   #[regex(r#"-\[\["#, |lex| {
       match lex.remainder().find("]]-") {
@@ -116,6 +124,10 @@ impl<'t> Token<'t> {
       Token::KwLet => "keyword `let`".to_string(),
       Token::KwIn => "keyword `in`".to_string(),
       Token::KwAtSign => "keyword `@`".to_string(),
+      Token::KwMatch => "keyword `match`".to_string(),
+      Token::KwWith => "keyword `with`".to_string(),
+      Token::KwIf => "keyword `if`".to_string(),
+      Token::KwEnd => "keyword `end`".to_string(),
 
       Token::OpNeg => "operator `!`".to_string(),
       Token::OpAdd => "operator `+`".to_string(),

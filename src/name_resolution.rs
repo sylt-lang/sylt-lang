@@ -437,6 +437,7 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
         at,
       )
     }
+    ast::Expr::Match { value, branches, span } => todo!(),
   })
 }
 

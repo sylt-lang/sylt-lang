@@ -75,10 +75,14 @@ macro_rules! skip {
 
 macro_rules! expect {
   ($lex:expr, $pat:pat, $msg:literal) => {{
-    if !matches!($lex.token(), Some($pat)) {
-      return err_msg_token($msg, $lex.token(), $lex.span());
+    match $lex.token() {
+      Some($pat) => {
+          $lex.feed()
+      }
+      _ => {
+          return err_msg_token($msg, $lex.token(), $lex.span());
+      }
     }
-    $lex.feed()
   }};
 }
 
@@ -276,6 +280,60 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
             next_value: Box::new(next_value),
           }
         }
+
+        Some(Token::KwMatch) => {
+          let value = Box::new(expr(lex)?);
+
+          let mut branches = Vec::new();
+          while matches!(lex.token(), Some(Token::KwWith)) {
+            lex.next();
+            let pattern = match parse_pat(lex)? {
+              Some(pattern) => pattern,
+              None => {
+                return err_msg_token(
+                  "Expected a pattern after 'with' in the match body",
+                  lex.token(),
+                  lex.span(),
+                )
+              }
+            };
+
+            let condition = if matches!(lex.token(), Some(Token::KwIf)) {
+              lex.next();
+              Some(expr(lex)?)
+            } else {
+              None
+            };
+
+            expect!(
+              lex,
+              Token::KwArrow,
+              "Expected '->' after the 'if' condition"
+            );
+
+            let value = expr(lex)?;
+
+            let span = pattern.span().merge(value.span());
+            branches.push(WithBranch { pattern, condition, value, span });
+          }
+
+          let (end_span, _) = expect!(
+            lex,
+            Token::KwEnd,
+            "Expected the match-expression to end with `end`"
+          );
+
+          if branches.is_empty() {
+            return err_msg(
+              "A 'match' expression requires at least one with branch",
+              span,
+            );
+          }
+
+          let span = end_span.merge(span);
+          Expr::Match { value, branches, span }
+        }
+
         t => return err_msg_token("Not a valid start of the expression", t, span),
       })
     }

@@ -66,7 +66,6 @@ pub enum Pattern<'t> {
   PInt(i64, Span),
   PReal(f64, Span),
   PStr(&'t str, Span),
-  // Value(Expr<'t>),
 }
 
 impl<'t> Pattern<'t> {
@@ -88,6 +87,14 @@ impl<'t> Pattern<'t> {
 pub struct EnumConst<'t> {
   pub tag: ProperName<'t>,
   pub ty: Option<Type<'t>>,
+  pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct WithBranch<'t> {
+  pub pattern: Pattern<'t>,
+  pub condition: Option<Expr<'t>>,
+  pub value: Expr<'t>,
   pub span: Span,
 }
 
@@ -117,12 +124,15 @@ pub enum Expr<'t> {
 
     next_value: Box<Expr<'t>>,
   },
-  // Match {
-  //   value: Box<Expr<'t>>,
-  //
-  //   // Non-empty
-  //   branches: Vec<(Pattern<'t>, Option<Expr<'t>>, Expr<'t>)>,
-  // },
+
+  Match {
+    value: Box<Expr<'t>>,
+
+    // Non-empty
+    branches: Vec<WithBranch<'t>>,
+    span: Span,
+  },
+
   Un(UnOp, Box<Expr<'t>>),
   Bin(BinOp, Box<Expr<'t>>, Box<Expr<'t>>),
 }
@@ -135,6 +145,7 @@ impl<'t> Expr<'t> {
       | Expr::EStr(_, span)
       | Expr::EBool(_, span)
       | Expr::Var(_, span)
+      | Expr::Match { span, .. }
       | Expr::Record { span, .. } => *span,
 
       Expr::Let { binding, bind_value: _, next_value } => next_value.span().merge(binding.span()),
