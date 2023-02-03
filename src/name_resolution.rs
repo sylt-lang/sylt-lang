@@ -67,6 +67,7 @@ pub struct EnumConst {
 
 #[derive(Debug, Clone)]
 pub enum Type {
+  TGeneric(_), // Hmmm...
   TApply(Box<Type>, Box<Type>, Span),
 
   TNode(NameId, Span),
@@ -358,11 +359,11 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
       },
       span,
     ),
-    ast::Type::TFunction(a, b, span) => Type::TFunction(
-      Box::new(resolve_ty(ctx, *a)?),
-      Box::new(resolve_ty(ctx, *b)?),
-      span,
-    ),
+    ast::Type::TFunction(a, b, span) => {
+      let a = Box::new(resolve_ty(ctx, *a)?);
+      let b = Box::new(resolve_ty(ctx, *b)?);
+      Type::TFunction(a, b, span)
+    }
     ast::Type::TRecord { fields, span } => {
       let fields = fields
         .into_iter()
@@ -373,6 +374,13 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
         })
         .collect::<RRes<Vec<(Span, FieldId, Type)>>>()?;
       Type::TRecord { fields, span }
+    }
+    ast::Type::TForall(ast::Name(name, at), inner, _) => {
+        let frame = ctx.push_frame();
+        let nameId = ctx.push_local_type(name, at);
+        let inner = resolve_ty(ctx, *inner)?;
+        ctx.pop_frame(frame);
+        inner
     }
   })
 }

@@ -475,6 +475,23 @@ pub fn type_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {
   fn peek_term<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {
     let (span, head) = lex.peek();
     Ok(Some(match head {
+      Some(Token::KwForall) => {
+        lex.next();
+        let (at, name) = match expect!(lex, Token::Name(_), "Expected a type-variable name") {
+          (at, Some(Token::Name(name))) => (at, name),
+          _ => unreachable!(),
+        };
+
+        let (end, _) = expect!(lex, Token::Period, "Expected '.' to end the 'forall'");
+
+        let inner = some!(
+          lex,
+          type_(lex)?,
+          "Expected a type following the `forall`"
+        );
+
+        Type::TForall(Name(name, at), Box::new(inner), span.merge(end))
+      }
       Some(Token::Name("_")) => {
         lex.next();
 
@@ -656,17 +673,6 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
     expect!(lex, Token::Equal, "Expected a `=` to start the type body");
 
     if matches!(lex.token(), Some(Token::KwForiegn)) {
-      if !args.is_empty() {
-        let span = args
-          .iter()
-          .map(|Name(_, span)| *span)
-          .reduce(|a, b| a.merge(b))
-          .unwrap();
-        return err_msg(
-          "A foreign type may not take arguments, please remove them",
-          span,
-        );
-      }
       lex.next();
       let end = lex.span();
       let span = start.merge(end);

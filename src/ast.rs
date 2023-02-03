@@ -210,6 +210,7 @@ pub enum Type<'t> {
     span: Span,
   },
   TVar(Name<'t>, Span),
+  TForall(Name<'t>, Box<Type<'t>>, Span),
   TFunction(Box<Type<'t>>, Box<Type<'t>>, Span),
   TRecord {
     fields: Vec<(Span, &'t str, Type<'t>)>,
@@ -223,6 +224,7 @@ impl<'t> Type<'t> {
       Type::TEmpty(span)
       | Type::TCustom { span, .. }
       | Type::TVar(_, span)
+      | Type::TForall(_, _, span)
       | Type::TFunction(_, _, span)
       | Type::TRecord { span, .. } => *span,
     }

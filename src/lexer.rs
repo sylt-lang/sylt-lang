@@ -51,6 +51,8 @@ pub enum Token<'t> {
   KwIf,
   #[token("end")]
   KwEnd,
+  #[token("forall")]
+  KwForall,
 
   #[regex(r#"-\[\["#, |lex| {
       match lex.remainder().find("]]-") {
@@ -128,6 +130,7 @@ impl<'t> Token<'t> {
       Token::KwWith => "keyword `with`".to_string(),
       Token::KwIf => "keyword `if`".to_string(),
       Token::KwEnd => "keyword `end`".to_string(),
+      Token::KwForall => "keyword `forall`".to_string(),
 
       Token::OpNeg => "operator `!`".to_string(),
       Token::OpAdd => "operator `+`".to_string(),
