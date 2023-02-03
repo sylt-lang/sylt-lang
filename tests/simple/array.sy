@@ -1,0 +1,27 @@
+
+type Unit = foreign
+type Array a = foreign
+
+def singletone
+  : forall a. a -> Array a
+  :
+  = foreign -[[ function(a) return { a } end ]]-
+
+def concat
+  : forall a. Array a -> Array a -> Array a
+  :
+  = foreign -[[ function(a) return function(b) return { table.unpack(a), table.unpack(b) } end end ]]-
+
+def print_array
+  : forall a. Array a -> Unit
+  :
+  = foreign -[[ function(xs) for k, v in pairs(xs) do print(k, v) end end ]]-
+
+
+def main
+  : Unit
+  :
+  = 
+  let a = singletone ' 1
+  let b = singletone ' 2
+  in print_array ' (concat ' a ' b)

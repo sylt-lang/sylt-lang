@@ -21,6 +21,7 @@ pub struct Name<'t> {
   pub name: &'t str,
   pub is_type: bool,
   pub is_foreign: bool,
+  pub is_generic: bool,
   pub def_at: Span,
   pub usages: Vec<Span>,
 }
@@ -67,7 +68,6 @@ pub struct EnumConst {
 
 #[derive(Debug, Clone)]
 pub enum Type {
-  TGeneric(_), // Hmmm...
   TApply(Box<Type>, Box<Type>, Span),
 
   TNode(NameId, Span),
@@ -209,39 +209,44 @@ impl<'t> Ctx<'t> {
     _global: bool,
     is_type: bool,
     is_foreign: bool,
+    is_generic: bool,
     name: &'t str,
     def_at: Span,
   ) -> NameId {
     let id = NameId(self.names.len());
     self
       .names
-      .push(Name { is_type, is_foreign, name, def_at, usages: vec![] });
+      .push(Name { is_type, is_foreign, is_generic, name, def_at, usages: vec![] });
     self.stack.push(id);
     id
   }
 
   fn push_local_var(&mut self, name: &'t str, def_at: Span) -> NameId {
-    self.push_var(false, false, false, name, def_at)
+    self.push_var(false, false, false, false, name, def_at)
   }
 
   fn push_global_var(&mut self, name: &'t str, def_at: Span) -> NameId {
-    self.push_var(true, false, false, name, def_at)
+    self.push_var(true, false, false, false, name, def_at)
   }
 
   fn push_local_type(&mut self, name: &'t str, def_at: Span) -> NameId {
-    self.push_var(false, true, false, name, def_at)
+    self.push_var(false, true, false, false, name, def_at)
   }
 
   fn push_global_type(&mut self, name: &'t str, def_at: Span) -> NameId {
-    self.push_var(true, true, false, name, def_at)
+    self.push_var(true, true, false, false, name, def_at)
   }
 
   fn push_global_type_foreign(&mut self, name: &'t str, def_at: Span) -> NameId {
-    self.push_var(true, true, true, name, def_at)
+    self.push_var(true, true, true, false, name, def_at)
   }
 
   fn push_global_var_foreign(&mut self, name: &'t str, def_at: Span) -> NameId {
-    self.push_var(true, false, true, name, def_at)
+    self.push_var(true, false, true, false, name, def_at)
+  }
+
+  fn push_generic(&mut self, name: &'t str, def_at: Span) -> NameId {
+    self.push_var(true, false, true, true, name, def_at)
   }
 
   fn read_name(&mut self, name: &'t str, at: Span) -> Option<NameId> {
@@ -375,9 +380,9 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
         .collect::<RRes<Vec<(Span, FieldId, Type)>>>()?;
       Type::TRecord { fields, span }
     }
-    ast::Type::TForall(ast::Name(name, at), inner, _) => {
+    ast::Type::TForall(ast::Name(name, at), inner, _span) => {
         let frame = ctx.push_frame();
-        let nameId = ctx.push_local_type(name, at);
+        ctx.push_generic(name, at);
         let inner = resolve_ty(ctx, *inner)?;
         ctx.pop_frame(frame);
         inner

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::cmp::Ordering;
+use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
@@ -15,6 +16,7 @@ pub enum CType<'t> {
   Unknown,
   Foreign(&'t Name<'t>),
   // Is this a good idea to code here?
+  Generic(usize),
   Bool,
   Int,
   Real,
@@ -83,7 +85,6 @@ impl<'t> CType<'t> {
         let b = b.render(checker);
         format!("{} -> {}", a, b)
       }
-
       CType::Req(rs, t) => {
         let t = t.render(checker);
         let rs = rs
@@ -92,6 +93,9 @@ impl<'t> CType<'t> {
           .collect::<Vec<String>>()
           .join(", ");
         format!("([{}] => {})", rs, t)
+      }
+      CType::Generic(i) => {
+        format!("#{}", *i)
       }
     }
   }
@@ -184,7 +188,14 @@ pub fn check<'t>(
   let mut checker = Checker {
     types: names
       .iter()
-      .map(|_| Node::Ty(Box::new(CType::Unknown)))
+      .enumerate()
+      .map(|(i, Name { is_generic, .. })| {
+        if *is_generic {
+          Node::Ty(Box::new(CType::Generic(i)))
+        } else {
+          Node::Ty(Box::new(CType::Unknown))
+        }
+      })
       .collect(),
     names,
     fields,
@@ -343,8 +354,10 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
     (CType::Int, CType::Int) => CType::Int,
     (CType::Real, CType::Real) => CType::Real,
     (CType::Str, CType::Str) => CType::Str,
-    (CType::Apply(_a0, _a1), CType::Apply(_b0, _b1)) => {
-      todo!();
+    (CType::Apply(a0, a1), CType::Apply(b0, b1)) => {
+      let c0 = unify(checker, *a0, *b0, span)?;
+      let c1 = unify(checker, *a1, *b1, span)?;
+      CType::Apply(Box::new(c0), Box::new(c1))
     }
     (CType::Function(a0, a1), CType::Function(b0, b1)) => {
       let c0 = unify(checker, *a0, *b0, span)?;
@@ -423,7 +436,7 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
     Expr::EInt(_, _) => CType::Int,
     Expr::EReal(_, _) => CType::Real,
     Expr::EStr(_, _) => CType::Str,
-    Expr::Var(name, _) => CType::NodeType(*name),
+    Expr::Var(name, _) => specialize_if_needed(checker, CType::NodeType(*name)),
     Expr::EnumConst { ty_name, value, const_name: _, span } => {
       let ty = CType::NodeType(*ty_name);
       match value {
@@ -532,6 +545,72 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       ret_ty
     }
   })
+}
+
+fn specialize_if_needed<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> CType<'t> {
+  fn specialize_inner<'t>(
+    checker: &mut Checker<'t>,
+    ty: CType<'t>,
+    given_names: &mut BTreeMap<usize, NameId>,
+  ) -> CType<'t> {
+    match ty {
+      CType::Unknown
+      | CType::Foreign(_)
+      | CType::Bool
+      | CType::Int
+      | CType::Real
+      | CType::Str
+      | CType::Record => ty,
+
+      CType::Generic(i) => match given_names.entry(i) {
+        Entry::Vacant(v) => {
+          let new_node = checker.raise_to_node(CType::Unknown);
+          v.insert(new_node);
+          CType::NodeType(new_node)
+        }
+        Entry::Occupied(o) => CType::NodeType(*o.get()),
+      },
+
+      CType::Req(reqs, inner) => CType::Req(
+        reqs.clone(),
+        Box::new(specialize_inner(checker, *inner, given_names)),
+      ),
+      CType::Apply(a, b) => {
+        let a = Box::new(specialize_inner(checker, *a, given_names));
+        let b = Box::new(specialize_inner(checker, *b, given_names));
+        CType::Apply(a, b)
+      }
+      CType::Function(a, b) => {
+        let a = Box::new(specialize_inner(checker, *a, given_names));
+        let b = Box::new(specialize_inner(checker, *b, given_names));
+        CType::Function(a, b)
+      }
+      CType::NodeType(node) => {
+        // NOTE[et]: I dislike this - maybe we should have two function, one that looks for generics and
+        // one that copies, and we only copy the types when we absolutely need to?
+        match resolve_ty(checker, node) {
+          CType::Unknown
+          | CType::Foreign(_)
+          | CType::Bool
+          | CType::Int
+          | CType::Real
+          | CType::Str
+          | CType::Record => CType::NodeType(node),
+
+          CType::NodeType(_)
+          | CType::Generic(_)
+          | CType::Req(_, _)
+          | CType::Apply(_, _)
+          | CType::Function(_, _) => {
+            let inner = resolve_ty(checker, node);
+            specialize_inner(checker, inner, given_names)
+          }
+        }
+      }
+    }
+  }
+
+  specialize_inner(checker, ty, &mut BTreeMap::new())
 }
 
 fn check_pattern<'t>(checker: &mut Checker<'t>, binding: &Pattern) -> TRes<CType<'t>> {
