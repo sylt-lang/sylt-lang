@@ -161,6 +161,12 @@ pub enum Expr {
     span: Span,
   },
 
+  Lambda {
+      args: Vec<Pattern>,
+      body: Box<Expr>,
+      span: Span,
+  },
+
   Un(ast::UnOp, Box<Expr>, Span),
   Bin(ast::BinOp, Box<Expr>, Box<Expr>, Span),
 }
@@ -498,6 +504,17 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
         .collect::<RRes<Vec<WithBranch>>>()?;
 
       Expr::Match { value, branches, span }
+    }
+    ast::Expr::Lambda { args, body, span } => {
+      let frame = ctx.push_frame();
+      let args = args
+        .into_iter()
+        .map(|binding| resolve_pattern(ctx, binding))
+        .collect::<RRes<Vec<_>>>()?;
+      let body = Box::new(resolve_expr(ctx, *body)?);
+      ctx.pop_frame(frame);
+
+      Expr::Lambda { args, body, span }
     }
   })
 }

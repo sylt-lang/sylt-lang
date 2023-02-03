@@ -133,6 +133,12 @@ pub enum Expr<'t> {
     span: Span,
   },
 
+  Lambda {
+    args: Vec<Pattern<'t>>,
+    body: Box::<Expr<'t>>,
+    span: Span,
+  },
+
   Un(UnOp, Box<Expr<'t>>),
   Bin(BinOp, Box<Expr<'t>>, Box<Expr<'t>>),
 }
@@ -146,6 +152,7 @@ impl<'t> Expr<'t> {
       | Expr::EBool(_, span)
       | Expr::Var(_, span)
       | Expr::Match { span, .. }
+      | Expr::Lambda { span, .. }
       | Expr::Record { span, .. } => *span,
 
       Expr::Let { binding, bind_value: _, next_value } => next_value.span().merge(binding.span()),

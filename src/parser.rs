@@ -240,6 +240,20 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
           let expr = record_inner(lex, span)?;
           expr
         }
+        Some(Token::KwLambda) => {
+          let mut args = vec![];
+          loop {
+            match parse_pat(lex)? {
+              Some(pat) => args.push(pat),
+              _ => break,
+            }
+          }
+          expect!(lex, Token::KwArrow, "Expected a `->` to start the lambda body");
+          let body = Box::new(expr(lex)?);
+
+          let span = body.span().merge(span);
+          Expr::Lambda { args, body, span }
+        }
         Some(Token::KwLet) => {
           let binding = match parse_pat(lex)? {
             Some(binding) => binding,
@@ -484,11 +498,7 @@ pub fn type_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {
 
         let (end, _) = expect!(lex, Token::Period, "Expected '.' to end the 'forall'");
 
-        let inner = some!(
-          lex,
-          type_(lex)?,
-          "Expected a type following the `forall`"
-        );
+        let inner = some!(lex, type_(lex)?, "Expected a type following the `forall`");
 
         Type::TForall(Name(name, at), Box::new(inner), span.merge(end))
       }

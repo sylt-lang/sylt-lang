@@ -28,3 +28,11 @@ def main
   let a = singletone ' "A"
   let b = singletone ' "B"
   in print_array ' (concat ' a ' b)
+
+--+ expected stdout:
+--+ 1	1
+--+ 2	2
+--+ 1	A
+--+ 2	B
+--+ nil
+

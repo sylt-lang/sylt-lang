@@ -547,6 +547,16 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
 
       ret_ty
     }
+
+    Expr::Lambda { args, body, span: _ } => {
+      let body = check_expr(checker, body)?;
+      let mut def_ty = body;
+      for arg in args.iter().rev() {
+        let arg = check_pattern(checker, arg)?;
+        def_ty = CType::Function(Box::new(arg), Box::new(def_ty));
+      }
+      def_ty
+    }
   })
 }
 

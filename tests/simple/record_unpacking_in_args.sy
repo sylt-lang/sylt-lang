@@ -4,3 +4,6 @@ type R = { a: Int }
 def r_to_a : R -> Int : { a } = a
 
 def main : Int : = r_to_a ' { a: 2 }
+
+--+ expected stdout: 2
+

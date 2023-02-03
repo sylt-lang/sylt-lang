@@ -275,6 +275,9 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
       gen_expr(out, ctx, value)?;
       write!(out, ")\n")?;
     }
+    Expr::Lambda { args, body, span: _ } => {
+      gen_function(out, ctx, args, body)?;
+    }
   })
 }
 
