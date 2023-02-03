@@ -215,6 +215,12 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
       gen_expr(out, ctx, expr)?;
       write!(out, ")")?;
     }
+    Expr::Un(ast::UnOp::Not(_), expr, _) => {
+      write!(out, "(not ")?;
+      gen_expr(out, ctx, expr)?;
+      write!(out, ")")?;
+    }
+    Expr::Bin(ast::BinOp::RevCall(_), _, _, _) => unreachable!("Should be compiled to `Call`"),
     Expr::Bin(ast::BinOp::Call(_), a, b, _) => {
       write!(out, "(")?;
       write!(out, "(")?;
@@ -236,7 +242,14 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
           ast::BinOp::Sub(_) => "-",
           ast::BinOp::Div(_) => "/",
           ast::BinOp::Mul(_) => "*",
+          ast::BinOp::And(_) => "and",
+          ast::BinOp::Or(_) => "or",
           ast::BinOp::Call(_) => unreachable!(),
+          ast::BinOp::RevCall(_) => unreachable!(),
+          ast::BinOp::Lt(_) => "<",
+          ast::BinOp::LtEq(_) => "<=",
+          ast::BinOp::Eq(_) => "==",
+          ast::BinOp::Neq(_) => "~=",
         }
       )?;
       gen_expr(out, ctx, b)?;
@@ -257,17 +270,22 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
         write!(out, "succ, _msg = pcall(function()\n    ")?;
         gen_pat(out, "match_value".to_string(), ctx, pattern)?;
         write!(out, "end)\n")?;
-        write!(out, "if succ ")?;
+        write!(out, "if succ then ")?;
         if let Some(condition) = condition {
-          write!(out, "and (function() return ")?;
+          gen_pat(out, "match_value".to_string(), ctx, pattern)?;
+          write!(out, "if ")?;
           gen_expr(out, ctx, condition)?;
-          write!(out, " end)() then\n")?;
-        } else {
           write!(out, "then\n")?;
+
+          write!(out, "return ")?;
+          gen_expr(out, ctx, value)?;
+
+          write!(out, "end\n")?;
+        } else {
+            gen_pat(out, "match_value".to_string(), ctx, pattern)?;
+            write!(out, "return ")?;
+            gen_expr(out, ctx, value)?;
         }
-        gen_pat(out, "match_value".to_string(), ctx, pattern)?;
-        write!(out, "return ")?;
-        gen_expr(out, ctx, value)?;
         write!(out, "\nend\n")?;
       }
       write!(out, "print(\"NO BRANCH!\")\n")?;

@@ -80,6 +80,23 @@ pub enum Token<'t> {
   OpDiv,
   #[token("'")]
   OpCall,
+  #[token("#")]
+  OpRevCall,
+  #[token("and")]
+  OpAnd,
+  #[token("or")]
+  OpOr,
+  #[token("not")]
+  OpNot,
+  #[token("<")]
+  OpLt,
+  #[token("<=")]
+  OpLtEq,
+  #[token("==")]
+  OpEq,
+  #[token("!=")]
+  OpNeq,
+
 
   #[token("(")]
   LParen,
@@ -141,6 +158,14 @@ impl<'t> Token<'t> {
       Token::OpMul => "operator `*`".to_string(),
       Token::OpDiv => "operator `/`".to_string(),
       Token::OpCall => "operator `'`".to_string(),
+      Token::OpRevCall => "operator `#`".to_string(),
+      Token::OpAnd => "operator `and`".to_string(),
+      Token::OpOr => "operator `or`".to_string(),
+      Token::OpNot => "operator `not`".to_string(),
+      Token::OpLt => "operator `<`".to_string(),
+      Token::OpLtEq => "operator `<=`".to_string(),
+      Token::OpEq => "operator `==`".to_string(),
+      Token::OpNeq => "operator `!=`".to_string(),
 
       Token::LParen => "a `(`".to_string(),
       Token::RParen => "a `)`".to_string(),

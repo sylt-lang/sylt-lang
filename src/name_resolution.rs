@@ -478,6 +478,16 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
       let at = op.span().merge(expr.span());
       Expr::Un(op, Box::new(resolve_expr(ctx, *expr)?), at)
     }
+    ast::Expr::Bin(ast::BinOp::RevCall(op_at), a, b) => {
+      let at = a.span().merge(b.span());
+      Expr::Bin(
+        ast::BinOp::Call(op_at),
+        // Note the swapped order
+        Box::new(resolve_expr(ctx, *b)?),
+        Box::new(resolve_expr(ctx, *a)?),
+        at,
+      )
+    }
     ast::Expr::Bin(op, a, b) => {
       let at = a.span().merge(b.span());
       Expr::Bin(

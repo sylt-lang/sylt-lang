@@ -418,8 +418,8 @@ fn check_requirements<'t>(
         Requirement::Field(_, _) => true,
       }) => {}
     //
-    CType::Apply(_, _) => todo!(),
-    CType::Function(_, _) => todo!(),
+    // CType::Apply(_, _) => todo!(),
+    // CType::Function(_, _) => todo!(),
     _ => {
       return error_req(
         checker,
@@ -457,6 +457,11 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       let expr_ty = check_expr(checker, expr)?;
       unify(checker, expr_ty, CType::Int, *at)?
     }
+    Expr::Un(ast::UnOp::Not(at), expr, _) => {
+      let expr_ty = check_expr(checker, expr)?;
+      unify(checker, expr_ty, CType::Bool, *at)?
+    }
+    Expr::Bin(ast::BinOp::RevCall(_), _, _, _) => unreachable!("Compiled to `Call`"),
     Expr::Bin(ast::BinOp::Call(at), f, a, _) => {
       let f_ty = check_expr(checker, f)?;
       let a_ty = check_expr(checker, a)?;
@@ -484,7 +489,19 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       let c_ty = unify(checker, a_ty, b_ty, *at)?;
       unify(checker, c_ty, Requirement::Num.to_ctype(), *at)?
     }
-
+    Expr::Bin(ast::BinOp::Neq(at) | ast::BinOp::Eq(at) | ast::BinOp::Lt(at) | ast::BinOp::LtEq(at), a, b, _) => {
+      let a_ty = check_expr(checker, a)?;
+      let b_ty = check_expr(checker, b)?;
+      let c_ty = unify(checker, a_ty, b_ty, *at)?;
+      unify(checker, c_ty, Requirement::Num.to_ctype(), *at)?;
+      CType::Bool
+    }
+    Expr::Bin(ast::BinOp::And(at) | ast::BinOp::Or(at), a, b, _) => {
+      let a_ty = check_expr(checker, a)?;
+      let b_ty = check_expr(checker, b)?;
+      let c_ty = unify(checker, a_ty, b_ty, *at)?;
+      unify(checker, c_ty, CType::Bool, *at)?
+    }
     Expr::Bin(ast::BinOp::Div(at), a, b, _) => {
       let a_ty = check_expr(checker, a)?;
       let b_ty = check_expr(checker, b)?;

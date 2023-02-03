@@ -177,12 +177,14 @@ impl<'t> Expr<'t> {
 #[derive(Debug, Clone, Copy)]
 pub enum UnOp {
   Neg(Span),
+  Not(Span),
 }
 
 impl UnOp {
   pub fn span(&self) -> Span {
     match self {
-      UnOp::Neg(span) => *span,
+      UnOp::Not(span)
+      | UnOp::Neg(span) => *span,
     }
   }
 }
@@ -194,6 +196,13 @@ pub enum BinOp {
   Div(Span),
   Mul(Span),
   Call(Span),
+  RevCall(Span),
+  And(Span),
+  Or(Span),
+  Lt(Span),
+  LtEq(Span),
+  Eq(Span),
+  Neq(Span),
 }
 
 impl BinOp {
@@ -203,7 +212,14 @@ impl BinOp {
       | BinOp::Sub(span)
       | BinOp::Div(span)
       | BinOp::Mul(span)
-      | BinOp::Call(span) => *span,
+      | BinOp::And(span)
+      | BinOp::Or(span)
+      | BinOp::Lt(span)
+      | BinOp::LtEq(span)
+      | BinOp::Eq(span)
+      | BinOp::Neq(span)
+      | BinOp::Call(span)
+      | BinOp::RevCall(span) => *span,
     }
   }
 }

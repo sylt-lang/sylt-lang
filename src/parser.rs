@@ -101,6 +101,7 @@ enum Prec {
   Comp,
   BoolAnd,
   BoolOr,
+  RevCall,
   Call,
 
   No,
@@ -113,10 +114,11 @@ fn next_prec(p: Prec) -> Prec {
     Prec::Factor => Prec::Factor,
     Prec::Term => Prec::Factor,
     Prec::Comp => Prec::Term,
-    Prec::BoolAnd => Prec::Comp,
+    Prec::BoolAnd => Prec::BoolAnd,
     Prec::BoolOr => Prec::BoolAnd,
 
-    Prec::Call => Prec::BoolOr,
+    Prec::RevCall => Prec::BoolOr,
+    Prec::Call => Prec::RevCall,
 
     Prec::No => Prec::Call,
   }
@@ -130,7 +132,16 @@ fn op_to_prec(t: BinOp) -> Prec {
     BinOp::Mul(_) => Prec::Factor,
     BinOp::Div(_) => Prec::Factor,
 
+    BinOp::And(_) => Prec::BoolAnd,
+    BinOp::Or(_) => Prec::BoolOr,
+
+    BinOp::RevCall(_) => Prec::RevCall,
     BinOp::Call(_) => Prec::Call,
+
+    BinOp::Lt(_) => Prec::Comp,
+    BinOp::LtEq(_) => Prec::Comp,
+    BinOp::Eq(_) => Prec::Comp,
+    BinOp::Neq(_) => Prec::Comp,
   }
 }
 
@@ -203,6 +214,7 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
       Ok(match token {
         None => return err_eof(span),
         Some(Token::OpNeg) => Expr::Un(UnOp::Neg(span), Box::new(prefix(lex)?)),
+        Some(Token::OpNot) => Expr::Un(UnOp::Not(span), Box::new(prefix(lex)?)),
         Some(Token::Name(str)) => Expr::Var(Name(str, span), span),
         Some(Token::True) => Expr::EBool(true, span),
         Some(Token::False) => Expr::EBool(false, span),
@@ -358,6 +370,15 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
         Token::OpMul => BinOp::Mul(span),
         Token::OpDiv => BinOp::Div(span),
         Token::OpCall => BinOp::Call(span),
+        Token::OpRevCall => BinOp::RevCall(span),
+
+        Token::OpLt => BinOp::Lt(span),
+        Token::OpLtEq => BinOp::LtEq(span),
+        Token::OpEq => BinOp::Eq(span),
+        Token::OpNeq => BinOp::Neq(span),
+
+        Token::OpAnd => BinOp::And(span),
+        Token::OpOr => BinOp::Or(span),
 
         _ => return None,
       })
