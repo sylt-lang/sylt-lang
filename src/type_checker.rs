@@ -290,6 +290,10 @@ fn record_merge<'t>(
 }
 fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) -> TRes<CType<'t>> {
   Ok(match (a, b) {
+    (CType::Generic(_), _) | (_, CType::Generic(_)) => {
+      panic!("Generic in unification, something is wrong!")
+    }
+    (a, CType::Unknown) => a,
     (a, b) if a == b => a,
     (CType::Unknown, b) => b,
     (a, CType::Unknown) => a,
