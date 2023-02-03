@@ -58,6 +58,7 @@ pub fn gen<'t>(
   names: &[Name<'t>],
   fields: &BTreeMap<FieldId, &'t str>,
   named_ast: &[Def],
+  gen_module: bool,
 ) -> Result<()> {
   writeln!(out, "-- BEGIN PREAMBLE\n{}\n-- END PREAMBLE\n\n", PREAMBLE)?;
 
@@ -74,18 +75,53 @@ pub fn gen<'t>(
     gen_def(out, ctx, def)?;
   }
 
+  let mut exports = vec![];
   for def in named_ast {
     match def {
-      // TODO: Fix this
       Def::Def { name: name @ NameId(slot), .. }
         if names[*slot].name == "main" && names[*slot].is_type == false =>
       {
-        write!(out, "print({}) -- TODO, don't\n", ctx.var(*name))?;
+        exports.push(("main", ctx.var(*name)));
+      }
+      Def::Def { name: name @ NameId(slot), .. }
+        if gen_module && names[*slot].name == "update" && names[*slot].is_type == false =>
+      {
+        exports.push(("update", ctx.var(*name)));
+      }
+      Def::Def { name: name @ NameId(slot), .. }
+        if gen_module && names[*slot].name == "draw" && names[*slot].is_type == false =>
+      {
+        exports.push(("draw", ctx.var(*name)));
+      }
+      Def::Def { name: name @ NameId(slot), .. }
+        if gen_module && names[*slot].name == "init" && names[*slot].is_type == false =>
+      {
+        exports.push(("init", ctx.var(*name)));
       }
       _ => { /* Do nothing */ }
     }
   }
-  Ok(())
+  if gen_module {
+    writeln!(
+      out,
+      "return {{ {} }}",
+      exports
+        .into_iter()
+        .map(|(lua_name, sy_name)| format!("[\"{}\"] = {}", lua_name, sy_name))
+        .collect::<Vec<String>>()
+        .join(", ")
+    )
+  } else {
+    writeln!(
+      out,
+      "print({})",
+      exports
+        .into_iter()
+        .map(|(_lua_name, sy_name)| format!("{}", sy_name))
+        .collect::<Vec<String>>()
+        .join(", ")
+    )
+  }
 }
 
 fn gen_def(out: &mut dyn Write, ctx: Ctx, def: &Def) -> Result<()> {
@@ -215,22 +251,22 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
     Expr::Match { value, branches, span: _ } => {
       write!(out, "(function(match_value)\n")?;
       write!(out, "local succ = nil\n_msg = nil\n")?;
-      for WithBranch { pattern, condition, value, span: _  } in branches.iter() {
-          write!(out, "succ, _msg = pcall(function()\n    ")?;
-          gen_pat(out, "match_value".to_string(), ctx, pattern)?;
-          write!(out, "end)\n")?;
-          write!(out, "if succ ")?;
-          if let Some(condition) = condition {
-              write!(out, "and (function() return ")?;
-              gen_expr(out, ctx, condition)?;
-              write!(out, " end)() then\n")?;
-          } else {
-              write!(out, "then\n")?;
-          }
-          gen_pat(out, "match_value".to_string(), ctx, pattern)?;
-          write!(out, "return ")?;
-          gen_expr(out, ctx, value)?;
-          write!(out, "\nend\n")?;
+      for WithBranch { pattern, condition, value, span: _ } in branches.iter() {
+        write!(out, "succ, _msg = pcall(function()\n    ")?;
+        gen_pat(out, "match_value".to_string(), ctx, pattern)?;
+        write!(out, "end)\n")?;
+        write!(out, "if succ ")?;
+        if let Some(condition) = condition {
+          write!(out, "and (function() return ")?;
+          gen_expr(out, ctx, condition)?;
+          write!(out, " end)() then\n")?;
+        } else {
+          write!(out, "then\n")?;
+        }
+        gen_pat(out, "match_value".to_string(), ctx, pattern)?;
+        write!(out, "return ")?;
+        gen_expr(out, ctx, value)?;
+        write!(out, "\nend\n")?;
       }
       write!(out, "print(\"NO BRANCH!\")\n")?;
       write!(out, "end)(")?;

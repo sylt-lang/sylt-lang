@@ -49,6 +49,13 @@ struct Args {
     help = "don't automaticallt run the program - parse and typecheck and codegen only if codegen is writen to file"
   )]
   only_compile: bool,
+
+  #[options(
+    no_short,
+    long = "love",
+    help = "codegen a love module instead of just running main"
+  )]
+  love: bool,
 }
 
 fn main() {
@@ -137,7 +144,7 @@ fn main() {
             Box::new(File::create(&path).expect("Failed to write lua to file")) as Box<dyn Write>
           }
         });
-        match codegen::gen(&mut code, &types, &names, &fields, &named_ast) {
+        match codegen::gen(&mut code, &types, &names, &fields, &named_ast, args.love) {
           Err(err) => {
             eprintln!("file error: {:?}", err);
             exit(4);
@@ -153,7 +160,7 @@ fn main() {
       .expect("Didn't find a `lua` executable");
     let mut out = lua.stdin.as_mut().unwrap();
     let mut code = BufWriter::new(&mut out);
-    match codegen::gen(&mut code, &types, &names, &fields, &named_ast) {
+    match codegen::gen(&mut code, &types, &names, &fields, &named_ast, args.love) {
       Err(err) => {
         eprintln!("file error: {:?}", err);
         exit(4);

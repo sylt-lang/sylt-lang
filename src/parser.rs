@@ -76,11 +76,9 @@ macro_rules! skip {
 macro_rules! expect {
   ($lex:expr, $pat:pat, $msg:literal) => {{
     match $lex.token() {
-      Some($pat) => {
-          $lex.feed()
-      }
+      Some($pat) => $lex.feed(),
       _ => {
-          return err_msg_token($msg, $lex.token(), $lex.span());
+        return err_msg_token($msg, $lex.token(), $lex.span());
       }
     }
   }};
