@@ -516,6 +516,31 @@ pub fn type_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {
         inner
       }
 
+      Some(Token::LCurl) => {
+        lex.next();
+        let mut fields = vec![];
+        let end = loop {
+          match lex.next() {
+            (span, Some(Token::RCurl)) => break span,
+            (span, Some(Token::Str(s))) | (span, Some(Token::Name(s))) => {
+              expect!(lex, Token::Colon, "Expected ':' after record label");
+              fields.push((span, s, some!(lex, type_(lex)?, "Expected a type to follow `:`")));
+              skip!(lex, Token::Comma);
+            }
+
+            (at, None) => return err_eof(at),
+            (s, Some(t)) => {
+              return err_msg_token(
+                "Not a valid record field-name, maybe you ment to quote it",
+                Some(t),
+                s,
+              )
+            }
+          }
+        };
+        Type::TRecord { fields, span: span.merge(end) }
+      }
+
       _ => return Ok(None),
     }))
   }

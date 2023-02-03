@@ -630,6 +630,23 @@ fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> TRes<CType<'t>> {
       let b_ty = check_type(checker, b)?;
       CType::Function(Box::new(a_ty), Box::new(b_ty))
     }
+    Type::TRecord { fields, span: _ } => {
+      let mut reqs = BTreeSet::new();
+      for (span, field, inner_ty) in fields.iter() {
+        let value_ty = check_type(checker, inner_ty)?;
+        let value_node = checker.raise_to_node(value_ty);
+        let field_req = Requirement::Field(*field, value_node);
+        if reqs.contains(&field_req) {
+          panic!(
+            "Multiple of the same field {:?}, {:?}",
+            checker.field(*field),
+            span
+          );
+        }
+        reqs.insert(field_req);
+      }
+      CType::Req(reqs, Box::new(CType::Record))
+    }
   })
 }
 

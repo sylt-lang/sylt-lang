@@ -71,6 +71,10 @@ pub enum Type {
 
   TNode(NameId, Span),
   TFunction(Box<Type>, Box<Type>, Span),
+  TRecord {
+    fields: Vec<(Span, FieldId, Type)>,
+    span: Span,
+  },
 
   TInt(Span),
   TReal(Span),
@@ -359,6 +363,17 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
       Box::new(resolve_ty(ctx, *b)?),
       span,
     ),
+    ast::Type::TRecord { fields, span } => {
+      let fields = fields
+        .into_iter()
+        .map(|(span, field, ty)| {
+          let field = ctx.find_field(field);
+          let ty = resolve_ty(ctx, ty)?;
+          Ok((span, field, ty))
+        })
+        .collect::<RRes<Vec<(Span, FieldId, Type)>>>()?;
+      Type::TRecord { fields, span }
+    }
   })
 }
 
