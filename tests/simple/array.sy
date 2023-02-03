@@ -24,4 +24,7 @@ def main
   = 
   let a = singletone ' 1
   let b = singletone ' 2
+  let _ = print_array ' (concat ' a ' b)
+  let a = singletone ' "A"
+  let b = singletone ' "B"
   in print_array ' (concat ' a ' b)
