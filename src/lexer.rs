@@ -8,7 +8,7 @@ pub enum Token<'t> {
   #[regex("[A-Z][a-zA-Z0-9_]*", |lex| lex.slice())]
   ProperName(&'t str),
 
-  #[regex(r"[\d]+", |lex| lex.slice())]
+  #[regex(r"-?[\d]+", |lex| lex.slice())]
   Int(&'t str),
 
   // `X.`, `.Y`, `X.Y`, `XeY` and `Xe-Y`
