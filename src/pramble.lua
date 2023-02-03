@@ -10,18 +10,6 @@ function Enum.new(k, v)
   return e
 end
 
-function sy_concat(a)
-  return function(b) 
-    return a .. b
-  end
-end
-
-function sy_print_stuff(a)
-  for k, v in pairs(a) do
-    print(k, v)
-  end
-end
-
 function sy_record_merge(a, b)
   -- fields in `a` take precedence over `b`
   -- Since everything is immutable we get away with a shallow copy here :D
