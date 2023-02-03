@@ -228,7 +228,8 @@ fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
       let body = check_expr(checker, body)?;
       let mut def_ty = body;
       for arg in args.iter().rev() {
-        def_ty = CType::Function(Box::new(CType::NodeType(*arg)), Box::new(def_ty));
+        let arg = check_pattern(checker, arg)?;
+        def_ty = CType::Function(Box::new(arg), Box::new(def_ty));
       }
       let name_ty = unify(checker, CType::NodeType(*name), def_ty, *span)?;
       unify(checker, name_ty, ty, *span)?;

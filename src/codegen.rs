@@ -146,9 +146,11 @@ fn gen_def(out: &mut dyn Write, ctx: Ctx, def: &Def) -> Result<()> {
   })
 }
 
-fn gen_function(out: &mut dyn Write, ctx: Ctx, args: &[NameId], body: &Expr) -> Result<()> {
+fn gen_function(out: &mut dyn Write, ctx: Ctx, args: &[Pattern], body: &Expr) -> Result<()> {
   if args.len() > 0 {
-    write!(out, "function({})\n", ctx.var(args[0]))?;
+    let arg = "_arg".to_string();
+    write!(out, "function({})\n", arg)?;
+    gen_pat(out, arg, ctx, &args[0])?;
     write!(out, "return ")?;
     gen_function(out, ctx, &args[1..], body)?;
     write!(out, "end\n")?;

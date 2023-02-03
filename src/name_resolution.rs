@@ -30,7 +30,7 @@ pub enum Def {
   Def {
     ty: Type,
     name: NameId,
-    args: Vec<NameId>,
+    args: Vec<Pattern>,
     body: Expr,
     span: Span,
   },
@@ -571,8 +571,8 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       let frame = ctx.push_frame();
       let args = args
         .into_iter()
-        .map(|ast::Name(name, at)| ctx.push_local_var(name, at))
-        .collect();
+        .map(|binding| resolve_pattern(ctx, binding))
+        .collect::<RRes<Vec<_>>>()?;
       let body = resolve_expr(ctx, body)?;
       ctx.pop_frame(frame);
       Def::Def { ty, name, args, body, span }

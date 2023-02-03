@@ -467,7 +467,7 @@ fn parse_pat<'t>(lex: &mut Lex<'t>) -> PRes<Option<Pattern<'t>>> {
       Pattern::PStr(s, span)
     }
 
-    t => return err_msg_token("Not a valid pattern", t, span),
+    _ => return Ok(None),
   }))
 }
 
@@ -524,7 +524,11 @@ pub fn type_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {
             (span, Some(Token::RCurl)) => break span,
             (span, Some(Token::Str(s))) | (span, Some(Token::Name(s))) => {
               expect!(lex, Token::Colon, "Expected ':' after record label");
-              fields.push((span, s, some!(lex, type_(lex)?, "Expected a type to follow `:`")));
+              fields.push((
+                span,
+                s,
+                some!(lex, type_(lex)?, "Expected a type to follow `:`"),
+              ));
               skip!(lex, Token::Comma);
             }
 
@@ -580,11 +584,8 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
     expect!(lex, Token::Colon, "Expected a `:` after the def type");
     let mut args = vec![];
     loop {
-      match lex.peek() {
-        (span, Some(Token::Name(str))) => {
-          args.push(Name(str, span));
-          lex.next();
-        }
+      match parse_pat(lex)? {
+        Some(pat) => args.push(pat),
         _ => break,
       }
     }
@@ -595,7 +596,7 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
       if !args.is_empty() {
         let span = args
           .iter()
-          .map(|Name(_, span)| *span)
+          .map(|p| p.span())
           .reduce(|a, b| a.merge(b))
           .unwrap();
         return err_msg(

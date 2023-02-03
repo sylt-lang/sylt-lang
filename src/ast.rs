@@ -11,7 +11,7 @@ pub enum Def<'t> {
   Def {
     ty: Type<'t>,
     name: Name<'t>,
-    args: Vec<Name<'t>>,
+    args: Vec<Pattern<'t>>,
     body: Expr<'t>,
     span: Span,
   },
