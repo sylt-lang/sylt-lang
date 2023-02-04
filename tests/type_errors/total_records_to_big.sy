@@ -1,0 +1,16 @@
+def f
+  : { a : Int } -> Int
+  : { b } = b
+
+--+ expected exit status: 7
+--+ expected stderr:
+--+ > While checking label "b".
+--+ > There are extra labels in one record.
+--+ 
+--+ ([(a: Int), (b: Int)] => Record)
+--+ ----
+--+ ([(a: Int)] => Record)
+--+ 
+--+   1| def f
+--+      ^^^^^
+

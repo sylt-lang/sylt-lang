@@ -296,6 +296,72 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
     (a, b) if a == b => a,
     (CType::Unknown, b) => b,
     (a, CType::Unknown) => a,
+    (CType::Req(ar, box CType::Record), CType::Req(br, box CType::Record)) => {
+      for aa in ar.iter() {
+        match (br.get(aa), aa) {
+          (Some(Requirement::Field(_, a_id)), Requirement::Field(_, b_id)) => {
+            unify(
+              checker,
+              CType::NodeType(*a_id),
+              CType::NodeType(*b_id),
+              span,
+            )?;
+          }
+          (_, Requirement::Field(field, _)) => {
+            let err = error_unify(
+              checker,
+              "There are extra labels in one record",
+              CType::Req(ar.clone(), Box::new(CType::Record)),
+              CType::Req(br.clone(), Box::new(CType::Record)),
+              span,
+            );
+            return with_label(checker, *field, err);
+          }
+          (_, _) => {
+            return error_unify(
+              checker,
+              "There are extra labels in one record",
+              CType::Req(ar.clone(), Box::new(CType::Record)),
+              CType::Req(br.clone(), Box::new(CType::Record)),
+              span,
+            );
+          }
+        }
+      }
+      for bb in br.iter() {
+        match (ar.get(bb), bb) {
+          (Some(Requirement::Field(_, b_id)), Requirement::Field(_, a_id)) => {
+            unify(
+              checker,
+              CType::NodeType(*a_id),
+              CType::NodeType(*b_id),
+              span,
+            )?;
+          }
+          (_, Requirement::Field(field, _)) => {
+            let err = error_unify(
+              checker,
+              "There are extra labels in one record",
+              CType::Req(ar.clone(), Box::new(CType::Record)),
+              CType::Req(br.clone(), Box::new(CType::Record)),
+              span,
+            );
+            return with_label(checker, *field, err);
+          }
+          (_, _) => {
+            return error_unify(
+              checker,
+              "There are extra labels in one record",
+              CType::Req(ar.clone(), Box::new(CType::Record)),
+              CType::Req(br.clone(), Box::new(CType::Record)),
+              span,
+            );
+          }
+        }
+      }
+
+      CType::Req(ar, Box::new(CType::Record))
+    }
     (CType::Req(ar, inner_a), CType::Req(br, inner_b)) => {
       let c = unify(checker, *inner_a, *inner_b, span)?;
       let mut cr = ar.clone();
@@ -489,7 +555,12 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       let c_ty = unify(checker, a_ty, b_ty, *at)?;
       unify(checker, c_ty, Requirement::Num.to_ctype(), *at)?
     }
-    Expr::Bin(ast::BinOp::Neq(at) | ast::BinOp::Eq(at) | ast::BinOp::Lt(at) | ast::BinOp::LtEq(at), a, b, _) => {
+    Expr::Bin(
+      ast::BinOp::Neq(at) | ast::BinOp::Eq(at) | ast::BinOp::Lt(at) | ast::BinOp::LtEq(at),
+      a,
+      b,
+      _,
+    ) => {
       let a_ty = check_expr(checker, a)?;
       let b_ty = check_expr(checker, b)?;
       let c_ty = unify(checker, a_ty, b_ty, *at)?;
