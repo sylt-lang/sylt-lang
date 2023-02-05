@@ -38,6 +38,7 @@ impl<'t> CType<'t> {
       | (CType::Record, CType::Record)
       | (CType::Unknown, CType::Unknown) => true,
       (CType::NodeType(a), CType::NodeType(b)) => a == b,
+      (CType::Generic(a), CType::Generic(b)) => a == b,
       _ => false,
     }
   }
@@ -429,6 +430,15 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
       let c0 = unify(checker, *a0, *b0, span)?;
       let c1 = unify(checker, *a1, *b1, span)?;
       CType::Function(Box::new(c0), Box::new(c1))
+    }
+    (a @ CType::Generic(_), b @ CType::Generic(_)) => {
+      return error_unify(
+        checker,
+        "Escaped generics, how did you get here? Please send me the code",
+        a,
+        b,
+        span,
+      )
     }
     (a, b) => return error_unify(checker, "Failed to merge types", a, b, span),
   })
