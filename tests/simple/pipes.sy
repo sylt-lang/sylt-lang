@@ -1,0 +1,6 @@
+def add : Int -> Int -> Int : a b = a + b
+
+def main : Int := 2 # add ' 1 # add ' 1
+
+--+ expected stdout: 4
+
