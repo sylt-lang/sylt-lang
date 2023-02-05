@@ -35,6 +35,7 @@ pub enum Def<'t> {
   },
   ForiegnType {
     name: ProperName<'t>,
+    args: Vec<Name<'t>>,
     span: Span,
   },
 }

@@ -210,18 +210,30 @@ pub fn check<'t>(
         unify(&mut checker, x, ty, *span)?;
       }
 
-      Def::ForeignType { name, span } => {
+      Def::ForeignType { name, args: _, span } => {
         let NameId(slot) = name;
         let x = CType::NodeType(*name);
         unify(&mut checker, x, CType::Foreign(&names[*slot]), *span)?;
       }
 
-      Def::Type { .. } => {}
+      Def::Type { name, args, body, span } => {
+        let mut def_ty = check_type(&mut checker, body)?;
+        for arg in args.iter().rev() {
+          def_ty = CType::Apply(Box::new(CType::NodeType(*arg)), Box::new(def_ty));
+        }
+        unify(&mut checker, CType::NodeType(*name), def_ty, *span)?;
+      }
 
-      Def::Enum { name, span, args: _, constructors: _ } => {
+      Def::Enum { name, span, args, constructors: _ } => {
         let NameId(slot) = name;
         let x = CType::NodeType(*name);
-        unify(&mut checker, x, CType::Foreign(&names[*slot]), *span)?;
+
+        let mut def_ty = CType::Foreign(&names[*slot]);
+        for arg in args.iter().rev() {
+          def_ty = CType::Apply(Box::new(CType::NodeType(*arg)), Box::new(def_ty));
+        }
+
+        unify(&mut checker, x, def_ty, *span)?;
       }
     }
   }

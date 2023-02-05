@@ -55,6 +55,7 @@ pub enum Def {
   },
   ForeignType {
     name: NameId,
+    args: Vec<NameId>,
     span: Span,
   },
 }
@@ -637,10 +638,17 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       Def::Type { name, args, body, span }
     }
 
-    ast::Def::ForiegnType { name: ast::ProperName(name, _), span } => {
+    ast::Def::ForiegnType { name: ast::ProperName(name, _), span, args } => {
       let name = ctx.find_name(name).unwrap();
 
-      Def::ForeignType { name, span }
+      let frame = ctx.push_frame();
+      let args = args
+        .into_iter()
+        .map(|ast::Name(name, at)| ctx.push_local_type(name, at))
+        .collect();
+      ctx.pop_frame(frame);
+
+      Def::ForeignType { name, args, span }
     }
 
     ast::Def::Enum {

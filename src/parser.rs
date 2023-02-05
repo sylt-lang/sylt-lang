@@ -707,7 +707,7 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
       lex.next();
       let end = lex.span();
       let span = start.merge(end);
-      Ok(Some(Def::ForiegnType { name, span }))
+      Ok(Some(Def::ForiegnType { name, args, span }))
     } else {
       let body = some!(lex, type_(lex)?, "Expected a type for the body");
 
