@@ -1,37 +1,98 @@
+-- unit
 type Unit = foreign
-type Array a = foreign
 
-def singletone
-  : forall a. a -> Array a
+def unit : Unit := foreign -[[
+  "UNIT"
+]]-
+
+-- Array
+type Array arrInner = foreign
+
+def empty
+  : forall sa. Array sa
+  :
+  = foreign -[[ (function() return { } end)() ]]-
+
+def singleton_ext
+  : forall sa. sa -> Array sa
   :
   = foreign -[[ function(a) return { a } end ]]-
 
-def concat
-  : forall a. Array a -> Array a -> Array a
+
+def singleton : forall sa. sa -> Array sa : a = singleton_ext ' a
+
+def concat_ext
+  : forall ca. Array ca -> Array ca -> Array ca
   :
-  = foreign -[[ function(a) return function(b) return { table.unpack(a), table.unpack(b) } end end ]]-
+  = foreign -[[
+function(a) return function(b)
+  local c = {}
+  for _, q in pairs(a) do
+    table.insert(c, q)
+  end
+  for _, q in pairs(b) do
+    table.insert(c, q)
+  end
+  return c
+end end
+]]-
 
-def print_array
-  : forall a. Array a -> Unit
+def concat : forall ca. Array ca -> Array ca -> Array ca := concat_ext
+
+def append
+  : forall aa. aa -> Array aa -> Array aa
+  : a as
+  = concat ' as ' (singleton ' a)
+
+def for_each_ext
+  : forall fa. forall fb. (fa -> fb) -> Array fa -> Array fb
   :
-  = foreign -[[ function(xs) for k, v in pairs(xs) do print(k, v) end end ]]-
+  = foreign -[[
+  function(f)
+    return function(xs)
+      local ys = {}
+      for k, v in pairs(xs) do
+        ys[k] = f(v)
+      end
+      return ys
+    end
+  end
+]]-
 
+def for_each : forall fa. forall fb. (fa -> fb) -> Array fa -> Array fb := for_each_ext
 
-def main
-  : Unit
+def print
+  : forall q. q -> Unit
   :
-  = 
-  let a = singletone ' 1
-  let b = singletone ' 2
-  let _ = print_array ' (concat ' a ' b)
-  let a = singletone ' "A"
-  let b = singletone ' "B"
-  in print_array ' (concat ' a ' b)
+  = foreign -[[
+  function(f)
+    if type(f) == "table" then
+      print("{")
+      for k, v in pairs(f) do
+        print(k, ":", v, ",")
+      end
+      print("}")
+    else
+      print(f)
+    end
+    return "UNIT"
+  end
+]]-
 
---+ expected stdout:
---+ 1	1
---+ 2	2
---+ 1	A
---+ 2	B
---+ nil
+def spy
+  : forall z. z -> z
+  : z
+  = let _ = print ' z in z
+
+def main  
+  : _
+  :
+  = empty
+      # (append ' 5)
+      # (append ' 6)
+      # (append ' 7)
+      # (append ' 8)
+      # (concat ' (empty # (append ' 99)))
+      # (for_each ' print)
+      # \_ -> unit
 

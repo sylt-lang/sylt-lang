@@ -290,9 +290,6 @@ fn record_merge<'t>(
 }
 fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) -> TRes<CType<'t>> {
   Ok(match (a, b) {
-    (CType::Generic(_), _) | (_, CType::Generic(_)) => {
-      panic!("Generic in unification, something is wrong!")
-    }
     (a, b) if a == b => a,
     (CType::Unknown, b) => b,
     (a, CType::Unknown) => a,
@@ -432,6 +429,9 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
       let c0 = unify(checker, *a0, *b0, span)?;
       let c1 = unify(checker, *a1, *b1, span)?;
       CType::Function(Box::new(c0), Box::new(c1))
+    }
+    (a @ CType::Generic(_), b) | (a, b @ CType::Generic(_)) => {
+      panic!("Generic unification should never happen! {:?} - {:?}", a, b);
     }
     (a, b) => return error_unify(checker, "Failed to merge types", a, b, span),
   })
