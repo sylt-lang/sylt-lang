@@ -430,9 +430,6 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
       let c1 = unify(checker, *a1, *b1, span)?;
       CType::Function(Box::new(c0), Box::new(c1))
     }
-    (a @ CType::Generic(_), b) | (a, b @ CType::Generic(_)) => {
-      panic!("Generic unification should never happen! {:?} - {:?}", a, b);
-    }
     (a, b) => return error_unify(checker, "Failed to merge types", a, b, span),
   })
 }
