@@ -5,14 +5,25 @@ def a : Int : = id ' 1
 def b : Str : = id ' 1
 
 --+ args: -o -t -
---+ expected exit status: 7
---+ expected stderr:
---+ > Failed to merge types.
---+ 
---+ Str
---+ ----
---+ Int
---+ 
---+   5| def b : Str : = id ' 1
---+      ^^^^^^^^^^^^^^^^^^^^^^
+--+ expected stdout:
+--+ 000 V "id" @ 93-95
+--+   used at: [Span(125, 127), Span(148, 150)]
+--+   type: #3
+--+   raw: Child(NameId(3))
+--+ 001 V "a" @ 113-114
+--+   used at: []
+--+   type: Int
+--+   raw: Ty(Int)
+--+ 002 V "b" @ 136-137
+--+   used at: []
+--+   type: Str
+--+   raw: Ty(Str)
+--+ 003 V "@" @ 98-99
+--+   used at: []
+--+   type: _ -> _
+--+   raw: Ty(Function(NodeType(NameId(4)), Unknown))
+--+ 004 V "a" @ 102-103
+--+   used at: [Span(106, 107)]
+--+   type: _
+--+   raw: Ty(Unknown)
 

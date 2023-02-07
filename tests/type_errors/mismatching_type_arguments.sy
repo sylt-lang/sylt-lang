@@ -10,11 +10,10 @@ def z : A Int := x + y
 --+ expected stderr:
 --+ > Failed to merge types.
 --+ 
---+ Str
+--+ Int Int
 --+ ----
 --+ Int
 --+ 
+--+   4| def x : A Int := 1
 --+   5| def y : A Str := 1
---+   6| 
---+   7| def z : A Int := x + y
 

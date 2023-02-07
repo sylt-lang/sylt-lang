@@ -1,0 +1,5 @@
+def id1 : forall p. p -> p : v = v
+
+def id2 : forall q. q -> q := id1
+
+def x ::= let q = id1 ' "a" in 1 # id1 # id2

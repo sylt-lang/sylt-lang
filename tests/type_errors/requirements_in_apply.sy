@@ -4,11 +4,11 @@ def f : A Int -> Int : { a } = a
 
 --+ expected exit status: 7
 --+ expected stderr:
---+ > The requirements are not valid here.
+--+ > Failed to merge types.
 --+ 
---+ #2
---+ is not
---+ (a: _)
+--+ Record
+--+ ----
+--+ Record Int
 --+ 
 --+   3| def f : A Int -> Int : { a } = a
 --+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
