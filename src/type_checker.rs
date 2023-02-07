@@ -671,12 +671,11 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
   })
 }
 
-fn specialize_if_needed<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> CType<'t> {
-  fn specialize_inner<'t>(
+fn raise_generics_to_unknowns<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> CType<'t> {
+  fn generic_helper<'t>(
     checker: &mut Checker<'t>,
     ty: CType<'t>,
-    given_names: &mut BTreeMap<usize, NameId>,
-    seen: &mut BTreeMap<NameId, NameId>,
+    generics_to_node_types: &mut BTreeMap<usize, NameId>
   ) -> CType<'t> {
     match ty {
       CType::Unknown
@@ -687,7 +686,7 @@ fn specialize_if_needed<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> CType<'
       | CType::Str
       | CType::Record => ty,
 
-      CType::Generic(i) => match given_names.entry(i) {
+      CType::Generic(i) => match generics_to_node_types.entry(i) {
         Entry::Vacant(v) => {
           let new_node = checker.raise_to_node(CType::Unknown);
           v.insert(new_node);
@@ -698,26 +697,26 @@ fn specialize_if_needed<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> CType<'
 
       CType::Req(reqs, inner) => CType::Req(
         reqs.clone(),
-        Box::new(specialize_inner(checker, *inner, given_names, seen)),
+        Box::new(generic_helper(checker, *inner, generics_to_node_types)),
       ),
       CType::Apply(a, b) => {
-        let a = Box::new(specialize_inner(checker, *a, given_names, seen));
-        let b = Box::new(specialize_inner(checker, *b, given_names, seen));
+        let a = Box::new(generic_helper(checker, *a, generics_to_node_types));
+        let b = Box::new(generic_helper(checker, *b, generics_to_node_types));
         CType::Apply(a, b)
       }
       CType::Function(a, b) => {
-        let a = Box::new(specialize_inner(checker, *a, given_names, seen));
-        let b = Box::new(specialize_inner(checker, *b, given_names, seen));
+        let a = Box::new(generic_helper(checker, *a, generics_to_node_types));
+        let b = Box::new(generic_helper(checker, *b, generics_to_node_types));
         CType::Function(a, b)
       }
       CType::NodeType(node) => {
         let ty = resolve_ty(checker, node);
-        specialize_inner(checker, ty, given_names, seen)
+        generic_helper(checker, ty, generics_to_node_types)
       }
     }
   }
 
-  specialize_inner(checker, ty, &mut BTreeMap::new(), &mut BTreeMap::new())
+  generic_helper(checker, ty, &mut BTreeMap::new())
 }
 
 fn check_pattern<'t>(checker: &mut Checker<'t>, binding: &Pattern) -> TRes<CType<'t>> {
@@ -738,7 +737,7 @@ fn check_pattern<'t>(checker: &mut Checker<'t>, binding: &Pattern) -> TRes<CType
       match inner {
         Some((pattern, exp_ty)) => {
           let expeced_ty = check_type(checker, exp_ty)?;
-          let expeced_ty = specialize_if_needed(checker, expeced_ty);
+          let expeced_ty = raise_generics_to_unknowns(checker, expeced_ty);
           let pat_ty = check_pattern(checker, pattern)?;
           // TODO: This won't handle generics.
           unify(checker, expeced_ty, pat_ty, *span)?;
