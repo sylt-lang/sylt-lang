@@ -163,9 +163,9 @@ pub enum Expr {
   },
 
   Lambda {
-      args: Vec<Pattern>,
-      body: Box<Expr>,
-      span: Span,
+    args: Vec<Pattern>,
+    body: Box<Expr>,
+    span: Span,
   },
 
   Un(ast::UnOp, Box<Expr>, Span),
@@ -221,9 +221,14 @@ impl<'t> Ctx<'t> {
     def_at: Span,
   ) -> NameId {
     let id = NameId(self.names.len());
-    self
-      .names
-      .push(Name { is_type, is_foreign, is_generic, name, def_at, usages: vec![] });
+    self.names.push(Name {
+      is_type,
+      is_foreign,
+      is_generic,
+      name,
+      def_at,
+      usages: vec![],
+    });
     self.stack.push(id);
     id
   }
@@ -388,11 +393,11 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
       Type::TRecord { fields, span }
     }
     ast::Type::TForall(ast::Name(name, at), inner, _span) => {
-        let frame = ctx.push_frame();
-        ctx.push_generic(name, at);
-        let inner = resolve_ty(ctx, *inner)?;
-        ctx.pop_frame(frame);
-        inner
+      let frame = ctx.push_frame();
+      ctx.push_generic(name, at);
+      let inner = resolve_ty(ctx, *inner)?;
+      ctx.pop_frame(frame);
+      inner
     }
   })
 }

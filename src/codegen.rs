@@ -282,9 +282,9 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
 
           write!(out, "end\n")?;
         } else {
-            gen_pat(out, "match_value".to_string(), ctx, pattern)?;
-            write!(out, "return ")?;
-            gen_expr(out, ctx, value)?;
+          gen_pat(out, "match_value".to_string(), ctx, pattern)?;
+          write!(out, "return ")?;
+          gen_expr(out, ctx, value)?;
         }
         write!(out, "\nend\n")?;
       }

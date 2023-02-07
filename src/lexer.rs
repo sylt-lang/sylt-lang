@@ -97,7 +97,6 @@ pub enum Token<'t> {
   #[token("!=")]
   OpNeq,
 
-
   #[token("(")]
   LParen,
   #[token(")")]

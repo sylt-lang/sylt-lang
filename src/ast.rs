@@ -136,7 +136,7 @@ pub enum Expr<'t> {
 
   Lambda {
     args: Vec<Pattern<'t>>,
-    body: Box::<Expr<'t>>,
+    body: Box<Expr<'t>>,
     span: Span,
   },
 
@@ -184,8 +184,7 @@ pub enum UnOp {
 impl UnOp {
   pub fn span(&self) -> Span {
     match self {
-      UnOp::Not(span)
-      | UnOp::Neg(span) => *span,
+      UnOp::Not(span) | UnOp::Neg(span) => *span,
     }
   }
 }

@@ -260,7 +260,11 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
               _ => break,
             }
           }
-          expect!(lex, Token::KwArrow, "Expected a `->` to start the lambda body");
+          expect!(
+            lex,
+            Token::KwArrow,
+            "Expected a `->` to start the lambda body"
+          );
           let body = Box::new(expr(lex)?);
 
           let span = body.span().merge(span);
@@ -629,13 +633,21 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
     } else {
       some!(lex, type_(lex)?, "Expected a type or `:` for the def")
     };
-    expect!(lex, Token::Colon, "Expected a `:` after the def type");
+
     let mut args = vec![];
-    loop {
-      match parse_pat(lex)? {
-        Some(pat) => args.push(pat),
-        _ => break,
+    match lex.token() {
+      Some(Token::Colon) => {
+        lex.next();
+        loop {
+          match parse_pat(lex)? {
+            Some(pat) => args.push(pat),
+            _ => break,
+          }
+        }
       }
+      Some(Token::Equal) => {}
+
+      t => return err_msg_token("Expected `:` or `=` after type signature", t, lex.span()),
     }
 
     expect!(lex, Token::Equal, "Expected a `=` to start the def body");

@@ -502,8 +502,7 @@ fn check_requirements<'t>(
         Requirement::Num => false,
         Requirement::Field(_, _) => true,
       }) => {}
-    //
-    // CType::Apply(_, _) => todo!(),
+    CType::Apply(inner, _) => return check_requirements(checker, span, req, *inner),
     // CType::Function(_, _) => todo!(),
     _ => {
       return error_req(
@@ -861,7 +860,11 @@ fn error_req<'t, A>(
     msg,
     span,
     a: a.render(checker),
-    req: format!("{:?}", req),
+    req: req
+      .iter()
+      .map(|r| r.to_name(checker))
+      .collect::<Vec<_>>()
+      .join(", "),
   })
 }
 

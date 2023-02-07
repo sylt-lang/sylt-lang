@@ -235,7 +235,7 @@ impl Error {
         Self::maybe_render_context(span, source)
       ),
       Error::CheckReq { msg, a, req, span } => format!(
-        "> {}.\n\n{}\nis not\n{:?}\n\n{}",
+        "> {}.\n\n{}\nis not\n{}\n\n{}",
         msg,
         a,
         req,
