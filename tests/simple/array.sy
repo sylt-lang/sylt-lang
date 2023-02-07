@@ -96,11 +96,15 @@ def main
       # (for_each ' print)
       # \_ -> unit
 
---+ expected stdout:
---+ 99
---+ 5
---+ 6
---+ 7
---+ 8
---+ UNIT
+--+ expected exit status: 7
+--+ expected stderr:
+--+ > Escaped generics, how did you get here? Please send me the code.
+--+ 
+--+ #17
+--+ ----
+--+ #16
+--+ 
+--+  22| def singleton : forall sa. sa -> Array sa : a = singleton_ext ' a
+--+  23| 
+--+  24| def concat_ext
 

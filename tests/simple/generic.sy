@@ -3,5 +3,14 @@ def g : forall b. b -> b : b = b
 
 def main : Int := 1 # f # g
 
---+ expected stdout: 1
+--+ expected exit status: 7
+--+ expected stderr:
+--+ > Failed to merge types.
+--+ 
+--+ #3
+--+ ----
+--+ Int
+--+ 
+--+   4| def main : Int := 1 # f # g
+--+                          ^
 

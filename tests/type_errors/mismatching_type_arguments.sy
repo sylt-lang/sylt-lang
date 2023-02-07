@@ -1,0 +1,20 @@
+
+type A q = Int
+
+def x : A Int := 1
+def y : A Str := 1
+
+def z : A Int := x + y
+
+--+ expected exit status: 7
+--+ expected stderr:
+--+ > Failed to merge types.
+--+ 
+--+ Str
+--+ ----
+--+ Int
+--+ 
+--+   5| def y : A Str := 1
+--+   6| 
+--+   7| def z : A Int := x + y
+

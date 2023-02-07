@@ -190,7 +190,7 @@ pub fn check<'t>(
     types: names
       .iter()
       .enumerate()
-      .map(|(i, Name { is_generic, .. })| {
+      .map(|(i, Name { is_generic, name, .. })| {
         if *is_generic {
           Node::Ty(Box::new(CType::Generic(i)))
         } else {
@@ -434,9 +434,16 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
     (CType::Real, CType::Real) => CType::Real,
     (CType::Str, CType::Str) => CType::Str,
     (CType::Apply(a0, a1), CType::Apply(b0, b1)) => {
+      // Can this happen?
       let c0 = unify(checker, *a0, *b0, span)?;
       let c1 = unify(checker, *a1, *b1, span)?;
       CType::Apply(Box::new(c0), Box::new(c1))
+    }
+    (CType::Apply(_a0, a1), b) => {
+      unify(checker, *a1, b, span)?
+    }
+    (a, CType::Apply(_b0, b1)) => {
+      unify(checker, *b1, a, span)?
     }
     (CType::Function(a0, a1), CType::Function(b0, b1)) => {
       let c0 = unify(checker, *a0, *b0, span)?;
@@ -683,7 +690,7 @@ fn specialize_if_needed<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> CType<'
 
       CType::Generic(i) => match given_names.entry(i) {
         Entry::Vacant(v) => {
-          let new_node = checker.raise_to_node(CType::Unknown);
+          let new_node = checker.raise_to_node(CType::Generic(i));
           v.insert(new_node);
           CType::NodeType(new_node)
         }
