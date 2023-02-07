@@ -527,13 +527,13 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
     Expr::EInt(_, _) => CType::Int,
     Expr::EReal(_, _) => CType::Real,
     Expr::EStr(_, _) => CType::Str,
-    Expr::Var(name, _) => specialize_if_needed(checker, CType::NodeType(*name)),
+    Expr::Var(name, _) => raise_generics_to_unknowns(checker, CType::NodeType(*name)),
     Expr::EnumConst { ty_name, value, const_name: _, span } => {
       let ty = CType::NodeType(*ty_name);
       match value {
         Some((expr, exp_ty)) => {
           let expeced_ty = check_type(checker, exp_ty)?;
-          let expeced_ty = specialize_if_needed(checker, expeced_ty);
+          let expeced_ty = raise_generics_to_unknowns(checker, expeced_ty);
           let expr_ty = check_expr(checker, expr)?;
           // TODO: This won't handle generics.
           unify(checker, expeced_ty, expr_ty, *span)?;
