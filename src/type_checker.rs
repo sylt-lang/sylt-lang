@@ -16,6 +16,7 @@ pub enum CType<'t> {
   Unknown,
   Foreign(&'t Name<'t>),
   // Is this a good idea to code here?
+  // Generics do not need to take up node types
   Generic(usize),
   Bool,
   Int,
@@ -96,7 +97,7 @@ impl<'t> CType<'t> {
         format!("([{}] => {})", rs, t)
       }
       CType::Generic(i) => {
-        format!("#{}", *i)
+        format!("t{}", *i)
       }
     }
   }
@@ -184,13 +185,13 @@ pub fn check<'t>(
   names: &'t Vec<Name<'t>>,
   defs: &Vec<Def>,
   fields: &'t BTreeMap<FieldId, &'t str>,
-) -> TRes<Vec<Node<'t>>> {
+) -> (Vec<Node<'t>>, TRes<()>) {
   // These are the only nodes which should ever be created. Otherwise memory usage will explode.
   let mut checker = Checker {
     types: names
       .iter()
       .enumerate()
-      .map(|(i, Name { is_generic, name, .. })| {
+      .map(|(i, Name { is_generic, .. })| {
         if *is_generic {
           Node::Ty(Box::new(CType::Generic(i)))
         } else {
@@ -202,47 +203,48 @@ pub fn check<'t>(
     fields,
   };
 
-  for def in defs {
-    match def {
-      Def::ForiegnDef { name, span, ty, .. } | Def::Def { name, span, ty, .. } => {
-        let ty = check_type(&mut checker, ty)?;
-        let x = CType::NodeType(*name);
-        unify(&mut checker, x, ty, *span)?;
-      }
-
-      Def::ForeignType { name, args: _, span } => {
-        let NameId(slot) = name;
-        let x = CType::NodeType(*name);
-        unify(&mut checker, x, CType::Foreign(&names[*slot]), *span)?;
-      }
-
-      Def::Type { name, args, body, span } => {
-        let mut def_ty = check_type(&mut checker, body)?;
-        for arg in args.iter().rev() {
-          def_ty = CType::Apply(Box::new(CType::NodeType(*arg)), Box::new(def_ty));
-        }
-        unify(&mut checker, CType::NodeType(*name), def_ty, *span)?;
-      }
-
-      Def::Enum { name, span, args, constructors: _ } => {
-        let NameId(slot) = name;
-        let x = CType::NodeType(*name);
-
-        let mut def_ty = CType::Foreign(&names[*slot]);
-        for arg in args.iter().rev() {
-          def_ty = CType::Apply(Box::new(CType::NodeType(*arg)), Box::new(def_ty));
+  let err = (|| {
+    for def in defs {
+      match def {
+        Def::ForiegnDef { name, span, ty, .. } | Def::Def { name, span, ty, .. } => {
+          let ty = check_type(&mut checker, ty)?;
+          let x = CType::NodeType(*name);
+          unify(&mut checker, x, ty, *span)?;
         }
 
-        unify(&mut checker, x, def_ty, *span)?;
+        Def::ForeignType { name, args: _, span } => {
+          let NameId(slot) = name;
+          let def_ty = CType::Foreign(&names[*slot]);
+          // for arg in args.iter() {
+          //   def_ty = CType::Apply(Box::new(def_ty), Box::new(CType::NodeType(*arg)));
+          // }
+          unify(&mut checker, CType::NodeType(*name), def_ty, *span)?;
+        }
+
+        // Args that are unused cannot exist, what are they going to limit
+        Def::Type { name, args: _, body, span } => {
+          let def_ty = check_type(&mut checker, body)?;
+          unify(&mut checker, CType::NodeType(*name), def_ty, *span)?;
+        }
+
+        Def::Enum { name, span, args: _, constructors: _ } => {
+          let NameId(slot) = name;
+          let def_ty = CType::Foreign(&names[*slot]);
+          // for arg in args.iter() {
+          //   def_ty = CType::Apply(Box::new(def_ty), Box::new(CType::NodeType(*arg)));
+          // }
+          unify(&mut checker, CType::NodeType(*name), def_ty, *span)?;
+        }
       }
     }
-  }
 
-  for def in defs {
-    check_def(&mut checker, def)?;
-  }
+    for def in defs {
+      check_def(&mut checker, def)?;
+    }
+    Ok(())
+  })();
 
-  Ok(checker.types)
+  (checker.types, err)
 }
 
 fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
@@ -302,6 +304,8 @@ fn record_merge<'t>(
   })
 }
 fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) -> TRes<CType<'t>> {
+  // println!("{} -- {}", a.render(checker), b.render(checker));
+  // println!("{:?} -- {:?}", a, b);
   Ok(match (a, b) {
     (a, b) if a == b => a,
     (CType::Unknown, b) => b,
@@ -434,16 +438,9 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
     (CType::Real, CType::Real) => CType::Real,
     (CType::Str, CType::Str) => CType::Str,
     (CType::Apply(a0, a1), CType::Apply(b0, b1)) => {
-      // Can this happen?
       let c0 = unify(checker, *a0, *b0, span)?;
       let c1 = unify(checker, *a1, *b1, span)?;
       CType::Apply(Box::new(c0), Box::new(c1))
-    }
-    (CType::Apply(_a0, a1), b) => {
-      unify(checker, *a1, b, span)?
-    }
-    (a, CType::Apply(_b0, b1)) => {
-      unify(checker, *b1, a, span)?
     }
     (CType::Function(a0, a1), CType::Function(b0, b1)) => {
       let c0 = unify(checker, *a0, *b0, span)?;
@@ -536,6 +533,7 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       match value {
         Some((expr, exp_ty)) => {
           let expeced_ty = check_type(checker, exp_ty)?;
+          let expeced_ty = specialize_if_needed(checker, expeced_ty);
           let expr_ty = check_expr(checker, expr)?;
           // TODO: This won't handle generics.
           unify(checker, expeced_ty, expr_ty, *span)?;
@@ -678,6 +676,7 @@ fn specialize_if_needed<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> CType<'
     checker: &mut Checker<'t>,
     ty: CType<'t>,
     given_names: &mut BTreeMap<usize, NameId>,
+    seen: &mut BTreeMap<NameId, NameId>,
   ) -> CType<'t> {
     match ty {
       CType::Unknown
@@ -690,7 +689,7 @@ fn specialize_if_needed<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> CType<'
 
       CType::Generic(i) => match given_names.entry(i) {
         Entry::Vacant(v) => {
-          let new_node = checker.raise_to_node(CType::Generic(i));
+          let new_node = checker.raise_to_node(CType::Unknown);
           v.insert(new_node);
           CType::NodeType(new_node)
         }
@@ -699,44 +698,26 @@ fn specialize_if_needed<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> CType<'
 
       CType::Req(reqs, inner) => CType::Req(
         reqs.clone(),
-        Box::new(specialize_inner(checker, *inner, given_names)),
+        Box::new(specialize_inner(checker, *inner, given_names, seen)),
       ),
       CType::Apply(a, b) => {
-        let a = Box::new(specialize_inner(checker, *a, given_names));
-        let b = Box::new(specialize_inner(checker, *b, given_names));
+        let a = Box::new(specialize_inner(checker, *a, given_names, seen));
+        let b = Box::new(specialize_inner(checker, *b, given_names, seen));
         CType::Apply(a, b)
       }
       CType::Function(a, b) => {
-        let a = Box::new(specialize_inner(checker, *a, given_names));
-        let b = Box::new(specialize_inner(checker, *b, given_names));
+        let a = Box::new(specialize_inner(checker, *a, given_names, seen));
+        let b = Box::new(specialize_inner(checker, *b, given_names, seen));
         CType::Function(a, b)
       }
       CType::NodeType(node) => {
-        // NOTE[et]: I dislike this - maybe we should have two function, one that looks for generics and
-        // one that copies, and we only copy the types when we absolutely need to?
-        match resolve_ty(checker, node) {
-          CType::Unknown
-          | CType::Foreign(_)
-          | CType::Bool
-          | CType::Int
-          | CType::Real
-          | CType::Str
-          | CType::Record => CType::NodeType(node),
-
-          CType::NodeType(_)
-          | CType::Generic(_)
-          | CType::Req(_, _)
-          | CType::Apply(_, _)
-          | CType::Function(_, _) => {
-            let inner = resolve_ty(checker, node);
-            specialize_inner(checker, inner, given_names)
-          }
-        }
+        let ty = resolve_ty(checker, node);
+        specialize_inner(checker, ty, given_names, seen)
       }
     }
   }
 
-  specialize_inner(checker, ty, &mut BTreeMap::new())
+  specialize_inner(checker, ty, &mut BTreeMap::new(), &mut BTreeMap::new())
 }
 
 fn check_pattern<'t>(checker: &mut Checker<'t>, binding: &Pattern) -> TRes<CType<'t>> {
@@ -757,6 +738,7 @@ fn check_pattern<'t>(checker: &mut Checker<'t>, binding: &Pattern) -> TRes<CType
       match inner {
         Some((pattern, exp_ty)) => {
           let expeced_ty = check_type(checker, exp_ty)?;
+          let expeced_ty = specialize_if_needed(checker, expeced_ty);
           let pat_ty = check_pattern(checker, pattern)?;
           // TODO: This won't handle generics.
           unify(checker, expeced_ty, pat_ty, *span)?;

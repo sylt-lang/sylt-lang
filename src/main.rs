@@ -95,14 +95,7 @@ fn main() {
     Ok(a) => a,
   };
 
-  let types = match type_checker::check(&names, &named_ast, &fields) {
-    Err(e) => {
-      // TODO: Can this be run per def?
-      eprintln!("{}", e.render(Some(&src)));
-      exit(7);
-    }
-    Ok(a) => a,
-  };
+  let (types, type_err) = type_checker::check(&names, &named_ast, &fields);
 
   match args.dump_types {
     Some(s) => {
@@ -132,6 +125,15 @@ fn main() {
     }
     None => {}
   }
+
+  match type_err {
+    Err(e) => {
+      // TODO: Can this be run per def?
+      eprintln!("{}", e.render(Some(&src)));
+      exit(7);
+    }
+    Ok(a) => a,
+  };
 
   if args.only_compile {
     match args.dump_lua {

@@ -649,7 +649,7 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       let frame = ctx.push_frame();
       let args = args
         .into_iter()
-        .map(|ast::Name(name, at)| ctx.push_local_type(name, at))
+        .map(|ast::Name(name, at)| ctx.push_generic(name, at))
         .collect();
       ctx.pop_frame(frame);
 
