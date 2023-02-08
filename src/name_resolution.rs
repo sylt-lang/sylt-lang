@@ -49,8 +49,6 @@ pub enum Def {
   },
   Enum {
     name: NameId,
-    args: Vec<NameId>,
-    constructors: Vec<EnumConst>,
     span: Span,
   },
   ForeignType {
@@ -62,7 +60,7 @@ pub enum Def {
 
 #[derive(Debug, Clone)]
 pub struct EnumConst {
-  pub tag: NameId,
+  pub tag: FieldId,
   pub ty: Option<Type>,
   pub span: Span,
 }
@@ -91,7 +89,7 @@ pub enum Pattern {
 
   EnumConst {
     ty_name: NameId,
-    const_name: NameId,
+    const_name: FieldId,
     inner: Option<(Box<Pattern>, Type)>,
     span: Span,
   },
@@ -143,7 +141,7 @@ pub enum Expr {
 
   EnumConst {
     ty_name: NameId,
-    const_name: NameId,
+    const_name: FieldId,
     value: Option<(Box<Expr>, Type)>,
     span: Span,
   },
@@ -186,7 +184,7 @@ pub struct Ctx<'t> {
   // overthinking this?
   //
   // Ty -> Const -> Type
-  enum_constructors: BTreeMap<NameId, BTreeMap<NameId, Option<Type>>>,
+  enum_constructors: BTreeMap<NameId, BTreeMap<FieldId, (Span, Option<Type>)>>,
 }
 
 impl<'t> Ctx<'t> {
@@ -589,21 +587,18 @@ fn resolve_enum_const<'t>(
   ctx: &mut Ctx<'t>,
   ast::ProperName(ty_name_, ty_name_at): ast::ProperName<'t>,
   ast::ProperName(const_name_, const_name_at): ast::ProperName<'t>,
-) -> RRes<(NameId, NameId, Option<Type>)> {
+) -> RRes<(NameId, FieldId, Option<Type>)> {
   let ty_name = match ctx.read_name(ty_name_, ty_name_at) {
     Some(t) => t,
     None => return error_no_var(ty_name_, ty_name_at),
   };
-  let const_name = match ctx.read_name(const_name_, const_name_at) {
-    Some(t) => t,
-    None => return error_no_var(const_name_, const_name_at),
-  };
+  let const_name = ctx.find_field(const_name_);
   let cons = match ctx.enum_constructors.get(&ty_name) {
     Some(t) => t,
     None => return error_no_enum(ty_name_, ty_name_at),
   };
   let value_ty = match cons.get(&const_name) {
-    Some(t) => t.clone(),
+    Some((_, t)) => t.clone(),
     None => return error_no_enum_const(ty_name_, ty_name_at, const_name_, const_name_at),
   };
   Ok((ty_name, const_name, value_ty))
@@ -658,33 +653,31 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
 
     ast::Def::Enum {
       name: ast::ProperName(name, _),
-      args,
       constructors,
+      args,
       span,
     } => {
       let name = ctx.find_name(name).unwrap();
-
+      let ty = name;
+      let mut cons = BTreeMap::new();
       let frame = ctx.push_frame();
-      let args = args
-        .into_iter()
-        .map(|ast::Name(name, at)| ctx.push_local_type(name, at))
-        .collect();
-      let constructors = constructors
-        .iter()
-        .map(
-          |ast::EnumConst { tag: ast::ProperName(tag, _), ty, span }| {
-            let tag = ctx.find_name(tag).unwrap();
-            let ty = ty
-              .as_ref()
-              .map(|t| resolve_ty(ctx, t.clone()))
-              .transpose()?;
-            Ok(EnumConst { tag, ty, span: *span })
-          },
-        )
-        .collect::<RRes<Vec<_>>>()?;
+      for ast::Name(name, at) in args.iter() {
+        ctx.push_generic(name, *at);
+      }
+      for ast::EnumConst { tag: ast::ProperName(tag_name, _at), ty, span } in constructors.iter() {
+        let tag = ctx.find_field(tag_name);
+        if let Some((at, _)) = cons.get(&tag) {
+          return Err(error_multiple_def(tag_name, *at, *span));
+        }
+        let ty = ty
+          .as_ref()
+          .map(|t| resolve_ty(ctx, t.clone()))
+          .transpose()?;
+        cons.insert(tag, (*span, ty));
+      }
       ctx.pop_frame(frame);
-
-      Def::Enum { name, args, constructors, span }
+      ctx.enum_constructors.insert(ty, cons);
+      Def::Enum { name, span }
     }
   })
 }
@@ -739,14 +732,22 @@ pub fn resolve<'t>(
       | (_, ast::Def::ForiegnType { .. })
       | (_, ast::Def::Type { .. }) => {}
 
-      (Some(ty), ast::Def::Enum { constructors, .. }) => {
+      (Some(ty), ast::Def::Enum { constructors, args, .. }) => {
         let mut cons = BTreeMap::new();
-        for ast::EnumConst { tag: ast::ProperName(tag, at), ty, span: _ } in constructors.iter() {
-          if let Some(NameId(old)) = ctx.find_name(tag) {
-            errs.push(error_multiple_def(name, ctx.names[old].def_at, *at));
-            continue;
+        let frame = ctx.push_frame();
+        for ast::Name(name, at) in args.iter() {
+          ctx.push_generic(name, *at);
+        }
+        for ast::EnumConst { tag: ast::ProperName(tag_name, _at), ty, span } in constructors.iter()
+        {
+          let tag = ctx.find_field(tag_name);
+          match cons.get(&tag) {
+            Some((at, _)) => {
+              errs.push(error_multiple_def(tag_name, *at, *span));
+              continue;
+            }
+            None => { /* Empty */ }
           }
-          let con = ctx.push_global_type(tag, *at);
           let ty = match ty
             .as_ref()
             .map(|t| resolve_ty(&mut ctx, t.clone()))
@@ -758,8 +759,9 @@ pub fn resolve<'t>(
               continue;
             }
           };
-          cons.insert(con, ty);
+          cons.insert(tag, (*span, ty));
         }
+        ctx.pop_frame(frame);
         ctx.enum_constructors.insert(ty, cons);
       }
     }

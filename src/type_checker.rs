@@ -227,7 +227,7 @@ pub fn check<'t>(
           unify(&mut checker, CType::NodeType(*name), def_ty, *span)?;
         }
 
-        Def::Enum { name, span, args: _, constructors: _ } => {
+        Def::Enum { name, span } => {
           let NameId(slot) = name;
           let def_ty = CType::Foreign(&names[*slot]);
           // for arg in args.iter() {
@@ -456,7 +456,9 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
         span,
       )
     }
-    (a, b) => return error_unify(checker, "Failed to merge types", a, b, span),
+    (a, b) => {
+      return error_unify(checker, "Failed to merge types", a, b, span);
+    }
   })
 }
 
@@ -532,14 +534,22 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       let ty = CType::NodeType(*ty_name);
       match value {
         Some((expr, exp_ty)) => {
-          let expeced_ty = check_type(checker, exp_ty)?;
-          let expeced_ty = raise_generics_to_unknowns(checker, expeced_ty);
+          let exp_ty = check_type(checker, exp_ty)?;
           let expr_ty = check_expr(checker, expr)?;
-          // TODO: This won't handle generics.
-          unify(checker, expeced_ty, expr_ty, *span)?;
-          ty
+          let f_ty = CType::Function(Box::new(exp_ty), Box::new(ty));
+          println!("{}", f_ty.render(checker));
+          let f_ty = raise_generics_to_unknowns(checker, f_ty);
+          println!("{}", f_ty.render(checker));
+          let call_ty = CType::Function(Box::new(expr_ty), Box::new(CType::Unknown));
+          let call_ty = raise_generics_to_unknowns(checker, call_ty);
+          println!("{} && {}", f_ty.render(checker), call_ty.render(checker));
+          if let CType::Function(_, out_ty) = unify(checker, f_ty, call_ty, *span)? {
+            *out_ty
+          } else {
+            unreachable!("We have to return a function when unifying with a function!");
+          }
         }
-        None => ty,
+        None => raise_generics_to_unknowns(checker, ty),
       }
     }
     Expr::Un(ast::UnOp::Neg(at), expr, _) => {
@@ -675,7 +685,7 @@ fn raise_generics_to_unknowns<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> C
   fn generic_helper<'t>(
     checker: &mut Checker<'t>,
     ty: CType<'t>,
-    generics_to_node_types: &mut BTreeMap<usize, NameId>
+    generics_to_node_types: &mut BTreeMap<usize, NameId>,
   ) -> CType<'t> {
     match ty {
       CType::Unknown
@@ -695,10 +705,21 @@ fn raise_generics_to_unknowns<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> C
         Entry::Occupied(o) => CType::NodeType(*o.get()),
       },
 
-      CType::Req(reqs, inner) => CType::Req(
-        reqs.clone(),
-        Box::new(generic_helper(checker, *inner, generics_to_node_types)),
-      ),
+      CType::Req(reqs, inner) => {
+        let reqs = reqs
+          .iter()
+          .map(|req| match req {
+            Requirement::Num => Requirement::Num,
+            Requirement::Field(field, ty) => {
+              let ty = generic_helper(checker, CType::NodeType(*ty), generics_to_node_types);
+              let ty = checker.raise_to_node(ty);
+              Requirement::Field(*field, ty)
+            }
+          })
+          .collect();
+        let inner = Box::new(generic_helper(checker, *inner, generics_to_node_types));
+        CType::Req(reqs, inner)
+      }
       CType::Apply(a, b) => {
         let a = Box::new(generic_helper(checker, *a, generics_to_node_types));
         let b = Box::new(generic_helper(checker, *b, generics_to_node_types));
