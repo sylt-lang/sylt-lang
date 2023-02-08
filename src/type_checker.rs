@@ -304,8 +304,6 @@ fn record_merge<'t>(
   })
 }
 fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) -> TRes<CType<'t>> {
-  // println!("{} -- {}", a.render(checker), b.render(checker));
-  // println!("{:?} -- {:?}", a, b);
   Ok(match (a, b) {
     (a, b) if a == b => a,
     (CType::Unknown, b) => b,
@@ -537,12 +535,9 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
           let exp_ty = check_type(checker, exp_ty)?;
           let expr_ty = check_expr(checker, expr)?;
           let f_ty = CType::Function(Box::new(exp_ty), Box::new(ty));
-          println!("{}", f_ty.render(checker));
           let f_ty = raise_generics_to_unknowns(checker, f_ty);
-          println!("{}", f_ty.render(checker));
           let call_ty = CType::Function(Box::new(expr_ty), Box::new(CType::Unknown));
           let call_ty = raise_generics_to_unknowns(checker, call_ty);
-          println!("{} && {}", f_ty.render(checker), call_ty.render(checker));
           if let CType::Function(_, out_ty) = unify(checker, f_ty, call_ty, *span)? {
             *out_ty
           } else {
