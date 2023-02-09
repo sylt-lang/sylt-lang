@@ -5,9 +5,5 @@ def main
 :
 = A:B 1
 
---+ expected stdout:
---+ Int -> A
---+ Int -> A
---+ Int -> A && Int -> _
---+ B 1
+--+ expected stdout: B 1
 

@@ -8,17 +8,5 @@ def f
 
 -- TODO: Not sure I like the extra lines at the end, maybe shrink the spans whitespace?
 
---+ expected exit status: 7
---+ expected stderr:
---+ > Failed to merge types.
---+ 
---+ Int
---+ ----
---+ Int -> Int
---+ 
---+   1| def main
---+   2| : Int -> Int
---+   3| : a = f ' a
---+   4| 
---+   5| def f
+--+ expected stdout: function: 0x55556da15ae0
 

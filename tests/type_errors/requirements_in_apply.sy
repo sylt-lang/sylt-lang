@@ -2,14 +2,3 @@ type A q = { a: q }
 
 def f : A Int -> Int : { a } = a
 
---+ expected exit status: 7
---+ expected stderr:
---+ > Failed to merge types.
---+ 
---+ Record
---+ ----
---+ Record Int
---+ 
---+   3| def f : A Int -> Int : { a } = a
---+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-

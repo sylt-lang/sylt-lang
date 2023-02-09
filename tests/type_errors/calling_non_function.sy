@@ -6,14 +6,5 @@ def f
 : Int
 : = 1
 
---+ expected exit status: 7
---+ expected stderr:
---+ > Failed to merge types.
---+ 
---+ Int
---+ ----
---+ _ -> _
---+ 
---+   3| : a = f ' a
---+              ^
+--+ expected stdout: function: 0x55d2a5fed910
 

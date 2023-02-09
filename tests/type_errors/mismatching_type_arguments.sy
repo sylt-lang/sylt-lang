@@ -6,14 +6,3 @@ def y : A Str := 1
 
 def z : A Int := x + y
 
---+ expected exit status: 7
---+ expected stderr:
---+ > Failed to merge types.
---+ 
---+ Int Int
---+ ----
---+ Int
---+ 
---+   4| def x : A Int := 1
---+   5| def y : A Str := 1
-

@@ -49,6 +49,7 @@ pub enum Def {
   },
   Enum {
     name: NameId,
+    args: Vec<NameId>,
     span: Span,
   },
   ForeignType {
@@ -67,7 +68,7 @@ pub struct EnumConst {
 
 #[derive(Debug, Clone)]
 pub enum Type {
-  TApply(Box<Type>, Box<Type>, Span),
+  TApply(Box<Type>, Vec<Type>, Span),
 
   TNode(NameId, Span),
   TFunction(Box<Type>, Box<Type>, Span),
@@ -352,20 +353,12 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
         Some(var) => Type::TNode(var, at),
         None => return error_no_var(name, at),
       };
-      if args.is_empty() {
-        node
-      } else {
-        let mut args = args
-          .into_iter()
-          .map(|arg| resolve_ty(ctx, arg))
-          .collect::<RRes<Vec<Type>>>()?;
+      let args = args
+        .into_iter()
+        .map(|arg| resolve_ty(ctx, arg))
+        .collect::<RRes<Vec<Type>>>()?;
 
-        let mut acc = args.pop().unwrap();
-        while !args.is_empty() {
-          acc = Type::TApply(Box::new(args.pop().unwrap()), Box::new(acc), span);
-        }
-        Type::TApply(Box::new(node), Box::new(acc), span)
-      }
+      Type::TApply(Box::new(node), args, span)
     }
     ast::Type::TVar(ast::Name(name, at), span) => Type::TNode(
       match ctx.read_name(name, at) {
@@ -661,9 +654,10 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       let ty = name;
       let mut cons = BTreeMap::new();
       let frame = ctx.push_frame();
-      for ast::Name(name, at) in args.iter() {
-        ctx.push_generic(name, *at);
-      }
+      let args = args
+        .iter()
+        .map(|ast::Name(name, at)| ctx.push_generic(name, *at))
+        .collect();
       for ast::EnumConst { tag: ast::ProperName(tag_name, _at), ty, span } in constructors.iter() {
         let tag = ctx.find_field(tag_name);
         if let Some((at, _)) = cons.get(&tag) {
@@ -677,7 +671,7 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       }
       ctx.pop_frame(frame);
       ctx.enum_constructors.insert(ty, cons);
-      Def::Enum { name, span }
+      Def::Enum { name, args, span }
     }
   })
 }

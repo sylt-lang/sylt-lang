@@ -8,17 +8,3 @@ def x
 : A -> A
 : a = a
 
---+ expected exit status: 7
---+ expected stderr:
---+ > Failed to merge types.
---+ 
---+ Int
---+ ----
---+ A
---+ 
---+   3| def f
---+   4| : Int -> Int
---+   5| : a = x ' a
---+   6| 
---+   7| def x
-

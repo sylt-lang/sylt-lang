@@ -25,7 +25,8 @@ pub enum CType<'t> {
   Record,
   //
   Req(BTreeSet<Requirement>, Box<CType<'t>>),
-  Apply(Box<CType<'t>>, Box<CType<'t>>),
+  // TODO: Can the element type be a NameId?
+  Apply(Box<CType<'t>>, Vec<CType<'t>>),
   Function(Box<CType<'t>>, Box<CType<'t>>),
 }
 
@@ -55,7 +56,7 @@ impl<'t> CType<'t> {
   ) -> String {
     // TODO: We need to clone types for now, but we should be able to not clone it later by
     // having a mutable borrow - preferably CType shouldn't care about Checker.
-    let mut checker = Checker { types, names, fields };
+    let mut checker = Checker { types, names, fields, aliases: BTreeMap::new() };
     self.render(&mut checker)
   }
 
@@ -67,7 +68,7 @@ impl<'t> CType<'t> {
     match self {
       CType::NodeType(name) => {
         let ty = resolve_ty(checker, *name);
-        ty.render(checker)
+        format!("<#{} {}>", name.0, ty.render(checker))
       }
       CType::Unknown => "_".to_string(),
       CType::Foreign(name) => name.name.to_string(),
@@ -77,10 +78,14 @@ impl<'t> CType<'t> {
       CType::Str => "Str".to_string(),
       // This isn't good enough
       CType::Record => "Record".to_string(),
-      CType::Apply(a, b) => {
+      CType::Apply(a, bs) => {
         let a = a.render(checker);
-        let b = b.render(checker);
-        format!("{} {}", a, b)
+        let bs = bs
+          .iter()
+          .map(|b| b.render(checker))
+          .collect::<Vec<_>>()
+          .join(" ");
+        format!("{} {}", a, bs)
       }
       CType::Function(a, b) => {
         let a = a.render(checker);
@@ -159,6 +164,7 @@ struct Checker<'t> {
   types: Vec<Node<'t>>,
   names: &'t [Name<'t>],
   fields: &'t BTreeMap<FieldId, &'t str>,
+  aliases: BTreeMap<NameId, (&'t Vec<NameId>, CType<'t>)>,
 }
 
 impl<'t> Checker<'t> {
@@ -183,7 +189,7 @@ type TRes<A> = Result<A, Error>;
 
 pub fn check<'t>(
   names: &'t Vec<Name<'t>>,
-  defs: &Vec<Def>,
+  defs: &'t Vec<Def>,
   fields: &'t BTreeMap<FieldId, &'t str>,
 ) -> (Vec<Node<'t>>, TRes<()>) {
   // These are the only nodes which should ever be created. Otherwise memory usage will explode.
@@ -201,38 +207,58 @@ pub fn check<'t>(
       .collect(),
     names,
     fields,
+    aliases: BTreeMap::new(),
   };
 
   let err = (|| {
     for def in defs {
       match def {
-        Def::ForiegnDef { name, span, ty, .. } | Def::Def { name, span, ty, .. } => {
-          let ty = check_type(&mut checker, ty)?;
-          let x = CType::NodeType(*name);
-          unify(&mut checker, x, ty, *span)?;
+        // Args that are unused cannot exist, what are they going to limit
+        Def::Type { name, args, body, span } => {
+          let NameId(slot) = name;
+          unify(
+            &mut checker,
+            CType::NodeType(*name),
+            CType::Foreign(&names[*slot]),
+            *span,
+          )?;
+
+          let def_ty = check_type(&mut checker, body)?;
+          checker.aliases.insert(*name, (args, def_ty));
         }
 
-        Def::ForeignType { name, args: _, span } => {
+        _ => {}
+      }
+    }
+    for def in defs {
+      match def {
+        Def::ForiegnDef { .. } | Def::Def { .. } => { /* Do nothing */ }
+
+        Def::ForeignType { name, args, span } => {
           let NameId(slot) = name;
-          let def_ty = CType::Foreign(&names[*slot]);
-          // for arg in args.iter() {
-          //   def_ty = CType::Apply(Box::new(def_ty), Box::new(CType::NodeType(*arg)));
-          // }
+          let args = args.iter().map(|a| CType::NodeType(*a)).collect();
+          let def_ty = CType::Apply(Box::new(CType::Foreign(&names[*slot])), args);
           unify(&mut checker, CType::NodeType(*name), def_ty, *span)?;
         }
 
         // Args that are unused cannot exist, what are they going to limit
-        Def::Type { name, args: _, body, span } => {
+        Def::Type { name, args, body, span } => {
+          let NameId(slot) = name;
+          unify(
+            &mut checker,
+            CType::NodeType(*name),
+            CType::Foreign(&names[*slot]),
+            *span,
+          )?;
+
           let def_ty = check_type(&mut checker, body)?;
-          unify(&mut checker, CType::NodeType(*name), def_ty, *span)?;
+          checker.aliases.insert(*name, (args, def_ty));
         }
 
-        Def::Enum { name, span } => {
+        Def::Enum { name, args, span } => {
           let NameId(slot) = name;
-          let def_ty = CType::Foreign(&names[*slot]);
-          // for arg in args.iter() {
-          //   def_ty = CType::Apply(Box::new(def_ty), Box::new(CType::NodeType(*arg)));
-          // }
+          let args = args.iter().map(|a| CType::NodeType(*a)).collect();
+          let def_ty = CType::Apply(Box::new(CType::Foreign(&names[*slot])), args);
           unify(&mut checker, CType::NodeType(*name), def_ty, *span)?;
         }
       }
@@ -435,10 +461,23 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
     (CType::Int, CType::Int) => CType::Int,
     (CType::Real, CType::Real) => CType::Real,
     (CType::Str, CType::Str) => CType::Str,
-    (CType::Apply(a0, a1), CType::Apply(b0, b1)) => {
+    (CType::Apply(a0, a1), CType::Apply(b0, b1)) if a1.len() == b1.len() => {
       let c0 = unify(checker, *a0, *b0, span)?;
-      let c1 = unify(checker, *a1, *b1, span)?;
-      CType::Apply(Box::new(c0), Box::new(c1))
+      let c1 = a1
+        .into_iter()
+        .zip(b1.into_iter())
+        .map(|(ax, bx)| unify(checker, ax, bx, span))
+        .collect::<TRes<Vec<_>>>()?;
+      CType::Apply(Box::new(c0), c1)
+    }
+    (a @ CType::Apply(_, _), b @ CType::Apply(_, _)) => {
+      return error_unify(
+        checker,
+        "The number of type arguments doesn't match here",
+        a,
+        b,
+        span,
+      )
     }
     (CType::Function(a0, a1), CType::Function(b0, b1)) => {
       let c0 = unify(checker, *a0, *b0, span)?;
@@ -507,7 +546,6 @@ fn check_requirements<'t>(
         Requirement::Field(_, _) => true,
       }) => {}
     CType::Apply(inner, _) => return check_requirements(checker, span, req, *inner),
-    // CType::Function(_, _) => todo!(),
     _ => {
       return error_req(
         checker,
@@ -537,7 +575,6 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
           let f_ty = CType::Function(Box::new(exp_ty), Box::new(ty));
           let f_ty = raise_generics_to_unknowns(checker, f_ty);
           let call_ty = CType::Function(Box::new(expr_ty), Box::new(CType::Unknown));
-          let call_ty = raise_generics_to_unknowns(checker, call_ty);
           if let CType::Function(_, out_ty) = unify(checker, f_ty, call_ty, *span)? {
             *out_ty
           } else {
@@ -715,10 +752,13 @@ fn raise_generics_to_unknowns<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> C
         let inner = Box::new(generic_helper(checker, *inner, generics_to_node_types));
         CType::Req(reqs, inner)
       }
-      CType::Apply(a, b) => {
+      CType::Apply(a, bs) => {
         let a = Box::new(generic_helper(checker, *a, generics_to_node_types));
-        let b = Box::new(generic_helper(checker, *b, generics_to_node_types));
-        CType::Apply(a, b)
+        let bs = bs
+          .into_iter()
+          .map(|b| generic_helper(checker, b, generics_to_node_types))
+          .collect();
+        CType::Apply(a, bs)
       }
       CType::Function(a, b) => {
         let a = Box::new(generic_helper(checker, *a, generics_to_node_types));
@@ -751,15 +791,19 @@ fn check_pattern<'t>(checker: &mut Checker<'t>, binding: &Pattern) -> TRes<CType
     Pattern::EnumConst { ty_name, const_name: _, inner, span } => {
       let ty = CType::NodeType(*ty_name);
       match inner {
-        Some((pattern, exp_ty)) => {
-          let expeced_ty = check_type(checker, exp_ty)?;
-          let expeced_ty = raise_generics_to_unknowns(checker, expeced_ty);
-          let pat_ty = check_pattern(checker, pattern)?;
-          // TODO: This won't handle generics.
-          unify(checker, expeced_ty, pat_ty, *span)?;
-          ty
+        Some((pat, exp_ty)) => {
+          let exp_ty = check_type(checker, exp_ty)?;
+          let pat_ty = check_pattern(checker, pat)?;
+          let f_ty = CType::Function(Box::new(exp_ty), Box::new(ty));
+          let f_ty = raise_generics_to_unknowns(checker, f_ty);
+          let call_ty = CType::Function(Box::new(pat_ty), Box::new(CType::Unknown));
+          if let CType::Function(_, out_ty) = unify(checker, f_ty, call_ty, *span)? {
+            *out_ty
+          } else {
+            unreachable!("We have to return a function when unifying with a function!");
+          }
         }
-        None => ty,
+        None => raise_generics_to_unknowns(checker, ty),
       }
     }
     Pattern::Record(fields, _) => {
@@ -822,10 +866,31 @@ fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> TRes<CType<'t>> {
     Type::TInt(_) => CType::Int,
     Type::TReal(_) => CType::Real,
     Type::TStr(_) => CType::Str,
-    Type::TApply(a, b, _) => {
-      let a_ty = check_type(checker, a)?;
-      let b_ty = check_type(checker, b)?;
-      CType::Apply(Box::new(a_ty), Box::new(b_ty))
+    Type::TApply(a, bs, span) => {
+      let bs_ty = bs
+        .iter()
+        .map(|b| check_type(checker, b))
+        .collect::<TRes<Vec<CType<'t>>>>()?;
+      let bs_ty = CType::Apply(Box::new(CType::Unknown), bs_ty);
+      match check_type(checker, a)? {
+        CType::NodeType(n) if checker.aliases.contains_key(&n) => {
+          let (args, body) = checker.aliases.get(&n).unwrap();
+          let args_ty = args.iter().map(|a| CType::NodeType(*a)).collect();
+          if let CType::Function(input, output) = raise_generics_to_unknowns(
+            checker,
+            CType::Function(
+              Box::new(CType::Apply(Box::new(CType::Unknown), args_ty)),
+              Box::new(body.clone()),
+            ),
+          ) {
+            unify(checker, *input, bs_ty, *span)?;
+            *output
+          } else {
+            unreachable!();
+          }
+        }
+        a_ty => unify(checker, a_ty, bs_ty, *span)?,
+      }
     }
     Type::TNode(slot, _) => CType::NodeType(*slot),
     Type::TFunction(a, b, _) => {

@@ -20,7 +20,7 @@ def b : Str : = id ' 1
 --+   raw: Ty(Str)
 --+ 003 V "@" @ 98-99
 --+   used at: []
---+   type: _ -> _
+--+   type: <#4 _> -> _
 --+   raw: Ty(Function(NodeType(NameId(4)), Unknown))
 --+ 004 V "a" @ 102-103
 --+   used at: [Span(106, 107)]
