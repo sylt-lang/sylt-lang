@@ -264,6 +264,11 @@ pub fn check<'t>(
       }
     }
 
+    // Why does this help? Do I allow unifying without knowing all the information? How bad is
+    // this in respect to performance and memory?
+    for def in defs {
+      check_def(&mut checker, def)?;
+    }
     for def in defs {
       check_def(&mut checker, def)?;
     }
@@ -330,6 +335,7 @@ fn record_merge<'t>(
   })
 }
 fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) -> TRes<CType<'t>> {
+  // println!("{} + {}", a.render(checker), b.render(checker));
   Ok(match (a, b) {
     (a, b) if a == b => a,
     (CType::Unknown, b) => b,
@@ -889,7 +895,10 @@ fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> TRes<CType<'t>> {
             unreachable!();
           }
         }
-        a_ty => unify(checker, a_ty, bs_ty, *span)?,
+        a_ty => {
+            let a_ty = raise_generics_to_unknowns(checker, a_ty);
+            unify(checker, a_ty, bs_ty, *span)?
+        }
       }
     }
     Type::TNode(slot, _) => CType::NodeType(*slot),

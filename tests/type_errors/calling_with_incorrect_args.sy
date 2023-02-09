@@ -8,3 +8,14 @@ def x
 : A -> A
 : a = a
 
+--+ expected exit status: 7
+--+ expected stderr:
+--+ > Failed to merge types.
+--+ 
+--+ A 
+--+ ----
+--+ Int
+--+ 
+--+   5| : a = x ' a
+--+              ^
+

@@ -1,10 +1,13 @@
 def main : _ : = let { a } = { a: "ABC" } in a + 1
 
+--+ expected exit status: 7
 --+ expected stderr:
---+ lua: stdin:38: attempt to add a 'string' with a 'number'
---+ stack traceback:
---+ 	[C]: in metamethod 'add'
---+ 	stdin:38: in function <stdin:35>
---+ 	stdin:35: in main chunk
---+ 	[C]: in ?
+--+ > Failed to merge types.
+--+ 
+--+ Str
+--+ ----
+--+ Int
+--+ 
+--+   1| def main : _ : = let { a } = { a: "ABC" } in a + 1
+--+                                                     ^
 

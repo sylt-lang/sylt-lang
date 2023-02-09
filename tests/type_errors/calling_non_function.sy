@@ -1,10 +1,22 @@
 def main
-: Int -> Int
-: a = f ' a
+: Int
+: a = f ' 1
 
 def f
 : Int
 : = 1
 
---+ expected stdout: function: 0x55d2a5fed910
+--+ expected exit status: 7
+--+ expected stderr:
+--+ > Failed to merge types.
+--+ 
+--+ <#2 _> -> _
+--+ ----
+--+ Int
+--+ 
+--+   1| def main
+--+   2| : Int
+--+   3| : a = f ' 1
+--+   4| 
+--+   5| def f
 
