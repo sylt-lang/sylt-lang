@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     
     container:
-      image: rust:nightly-buster-slim
+      image: ghcr.io/rust-lang/rust:nightly-buster-slim rust:nightly-buster-slim
 
     steps:
     - uses: actions/checkout@v2
