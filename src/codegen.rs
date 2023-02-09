@@ -315,7 +315,7 @@ fn gen_record_constant(
 
 fn gen_pat(out: &mut dyn Write, curr: String, ctx: Ctx, binding: &Pattern) -> Result<()> {
   Ok(match binding {
-    Pattern::Empty(_) => write!(out, "{}\n", curr)?,
+    Pattern::Empty(_) => write!(out, "sy_id({})\n", curr)?,
     Pattern::Var(name, inner, _) => {
       write!(out, "local {} = {}\n", ctx.var(*name), curr)?;
       match inner {
@@ -323,13 +323,22 @@ fn gen_pat(out: &mut dyn Write, curr: String, ctx: Ctx, binding: &Pattern) -> Re
         None => (),
       }
     }
-    Pattern::EnumConst { inner: Some(inner), const_name, .. } => {
-      gen_pat(out, format!("_sy_intern_check_const({}, \"{}\")", curr, ctx.field(*const_name)), ctx, &*inner.0)?
-    }
-    Pattern::EnumConst { inner: None, const_name, .. } => {
-      write!(out, "_sy_intern_check_const({}, \"{}\")\n", curr, ctx.field(*const_name))?
-
-    }
+    Pattern::EnumConst { inner: Some(inner), const_name, .. } => gen_pat(
+      out,
+      format!(
+        "_sy_intern_check_const({}, \"{}\")",
+        curr,
+        ctx.field(*const_name)
+      ),
+      ctx,
+      &*inner.0,
+    )?,
+    Pattern::EnumConst { inner: None, const_name, .. } => write!(
+      out,
+      "_sy_intern_check_const({}, \"{}\")\n",
+      curr,
+      ctx.field(*const_name)
+    )?,
     Pattern::Record(fields, _) => {
       for (field, _, pat) in fields {
         let field = ctx.field(*field);

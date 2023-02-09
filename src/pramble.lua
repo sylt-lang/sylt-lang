@@ -10,6 +10,8 @@ function Enum.new(k, v)
   return e
 end
 
+function sy_id(a) return a end
+
 function sy_record_merge(a, b)
   -- fields in `a` take precedence over `b`
   -- Since everything is immutable we get away with a shallow copy here :D
