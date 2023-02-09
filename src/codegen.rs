@@ -265,7 +265,7 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
     }
     Expr::Match { value, branches, span: _ } => {
       write!(out, "(function(match_value)\n")?;
-      write!(out, "local succ = nil\n_msg = nil\n")?;
+      write!(out, "local succ = nil\nlocal _msg = nil\n")?;
       for WithBranch { pattern, condition, value, span: _ } in branches.iter() {
         write!(out, "succ, _msg = pcall(function()\n    ")?;
         gen_pat(out, "match_value".to_string(), ctx, pattern)?;
@@ -315,7 +315,7 @@ fn gen_record_constant(
 
 fn gen_pat(out: &mut dyn Write, curr: String, ctx: Ctx, binding: &Pattern) -> Result<()> {
   Ok(match binding {
-    Pattern::Empty(_) => (),
+    Pattern::Empty(_) => write!(out, "{}\n", curr)?,
     Pattern::Var(name, inner, _) => {
       write!(out, "local {} = {}\n", ctx.var(*name), curr)?;
       match inner {
@@ -323,10 +323,13 @@ fn gen_pat(out: &mut dyn Write, curr: String, ctx: Ctx, binding: &Pattern) -> Re
         None => (),
       }
     }
-    Pattern::EnumConst { inner: Some(inner), .. } => {
-      gen_pat(out, format!("{}[2]", curr), ctx, &*inner.0)?
+    Pattern::EnumConst { inner: Some(inner), const_name, .. } => {
+      gen_pat(out, format!("_sy_intern_check_const({}, \"{}\")", curr, ctx.field(*const_name)), ctx, &*inner.0)?
     }
-    Pattern::EnumConst { inner: None, .. } => (),
+    Pattern::EnumConst { inner: None, const_name, .. } => {
+      write!(out, "_sy_intern_check_const({}, \"{}\")\n", curr, ctx.field(*const_name))?
+
+    }
     Pattern::Record(fields, _) => {
       for (field, _, pat) in fields {
         let field = ctx.field(*field);

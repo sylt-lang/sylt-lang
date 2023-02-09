@@ -26,3 +26,8 @@ end
 function _sy_intern_check_pattern(kind, expected, given)
   assert(expected == given, "Invalid pattern match: " .. tostring(expected) .. " != " .. tostring(given))
 end
+
+function _sy_intern_check_const(thing, const)
+  assert(const == thing[1], "Invalid pattern match: \"" .. const .. "\" != " .. tostring(thing[1]))
+  return thing[2]
+end
