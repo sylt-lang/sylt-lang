@@ -1,0 +1,6 @@
+def q : forall a. { field: a } -> Str : { field } = field
+
+def main : Str := q ' { field: 1 }
+
+--+ expected stdout: 1
+

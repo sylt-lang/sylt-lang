@@ -1,0 +1,17 @@
+enum A a = A { field: a }
+
+def q : forall a. A -> Str : A:A { field } = field
+
+def main : Str := q ' A:A { field: 1 }
+
+--+ expected exit status: 7
+--+ expected stderr:
+--+ > The number of type arguments doesn't match here.
+--+ 
+--+ A <#7 _>
+--+ ----
+--+ _ 
+--+ 
+--+   3| def q : forall a. A -> Str : A:A { field } = field
+--+                        ^
+

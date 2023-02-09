@@ -1,0 +1,17 @@
+type A p = p
+
+def f : forall a. A a -> a : q = q
+
+def main : Str := f ' 1
+
+--+ expected exit status: 7
+--+ expected stderr:
+--+ > Failed to merge types.
+--+ 
+--+ Int
+--+ ----
+--+ Str
+--+ 
+--+   5| def main : Str := f ' 1
+--+      ^^^^^^^^^^^^^^^^^^^^^^^
+
