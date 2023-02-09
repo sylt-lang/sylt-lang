@@ -896,8 +896,8 @@ fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> TRes<CType<'t>> {
           }
         }
         a_ty => {
-            let a_ty = raise_generics_to_unknowns(checker, a_ty);
-            unify(checker, a_ty, bs_ty, *span)?
+          let a_ty = raise_generics_to_unknowns(checker, a_ty);
+          unify(checker, a_ty, bs_ty, *span)?
         }
       }
     }
