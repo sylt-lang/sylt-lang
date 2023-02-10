@@ -5,9 +5,32 @@ function Enum.__tostring(t)
 end
 
 function Enum.new(k, v)
-  local e = {k, v}
+  local e = { k, v }
   setmetatable(e, Enum)
   return e
+end
+
+RecordMeta = {}
+function RecordMeta.__tostring(record)
+  local s = '{'
+  local first = true
+  for k, v in pairs(record) do
+    if first then
+      first = false
+    else
+      s = s .. ', '
+    end
+
+    s = s .. tostring(k) .. ': ' .. tostring(v)
+  end
+  s = s .. '}'
+  return s
+end
+
+Record = {}
+function Record.new(record)
+  setmetatable(record, RecordMeta)
+  return record
 end
 
 function sy_id(a) return a end

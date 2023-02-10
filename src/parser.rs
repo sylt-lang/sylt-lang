@@ -614,7 +614,9 @@ pub fn type_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {
   Ok(Some(ty))
 }
 
+/// Parse a definition
 pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
+  /// Parse a normal definition
   fn def_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Def<'t>>> {
     let start = lex.span();
     if !matches!(lex.token(), Some(Token::KwDef)) {
@@ -686,6 +688,7 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
     }
   }
 
+  /// Parse a type alias
   fn ty_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Def<'t>>> {
     let start = lex.span();
     if !matches!(lex.token(), Some(Token::KwType)) {
@@ -729,6 +732,7 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
     }
   }
 
+  /// Parse an enum
   fn enum_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Def<'t>>> {
     let start = lex.span();
     if !matches!(lex.token(), Some(Token::KwEnum)) {
@@ -758,6 +762,7 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
 
     expect!(lex, Token::Equal, "Expected a `=` to start the enum body");
 
+    /// Parse an enum constructor
     fn enum_const<'t>(lex: &mut Lex<'t>) -> PRes<EnumConst<'t>> {
       let start = lex.span();
       let tag = match expect!(

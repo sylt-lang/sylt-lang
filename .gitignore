@@ -4,6 +4,13 @@ coverage-*
 target
 tags
 
+# Direnv and nix
+.direnv/
+.envrc
+shell.nix
+flake.nix
+flake.lock
+
 
 # Added by cargo
 

@@ -50,7 +50,7 @@ impl<'a> Ctx<'a> {
   }
 }
 
-const PREAMBLE: &'static str = include_str!("pramble.lua");
+const PREAMBLE: &'static str = include_str!("preamble.lua");
 
 pub fn gen<'t>(
   out: &mut dyn Write,
@@ -304,13 +304,13 @@ fn gen_record_constant(
   ctx: Ctx,
   fields: &[((Span, FieldId), Expr)],
 ) -> Result<()> {
-  write!(out, "{{")?;
+  write!(out, "Record.new({{")?;
   for ((_, field), value) in fields.iter() {
     write!(out, "[\"{}\"] = ", ctx.field(*field))?;
     gen_expr(out, ctx, value)?;
     write!(out, ",")?;
   }
-  write!(out, "}}")
+  write!(out, "}})")
 }
 
 fn gen_pat(out: &mut dyn Write, curr: String, ctx: Ctx, binding: &Pattern) -> Result<()> {

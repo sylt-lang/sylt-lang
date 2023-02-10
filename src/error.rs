@@ -191,7 +191,7 @@ impl Error {
       ),
 
       Error::ResUnknown { name, span } => format!(
-        "> I couldn't figure out what {:?} refernces. Did you make a typo?\n{}",
+        "> I couldn't figure out what {:?} references. Did you make a typo?\n{}",
         name,
         Self::maybe_render_context(span, source)
       ),
