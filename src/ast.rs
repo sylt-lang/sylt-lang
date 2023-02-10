@@ -172,19 +172,19 @@ pub struct WithBranch<'t> {
 /// An expression
 #[derive(Debug, Clone)]
 pub enum Expr<'t> {
-  /// A boolean expression
+  /// A boolean value
   EBool(bool, Span),
 
-  /// An integer expression
+  /// An integer value
   EInt(i64, Span),
 
-  /// A real number expression
+  /// A real number value
   EReal(f64, Span),
 
-  /// A string expression
+  /// A string value
   EStr(&'t str, Span),
 
-  /// An enum construction expression
+  /// An enum value
   ///
   /// Example
   /// ```sylt
@@ -196,7 +196,7 @@ pub enum Expr<'t> {
     value: Option<Box<Expr<'t>>>,
   },
 
-  /// A record construction expression
+  /// A record value
   ///
   /// Example
   /// ```sylt
@@ -309,17 +309,29 @@ impl UnOp {
 /// Binary operators
 #[derive(Debug, Clone, Copy)]
 pub enum BinOp {
+  /// Addition operator `+`
   Add(Span),
+  /// Subtraction operator `-`
   Sub(Span),
+  /// Division operator `/`
   Div(Span),
+  /// Multiplication operator `*`
   Mul(Span),
+  /// Call operator `'`
   Call(Span),
+  /// Pipe operator `#`
   RevCall(Span),
+  /// And operator `and`
   And(Span),
+  /// Or operator `or`
   Or(Span),
+  /// Less than operator `<`
   Lt(Span),
+  /// Less than or equal operator `<=`
   LtEq(Span),
+  /// Equality operator `==`
   Eq(Span),
+  /// Inequality operator `~=`
   Neq(Span),
 }
 
@@ -345,7 +357,7 @@ impl BinOp {
 /// Types
 #[derive(Debug, Clone)]
 pub enum Type<'t> {
-  /// The empty type, matches all types
+  /// The empty (unknown) type, matches all types
   TEmpty(Span),
 
   /// A type alias
