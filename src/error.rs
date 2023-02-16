@@ -25,15 +25,10 @@ pub enum Error {
   },
 
   /// Parsing reached eof
-  SynEoF {
-    span: Span,
-  },
+  SynEoF { span: Span },
 
   /// No definition of variable
-  ResUnknown {
-    name: String,
-    span: Span,
-  },
+  ResUnknown { name: String, span: Span },
 
   /// Multiple definitions for a variable
   ResMultiple {
@@ -50,16 +45,10 @@ pub enum Error {
   },
 
   /// Missing enum
-  ResNoEnum {
-    ty_name: String,
-    at: Span,
-  },
+  ResNoEnum { ty_name: String, at: Span },
 
   /// FIXME: ?
-  ResMsg {
-    msg: String,
-    span: Span,
-  },
+  ResMsg { msg: String, span: Span },
 
   /// FIXME: ?
   CheckMsg {
@@ -100,10 +89,7 @@ pub enum Error {
   },
 
   /// An error message with an associated record field
-  CheckField {
-    field: String,
-    inner: Box<Error>,
-  },
+  CheckField { field: String, inner: Box<Error> },
 }
 
 impl Error {

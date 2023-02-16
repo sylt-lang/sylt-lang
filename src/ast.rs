@@ -38,7 +38,6 @@ pub enum Def<'t> {
     foreign_block: Option<(&'t str, Span)>,
   },
 
-
   /// A type alias
   ///
   /// Example
