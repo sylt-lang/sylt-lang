@@ -15,7 +15,7 @@ pub enum Def<'t> {
   ///
   /// Example
   /// ```sylt
-  /// a : Int := 1
+  /// def a : Int := 1
   /// ```
   Def {
     ty: Type<'t>,
@@ -154,7 +154,7 @@ pub struct EnumConst<'t> {
   pub span: Span,
 }
 
-/// A "which" branch in a match expression
+/// A "with" branch in a match expression
 ///
 /// Example
 /// ```sylt
@@ -183,7 +183,7 @@ pub enum Expr<'t> {
   /// A string value
   EStr(&'t str, Span),
 
-  /// An enum value
+  /// An enum constructor value
   ///
   /// Example
   /// ```sylt
@@ -330,7 +330,7 @@ pub enum BinOp {
   LtEq(Span),
   /// Equality operator `==`
   Eq(Span),
-  /// Inequality operator `~=`
+  /// Inequality operator `!=`
   Neq(Span),
 }
 
