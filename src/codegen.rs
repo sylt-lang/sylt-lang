@@ -203,11 +203,11 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
     Expr::Var(name, _) => write!(out, "{}", ctx.var(*name))?,
     Expr::EnumConst { ty_name: _, const_name, value, span: _ } => {
       if let Some((value, _)) = value {
-        write!(out, "Enum.new( \"{}\", (", ctx.field(*const_name))?;
+        write!(out, "Sylt.Enum.new( \"{}\", (", ctx.field(*const_name))?;
         gen_expr(out, ctx, value)?;
         write!(out, ") )")?;
       } else {
-        write!(out, "Enum.new( \"{}\", nil )", ctx.field(*const_name))?;
+        write!(out, "Sylt.Enum.new( \"{}\", nil )", ctx.field(*const_name))?;
       }
     }
     Expr::Un(ast::UnOp::Neg(_), expr, _) => {
@@ -257,7 +257,7 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
     }
     Expr::Record { to_extend: None, fields, span: _ } => gen_record_constant(out, ctx, fields)?,
     Expr::Record { to_extend: Some(to_extend), fields, span: _ } => {
-      write!(out, "sy_record_merge( ")?;
+      write!(out, "Sylt.Record.merge(")?;
       gen_expr(out, ctx, to_extend)?;
       write!(out, ", ")?;
       gen_record_constant(out, ctx, fields)?;
@@ -304,7 +304,7 @@ fn gen_record_constant(
   ctx: Ctx,
   fields: &[((Span, FieldId), Expr)],
 ) -> Result<()> {
-  write!(out, "Record.new({{")?;
+  write!(out, "Sylt.Record.new({{")?;
   for ((_, field), value) in fields.iter() {
     write!(out, "[\"{}\"] = ", ctx.field(*field))?;
     gen_expr(out, ctx, value)?;
@@ -326,7 +326,7 @@ fn gen_pat(out: &mut dyn Write, curr: String, ctx: Ctx, binding: &Pattern) -> Re
     Pattern::EnumConst { inner: Some(inner), const_name, .. } => gen_pat(
       out,
       format!(
-        "_sy_intern_check_const({}, \"{}\")",
+        "Sylt.Pattern.check_const({}, \"{}\")",
         curr,
         ctx.field(*const_name)
       ),
@@ -335,7 +335,7 @@ fn gen_pat(out: &mut dyn Write, curr: String, ctx: Ctx, binding: &Pattern) -> Re
     )?,
     Pattern::EnumConst { inner: None, const_name, .. } => write!(
       out,
-      "_sy_intern_check_const({}, \"{}\")\n",
+      "Sylt.Pattern.check_const({}, \"{}\")\n",
       curr,
       ctx.field(*const_name)
     )?,
@@ -345,9 +345,9 @@ fn gen_pat(out: &mut dyn Write, curr: String, ctx: Ctx, binding: &Pattern) -> Re
         gen_pat(out, format!("{}[\"{}\"]", curr, field), ctx, pat)?;
       }
     }
-    Pattern::PBool(x, _) => write!(out, "_sy_intern_check_pattern(0, {}, {})\n", x, curr)?,
-    Pattern::PInt(x, _) => write!(out, "_sy_intern_check_pattern(1, {}, {})\n", x, curr)?,
-    Pattern::PReal(x, _) => write!(out, "_sy_intern_check_pattern(2, {}, {})\n", x, curr)?,
-    Pattern::PStr(x, _) => write!(out, "_sy_intern_check_pattern(3, {}, {})\n", x, curr)?,
+    Pattern::PBool(x, _) => write!(out, "Sylt.Internal.check_pattern(0, {}, {})\n", x, curr)?,
+    Pattern::PInt(x, _) => write!(out, "Sylt.Internal.check_pattern(1, {}, {})\n", x, curr)?,
+    Pattern::PReal(x, _) => write!(out, "Sylt.Internal.check_pattern(2, {}, {})\n", x, curr)?,
+    Pattern::PStr(x, _) => write!(out, "Sylt.Internal.check_pattern(3, {}, {})\n", x, curr)?,
   })
 }
