@@ -9,6 +9,50 @@ use crate::ast;
 use crate::error::*;
 use crate::name_resolution::*;
 
+// [[ Maintainers note 2023-02-21 ]]
+// This module is very complex, this is true, but fear not for some key insights can really help
+// this module make sense.
+//
+// This typesystem is my  implementation of a Damas–Hindley–Milner typesystem, but what does that
+// mean?
+// Obligatory wikipedia reference: https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system
+//
+// This type system can deduce types itself, and reason about your entire program as a whole. This
+// makes it so you are not required to write types anywhere, the computer checks the types for you,
+// like magic! Unfortunately it has limitations with some more fancy kinds of types, which aren't
+// present in sylt as of now.
+//
+// People give the rules slightly different names, but there are 4 things we can do in the
+// typesystem.
+//  1. We can unify types, this is handled by the `unify` function. This means the type-system
+//     knows that two types are exactly the same. For example `a = b` would cause a unification of
+//     the types of `a` and `b` since we assign them to each other we know they have to have the
+//     same type. These rules get a bit intricate for some types, but they are pretty straight
+//     forward.
+//
+//  2. Specialization/substitution, handled by `raise_generics_to_unknowns` takes a type that is
+//     not specialized, e.g. `forall a. a -> a` and substitutes the generic with a new named type.
+//     This makes it possible to unify a generic, like `a` with an actual type `Int`, since a
+//     generic stands for "any possible type". Note especially that we keep equality of types
+//     though, so after this substitution we get a type like `#1 -> #1`.
+//     Substitutes makes it possible to unify later. 
+//
+//  3. Some types are a bit more special than simple types such as `Int` or `Bool`. Records are
+//     handled in a different way, namely with requirements on types this concept is similar to
+//     type-classes (for the OOP people think interfaces). So we can attach the requirement "has
+//     a field `.field`" to a type. We then verify these rules after a unification to make sure
+//     they are kept.
+//
+//  4. We know the type of a constant. So if you write `1`, we know it's an `Int`. This gets a bit
+//     more tricky when it comes to `Real` and `Int` since you might write `1` but expect the
+//     compiler to automatically cast it to `Real` in the comparison or whatever, this is not done
+//     at all in Sylt-lang.
+//
+// There are some limitations of this implementation though. It would be nice to remove the
+// assumption of certain types from the type_checker file, it doesn't need to know about `Int` or
+// `Bool`, just that things return something called `Int` or `Bool`. 
+//
+
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub enum CType<'t> {
   NodeType(NameId),
