@@ -5,7 +5,6 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
-use crate::ast;
 use crate::error::*;
 use crate::name_resolution::*;
 
@@ -634,66 +633,6 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
         None => raise_generics_to_unknowns(checker, ty),
       }
     }
-    Expr::Un(ast::UnOp::Neg(at), expr, _) => {
-      let expr_ty = check_expr(checker, expr)?;
-      unify(checker, expr_ty, CType::Int, *at)?
-    }
-    Expr::Un(ast::UnOp::Not(at), expr, _) => {
-      let expr_ty = check_expr(checker, expr)?;
-      unify(checker, expr_ty, CType::Bool, *at)?
-    }
-    Expr::Bin(ast::BinOp::RevCall(_), _, _, _) => unreachable!("Compiled to `Call`"),
-    Expr::Bin(ast::BinOp::Call(at), f, a, _) => {
-      let f_ty = check_expr(checker, f)?;
-      let a_ty = check_expr(checker, a)?;
-      // Can this be removed?
-      match unify(
-        checker,
-        f_ty,
-        CType::Function(Box::new(a_ty), Box::new(CType::Unknown)),
-        *at,
-      )? {
-        CType::NodeType(name) => {
-          if let CType::Function(_, ret) = resolve_ty(checker, name) {
-            *ret
-          } else {
-            unreachable!()
-          }
-        }
-        CType::Function(_, ret) => *ret,
-        _ => unreachable!(),
-      }
-    }
-    Expr::Bin(ast::BinOp::Add(at) | ast::BinOp::Sub(at) | ast::BinOp::Mul(at), a, b, _) => {
-      let a_ty = check_expr(checker, a)?;
-      let b_ty = check_expr(checker, b)?;
-      let c_ty = unify(checker, a_ty, b_ty, *at)?;
-      unify(checker, c_ty, Requirement::Num.to_ctype(), *at)?
-    }
-    Expr::Bin(
-      ast::BinOp::Neq(at) | ast::BinOp::Eq(at) | ast::BinOp::Lt(at) | ast::BinOp::LtEq(at),
-      a,
-      b,
-      _,
-    ) => {
-      let a_ty = check_expr(checker, a)?;
-      let b_ty = check_expr(checker, b)?;
-      let c_ty = unify(checker, a_ty, b_ty, *at)?;
-      unify(checker, c_ty, Requirement::Num.to_ctype(), *at)?;
-      CType::Bool
-    }
-    Expr::Bin(ast::BinOp::And(at) | ast::BinOp::Or(at), a, b, _) => {
-      let a_ty = check_expr(checker, a)?;
-      let b_ty = check_expr(checker, b)?;
-      let c_ty = unify(checker, a_ty, b_ty, *at)?;
-      unify(checker, c_ty, CType::Bool, *at)?
-    }
-    Expr::Bin(ast::BinOp::Div(at), a, b, _) => {
-      let a_ty = check_expr(checker, a)?;
-      let b_ty = check_expr(checker, b)?;
-      let c_ty = unify(checker, a_ty, b_ty, *at)?;
-      unify(checker, c_ty, CType::Real, *at)?
-    }
     Expr::Let { bind_value, binding, next_value } => {
       let out = check_expr(checker, next_value)?;
 
@@ -759,6 +698,27 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
         def_ty = CType::Function(Box::new(arg), Box::new(def_ty));
       }
       def_ty
+    }
+    Expr::Call(f, a, at) => {
+      let f_ty = check_expr(checker, f)?;
+      let a_ty = check_expr(checker, a)?;
+      // Can this be removed?
+      match unify(
+        checker,
+        f_ty,
+        CType::Function(Box::new(a_ty), Box::new(CType::Unknown)),
+        *at,
+      )? {
+        CType::NodeType(name) => {
+          if let CType::Function(_, ret) = resolve_ty(checker, name) {
+            *ret
+          } else {
+            unreachable!()
+          }
+        }
+        CType::Function(_, ret) => *ret,
+        _ => unreachable!(),
+      }
     }
   })
 }

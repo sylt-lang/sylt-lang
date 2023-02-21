@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::io::{Result, Write};
 
-use crate::ast;
 use crate::error::Span;
 use crate::name_resolution::*;
 use crate::type_checker::*;
@@ -210,18 +209,7 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
         write!(out, "Enum.new( \"{}\", nil )", ctx.field(*const_name))?;
       }
     }
-    Expr::Un(ast::UnOp::Neg(_), expr, _) => {
-      write!(out, "(-")?;
-      gen_expr(out, ctx, expr)?;
-      write!(out, ")")?;
-    }
-    Expr::Un(ast::UnOp::Not(_), expr, _) => {
-      write!(out, "(not ")?;
-      gen_expr(out, ctx, expr)?;
-      write!(out, ")")?;
-    }
-    Expr::Bin(ast::BinOp::RevCall(_), _, _, _) => unreachable!("Should be compiled to `Call`"),
-    Expr::Bin(ast::BinOp::Call(_), a, b, _) => {
+    Expr::Call(a, b, _) => {
       write!(out, "(")?;
       write!(out, "(")?;
       gen_expr(out, ctx, a)?;
@@ -229,30 +217,6 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
       write!(out, "(")?;
       gen_expr(out, ctx, b)?;
       write!(out, ")")?;
-      write!(out, ")")?;
-    }
-    Expr::Bin(op, a, b, _) => {
-      write!(out, "(")?;
-      gen_expr(out, ctx, a)?;
-      write!(
-        out,
-        "{}",
-        match op {
-          ast::BinOp::Add(_) => "+",
-          ast::BinOp::Sub(_) => "-",
-          ast::BinOp::Div(_) => "/",
-          ast::BinOp::Mul(_) => "*",
-          ast::BinOp::And(_) => "and",
-          ast::BinOp::Or(_) => "or",
-          ast::BinOp::Call(_) => unreachable!(),
-          ast::BinOp::RevCall(_) => unreachable!(),
-          ast::BinOp::Lt(_) => "<",
-          ast::BinOp::LtEq(_) => "<=",
-          ast::BinOp::Eq(_) => "==",
-          ast::BinOp::Neq(_) => "~=",
-        }
-      )?;
-      gen_expr(out, ctx, b)?;
       write!(out, ")")?;
     }
     Expr::Record { to_extend: None, fields, span: _ } => gen_record_constant(out, ctx, fields)?,

@@ -77,6 +77,7 @@ pub enum Type {
     span: Span,
   },
 
+  // TODO these should be removed
   TInt(Span),
   TReal(Span),
   TStr(Span),
@@ -167,8 +168,7 @@ pub enum Expr {
     span: Span,
   },
 
-  Un(ast::UnOp, Box<Expr>, Span),
-  Bin(ast::BinOp, Box<Expr>, Box<Expr>, Span),
+  Call(Box<Expr>, Box<Expr>, Span),
 }
 
 #[derive(Debug, Clone)]
@@ -472,26 +472,65 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
       Expr::EnumConst { ty_name, const_name, value, span }
     }
     ast::Expr::Un(op, expr) => {
-      let at = op.span().merge(expr.span());
-      Expr::Un(op, Box::new(resolve_expr(ctx, *expr)?), at)
-    }
-    ast::Expr::Bin(ast::BinOp::RevCall(op_at), a, b) => {
-      let at = a.span().merge(b.span());
-      Expr::Bin(
-        ast::BinOp::Call(op_at),
-        // Note the swapped order
-        Box::new(resolve_expr(ctx, *b)?),
-        Box::new(resolve_expr(ctx, *a)?),
-        at,
+      let function_name = match op {
+        ast::UnOp::Neg(_) => "_neg",
+        ast::UnOp::Not(_) => "_not",
+      };
+      let function = match ctx.read_name(function_name, op.span()) {
+        Some(t) => t,
+        // Maybe a special error since it's an internal?
+        None => return error_no_var(function_name, op.span()),
+      };
+
+      Expr::Call(
+        Box::new(Expr::Var(function, op.span())),
+        Box::new(resolve_expr(ctx, *expr)?),
+        op.span(),
       )
     }
     ast::Expr::Bin(op, a, b) => {
-      let at = a.span().merge(b.span());
-      Expr::Bin(
-        op,
-        Box::new(resolve_expr(ctx, *a)?),
+      let function_name = match op {
+        // The call operators which are a special construct now
+        ast::BinOp::Call(_) => {
+          return Ok(Expr::Call(
+            Box::new(resolve_expr(ctx, *a)?),
+            Box::new(resolve_expr(ctx, *b)?),
+            op.span(),
+          ))
+        }
+        ast::BinOp::RevCall(_) => {
+          return Ok(Expr::Call(
+            Box::new(resolve_expr(ctx, *b)?),
+            Box::new(resolve_expr(ctx, *a)?),
+            op.span(),
+          ))
+        }
+
+        // Simple cases
+        ast::BinOp::Add(_) => "_add",
+        ast::BinOp::Sub(_) => "_sub",
+        ast::BinOp::Div(_) => "_div",
+        ast::BinOp::Mul(_) => "_mul",
+        ast::BinOp::And(_) => "_and",
+        ast::BinOp::Or(_) => "_or",
+        ast::BinOp::Lt(_) => "_lt",
+        ast::BinOp::LtEq(_) => "_lteq",
+        ast::BinOp::Eq(_) => "_eq",
+        ast::BinOp::Neq(_) => "_neq",
+      };
+      let function = match ctx.read_name(function_name, op.span()) {
+        Some(t) => t,
+        // Maybe a special error since it's an internal?
+        None => return error_no_var(function_name, op.span()),
+      };
+      Expr::Call(
+        Box::new(Expr::Call(
+          Box::new(Expr::Var(function, op.span())),
+          Box::new(resolve_expr(ctx, *a)?),
+          op.span(),
+        )),
         Box::new(resolve_expr(ctx, *b)?),
-        at,
+        op.span(),
       )
     }
     ast::Expr::Match { value, branches, span } => {
