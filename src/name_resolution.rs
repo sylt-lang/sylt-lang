@@ -68,20 +68,14 @@ pub struct EnumConst {
 
 #[derive(Debug, Clone)]
 pub enum Type {
+  // TODO: Type and Function are the same thing.
   TApply(Box<Type>, Vec<Type>, Span),
-
   TNode(NameId, Span),
   TFunction(Box<Type>, Box<Type>, Span),
   TRecord {
     fields: Vec<(Span, FieldId, Type)>,
     span: Span,
   },
-
-  // TODO these should be removed
-  TInt(Span),
-  TReal(Span),
-  TStr(Span),
-  TBool(Span),
 }
 
 #[derive(Debug, Clone)]
@@ -98,10 +92,10 @@ pub enum Pattern {
 
   Record(Vec<(FieldId, Span, Pattern)>, Span),
 
-  PBool(bool, Span),
-  PInt(i64, Span),
-  PReal(f64, Span),
-  PStr(String, Span),
+  PBool(bool, Span, NameId),
+  PInt(i64, Span, NameId),
+  PReal(f64, Span, NameId),
+  PStr(String, Span, NameId),
 }
 
 impl Pattern {
@@ -110,10 +104,10 @@ impl Pattern {
       Pattern::Empty(span)
       | Pattern::Var(_, _, span)
       | Pattern::EnumConst { span, .. }
-      | Pattern::PBool(_, span)
-      | Pattern::PInt(_, span)
-      | Pattern::PReal(_, span)
-      | Pattern::PStr(_, span)
+      | Pattern::PBool(_, span, _)
+      | Pattern::PInt(_, span, _)
+      | Pattern::PReal(_, span, _)
+      | Pattern::PStr(_, span, _)
       | Pattern::Record(_, span) => *span,
     }
   }
@@ -123,16 +117,18 @@ impl Pattern {
 pub struct WithBranch {
   pub pattern: Pattern,
   pub condition: Option<Expr>,
+  pub bool: NameId,
   pub value: Expr,
   pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-  EBool(bool, Span),
-  EInt(i64, Span),
-  EReal(f64, Span),
-  EStr(String, Span),
+  EBool(bool, Span, NameId),
+  EInt(i64, Span, NameId),
+  EReal(f64, Span, NameId),
+  EStr(String, Span, NameId),
+
   Var(NameId, Span),
 
   Record {
@@ -270,6 +266,17 @@ impl<'t> Ctx<'t> {
     }
   }
 
+  fn read_name_or_error(&mut self, name: &'t str, at: Span) -> RRes<NameId> {
+    match self.find_name(name) {
+      Some(NameId(v)) => {
+        self.names[v].usages.push(at);
+        return Ok(NameId(v));
+      }
+      None => error_no_var(name, at),
+    }
+  }
+
+
   fn find_name(&mut self, name: &'t str) -> Option<NameId> {
     for NameId(v) in self.stack.iter().rev() {
       if self.names[*v].name == name {
@@ -328,31 +335,9 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
       ctx.pop_frame(frame);
       Type::TNode(node, at)
     }
-    ast::Type::TCustom { name: ast::ProperName(name, at), args, span: _ }
-      if name == "Int" && args.len() == 0 =>
-    {
-      Type::TInt(at)
-    }
-    ast::Type::TCustom { name: ast::ProperName(name, at), args, span: _ }
-      if name == "Real" && args.len() == 0 =>
-    {
-      Type::TReal(at)
-    }
-    ast::Type::TCustom { name: ast::ProperName(name, at), args, span: _ }
-      if name == "Str" && args.len() == 0 =>
-    {
-      Type::TStr(at)
-    }
-    ast::Type::TCustom { name: ast::ProperName(name, at), args, span: _ }
-      if name == "Bool" && args.len() == 0 =>
-    {
-      Type::TBool(at)
-    }
     ast::Type::TCustom { name: ast::ProperName(name, at), args, span } => {
-      let node = match ctx.read_name(name, at) {
-        Some(var) => Type::TNode(var, at),
-        None => return error_no_var(name, at),
-      };
+      let var = ctx.read_name_or_error(name, at)?;
+      let node = Type::TNode(var, at);
       let args = args
         .into_iter()
         .map(|arg| resolve_ty(ctx, arg))
@@ -361,10 +346,7 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
       Type::TApply(Box::new(node), args, span)
     }
     ast::Type::TVar(ast::Name(name, at), span) => Type::TNode(
-      match ctx.read_name(name, at) {
-        Some(var) => var,
-        None => return error_no_var(name, at),
-      },
+      ctx.read_name_or_error(name, at)?,
       span,
     ),
     ast::Type::TFunction(a, b, span) => {
@@ -406,15 +388,12 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
       Expr::Let { bind_value, binding, next_value }
     }
 
-    ast::Expr::EBool(value, span) => Expr::EBool(value, span),
-    ast::Expr::EInt(value, span) => Expr::EInt(value, span),
-    ast::Expr::EReal(value, span) => Expr::EReal(value, span),
-    ast::Expr::EStr(value, span) => Expr::EStr(value.to_string(), span),
+    ast::Expr::EBool(value, span) => Expr::EBool(value, span, ctx.read_name_or_error("Bool", span)?),
+    ast::Expr::EInt(value, span) => Expr::EInt(value, span, ctx.read_name_or_error("Int", span)?),
+    ast::Expr::EReal(value, span) => Expr::EReal(value, span, ctx.read_name_or_error("Real", span)?),
+    ast::Expr::EStr(value, span) => Expr::EStr(value.to_string(), span, ctx.read_name_or_error("Str", span)?),
     ast::Expr::Var(ast::Name(name, at), span) => Expr::Var(
-      match ctx.read_name(name, at) {
-        Some(var) => var,
-        None => return error_no_var(name, at),
-      },
+      ctx.read_name_or_error(name, at)?,
       span,
     ),
     ast::Expr::Record { to_extend, fields, span } => {
@@ -476,11 +455,7 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
         ast::UnOp::Neg(_) => "_neg",
         ast::UnOp::Not(_) => "_not",
       };
-      let function = match ctx.read_name(function_name, op.span()) {
-        Some(t) => t,
-        // Maybe a special error since it's an internal?
-        None => return error_no_var(function_name, op.span()),
-      };
+      let function = ctx.read_name_or_error(function_name, op.span())?;
 
       Expr::Call(
         Box::new(Expr::Var(function, op.span())),
@@ -518,11 +493,7 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
         ast::BinOp::Eq(_) => "_eq",
         ast::BinOp::Neq(_) => "_neq",
       };
-      let function = match ctx.read_name(function_name, op.span()) {
-        Some(t) => t,
-        // Maybe a special error since it's an internal?
-        None => return error_no_var(function_name, op.span()),
-      };
+      let function = ctx.read_name_or_error(function_name, op.span())?;
       Expr::Call(
         Box::new(Expr::Call(
           Box::new(Expr::Var(function, op.span())),
@@ -545,7 +516,7 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
           let value = resolve_expr(ctx, value)?;
           ctx.pop_frame(frame);
 
-          Ok(WithBranch { pattern, condition, value, span })
+          Ok(WithBranch { pattern, condition, bool: ctx.read_name_or_error("Bool", span)? , value, span })
         })
         .collect::<RRes<Vec<WithBranch>>>()?;
 
@@ -608,10 +579,10 @@ fn resolve_pattern<'t>(ctx: &mut Ctx<'t>, pat: ast::Pattern<'t>) -> RRes<Pattern
         .collect::<RRes<Vec<_>>>()?;
       Pattern::Record(fields, span)
     }
-    ast::Pattern::PBool(b, span) => Pattern::PBool(b, span),
-    ast::Pattern::PInt(i, span) => Pattern::PInt(i, span),
-    ast::Pattern::PReal(r, span) => Pattern::PReal(r, span),
-    ast::Pattern::PStr(s, span) => Pattern::PStr(s.to_owned(), span),
+    ast::Pattern::PBool(b, span) => Pattern::PBool(b, span, ctx.read_name_or_error("Bool", span)?),
+    ast::Pattern::PInt(i, span) => Pattern::PInt(i, span, ctx.read_name_or_error("Int", span)?),
+    ast::Pattern::PReal(r, span) => Pattern::PReal(r, span, ctx.read_name_or_error("Real", span)?),
+    ast::Pattern::PStr(s, span) => Pattern::PStr(s.to_owned(), span, ctx.read_name_or_error("Str", span)?),
   })
 }
 

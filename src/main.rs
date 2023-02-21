@@ -58,8 +58,21 @@ struct Args {
   love: bool,
 }
 
+const PREAMBLE: &'static str = include_str!("preamble.sy");
+
 fn main() {
   let args = Args::parse_args_default_or_exit();
+
+  let preamble_ast = match parser::parse(PREAMBLE) {
+    Err(errs) => {
+      for e in errs.iter() {
+        eprintln!("PREAMBLE ERROR!{}", e.render(Some(PREAMBLE)));
+      }
+      exit(15);
+    }
+    Ok(a) => a,
+  };
+
   let src = match std::fs::read_to_string(&args.source) {
     Ok(src) => src,
     Err(e) => {
@@ -68,7 +81,7 @@ fn main() {
     }
   };
 
-  let ast = match parser::parse(&src) {
+  let given_ast = match parser::parse(&src) {
     Err(errs) => {
       for e in errs.iter() {
         eprintln!("{}", e.render(Some(&src)));
@@ -77,6 +90,9 @@ fn main() {
     }
     Ok(a) => a,
   };
+
+  // TODO: Fix the spans so they refer to files as well
+  let ast = [preamble_ast, given_ast].concat();
 
   match args.dump_ast {
     Some(s) if s == "-" => println!("{:#?}", ast),

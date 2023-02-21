@@ -195,10 +195,10 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
       gen_let_binding(out, ctx, TmpVar::zero(), bind_value, binding, next_value)?;
       write!(out, "\nend )()\n")?;
     }
-    Expr::EBool(b, _) => write!(out, "{}", b)?,
-    Expr::EInt(i, _) => write!(out, "{}", i)?,
-    Expr::EReal(f, _) => write!(out, "{}", f)?, // TODO: Is this stable?
-    Expr::EStr(s, _) => write!(out, "{:?}", s)?, // TODO: Is this stable?
+    Expr::EBool(b, _, _) => write!(out, "{}", b)?,
+    Expr::EInt(i, _, _) => write!(out, "{}", i)?,
+    Expr::EReal(f, _, _) => write!(out, "{}", f)?, // TODO: Is this stable?
+    Expr::EStr(s, _, _) => write!(out, "{:?}", s)?, // TODO: Is this stable?
     Expr::Var(name, _) => write!(out, "{}", ctx.var(*name))?,
     Expr::EnumConst { ty_name: _, const_name, value, span: _ } => {
       if let Some((value, _)) = value {
@@ -230,7 +230,7 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
     Expr::Match { value, branches, span: _ } => {
       write!(out, "(function(match_value)\n")?;
       write!(out, "local succ = nil\nlocal _msg = nil\n")?;
-      for WithBranch { pattern, condition, value, span: _ } in branches.iter() {
+      for WithBranch { pattern, condition, value, bool: _, span: _ } in branches.iter() {
         write!(out, "succ, _msg = pcall(function()\n    ")?;
         gen_pat(out, "match_value".to_string(), ctx, pattern)?;
         write!(out, "end)\n")?;
@@ -309,9 +309,9 @@ fn gen_pat(out: &mut dyn Write, curr: String, ctx: Ctx, binding: &Pattern) -> Re
         gen_pat(out, format!("{}[\"{}\"]", curr, field), ctx, pat)?;
       }
     }
-    Pattern::PBool(x, _) => write!(out, "_sy_intern_check_pattern(0, {}, {})\n", x, curr)?,
-    Pattern::PInt(x, _) => write!(out, "_sy_intern_check_pattern(1, {}, {})\n", x, curr)?,
-    Pattern::PReal(x, _) => write!(out, "_sy_intern_check_pattern(2, {}, {})\n", x, curr)?,
-    Pattern::PStr(x, _) => write!(out, "_sy_intern_check_pattern(3, {}, {})\n", x, curr)?,
+    Pattern::PBool(x, _, _) => write!(out, "_sy_intern_check_pattern(0, {}, {})\n", x, curr)?,
+    Pattern::PInt(x, _, _) => write!(out, "_sy_intern_check_pattern(1, {}, {})\n", x, curr)?,
+    Pattern::PReal(x, _, _) => write!(out, "_sy_intern_check_pattern(2, {}, {})\n", x, curr)?,
+    Pattern::PStr(x, _, _) => write!(out, "_sy_intern_check_pattern(3, {}, {})\n", x, curr)?,
   })
 }
