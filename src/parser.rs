@@ -531,16 +531,24 @@ pub fn type_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {
     Ok(Some(match head {
       Some(Token::KwForall) => {
         lex.next();
-        let (at, name) = match expect!(lex, Token::Name(_), "Expected a type-variable name") {
-          (at, Some(Token::Name(name))) => (at, name),
-          _ => unreachable!(),
-        };
-
+        let mut vars = vec![];
+        loop {
+            match lex.peek() {
+              (at, Some(Token::Name(name))) => {
+                  vars.push(Name(name, at));
+                  lex.next();
+              }
+              _ => break,
+            }
+        }
         let (end, _) = expect!(lex, Token::Period, "Expected '.' to end the 'forall'");
+        let span = span.merge(end);
 
-        let inner = some!(lex, type_(lex)?, "Expected a type following the `forall`");
-
-        Type::TForall(Name(name, at), Box::new(inner), span.merge(end))
+        let mut inner = some!(lex, type_(lex)?, "Expected a type following the `forall`");
+        for v in vars.into_iter() {
+            inner = Type::TForall(v, Box::new(inner), span);
+        }
+        inner
       }
       Some(Token::Name("_")) => {
         lex.next();
