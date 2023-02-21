@@ -489,7 +489,7 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
     (CType::Foreign(a), CType::Foreign(b)) if a.def_at != b.def_at => {
       return error_unify(
         checker,
-        "Failed to merge these two foriegn types types",
+        "Failed to merge these types",
         CType::Foreign(a),
         CType::Foreign(b),
         span,
