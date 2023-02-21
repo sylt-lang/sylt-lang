@@ -213,7 +213,7 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
       let (span, token) = lex.next();
       Ok(match token {
         None => return err_eof(span),
-        Some(Token::OpNeg) => Expr::Un(UnOp::Neg(span), Box::new(prefix(lex)?)),
+        Some(Token::OpSub) => Expr::Un(UnOp::Neg(span), Box::new(prefix(lex)?)),
         Some(Token::OpNot) => Expr::Un(UnOp::Not(span), Box::new(prefix(lex)?)),
         Some(Token::Name(str)) => Expr::Var(Name(str, span), span),
         Some(Token::True) => Expr::EBool(true, span),
@@ -447,6 +447,21 @@ fn parse_pat<'t>(lex: &mut Lex<'t>) -> PRes<Option<Pattern<'t>>> {
           span,
         );
       }
+    }
+
+    Some(Token::LParen) => {
+        lex.next();
+        let inner = some!(
+          lex,
+          parse_pat(lex)?,
+          "Expected a pattern inside parentheses after seeing `(`"
+        );
+        expect!(
+          lex,
+          Token::RParen,
+          "Expected a closing parenthasis after the inner pattern"
+        );
+        inner
     }
 
     Some(Token::LCurl) => {
@@ -854,8 +869,9 @@ mod test {
   test_p!(long_ident2, expr, "a_b_c");
   test_p!(long_ident3, expr, "_a_b_c");
   test_p!(long_ident4, expr, "snakeCase");
-  test_p!(neg1, expr, "!1");
-  test_p!(neg2, expr, "!(1 + 1)");
+  test_p!(neg1, expr, "-1");
+  test_p!(neg2, expr, "-1 + 1 - 1 - -1");
+  test_p!(neg3, expr, "-(1 + 1)");
   test_p!(add1, expr, "1 + 1");
   test_p!(add2, expr, "1 + 1 + 1 + 1");
   test_p!(sub1, expr, "1 - 1");
@@ -929,4 +945,7 @@ mod test {
     def,
     "enum One a b c d e f g = One (Q a b c d e f g H) | QQ a"
   );
+
+  test_p!(d_minus0, def, "def f ::= -1");
+  test_p!(d_minus1, expr, "- - -1");
 }
