@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::io::{Result, Write};
 
-use crate::ast;
 use crate::error::Span;
 use crate::name_resolution::*;
 use crate::type_checker::*;
@@ -196,10 +195,10 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
       gen_let_binding(out, ctx, TmpVar::zero(), bind_value, binding, next_value)?;
       write!(out, "\nend )()\n")?;
     }
-    Expr::EBool(b, _) => write!(out, "{}", b)?,
-    Expr::EInt(i, _) => write!(out, "{}", i)?,
-    Expr::EReal(f, _) => write!(out, "{}", f)?, // TODO: Is this stable?
-    Expr::EStr(s, _) => write!(out, "{:?}", s)?, // TODO: Is this stable?
+    Expr::EBool(b, _, _) => write!(out, "{}", b)?,
+    Expr::EInt(i, _, _) => write!(out, "{}", i)?,
+    Expr::EReal(f, _, _) => write!(out, "{}", f)?, // TODO: Is this stable?
+    Expr::EStr(s, _, _) => write!(out, "{:?}", s)?, // TODO: Is this stable?
     Expr::Var(name, _) => write!(out, "{}", ctx.var(*name))?,
     Expr::EnumConst { ty_name: _, const_name, value, span: _ } => {
       if let Some((value, _)) = value {
@@ -210,18 +209,7 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
         write!(out, "Sylt.Enum.new( \"{}\", nil )", ctx.field(*const_name))?;
       }
     }
-    Expr::Un(ast::UnOp::Neg(_), expr, _) => {
-      write!(out, "(-")?;
-      gen_expr(out, ctx, expr)?;
-      write!(out, ")")?;
-    }
-    Expr::Un(ast::UnOp::Not(_), expr, _) => {
-      write!(out, "(not ")?;
-      gen_expr(out, ctx, expr)?;
-      write!(out, ")")?;
-    }
-    Expr::Bin(ast::BinOp::RevCall(_), _, _, _) => unreachable!("Should be compiled to `Call`"),
-    Expr::Bin(ast::BinOp::Call(_), a, b, _) => {
+    Expr::Call(a, b, _) => {
       write!(out, "(")?;
       write!(out, "(")?;
       gen_expr(out, ctx, a)?;
@@ -229,30 +217,6 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
       write!(out, "(")?;
       gen_expr(out, ctx, b)?;
       write!(out, ")")?;
-      write!(out, ")")?;
-    }
-    Expr::Bin(op, a, b, _) => {
-      write!(out, "(")?;
-      gen_expr(out, ctx, a)?;
-      write!(
-        out,
-        "{}",
-        match op {
-          ast::BinOp::Add(_) => "+",
-          ast::BinOp::Sub(_) => "-",
-          ast::BinOp::Div(_) => "/",
-          ast::BinOp::Mul(_) => "*",
-          ast::BinOp::And(_) => "and",
-          ast::BinOp::Or(_) => "or",
-          ast::BinOp::Call(_) => unreachable!(),
-          ast::BinOp::RevCall(_) => unreachable!(),
-          ast::BinOp::Lt(_) => "<",
-          ast::BinOp::LtEq(_) => "<=",
-          ast::BinOp::Eq(_) => "==",
-          ast::BinOp::Neq(_) => "~=",
-        }
-      )?;
-      gen_expr(out, ctx, b)?;
       write!(out, ")")?;
     }
     Expr::Record { to_extend: None, fields, span: _ } => gen_record_constant(out, ctx, fields)?,
@@ -266,7 +230,7 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
     Expr::Match { value, branches, span: _ } => {
       write!(out, "(function(match_value)\n")?;
       write!(out, "local succ = nil\nlocal _msg = nil\n")?;
-      for WithBranch { pattern, condition, value, span: _ } in branches.iter() {
+      for WithBranch { pattern, condition, value, bool: _, span: _ } in branches.iter() {
         write!(out, "succ, _msg = pcall(function()\n    ")?;
         gen_pat(out, "match_value".to_string(), ctx, pattern)?;
         write!(out, "end)\n")?;
@@ -345,9 +309,9 @@ fn gen_pat(out: &mut dyn Write, curr: String, ctx: Ctx, binding: &Pattern) -> Re
         gen_pat(out, format!("{}[\"{}\"]", curr, field), ctx, pat)?;
       }
     }
-    Pattern::PBool(x, _) => write!(out, "Sylt.Internal.check_pattern(0, {}, {})\n", x, curr)?,
-    Pattern::PInt(x, _) => write!(out, "Sylt.Internal.check_pattern(1, {}, {})\n", x, curr)?,
-    Pattern::PReal(x, _) => write!(out, "Sylt.Internal.check_pattern(2, {}, {})\n", x, curr)?,
-    Pattern::PStr(x, _) => write!(out, "Sylt.Internal.check_pattern(3, {}, {})\n", x, curr)?,
+    Pattern::PBool(x, _, _) => write!(out, "_sy_intern_check_pattern(0, {}, {})\n", x, curr)?,
+    Pattern::PInt(x, _, _) => write!(out, "_sy_intern_check_pattern(1, {}, {})\n", x, curr)?,
+    Pattern::PReal(x, _, _) => write!(out, "_sy_intern_check_pattern(2, {}, {})\n", x, curr)?,
+    Pattern::PStr(x, _, _) => write!(out, "_sy_intern_check_pattern(3, {}, {})\n", x, curr)?,
   })
 }

@@ -5,9 +5,52 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
-use crate::ast;
 use crate::error::*;
 use crate::name_resolution::*;
+
+// [[ Maintainers note 2023-02-21 ]]
+// This module is very complex, this is true, but fear not for some key insights can really help
+// this module make sense.
+//
+// This typesystem is my  implementation of a Damas–Hindley–Milner typesystem, but what does that
+// mean?
+// Obligatory wikipedia reference: https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system
+//
+// This type system can deduce types itself, and reason about your entire program as a whole. This
+// makes it so you are not required to write types anywhere, the computer checks the types for you,
+// like magic! Unfortunately it has limitations with some more fancy kinds of types, which aren't
+// present in sylt as of now.
+//
+// People give the rules slightly different names, but there are 4 things we can do in the
+// typesystem.
+//  1. We can unify types, this is handled by the `unify` function. This means the type-system
+//     knows that two types are exactly the same. For example `a = b` would cause a unification of
+//     the types of `a` and `b` since we assign them to each other we know they have to have the
+//     same type. These rules get a bit intricate for some types, but they are pretty straight
+//     forward.
+//
+//  2. Specialization/substitution, handled by `raise_generics_to_unknowns` takes a type that is
+//     not specialized, e.g. `forall a. a -> a` and substitutes the generic with a new named type.
+//     This makes it possible to unify a generic, like `a` with an actual type `Int`, since a
+//     generic stands for "any possible type". Note especially that we keep equality of types
+//     though, so after this substitution we get a type like `#1 -> #1`.
+//     Substitutes makes it possible to unify later.
+//
+//  3. Some types are a bit more special than simple types such as `Int` or `Bool`. Records are
+//     handled in a different way, namely with requirements on types this concept is similar to
+//     type-classes (for the OOP people think interfaces). So we can attach the requirement "has
+//     a field `.field`" to a type. We then verify these rules after a unification to make sure
+//     they are kept.
+//
+//  4. We know the type of a constant. So if you write `1`, we know it's an `Int`. This gets a bit
+//     more tricky when it comes to `Real` and `Int` since you might write `1` but expect the
+//     compiler to automatically cast it to `Real` in the comparison or whatever, this is not done
+//     at all in Sylt-lang.
+//
+// There are some limitations of this implementation though. It would be nice to remove the
+// assumption of certain types from the type_checker file, it doesn't need to know about `Int` or
+// `Bool`, just that things return something called `Int` or `Bool`.
+//
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub enum CType<'t> {
@@ -18,10 +61,6 @@ pub enum CType<'t> {
   // Is this a good idea to code here?
   // Generics do not need to take up node types
   Generic(usize),
-  Bool,
-  Int,
-  Real,
-  Str,
   Record,
   //
   Req(BTreeSet<Requirement>, Box<CType<'t>>),
@@ -33,12 +72,8 @@ pub enum CType<'t> {
 impl<'t> CType<'t> {
   fn is_same(&self, other: &Self) -> bool {
     match (self, other) {
-      (CType::Bool, CType::Bool)
-      | (CType::Int, CType::Int)
-      | (CType::Real, CType::Real)
-      | (CType::Str, CType::Str)
-      | (CType::Record, CType::Record)
-      | (CType::Unknown, CType::Unknown) => true,
+      (CType::Record, CType::Record) | (CType::Unknown, CType::Unknown) => true,
+      (CType::Foreign(a), CType::Foreign(b)) => a == b,
       (CType::NodeType(a), CType::NodeType(b)) => a == b,
       (CType::Generic(a), CType::Generic(b)) => a == b,
       _ => false,
@@ -72,10 +107,6 @@ impl<'t> CType<'t> {
       }
       CType::Unknown => "_".to_string(),
       CType::Foreign(name) => name.name.to_string(),
-      CType::Bool => "Bool".to_string(),
-      CType::Int => "Int".to_string(),
-      CType::Real => "Real".to_string(),
-      CType::Str => "Str".to_string(),
       // This isn't good enough
       CType::Record => "Record".to_string(),
       CType::Apply(a, bs) => {
@@ -464,9 +495,6 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
         span,
       )
     }
-    (CType::Int, CType::Int) => CType::Int,
-    (CType::Real, CType::Real) => CType::Real,
-    (CType::Str, CType::Str) => CType::Str,
     (CType::Apply(a0, a1), CType::Apply(b0, b1)) if a1.len() == b1.len() => {
       let c0 = unify(checker, *a0, *b0, span)?;
       let c1 = a1
@@ -531,21 +559,6 @@ fn check_requirements<'t>(
     }
     //
     CType::Unknown => {}
-    CType::Int
-      if req.iter().all(|r| match r {
-        Requirement::Num => true,
-        Requirement::Field(_, _) => false,
-      }) => {}
-    CType::Real
-      if req.iter().all(|r| match r {
-        Requirement::Num => true,
-        Requirement::Field(_, _) => false,
-      }) => {}
-    CType::Str
-      if req.iter().all(|r| match r {
-        Requirement::Num => false,
-        Requirement::Field(_, _) => false,
-      }) => {}
     CType::Record
       if req.iter().all(|r| match r {
         Requirement::Num => false,
@@ -567,10 +580,6 @@ fn check_requirements<'t>(
 
 fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
   Ok(match body {
-    Expr::EBool(_, _) => CType::Bool,
-    Expr::EInt(_, _) => CType::Int,
-    Expr::EReal(_, _) => CType::Real,
-    Expr::EStr(_, _) => CType::Str,
     Expr::Var(name, _) => raise_generics_to_unknowns(checker, CType::NodeType(*name)),
     Expr::EnumConst { ty_name, value, const_name: _, span } => {
       let ty = CType::NodeType(*ty_name);
@@ -589,66 +598,6 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
         }
         None => raise_generics_to_unknowns(checker, ty),
       }
-    }
-    Expr::Un(ast::UnOp::Neg(at), expr, _) => {
-      let expr_ty = check_expr(checker, expr)?;
-      unify(checker, expr_ty, CType::Int, *at)?
-    }
-    Expr::Un(ast::UnOp::Not(at), expr, _) => {
-      let expr_ty = check_expr(checker, expr)?;
-      unify(checker, expr_ty, CType::Bool, *at)?
-    }
-    Expr::Bin(ast::BinOp::RevCall(_), _, _, _) => unreachable!("Compiled to `Call`"),
-    Expr::Bin(ast::BinOp::Call(at), f, a, _) => {
-      let f_ty = check_expr(checker, f)?;
-      let a_ty = check_expr(checker, a)?;
-      // Can this be removed?
-      match unify(
-        checker,
-        f_ty,
-        CType::Function(Box::new(a_ty), Box::new(CType::Unknown)),
-        *at,
-      )? {
-        CType::NodeType(name) => {
-          if let CType::Function(_, ret) = resolve_ty(checker, name) {
-            *ret
-          } else {
-            unreachable!()
-          }
-        }
-        CType::Function(_, ret) => *ret,
-        _ => unreachable!(),
-      }
-    }
-    Expr::Bin(ast::BinOp::Add(at) | ast::BinOp::Sub(at) | ast::BinOp::Mul(at), a, b, _) => {
-      let a_ty = check_expr(checker, a)?;
-      let b_ty = check_expr(checker, b)?;
-      let c_ty = unify(checker, a_ty, b_ty, *at)?;
-      unify(checker, c_ty, Requirement::Num.to_ctype(), *at)?
-    }
-    Expr::Bin(
-      ast::BinOp::Neq(at) | ast::BinOp::Eq(at) | ast::BinOp::Lt(at) | ast::BinOp::LtEq(at),
-      a,
-      b,
-      _,
-    ) => {
-      let a_ty = check_expr(checker, a)?;
-      let b_ty = check_expr(checker, b)?;
-      let c_ty = unify(checker, a_ty, b_ty, *at)?;
-      unify(checker, c_ty, Requirement::Num.to_ctype(), *at)?;
-      CType::Bool
-    }
-    Expr::Bin(ast::BinOp::And(at) | ast::BinOp::Or(at), a, b, _) => {
-      let a_ty = check_expr(checker, a)?;
-      let b_ty = check_expr(checker, b)?;
-      let c_ty = unify(checker, a_ty, b_ty, *at)?;
-      unify(checker, c_ty, CType::Bool, *at)?
-    }
-    Expr::Bin(ast::BinOp::Div(at), a, b, _) => {
-      let a_ty = check_expr(checker, a)?;
-      let b_ty = check_expr(checker, b)?;
-      let c_ty = unify(checker, a_ty, b_ty, *at)?;
-      unify(checker, c_ty, CType::Real, *at)?
     }
     Expr::Let { bind_value, binding, next_value } => {
       let out = check_expr(checker, next_value)?;
@@ -686,20 +635,20 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
 
       // NOTE[et]: There's different ways of doing this, it might be more nice to depth-first
       // instead of breath first.
-      for WithBranch { pattern, condition: _, value: _, span } in branches.iter() {
+      for WithBranch { pattern, condition: _, value: _, bool: _, span } in branches.iter() {
         let pattern_ty = check_pattern(checker, pattern)?;
         outer_match_ty = unify(checker, pattern_ty, outer_match_ty, *span)?;
       }
 
-      for WithBranch { pattern: _, condition, value: _, span } in branches.iter() {
+      for WithBranch { pattern: _, condition, value: _, bool, span } in branches.iter() {
         if let Some(condition) = condition {
           let condition_ty = check_expr(checker, condition)?;
-          unify(checker, condition_ty, CType::Bool, *span)?;
+          unify(checker, condition_ty, CType::NodeType(*bool), *span)?;
         }
       }
 
       let mut ret_ty = CType::Unknown;
-      for WithBranch { pattern: _, condition: _, value, span } in branches.iter() {
+      for WithBranch { pattern: _, condition: _, value, bool: _, span } in branches.iter() {
         let value_ty = check_expr(checker, value)?;
         ret_ty = unify(checker, value_ty, ret_ty, *span)?;
       }
@@ -716,6 +665,31 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
       }
       def_ty
     }
+    Expr::Call(f, a, at) => {
+      let f_ty = check_expr(checker, f)?;
+      let a_ty = check_expr(checker, a)?;
+      // Can this be removed?
+      match unify(
+        checker,
+        f_ty,
+        CType::Function(Box::new(a_ty), Box::new(CType::Unknown)),
+        *at,
+      )? {
+        CType::NodeType(name) => {
+          if let CType::Function(_, ret) = resolve_ty(checker, name) {
+            *ret
+          } else {
+            unreachable!()
+          }
+        }
+        CType::Function(_, ret) => *ret,
+        _ => unreachable!(),
+      }
+    }
+    Expr::EBool(_, _, ty)
+    | Expr::EInt(_, _, ty)
+    | Expr::EReal(_, _, ty)
+    | Expr::EStr(_, _, ty) => CType::NodeType(*ty),
   })
 }
 
@@ -726,13 +700,7 @@ fn raise_generics_to_unknowns<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> C
     generics_to_node_types: &mut BTreeMap<usize, NameId>,
   ) -> CType<'t> {
     match ty {
-      CType::Unknown
-      | CType::Foreign(_)
-      | CType::Bool
-      | CType::Int
-      | CType::Real
-      | CType::Str
-      | CType::Record => ty,
+      CType::Unknown | CType::Foreign(_) | CType::Record => ty,
 
       CType::Generic(i) => match generics_to_node_types.entry(i) {
         Entry::Vacant(v) => {
@@ -829,10 +797,10 @@ fn check_pattern<'t>(checker: &mut Checker<'t>, binding: &Pattern) -> TRes<CType
       }
       CType::Req(reqs, Box::new(CType::Unknown))
     }
-    Pattern::PBool(_, _) => CType::Bool,
-    Pattern::PInt(_, _) => CType::Int,
-    Pattern::PReal(_, _) => CType::Real,
-    Pattern::PStr(_, _) => CType::Str,
+    Pattern::PBool(_, _, ty)
+    | Pattern::PInt(_, _, ty)
+    | Pattern::PReal(_, _, ty)
+    | Pattern::PStr(_, _, ty) => CType::NodeType(*ty),
   })
 }
 
@@ -868,10 +836,6 @@ fn inject<'t>(checker: &mut Checker<'t>, a_id: NameId, c: CType<'t>) {
 
 fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> TRes<CType<'t>> {
   Ok(match ty {
-    Type::TBool(_) => CType::Bool,
-    Type::TInt(_) => CType::Int,
-    Type::TReal(_) => CType::Real,
-    Type::TStr(_) => CType::Str,
     Type::TApply(a, bs, span) => {
       let bs_ty = bs
         .iter()

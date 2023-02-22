@@ -68,8 +68,6 @@ pub enum Token<'t> {
   ForiegnBlock(&'t str),
 
   // Operators
-  #[token("!")]
-  OpNeg,
   #[token("+")]
   OpAdd,
   #[token("-")]
@@ -151,7 +149,6 @@ impl<'t> Token<'t> {
       Token::KwForall => "keyword `forall`".to_string(),
       Token::KwLambda => "keyword `lambda`".to_string(),
 
-      Token::OpNeg => "operator `!`".to_string(),
       Token::OpAdd => "operator `+`".to_string(),
       Token::OpSub => "operator `-`".to_string(),
       Token::OpMul => "operator `*`".to_string(),
