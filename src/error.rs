@@ -17,55 +17,54 @@ impl Display for Span {
 
 #[derive(Clone, Debug)]
 pub enum Error {
+  /// FIXME: ?
   SynMsg {
     msg: &'static str,
     span: Span,
     token: Option<String>,
   },
 
-  SynEoF {
-    span: Span,
-  },
+  /// Parsing reached eof
+  SynEoF { span: Span },
 
-  ResUnknown {
-    name: String,
-    span: Span,
-  },
+  /// No definition of variable
+  ResUnknown { name: String, span: Span },
 
+  /// Multiple definitions for a variable
   ResMultiple {
     name: String,
     original: Span,
     new: Span,
   },
 
+  /// Missing enum constructor
   ResNoEnumConst {
     ty_name: String,
     at: Span,
     const_name: String,
   },
 
-  ResNoEnum {
-    ty_name: String,
-    at: Span,
-  },
+  /// Missing enum
+  ResNoEnum { ty_name: String, at: Span },
 
-  ResMsg {
-    msg: String,
-    span: Span,
-  },
+  /// FIXME: ?
+  ResMsg { msg: String, span: Span },
 
+  /// FIXME: ?
   CheckMsg {
     msg: &'static str,
     a_span: Span,
     b_span: Span,
   },
 
+  /// FIXME: ?
   CheckExpected {
     msg: &'static str,
     span: Span,
     a: String,
   },
 
+  /// Missing requirements
   CheckReq {
     msg: &'static str,
     span: Span,
@@ -73,6 +72,7 @@ pub enum Error {
     req: String,
   },
 
+  /// Unification failure
   CheckUnify {
     msg: &'static str,
     a: String,
@@ -80,6 +80,7 @@ pub enum Error {
     span: Span,
   },
 
+  /// FIXME: ?
   CheckExtraLabel {
     a: String,
     b: String,
@@ -87,13 +88,12 @@ pub enum Error {
     span: Span,
   },
 
-  CheckField {
-    field: String,
-    inner: Box<Error>,
-  },
+  /// An error message with an associated record field
+  CheckField { field: String, inner: Box<Error> },
 }
 
 impl Error {
+  /// Show the line(s) of a span from the source code
   fn render_context(at: &Span, source: &str) -> Option<String> {
     let mut line_nr = 1;
     let mut line_start = 0;
@@ -168,12 +168,14 @@ impl Error {
     })
   }
 
+  /// Try to render the context, handle reaching EOF
   fn maybe_render_context(at: &Span, source: Option<&str>) -> String {
     source
       .map(|s| Self::render_context(at, s).unwrap_or_else(|| "  Reached EoF".to_string()))
       .unwrap_or("".to_string())
   }
 
+  /// Render this error message with the context
   pub fn render(&self, source: Option<&str>) -> String {
     match self {
       Error::SynMsg { msg, token: Some(t), span } => format!(
@@ -191,7 +193,7 @@ impl Error {
       ),
 
       Error::ResUnknown { name, span } => format!(
-        "> I couldn't figure out what {:?} refernces. Did you make a typo?\n{}",
+        "> I couldn't figure out what {:?} references. Did you make a typo?\n{}",
         name,
         Self::maybe_render_context(span, source)
       ),

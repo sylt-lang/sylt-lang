@@ -1,13 +1,22 @@
 use crate::error::*;
 
+/// A name start with lower case letters (or underscore), `a`, or, `variable_name` for instance.
 #[derive(Debug, Clone)]
 pub struct Name<'t>(pub &'t str, pub Span);
 
+/// A name starting with an upper case letter, an enum variant for instance.
 #[derive(Debug, Clone)]
 pub struct ProperName<'t>(pub &'t str, pub Span);
 
+/// An outer definition
 #[derive(Debug, Clone)]
 pub enum Def<'t> {
+  /// A normal definition
+  ///
+  /// Example
+  /// ```sylt
+  /// def a : Int := 1
+  /// ```
   Def {
     ty: Type<'t>,
     name: Name<'t>,
@@ -15,24 +24,52 @@ pub enum Def<'t> {
     body: Expr<'t>,
     span: Span,
   },
+
+  /// A foreign definition
+  ///
+  /// Example
+  /// ```sylt
+  /// def a : Int := foreign -[[ 1 ]]-
+  /// ```
   ForiegnDef {
     ty: Type<'t>,
     name: Name<'t>,
     span: Span,
     foreign_block: Option<(&'t str, Span)>,
   },
+
+  /// A type alias
+  ///
+  /// Example
+  /// ```sylt
+  /// type A x = { variable: x }
+  /// ```
   Type {
     name: ProperName<'t>,
     args: Vec<Name<'t>>,
     body: Type<'t>,
     span: Span,
   },
+
+  /// An enum
+  ///
+  /// Example
+  /// ```sylt
+  /// enum A = X Int | Y { y: Int }
+  /// ```
   Enum {
     name: ProperName<'t>,
     args: Vec<Name<'t>>,
     constructors: Vec<EnumConst<'t>>,
     span: Span,
   },
+
+  /// A foreign type
+  ///
+  /// Example
+  /// ```sylt
+  /// type Handle = foreign
+  /// ```
   ForiegnType {
     name: ProperName<'t>,
     args: Vec<Name<'t>>,
@@ -54,18 +91,43 @@ impl<'t> Def<'t> {
 
 #[derive(Debug, Clone)]
 pub enum Pattern<'t> {
+  /// The empty pattern: `_`
   Empty(Span),
+
+  /// A variable name, matches everything
   Var(Name<'t>, Option<Box<Pattern<'t>>>, Span),
+
+  /// An enum constructor pattern
+  ///
+  /// Example
+  /// ```sylt
+  /// Enum:Variant value
+  /// ```
   EnumConst {
     ty_name: ProperName<'t>,
     const_name: ProperName<'t>,
     inner: Option<Box<Pattern<'t>>>,
     span: Span,
   },
+
+  /// A record pattern
+  ///
+  /// Example
+  /// ```sylt
+  /// { x: 1, y }
+  /// ```
   Record(Vec<((Span, &'t str), Option<Pattern<'t>>)>, Span),
+
+  /// A boolean pattern
   PBool(bool, Span),
+
+  /// An integer pattern
   PInt(i64, Span),
+
+  /// A real number pattern
   PReal(f64, Span),
+
+  /// A string pattern
   PStr(&'t str, Span),
 }
 
@@ -84,6 +146,7 @@ impl<'t> Pattern<'t> {
   }
 }
 
+/// One constructor of an enum
 #[derive(Debug, Clone)]
 pub struct EnumConst<'t> {
   pub tag: ProperName<'t>,
@@ -91,6 +154,12 @@ pub struct EnumConst<'t> {
   pub span: Span,
 }
 
+/// A "with" branch in a match expression
+///
+/// Example
+/// ```sylt
+/// with 1 -> 2
+/// ```
 #[derive(Debug, Clone)]
 pub struct WithBranch<'t> {
   pub pattern: Pattern<'t>,
@@ -99,26 +168,54 @@ pub struct WithBranch<'t> {
   pub span: Span,
 }
 
+/// An expression
 #[derive(Debug, Clone)]
 pub enum Expr<'t> {
+  /// A boolean value
   EBool(bool, Span),
+
+  /// An integer value
   EInt(i64, Span),
+
+  /// A real number value
   EReal(f64, Span),
+
+  /// A string value
   EStr(&'t str, Span),
 
+  /// An enum constructor value
+  ///
+  /// Example
+  /// ```sylt
+  /// Enum:Variant value
+  /// ```
   EnumConst {
     ty_name: ProperName<'t>,
     const_name: ProperName<'t>,
     value: Option<Box<Expr<'t>>>,
   },
 
+  /// A record value
+  ///
+  /// Example
+  /// ```sylt
+  /// { x: 1, y: 2 }
+  /// ```
   Record {
     to_extend: Option<Box<Expr<'t>>>,
     fields: Vec<((Span, &'t str), Expr<'t>)>,
     span: Span,
   },
 
+  /// A variable
   Var(Name<'t>, Span),
+
+  /// A let binding
+  ///
+  /// Example
+  /// ```sylt
+  /// let a = 1 in "another expression"
+  /// ```
   Let {
     binding: Pattern<'t>,
     bind_value: Box<Expr<'t>>,
@@ -126,6 +223,15 @@ pub enum Expr<'t> {
     next_value: Box<Expr<'t>>,
   },
 
+  /// A match expression
+  ///
+  /// Example
+  /// ```sylt
+  /// match "expression"
+  ///   with "pattern1" -> 0
+  ///   with _ -> 1
+  /// end
+  /// ```
   Match {
     value: Box<Expr<'t>>,
 
@@ -134,13 +240,22 @@ pub enum Expr<'t> {
     span: Span,
   },
 
+  /// A lambda function
+  ///
+  /// Example
+  /// ```sylt
+  /// \x -> x
+  /// ```
   Lambda {
     args: Vec<Pattern<'t>>,
     body: Box<Expr<'t>>,
     span: Span,
   },
 
+  /// A unary operator expression
   Un(UnOp, Box<Expr<'t>>),
+
+  /// A binary operator expression
   Bin(BinOp, Box<Expr<'t>>, Box<Expr<'t>>),
 }
 
@@ -175,6 +290,7 @@ impl<'t> Expr<'t> {
   }
 }
 
+/// Unary operators
 #[derive(Debug, Clone, Copy)]
 pub enum UnOp {
   Neg(Span),
@@ -189,19 +305,32 @@ impl UnOp {
   }
 }
 
+/// Binary operators
 #[derive(Debug, Clone, Copy)]
 pub enum BinOp {
+  /// Addition operator `+`
   Add(Span),
+  /// Subtraction operator `-`
   Sub(Span),
+  /// Division operator `/`
   Div(Span),
+  /// Multiplication operator `*`
   Mul(Span),
+  /// Call operator `'`
   Call(Span),
+  /// Pipe operator `#`
   RevCall(Span),
+  /// And operator `and`
   And(Span),
+  /// Or operator `or`
   Or(Span),
+  /// Less than operator `<`
   Lt(Span),
+  /// Less than or equal operator `<=`
   LtEq(Span),
+  /// Equality operator `==`
   Eq(Span),
+  /// Inequality operator `!=`
   Neq(Span),
 }
 
@@ -224,17 +353,29 @@ impl BinOp {
   }
 }
 
+/// Types
 #[derive(Debug, Clone)]
 pub enum Type<'t> {
+  /// The empty (unknown) type, matches all types
   TEmpty(Span),
+
+  /// A type alias
   TCustom {
     name: ProperName<'t>,
     args: Vec<Type<'t>>,
     span: Span,
   },
+
+  /// A type variable
   TVar(Name<'t>, Span),
+
+  /// A forall type
   TForall(Name<'t>, Box<Type<'t>>, Span),
+
+  /// A function type
   TFunction(Box<Type<'t>>, Box<Type<'t>>, Span),
+
+  /// A record type
   TRecord {
     fields: Vec<(Span, &'t str, Type<'t>)>,
     span: Span,
