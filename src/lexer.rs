@@ -12,7 +12,7 @@ pub enum Token<'t> {
   Int(&'t str),
 
   // `X.`, `.Y`, `X.Y`, `XeY` and `Xe-Y`
-  #[regex(r"([\d]+\.[\d]*|[\d]*\.[\d]+)|[\d]+e(-|\+)?[\d]+", |lex| lex.slice(), priority=2)]
+  #[regex(r"(\d+\.\d*|\d*\.\d+)|\d+e[+-]?\d+", |lex| lex.slice(), priority=2)]
   Real(&'t str),
 
   // TODO replace the \\ and \" with the right strings? Do I need to do this or can I let Lua do

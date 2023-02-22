@@ -315,7 +315,7 @@ fn gen_record_constant(
 
 fn gen_pat(out: &mut dyn Write, curr: String, ctx: Ctx, binding: &Pattern) -> Result<()> {
   Ok(match binding {
-    Pattern::Empty(_) => write!(out, "sy_id({})\n", curr)?,
+    Pattern::Empty(_) => write!(out, "Sylt.Pattern.id({})\n", curr)?,
     Pattern::Var(name, inner, _) => {
       write!(out, "local {} = {}\n", ctx.var(*name), curr)?;
       match inner {
@@ -345,9 +345,9 @@ fn gen_pat(out: &mut dyn Write, curr: String, ctx: Ctx, binding: &Pattern) -> Re
         gen_pat(out, format!("{}[\"{}\"]", curr, field), ctx, pat)?;
       }
     }
-    Pattern::PBool(x, _) => write!(out, "Sylt.Internal.check_pattern(0, {}, {})\n", x, curr)?,
-    Pattern::PInt(x, _) => write!(out, "Sylt.Internal.check_pattern(1, {}, {})\n", x, curr)?,
-    Pattern::PReal(x, _) => write!(out, "Sylt.Internal.check_pattern(2, {}, {})\n", x, curr)?,
-    Pattern::PStr(x, _) => write!(out, "Sylt.Internal.check_pattern(3, {}, {})\n", x, curr)?,
+    Pattern::PBool(x, _) => write!(out, "Sylt.Pattern.check_pattern(0, {}, {})\n", x, curr)?,
+    Pattern::PInt(x, _) => write!(out, "Sylt.Pattern.check_pattern(1, {}, {})\n", x, curr)?,
+    Pattern::PReal(x, _) => write!(out, "Sylt.Pattern.check_pattern(2, {}, {})\n", x, curr)?,
+    Pattern::PStr(x, _) => write!(out, "Sylt.Pattern.check_pattern(3, {}, {})\n", x, curr)?,
   })
 }
