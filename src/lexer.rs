@@ -53,6 +53,10 @@ pub enum Token<'t> {
   KwEnd,
   #[token("forall")]
   KwForall,
+  #[token("class")]
+  KwClass,
+  #[token("instance")]
+  KwInstance,
   #[token("\\")]
   KwLambda,
 
@@ -147,6 +151,8 @@ impl<'t> Token<'t> {
       Token::KwIf => "keyword `if`".to_string(),
       Token::KwEnd => "keyword `end`".to_string(),
       Token::KwForall => "keyword `forall`".to_string(),
+      Token::KwClass => "keyword `class`".to_string(),
+      Token::KwInstance => "keyword `instance`".to_string(),
       Token::KwLambda => "keyword `lambda`".to_string(),
 
       Token::OpAdd => "operator `+`".to_string(),

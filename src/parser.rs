@@ -450,18 +450,18 @@ fn parse_pat<'t>(lex: &mut Lex<'t>) -> PRes<Option<Pattern<'t>>> {
     }
 
     Some(Token::LParen) => {
-        lex.next();
-        let inner = some!(
-          lex,
-          parse_pat(lex)?,
-          "Expected a pattern inside parentheses after seeing `(`"
-        );
-        expect!(
-          lex,
-          Token::RParen,
-          "Expected a closing parenthasis after the inner pattern"
-        );
-        inner
+      lex.next();
+      let inner = some!(
+        lex,
+        parse_pat(lex)?,
+        "Expected a pattern inside parentheses after seeing `(`"
+      );
+      expect!(
+        lex,
+        Token::RParen,
+        "Expected a closing parenthasis after the inner pattern"
+      );
+      inner
     }
 
     Some(Token::LCurl) => {
@@ -529,24 +529,53 @@ pub fn type_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {
   fn peek_term<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {
     let (span, head) = lex.peek();
     Ok(Some(match head {
+      Some(Token::KwLet) => {
+        lex.next();
+        let class = match lex.peek() {
+          (name_at, Some(Token::ProperName(name))) => ProperName(name, name_at),
+          (at, tok) => {
+            return err_msg_token(
+              "Expected a proper name to use as base for narrowing",
+              tok,
+              at,
+            )
+          }
+        };
+
+        let var = match lex.peek() {
+          (name_at, Some(Token::Name(name))) => Name(name, name_at),
+          (at, tok) => {
+            return err_msg_token("Expected a type variable name to be narrowed", tok, at)
+          }
+        };
+
+        let _ = expect!(
+          lex,
+          Token::Period,
+          "Expected '.' to end the 'let' requirement"
+        );
+
+        let span = span.merge(var.1);
+        Type::TLet { class, var, span }
+      }
       Some(Token::KwForall) => {
         lex.next();
         let mut vars = vec![];
         loop {
-            match lex.peek() {
-              (at, Some(Token::Name(name))) => {
-                  vars.push(Name(name, at));
-                  lex.next();
-              }
-              _ => break,
+          match lex.peek() {
+            (at, Some(Token::Name(name))) => {
+              vars.push(Name(name, at));
+              lex.next();
             }
+            _ => break,
+          }
         }
         let (end, _) = expect!(lex, Token::Period, "Expected '.' to end the 'forall'");
         let span = span.merge(end);
 
         let mut inner = some!(lex, type_(lex)?, "Expected a type following the `forall`");
         for v in vars.into_iter() {
-            inner = Type::TForall(v, Box::new(inner), span);
+          inner = Type::TForall(v, Box::new(inner), span);
         }
         inner
       }
@@ -815,6 +844,50 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
     Ok(Some(Def::Enum { name, args, constructors, span }))
   }
 
+  /// Parse `class` declaration
+  fn class_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Def<'t>>> {
+    let start = lex.span();
+    if !matches!(lex.token(), Some(Token::KwClass)) {
+      return Ok(None);
+    };
+    lex.next();
+
+    let name = match expect!(
+      lex,
+      Token::ProperName(_),
+      "Expected a proper name for the class"
+    ) {
+      (span, Some(Token::ProperName(str))) => ProperName(str, span),
+      _ => unreachable!("Checked in the expect before"),
+    };
+
+    let span = start.merge(name.1);
+    Ok(Some(Def::Class { name, span }))
+  }
+
+  /// Parse `class` declaration
+  fn instance_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Def<'t>>> {
+    let start = lex.span();
+    if !matches!(lex.token(), Some(Token::KwInstance)) {
+      return Ok(None);
+    };
+    lex.next();
+
+    let class = match expect!(
+      lex,
+      Token::ProperName(_),
+      "Expected a proper name for the class"
+    ) {
+      (span, Some(Token::ProperName(str))) => ProperName(str, span),
+      _ => unreachable!("Checked in the expect before"),
+    };
+
+    let ty = some!(lex, type_(lex)?, "Expected a type after the class name for this instance");
+
+    let span = start.merge(ty.span());
+    Ok(Some(Def::Instance { class, ty, span }))
+  }
+
   let d = (|| {
     match def_(lex)? {
       Some(x) => return Ok(Some(x)),
@@ -825,6 +898,14 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
       None => {}
     }
     match enum_(lex)? {
+      Some(x) => return Ok(Some(x)),
+      None => {}
+    }
+    match class_(lex)? {
+      Some(x) => return Ok(Some(x)),
+      None => {}
+    }
+    match instance_(lex)? {
       Some(x) => return Ok(Some(x)),
       None => {}
     }

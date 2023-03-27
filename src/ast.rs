@@ -11,7 +11,27 @@ pub struct ProperName<'t>(pub &'t str, pub Span);
 /// An outer definition
 #[derive(Debug, Clone)]
 pub enum Def<'t> {
-  /// A normal definition
+  /// Defining a type class
+  ///
+  /// Example
+  /// ```sylt
+  /// class Num
+  /// ```
+  Class { name: ProperName<'t>, span: Span },
+
+  /// Defining an instance of a class
+  ///
+  /// Example
+  /// ```sylt
+  /// instance Num Int
+  /// ```
+  Instance {
+    class: ProperName<'t>,
+    ty: Type<'t>,
+    span: Span,
+  },
+
+  /// A definition of a constant or function
   ///
   /// Example
   /// ```sylt
@@ -84,7 +104,10 @@ impl<'t> Def<'t> {
       | Def::ForiegnDef { name: Name(str, span), .. }
       | Def::Type { name: ProperName(str, span), .. }
       | Def::Enum { name: ProperName(str, span), .. }
-      | Def::ForiegnType { name: ProperName(str, span), .. } => Some((str, *span)),
+      | Def::ForiegnType { name: ProperName(str, span), .. }
+      | Def::Class { name: ProperName(str, span), .. } => Some((str, *span)),
+
+      Def::Instance { .. } => None,
     }
   }
 }
@@ -380,6 +403,13 @@ pub enum Type<'t> {
     fields: Vec<(Span, &'t str, Type<'t>)>,
     span: Span,
   },
+
+  /// A type constraint in the form of a tag
+  TLet {
+    class: ProperName<'t>,
+    var: Name<'t>,
+    span: Span,
+  },
 }
 
 impl<'t> Type<'t> {
@@ -390,6 +420,7 @@ impl<'t> Type<'t> {
       | Type::TVar(_, span)
       | Type::TForall(_, _, span)
       | Type::TFunction(_, _, span)
+      | Type::TLet { span, .. }
       | Type::TRecord { span, .. } => *span,
     }
   }

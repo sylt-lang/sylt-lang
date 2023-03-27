@@ -888,6 +888,7 @@ fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> TRes<CType<'t>> {
       }
       CType::Req(reqs, Box::new(CType::Record))
     }
+    Type::TConstraint { class, var } => todo!(),
   })
 }
 

@@ -57,6 +57,8 @@ pub enum Def {
     args: Vec<NameId>,
     span: Span,
   },
+  Class,
+  Instance { class: NameId, ty: Type },
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +77,10 @@ pub enum Type {
   TRecord {
     fields: Vec<(Span, FieldId, Type)>,
     span: Span,
+  },
+  TConstraint {
+    class: NameId,
+    var: NameId,
   },
 }
 
@@ -276,7 +282,6 @@ impl<'t> Ctx<'t> {
     }
   }
 
-
   fn find_name(&mut self, name: &'t str) -> Option<NameId> {
     for NameId(v) in self.stack.iter().rev() {
       if self.names[*v].name == name {
@@ -345,10 +350,9 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
 
       Type::TApply(Box::new(node), args, span)
     }
-    ast::Type::TVar(ast::Name(name, at), span) => Type::TNode(
-      ctx.read_name_or_error(name, at)?,
-      span,
-    ),
+    ast::Type::TVar(ast::Name(name, at), span) => {
+      Type::TNode(ctx.read_name_or_error(name, at)?, span)
+    }
     ast::Type::TFunction(a, b, span) => {
       let a = Box::new(resolve_ty(ctx, *a)?);
       let b = Box::new(resolve_ty(ctx, *b)?);
@@ -372,6 +376,15 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
       ctx.pop_frame(frame);
       inner
     }
+    ast::Type::TLet {
+      class: ast::ProperName(class_name, class_at),
+      var: ast::Name(var_name, var_at),
+      span,
+    } => {
+      let var = ctx.read_name_or_error(var_name, var_at)?;
+      let class = ctx.read_name_or_error(class_name, class_at)?;
+      Type::TConstraint { class, var }
+    }
   })
 }
 
@@ -388,14 +401,19 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
       Expr::Let { bind_value, binding, next_value }
     }
 
-    ast::Expr::EBool(value, span) => Expr::EBool(value, span, ctx.read_name_or_error("Bool", span)?),
+    ast::Expr::EBool(value, span) => {
+      Expr::EBool(value, span, ctx.read_name_or_error("Bool", span)?)
+    }
     ast::Expr::EInt(value, span) => Expr::EInt(value, span, ctx.read_name_or_error("Int", span)?),
-    ast::Expr::EReal(value, span) => Expr::EReal(value, span, ctx.read_name_or_error("Real", span)?),
-    ast::Expr::EStr(value, span) => Expr::EStr(value.to_string(), span, ctx.read_name_or_error("Str", span)?),
-    ast::Expr::Var(ast::Name(name, at), span) => Expr::Var(
-      ctx.read_name_or_error(name, at)?,
+    ast::Expr::EReal(value, span) => {
+      Expr::EReal(value, span, ctx.read_name_or_error("Real", span)?)
+    }
+    ast::Expr::EStr(value, span) => Expr::EStr(
+      value.to_string(),
       span,
+      ctx.read_name_or_error("Str", span)?,
     ),
+    ast::Expr::Var(ast::Name(name, at), span) => Expr::Var(ctx.read_name_or_error(name, at)?, span),
     ast::Expr::Record { to_extend, fields, span } => {
       let to_extend = match to_extend {
         Some(to_extend) => Some(Box::new(resolve_expr(ctx, *to_extend)?)),
@@ -516,7 +534,13 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
           let value = resolve_expr(ctx, value)?;
           ctx.pop_frame(frame);
 
-          Ok(WithBranch { pattern, condition, bool: ctx.read_name_or_error("Bool", span)? , value, span })
+          Ok(WithBranch {
+            pattern,
+            condition,
+            bool: ctx.read_name_or_error("Bool", span)?,
+            value,
+            span,
+          })
         })
         .collect::<RRes<Vec<WithBranch>>>()?;
 
@@ -582,7 +606,9 @@ fn resolve_pattern<'t>(ctx: &mut Ctx<'t>, pat: ast::Pattern<'t>) -> RRes<Pattern
     ast::Pattern::PBool(b, span) => Pattern::PBool(b, span, ctx.read_name_or_error("Bool", span)?),
     ast::Pattern::PInt(i, span) => Pattern::PInt(i, span, ctx.read_name_or_error("Int", span)?),
     ast::Pattern::PReal(r, span) => Pattern::PReal(r, span, ctx.read_name_or_error("Real", span)?),
-    ast::Pattern::PStr(s, span) => Pattern::PStr(s.to_owned(), span, ctx.read_name_or_error("Str", span)?),
+    ast::Pattern::PStr(s, span) => {
+      Pattern::PStr(s.to_owned(), span, ctx.read_name_or_error("Str", span)?)
+    }
   })
 }
 
@@ -683,6 +709,12 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       ctx.enum_constructors.insert(ty, cons);
       Def::Enum { name, args, span }
     }
+    ast::Def::Class { .. } => { Def::Class }
+    ast::Def::Instance { class, ty, span: _ } => {
+        let class = ctx.read_name_or_error(class.0, class.1)?;
+        let ty = resolve_ty(ctx, ty)?;
+        Def::Instance { class, ty }
+    }
   })
 }
 
@@ -699,7 +731,6 @@ pub fn resolve<'t>(
       None => continue,
       Some(x) => x,
     };
-    // TODO, handle type definitions here
     match (ctx.find_name(name), d) {
       (Some(NameId(old)), _) => {
         errs.push(error_multiple_def(name, ctx.names[old].def_at, at));
@@ -719,21 +750,21 @@ pub fn resolve<'t>(
       (None, ast::Def::Enum { .. }) => {
         ctx.push_global_type(name, at);
       }
+      (None, ast::Def::Class { .. }) => {
+        ctx.push_global_type(name, at);
+      }
+      (None, ast::Def::Instance { .. }) => continue,
     }
   }
 
   for d in defs.iter() {
-    let (name, _) = match d.name() {
-      None => continue,
-      Some(x) => x,
-    };
     // TODO, handle type definitions here
-    match (ctx.find_name(name), d) {
-      (None, _) => unreachable!(),
-
+    match (d.name().and_then(|(name, _)| ctx.find_name(name)), d) {
       (_, ast::Def::ForiegnDef { .. })
       | (_, ast::Def::Def { .. })
       | (_, ast::Def::ForiegnType { .. })
+      | (_, ast::Def::Class { .. })
+      | (_, ast::Def::Instance { .. })
       | (_, ast::Def::Type { .. }) => {}
 
       (Some(ty), ast::Def::Enum { constructors, args, .. }) => {
@@ -768,6 +799,8 @@ pub fn resolve<'t>(
         ctx.pop_frame(frame);
         ctx.enum_constructors.insert(ty, cons);
       }
+
+      (None, ast::Def::Enum { .. }) => unreachable!("Error unreachable match arm in compiler"),
     }
   }
 
