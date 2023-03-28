@@ -171,7 +171,7 @@ impl Error {
   /// Try to render the context, handle reaching EOF
   fn maybe_render_context(at: &Span, source: Option<&str>) -> String {
     source
-      .map(|s| Self::render_context(at, s).unwrap_or_else(|| "  Reached EoF".to_string()))
+      .map(|s| Self::render_context(at, s).unwrap_or_else(|| "  No context, EOF".to_string()))
       .unwrap_or("".to_string())
   }
 
@@ -215,7 +215,7 @@ impl Error {
       }
       Error::ResNoEnum { ty_name, at } => {
         format!(
-          "> The name {:?} does is not an enum\n{}",
+          "> The name {:?} is not an enum\n{}",
           ty_name,
           Self::maybe_render_context(at, source)
         )

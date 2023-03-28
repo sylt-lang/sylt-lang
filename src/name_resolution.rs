@@ -57,8 +57,11 @@ pub enum Def {
     args: Vec<NameId>,
     span: Span,
   },
-  Class,
-  Instance { class: NameId, ty: Type },
+  Class(NameId),
+  Instance {
+    class: NameId,
+    ty: Type,
+  },
 }
 
 #[derive(Debug, Clone)]
@@ -81,6 +84,8 @@ pub enum Type {
   TConstraint {
     class: NameId,
     var: NameId,
+    inner: Box<Type>,
+    span: Span,
   },
 }
 
@@ -380,10 +385,12 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
       class: ast::ProperName(class_name, class_at),
       var: ast::Name(var_name, var_at),
       span,
+      inner,
     } => {
       let var = ctx.read_name_or_error(var_name, var_at)?;
       let class = ctx.read_name_or_error(class_name, class_at)?;
-      Type::TConstraint { class, var }
+      let inner = Box::new(resolve_ty(ctx, *inner)?);
+      Type::TConstraint { class, var, inner, span }
     }
   })
 }
@@ -709,11 +716,14 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       ctx.enum_constructors.insert(ty, cons);
       Def::Enum { name, args, span }
     }
-    ast::Def::Class { .. } => { Def::Class }
+    ast::Def::Class { name: ast::ProperName(name, at), .. } => {
+      let name = ctx.read_name_or_error(name, at)?;
+      Def::Class(name)
+    }
     ast::Def::Instance { class, ty, span: _ } => {
-        let class = ctx.read_name_or_error(class.0, class.1)?;
-        let ty = resolve_ty(ctx, ty)?;
-        Def::Instance { class, ty }
+      let class = ctx.read_name_or_error(class.0, class.1)?;
+      let ty = resolve_ty(ctx, ty)?;
+      Def::Instance { class, ty }
     }
   })
 }

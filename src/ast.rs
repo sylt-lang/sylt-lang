@@ -409,6 +409,7 @@ pub enum Type<'t> {
     class: ProperName<'t>,
     var: Name<'t>,
     span: Span,
+    inner: Box<Type<'t>>,
   },
 }
 

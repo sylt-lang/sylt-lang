@@ -8,6 +8,8 @@ use std::collections::BTreeSet;
 use crate::error::*;
 use crate::name_resolution::*;
 
+// TODO[et]: I should write unit tests for the typechecker, that is actually quite easy now...
+
 // [[ Maintainers note 2023-02-21 ]]
 // This module is very complex, this is true, but fear not for some key insights can really help
 // this module make sense.
@@ -64,7 +66,7 @@ pub enum CType<'t> {
   Record,
   //
   Req(BTreeSet<Requirement>, Box<CType<'t>>),
-  // TODO: Can the element type be a NameId?
+  // TODO: Can the element type be a NameId? Remove Apply and use Function everywhere.
   Apply(Box<CType<'t>>, Vec<CType<'t>>),
   Function(Box<CType<'t>>, Box<CType<'t>>),
 }
@@ -91,7 +93,14 @@ impl<'t> CType<'t> {
   ) -> String {
     // TODO: We need to clone types for now, but we should be able to not clone it later by
     // having a mutable borrow - preferably CType shouldn't care about Checker.
-    let mut checker = Checker { types, names, fields, aliases: BTreeMap::new() };
+    let mut checker = Checker {
+      types,
+      names,
+      fields,
+      aliases: BTreeMap::new(),
+      instances: BTreeMap::new(),
+      check_requirements: false,
+    };
     self.render(&mut checker)
   }
 
@@ -142,6 +151,7 @@ impl<'t> CType<'t> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Requirement {
   Num,
+  Class(NameId),
   Field(FieldId, NameId),
 }
 
@@ -157,6 +167,7 @@ impl Ord for Requirement {
       match s {
         Requirement::Num => (0, 0),
         Requirement::Field(FieldId(n), _) => (1, *n),
+        Requirement::Class(NameId(id)) => (2, *id),
       }
     }
 
@@ -174,6 +185,9 @@ impl Requirement {
           checker.field(*field),
           CType::NodeType(*ty).render(checker)
         )
+      }
+      Requirement::Class(class) => {
+        format!("(class {})", checker.name(*class),)
       }
     }
   }
@@ -196,11 +210,21 @@ struct Checker<'t> {
   names: &'t [Name<'t>],
   fields: &'t BTreeMap<FieldId, &'t str>,
   aliases: BTreeMap<NameId, (&'t Vec<NameId>, CType<'t>)>,
+
+  // TODO - It's never been a good idea to add more complexity here, so I doubt this is the best
+  // way to do this
+  instances: BTreeMap<NameId, BTreeSet<CType<'t>>>,
+
+  check_requirements: bool,
 }
 
 impl<'t> Checker<'t> {
   fn field(&self, field: FieldId) -> &'t str {
     &self.fields[&field]
+  }
+
+  fn name(&self, NameId(slot): NameId) -> &'t str {
+    &self.names[slot].name
   }
 
   // This function is really expensive memory wise. Removing a call to this function is big profit!
@@ -239,6 +263,8 @@ pub fn check<'t>(
     names,
     fields,
     aliases: BTreeMap::new(),
+    instances: BTreeMap::new(),
+    check_requirements: false,
   };
 
   let err = (|| {
@@ -263,7 +289,7 @@ pub fn check<'t>(
     }
     for def in defs {
       match def {
-        Def::ForiegnDef { .. } | Def::Def { .. } => { /* Do nothing */ }
+        Def::Instance { .. } | Def::ForiegnDef { .. } | Def::Def { .. } => { /* Do nothing */ }
 
         Def::ForeignType { name, args, span } => {
           let NameId(slot) = name;
@@ -292,14 +318,22 @@ pub fn check<'t>(
           let def_ty = CType::Apply(Box::new(CType::Foreign(&names[*slot])), args);
           unify(&mut checker, CType::NodeType(*name), def_ty, *span)?;
         }
+        Def::Class(class) => match checker.instances.entry(*class) {
+          Entry::Vacant(e) => {
+            e.insert(BTreeSet::new());
+          }
+          Entry::Occupied(_) => unreachable!("We dissallow multiple names, how did we get here?"),
+        },
       }
     }
 
     // Why does this help? Do I allow unifying without knowing all the information? How bad is
     // this in respect to performance and memory?
+    checker.check_requirements = false;
     for def in defs {
       check_def(&mut checker, def)?;
     }
+    checker.check_requirements = true;
     for def in defs {
       check_def(&mut checker, def)?;
     }
@@ -331,6 +365,17 @@ fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
     }
     Def::Enum { .. } => {
       // TODO! More needs to be done here, mainly with higher order types and stuff
+    }
+    Def::Class(..) => {
+      // TODO! More needs to be done here, mainly with higher order types and stuff
+    }
+    Def::Instance { class, ty } => {
+      let ty = check_type(checker, ty)?;
+      if let Some(instances) = checker.instances.get(class).cloned() {
+        instances.iter().any(|alt| check_eq(checker, alt, &ty));
+      } else {
+        unreachable!();
+      }
     }
 
     Def::ForeignType { .. } => { /* Do nothing */ }
@@ -365,6 +410,47 @@ fn record_merge<'t>(
     }
   })
 }
+
+fn check_eq<'t>(checker: &mut Checker<'t>, a: &CType<'t>, b: &CType<'t>) -> bool {
+  dbg!(a, b);
+  // If they're equal, they're equal
+  a == b
+    || match (a, b) {
+      // Ignore unknowns
+      (CType::Unknown, _) => true,
+      (_, CType::Unknown) => true,
+      // If it's a pointer, dig a bit deeper
+      (CType::NodeType(a_id), CType::NodeType(b_id)) => {
+        resolve(checker, &a_id) == resolve(checker, &b_id)
+      }
+      (CType::NodeType(a_id), b) => {
+        let inner_a = resolve_ty(checker, *a_id);
+        check_eq(checker, &inner_a, b)
+      }
+      (a, CType::NodeType(b_id)) => {
+        let inner_b = resolve_ty(checker, *b_id);
+        check_eq(checker, a, &inner_b)
+      }
+      // Equality for foreign types is well defined
+      (CType::Foreign(a), CType::Foreign(b)) => a.def_at == b.def_at,
+      // NOTE[et]: Should be same case as function, which is much simpler
+      (CType::Apply(a0, a1), CType::Apply(b0, b1)) => {
+        a1.len() == b1.len()
+          && check_eq(checker, a0, b0)
+          && a1
+            .iter()
+            .zip(b1.iter())
+            .all(|(a, b)| check_eq(checker, a, b))
+      }
+      // NOTE[et]: Equality for function types, because why not?
+      (CType::Function(a0, a1), CType::Function(b0, b1)) => {
+        check_eq(checker, a0, b0) && check_eq(checker, a1, b1)
+      }
+      // Not a match
+      (_, _) => false,
+    }
+}
+
 fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) -> TRes<CType<'t>> {
   // println!("{} + {}", a.render(checker), b.render(checker));
   Ok(match (a, b) {
@@ -452,7 +538,7 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
             with_label(checker, *field, u)?;
             cr.insert(*bb);
           }
-          (None | Some(Requirement::Num | Requirement::Field(_, _)), _) => {
+          (None | Some(Requirement::Num | Requirement::Class(_) | Requirement::Field(_, _)), _) => {
             cr.insert(*bb);
           }
         }
@@ -539,6 +625,9 @@ fn check_requirements<'t>(
   req: BTreeSet<Requirement>,
   c: CType<'t>,
 ) -> TRes<CType<'t>> {
+  if !checker.check_requirements {
+    return Ok(c);
+  }
   match c {
     CType::NodeType(name) => {
       let c = resolve_ty(checker, name);
@@ -548,23 +637,30 @@ fn check_requirements<'t>(
       return unify(checker, c, CType::Req(req, Box::new(CType::Unknown)), span);
     }
     //
-    CType::Foreign(_) => {
-      return error_req(
-        checker,
-        "A Foreign type cannot have requirements",
-        c,
-        &req,
-        span,
-      );
-    }
-    //
     CType::Unknown => {}
     CType::Record
       if req.iter().all(|r| match r {
         Requirement::Num => false,
+        Requirement::Class(class) => {
+          let instances = checker.instances.get(class).cloned();
+          instances
+            .map(|alts| alts.iter().any(|alt| check_eq(checker, alt, &c)))
+            .unwrap_or(false)
+        }
         Requirement::Field(_, _) => true,
       }) => {}
-    CType::Apply(inner, _) => return check_requirements(checker, span, req, *inner),
+    _ if req.iter().all(|r| match r {
+      Requirement::Num => false,
+      Requirement::Class(class) => {
+        let instances = checker.instances.get(class).cloned();
+        // TODO[et]: This is probably wrong
+        dbg!(&class, &instances, &c);
+        dbg!(instances
+          .map(|alts| alts.is_empty() || alts.iter().any(|alt| check_eq(checker, alt, &c)))
+          .unwrap_or(false))
+      }
+      Requirement::Field(_, _) => false,
+    }) => {}
     _ => {
       return error_req(
         checker,
@@ -633,7 +729,7 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
     Expr::Match { value, branches, span: _ } => {
       let mut outer_match_ty = check_expr(checker, value)?;
 
-      // NOTE[et]: There's different ways of doing this, it might be more nice to depth-first
+      // NOTE[]: There's different ways of doing this, it might be more nice to depth-first
       // instead of breath first.
       for WithBranch { pattern, condition: _, value: _, bool: _, span } in branches.iter() {
         let pattern_ty = check_pattern(checker, pattern)?;
@@ -686,10 +782,9 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
         _ => unreachable!(),
       }
     }
-    Expr::EBool(_, _, ty)
-    | Expr::EInt(_, _, ty)
-    | Expr::EReal(_, _, ty)
-    | Expr::EStr(_, _, ty) => CType::NodeType(*ty),
+    Expr::EBool(_, _, ty) | Expr::EInt(_, _, ty) | Expr::EReal(_, _, ty) | Expr::EStr(_, _, ty) => {
+      CType::NodeType(*ty)
+    }
   })
 }
 
@@ -716,6 +811,7 @@ fn raise_generics_to_unknowns<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> C
           .iter()
           .map(|req| match req {
             Requirement::Num => Requirement::Num,
+            Requirement::Class(class) => Requirement::Class(*class),
             Requirement::Field(field, ty) => {
               let ty = generic_helper(checker, CType::NodeType(*ty), generics_to_node_types);
               let ty = checker.raise_to_node(ty);
@@ -888,7 +984,18 @@ fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> TRes<CType<'t>> {
       }
       CType::Req(reqs, Box::new(CType::Record))
     }
-    Type::TConstraint { class, var } => todo!(),
+    Type::TConstraint { class, var, inner, span } => {
+      unify(
+        checker,
+        CType::Req(
+          [Requirement::Class(*class)].into_iter().collect(),
+          Box::new(CType::NodeType(*var)),
+        ),
+        CType::NodeType(*var),
+        *span,
+      )?;
+      check_type(checker, inner)?
+    }
   })
 }
 

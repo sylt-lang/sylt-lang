@@ -16,7 +16,7 @@ function Sylt.Enum.new(k, v)
   return e
 end
 
--- Records
+-- Record
 Sylt.Record = {}
 
 Sylt.Record.Meta = {
@@ -55,7 +55,9 @@ function Sylt.Record.merge(a, b)
   return out
 end
 
--- Patterns
+-- Pattern
+Sylt.Pattern = {}
+
 function Sylt.Pattern.check_pattern(kind, expected, given)
   assert(expected == given, 'Invalid pattern match: ' .. tostring(expected) .. ' != ' .. tostring(given))
 end

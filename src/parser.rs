@@ -531,7 +531,7 @@ pub fn type_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {
     Ok(Some(match head {
       Some(Token::KwLet) => {
         lex.next();
-        let class = match lex.peek() {
+        let class = match lex.next() {
           (name_at, Some(Token::ProperName(name))) => ProperName(name, name_at),
           (at, tok) => {
             return err_msg_token(
@@ -542,7 +542,7 @@ pub fn type_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {
           }
         };
 
-        let var = match lex.peek() {
+        let var = match lex.next() {
           (name_at, Some(Token::Name(name))) => Name(name, name_at),
           (at, tok) => {
             return err_msg_token("Expected a type variable name to be narrowed", tok, at)
@@ -555,8 +555,14 @@ pub fn type_<'t>(lex: &mut Lex<'t>) -> PRes<Option<Type<'t>>> {
           "Expected '.' to end the 'let' requirement"
         );
 
+        let inner = Box::new(some!(
+          lex,
+          type_(lex)?,
+          "Expected a type following the `let` requirement"
+        ));
+
         let span = span.merge(var.1);
-        Type::TLet { class, var, span }
+        Type::TLet { class, var, span, inner }
       }
       Some(Token::KwForall) => {
         lex.next();
@@ -882,7 +888,11 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
       _ => unreachable!("Checked in the expect before"),
     };
 
-    let ty = some!(lex, type_(lex)?, "Expected a type after the class name for this instance");
+    let ty = some!(
+      lex,
+      type_(lex)?,
+      "Expected a type after the class name for this instance"
+    );
 
     let span = start.merge(ty.span());
     Ok(Some(Def::Instance { class, ty, span }))

@@ -145,7 +145,7 @@ fn gen_def(out: &mut dyn Write, ctx: Ctx, def: &Def) -> Result<()> {
     | Def::Type { .. }
     | Def::ForeignType { .. }
     | Def::Class { .. }
-    | Def::Instance { .. } => todo!(),
+    | Def::Instance { .. } => (),
   })
 }
 
