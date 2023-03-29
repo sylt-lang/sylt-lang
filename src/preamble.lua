@@ -12,7 +12,7 @@ Sylt.Enum.Meta = {
 
 function Sylt.Enum.new(k, v)
   local e = { k, v }
-  setmetatable(e, Sylt.Enum)
+  setmetatable(e, Sylt.Enum.Meta)
   return e
 end
 
@@ -66,3 +66,6 @@ function Sylt.Pattern.check_const(thing, const)
   assert(const == thing[1], 'Invalid pattern match: "' .. const .. '" != ' .. tostring(thing[1]))
   return thing[2]
 end
+
+-- Helper functions
+Sylt.identity = function(x) return x end

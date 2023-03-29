@@ -1,6 +1,4 @@
-def add : _ -> _ -> _ : a b = a + b
-
-def main : Real : = add ' 0.1 ' 0.2
+def main : Real : = 0.1 + 0.2
 
 --+ expected stdout: 0.3
 

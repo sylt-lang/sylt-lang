@@ -149,7 +149,6 @@ impl<'t> CType<'t> {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Requirement {
-  Num,
   Class(NameId),
   Field(FieldId, NameId),
 }
@@ -164,7 +163,6 @@ impl Ord for Requirement {
   fn cmp(&self, other: &Self) -> Ordering {
     fn to_tuple(s: &Requirement) -> (usize, usize) {
       match s {
-        Requirement::Num => (0, 0),
         Requirement::Field(FieldId(n), _) => (1, *n),
         Requirement::Class(NameId(id)) => (2, *id),
       }
@@ -177,7 +175,6 @@ impl Ord for Requirement {
 impl Requirement {
   fn to_name<'t>(&self, checker: &mut Checker<'t>) -> String {
     match self {
-      Requirement::Num => "Num".to_owned(),
       Requirement::Field(field, ty) => {
         format!(
           "({}: {})",
@@ -528,7 +525,7 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
             with_label(checker, *field, u)?;
             cr.insert(*bb);
           }
-          (None | Some(Requirement::Num | Requirement::Class(_) | Requirement::Field(_, _)), _) => {
+          (_, _) => {
             cr.insert(*bb);
           }
         }
@@ -621,14 +618,13 @@ fn check_requirements<'t>(
       let c = resolve_ty(checker, name);
       return check_requirements(checker, span, req, c);
     }
-    c @ CType::Req(_, _) => {
+    CType::Req(_, _) => {
       return unify(checker, c, CType::Req(req, Box::new(CType::Unknown)), span);
     }
     //
     CType::Unknown => {}
     CType::Record
       if req.iter().all(|r| match r {
-        Requirement::Num => false,
         Requirement::Class(class) => {
           let instances = checker.instances.get(class).cloned();
           instances
@@ -637,13 +633,17 @@ fn check_requirements<'t>(
         }
         Requirement::Field(_, _) => true,
       }) => {}
+    // Generics can ignore requirement checks since we just check them for instances
+    CType::Generic(_) => {}
+    // It's a type we can check
     _ if req.iter().all(|r| match r {
-      Requirement::Num => false,
       Requirement::Class(class) => {
         let instances = checker.instances.get(class).cloned();
-        instances
-          .map(|alts| alts.is_empty() || alts.iter().any(|alt| check_eq(checker, alt, &c)))
-          .unwrap_or(false)
+        let res = instances
+          .as_ref()
+          .map(|alts| alts.iter().any(|alt| check_eq(checker, alt, &c)))
+          .unwrap_or(false);
+        res
       }
       Requirement::Field(_, _) => false,
     }) => {}
@@ -796,7 +796,6 @@ fn raise_generics_to_unknowns<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> C
         let reqs = reqs
           .iter()
           .map(|req| match req {
-            Requirement::Num => Requirement::Num,
             Requirement::Class(class) => Requirement::Class(*class),
             Requirement::Field(field, ty) => {
               let ty = generic_helper(checker, CType::NodeType(*ty), generics_to_node_types);
@@ -971,7 +970,7 @@ fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> TRes<CType<'t>> {
       CType::Req(reqs, Box::new(CType::Record))
     }
     Type::TConstraint { class, var, inner, span } => {
-      unify(
+      let c = unify(
         checker,
         CType::Req(
           [Requirement::Class(*class)].into_iter().collect(),
@@ -980,6 +979,7 @@ fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> TRes<CType<'t>> {
         CType::NodeType(*var),
         *span,
       )?;
+      inject(checker, *var, c);
       check_type(checker, inner)?
     }
   })
