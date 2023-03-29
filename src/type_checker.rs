@@ -99,7 +99,6 @@ impl<'t> CType<'t> {
       fields,
       aliases: BTreeMap::new(),
       instances: BTreeMap::new(),
-      check_requirements: false,
     };
     self.render(&mut checker)
   }
@@ -214,8 +213,6 @@ struct Checker<'t> {
   // TODO - It's never been a good idea to add more complexity here, so I doubt this is the best
   // way to do this
   instances: BTreeMap<NameId, BTreeSet<CType<'t>>>,
-
-  check_requirements: bool,
 }
 
 impl<'t> Checker<'t> {
@@ -264,7 +261,6 @@ pub fn check<'t>(
     fields,
     aliases: BTreeMap::new(),
     instances: BTreeMap::new(),
-    check_requirements: false,
   };
 
   let err = (|| {
@@ -329,11 +325,9 @@ pub fn check<'t>(
 
     // Why does this help? Do I allow unifying without knowing all the information? How bad is
     // this in respect to performance and memory?
-    checker.check_requirements = false;
     for def in defs {
       check_def(&mut checker, def)?;
     }
-    checker.check_requirements = true;
     for def in defs {
       check_def(&mut checker, def)?;
     }
@@ -371,11 +365,8 @@ fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
     }
     Def::Instance { class, ty } => {
       let ty = check_type(checker, ty)?;
-      if let Some(instances) = checker.instances.get(class).cloned() {
-        instances.iter().any(|alt| check_eq(checker, alt, &ty));
-      } else {
-        unreachable!();
-      }
+      assert!(checker.instances.contains_key(class), "Should always contain the key since class definitions are done before hand, but maybe this should be an actual error?");
+      checker.instances.get_mut(class).unwrap().insert(ty);
     }
 
     Def::ForeignType { .. } => { /* Do nothing */ }
@@ -412,7 +403,6 @@ fn record_merge<'t>(
 }
 
 fn check_eq<'t>(checker: &mut Checker<'t>, a: &CType<'t>, b: &CType<'t>) -> bool {
-  dbg!(a, b);
   // If they're equal, they're equal
   a == b
     || match (a, b) {
@@ -625,9 +615,7 @@ fn check_requirements<'t>(
   req: BTreeSet<Requirement>,
   c: CType<'t>,
 ) -> TRes<CType<'t>> {
-  if !checker.check_requirements {
-    return Ok(c);
-  }
+  // TODO: It would be great if we could generate one error for each constraint
   match c {
     CType::NodeType(name) => {
       let c = resolve_ty(checker, name);
@@ -653,11 +641,9 @@ fn check_requirements<'t>(
       Requirement::Num => false,
       Requirement::Class(class) => {
         let instances = checker.instances.get(class).cloned();
-        // TODO[et]: This is probably wrong
-        dbg!(&class, &instances, &c);
-        dbg!(instances
+        instances
           .map(|alts| alts.is_empty() || alts.iter().any(|alt| check_eq(checker, alt, &c)))
-          .unwrap_or(false))
+          .unwrap_or(false)
       }
       Requirement::Field(_, _) => false,
     }) => {}
