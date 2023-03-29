@@ -6,11 +6,11 @@ def x
 
 --+ expected exit status: 7
 --+ expected stderr:
---+ > A Foreign type cannot have requirements.
+--+ > The requirements are not valid here.
 --+ 
---+ A
+--+ A 
 --+ is not
---+ Num
+--+ (class Num)
 --+ 
 --+   3| def x
 --+      ^^^^^

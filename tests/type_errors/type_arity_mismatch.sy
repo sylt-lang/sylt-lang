@@ -8,7 +8,7 @@ def main : Str := q ' A:A { field: 1 }
 --+ expected stderr:
 --+ > The number of type arguments doesn't match here.
 --+ 
---+ A <#7 _>
+--+ A <#38 _>
 --+ ----
 --+ _ 
 --+ 

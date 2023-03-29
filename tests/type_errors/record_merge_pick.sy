@@ -2,11 +2,11 @@ def main : _ : = let { a } = { a: "ABC" } in a + 1
 
 --+ expected exit status: 7
 --+ expected stderr:
---+ > Failed to merge types.
+--+ > The requirements are not valid here.
 --+ 
---+ Str
---+ ----
---+ Int
+--+ Str 
+--+ is not
+--+ (class Num)
 --+ 
 --+   1| def main : _ : = let { a } = { a: "ABC" } in a + 1
 --+                                                     ^

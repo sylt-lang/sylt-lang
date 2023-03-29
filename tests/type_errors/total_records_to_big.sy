@@ -7,9 +7,9 @@ def f
 --+ > While checking label "b".
 --+ > There are extra labels in one record.
 --+ 
---+ ([(a: <#2 Int>), (b: <#1 _>)] => Record)
+--+ ([(a: <#33 Int >), (b: <#32 _>)] => Record)
 --+ ----
---+ ([(a: <#3 Int>)] => Record)
+--+ ([(a: <#34 Int >)] => Record)
 --+ 
 --+   1| def f
 --+      ^^^^^

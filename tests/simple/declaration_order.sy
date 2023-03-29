@@ -5,9 +5,9 @@ def main ::=
 def getX :: { x } = x
 
 --+ expected stderr:
---+ lua: stdin:43: attempt to call a nil value (global '_1_getX')
+--+ lua: stdin:91: attempt to call a nil value (global '_20_getX')
 --+ stack traceback:
---+ 	stdin:43: in function <stdin:42>
---+ 	stdin:42: in main chunk
+--+ 	stdin:91: in function <stdin:90>
+--+ 	stdin:90: in main chunk
 --+ 	[C]: in ?
 

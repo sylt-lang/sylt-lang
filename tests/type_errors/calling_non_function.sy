@@ -10,9 +10,9 @@ def f
 --+ expected stderr:
 --+ > Failed to merge types.
 --+ 
---+ <#2 _> -> _
+--+ <#33 _> -> _
 --+ ----
---+ Int
+--+ Int 
 --+ 
 --+   1| def main
 --+   2| : Int
