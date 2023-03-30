@@ -59,7 +59,7 @@ pub fn gen<'t>(
   named_ast: &[Def],
   gen_module: bool,
 ) -> Result<()> {
-  writeln!(out, "-- BEGIN PREAMBLE\n{}\n-- END PREAMBLE\n\n", PREAMBLE)?;
+  writeln!(out, "-- BEGIN LUA PREAMBLE\n{}\n-- END LUA PREAMBLE\n\n", PREAMBLE)?;
 
   let gen_vars = names
     .iter()
