@@ -564,6 +564,22 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
 
       Expr::Lambda { args, body, span }
     }
+    ast::Expr::EArray(values, span) => {
+        // Ignore the single case where we only require the `empty` function.
+      let append = Expr::Var(ctx.read_name_or_error("append", span)?, span);
+      let empty = Expr::Var(ctx.read_name_or_error("empty", span)?, span);
+      let mut expr = empty;
+      for v in values.into_iter() {
+        let span = v.span();
+        let vv = resolve_expr(ctx, v)?;
+        expr = Expr::Call(
+          Box::new(Expr::Call(Box::new(append.clone()), Box::new(vv), span)),
+          Box::new(expr),
+          span,
+        );
+      }
+      expr
+    }
   })
 }
 

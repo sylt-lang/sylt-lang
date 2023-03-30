@@ -206,6 +206,9 @@ pub enum Expr<'t> {
   /// A string value
   EStr(&'t str, Span),
 
+  /// An array expression
+  EArray(Vec<Expr<'t>>, Span),
+
   /// An enum constructor value
   ///
   /// Example
@@ -289,6 +292,7 @@ impl<'t> Expr<'t> {
       | Expr::EReal(_, span)
       | Expr::EStr(_, span)
       | Expr::EBool(_, span)
+      | Expr::EArray(_, span)
       | Expr::Var(_, span)
       | Expr::Match { span, .. }
       | Expr::Lambda { span, .. }

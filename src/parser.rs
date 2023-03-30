@@ -239,6 +239,26 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
             );
           }
         }
+        Some(Token::LBracket) => {
+          let mut inner = vec![];
+          loop {
+            match lex.peek() {
+              (span, None) => return err_eof(span),
+              (_, Some(Token::RBracket)) => {
+                  lex.next();
+                  break;
+              }
+              (_, Some(_)) => {
+                  // TODO: Better error message
+                  inner.push(expr(lex)?);
+                  skip!(lex, Token::Comma);
+              }
+            }
+          }
+
+          let span = span.merge(lex.span());
+          Expr::EArray(inner, span)
+        }
         Some(Token::LParen) => {
           let expr = expr(lex)?;
           expect!(

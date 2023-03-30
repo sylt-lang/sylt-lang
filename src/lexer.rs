@@ -104,6 +104,11 @@ pub enum Token<'t> {
   #[token(")")]
   RParen,
 
+  #[token("[")]
+  LBracket,
+  #[token("]")]
+  RBracket,
+
   #[token("{")]
   LCurl,
   #[token("}")]
@@ -171,6 +176,8 @@ impl<'t> Token<'t> {
 
       Token::LParen => "a `(`".to_string(),
       Token::RParen => "a `)`".to_string(),
+      Token::LBracket => "a `[`".to_string(),
+      Token::RBracket => "a `]`".to_string(),
       Token::LCurl => "a `{`".to_string(),
       Token::RCurl => "a `}`".to_string(),
       Token::Comma => "a `,`".to_string(),
