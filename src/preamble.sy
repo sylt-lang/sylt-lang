@@ -24,7 +24,7 @@ def _div
 
 def _neg
   : forall a. let Num a. a -> a 
-  := foreign -[[ function(a) return function(b) return -a end end ]]-
+  := foreign -[[ function(a) return -a end ]]-
 
 class Eq
 instance Eq Int
@@ -61,4 +61,4 @@ def _or
 
 def _not
   : forall a. Bool -> Bool
-  := foreign -[[ function(a) return function(b) return not a end end ]]-
+  := foreign -[[ function(a) return not a end ]]-

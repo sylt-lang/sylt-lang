@@ -183,8 +183,12 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
             break (span, Some(Box::new(to_extend)));
           }
           (span, Some(Token::Str(s))) | (span, Some(Token::Name(s))) => {
-            expect!(lex, Token::Colon, "Expected ':' after record label");
-            fields.push(((span, s), expr(lex)?));
+            if matches!(lex.token(), Some(Token::Colon)) {
+              skip!(lex, Token::Colon);
+              fields.push(((span, s), expr(lex)?));
+            } else {
+              fields.push(((span, s), Expr::Var(Name(s, span), span)));
+            }
             match lex.peek() {
               (_, Some(Token::Comma | Token::RCurl | Token::Pipe)) => {
                 skip!(lex, Token::Comma);
@@ -245,13 +249,13 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
             match lex.peek() {
               (span, None) => return err_eof(span),
               (_, Some(Token::RBracket)) => {
-                  lex.next();
-                  break;
+                lex.next();
+                break;
               }
               (_, Some(_)) => {
-                  // TODO: Better error message
-                  inner.push(expr(lex)?);
-                  skip!(lex, Token::Comma);
+                // TODO: Better error message
+                inner.push(expr(lex)?);
+                skip!(lex, Token::Comma);
               }
             }
           }

@@ -59,7 +59,11 @@ pub fn gen<'t>(
   named_ast: &[Def],
   gen_module: bool,
 ) -> Result<()> {
-  writeln!(out, "-- BEGIN LUA PREAMBLE\n{}\n-- END LUA PREAMBLE\n\n", PREAMBLE)?;
+  writeln!(
+    out,
+    "-- BEGIN LUA PREAMBLE\n{}\n-- END LUA PREAMBLE\n\n",
+    PREAMBLE
+  )?;
 
   let gen_vars = names
     .iter()
@@ -243,7 +247,7 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
           gen_pat(out, "match_value".to_string(), ctx, pattern)?;
           write!(out, "if ")?;
           gen_expr(out, ctx, condition)?;
-          write!(out, "then\n")?;
+          write!(out, " then\n")?;
 
           write!(out, "return ")?;
           gen_expr(out, ctx, value)?;
