@@ -1,0 +1,7 @@
+def empty : Int : = 0
+def append : Int -> Int -> Int : a b = a + b
+
+def main : Int = [1, 2, 3, 4]
+
+--+ expected stdout: 10
+

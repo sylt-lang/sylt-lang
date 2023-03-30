@@ -1,0 +1,20 @@
+
+def addSelf
+  : forall a
+    . let Num a
+    . a -> a
+  : a = a + a
+
+def main : Str = addSelf ' "ABC"
+
+--+ expected exit status: 7
+--+ expected stderr:
+--+ > The requirements are not valid here.
+--+ 
+--+ Str 
+--+ is not
+--+ (class Num)
+--+ 
+--+   8| def main : Str = addSelf ' "ABC"
+--+                               ^
+
