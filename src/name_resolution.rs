@@ -2,6 +2,7 @@
 // Type check - needs to be memory efficient
 // Two scopes? Module and function?
 
+use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 
 use crate::ast;
@@ -217,6 +218,13 @@ impl<'t> Ctx<'t> {
     id
   }
 
+  fn field_to_str(&mut self, field: FieldId) -> &'t str {
+    match self.fields.0.get(&field) {
+      Some(id) => return *id,
+      None => unreachable!("We generate invalid FieldIds somewhere!"),
+    }
+  }
+
   fn push_var(
     &mut self,
     _global: bool,
@@ -329,6 +337,24 @@ fn error_no_enum_const<A>(
   })
 }
 
+// TODO: Show all the places where this happened?
+fn error_multiple_fields_share_name(field: &str, span: Span, num: usize) -> Result<Expr, Error> {
+  if num == 2 {
+    Err(Error::ResMsg {
+      msg: format!("The field `{}` was assigned twice, first assignment was here", field),
+      span,
+    })
+  } else {
+    Err(Error::ResMsg {
+      msg: format!(
+        "The field `{}` was assigned {} times, first assignment was here",
+        num, field
+      ),
+      span,
+    })
+  }
+}
+
 fn error_no_enum<A>(ty_name: &str, ty_name_at: Span) -> RRes<A> {
   Err(Error::ResNoEnum { ty_name: ty_name.to_string(), at: ty_name_at })
 }
@@ -437,6 +463,26 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
           }
         })
         .collect::<RRes<Vec<_>>>()?;
+
+      let mut counter = BTreeMap::new();
+      for ((span, field_id), _) in fields.iter() {
+        match counter.entry(field_id) {
+          Entry::Vacant(x) => {
+            x.insert(vec![span]);
+          }
+          Entry::Occupied(mut spans) => spans.get_mut().push(span),
+        }
+      }
+
+      for (field_id, spans) in counter.iter() {
+        if spans.len() > 1 {
+          return error_multiple_fields_share_name(
+            ctx.field_to_str(**field_id),
+            *spans[0],
+            spans.len(),
+          );
+        }
+      }
 
       Expr::Record { span, to_extend, fields }
     }
@@ -565,7 +611,7 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
       Expr::Lambda { args, body, span }
     }
     ast::Expr::EArray(values, span) => {
-        // Ignore the single case where we only require the `empty` function.
+      // Ignore the single case where we only require the `empty` function.
       let append = Expr::Var(ctx.read_name_or_error("append", span)?, span);
       let empty = Expr::Var(ctx.read_name_or_error("empty", span)?, span);
       let mut expr = empty;

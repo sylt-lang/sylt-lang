@@ -1,0 +1,8 @@
+def main : _ = let x = 1 in { x, x }
+
+--+ expected exit status: 6
+--+ expected stderr:
+--+ > The field `x` was assigned twice, first assignment was here
+--+   1| def main : _ = let x = 1 in { x, x }
+--+                                    ^
+

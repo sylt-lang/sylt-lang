@@ -7,21 +7,21 @@ def b : Str : = id ' 1
 --+ args: -o -t -
 --+ expected stdout:
 --+ 000 V "Int" @ 52-55
---+   used at: [Span(171, 174), Span(798, 801), Span(1124, 1127), Span(117, 120), Span(130, 131), Span(153, 154)]
+--+   used at: [Span(171, 174), Span(775, 778), Span(1101, 1104), Span(117, 120), Span(130, 131), Span(153, 154)]
 --+   type: Int 
---+   raw: Ty(Apply(Foreign(Name { name: "Int", is_type: true, is_foreign: true, is_generic: false, def_at: Span(52, 55), usages: [Span(171, 174), Span(798, 801), Span(1124, 1127), Span(117, 120), Span(130, 131), Span(153, 154)] }), []))
+--+   raw: Ty(Apply(Foreign(Name { name: "Int", is_type: true, is_foreign: true, is_generic: false, def_at: Span(52, 55), usages: [Span(171, 174), Span(775, 778), Span(1101, 1104), Span(117, 120), Span(130, 131), Span(153, 154)] }), []))
 --+ 001 V "Real" @ 72-76
---+   used at: [Span(153, 157), Span(584, 588), Span(814, 818), Span(1141, 1145)]
+--+   used at: [Span(153, 157), Span(584, 588), Span(791, 795), Span(1118, 1122)]
 --+   type: Real 
---+   raw: Ty(Apply(Foreign(Name { name: "Real", is_type: true, is_foreign: true, is_generic: false, def_at: Span(72, 76), usages: [Span(153, 157), Span(584, 588), Span(814, 818), Span(1141, 1145)] }), []))
+--+   raw: Ty(Apply(Foreign(Name { name: "Real", is_type: true, is_foreign: true, is_generic: false, def_at: Span(72, 76), usages: [Span(153, 157), Span(584, 588), Span(791, 795), Span(1118, 1122)] }), []))
 --+ 002 V "Str" @ 93-96
---+   used at: [Span(831, 834), Span(1159, 1162), Span(140, 143)]
+--+   used at: [Span(808, 811), Span(1136, 1139), Span(140, 143)]
 --+   type: Str 
---+   raw: Ty(Apply(Foreign(Name { name: "Str", is_type: true, is_foreign: true, is_generic: false, def_at: Span(93, 96), usages: [Span(831, 834), Span(1159, 1162), Span(140, 143)] }), []))
+--+   raw: Ty(Apply(Foreign(Name { name: "Str", is_type: true, is_foreign: true, is_generic: false, def_at: Span(93, 96), usages: [Span(808, 811), Span(1136, 1139), Span(140, 143)] }), []))
 --+ 003 V "Bool" @ 113-117
---+   used at: [Span(847, 851), Span(896, 900), Span(1020, 1024), Span(1176, 1180), Span(1226, 1230), Span(1351, 1355), Span(1456, 1460), Span(1464, 1468), Span(1472, 1476), Span(1576, 1580), Span(1584, 1588), Span(1592, 1596), Span(1696, 1700), Span(1704, 1708)]
+--+   used at: [Span(824, 828), Span(873, 877), Span(997, 1001), Span(1153, 1157), Span(1203, 1207), Span(1328, 1332), Span(1433, 1437), Span(1441, 1445), Span(1449, 1453), Span(1553, 1557), Span(1561, 1565), Span(1569, 1573), Span(1673, 1677), Span(1681, 1685)]
 --+   type: Bool 
---+   raw: Ty(Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(847, 851), Span(896, 900), Span(1020, 1024), Span(1176, 1180), Span(1226, 1230), Span(1351, 1355), Span(1456, 1460), Span(1464, 1468), Span(1472, 1476), Span(1576, 1580), Span(1584, 1588), Span(1592, 1596), Span(1696, 1700), Span(1704, 1708)] }), []))
+--+   raw: Ty(Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(824, 828), Span(873, 877), Span(997, 1001), Span(1153, 1157), Span(1203, 1207), Span(1328, 1332), Span(1433, 1437), Span(1441, 1445), Span(1449, 1453), Span(1553, 1557), Span(1561, 1565), Span(1569, 1573), Span(1673, 1677), Span(1681, 1685)] }), []))
 --+ 004 V "Num" @ 136-139
 --+   used at: [Span(136, 139), Span(149, 152), Span(167, 170), Span(204, 207), Span(325, 328), Span(446, 449), Span(567, 570), Span(691, 694)]
 --+   type: _
@@ -41,47 +41,47 @@ def b : Str : = id ' 1
 --+ 008 V "_div" @ 543-547
 --+   used at: []
 --+   type: <#25 ([(class Num)] => t25)> -> <#25 ([(class Num)] => t25)> -> Real 
---+   raw: Ty(Function(NodeType(NameId(25)), Function(NodeType(NameId(25)), Apply(Foreign(Name { name: "Real", is_type: true, is_foreign: true, is_generic: false, def_at: Span(72, 76), usages: [Span(153, 157), Span(584, 588), Span(814, 818), Span(1141, 1145)] }), []))))
+--+   raw: Ty(Function(NodeType(NameId(25)), Function(NodeType(NameId(25)), Apply(Foreign(Name { name: "Real", is_type: true, is_foreign: true, is_generic: false, def_at: Span(72, 76), usages: [Span(153, 157), Span(584, 588), Span(791, 795), Span(1118, 1122)] }), []))))
 --+ 009 V "_neg" @ 668-672
 --+   used at: []
 --+   type: <#26 ([(class Num)] => t26)> -> <#26 ([(class Num)] => t26)>
 --+   raw: Ty(Function(NodeType(NameId(26)), NodeType(NameId(26))))
---+ 010 V "Eq" @ 783-785
---+   used at: [Span(783, 785), Span(795, 797), Span(811, 813), Span(828, 830), Span(844, 846), Span(880, 882), Span(1004, 1006)]
+--+ 010 V "Eq" @ 760-762
+--+   used at: [Span(760, 762), Span(772, 774), Span(788, 790), Span(805, 807), Span(821, 823), Span(857, 859), Span(981, 983)]
 --+   type: _
 --+   raw: Ty(Unknown)
---+ 011 V "_eq" @ 857-860
+--+ 011 V "_eq" @ 834-837
 --+   used at: []
 --+   type: <#27 ([(class Eq)] => t27)> -> <#27 ([(class Eq)] => t27)> -> Bool 
---+   raw: Ty(Function(NodeType(NameId(27)), Function(NodeType(NameId(27)), Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(847, 851), Span(896, 900), Span(1020, 1024), Span(1176, 1180), Span(1226, 1230), Span(1351, 1355), Span(1456, 1460), Span(1464, 1468), Span(1472, 1476), Span(1576, 1580), Span(1584, 1588), Span(1592, 1596), Span(1696, 1700), Span(1704, 1708)] }), []))))
---+ 012 V "_neq" @ 980-984
+--+   raw: Ty(Function(NodeType(NameId(27)), Function(NodeType(NameId(27)), Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(824, 828), Span(873, 877), Span(997, 1001), Span(1153, 1157), Span(1203, 1207), Span(1328, 1332), Span(1433, 1437), Span(1441, 1445), Span(1449, 1453), Span(1553, 1557), Span(1561, 1565), Span(1569, 1573), Span(1673, 1677), Span(1681, 1685)] }), []))))
+--+ 012 V "_neq" @ 957-961
 --+   used at: []
 --+   type: <#28 ([(class Eq)] => t28)> -> <#28 ([(class Eq)] => t28)> -> Bool 
---+   raw: Ty(Function(NodeType(NameId(28)), Function(NodeType(NameId(28)), Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(847, 851), Span(896, 900), Span(1020, 1024), Span(1176, 1180), Span(1226, 1230), Span(1351, 1355), Span(1456, 1460), Span(1464, 1468), Span(1472, 1476), Span(1576, 1580), Span(1584, 1588), Span(1592, 1596), Span(1696, 1700), Span(1704, 1708)] }), []))))
---+ 013 V "Cmp" @ 1107-1110
---+   used at: [Span(1107, 1110), Span(1120, 1123), Span(1137, 1140), Span(1155, 1158), Span(1172, 1175), Span(1209, 1212), Span(1334, 1337)]
+--+   raw: Ty(Function(NodeType(NameId(28)), Function(NodeType(NameId(28)), Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(824, 828), Span(873, 877), Span(997, 1001), Span(1153, 1157), Span(1203, 1207), Span(1328, 1332), Span(1433, 1437), Span(1441, 1445), Span(1449, 1453), Span(1553, 1557), Span(1561, 1565), Span(1569, 1573), Span(1673, 1677), Span(1681, 1685)] }), []))))
+--+ 013 V "Cmp" @ 1084-1087
+--+   used at: [Span(1084, 1087), Span(1097, 1100), Span(1114, 1117), Span(1132, 1135), Span(1149, 1152), Span(1186, 1189), Span(1311, 1314)]
 --+   type: _
 --+   raw: Ty(Unknown)
---+ 014 V "_lt" @ 1186-1189
+--+ 014 V "_lt" @ 1163-1166
 --+   used at: []
 --+   type: <#29 ([(class Cmp)] => t29)> -> <#29 ([(class Cmp)] => t29)> -> Bool 
---+   raw: Ty(Function(NodeType(NameId(29)), Function(NodeType(NameId(29)), Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(847, 851), Span(896, 900), Span(1020, 1024), Span(1176, 1180), Span(1226, 1230), Span(1351, 1355), Span(1456, 1460), Span(1464, 1468), Span(1472, 1476), Span(1576, 1580), Span(1584, 1588), Span(1592, 1596), Span(1696, 1700), Span(1704, 1708)] }), []))))
---+ 015 V "_lteq" @ 1309-1314
+--+   raw: Ty(Function(NodeType(NameId(29)), Function(NodeType(NameId(29)), Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(824, 828), Span(873, 877), Span(997, 1001), Span(1153, 1157), Span(1203, 1207), Span(1328, 1332), Span(1433, 1437), Span(1441, 1445), Span(1449, 1453), Span(1553, 1557), Span(1561, 1565), Span(1569, 1573), Span(1673, 1677), Span(1681, 1685)] }), []))))
+--+ 015 V "_lteq" @ 1286-1291
 --+   used at: []
 --+   type: <#30 ([(class Cmp)] => t30)> -> <#30 ([(class Cmp)] => t30)> -> Bool 
---+   raw: Ty(Function(NodeType(NameId(30)), Function(NodeType(NameId(30)), Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(847, 851), Span(896, 900), Span(1020, 1024), Span(1176, 1180), Span(1226, 1230), Span(1351, 1355), Span(1456, 1460), Span(1464, 1468), Span(1472, 1476), Span(1576, 1580), Span(1584, 1588), Span(1592, 1596), Span(1696, 1700), Span(1704, 1708)] }), []))))
---+ 016 V "_and" @ 1436-1440
+--+   raw: Ty(Function(NodeType(NameId(30)), Function(NodeType(NameId(30)), Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(824, 828), Span(873, 877), Span(997, 1001), Span(1153, 1157), Span(1203, 1207), Span(1328, 1332), Span(1433, 1437), Span(1441, 1445), Span(1449, 1453), Span(1553, 1557), Span(1561, 1565), Span(1569, 1573), Span(1673, 1677), Span(1681, 1685)] }), []))))
+--+ 016 V "_and" @ 1413-1417
 --+   used at: []
 --+   type: Bool  -> Bool  -> Bool 
---+   raw: Ty(Function(Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(847, 851), Span(896, 900), Span(1020, 1024), Span(1176, 1180), Span(1226, 1230), Span(1351, 1355), Span(1456, 1460), Span(1464, 1468), Span(1472, 1476), Span(1576, 1580), Span(1584, 1588), Span(1592, 1596), Span(1696, 1700), Span(1704, 1708)] }), []), Function(Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(847, 851), Span(896, 900), Span(1020, 1024), Span(1176, 1180), Span(1226, 1230), Span(1351, 1355), Span(1456, 1460), Span(1464, 1468), Span(1472, 1476), Span(1576, 1580), Span(1584, 1588), Span(1592, 1596), Span(1696, 1700), Span(1704, 1708)] }), []), Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(847, 851), Span(896, 900), Span(1020, 1024), Span(1176, 1180), Span(1226, 1230), Span(1351, 1355), Span(1456, 1460), Span(1464, 1468), Span(1472, 1476), Span(1576, 1580), Span(1584, 1588), Span(1592, 1596), Span(1696, 1700), Span(1704, 1708)] }), []))))
---+ 017 V "_or" @ 1557-1560
+--+   raw: Ty(Function(Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(824, 828), Span(873, 877), Span(997, 1001), Span(1153, 1157), Span(1203, 1207), Span(1328, 1332), Span(1433, 1437), Span(1441, 1445), Span(1449, 1453), Span(1553, 1557), Span(1561, 1565), Span(1569, 1573), Span(1673, 1677), Span(1681, 1685)] }), []), Function(Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(824, 828), Span(873, 877), Span(997, 1001), Span(1153, 1157), Span(1203, 1207), Span(1328, 1332), Span(1433, 1437), Span(1441, 1445), Span(1449, 1453), Span(1553, 1557), Span(1561, 1565), Span(1569, 1573), Span(1673, 1677), Span(1681, 1685)] }), []), Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(824, 828), Span(873, 877), Span(997, 1001), Span(1153, 1157), Span(1203, 1207), Span(1328, 1332), Span(1433, 1437), Span(1441, 1445), Span(1449, 1453), Span(1553, 1557), Span(1561, 1565), Span(1569, 1573), Span(1673, 1677), Span(1681, 1685)] }), []))))
+--+ 017 V "_or" @ 1534-1537
 --+   used at: []
 --+   type: Bool  -> Bool  -> Bool 
---+   raw: Ty(Function(Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(847, 851), Span(896, 900), Span(1020, 1024), Span(1176, 1180), Span(1226, 1230), Span(1351, 1355), Span(1456, 1460), Span(1464, 1468), Span(1472, 1476), Span(1576, 1580), Span(1584, 1588), Span(1592, 1596), Span(1696, 1700), Span(1704, 1708)] }), []), Function(Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(847, 851), Span(896, 900), Span(1020, 1024), Span(1176, 1180), Span(1226, 1230), Span(1351, 1355), Span(1456, 1460), Span(1464, 1468), Span(1472, 1476), Span(1576, 1580), Span(1584, 1588), Span(1592, 1596), Span(1696, 1700), Span(1704, 1708)] }), []), Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(847, 851), Span(896, 900), Span(1020, 1024), Span(1176, 1180), Span(1226, 1230), Span(1351, 1355), Span(1456, 1460), Span(1464, 1468), Span(1472, 1476), Span(1576, 1580), Span(1584, 1588), Span(1592, 1596), Span(1696, 1700), Span(1704, 1708)] }), []))))
---+ 018 V "_not" @ 1677-1681
+--+   raw: Ty(Function(Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(824, 828), Span(873, 877), Span(997, 1001), Span(1153, 1157), Span(1203, 1207), Span(1328, 1332), Span(1433, 1437), Span(1441, 1445), Span(1449, 1453), Span(1553, 1557), Span(1561, 1565), Span(1569, 1573), Span(1673, 1677), Span(1681, 1685)] }), []), Function(Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(824, 828), Span(873, 877), Span(997, 1001), Span(1153, 1157), Span(1203, 1207), Span(1328, 1332), Span(1433, 1437), Span(1441, 1445), Span(1449, 1453), Span(1553, 1557), Span(1561, 1565), Span(1569, 1573), Span(1673, 1677), Span(1681, 1685)] }), []), Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(824, 828), Span(873, 877), Span(997, 1001), Span(1153, 1157), Span(1203, 1207), Span(1328, 1332), Span(1433, 1437), Span(1441, 1445), Span(1449, 1453), Span(1553, 1557), Span(1561, 1565), Span(1569, 1573), Span(1673, 1677), Span(1681, 1685)] }), []))))
+--+ 018 V "_not" @ 1654-1658
 --+   used at: []
 --+   type: Bool  -> Bool 
---+   raw: Ty(Function(Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(847, 851), Span(896, 900), Span(1020, 1024), Span(1176, 1180), Span(1226, 1230), Span(1351, 1355), Span(1456, 1460), Span(1464, 1468), Span(1472, 1476), Span(1576, 1580), Span(1584, 1588), Span(1592, 1596), Span(1696, 1700), Span(1704, 1708)] }), []), Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(847, 851), Span(896, 900), Span(1020, 1024), Span(1176, 1180), Span(1226, 1230), Span(1351, 1355), Span(1456, 1460), Span(1464, 1468), Span(1472, 1476), Span(1576, 1580), Span(1584, 1588), Span(1592, 1596), Span(1696, 1700), Span(1704, 1708)] }), [])))
+--+   raw: Ty(Function(Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(824, 828), Span(873, 877), Span(997, 1001), Span(1153, 1157), Span(1203, 1207), Span(1328, 1332), Span(1433, 1437), Span(1441, 1445), Span(1449, 1453), Span(1553, 1557), Span(1561, 1565), Span(1569, 1573), Span(1673, 1677), Span(1681, 1685)] }), []), Apply(Foreign(Name { name: "Bool", is_type: true, is_foreign: true, is_generic: false, def_at: Span(113, 117), usages: [Span(824, 828), Span(873, 877), Span(997, 1001), Span(1153, 1157), Span(1203, 1207), Span(1328, 1332), Span(1433, 1437), Span(1441, 1445), Span(1449, 1453), Span(1553, 1557), Span(1561, 1565), Span(1569, 1573), Span(1673, 1677), Span(1681, 1685)] }), [])))
 --+ 019 V "id" @ 93-95
 --+   used at: [Span(125, 127), Span(148, 150)]
 --+   type: #34
@@ -89,11 +89,11 @@ def b : Str : = id ' 1
 --+ 020 V "a" @ 113-114
 --+   used at: []
 --+   type: Int 
---+   raw: Ty(Apply(Foreign(Name { name: "Int", is_type: true, is_foreign: true, is_generic: false, def_at: Span(52, 55), usages: [Span(171, 174), Span(798, 801), Span(1124, 1127), Span(117, 120), Span(130, 131), Span(153, 154)] }), []))
+--+   raw: Ty(Apply(Foreign(Name { name: "Int", is_type: true, is_foreign: true, is_generic: false, def_at: Span(52, 55), usages: [Span(171, 174), Span(775, 778), Span(1101, 1104), Span(117, 120), Span(130, 131), Span(153, 154)] }), []))
 --+ 021 V "b" @ 136-137
 --+   used at: []
 --+   type: Str 
---+   raw: Ty(Apply(Foreign(Name { name: "Str", is_type: true, is_foreign: true, is_generic: false, def_at: Span(93, 96), usages: [Span(831, 834), Span(1159, 1162), Span(140, 143)] }), []))
+--+   raw: Ty(Apply(Foreign(Name { name: "Str", is_type: true, is_foreign: true, is_generic: false, def_at: Span(93, 96), usages: [Span(808, 811), Span(1136, 1139), Span(140, 143)] }), []))
 --+ 022 V "a" @ 197-198
 --+   used at: [Span(208, 209), Span(211, 212), Span(216, 217), Span(221, 222)]
 --+   type: ([(class Num)] => t22)
@@ -114,31 +114,31 @@ def b : Str : = id ' 1
 --+   used at: [Span(695, 696), Span(698, 699), Span(703, 704)]
 --+   type: ([(class Num)] => t26)
 --+   raw: Ty(Req({Class(NameId(4))}, Generic(26)))
---+ 027 V "a" @ 873-874
---+   used at: [Span(883, 884), Span(886, 887), Span(891, 892)]
+--+ 027 V "a" @ 850-851
+--+   used at: [Span(860, 861), Span(863, 864), Span(868, 869)]
 --+   type: ([(class Eq)] => t27)
 --+   raw: Ty(Req({Class(NameId(10))}, Generic(27)))
---+ 028 V "a" @ 997-998
---+   used at: [Span(1007, 1008), Span(1010, 1011), Span(1015, 1016)]
+--+ 028 V "a" @ 974-975
+--+   used at: [Span(984, 985), Span(987, 988), Span(992, 993)]
 --+   type: ([(class Eq)] => t28)
 --+   raw: Ty(Req({Class(NameId(10))}, Generic(28)))
---+ 029 V "a" @ 1202-1203
---+   used at: [Span(1213, 1214), Span(1216, 1217), Span(1221, 1222)]
+--+ 029 V "a" @ 1179-1180
+--+   used at: [Span(1190, 1191), Span(1193, 1194), Span(1198, 1199)]
 --+   type: ([(class Cmp)] => t29)
 --+   raw: Ty(Req({Class(NameId(13))}, Generic(29)))
---+ 030 V "a" @ 1327-1328
---+   used at: [Span(1338, 1339), Span(1341, 1342), Span(1346, 1347)]
+--+ 030 V "a" @ 1304-1305
+--+   used at: [Span(1315, 1316), Span(1318, 1319), Span(1323, 1324)]
 --+   type: ([(class Cmp)] => t30)
 --+   raw: Ty(Req({Class(NameId(13))}, Generic(30)))
---+ 031 V "a" @ 1453-1454
+--+ 031 V "a" @ 1430-1431
 --+   used at: []
 --+   type: t31
 --+   raw: Ty(Generic(31))
---+ 032 V "a" @ 1573-1574
+--+ 032 V "a" @ 1550-1551
 --+   used at: []
 --+   type: t32
 --+   raw: Ty(Generic(32))
---+ 033 V "a" @ 1693-1694
+--+ 033 V "a" @ 1670-1671
 --+   used at: []
 --+   type: t33
 --+   raw: Ty(Generic(33))
