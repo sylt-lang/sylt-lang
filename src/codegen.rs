@@ -235,7 +235,7 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
       gen_record_constant(out, ctx, fields)?;
       write!(out, ")")?
     }
-    Expr::Match { value, branches, span: _ } => {
+    Expr::Match { value, branches, span } => {
       write!(out, "(function(match_value)\n")?;
       write!(out, "local succ = nil\nlocal _msg = nil\n")?;
       for WithBranch { pattern, condition, value, bool: _, span: _ } in branches.iter() {
@@ -252,7 +252,7 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
           write!(out, "return ")?;
           gen_expr(out, ctx, value)?;
 
-          write!(out, "end\n")?;
+          write!(out, " end\n")?;
         } else {
           gen_pat(out, "match_value".to_string(), ctx, pattern)?;
           write!(out, "return ")?;
@@ -260,7 +260,7 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
         }
         write!(out, "\nend\n")?;
       }
-      write!(out, "print(\"NO BRANCH!\")\n")?;
+      write!(out, "print(\"NO BRANCH!\", \"{:?}\")\n", span)?;
       write!(out, "end)(")?;
       gen_expr(out, ctx, value)?;
       write!(out, ")\n")?;
