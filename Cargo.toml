@@ -8,6 +8,6 @@ name = "sylt"
 path = "src/main.rs"
 
 [dependencies]
-logos = "0.12.1"
+logos = "0.13.0"
 goldentests = "1.1"
 gumdrop = "0.8.1"

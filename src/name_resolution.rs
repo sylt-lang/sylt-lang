@@ -341,7 +341,10 @@ fn error_no_enum_const<A>(
 fn error_multiple_fields_share_name(field: &str, span: Span, num: usize) -> Result<Expr, Error> {
   if num == 2 {
     Err(Error::ResMsg {
-      msg: format!("The field `{}` was assigned twice, first assignment was here", field),
+      msg: format!(
+        "The field `{}` was assigned twice, first assignment was here",
+        field
+      ),
       span,
     })
   } else {

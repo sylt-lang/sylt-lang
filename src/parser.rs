@@ -29,7 +29,10 @@ impl<'t> Lex<'t> {
   }
 
   fn feed(&mut self) -> (Span, Option<Token<'t>>) {
-    let t = self.lexer.next();
+    let t: Option<Token<'t>> = self.lexer.next().map(|x| match x {
+      Ok(x) => x,
+      Err(()) => Token::Error,
+    });
     let s = {
       let s = self.lexer.span();
       Span(s.start, s.end)
