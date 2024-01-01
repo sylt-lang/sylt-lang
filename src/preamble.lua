@@ -21,16 +21,17 @@ Sylt.Record = {}
 
 Sylt.Record.Meta = {
   __tostring = function(record)
+    names = {}
+    for k, _ in pairs(record) do
+      table.insert(names, k)
+    end
+    table.sort(names)
     local s = '{'
-    local first = true
-    for k, v in pairs(record) do
-      if first then
-        first = false
-      else
+    for i, k in ipairs(names) do
+      if i ~= 1 then
         s = s .. ', '
       end
-
-      s = s .. tostring(k) .. ': ' .. tostring(v)
+      s = s .. tostring(k) .. ': ' .. tostring(record[k])
     end
     s = s .. '}'
     return s
@@ -45,7 +46,7 @@ end
 function Sylt.Record.merge(a, b)
   -- fields in `a` take precedence over `b`
   -- Since everything is immutable we get away with a shallow copy here :D
-  local out = {}
+  local out = Sylt.Record.new({})
   for k, v in pairs(a) do
     out[k] = v
   end

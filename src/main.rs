@@ -195,7 +195,6 @@ fn main() {
       None => {}
     }
     drop(code);
-    drop(out);
 
     if let Some(ref mut stdout) = lua.stdout {
       for line in BufReader::new(stdout).lines() {

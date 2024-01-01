@@ -1,0 +1,4 @@
+def main ::= { a: 1 | { b: 5 }}
+
+--+ expected stdout: {a: 1, b: 5}
+
