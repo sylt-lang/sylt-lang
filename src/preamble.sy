@@ -26,6 +26,8 @@ def _neg
   : forall a. let Num a. a -> a 
   := foreign -[[ function(a) return -a end ]]-
 
+def concat : Str -> Str -> Str := foreign -[[ function(a) return function(b) return a .. b end end ]]-
+
 class Eq
 instance Eq Int
 instance Eq Real

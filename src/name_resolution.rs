@@ -295,6 +295,15 @@ impl<'t> Ctx<'t> {
     }
   }
 
+  fn read_or_create_generic(&mut self, name: &'t str, at: Span) -> NameId {
+    let NameId(v) = match self.find_name(name) {
+      Some(NameId(v)) if self.names[v].is_generic => NameId(v),
+      _ => self.push_generic(name, at),
+    };
+    self.names[v].usages.push(at);
+    NameId(v)
+  }
+
   fn find_name(&mut self, name: &'t str) -> Option<NameId> {
     for NameId(v) in self.stack.iter().rev() {
       if self.names[*v].name == name {
@@ -384,8 +393,10 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
 
       Type::TApply(Box::new(node), args, span)
     }
-    ast::Type::TVar(ast::Name(name, at), span) => {
-      Type::TNode(ctx.read_name_or_error(name, at)?, span)
+    ast::Type::TVar(ast::Name(name, at), span) =>
+    // Allow defining type variables as they are introduced - I find little value in the forall
+    {
+      Type::TNode(ctx.read_or_create_generic(name, at), span)
     }
     ast::Type::TFunction(a, b, span) => {
       let a = Box::new(resolve_ty(ctx, *a)?);
@@ -708,7 +719,10 @@ fn resolve_enum_const<'t>(
 fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
   Ok(match def {
     ast::Def::Def { ty, name: ast::Name(name, _), args, body, span } => {
+      let frame = ctx.push_frame();
       let ty = resolve_ty(ctx, ty)?;
+      ctx.pop_frame(frame);
+
       let name = ctx.find_name(name).unwrap();
       let frame = ctx.push_frame();
       let args = args

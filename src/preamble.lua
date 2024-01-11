@@ -56,6 +56,29 @@ function Sylt.Record.merge(a, b)
   return out
 end
 
+-- Array
+
+Sylt.Array = {}
+
+Sylt.Array.Meta = {
+  __tostring = function(array)
+    local s = '['
+    for i, k in ipairs(array) do
+      if i ~= 1 then
+        s = s .. ', '
+      end
+      s = s .. tostring(k)
+    end
+    s = s .. ']'
+    return s
+  end,
+}
+
+function Sylt.Array.new(a)
+  setmetatable(a, Sylt.Array.Meta)
+  return a
+end
+
 -- Pattern
 Sylt.Pattern = {}
 

@@ -1,12 +1,3 @@
-def concat : Str -> Str -> Str := foreign
--[[
-function(a)
-  return function(b)
-    return a .. b
-  end
-end
-]]-
-
 def main : Str : = concat ' "a" ' "b"
 
 --+ expected stdout: ab

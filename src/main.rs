@@ -91,14 +91,15 @@ fn main() {
     Ok(a) => a,
   };
 
+  match args.dump_ast {
+    Some(s) if s == "-" => println!("{:#?}", given_ast),
+    Some(s) => std::fs::write(s, format!("{:#?}", given_ast)).expect("Failed to write AST to file"),
+    None => {}
+  }
+
   // TODO: Fix the spans so they refer to files as well
   let ast = [preamble_ast, given_ast].concat();
 
-  match args.dump_ast {
-    Some(s) if s == "-" => println!("{:#?}", ast),
-    Some(s) => std::fs::write(s, format!("{:#?}", ast)).expect("Failed to write AST to file"),
-    None => {}
-  }
 
   // TODO[et]: How slow is this clone?
   let (names, fields, named_ast) = match name_resolution::resolve(ast) {
@@ -219,6 +220,7 @@ fn main() {
 
 #[test]
 fn run_golden_tests() -> goldentests::TestResult<()> {
-  let config = goldentests::TestConfig::new("target/debug/sylt", "tests", "--+ ")?;
+  let mut config = goldentests::TestConfig::new("target/debug/sylt", "tests", "--+ ")?;
+  config.overwrite_tests = std::env::var("OVERWRITE").is_ok();
   config.run_tests()
 }

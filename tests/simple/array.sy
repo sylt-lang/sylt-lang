@@ -37,12 +37,12 @@ function(a) return function(b)
 end end
 ]]-
 
-def concat : forall ca. Array ca -> Array ca -> Array ca := concat_ext
+def concat_ : forall ca. Array ca -> Array ca -> Array ca := concat_ext
 
 def append
   : forall aa. aa -> Array aa -> Array aa
   : a as
-  = concat ' as ' (singleton ' a)
+  = concat_ ' as ' (singleton ' a)
 
 def for_each_ext
   : forall fa. forall fb. (fa -> fb) -> Array fa -> Array fb
@@ -92,7 +92,7 @@ def main
       # (append ' 6)
       # (append ' 7)
       # (append ' 8)
-      # (concat ' (empty # (append ' 99)))
+      # (concat_ ' (empty # (append ' 99)))
       # (for_each ' print)
       # \_ -> unit
 

@@ -10,7 +10,7 @@ def f
 --+ expected stderr:
 --+ > Failed to merge types.
 --+ 
---+ <#33 _> -> _
+--+ <#34 _> -> _
 --+ ----
 --+ Int 
 --+ 
