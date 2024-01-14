@@ -351,7 +351,7 @@ pub enum BinOp {
   And(Span),
   /// Or operator `or`
   Or(Span),
-  /// Less than operator `<`
+  /// Less than operator `<`, maybe include `>`?
   Lt(Span),
   /// Less than or equal operator `<=`
   LtEq(Span),
