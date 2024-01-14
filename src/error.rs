@@ -169,18 +169,22 @@ impl Error {
         )
       }
       (Some((start_line, start_at, _)), Some((end_line, end_at, _))) if start_line != end_line => {
-        source
-          .chars()
-          .enumerate()
-          .skip(start_at)
-          // Of-by-one?
-          .take_while(|(i, c)| !(*i >= end_at && *c == '\n'))
-          .map(|(_, c)| c)
-          .collect::<String>()
-          .split('\n')
-          .enumerate()
-          .map(|(offset, line)| format!("{}\n{:>3}| {}\n", filename, start_line + offset, line))
-          .collect::<String>()
+        format!(
+          "{}\n{}",
+          filename,
+          source
+            .chars()
+            .enumerate()
+            .skip(start_at)
+            // Of-by-one?
+            .take_while(|(i, c)| !(*i >= end_at && *c == '\n'))
+            .map(|(_, c)| c)
+            .collect::<String>()
+            .split('\n')
+            .enumerate()
+            .map(|(offset, line)| format!("{:>3}| {}\n", start_line + offset, line))
+            .collect::<String>()
+        )
       }
       _ => {
         return None;
@@ -194,7 +198,9 @@ impl Error {
       .get(at.2)
       .map(|x| x.as_ref())
       .flatten()
-      .map(|(n, s)| Self::render_context(at, n, s).unwrap_or_else(|| format!("  No context for {}, EOF", n)))
+      .map(|(n, s)| {
+        Self::render_context(at, n, s).unwrap_or_else(|| format!("  No context for {}, EOF", n))
+      })
       .unwrap_or("".to_string())
   }
 
