@@ -74,8 +74,27 @@ pub fn gen<'t>(
     })
     .collect();
   let ctx = Ctx { gen_vars: &gen_vars, fields };
+  // We special handle `main` and generate it after all other definitions - this lets us ignore
+  // circular dependencies for the most part. Constants can still depend on eachother in ways that
+  // might break. This change is so much smaller and faster than a more robust solution that
+  // telling people to resolve these dependencies some other way is fine.
+  //
+  // I'm a bit worried because I'm starting to think about moving towards thunks in the code
+  // generation - but that might cause other problems? 
+  let mut main = None;
   for def in named_ast {
-    gen_def(out, ctx, def)?;
+    match def {
+      Def::Def { name: NameId(slot), .. }
+        if names[*slot].name == "main" && names[*slot].is_type == false => {
+            main = Some(def);
+        }
+      _ => {
+        gen_def(out, ctx, def)?;
+      }
+    }
+  }
+  if let Some(def) = main {
+      gen_def(out, ctx, def)?;
   }
 
   let mut exports = vec![];
