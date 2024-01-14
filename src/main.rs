@@ -1,6 +1,7 @@
 #![feature(box_patterns)]
 
 use gumdrop::Options;
+use std::collections::BinaryHeap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
@@ -20,7 +21,7 @@ struct Args {
   help: bool,
 
   #[options(required, free, help = "the singular source file to compile")]
-  source: String,
+  source: Vec<String>,
 
   #[options(
     short = 'a',
@@ -63,49 +64,77 @@ const PREAMBLE: &'static str = include_str!("preamble.sy");
 fn main() {
   let args = Args::parse_args_default_or_exit();
 
-  let preamble_ast = match parser::parse(PREAMBLE) {
-    Err(errs) => {
-      for e in errs.iter() {
-        eprintln!("PREAMBLE ERROR!{}", e.render(Some(PREAMBLE)));
-      }
-      exit(15);
-    }
-    Ok(a) => a,
-  };
+  let preamble = "PREAMBLE";
+  let files_in_order = args
+    .source
+    .clone()
+    .into_iter()
+    .chain([preamble.to_string()].into_iter())
+    .collect::<BinaryHeap<_>>();
 
-  let src = match std::fs::read_to_string(&args.source) {
-    Ok(src) => src,
-    Err(e) => {
-      eprintln!("Failed to open source file {:?}: {}", &args.source, e);
-      exit(1);
+  let mut errors = Vec::new();
+  let mut srcs: Vec<Option<(String, String)>> = Vec::new();
+  let mut asts = Vec::new();
+  for filename in files_in_order.iter() {
+    if *filename == preamble {
+      srcs.push(Some((filename.to_string(), PREAMBLE.to_string())));
+    } else {
+      match std::fs::read_to_string(&filename) {
+        Ok(src) => {
+          srcs.push(Some((filename.to_string(), src)));
+        }
+        Err(e) => {
+          srcs.push(None);
+          errors.push(
+            error::Error::Special(format!("Failed to open source file {:?}: {}", &filename, e))
+              .render(&[]),
+          );
+          continue;
+        }
+      };
     }
-  };
-
-  let given_ast = match parser::parse(&src) {
-    Err(errs) => {
-      for e in errs.iter() {
-        eprintln!("{}", e.render(Some(&src)));
-      }
-      exit(5);
-    }
-    Ok(a) => a,
-  };
-
-  match args.dump_ast {
-    Some(s) if s == "-" => println!("{:#?}", given_ast),
-    Some(s) => std::fs::write(s, format!("{:#?}", given_ast)).expect("Failed to write AST to file"),
-    None => {}
   }
 
-  // TODO: Fix the spans so they refer to files as well
-  let ast = [preamble_ast, given_ast].concat();
+  for (file_id, filename) in files_in_order.iter().enumerate() {
+    let src = match srcs.get(file_id) {
+      Some(Some((_, src))) => src,
+      _ => continue,
+    };
+    match parser::parse(&src, file_id) {
+      Ok(ast) => {
+        match args.dump_ast.as_ref() {
+          Some(s) if s == "-" => println!("{}\n{:#?}", filename, ast),
+          Some(s) => std::fs::write(s, format!("{:#?}", ast)).expect("Failed to write AST to file"),
+          None => {}
+        }
+        asts.push(Some(ast));
+      }
+      Err(errs) => {
+        asts.push(None);
+        for e in errs.iter() {
+          errors.push(e.render(srcs.as_slice()));
+        }
+        continue;
+      }
+    };
+  }
 
+  if !errors.is_empty() {
+    for e in errors.iter() {
+      eprintln!("{}", e);
+    }
+    exit(1);
+  }
 
-  // TODO[et]: How slow is this clone?
-  let (names, fields, named_ast) = match name_resolution::resolve(ast) {
+  let combined_ast: Vec<ast::Def<'_>> = asts
+    .into_iter()
+    .filter_map(|x| x)
+    .flatten()
+    .collect::<Vec<_>>();
+  let (names, fields, named_ast) = match name_resolution::resolve(combined_ast) {
     Err(errs) => {
       for e in errs.iter() {
-        eprintln!("{}", e.render(Some(&src)));
+        eprintln!("{}", e.render(srcs.as_slice()));
       }
       exit(6);
     }
@@ -113,7 +142,6 @@ fn main() {
   };
 
   let (types, type_err) = type_checker::check(&names, &named_ast, &fields);
-
   match args.dump_types {
     Some(s) => {
       let mut out = BufWriter::new(match s {
@@ -146,7 +174,7 @@ fn main() {
   match type_err {
     Err(e) => {
       // TODO: Can this be run per def?
-      eprintln!("{}", e.render(Some(&src)));
+      eprintln!("{}", e.render(srcs.as_slice()));
       exit(7);
     }
     Ok(a) => a,

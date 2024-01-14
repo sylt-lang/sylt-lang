@@ -7,6 +7,7 @@ use logos::Logos;
 pub struct Lex<'t> {
   lexer: logos::Lexer<'t, Token<'t>>,
   buffer: (Span, Option<Token<'t>>),
+  file_id : usize,
 }
 
 pub fn err_eof<'t, A>(span: Span) -> PRes<A> {
@@ -22,8 +23,8 @@ pub fn err_msg_token<'t, A>(msg: &'static str, token: Option<Token<'t>>, span: S
 }
 
 impl<'t> Lex<'t> {
-  pub fn new(lexer: logos::Lexer<'t, Token<'t>>) -> Self {
-    let mut lexer = Self { lexer, buffer: (Span(0, 0), None) };
+  pub fn new(lexer: logos::Lexer<'t, Token<'t>>, file_id: usize) -> Self {
+    let mut lexer = Self { lexer, buffer: (Span(0, 0, file_id), None), file_id };
     lexer.feed();
     lexer
   }
@@ -35,7 +36,7 @@ impl<'t> Lex<'t> {
     });
     let s = {
       let s = self.lexer.span();
-      Span(s.start, s.end)
+      Span(s.start, s.end, self.file_id)
     };
     let out = self.buffer;
     self.buffer = (s, t);
@@ -148,8 +149,8 @@ fn op_to_prec(t: BinOp) -> Prec {
   }
 }
 
-pub fn parse<'t>(source: &'t str) -> Result<Vec<Def<'t>>, Vec<Error>> {
-  let mut lex = Lex::new(Token::lexer(source));
+pub fn parse<'t>(source: &'t str, file_id: usize) -> Result<Vec<Def<'t>>, Vec<Error>> {
+  let mut lex = Lex::new(Token::lexer(source), file_id);
   let mut errs = vec![];
   let mut defs = vec![];
   while !lex.is_eof() {
@@ -962,7 +963,7 @@ mod test {
       #[test]
       fn $name() {
         let src = $src;
-        let mut lex = Lex::new(Token::lexer($src));
+        let mut lex = Lex::new(Token::lexer($src), 0);
         let res = $parse(&mut lex);
         assert!(res.is_ok(), "\n{:?} should parse\ngave:\n{:?}", src, res);
         assert!(
@@ -981,7 +982,7 @@ mod test {
       #[test]
       fn $name() {
         let src = $src;
-        let mut lex = Lex::new(Token::lexer($src));
+        let mut lex = Lex::new(Token::lexer($src), 0);
         let res = $parse(&mut lex);
         assert!(
           res.is_err(),

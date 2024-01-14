@@ -1,11 +1,12 @@
 use std::fmt::Display;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
-pub struct Span(pub usize, pub usize);
+pub struct Span(pub usize, pub usize, pub usize);
 
 impl Span {
   pub fn merge(self, other: Self) -> Self {
-    Self(self.0.min(other.0), self.1.max(other.1))
+    assert_eq!(self.2, other.2, "Can't join spans from different files");
+    Self(self.0.min(other.0), self.1.max(other.1), self.2)
   }
 }
 
@@ -17,6 +18,9 @@ impl Display for Span {
 
 #[derive(Clone, Debug)]
 pub enum Error {
+  // Special errors which are caused by unfortunate realities like files not existing.
+  Special(String),
+
   /// FIXME: ?
   SynMsg {
     msg: &'static str,
@@ -25,10 +29,15 @@ pub enum Error {
   },
 
   /// Parsing reached eof
-  SynEoF { span: Span },
+  SynEoF {
+    span: Span,
+  },
 
   /// No definition of variable
-  ResUnknown { name: String, span: Span },
+  ResUnknown {
+    name: String,
+    span: Span,
+  },
 
   /// Multiple definitions for a variable
   ResMultiple {
@@ -45,10 +54,16 @@ pub enum Error {
   },
 
   /// Missing enum
-  ResNoEnum { ty_name: String, at: Span },
+  ResNoEnum {
+    ty_name: String,
+    at: Span,
+  },
 
   /// FIXME: ?
-  ResMsg { msg: String, span: Span },
+  ResMsg {
+    msg: String,
+    span: Span,
+  },
 
   /// FIXME: ?
   CheckMsg {
@@ -89,12 +104,15 @@ pub enum Error {
   },
 
   /// An error message with an associated record field
-  CheckField { field: String, inner: Box<Error> },
+  CheckField {
+    field: String,
+    inner: Box<Error>,
+  },
 }
 
 impl Error {
   /// Show the line(s) of a span from the source code
-  fn render_context(at: &Span, source: &str) -> Option<String> {
+  fn render_context(at: &Span, filename: &str, source: &str) -> Option<String> {
     let mut line_nr = 1;
     let mut line_start = 0;
 
@@ -119,7 +137,8 @@ impl Error {
         if start_line == end_line =>
       {
         format!(
-          "{:>3}| {}\n     {}{}",
+          "{}\n{:>3}| {}\n     {}{}",
+          filename,
           start_line,
           source
             .chars()
@@ -139,7 +158,8 @@ impl Error {
           .take_while(|c| *c != '\n')
           .collect::<String>();
         format!(
-          "{:>3}| {}\n     {}{}",
+          "{}\n{:>3}| {}\n     {}{}",
+          filename,
           start_line,
           line,
           (0..start_offset).map(|_| ' ').collect::<String>(),
@@ -159,7 +179,7 @@ impl Error {
           .collect::<String>()
           .split('\n')
           .enumerate()
-          .map(|(offset, line)| format!("{:>3}| {}\n", start_line + offset, line))
+          .map(|(offset, line)| format!("{}\n{:>3}| {}\n", filename, start_line + offset, line))
           .collect::<String>()
       }
       _ => {
@@ -169,15 +189,19 @@ impl Error {
   }
 
   /// Try to render the context, handle reaching EOF
-  fn maybe_render_context(at: &Span, source: Option<&str>) -> String {
+  fn maybe_render_context(at: &Span, source: &[Option<(String, String)>]) -> String {
     source
-      .map(|s| Self::render_context(at, s).unwrap_or_else(|| "  No context, EOF".to_string()))
+      .get(at.2)
+      .map(|x| x.as_ref())
+      .flatten()
+      .map(|(n, s)| Self::render_context(at, n, s).unwrap_or_else(|| format!("  No context for {}, EOF", n)))
       .unwrap_or("".to_string())
   }
 
   /// Render this error message with the context
-  pub fn render(&self, source: Option<&str>) -> String {
+  pub fn render(&self, source: &[Option<(String, String)>]) -> String {
     match self {
+      Error::Special(err) => format!("! {}.", err),
       Error::SynMsg { msg, token: Some(t), span } => format!(
         "> {}. Got {} instead.\n{}",
         msg,
