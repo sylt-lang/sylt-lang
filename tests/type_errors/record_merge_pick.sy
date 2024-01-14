@@ -8,6 +8,7 @@ def main : _ : = let { a } = { a: "ABC" } in a + 1
 --+ is not
 --+ (class Num)
 --+ 
+--+ tests/type_errors/record_merge_pick.sy
 --+   1| def main : _ : = let { a } = { a: "ABC" } in a + 1
 --+                                                     ^
 

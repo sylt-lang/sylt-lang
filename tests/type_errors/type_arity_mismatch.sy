@@ -12,6 +12,7 @@ def main : Str := q ' A:A { field: 1 }
 --+ ----
 --+ _ 
 --+ 
+--+ tests/type_errors/type_arity_mismatch.sy
 --+   3| def q : forall a. A -> Str : A:A { field } = field
 --+                        ^
 

@@ -6,3 +6,9 @@ def y : A Str := 1
 
 def z : A Int := x + y
 
+--+ expected stderr:
+--+ lua: stdin:108: attempt to call a nil value (global '_9__add')
+--+ stack traceback:
+--+ 	stdin:108: in main chunk
+--+ 	[C]: in ?
+

@@ -10,10 +10,11 @@ def f
 --+ expected stderr:
 --+ > Failed to merge types.
 --+ 
---+ <#34 _> -> _
+--+ <#22 _> -> _
 --+ ----
 --+ Int 
 --+ 
+--+ tests/type_errors/calling_non_function.sy
 --+   1| def main
 --+   2| : Int
 --+   3| : a = f ' 1

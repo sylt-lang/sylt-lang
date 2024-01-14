@@ -12,6 +12,7 @@ def main : Str := f ' 1
 --+ ----
 --+ Str
 --+ 
+--+ tests/type_errors/type_aliases.sy
 --+   5| def main : Str := f ' 1
 --+      ^^^^^^^^^^^^^^^^^^^^^^^
 

@@ -4,10 +4,5 @@ def main ::=
 
 def getX :: { x } = x
 
---+ expected stderr:
---+ lua: stdin:116: attempt to call a nil value (global '_21_getX')
---+ stack traceback:
---+ 	stdin:116: in function <stdin:115>
---+ 	stdin:115: in main chunk
---+ 	[C]: in ?
+--+ expected stdout: 2
 

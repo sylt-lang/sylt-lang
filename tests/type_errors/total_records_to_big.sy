@@ -7,10 +7,11 @@ def f
 --+ > While checking label "b".
 --+ > There are extra labels in one record.
 --+ 
---+ ([(a: <#34 Int >), (b: <#33 _>)] => Record)
+--+ ([(a: <#34 Int >), (b: <#21 _>)] => Record)
 --+ ----
 --+ ([(a: <#35 Int >)] => Record)
 --+ 
+--+ tests/type_errors/total_records_to_big.sy
 --+   1| def f
 --+      ^^^^^
 

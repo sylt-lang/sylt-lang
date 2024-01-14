@@ -8,6 +8,7 @@ def main
 --+ expected exit status: 6
 --+ expected stderr:
 --+ > The enum "A" does not have a constructor named "A"
+--+ tests/simple/enum_instance_error_no_enum.sy
 --+   6| = A:A 1
 --+        ^^^
 

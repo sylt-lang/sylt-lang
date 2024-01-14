@@ -12,6 +12,7 @@ def x
 --+ is not
 --+ (class Num)
 --+ 
---+   3| def x
---+      ^^^^^
+--+ tests/type_errors/addition_is_restricted.sy
+--+   5| : a = a + a
+--+              ^
 
