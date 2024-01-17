@@ -80,21 +80,22 @@ pub fn gen<'t>(
   // telling people to resolve these dependencies some other way is fine.
   //
   // I'm a bit worried because I'm starting to think about moving towards thunks in the code
-  // generation - but that might cause other problems? 
+  // generation - but that might cause other problems?
   let mut main = None;
   for def in named_ast {
     match def {
       Def::Def { name: NameId(slot), .. }
-        if names[*slot].name == "main" && names[*slot].is_type == false => {
-            main = Some(def);
-        }
+        if names[*slot].name == "main" && names[*slot].is_type == false =>
+      {
+        main = Some(def);
+      }
       _ => {
         gen_def(out, ctx, def)?;
       }
     }
   }
   if let Some(def) = main {
-      gen_def(out, ctx, def)?;
+    gen_def(out, ctx, def)?;
   }
 
   let mut exports = vec![];

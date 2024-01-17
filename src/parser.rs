@@ -7,7 +7,7 @@ use logos::Logos;
 pub struct Lex<'t> {
   lexer: logos::Lexer<'t, Token<'t>>,
   buffer: (Span, Option<Token<'t>>),
-  file_id : usize,
+  file_id: usize,
 }
 
 pub fn err_eof<'t, A>(span: Span) -> PRes<A> {
@@ -24,7 +24,11 @@ pub fn err_msg_token<'t, A>(msg: &'static str, token: Option<Token<'t>>, span: S
 
 impl<'t> Lex<'t> {
   pub fn new(lexer: logos::Lexer<'t, Token<'t>>, file_id: usize) -> Self {
-    let mut lexer = Self { lexer, buffer: (Span(0, 0, file_id), None), file_id };
+    let mut lexer = Self {
+      lexer,
+      buffer: (Span(0, 0, file_id), None),
+      file_id,
+    };
     lexer.feed();
     lexer
   }

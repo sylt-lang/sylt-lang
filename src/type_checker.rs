@@ -236,11 +236,14 @@ impl<'t> Checker<'t> {
 
 type TRes<A> = Result<A, Error>;
 
-pub fn check<'t>(
+pub fn check<'a, 't>(
   names: &'t Vec<Name<'t>>,
-  defs: &'t Vec<Def>,
+  defs: &'a Vec<Def>,
   fields: &'t BTreeMap<FieldId, &'t str>,
-) -> (Vec<Node<'t>>, TRes<()>) {
+) -> (Vec<Node<'t>>, TRes<()>)
+where
+  'a: 't,
+{
   // These are the only nodes which should ever be created. Otherwise memory usage will explode.
   let mut checker = Checker {
     types: names
@@ -331,7 +334,8 @@ pub fn check<'t>(
     Ok(())
   })();
 
-  (checker.types, err)
+  let var_name = (checker.types, err);
+  var_name
 }
 
 fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {

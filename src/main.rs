@@ -141,6 +141,7 @@ fn main() {
     Ok(a) => a,
   };
 
+  let named_ast = name_resolution::sort_and_trim(&names, named_ast);
   let (types, type_err) = type_checker::check(&names, &named_ast, &fields);
   match args.dump_types {
     Some(s) => {

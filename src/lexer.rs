@@ -184,7 +184,7 @@ impl<'t> Token<'t> {
       Token::Colon => "a `:`".to_string(),
       Token::Equal => "a `=`".to_string(),
       Token::Pipe => "a `|`".to_string(),
-      
+
       Token::Error => "error".to_string(),
     }
   }

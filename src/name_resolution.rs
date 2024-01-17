@@ -905,3 +905,89 @@ pub fn resolve<'t>(
     Err(errs)
   }
 }
+
+pub(crate) fn sort_and_trim<'t>(names: &Vec<Name<'t>>, named_ast: Vec<Def>) -> Vec<Def> {
+  let mut out = Vec::new();
+  let mut defs = BTreeMap::new();
+  for x in named_ast.into_iter() {
+    match x {
+      Def::Def { name, .. } => {
+        defs.insert(name, Some(x));
+      }
+      Def::ForiegnDef { name, .. } => {
+        defs.insert(name, Some(x));
+      }
+      //
+      Def::Type { .. } => out.push(x),
+      Def::Enum { .. } => out.push(x),
+      Def::ForeignType { .. } => out.push(x),
+      Def::Class(_) => out.push(x),
+      Def::Instance { .. } => out.push(x),
+    }
+  }
+  for (i, _) in names
+    .iter()
+    .enumerate()
+    .filter(|(_, x)| matches!(x.name, "main" | "update" | "init" | "draw"))
+  {
+    if let Some(def) = defs.get_mut(&NameId(i)).unwrap().take() {
+      add_deps(&mut out, &mut defs, &def);
+      out.push(def);
+    }
+  }
+  out
+}
+
+fn add_deps(out: &mut Vec<Def>, defs: &mut BTreeMap<NameId, Option<Def>>, def: &Def) {
+  match def {
+    Def::Def { body, .. } => add_deps_eagerly(out, defs, &body),
+    Def::ForiegnDef { .. }
+    | Def::Type { .. }
+    | Def::Enum { .. }
+    | Def::ForeignType { .. }
+    | Def::Class(_)
+    | Def::Instance { .. } => {}
+  }
+}
+
+fn add_deps_eagerly(out: &mut Vec<Def>, defs: &mut BTreeMap<NameId, Option<Def>>, expr: &Expr) {
+  match expr {
+    Expr::EBool(_, _, _) | Expr::EInt(_, _, _) | Expr::EReal(_, _, _) | Expr::EStr(_, _, _) => {}
+    Expr::Var(name_id, _) => match defs.get_mut(name_id) {
+      Some(some_def @ Some(_)) => {
+        let def = some_def.take().unwrap();
+        add_deps(out, defs, &def);
+        out.push(def);
+      }
+      _ => {}
+    },
+    Expr::Record { to_extend, fields, span: _ } => {
+      to_extend.as_ref().map(|x| add_deps_eagerly(out, defs, x));
+      for (_, field) in fields.iter() {
+        add_deps_eagerly(out, defs, field);
+      }
+    }
+    Expr::EnumConst { value, .. } => {
+      value
+        .as_ref()
+        .map(|(x, _)| add_deps_eagerly(out, defs, x.as_ref()));
+    }
+    Expr::Let { bind_value, binding: _, next_value } => {
+      add_deps_eagerly(out, defs, bind_value);
+      add_deps_eagerly(out, defs, next_value);
+    }
+    Expr::Match { value, branches, span: _ } => {
+      add_deps_eagerly(out, defs, &value);
+      for branch in branches.iter() {
+        add_deps_eagerly(out, defs, &branch.value);
+      }
+    }
+    Expr::Lambda { body, .. } => {
+      add_deps_eagerly(out, defs, &body);
+    }
+    Expr::Call(f, v, _) => {
+      add_deps_eagerly(out, defs, &f);
+      add_deps_eagerly(out, defs, &v);
+    }
+  }
+}
