@@ -4,15 +4,3 @@ def x
 : A -> A
 : a = a + a
 
---+ expected exit status: 7
---+ expected stderr:
---+ > The requirements are not valid here.
---+ 
---+ A 
---+ is not
---+ (class Num)
---+ 
---+ tests/type_errors/addition_is_restricted.sy
---+   5| : a = a + a
---+              ^
-

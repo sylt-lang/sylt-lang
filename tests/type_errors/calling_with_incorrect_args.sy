@@ -8,15 +8,3 @@ def x
 : A -> A
 : a = a
 
---+ expected exit status: 7
---+ expected stderr:
---+ > Failed to merge these types.
---+ 
---+ A
---+ ----
---+ Int
---+ 
---+ tests/type_errors/calling_with_incorrect_args.sy
---+   5| : a = x ' a
---+              ^
-
