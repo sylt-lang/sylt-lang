@@ -62,5 +62,9 @@ def _or
   := foreign -[[ function(a) return function(b) return a or b end end ]]-
 
 def _not
-  : forall a. Bool -> Bool
+  : Bool -> Bool
   := foreign -[[ function(a) return not a end ]]-
+
+def unsafe_coerce
+  : forall a b. a -> b
+  := foreign -[[ function(a) return a end ]]-

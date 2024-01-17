@@ -101,9 +101,13 @@ macro_rules! some {
   };
 }
 
+// Change this to `enum Prec { L(usize), R(usize) }`?
 #[derive(PartialEq, PartialOrd, Clone, Copy, Debug)]
 enum Prec {
+  Strongest,
+
   // Tightest binding
+  ImplicitCall,
   Factor,
   Term,
   Comp,
@@ -111,15 +115,17 @@ enum Prec {
   BoolOr,
   Call,
   RevCall,
+  // Weakest binding
 
   No,
-  // Weakest binding
 }
 
 fn next_prec(p: Prec) -> Prec {
   // To change associativeity, simply change from `Prec::A -> Prec::B` to `Prec::A -> Prec::A`, or vise versa.
   match p {
-    Prec::Factor => Prec::Factor,
+    Prec::Strongest => Prec::Strongest,
+    Prec::ImplicitCall => Prec::Strongest,
+    Prec::Factor => Prec::ImplicitCall,
     Prec::Term => Prec::Factor,
     Prec::Comp => Prec::Term,
     Prec::BoolAnd => Prec::BoolAnd,
@@ -128,7 +134,7 @@ fn next_prec(p: Prec) -> Prec {
     Prec::Call => Prec::BoolOr,
     Prec::RevCall => Prec::Call,
 
-    Prec::No => Prec::Call,
+    Prec::No => Prec::No,
   }
 }
 
@@ -143,6 +149,7 @@ fn op_to_prec(t: BinOp) -> Prec {
     BinOp::And(_) => Prec::BoolAnd,
     BinOp::Or(_) => Prec::BoolOr,
 
+    BinOp::ImplicitCall(_) => Prec::ImplicitCall,
     BinOp::RevCall(_) => Prec::RevCall,
     BinOp::Call(_) => Prec::Call,
 
@@ -416,6 +423,18 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
         Token::OpAnd => BinOp::And(span),
         Token::OpOr => BinOp::Or(span),
 
+        Token::Name(_)
+        | Token::ProperName(_)
+        | Token::Int(_)
+        | Token::Real(_)
+        | Token::Str(_)
+        | Token::True
+        | Token::False
+        | Token::LParen
+        | Token::LBracket
+        | Token::LCurl => BinOp::ImplicitCall(span), // TODO[et]: Point at the space before?
+
+        // Not an operator
         _ => return None,
       })
     }
@@ -425,7 +444,9 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
       let (span, token) = lex.peek();
       match token.as_ref().and_then(|t| maybe_op(span, t)) {
         Some(op) if op_to_prec(op) <= prec => {
-          lex.next();
+          if !matches!(op, BinOp::ImplicitCall(_)) {
+            lex.next();
+          }
           let rhs = parse_precedence(lex, next_prec(op_to_prec(op)))?;
           lhs = Expr::Bin(op, Box::new(lhs), Box::new(rhs));
         }

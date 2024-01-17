@@ -347,6 +347,8 @@ pub enum BinOp {
   Call(Span),
   /// Pipe operator `#`
   RevCall(Span),
+  /// Implicit call - two terms after eachother
+  ImplicitCall(Span),
   /// And operator `and`
   And(Span),
   /// Or operator `or`
@@ -375,6 +377,7 @@ impl BinOp {
       | BinOp::Eq(span)
       | BinOp::Neq(span)
       | BinOp::Call(span)
+      | BinOp::ImplicitCall(span)
       | BinOp::RevCall(span) => *span,
     }
   }

@@ -551,7 +551,7 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
     ast::Expr::Bin(op, a, b) => {
       let function_name = match op {
         // The call operators which are a special construct now
-        ast::BinOp::Call(_) => {
+        ast::BinOp::ImplicitCall(_) | ast::BinOp::Call(_) => {
           return Ok(Expr::Call(
             Box::new(resolve_expr(ctx, *a)?),
             Box::new(resolve_expr(ctx, *b)?),

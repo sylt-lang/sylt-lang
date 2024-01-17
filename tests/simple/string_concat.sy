@@ -1,4 +1,4 @@
-def main : Str : = concat ' "a" ' "b"
+def main : Str := (concat "a" "b")
 
 --+ expected stdout: ab
 
