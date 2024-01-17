@@ -103,8 +103,9 @@ fn main() {
     match parser::parse(&src, file_id) {
       Ok(ast) => {
         match args.dump_ast.as_ref() {
+          _ if filename == preamble => {}
           Some(s) if s == "-" => println!("{}\n{:#?}", filename, ast),
-          Some(s) => std::fs::write(s, format!("{:#?}", ast)).expect("Failed to write AST to file"),
+          Some(s) => std::fs::write(format!("{}_{}.ast", s, filename), format!("{:#?}", ast)).expect("Failed to write AST to file"),
           None => {}
         }
         asts.push(Some(ast));
@@ -141,6 +142,7 @@ fn main() {
     Ok(a) => a,
   };
 
+  // TODO[et]: Can I move this to after the type checker?
   let named_ast = name_resolution::sort_and_trim(&names, named_ast);
   let (types, type_err) = type_checker::check(&names, &named_ast, &fields);
   match args.dump_types {
