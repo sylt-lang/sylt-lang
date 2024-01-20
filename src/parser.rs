@@ -988,15 +988,17 @@ mod test {
       #[test]
       fn $name() {
         let src = $src;
+        let tokens = Token::lexer($src).collect::<Vec<_>>();
         let mut lex = Lex::new(Token::lexer($src), 0);
         let res = $parse(&mut lex);
-        assert!(res.is_ok(), "\n{:?} should parse\ngave:\n{:?}", src, res);
+        assert!(res.is_ok(), "\n{:?} should parse\ngave:\n{:?}\nTokens: {:?}", src, res, tokens);
         assert!(
           lex.is_eof(),
-          "\nDidn't parse to end of input! {:?} - {:?}\nGot: {:?}",
+          "\nDidn't parse to end of input! {:?} - {:?}\nGot: {:?}\nTokens: {:?}",
           src,
           lex.next(),
           res,
+          tokens,
         );
       }
     };
@@ -1007,13 +1009,16 @@ mod test {
       #[test]
       fn $name() {
         let src = $src;
+        let tokens = Token::lexer($src).collect::<Vec<_>>();
         let mut lex = Lex::new(Token::lexer($src), 0);
         let res = $parse(&mut lex);
         assert!(
           res.is_err(),
-          "\n{:?} should NOT parse\ngave:\n{:?}\n",
+          "\n{:?} should NOT parse\ngave:\n{:?}\n{:?}\n",
           src,
-          res
+          res,
+          tokens,
+
         );
       }
     };
@@ -1105,4 +1110,8 @@ mod test {
 
   test_p!(d_minus0, def, "def f ::= -1");
   test_p!(d_minus1, expr, "- - -1");
+
+  test_p!(d_string0, def, "def f ::= f \"ABC\"");
+  test_p!(d_string1, def, r#"def f ::= f "\d""#);
+  test_p!(d_string2, def, r#"def f ::= f "\"""#);
 }

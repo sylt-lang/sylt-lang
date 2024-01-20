@@ -1,5 +1,25 @@
 use logos::Logos;
 
+fn str<'t>(lex: &mut logos::Lexer<'t, Token<'t>>) -> Option<&'t str> {
+  while let Some(at) = lex.remainder().find("\"") {
+    if at == 0 {
+      lex.bump(at + 1);
+      return Some(lex.slice());
+    }
+    match lex.remainder().get(at - 1..at + 1) {
+      Some("\\\"") => {
+        lex.bump(at + 1);
+      }
+      Some(_) => {
+        lex.bump(at + 1);
+        return Some(lex.slice());
+      }
+      None => return None,
+    }
+  }
+  None
+}
+
 #[derive(Logos, Debug, PartialEq, Clone, Copy)]
 #[logos(skip r"[ \t\n\f]+")]
 #[logos(skip r"--.*\n")]
@@ -19,7 +39,7 @@ pub enum Token<'t> {
 
   // TODO replace the \\ and \" with the right strings? Do I need to do this or can I let Lua do
   // it?
-  #[regex(r#""[^(\\.)"]*""#, |lex| lex.slice().strip_prefix("\"").unwrap().strip_suffix("\"").unwrap(), priority=2)]
+  #[regex("\"", |lex| str(lex).and_then(|s| s.strip_prefix("\"").and_then(|s| s.strip_suffix("\""))), priority = 2)]
   Str(&'t str),
 
   #[token("true")]
@@ -59,7 +79,7 @@ pub enum Token<'t> {
   KwClass,
   #[token("instance")]
   KwInstance,
-  #[token("\\")]
+  #[token("\\", priority = 3)]
   KwLambda,
 
   #[regex(r#"-\[\["#, |lex| {
