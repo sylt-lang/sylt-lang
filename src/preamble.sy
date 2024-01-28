@@ -1,3 +1,4 @@
+mod Preamble
 -- TODO: Move in the lua preamble here aswell
 
 type Int = foreign 
@@ -68,3 +69,7 @@ def _not
 def unsafe_coerce
   : forall a b. a -> b
   := foreign -[[ function(a) return a end ]]-
+
+def identity
+  : forall a. a -> a
+  : x = x

@@ -53,6 +53,8 @@ pub enum Token<'t> {
   KwArrow,
   #[token("def")]
   KwDef,
+  #[token("mod")]
+  KwMod,
   #[token("enum")]
   KwEnum,
   #[token("type")]
@@ -163,6 +165,7 @@ impl<'t> Token<'t> {
 
       Token::KwArrow => "keyword `->`".to_string(),
       Token::KwDef => "keyword `def`".to_string(),
+      Token::KwMod => "keyword `mod`".to_string(),
       Token::KwEnum => "keyword `enum`".to_string(),
       Token::KwType => "keyword `type`".to_string(),
       Token::KwForiegn => "keyword `foreign`".to_string(),

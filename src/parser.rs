@@ -116,7 +116,6 @@ enum Prec {
   Call,
   RevCall,
   // Weakest binding
-
   No,
 }
 
@@ -160,10 +159,22 @@ fn op_to_prec(t: BinOp) -> Prec {
   }
 }
 
-pub fn parse<'t>(source: &'t str, file_id: usize) -> Result<Vec<Def<'t>>, Vec<Error>> {
+pub fn parse<'t>(
+  source: &'t str,
+  file_id: usize,
+) -> Result<(ProperName<'t>, Vec<Def<'t>>), Vec<Error>> {
   let mut lex = Lex::new(Token::lexer(source), file_id);
   let mut errs = vec![];
   let mut defs = vec![];
+
+  let m = match mod_(&mut lex) {
+    Ok(m) => m,
+    Err(err) => {
+      errs.push(err);
+      ProperName("Mod-Err", lex.span())
+    }
+  };
+
   while !lex.is_eof() {
     match def(&mut lex) {
       Err(err) => {
@@ -179,9 +190,29 @@ pub fn parse<'t>(source: &'t str, file_id: usize) -> Result<Vec<Def<'t>>, Vec<Er
     }
   }
   if errs.is_empty() {
-    Ok(defs)
+    Ok((m, defs))
   } else {
     Err(errs)
+  }
+}
+
+fn mod_<'t>(lex: &mut Lex<'t>) -> PRes<ProperName<'t>> {
+  expect!(
+    lex,
+    Token::KwMod,
+    "All modules should start with a module declaration"
+  );
+  proper(lex, "Expected a proper name after the `mod` keyword")
+}
+
+fn proper<'t>(lex: &mut Lex<'t>, msg: &'static str) -> PRes<ProperName<'t>> {
+  match lex.token() {
+    Some(Token::ProperName(str)) => {
+      let span = lex.span();
+      lex.next();
+      Ok(ProperName(str, span))
+    }
+    _ => err_msg_token(msg, lex.token(), lex.span()),
   }
 }
 
@@ -202,7 +233,7 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
               skip!(lex, Token::Colon);
               fields.push(((span, s), expr(lex)?));
             } else {
-              fields.push(((span, s), Expr::Var(Name(s, span), span)));
+              fields.push(((span, s), Expr::Var(None, Name(s, span), span)));
             }
             match lex.peek() {
               (_, Some(Token::Comma | Token::RCurl | Token::Pipe)) => {
@@ -234,28 +265,58 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
         None => return err_eof(span),
         Some(Token::OpSub) => Expr::Un(UnOp::Neg(span), Box::new(prefix(lex)?)),
         Some(Token::OpNot) => Expr::Un(UnOp::Not(span), Box::new(prefix(lex)?)),
-        Some(Token::Name(str)) => Expr::Var(Name(str, span), span),
+        Some(Token::Name(str)) => Expr::Var(None, Name(str, span), span),
         Some(Token::True) => Expr::EBool(true, span),
         Some(Token::False) => Expr::EBool(false, span),
         Some(Token::Int(i)) => Expr::EInt(i.parse().expect("Error in Int regex!"), span),
         Some(Token::Real(r)) => Expr::EReal(r.parse().expect("Error in Real regex!"), span),
         Some(Token::Str(s)) => Expr::EStr(s, span),
         Some(Token::ProperName(ty_name)) => {
-          expect!(lex, Token::Colon, "Expected ':' in this enum constructor");
-          if let (inner_span, Some(Token::ProperName(const_name))) = lex.next() {
-            let ty_name = ProperName(ty_name, span);
-            let const_name = ProperName(const_name, inner_span);
-            let value = if let (_, Some(Token::RParen)) = lex.peek() {
-              None
-            } else {
-              Some(Box::new(expr(lex)?))
-            };
-            Expr::EnumConst { ty_name, const_name, value }
-          } else {
-            return err_msg(
-              "Expected another proper name and then a valid expression in this enum constructor",
-              span,
-            );
+          let ty_span = span;
+          // NOTE[et]: I am unsure if I want namespace lookup in types. But here I limit each
+          // module to a proper name - which should be fine.
+          match expect!(
+            lex,
+            Token::Colon | Token::Period,
+            "Expected ':' for an enum constructor or a '.' for namespace lookup"
+          ) {
+            (_, Some(Token::Colon)) => {
+              let (inner_span, const_name) = if let (
+                inner_span,
+                Some(Token::ProperName(const_name)),
+              ) = lex.next()
+              {
+                (inner_span, const_name)
+              } else {
+                return err_msg(
+                      "Expected another proper name and then a valid expression in this enum constructor",
+                      span,
+                    );
+              };
+              let ty_name = ProperName(ty_name, span);
+              let const_name = ProperName(const_name, inner_span);
+              let value = if let (_, Some(Token::RParen)) = lex.peek() {
+                None
+              } else {
+                Some(Box::new(expr(lex)?))
+              };
+              Expr::EnumConst { ty_name, const_name, value }
+            }
+            (span, Some(Token::Period)) => {
+              let (inner_span, inner_name) =
+                if let (inner_span, Some(Token::Name(inner_name))) = lex.next() {
+                  (inner_span, inner_name)
+                } else {
+                  return err_msg("Expected a name to look up in the namespace", span);
+                };
+              Expr::Var(
+                Some(ProperName(ty_name, ty_span)),
+                Name(inner_name, inner_span),
+                ty_span.merge(span),
+              )
+            }
+
+            _ => unreachable!(),
           }
         }
         Some(Token::LBracket) => {
@@ -991,7 +1052,13 @@ mod test {
         let tokens = Token::lexer($src).collect::<Vec<_>>();
         let mut lex = Lex::new(Token::lexer($src), 0);
         let res = $parse(&mut lex);
-        assert!(res.is_ok(), "\n{:?} should parse\ngave:\n{:?}\nTokens: {:?}", src, res, tokens);
+        assert!(
+          res.is_ok(),
+          "\n{:?} should parse\ngave:\n{:?}\nTokens: {:?}",
+          src,
+          res,
+          tokens
+        );
         assert!(
           lex.is_eof(),
           "\nDidn't parse to end of input! {:?} - {:?}\nGot: {:?}\nTokens: {:?}",
@@ -1018,7 +1085,6 @@ mod test {
           src,
           res,
           tokens,
-
         );
       }
     };
@@ -1114,4 +1180,8 @@ mod test {
   test_p!(d_string0, def, "def f ::= f \"ABC\"");
   test_p!(d_string1, def, r#"def f ::= f "\d""#);
   test_p!(d_string2, def, r#"def f ::= f "\"""#);
+
+  test_p!(d_namespace0, def, "def f ::= A f");
+  test_p!(d_namespace1, def, "def f ::= ABC.f 1 2 3");
+  test_p!(d_namespace2, def, "def f ::= f ABC.a");
 }

@@ -1,11 +1,11 @@
 use crate::error::*;
 
 /// A name start with lower case letters (or underscore), `a`, or, `variable_name` for instance.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Name<'t>(pub &'t str, pub Span);
 
 /// A name starting with an upper case letter, an enum variant for instance.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct ProperName<'t>(pub &'t str, pub Span);
 
 /// An outer definition
@@ -234,7 +234,7 @@ pub enum Expr<'t> {
   },
 
   /// A variable
-  Var(Name<'t>, Span),
+  Var(Option<ProperName<'t>>, Name<'t>, Span),
 
   /// A let binding
   ///
@@ -293,7 +293,7 @@ impl<'t> Expr<'t> {
       | Expr::EStr(_, span)
       | Expr::EBool(_, span)
       | Expr::EArray(_, span)
-      | Expr::Var(_, span)
+      | Expr::Var(_, _, span)
       | Expr::Match { span, .. }
       | Expr::Lambda { span, .. }
       | Expr::Record { span, .. } => *span,

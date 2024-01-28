@@ -35,12 +35,14 @@ pub enum Error {
 
   /// No definition of variable
   ResUnknown {
+    ns: String,
     name: String,
     span: Span,
   },
 
   /// Multiple definitions for a variable
   ResMultiple {
+    ns: String,
     name: String,
     original: Span,
     new: Span,
@@ -222,14 +224,16 @@ impl Error {
         Self::maybe_render_context(span, source)
       ),
 
-      Error::ResUnknown { name, span } => format!(
-        "> I couldn't figure out what {:?} references. Did you make a typo?\n{}",
+      Error::ResUnknown { ns, name, span } => format!(
+        "> I couldn't figure out what '{:?} {:?}' references. Did you make a typo?\n{}",
+        ns,
         name,
         Self::maybe_render_context(span, source)
       ),
-      Error::ResMultiple { name, original, new } => {
+      Error::ResMultiple { ns, name, original, new } => {
         format!(
-          "> I found multiple definitons of {:?}.\n first here:\n{}\n second here:\n{}\n",
+          "> I found multiple definitons of '{:?} {:?}'.\n first here:\n{}\n second here:\n{}\n",
+          ns,
           name,
           Self::maybe_render_context(original, source),
           Self::maybe_render_context(new, source)

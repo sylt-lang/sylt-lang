@@ -19,7 +19,7 @@ pub struct StackFrame(usize);
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Name<'t> {
-  pub name: &'t str,
+  pub name: (&'t str, &'t str),
   pub is_type: bool,
   pub is_foreign: bool,
   pub is_generic: bool,
@@ -231,7 +231,7 @@ impl<'t> Ctx<'t> {
     is_type: bool,
     is_foreign: bool,
     is_generic: bool,
-    name: &'t str,
+    name: (&'t str, &'t str),
     def_at: Span,
   ) -> NameId {
     let id = NameId(self.names.len());
@@ -247,45 +247,41 @@ impl<'t> Ctx<'t> {
     id
   }
 
-  fn push_local_var(&mut self, name: &'t str, def_at: Span) -> NameId {
+  const T: &'static str = "Preamble";
+
+  fn push_local_var(&mut self, name: (&'t str, &'t str), def_at: Span) -> NameId {
     self.push_var(false, false, false, false, name, def_at)
   }
 
-  fn push_global_var(&mut self, name: &'t str, def_at: Span) -> NameId {
+  fn push_global_var(&mut self, name: (&'t str, &'t str), def_at: Span) -> NameId {
     self.push_var(true, false, false, false, name, def_at)
   }
 
   fn push_local_type(&mut self, name: &'t str, def_at: Span) -> NameId {
-    self.push_var(false, true, false, false, name, def_at)
+    self.push_var(false, true, false, false, (Self::T, name), def_at)
   }
 
   fn push_global_type(&mut self, name: &'t str, def_at: Span) -> NameId {
-    self.push_var(true, true, false, false, name, def_at)
+    self.push_var(true, true, false, false, (Self::T, name), def_at)
   }
 
-  fn push_global_type_foreign(&mut self, name: &'t str, def_at: Span) -> NameId {
+  fn push_global_type_foreign(&mut self, name: (&'t str, &'t str), def_at: Span) -> NameId {
     self.push_var(true, true, true, false, name, def_at)
   }
 
-  fn push_global_var_foreign(&mut self, name: &'t str, def_at: Span) -> NameId {
+  fn push_global_var_foreign(&mut self, name: (&'t str, &'t str), def_at: Span) -> NameId {
     self.push_var(true, false, true, false, name, def_at)
   }
 
   fn push_generic(&mut self, name: &'t str, def_at: Span) -> NameId {
-    self.push_var(true, false, true, true, name, def_at)
+    self.push_var(true, false, true, true, (Self::T, name), def_at)
   }
 
-  fn read_name(&mut self, name: &'t str, at: Span) -> Option<NameId> {
-    match self.find_name(name) {
-      Some(NameId(v)) => {
-        self.names[v].usages.push(at);
-        return Some(NameId(v));
-      }
-      None => None,
-    }
+  fn read_type_name_or_error(&mut self, name: &'t str, at: Span) -> RRes<NameId> {
+    self.read_name_or_error((Self::T, name), at)
   }
 
-  fn read_name_or_error(&mut self, name: &'t str, at: Span) -> RRes<NameId> {
+  fn read_name_or_error(&mut self, name: (&'t str, &'t str), at: Span) -> RRes<NameId> {
     match self.find_name(name) {
       Some(NameId(v)) => {
         self.names[v].usages.push(at);
@@ -295,8 +291,8 @@ impl<'t> Ctx<'t> {
     }
   }
 
-  fn read_or_create_generic(&mut self, name: &'t str, at: Span) -> NameId {
-    let NameId(v) = match self.find_name(name) {
+  fn read_type_or_create_generic(&mut self, name: &'t str, at: Span) -> NameId {
+    let NameId(v) = match self.find_name((Self::T, name)) {
       Some(NameId(v)) if self.names[v].is_generic => NameId(v),
       _ => self.push_generic(name, at),
     };
@@ -304,7 +300,7 @@ impl<'t> Ctx<'t> {
     NameId(v)
   }
 
-  fn find_name(&mut self, name: &'t str) -> Option<NameId> {
+  fn find_name(&mut self, name: (&'t str, &'t str)) -> Option<NameId> {
     for NameId(v) in self.stack.iter().rev() {
       if self.names[*v].name == name {
         return Some(NameId(*v));
@@ -324,12 +320,17 @@ impl<'t> Ctx<'t> {
 
 type RRes<A> = Result<A, Error>;
 
-fn error_no_var<'t, A>(name: &'t str, span: Span) -> RRes<A> {
-  Err(Error::ResUnknown { name: name.to_string(), span })
+fn error_no_var<'t, A>((ns, name): (&'t str, &'t str), span: Span) -> RRes<A> {
+  Err(Error::ResUnknown { ns: ns.to_string(), name: name.to_string(), span })
 }
 
-fn error_multiple_def<'t>(name: &'t str, original: Span, new: Span) -> Error {
-  Error::ResMultiple { name: name.to_string(), original, new }
+fn error_multiple_def<'t>((ns, name): (&'t str, &'t str), original: Span, new: Span) -> Error {
+  Error::ResMultiple {
+    ns: ns.to_string(),
+    name: name.to_string(),
+    original,
+    new,
+  }
 }
 
 // TODO: Show the best matching enum, to be helpful
@@ -384,7 +385,7 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
       Type::TNode(node, at)
     }
     ast::Type::TCustom { name: ast::ProperName(name, at), args, span } => {
-      let var = ctx.read_name_or_error(name, at)?;
+      let var = ctx.read_type_name_or_error(name, at)?;
       let node = Type::TNode(var, at);
       let args = args
         .into_iter()
@@ -396,7 +397,7 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
     ast::Type::TVar(ast::Name(name, at), span) =>
     // Allow defining type variables as they are introduced - I find little value in the forall
     {
-      Type::TNode(ctx.read_or_create_generic(name, at), span)
+      Type::TNode(ctx.read_type_or_create_generic(name, at), span)
     }
     ast::Type::TFunction(a, b, span) => {
       let a = Box::new(resolve_ty(ctx, *a)?);
@@ -427,43 +428,48 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, ty: ast::Type<'t>) -> RRes<Type> {
       span,
       inner,
     } => {
-      let var = ctx.read_name_or_error(var_name, var_at)?;
-      let class = ctx.read_name_or_error(class_name, class_at)?;
+      let var = ctx.read_type_name_or_error(var_name, var_at)?;
+      let class = ctx.read_type_name_or_error(class_name, class_at)?;
       let inner = Box::new(resolve_ty(ctx, *inner)?);
       Type::TConstraint { class, var, inner, span }
     }
   })
 }
 
-fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
+fn resolve_expr<'t>(ctx: &mut Ctx<'t>, m: ast::ProperName<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
   Ok(match def {
     ast::Expr::Let { bind_value, binding, next_value } => {
-      let bind_value = Box::new(resolve_expr(ctx, *bind_value)?);
+      let bind_value = Box::new(resolve_expr(ctx, m, *bind_value)?);
 
       let frame = ctx.push_frame();
-      let binding = resolve_pattern(ctx, binding)?;
-      let next_value = Box::new(resolve_expr(ctx, *next_value)?);
+      let binding = resolve_pattern(ctx, m, binding)?;
+      let next_value = Box::new(resolve_expr(ctx, m, *next_value)?);
       ctx.pop_frame(frame);
 
       Expr::Let { bind_value, binding, next_value }
     }
 
     ast::Expr::EBool(value, span) => {
-      Expr::EBool(value, span, ctx.read_name_or_error("Bool", span)?)
+      Expr::EBool(value, span, ctx.read_type_name_or_error("Bool", span)?)
     }
-    ast::Expr::EInt(value, span) => Expr::EInt(value, span, ctx.read_name_or_error("Int", span)?),
+    ast::Expr::EInt(value, span) => {
+      Expr::EInt(value, span, ctx.read_type_name_or_error("Int", span)?)
+    }
     ast::Expr::EReal(value, span) => {
-      Expr::EReal(value, span, ctx.read_name_or_error("Real", span)?)
+      Expr::EReal(value, span, ctx.read_type_name_or_error("Real", span)?)
     }
     ast::Expr::EStr(value, span) => Expr::EStr(
       value.to_string(),
       span,
-      ctx.read_name_or_error("Str", span)?,
+      ctx.read_type_name_or_error("Str", span)?,
     ),
-    ast::Expr::Var(ast::Name(name, at), span) => Expr::Var(ctx.read_name_or_error(name, at)?, span),
+    ast::Expr::Var(ns, ast::Name(name, at), span) => Expr::Var(
+      ctx.read_name_or_error((ns.map(|x| x.0).unwrap_or(m.0), name), at)?,
+      span,
+    ),
     ast::Expr::Record { to_extend, fields, span } => {
       let to_extend = match to_extend {
-        Some(to_extend) => Some(Box::new(resolve_expr(ctx, *to_extend)?)),
+        Some(to_extend) => Some(Box::new(resolve_expr(ctx, m, *to_extend)?)),
         None => None,
       };
 
@@ -471,7 +477,7 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
         .into_iter()
         .map(|((at, field), value)| {
           let field = ctx.find_field(field);
-          match resolve_expr(ctx, value) {
+          match resolve_expr(ctx, m, value) {
             Ok(value) => Ok(((at, field), value)),
             Err(err) => Err(err),
           }
@@ -515,7 +521,7 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
       );
 
       let value = value
-        .map(|a| resolve_expr(ctx, *a))
+        .map(|a| resolve_expr(ctx, m, *a))
         .transpose()?
         .map(Box::new);
 
@@ -540,11 +546,11 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
         ast::UnOp::Neg(_) => "_neg",
         ast::UnOp::Not(_) => "_not",
       };
-      let function = ctx.read_name_or_error(function_name, op.span())?;
+      let function = ctx.read_name_or_error((Ctx::T, function_name), op.span())?;
 
       Expr::Call(
         Box::new(Expr::Var(function, op.span())),
-        Box::new(resolve_expr(ctx, *expr)?),
+        Box::new(resolve_expr(ctx, m, *expr)?),
         op.span(),
       )
     }
@@ -553,15 +559,15 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
         // The call operators which are a special construct now
         ast::BinOp::ImplicitCall(_) | ast::BinOp::Call(_) => {
           return Ok(Expr::Call(
-            Box::new(resolve_expr(ctx, *a)?),
-            Box::new(resolve_expr(ctx, *b)?),
+            Box::new(resolve_expr(ctx, m, *a)?),
+            Box::new(resolve_expr(ctx, m, *b)?),
             op.span(),
           ))
         }
         ast::BinOp::RevCall(_) => {
           return Ok(Expr::Call(
-            Box::new(resolve_expr(ctx, *b)?),
-            Box::new(resolve_expr(ctx, *a)?),
+            Box::new(resolve_expr(ctx, m, *b)?),
+            Box::new(resolve_expr(ctx, m, *a)?),
             op.span(),
           ))
         }
@@ -578,33 +584,33 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
         ast::BinOp::Eq(_) => "_eq",
         ast::BinOp::Neq(_) => "_neq",
       };
-      let function = ctx.read_name_or_error(function_name, op.span())?;
+      let function = ctx.read_name_or_error((Ctx::T, function_name), op.span())?;
       Expr::Call(
         Box::new(Expr::Call(
           Box::new(Expr::Var(function, op.span())),
-          Box::new(resolve_expr(ctx, *a)?),
+          Box::new(resolve_expr(ctx, m, *a)?),
           op.span(),
         )),
-        Box::new(resolve_expr(ctx, *b)?),
+        Box::new(resolve_expr(ctx, m, *b)?),
         op.span(),
       )
     }
     ast::Expr::Match { value, branches, span } => {
-      let value = Box::new(resolve_expr(ctx, *value)?);
+      let value = Box::new(resolve_expr(ctx, m, *value)?);
 
       let branches = branches
         .into_iter()
         .map(|ast::WithBranch { pattern, condition, value, span }| {
           let frame = ctx.push_frame();
-          let pattern = resolve_pattern(ctx, pattern)?;
-          let condition = condition.map(|c| resolve_expr(ctx, c)).transpose()?;
-          let value = resolve_expr(ctx, value)?;
+          let pattern = resolve_pattern(ctx, m, pattern)?;
+          let condition = condition.map(|c| resolve_expr(ctx, m, c)).transpose()?;
+          let value = resolve_expr(ctx, m, value)?;
           ctx.pop_frame(frame);
 
           Ok(WithBranch {
             pattern,
             condition,
-            bool: ctx.read_name_or_error("Bool", span)?,
+            bool: ctx.read_type_name_or_error("Bool", span)?,
             value,
             span,
           })
@@ -617,21 +623,21 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
       let frame = ctx.push_frame();
       let args = args
         .into_iter()
-        .map(|binding| resolve_pattern(ctx, binding))
+        .map(|binding| resolve_pattern(ctx, m, binding))
         .collect::<RRes<Vec<_>>>()?;
-      let body = Box::new(resolve_expr(ctx, *body)?);
+      let body = Box::new(resolve_expr(ctx, m, *body)?);
       ctx.pop_frame(frame);
 
       Expr::Lambda { args, body, span }
     }
     ast::Expr::EArray(values, span) => {
       // Ignore the single case where we only require the `empty` function.
-      let append = Expr::Var(ctx.read_name_or_error("append", span)?, span);
-      let empty = Expr::Var(ctx.read_name_or_error("empty", span)?, span);
+      let append = Expr::Var(ctx.read_name_or_error((Ctx::T, "append"), span)?, span);
+      let empty = Expr::Var(ctx.read_name_or_error((Ctx::T, "empty"), span)?, span);
       let mut expr = empty;
       for v in values.into_iter() {
         let span = v.span();
-        let vv = resolve_expr(ctx, v)?;
+        let vv = resolve_expr(ctx, m, v)?;
         expr = Expr::Call(
           Box::new(Expr::Call(Box::new(append.clone()), Box::new(vv), span)),
           Box::new(expr),
@@ -643,13 +649,17 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, def: ast::Expr<'t>) -> RRes<Expr> {
   })
 }
 
-fn resolve_pattern<'t>(ctx: &mut Ctx<'t>, pat: ast::Pattern<'t>) -> RRes<Pattern> {
+fn resolve_pattern<'t>(
+  ctx: &mut Ctx<'t>,
+  m: ast::ProperName<'t>,
+  pat: ast::Pattern<'t>,
+) -> RRes<Pattern> {
   Ok(match pat {
     ast::Pattern::Empty(span) => Pattern::Empty(span),
     ast::Pattern::Var(ast::Name(var, at), inner, span) => {
-      let var = ctx.push_local_var(var, at);
+      let var = ctx.push_local_var((m.0, var), at);
       let inner = match inner {
-        Some(inner) => Some(Box::new(resolve_pattern(ctx, *inner)?)),
+        Some(inner) => Some(Box::new(resolve_pattern(ctx, m, *inner)?)),
         None => None,
       };
       Pattern::Var(var, inner, span)
@@ -658,7 +668,7 @@ fn resolve_pattern<'t>(ctx: &mut Ctx<'t>, pat: ast::Pattern<'t>) -> RRes<Pattern
       let (ty_name, const_name, value_ty) = resolve_enum_const(ctx, ty_name, const_name)?;
 
       let inner = match (inner, value_ty) {
-        (Some(v), Some(t)) => Some((Box::new(resolve_pattern(ctx, *v)?), t)),
+        (Some(v), Some(t)) => Some((Box::new(resolve_pattern(ctx, m, *v)?), t)),
         (None, None) => None,
         (Some(_), None) => {
           return error_msg("The type claims no value but a type was given here", span)
@@ -678,20 +688,28 @@ fn resolve_pattern<'t>(ctx: &mut Ctx<'t>, pat: ast::Pattern<'t>) -> RRes<Pattern
         .into_iter()
         .map(|((span, field), pat)| {
           let pat = match pat {
-            Some(pat) => resolve_pattern(ctx, pat)?,
-            None => Pattern::Var(ctx.push_local_var(field, span), None, span),
+            Some(pat) => resolve_pattern(ctx, m, pat)?,
+            None => Pattern::Var(ctx.push_local_var((m.0, field), span), None, span),
           };
           Ok((ctx.find_field(field), span, pat))
         })
         .collect::<RRes<Vec<_>>>()?;
       Pattern::Record(fields, span)
     }
-    ast::Pattern::PBool(b, span) => Pattern::PBool(b, span, ctx.read_name_or_error("Bool", span)?),
-    ast::Pattern::PInt(i, span) => Pattern::PInt(i, span, ctx.read_name_or_error("Int", span)?),
-    ast::Pattern::PReal(r, span) => Pattern::PReal(r, span, ctx.read_name_or_error("Real", span)?),
-    ast::Pattern::PStr(s, span) => {
-      Pattern::PStr(s.to_owned(), span, ctx.read_name_or_error("Str", span)?)
+    ast::Pattern::PBool(b, span) => {
+      Pattern::PBool(b, span, ctx.read_type_name_or_error("Bool", span)?)
     }
+    ast::Pattern::PInt(i, span) => {
+      Pattern::PInt(i, span, ctx.read_type_name_or_error("Int", span)?)
+    }
+    ast::Pattern::PReal(r, span) => {
+      Pattern::PReal(r, span, ctx.read_type_name_or_error("Real", span)?)
+    }
+    ast::Pattern::PStr(s, span) => Pattern::PStr(
+      s.to_owned(),
+      span,
+      ctx.read_type_name_or_error("Str", span)?,
+    ),
   })
 }
 
@@ -700,10 +718,7 @@ fn resolve_enum_const<'t>(
   ast::ProperName(ty_name_, ty_name_at): ast::ProperName<'t>,
   ast::ProperName(const_name_, const_name_at): ast::ProperName<'t>,
 ) -> RRes<(NameId, FieldId, Option<Type>)> {
-  let ty_name = match ctx.read_name(ty_name_, ty_name_at) {
-    Some(t) => t,
-    None => return error_no_var(ty_name_, ty_name_at),
-  };
+  let ty_name = ctx.read_type_name_or_error(ty_name_, ty_name_at)?;
   let const_name = ctx.find_field(const_name_);
   let cons = match ctx.enum_constructors.get(&ty_name) {
     Some(t) => t,
@@ -716,31 +731,31 @@ fn resolve_enum_const<'t>(
   Ok((ty_name, const_name, value_ty))
 }
 
-fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
+fn resolve_def<'t>(ctx: &mut Ctx<'t>, m: ast::ProperName<'t>, def: ast::Def<'t>) -> RRes<Def> {
   Ok(match def {
     ast::Def::Def { ty, name: ast::Name(name, _), args, body, span } => {
       let frame = ctx.push_frame();
       let ty = resolve_ty(ctx, ty)?;
       ctx.pop_frame(frame);
 
-      let name = ctx.find_name(name).unwrap();
+      let name = ctx.find_name((m.0, name)).unwrap();
       let frame = ctx.push_frame();
       let args = args
         .into_iter()
-        .map(|binding| resolve_pattern(ctx, binding))
+        .map(|binding| resolve_pattern(ctx, m, binding))
         .collect::<RRes<Vec<_>>>()?;
-      let body = resolve_expr(ctx, body)?;
+      let body = resolve_expr(ctx, m, body)?;
       ctx.pop_frame(frame);
       Def::Def { ty, name, args, body, span }
     }
     ast::Def::ForiegnDef { ty, name: ast::Name(name, _), span, foreign_block } => {
       let ty = resolve_ty(ctx, ty)?;
-      let name = ctx.find_name(name).unwrap();
+      let name = ctx.find_name((m.0, name)).unwrap();
       let foreign_block = foreign_block.map(|(source, _)| source.to_owned());
       Def::ForiegnDef { ty, name, span, foreign_block }
     }
     ast::Def::Type { name: ast::ProperName(name, _), args, body, span } => {
-      let name = ctx.find_name(name).unwrap();
+      let name = ctx.find_name((m.0, name)).unwrap();
 
       let frame = ctx.push_frame();
       let args = args
@@ -754,7 +769,7 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
     }
 
     ast::Def::ForiegnType { name: ast::ProperName(name, _), span, args } => {
-      let name = ctx.find_name(name).unwrap();
+      let name = ctx.find_name((m.0, name)).unwrap();
 
       let frame = ctx.push_frame();
       let args = args
@@ -772,7 +787,7 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       args,
       span,
     } => {
-      let name = ctx.find_name(name).unwrap();
+      let name = ctx.find_name((Ctx::T, name)).unwrap();
       let ty = name;
       let mut cons = BTreeMap::new();
       let frame = ctx.push_frame();
@@ -783,7 +798,7 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       for ast::EnumConst { tag: ast::ProperName(tag_name, _at), ty, span } in constructors.iter() {
         let tag = ctx.find_field(tag_name);
         if let Some((at, _)) = cons.get(&tag) {
-          return Err(error_multiple_def(tag_name, *at, *span));
+          return Err(error_multiple_def((m.0, tag_name), *at, *span));
         }
         let ty = ty
           .as_ref()
@@ -796,11 +811,11 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
       Def::Enum { name, args, span }
     }
     ast::Def::Class { name: ast::ProperName(name, at), .. } => {
-      let name = ctx.read_name_or_error(name, at)?;
+      let name = ctx.read_type_name_or_error(name, at)?;
       Def::Class(name)
     }
     ast::Def::Instance { class, ty, span: _ } => {
-      let class = ctx.read_name_or_error(class.0, class.1)?;
+      let class = ctx.read_type_name_or_error(class.0, class.1)?;
       let ty = resolve_ty(ctx, ty)?;
       Def::Instance { class, ty }
     }
@@ -808,17 +823,17 @@ fn resolve_def<'t>(ctx: &mut Ctx<'t>, def: ast::Def<'t>) -> RRes<Def> {
 }
 
 pub fn resolve<'t>(
-  defs: Vec<ast::Def<'t>>,
+  defs: Vec<(ast::ProperName<'t>, ast::Def<'t>)>,
 ) -> Result<(Vec<Name<'t>>, BTreeMap<FieldId, &'t str>, Vec<Def>), Vec<Error>> {
   let mut ctx = Ctx::new();
   let mut out = vec![];
   let mut errs = vec![];
 
   // Top-pass
-  for d in defs.iter() {
+  for (m, d) in defs.iter() {
     let (name, at) = match d.name() {
       None => continue,
-      Some(x) => x,
+      Some((name, at)) => ((m.0, name), at),
     };
     match (ctx.find_name(name), d) {
       (Some(NameId(old)), _) => {
@@ -834,21 +849,24 @@ pub fn resolve<'t>(
         ctx.push_global_type_foreign(name, at);
       }
       (None, ast::Def::Type { .. }) => {
-        ctx.push_global_type(name, at);
+        ctx.push_global_type(name.1, at);
       }
       (None, ast::Def::Enum { .. }) => {
-        ctx.push_global_type(name, at);
+        ctx.push_global_type(name.1, at);
       }
       (None, ast::Def::Class { .. }) => {
-        ctx.push_global_type(name, at);
+        ctx.push_global_type(name.1, at);
       }
       (None, ast::Def::Instance { .. }) => continue,
     }
   }
 
-  for d in defs.iter() {
+  for (_, d) in defs.iter() {
     // TODO, handle type definitions here
-    match (d.name().and_then(|(name, _)| ctx.find_name(name)), d) {
+    match (
+      d.name().and_then(|(name, _)| ctx.find_name((Ctx::T, name))),
+      d,
+    ) {
       (_, ast::Def::ForiegnDef { .. })
       | (_, ast::Def::Def { .. })
       | (_, ast::Def::ForiegnType { .. })
@@ -867,7 +885,7 @@ pub fn resolve<'t>(
           let tag = ctx.find_field(tag_name);
           match cons.get(&tag) {
             Some((at, _)) => {
-              errs.push(error_multiple_def(tag_name, *at, *span));
+              errs.push(error_multiple_def((Ctx::T, tag_name), *at, *span));
               continue;
             }
             None => { /* Empty */ }
@@ -893,8 +911,8 @@ pub fn resolve<'t>(
     }
   }
 
-  for def in defs {
-    match resolve_def(&mut ctx, def) {
+  for (m, def) in defs {
+    match resolve_def(&mut ctx, m, def) {
       Err(err) => errs.push(err),
       Ok(o) => out.push(o),
     }
@@ -925,11 +943,12 @@ pub(crate) fn sort_and_trim<'t>(names: &Vec<Name<'t>>, named_ast: Vec<Def>) -> V
       Def::Instance { .. } => out.push(x),
     }
   }
-  for (i, _) in names
-    .iter()
-    .enumerate()
-    .filter(|(_, x)| matches!(x.name, "main" | "update" | "init" | "draw"))
-  {
+  for (i, _) in names.iter().enumerate().filter(|(_, x)| {
+    matches!(
+      x.name,
+      (_, "main") | (_, "update") | (_, "init") | (_, "draw")
+    )
+  }) {
     if let Some(def) = defs.get_mut(&NameId(i)).unwrap().take() {
       add_deps(&mut out, &mut defs, &def);
       out.push(def);

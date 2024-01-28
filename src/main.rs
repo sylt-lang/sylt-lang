@@ -105,7 +105,8 @@ fn main() {
         match args.dump_ast.as_ref() {
           _ if filename == preamble => {}
           Some(s) if s == "-" => println!("{}\n{:#?}", filename, ast),
-          Some(s) => std::fs::write(format!("{}_{}.ast", s, filename), format!("{:#?}", ast)).expect("Failed to write AST to file"),
+          Some(s) => std::fs::write(format!("{}_{}.ast", s, filename), format!("{:#?}", ast))
+            .expect("Failed to write AST to file"),
           None => {}
         }
         asts.push(Some(ast));
@@ -127,9 +128,10 @@ fn main() {
     exit(1);
   }
 
-  let combined_ast: Vec<ast::Def<'_>> = asts
+  let combined_ast: Vec<(ast::ProperName<'_>, ast::Def<'_>)> = asts
     .into_iter()
     .filter_map(|x| x)
+    .map(|(m, xs)| xs.into_iter().map(|x| (m, x)).collect::<Vec<_>>())
     .flatten()
     .collect::<Vec<_>>();
   let (names, fields, named_ast) = match name_resolution::resolve(combined_ast) {

@@ -114,7 +114,7 @@ impl<'t> CType<'t> {
         format!("<#{} {}>", name.0, ty.render(checker))
       }
       CType::Unknown => "_".to_string(),
-      CType::Foreign(name) => name.name.to_string(),
+      CType::Foreign(name) => format!("'{} {}'", name.name.0, name.name.1),
       // This isn't good enough
       CType::Record => "Record".to_string(),
       CType::Apply(a, bs) => {
@@ -217,8 +217,11 @@ impl<'t> Checker<'t> {
     &self.fields[&field]
   }
 
-  fn name(&self, NameId(slot): NameId) -> &'t str {
-    &self.names[slot].name
+  fn name(&self, NameId(slot): NameId) -> String {
+    format!(
+      "'{} {}'",
+      &self.names[slot].name.0, &self.names[slot].name.1
+    )
   }
 
   // This function is really expensive memory wise. Removing a call to this function is big profit!

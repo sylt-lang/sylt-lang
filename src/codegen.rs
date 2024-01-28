@@ -69,8 +69,8 @@ pub fn gen<'t>(
     .iter()
     .enumerate()
     .map(|(i, name)| GenVar {
-      var_name: format!("_{}_{}", i, name.name),
-      foreign_name: format!("{}", name.name),
+      var_name: format!("_{}_{}_{}", i, name.name.0, name.name.1),
+      foreign_name: format!("{}", name.name.1),
     })
     .collect();
   let ctx = Ctx { gen_vars: &gen_vars, fields };
@@ -85,7 +85,7 @@ pub fn gen<'t>(
   for def in named_ast {
     match def {
       Def::Def { name: NameId(slot), .. }
-        if names[*slot].name == "main" && names[*slot].is_type == false =>
+        if names[*slot].name.1 == "main" && names[*slot].is_type == false =>
       {
         main = Some(def);
       }
@@ -98,26 +98,27 @@ pub fn gen<'t>(
     gen_def(out, ctx, def)?;
   }
 
+  // TODO[et]: Check it's the main module!
   let mut exports = vec![];
   for def in named_ast {
     match def {
       Def::Def { name: name @ NameId(slot), .. }
-        if names[*slot].name == "main" && names[*slot].is_type == false =>
+        if names[*slot].name.1 == "main" && names[*slot].is_type == false =>
       {
         exports.push(("main", ctx.var(*name)));
       }
       Def::Def { name: name @ NameId(slot), .. }
-        if gen_module && names[*slot].name == "update" && names[*slot].is_type == false =>
+        if gen_module && names[*slot].name.1 == "update" && names[*slot].is_type == false =>
       {
         exports.push(("update", ctx.var(*name)));
       }
       Def::Def { name: name @ NameId(slot), .. }
-        if gen_module && names[*slot].name == "draw" && names[*slot].is_type == false =>
+        if gen_module && names[*slot].name.1 == "draw" && names[*slot].is_type == false =>
       {
         exports.push(("draw", ctx.var(*name)));
       }
       Def::Def { name: name @ NameId(slot), .. }
-        if gen_module && names[*slot].name == "init" && names[*slot].is_type == false =>
+        if gen_module && names[*slot].name.1 == "init" && names[*slot].is_type == false =>
       {
         exports.push(("init", ctx.var(*name)));
       }
