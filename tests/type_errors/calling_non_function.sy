@@ -1,3 +1,5 @@
+mod A
+
 def main
 : Int
 : a = f ' 1
@@ -10,11 +12,11 @@ def f
 --+ expected stderr:
 --+ > Failed to merge types.
 --+ 
---+ Int 
+--+ '@ Int' 
 --+ ----
---+ <#2 Int > -> _
+--+ <#2 '@ Int' > -> _
 --+ 
 --+ tests/type_errors/calling_non_function.sy
---+   3| : a = f ' 1
+--+   5| : a = f ' 1
 --+              ^
 

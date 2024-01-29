@@ -1,4 +1,6 @@
-def main ::= x ' 1
+mod A
+
+def main ::= I.x ' 1
 
 --+ args: tests/simple/to_import.isy
 --+ expected stdout: 2

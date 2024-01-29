@@ -1,14 +1,16 @@
+mod A
+
 def main : _ : = let { a } = { a: "ABC" } in a + 1
 
 --+ expected exit status: 7
 --+ expected stderr:
 --+ > The requirements are not valid here.
 --+ 
---+ Str 
+--+ '@ Str' 
 --+ is not
---+ (class Num)
+--+ (class '@ Num')
 --+ 
 --+ tests/type_errors/record_merge_pick.sy
---+   1| def main : _ : = let { a } = { a: "ABC" } in a + 1
+--+   3| def main : _ : = let { a } = { a: "ABC" } in a + 1
 --+                                                     ^
 

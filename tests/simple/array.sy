@@ -1,3 +1,5 @@
+mod A
+
 -- unit
 type Unit = foreign
 

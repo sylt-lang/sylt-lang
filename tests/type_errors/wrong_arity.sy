@@ -1,3 +1,5 @@
+mod A
+
 def main
 : Int -> Int
 : a = f ' a
@@ -12,14 +14,14 @@ def f
 --+ expected stderr:
 --+ > Failed to merge types.
 --+ 
---+ Int  -> ([(class Num)] => Int )
+--+ '@ Int'  -> ([(class '@ Num')] => '@ Int' )
 --+ ----
---+ Int 
+--+ '@ Int' 
 --+ 
 --+ tests/type_errors/wrong_arity.sy
---+   1| def main
---+   2| : Int -> Int
---+   3| : a = f ' a
---+   4| 
---+   5| def f
+--+   3| def main
+--+   4| : Int -> Int
+--+   5| : a = f ' a
+--+   6| 
+--+   7| def f
 

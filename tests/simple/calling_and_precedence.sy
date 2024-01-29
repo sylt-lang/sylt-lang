@@ -1,8 +1,10 @@
+mod A
+
 
 type A = foreign
-def a : Int -> A := unsafe_coerce
+def a : Int -> A := Preamble.unsafe_coerce
 
-def b : A -> Int := unsafe_coerce
+def b : A -> Int := Preamble.unsafe_coerce
 
 def main ::=
   (b (a 1))

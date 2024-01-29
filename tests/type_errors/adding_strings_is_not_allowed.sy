@@ -1,3 +1,5 @@
+mod A
+
 
 def addSelf
   : forall a
@@ -11,11 +13,11 @@ def main : Str = addSelf ' "ABC"
 --+ expected stderr:
 --+ > The requirements are not valid here.
 --+ 
---+ Str 
+--+ '@ Str' 
 --+ is not
---+ (class Num)
+--+ (class '@ Num')
 --+ 
 --+ tests/type_errors/adding_strings_is_not_allowed.sy
---+   8| def main : Str = addSelf ' "ABC"
+--+  10| def main : Str = addSelf ' "ABC"
 --+                               ^
 

@@ -1181,7 +1181,7 @@ mod test {
   test_p!(d_string1, def, r#"def f ::= f "\d""#);
   test_p!(d_string2, def, r#"def f ::= f "\"""#);
 
-  test_p!(d_namespace0, def, "def f ::= A f");
+  test_p!(d_namespace0, def, "def f ::= A.f");
   test_p!(d_namespace1, def, "def f ::= ABC.f 1 2 3");
   test_p!(d_namespace2, def, "def f ::= f ABC.a");
 }

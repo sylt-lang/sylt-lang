@@ -1,3 +1,5 @@
+mod A
+
 enum A = B Int | C
 
 def x : A -> A -> Int -> Int : (A:B 1) (A:C) 1 = 1

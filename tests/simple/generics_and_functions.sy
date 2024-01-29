@@ -1,3 +1,5 @@
+mod A
+
 def id1 : forall p. p -> p : v = v
 
 def id2 : forall q. q -> q := id1

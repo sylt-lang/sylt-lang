@@ -1,3 +1,5 @@
+mod A
+
 def a: a -> a : x = x
 
 def main ::= a ' 1

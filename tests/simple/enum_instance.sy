@@ -1,3 +1,5 @@
+mod A
+
 enum A = B Int
 
 def main

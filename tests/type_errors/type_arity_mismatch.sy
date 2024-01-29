@@ -1,3 +1,5 @@
+mod A
+
 enum A a = A { field: a }
 
 def q : forall a. A -> Str : A:A { field } = field
@@ -8,11 +10,11 @@ def main : Str := q ' A:A { field: 1 }
 --+ expected stderr:
 --+ > The number of type arguments doesn't match here.
 --+ 
---+ A <#41 _>
+--+ '@ A' <#44 _>
 --+ ----
 --+ _ 
 --+ 
 --+ tests/type_errors/type_arity_mismatch.sy
---+   3| def q : forall a. A -> Str : A:A { field } = field
+--+   5| def q : forall a. A -> Str : A:A { field } = field
 --+                        ^
 

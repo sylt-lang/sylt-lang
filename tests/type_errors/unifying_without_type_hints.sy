@@ -1,3 +1,5 @@
+mod A
+
 -- Should figure out that the type for this function is `Int -> Int`, it doesn't do that
 def id : _ : a = a
 
