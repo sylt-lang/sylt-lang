@@ -10,6 +10,7 @@ use std::process::{exit, Command, Stdio};
 mod ast;
 mod codegen;
 mod error;
+mod hexer;
 mod lexer;
 mod name_resolution;
 mod parser;
@@ -20,8 +21,15 @@ struct Args {
   #[options(help = "print help message")]
   help: bool,
 
-  #[options(required, free, help = "the singular source file to compile")]
+  #[options(required, free, help = "the source files to compile")]
   source: Vec<String>,
+
+  #[options(
+    short = 'o',
+    long = "operators",
+    help = "a source file defining operators and their precedence"
+  )]
+  operators: Option<String>,
 
   #[options(
     short = 'a',
@@ -45,7 +53,7 @@ struct Args {
   dump_lua: Option<String>,
 
   #[options(
-    short = 'o',
+    short = 'c',
     long = "only-compile",
     help = "don't automaticallt run the program - parse and typecheck and codegen only if codegen is writen to file"
   )]
