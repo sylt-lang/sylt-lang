@@ -112,7 +112,7 @@ enum Binding {
 
 impl Binding {
   fn call_binding() -> Self {
-    Self::L(0)
+    Self::R(1)
   }
 }
 

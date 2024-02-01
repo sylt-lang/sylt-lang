@@ -174,9 +174,10 @@ fn main() {
     Ok(a) => a,
   };
 
-  // TODO[et]: Can I move this to after the type checker?
-  let named_ast = name_resolution::sort_and_trim(&names, named_ast);
+  // TODO[et]: Can I remove this clone somehow?
+  let other_named_ast = named_ast.clone();
   let (types, type_err) = type_checker::check(&names, &named_ast, &fields);
+  let named_ast = name_resolution::sort_and_trim(&names, other_named_ast);
   match args.dump_types {
     Some(s) => {
       let mut out = BufWriter::new(match s {
