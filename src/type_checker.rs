@@ -317,6 +317,7 @@ where
           let def_ty = CType::Apply(Box::new(CType::Foreign(&names[*slot])), args);
           unify(&mut checker, CType::NodeType(*name), def_ty, *span)?;
         }
+
         Def::Class(class) => match checker.instances.entry(*class) {
           Entry::Vacant(e) => {
             e.insert(BTreeSet::new());
@@ -334,11 +335,79 @@ where
     for def in defs {
       check_def(&mut checker, def)?;
     }
+    for (i, t) in checker.types.clone().iter().enumerate() {
+      match (t, checker.names.get(i).clone()) {
+        (Node::Ty(t), Some(n)) if (n.is_type && n.is_generic) => {
+          check_everything_makes_sense(&mut checker, *t.clone(), t, n.def_at)?
+        }
+        _ => {}
+      }
+    }
     Ok(())
   })();
 
   let var_name = (checker.types, err);
   var_name
+}
+
+// NOTE[et]: There's still a major problem with typeclasses. Calling discards
+// requirements, so typeclasses aren't a thing that are checked in any meaningful way (it would
+// also be really nice if there were dependencies with typeclasses but I should be able to solve
+// all this at the same time)
+//
+// Given this function:
+//   def i: let Num a. a -> a : a = a + a
+//
+// Consider this program that does not compile:
+//   def main ::= i "A"
+//
+// And then this program that *does* compile despite not being correct:
+//   def main ::= i ' "A"
+//
+// What I believe is happening is the changes to operators meant that this is actually more calls
+// and is actually equivalent to:
+//   def xcall :: f a = f a
+//   def main ::= call i "A"
+// here xcall discards the requirements and the function typechecks since generics are converted to
+// unknowns which unify with everything.
+// I propose to store requirements in a seperate list (this is what the literature also
+// discusses) that is checked when copied from generics. That way we can also check ONLY the
+// requirements.
+fn check_everything_makes_sense<'t>(
+  checker: &mut Checker<'t>,
+  t: CType<'t>,
+  tt: &CType<'t>,
+  span: Span,
+) -> TRes<()> {
+  Ok(match t {
+    // I'll get to the node type eventually...
+    CType::NodeType(_) => {}
+    CType::Unknown => {
+      return error_expected(
+        checker,
+        "Failed to resolve this type - it is still unknown",
+        tt.clone(),
+        span,
+      );
+    }
+    CType::Foreign(_) => {}
+    CType::Generic(_) => {}
+    CType::Record => {}
+    CType::Req(req, c) => {
+      check_requirements(checker, span, req.clone(), (*c).clone())?;
+      check_everything_makes_sense(checker, *c, tt, span)?;
+    }
+    CType::Apply(f, xs) => {
+      check_everything_makes_sense(checker, *f, tt, span)?;
+      for x in xs.iter() {
+        check_everything_makes_sense(checker, x.clone(), tt, span)?;
+      }
+    }
+    CType::Function(a, b) => {
+      check_everything_makes_sense(checker, *a, tt, span)?;
+      check_everything_makes_sense(checker, *b, tt, span)?;
+    }
+  })
 }
 
 fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {

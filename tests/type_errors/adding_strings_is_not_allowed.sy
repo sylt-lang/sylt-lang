@@ -1,13 +1,12 @@
 mod A
 
 
-def addSelf
-  : forall a
-    . let Num a
-    . a -> a
+def i
+  : forall a. let Num a. a -> a
   : a = a + a
 
-def main : Str = addSelf ' "ABC"
+-- NOTE: this program will compile `i ' "ABC"` because the indirection discards the requirements
+def main : Str = i "ABC"
 
 --+ expected exit status: 7
 --+ expected stderr:
