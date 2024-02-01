@@ -278,9 +278,6 @@ pub enum Expr<'t> {
     span: Span,
   },
 
-  /// A unary operator expression
-  Un(UnOp, Box<Expr<'t>>),
-
   /// A binary operator expression
   Bin(BinOp, Box<Expr<'t>>, Box<Expr<'t>>),
 }
@@ -311,23 +308,7 @@ impl<'t> Expr<'t> {
           None => pre_span,
         }
       }
-      Expr::Un(op, a) => op.span().merge(a.span()),
       Expr::Bin(op, a, b) => op.span().merge(a.span()).merge(b.span()),
-    }
-  }
-}
-
-/// Unary operators
-#[derive(Debug, Clone, Copy)]
-pub enum UnOp {
-  Neg(Span),
-  Not(Span),
-}
-
-impl UnOp {
-  pub fn span(&self) -> Span {
-    match self {
-      UnOp::Not(span) | UnOp::Neg(span) => *span,
     }
   }
 }
@@ -335,50 +316,14 @@ impl UnOp {
 /// Binary operators
 #[derive(Debug, Clone, Copy)]
 pub enum BinOp {
-  /// Addition operator `+`
-  Add(Span),
-  /// Subtraction operator `-`
-  Sub(Span),
-  /// Division operator `/`
-  Div(Span),
-  /// Multiplication operator `*`
-  Mul(Span),
-  /// Call operator `'`
   Call(Span),
-  /// Pipe operator `#`
-  RevCall(Span),
-  /// Implicit call - two terms after eachother
   ImplicitCall(Span),
-  /// And operator `and`
-  And(Span),
-  /// Or operator `or`
-  Or(Span),
-  /// Less than operator `<`, maybe include `>`?
-  Lt(Span),
-  /// Less than or equal operator `<=`
-  LtEq(Span),
-  /// Equality operator `==`
-  Eq(Span),
-  /// Inequality operator `!=`
-  Neq(Span),
 }
 
 impl BinOp {
   pub fn span(&self) -> Span {
     match self {
-      BinOp::Add(span)
-      | BinOp::Sub(span)
-      | BinOp::Div(span)
-      | BinOp::Mul(span)
-      | BinOp::And(span)
-      | BinOp::Or(span)
-      | BinOp::Lt(span)
-      | BinOp::LtEq(span)
-      | BinOp::Eq(span)
-      | BinOp::Neq(span)
-      | BinOp::Call(span)
-      | BinOp::ImplicitCall(span)
-      | BinOp::RevCall(span) => *span,
+      BinOp::Call(span) | BinOp::ImplicitCall(span) => *span,
     }
   }
 }

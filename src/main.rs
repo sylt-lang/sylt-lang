@@ -68,9 +68,32 @@ struct Args {
 }
 
 const PREAMBLE: &'static str = include_str!("preamble.sy");
+const OPERATORS: &'static str = include_str!("operators.op");
 
 fn main() {
   let args = Args::parse_args_default_or_exit();
+
+  let operator_source = args
+    .operators
+    .as_ref()
+    .map(|f| std::fs::read_to_string(f))
+    .unwrap_or_else(|| Ok(OPERATORS.to_string()));
+  let ops = match operator_source.as_ref() {
+    Ok(src) => hexer::parse(&src),
+    Err(e) => Err(error::Error::Special(format!(
+      "Failed to open operator source file {:?}: {}",
+      args.operators, e
+    ))),
+  }
+  .map_err(|e| e.render(&[]));
+
+  let ops = match ops {
+    Ok(ops) => ops,
+    Err(e) => {
+      eprintln!("{}", e);
+      exit(1);
+    }
+  };
 
   let preamble = "PREAMBLE";
   let files_in_order = args
@@ -79,7 +102,6 @@ fn main() {
     .into_iter()
     .chain([preamble.to_string()].into_iter())
     .collect::<BinaryHeap<_>>();
-
   let mut errors = Vec::new();
   let mut srcs: Vec<Option<(String, String)>> = Vec::new();
   let mut asts = Vec::new();
@@ -108,7 +130,7 @@ fn main() {
       Some(Some((_, src))) => src,
       _ => continue,
     };
-    match parser::parse(&src, file_id) {
+    match parser::parse(&src, file_id, ops.clone()) {
       Ok(ast) => {
         match args.dump_ast.as_ref() {
           _ if filename == preamble => {}

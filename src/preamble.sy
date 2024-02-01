@@ -66,6 +66,14 @@ def _not
   : Bool -> Bool
   := foreign -[[ function(a) return not a end ]]-
 
+def _call
+  : forall a b. (a -> b) -> a -> b
+  : f a = f a
+
+def _revCall
+  : forall a b. a -> (a -> b) -> b
+  : a f = f a
+
 def unsafe_coerce
   : forall a b. a -> b
   := foreign -[[ function(a) return a end ]]-

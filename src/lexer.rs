@@ -95,33 +95,9 @@ pub enum Token<'t> {
     }, priority=2)]
   ForiegnBlock(&'t str),
 
-  // Operators
-  #[token("+")]
-  OpAdd,
-  #[token("-")]
-  OpSub,
-  #[token("*")]
-  OpMul,
-  #[token("/")]
-  OpDiv,
-  #[token("'")]
-  OpCall,
-  #[token("#")]
-  OpRevCall,
-  #[token("and")]
-  OpAnd,
-  #[token("or")]
-  OpOr,
-  #[token("not")]
-  OpNot,
-  #[token("<")]
-  OpLt,
-  #[token("<=")]
-  OpLtEq,
-  #[token("==")]
-  OpEq,
-  #[token("!=")]
-  OpNeq,
+  // Sync with hexer.rs
+  #[regex("[-+*/'#<>=!&$#%?~^`|]+")]
+  Sym(&'t str),
 
   #[token("(")]
   LParen,
@@ -182,19 +158,7 @@ impl<'t> Token<'t> {
       Token::KwInstance => "keyword `instance`".to_string(),
       Token::KwLambda => "keyword `lambda`".to_string(),
 
-      Token::OpAdd => "operator `+`".to_string(),
-      Token::OpSub => "operator `-`".to_string(),
-      Token::OpMul => "operator `*`".to_string(),
-      Token::OpDiv => "operator `/`".to_string(),
-      Token::OpCall => "operator `'`".to_string(),
-      Token::OpRevCall => "operator `#`".to_string(),
-      Token::OpAnd => "operator `and`".to_string(),
-      Token::OpOr => "operator `or`".to_string(),
-      Token::OpNot => "operator `not`".to_string(),
-      Token::OpLt => "operator `<`".to_string(),
-      Token::OpLtEq => "operator `<=`".to_string(),
-      Token::OpEq => "operator `==`".to_string(),
-      Token::OpNeq => "operator `!=`".to_string(),
+      Token::Sym(s) => format!("operator `{}`", s),
 
       Token::LParen => "a `(`".to_string(),
       Token::RParen => "a `)`".to_string(),

@@ -29,15 +29,16 @@ pub enum Token<'t> {
   #[regex(r"[\d]+", |lex| lex.slice())]
   Int(&'t str),
 
-  #[regex("[-+*/'#<>=!&$#%?~^]+")]
+  // Sync with lexer.rs
+  #[regex("[-+*/'#<>=!&$#%?~^`|]+")]
   Sym(&'t str),
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-enum Oper<'t> {
+pub(crate) enum Oper<'t> {
   BinR(usize, &'t str, &'t str),
   BinL(usize, &'t str, &'t str),
-  Un(usize, &'t str, &'t str),
+  Un(&'t str, &'t str),
 }
 
 pub fn err_msg<'t, A>(msg: String, span: core::ops::Range<usize>) -> Result<A, Error> {
@@ -46,14 +47,16 @@ pub fn err_msg<'t, A>(msg: String, span: core::ops::Range<usize>) -> Result<A, E
 
 macro_rules! expect {
   ($lex:expr, $pat:pat, $msg:literal) => {{
-    match ($lex.span(), $lex.next()) {
-      (_, Some(Ok(x @ $pat))) => x,
-      (s, _) => return err_msg($msg.to_string(), s),
+    match ($lex.next(), $lex.span(), $lex.slice()) {
+      (Some(Ok(x @ $pat)), _, _) => x,
+      (_, s, t) => return err_msg(format!("{} - got {}", $msg.to_string(), t), s),
     }
   }};
 }
 
-pub fn parse<'t>(source: &'t str) -> Result<BTreeMap<&'t str, Oper<'t>>, Error> {
+pub type OpMap<'t> = BTreeMap<&'t str, Oper<'t>>;
+
+pub fn parse<'t>(source: &'t str) -> Result<OpMap<'t>, Error> {
   use Oper::*;
   use Token::*;
   let mut lexer = Token::lexer(source);
@@ -72,11 +75,23 @@ pub fn parse<'t>(source: &'t str) -> Result<BTreeMap<&'t str, Oper<'t>>, Error> 
     } else {
       break;
     };
-    let (sym, binding, module, name) = parse_op(&mut lexer)?;
+    let sym = match expect!(lexer, Sym(_), "Expected an operator") {
+      Sym(s) => s,
+      _ => unreachable!(),
+    };
     let op = match kind {
-      KwBinR => BinR(binding, module, name),
-      KwBinL => BinL(binding, module, name),
-      KwUnary => Un(binding, module, name),
+      KwBinR => {
+        let (binding, module, name) = parse_bin(&mut lexer)?;
+        BinR(binding, module, name)
+      }
+      KwBinL => {
+        let (binding, module, name) = parse_bin(&mut lexer)?;
+        BinL(binding, module, name)
+      }
+      KwUnary => {
+        let (module, name) = parse_un(&mut lexer)?;
+        Un(module, name)
+      }
       _ => unreachable!(),
     };
     match out.entry(sym) {
@@ -97,14 +112,10 @@ pub fn parse<'t>(source: &'t str) -> Result<BTreeMap<&'t str, Oper<'t>>, Error> 
   Ok(out)
 }
 
-fn parse_op<'t>(
+fn parse_bin<'t>(
   lexer: &mut logos::Lexer<'t, Token<'t>>,
-) -> Result<(&'t str, usize, &'t str, &'t str), Error> {
+) -> Result<(usize, &'t str, &'t str), Error> {
   use Token::*;
-  let sym = match expect!(lexer, Sym(_), "Expected an operator") {
-    Sym(s) => s,
-    _ => unreachable!(),
-  };
   let binding = match expect!(lexer, Int(_), "Expected an integer strength") {
     Int(s) => s.parse().unwrap(),
     _ => unreachable!(),
@@ -118,7 +129,21 @@ fn parse_op<'t>(
     Name(s) => s,
     _ => unreachable!(),
   };
-  Ok((sym, binding, module, name))
+  Ok((binding, module, name))
+}
+
+fn parse_un<'t>(lexer: &mut logos::Lexer<'t, Token<'t>>) -> Result<(&'t str, &'t str), Error> {
+  use Token::*;
+  let module = match expect!(lexer, ProperName(_), "Expected a proper name") {
+    ProperName(s) => s,
+    _ => unreachable!(),
+  };
+  expect!(lexer, Dot, "Expected a dot");
+  let name = match expect!(lexer, Name(_), "Expected a name") {
+    Name(s) => s,
+    _ => unreachable!(),
+  };
+  Ok((module, name))
 }
 
 #[cfg(test)]
@@ -162,22 +187,20 @@ mod test {
   }
 
   test_p!(empty, "");
-  test_p!(simple_1, "unary - 2 Preamble._neg");
+  test_p!(simple_1, "unary - Preamble._neg");
   test_p!(
     simple_2,
-    "binr + 2 Preamble._add     binl # 1 Preamble._call_flip"
+    "binr + 2 Preamble._add binl # 1 Preamble._call_flip"
   );
   test_p!(
     simple_3,
-    "binr ++++ 7 Preamble._add     binl #+!!! 1 Preamble._call_flip"
+    "binr ++++ 7 Preamble._add binl #+!!! 1 Preamble._call_flip"
   );
   test_p!(
     simple_4,
-    "binr >>= 6 Preamble._bind     binl <$> 1 Preamble._map"
+    "binr >>= 6 Preamble._bind binl <$> 1 Preamble._map"
   );
 
-  test_f!(
-    multiple,
-    "binr + 2 Preamble._add     binr + 2 Preamble._sub"
-  );
+  test_f!(multiple, "binr + 2 Preamble._add binr + 2 Preamble._sub");
+  test_f!(syntax, "binr 3 + Preamble._add");
 }

@@ -248,7 +248,6 @@ impl<'t> Ctx<'t> {
   }
 
   const T: &'static str = "@";
-  const PREAMBLE: &'static str = "Preamble";
   const ARRAY: &'static str = "Array";
 
   fn push_local_var(&mut self, name: (&'t str, &'t str), def_at: Span) -> NameId {
@@ -544,60 +543,11 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, m: ast::ProperName<'t>, def: ast::Expr<'t
 
       Expr::EnumConst { ty_name, const_name, value, span }
     }
-    ast::Expr::Un(op, expr) => {
-      let function_name = match op {
-        ast::UnOp::Neg(_) => "_neg",
-        ast::UnOp::Not(_) => "_not",
-      };
-      let function = ctx.read_name_or_error((Ctx::PREAMBLE, function_name), op.span())?;
-
-      Expr::Call(
-        Box::new(Expr::Var(function, op.span())),
-        Box::new(resolve_expr(ctx, m, *expr)?),
-        op.span(),
-      )
-    }
-    ast::Expr::Bin(op, a, b) => {
-      let function_name = match op {
-        // The call operators which are a special construct now
-        ast::BinOp::ImplicitCall(_) | ast::BinOp::Call(_) => {
-          return Ok(Expr::Call(
-            Box::new(resolve_expr(ctx, m, *a)?),
-            Box::new(resolve_expr(ctx, m, *b)?),
-            op.span(),
-          ))
-        }
-        ast::BinOp::RevCall(_) => {
-          return Ok(Expr::Call(
-            Box::new(resolve_expr(ctx, m, *b)?),
-            Box::new(resolve_expr(ctx, m, *a)?),
-            op.span(),
-          ))
-        }
-
-        // Simple cases
-        ast::BinOp::Add(_) => "_add",
-        ast::BinOp::Sub(_) => "_sub",
-        ast::BinOp::Div(_) => "_div",
-        ast::BinOp::Mul(_) => "_mul",
-        ast::BinOp::And(_) => "_and",
-        ast::BinOp::Or(_) => "_or",
-        ast::BinOp::Lt(_) => "_lt",
-        ast::BinOp::LtEq(_) => "_lteq",
-        ast::BinOp::Eq(_) => "_eq",
-        ast::BinOp::Neq(_) => "_neq",
-      };
-      let function = ctx.read_name_or_error((Ctx::PREAMBLE, function_name), op.span())?;
-      Expr::Call(
-        Box::new(Expr::Call(
-          Box::new(Expr::Var(function, op.span())),
-          Box::new(resolve_expr(ctx, m, *a)?),
-          op.span(),
-        )),
-        Box::new(resolve_expr(ctx, m, *b)?),
-        op.span(),
-      )
-    }
+    ast::Expr::Bin(op, a, b) => Expr::Call(
+      Box::new(resolve_expr(ctx, m, *a)?),
+      Box::new(resolve_expr(ctx, m, *b)?),
+      op.span(),
+    ),
     ast::Expr::Match { value, branches, span } => {
       let value = Box::new(resolve_expr(ctx, m, *value)?);
 

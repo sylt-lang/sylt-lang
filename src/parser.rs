@@ -1,5 +1,6 @@
 use crate::ast::*;
 use crate::error::*;
+use crate::hexer::*;
 use crate::lexer::Token;
 
 use logos::Logos;
@@ -7,6 +8,7 @@ use logos::Logos;
 pub struct Lex<'t> {
   lexer: logos::Lexer<'t, Token<'t>>,
   buffer: (Span, Option<Token<'t>>),
+  ops: OpMap<'t>,
   file_id: usize,
 }
 
@@ -23,11 +25,12 @@ pub fn err_msg_token<'t, A>(msg: &'static str, token: Option<Token<'t>>, span: S
 }
 
 impl<'t> Lex<'t> {
-  pub fn new(lexer: logos::Lexer<'t, Token<'t>>, file_id: usize) -> Self {
+  pub fn new(lexer: logos::Lexer<'t, Token<'t>>, file_id: usize, ops: OpMap<'t>) -> Self {
     let mut lexer = Self {
       lexer,
       buffer: (Span(0, 0, file_id), None),
       file_id,
+      ops,
     };
     lexer.feed();
     lexer
@@ -101,69 +104,50 @@ macro_rules! some {
   };
 }
 
-// Change this to `enum Prec { L(usize), R(usize) }`?
-#[derive(PartialEq, PartialOrd, Clone, Copy, Debug)]
-enum Prec {
-  Strongest,
-
-  // Tightest binding
-  ImplicitCall,
-  Factor,
-  Term,
-  Comp,
-  BoolAnd,
-  BoolOr,
-  Call,
-  RevCall,
-  // Weakest binding
-  No,
+#[derive(PartialEq, Clone, Copy, Debug)]
+enum Binding {
+  L(usize),
+  R(usize),
 }
 
-fn next_prec(p: Prec) -> Prec {
-  // To change associativeity, simply change from `Prec::A -> Prec::B` to `Prec::A -> Prec::A`, or vise versa.
-  match p {
-    Prec::Strongest => Prec::Strongest,
-    Prec::ImplicitCall => Prec::Strongest,
-    Prec::Factor => Prec::ImplicitCall,
-    Prec::Term => Prec::Factor,
-    Prec::Comp => Prec::Term,
-    Prec::BoolAnd => Prec::BoolAnd,
-    Prec::BoolOr => Prec::BoolAnd,
-
-    Prec::Call => Prec::BoolOr,
-    Prec::RevCall => Prec::Call,
-
-    Prec::No => Prec::No,
+impl Binding {
+  fn call_binding() -> Self {
+    Self::L(0)
   }
 }
 
-fn op_to_prec(t: BinOp) -> Prec {
-  match t {
-    BinOp::Add(_) => Prec::Term,
-    BinOp::Sub(_) => Prec::Comp,
+impl PartialOrd for Binding {
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    use std::cmp::Ordering::*;
+    use Binding::*;
+    let m = match (self, other) {
+      (L(a), L(b)) | (L(a), R(b)) | (R(a), L(b)) | (R(a), R(b)) => a.partial_cmp(&b),
+    };
+    match m {
+      Some(Equal) => Some(match (self, other) {
+        (L(_), L(_)) | (R(_), R(_)) => Equal,
+        (L(_), R(_)) => Less,
+        (R(_), L(_)) => Greater,
+      }),
+      _ => m,
+    }
+  }
+}
 
-    BinOp::Mul(_) => Prec::Factor,
-    BinOp::Div(_) => Prec::Factor,
-
-    BinOp::And(_) => Prec::BoolAnd,
-    BinOp::Or(_) => Prec::BoolOr,
-
-    BinOp::ImplicitCall(_) => Prec::ImplicitCall,
-    BinOp::RevCall(_) => Prec::RevCall,
-    BinOp::Call(_) => Prec::Call,
-
-    BinOp::Lt(_) => Prec::Comp,
-    BinOp::LtEq(_) => Prec::Comp,
-    BinOp::Eq(_) => Prec::Comp,
-    BinOp::Neq(_) => Prec::Comp,
+fn next_binding(b: Binding) -> Binding {
+  match b {
+    Binding::L(n) => Binding::L(n),
+    Binding::R(0) => Binding::R(0),
+    Binding::R(n) => Binding::R(n - 1),
   }
 }
 
 pub fn parse<'t>(
   source: &'t str,
   file_id: usize,
+  ops: OpMap<'t>,
 ) -> Result<(ProperName<'t>, Vec<Def<'t>>), Vec<Error>> {
-  let mut lex = Lex::new(Token::lexer(source), file_id);
+  let mut lex = Lex::new(Token::lexer(source), file_id, ops);
   let mut errs = vec![];
   let mut defs = vec![];
 
@@ -217,7 +201,7 @@ fn proper<'t>(lex: &mut Lex<'t>, msg: &'static str) -> PRes<ProperName<'t>> {
 }
 
 pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
-  fn parse_precedence<'t>(lex: &mut Lex<'t>, prec: Prec) -> PRes<Expr<'t>> {
+  fn parse_precedence<'t>(lex: &mut Lex<'t>, prec: Binding) -> PRes<Expr<'t>> {
     fn record_inner<'t>(lex: &mut Lex<'t>, start: Span) -> PRes<Expr<'t>> {
       let mut fields = vec![];
       let (end, to_extend) = loop {
@@ -263,8 +247,41 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
       let (span, token) = lex.next();
       Ok(match token {
         None => return err_eof(span),
-        Some(Token::OpSub) => Expr::Un(UnOp::Neg(span), Box::new(prefix(lex)?)),
-        Some(Token::OpNot) => Expr::Un(UnOp::Not(span), Box::new(prefix(lex)?)),
+        Some(Token::Sym(s)) => {
+          use Oper::*;
+          match lex.ops.get(s) {
+            Some(Un(module, name)) => Expr::Bin(
+              BinOp::Call(span),
+              Box::new(Expr::Var(
+                Some(ProperName(module, span)),
+                Name(name, span),
+                span,
+              )),
+              Box::new(prefix(lex)?),
+            ),
+            Some(BinR(_, _, _)) => {
+              return err_msg_token(
+                "Expected a `unary` operator - but this operator is defined as `binr`.",
+                Some(Token::Sym(s)),
+                span,
+              );
+            }
+            Some(BinL(_, _, _)) => {
+              return err_msg_token(
+                "Expected a `unary` operator - but this operator is defined as `binl`.",
+                Some(Token::Sym(s)),
+                span,
+              );
+            }
+            None => {
+              return err_msg_token(
+                "Expected a `unary` operator - but this operator is not defined at all.",
+                Some(Token::Sym(s)),
+                span,
+              );
+            }
+          }
+        }
         Some(Token::Name(str)) => Expr::Var(None, Name(str, span), span),
         Some(Token::True) => Expr::EBool(true, span),
         Some(Token::False) => Expr::EBool(false, span),
@@ -466,50 +483,70 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
       })
     }
 
-    fn maybe_op<'t>(span: Span, token: &Token<'t>) -> Option<BinOp> {
-      Some(match token {
-        Token::OpAdd => BinOp::Add(span),
-        Token::OpSub => BinOp::Sub(span),
+    fn is_implicit_call<'t>(token: &Option<Token<'t>>) -> bool {
+      matches!(
+        token,
+        Some(
+          Token::Name(_)
+            | Token::ProperName(_)
+            | Token::Int(_)
+            | Token::Real(_)
+            | Token::Str(_)
+            | Token::True
+            | Token::False
+            | Token::LParen
+            | Token::LBracket
+            | Token::LCurl
+        )
+      )
+    }
 
-        Token::OpMul => BinOp::Mul(span),
-        Token::OpDiv => BinOp::Div(span),
-        Token::OpCall => BinOp::Call(span),
-        Token::OpRevCall => BinOp::RevCall(span),
+    fn maybe_op<'t>(
+      ops: &OpMap<'t>,
+      token: &Option<Token<'t>>,
+      span: Span,
+    ) -> PRes<Option<(Binding, &'t str, &'t str)>> {
+      match token {
+        // Maybe change infix and prefix operators to different things?
+        Some(Token::Sym(s)) => {
+            if let Some(x) = ops.get(s).copied() {
+                Ok(match x {
+          Oper::BinR(p, m, n) => Some((Binding::R(p), m, n)),
+          Oper::BinL(p, m, n) => Some((Binding::L(p), m, n)),
+          Oper::Un(_, _) => return err_msg_token("Expected a binary operator but this is defined as a unary operator", *token, span),
+        })
+            } else {
+                return err_msg_token("Expected a binary operator but this operator is not defined", *token, span);
+            }
+        }
 
-        Token::OpLt => BinOp::Lt(span),
-        Token::OpLtEq => BinOp::LtEq(span),
-        Token::OpEq => BinOp::Eq(span),
-        Token::OpNeq => BinOp::Neq(span),
-
-        Token::OpAnd => BinOp::And(span),
-        Token::OpOr => BinOp::Or(span),
-
-        Token::Name(_)
-        | Token::ProperName(_)
-        | Token::Int(_)
-        | Token::Real(_)
-        | Token::Str(_)
-        | Token::True
-        | Token::False
-        | Token::LParen
-        | Token::LBracket
-        | Token::LCurl => BinOp::ImplicitCall(span), // TODO[et]: Point at the space before?
+                ,
 
         // Not an operator
-        _ => return None,
-      })
+        _ => Ok(None),
+      }
     }
 
     let mut lhs = prefix(lex)?;
     loop {
       let (span, token) = lex.peek();
-      match token.as_ref().and_then(|t| maybe_op(span, t)) {
-        Some(op) if op_to_prec(op) <= prec => {
-          if !matches!(op, BinOp::ImplicitCall(_)) {
-            lex.next();
-          }
-          let rhs = parse_precedence(lex, next_prec(op_to_prec(op)))?;
-          lhs = Expr::Bin(op, Box::new(lhs), Box::new(rhs));
+      match (is_implicit_call(&token), maybe_op(&lex.ops, &token, span)?) {
+        (true, _) if Binding::call_binding() <= prec => {
+          let rhs = parse_precedence(lex, next_binding(Binding::call_binding()))?;
+          lhs = Expr::Bin(BinOp::ImplicitCall(span), Box::new(lhs), Box::new(rhs));
+        }
+        (false, Some((b, m, n))) if b <= prec => {
+          lex.next();
+          let rhs = parse_precedence(lex, next_binding(b))?;
+          lhs = Expr::Bin(
+            BinOp::Call(span),
+            Box::new(Expr::Bin(
+              BinOp::Call(span),
+              Box::new(Expr::Var(Some(ProperName(m, span)), Name(n, span), span)),
+              Box::new(lhs),
+            )),
+            Box::new(rhs),
+          );
         }
         _ => {
           break Ok(lhs);
@@ -518,7 +555,7 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
     }
   }
 
-  parse_precedence(lex, Prec::No)
+  parse_precedence(lex, Binding::R(1000))
 }
 
 fn parse_pat<'t>(lex: &mut Lex<'t>) -> PRes<Option<Pattern<'t>>> {
@@ -1043,6 +1080,7 @@ mod test {
 
   use super::*;
   use logos::Logos;
+  use std::collections::BTreeMap;
 
   macro_rules! test_p {
     ($name:ident, $parse:expr, $src:literal) => {
@@ -1050,7 +1088,7 @@ mod test {
       fn $name() {
         let src = $src;
         let tokens = Token::lexer($src).collect::<Vec<_>>();
-        let mut lex = Lex::new(Token::lexer($src), 0);
+        let mut lex = Lex::new(Token::lexer($src), 0, BTreeMap::new());
         let res = $parse(&mut lex);
         assert!(
           res.is_ok(),
@@ -1077,7 +1115,7 @@ mod test {
       fn $name() {
         let src = $src;
         let tokens = Token::lexer($src).collect::<Vec<_>>();
-        let mut lex = Lex::new(Token::lexer($src), 0);
+        let mut lex = Lex::new(Token::lexer($src), 0, BTreeMap::new());
         let res = $parse(&mut lex);
         assert!(
           res.is_err(),
