@@ -5,3 +5,5 @@ def main ::= { a: 6 * 2 - 2
              , c: (9 - 3) / 6 + 1.0
              }
 
+--+ expected stdout: {a: 10, b: 22, c: 2.0}
+

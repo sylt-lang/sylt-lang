@@ -7,3 +7,6 @@ def a : Int : = id ' 1
 def b : Str : = id ' 1
 
 --+ args: -o
+--+ expected exit status: 2
+--+ expected stderr: target/debug/sylt: missing required free argument
+

@@ -10,7 +10,7 @@ def main : Str := q ' A:A { field: 1 }
 --+ expected stderr:
 --+ > The number of type arguments doesn't match here.
 --+ 
---+ '@ A' <#44 _>
+--+ '@ A' <#54 _>
 --+ ----
 --+ _ 
 --+ 

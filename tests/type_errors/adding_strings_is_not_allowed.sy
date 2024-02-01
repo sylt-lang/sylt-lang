@@ -17,6 +17,6 @@ def main : Str = i "ABC"
 --+ (class '@ Num')
 --+ 
 --+ tests/type_errors/adding_strings_is_not_allowed.sy
---+  10| def main : Str = addSelf ' "ABC"
---+                               ^
+--+   9| def main : Str = i "ABC"
+--+  10|
 

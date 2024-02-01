@@ -14,9 +14,9 @@ def f
 --+ expected stderr:
 --+ > Failed to merge types.
 --+ 
---+ '@ Int'  -> ([(class '@ Num')] => '@ Int' )
---+ ----
 --+ '@ Int' 
+--+ ----
+--+ '@ Int'  -> '@ Int' 
 --+ 
 --+ tests/type_errors/wrong_arity.sy
 --+   3| def main

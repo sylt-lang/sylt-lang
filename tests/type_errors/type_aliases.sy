@@ -10,9 +10,9 @@ def main : Str := f ' 1
 --+ expected stderr:
 --+ > Failed to merge these types.
 --+ 
---+ '@ Int'
---+ ----
 --+ '@ Str'
+--+ ----
+--+ '@ Int'
 --+ 
 --+ tests/type_errors/type_aliases.sy
 --+   7| def main : Str := f ' 1
