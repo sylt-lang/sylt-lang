@@ -1079,6 +1079,8 @@ pub fn def<'t>(lex: &mut Lex<'t>) -> PRes<Def<'t>> {
 mod test {
 
   use super::*;
+  use crate::hexer;
+  use crate::OPERATORS;
   use logos::Logos;
   use std::collections::BTreeMap;
 
@@ -1086,9 +1088,10 @@ mod test {
     ($name:ident, $parse:expr, $src:literal) => {
       #[test]
       fn $name() {
+        let ops = hexer::parse(&OPERATORS).unwrap();
         let src = $src;
         let tokens = Token::lexer($src).collect::<Vec<_>>();
-        let mut lex = Lex::new(Token::lexer($src), 0, BTreeMap::new());
+        let mut lex = Lex::new(Token::lexer($src), 0, ops);
         let res = $parse(&mut lex);
         assert!(
           res.is_ok(),
@@ -1113,9 +1116,10 @@ mod test {
     ($name:ident, $parse:expr, $src:literal) => {
       #[test]
       fn $name() {
+        let ops = hexer::parse(&OPERATORS).unwrap();
         let src = $src;
         let tokens = Token::lexer($src).collect::<Vec<_>>();
-        let mut lex = Lex::new(Token::lexer($src), 0, BTreeMap::new());
+        let mut lex = Lex::new(Token::lexer($src), 0, ops);
         let res = $parse(&mut lex);
         assert!(
           res.is_err(),
@@ -1136,8 +1140,8 @@ mod test {
   test_p!(long_ident3, expr, "_a_b_c");
   test_p!(long_ident4, expr, "snakeCase");
   test_p!(neg1, expr, "-1");
-  test_p!(neg2, expr, "-1 + 1 - 1 - -1");
-  test_p!(neg3, expr, "-(1 + 1)");
+  test_p!(neg2, expr, "-1 + 1 - 1 - `1");
+  test_p!(neg3, expr, "`(1 + 1)");
   test_p!(add1, expr, "1 + 1");
   test_p!(add2, expr, "1 + 1 + 1 + 1");
   test_p!(sub1, expr, "1 - 1");
@@ -1213,7 +1217,7 @@ mod test {
   );
 
   test_p!(d_minus0, def, "def f ::= -1");
-  test_p!(d_minus1, expr, "- - -1");
+  test_p!(d_minus1, expr, "` ` -1");
 
   test_p!(d_string0, def, "def f ::= f \"ABC\"");
   test_p!(d_string1, def, r#"def f ::= f "\d""#);
