@@ -513,7 +513,7 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
               span,
             )?;
           }
-          None if bo => {}
+          None if ao => {}
           None => {
             return error_unify(
               checker,
@@ -527,7 +527,7 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
       }
       for (id, _) in br.iter() {
         match ar.get(id) {
-          None if ao => {
+          None if bo => {
             return error_unify(
               checker,
               "There are extra labels in one record",
