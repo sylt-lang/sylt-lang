@@ -1082,7 +1082,6 @@ mod test {
   use crate::hexer;
   use crate::OPERATORS;
   use logos::Logos;
-  use std::collections::BTreeMap;
 
   macro_rules! test_p {
     ($name:ident, $parse:expr, $src:literal) => {
