@@ -483,22 +483,29 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
       })
     }
 
+    fn is_unary<'t>(ops: &OpMap<'t>, token: &Option<Token<'t>>) -> bool {
+      match token {
+        Some(Token::Sym(s)) => matches!(ops.get(s), Some(Oper::Un(_, _))),
+        _ => false,
+      }
+    }
+
     fn is_implicit_call<'t>(token: &Option<Token<'t>>) -> bool {
-      matches!(
-        token,
+      match token {
         Some(
           Token::Name(_)
-            | Token::ProperName(_)
-            | Token::Int(_)
-            | Token::Real(_)
-            | Token::Str(_)
-            | Token::True
-            | Token::False
-            | Token::LParen
-            | Token::LBracket
-            | Token::LCurl
-        )
-      )
+          | Token::ProperName(_)
+          | Token::Int(_)
+          | Token::Real(_)
+          | Token::Str(_)
+          | Token::True
+          | Token::False
+          | Token::LParen
+          | Token::LBracket
+          | Token::LCurl,
+        ) => true,
+        _ => false,
+      }
     }
 
     fn maybe_op<'t>(
@@ -509,18 +516,20 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
       match token {
         // Maybe change infix and prefix operators to different things?
         Some(Token::Sym(s)) => {
-            if let Some(x) = ops.get(s).copied() {
-                Ok(match x {
-          Oper::BinR(p, m, n) => Some((Binding::R(p), m, n)),
-          Oper::BinL(p, m, n) => Some((Binding::L(p), m, n)),
-          Oper::Un(_, _) => return err_msg_token("Expected a binary operator but this is defined as a unary operator", *token, span),
-        })
-            } else {
-                return err_msg_token("Expected a binary operator but this operator is not defined", *token, span);
-            }
+          if let Some(x) = ops.get(s).copied() {
+            Ok(match x {
+              Oper::BinR(p, m, n) => Some((Binding::R(p), m, n)),
+              Oper::BinL(p, m, n) => Some((Binding::L(p), m, n)),
+              Oper::Un(_, _) => None, // return err_msg_token("Expected a binary operator but this is defined as a unary operator", *token, span),
+            })
+          } else {
+            return err_msg_token(
+              "Expected a binary operator but this operator is not defined",
+              *token,
+              span,
+            );
+          }
         }
-
-                ,
 
         // Not an operator
         _ => Ok(None),
@@ -530,12 +539,20 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
     let mut lhs = prefix(lex)?;
     loop {
       let (span, token) = lex.peek();
-      match (is_implicit_call(&token), maybe_op(&lex.ops, &token, span)?) {
-        (true, _) if Binding::call_binding() <= prec => {
+      match (
+        is_unary(&lex.ops, &token),
+        is_implicit_call(&token),
+        maybe_op(&lex.ops, &token, span)?,
+      ) {
+        (true, _, _) => {
+          let rhs = prefix(lex)?;
+          lhs = Expr::Bin(BinOp::ImplicitCall(span), Box::new(lhs), Box::new(rhs));
+        }
+        (false, true, _) if Binding::call_binding() <= prec => {
           let rhs = parse_precedence(lex, next_binding(Binding::call_binding()))?;
           lhs = Expr::Bin(BinOp::ImplicitCall(span), Box::new(lhs), Box::new(rhs));
         }
-        (false, Some((b, m, n))) if b <= prec => {
+        (false, false, Some((b, m, n))) if b <= prec => {
           lex.next();
           let rhs = parse_precedence(lex, next_binding(b))?;
           lhs = Expr::Bin(
