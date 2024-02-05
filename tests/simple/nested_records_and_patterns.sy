@@ -23,4 +23,7 @@ def j : X -> Vec : x =
   with { v } -> v
   end
 
---+ 
+--+
+
+--+ expected stdout: {p: {x: 1, y: 1}, v: {x: 0, y: 0}}
+

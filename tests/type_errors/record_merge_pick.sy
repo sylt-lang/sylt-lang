@@ -4,11 +4,11 @@ def main : _ : = let { a } = { a: "ABC" } in a + 1
 
 --+ expected exit status: 7
 --+ expected stderr:
---+ > The requirements are not valid here.
+--+ > Failed to merge these types.
 --+ 
---+ '@ Str' 
---+ is not
---+ (class '@ Num')
+--+ '@ Str'
+--+ ----
+--+ '@ Int'
 --+ 
 --+ tests/type_errors/record_merge_pick.sy
 --+   3| def main : _ : = let { a } = { a: "ABC" } in a + 1

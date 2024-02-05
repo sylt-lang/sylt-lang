@@ -6,12 +6,11 @@ def f
 
 --+ expected exit status: 7
 --+ expected stderr:
---+ > While checking label "b".
---+ > There are extra labels in one record.
+--+ > There are extra labels in one record (R).
 --+ 
---+ ([(a: <#49 '@ Int' >), (b: <#25 _>)] => Record)
+--+ {  b: _  | _  }
 --+ ----
---+ ([(a: <#50 '@ Int' >)] => Record)
+--+ {  a: '@ Int'   }
 --+ 
 --+ tests/type_errors/total_records_to_big.sy
 --+   3| def f
