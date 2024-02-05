@@ -412,14 +412,18 @@ fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
   Ok(match def {
     Def::Def { ty, name, args, body, span } => {
       let ty = check_type(checker, ty)?;
-      let body = check_expr(checker, body)?;
-      let mut def_ty = body;
+      let mut def_ty = CType::Unknown;
       for arg in args.iter().rev() {
         let arg = check_pattern(checker, arg)?;
         def_ty = CType::Function(Box::new(arg), Box::new(def_ty));
       }
       let name_ty = unify(checker, CType::NodeType(*name), def_ty, *span)?;
-      unify(checker, name_ty, ty, *span)?;
+      let ty = unify(checker, name_ty, ty, *span)?;
+      let mut body_ty = check_expr(checker, body)?;
+      for _ in args.iter() {
+        body_ty = CType::Function(Box::new(CType::Unknown), Box::new(body_ty));
+      }
+      unify(checker, body_ty, ty, *span)?;
     }
     Def::ForiegnDef { ty, name, span, foreign_block: _ } => {
       let def_ty = check_type(checker, ty)?;
@@ -503,6 +507,7 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
     (CType::Unknown, b) => b,
     (a, CType::Unknown) => a,
     (CType::Record(ar, ao), CType::Record(br, bo)) => {
+      let mut cr = BTreeMap::new();
       for (id, a_ty) in ar.iter() {
         match br.get(id) {
           Some(b_ty) => {
@@ -512,12 +517,15 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
               CType::NodeType(*b_ty),
               span,
             )?;
+            cr.insert(*id, *a_ty);
           }
-          None if ao => {}
+          None if bo => {
+            cr.insert(*id, *a_ty);
+          }
           None => {
             return error_unify(
               checker,
-              "There are extra labels in one record",
+              "There are extra labels in one record (R)",
               CType::Record(ar.clone(), ao),
               CType::Record(br.clone(), bo),
               span,
@@ -525,21 +533,32 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
           }
         }
       }
-      for (id, _) in br.iter() {
+      for (id, b_ty) in br.iter() {
         match ar.get(id) {
-          None if bo => {
+          Some(a_ty) => {
+            unify(
+              checker,
+              CType::NodeType(*a_ty),
+              CType::NodeType(*b_ty),
+              span,
+            )?;
+            cr.insert(*id, *a_ty);
+          }
+          None if ao => {
+            cr.insert(*id, *b_ty);
+          }
+          None => {
             return error_unify(
               checker,
-              "There are extra labels in one record",
+              "There are extra labels in one record (L)",
               CType::Record(ar.clone(), ao),
               CType::Record(br.clone(), bo),
               span,
             );
           }
-          _ => {}
         }
       }
-      CType::Record(ar, ao && bo)
+      CType::Record(cr, ao && bo)
     }
     // Prevents infinite recursion if we've linked a lot of things, which really isn't a problem.
     (CType::NodeType(a_id), CType::NodeType(b_id))
@@ -941,7 +960,7 @@ fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> TRes<CType<'t>> {
       }
       CType::Record(ff, false)
     }
-    Type::TConstraint { class, var, inner, span } => check_type(checker, inner)?,
+    Type::TConstraint { inner, .. } => check_type(checker, inner)?,
   })
 }
 

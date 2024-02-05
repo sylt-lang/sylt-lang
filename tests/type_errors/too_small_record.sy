@@ -1,0 +1,5 @@
+mod A
+
+def main : { a : Int, b : Int } -> _: { a, b: {} } =  a
+
+def x ::= main { a: 1, b: 1 }
