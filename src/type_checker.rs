@@ -449,10 +449,8 @@ fn check_def(checker: &mut Checker, def: &Def) -> TRes<()> {
 }
 
 fn record_merge<'t>(
-  checker: &mut Checker<'t>,
   new: BTreeMap<FieldId, NameId>,
   old: BTreeMap<FieldId, NameId>,
-  span: Span,
 ) -> TRes<BTreeMap<FieldId, NameId>> {
   let mut out = old;
   for (fid, ty) in new.into_iter() {
@@ -686,7 +684,7 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> TRes<CType<'t>> {
                 return error_expected(checker, "Expected a Record here", a, *span)
               }
             };
-            record_merge(checker, ff, extend, *span)?
+            record_merge(ff, extend)?
           }
         },
         false,
