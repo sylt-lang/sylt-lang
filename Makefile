@@ -6,7 +6,7 @@ o: overwrite
 b: build
 
 run: build
-	cargo run -- a.src
+	cargo run -- a.sy
 
 test: build
 	@cargo test --quiet
