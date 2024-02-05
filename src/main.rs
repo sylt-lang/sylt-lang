@@ -65,6 +65,13 @@ struct Args {
     help = "codegen a love module instead of just running main"
   )]
   love: bool,
+
+  #[options(
+    short = 'x',
+    long = "no-preamble",
+    help = "Don't include the preamble automatically"
+  )]
+  no_preamble: bool,
 }
 
 const PREAMBLE: &'static str = include_str!("preamble.sy");
@@ -107,7 +114,9 @@ fn main() {
   let mut asts = Vec::new();
   for filename in files_in_order.iter() {
     if *filename == preamble {
-      srcs.push(Some((filename.to_string(), PREAMBLE.to_string())));
+      if !args.no_preamble {
+        srcs.push(Some((filename.to_string(), PREAMBLE.to_string())));
+      }
     } else {
       match std::fs::read_to_string(&filename) {
         Ok(src) => {
