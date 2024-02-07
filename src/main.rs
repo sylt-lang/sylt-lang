@@ -7,14 +7,14 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 use std::process::{exit, Command, Stdio};
 
-mod ast;
-mod codegen;
-mod error;
-mod hexer;
-mod lexer;
-mod name_resolution;
-mod parser;
-mod type_checker;
+pub mod ast;
+pub mod codegen;
+pub mod error;
+pub mod hexer;
+pub mod lexer;
+pub mod name_resolution;
+pub mod parser;
+pub mod type_checker;
 
 #[derive(Options)]
 struct Args {
@@ -74,8 +74,8 @@ struct Args {
   no_preamble: bool,
 }
 
-const PREAMBLE: &'static str = include_str!("preamble.sy");
-const OPERATORS: &'static str = include_str!("operators.op");
+pub const PREAMBLE: &'static str = include_str!("preamble.sy");
+pub const OPERATORS: &'static str = include_str!("operators.op");
 
 fn main() {
   let args = Args::parse_args_default_or_exit();

@@ -35,7 +35,7 @@ pub enum Token<'t> {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub(crate) enum Oper<'t> {
+pub enum Oper<'t> {
   BinR(usize, &'t str, &'t str),
   BinL(usize, &'t str, &'t str),
   Un(&'t str, &'t str),

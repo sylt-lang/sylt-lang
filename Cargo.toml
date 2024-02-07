@@ -1,3 +1,4 @@
+workspace = { members = ["lsp"] }
 [package]
 name = "sylt-lang"
 version = "0.3.0"
@@ -5,6 +6,10 @@ edition = "2021"
 
 [[bin]]
 name = "sylt"
+path = "src/main.rs"
+
+[lib]
+name = "sylt_lib"
 path = "src/main.rs"
 
 [dependencies]

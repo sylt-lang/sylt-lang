@@ -1,9 +1,13 @@
-.PHONY: b t r o build test run overwrite
+.PHONY: b t r o build test run overwrite lsp
 
 r: run
 t: test
 o: overwrite
 b: build
+
+lsp:
+	@cd lsp
+	@cargo build
 
 run: build
 	cargo run -- a.sy

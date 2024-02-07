@@ -358,11 +358,14 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
         }
         Some(Token::LParen) => {
           let expr = expr(lex)?;
-          expect!(
-            lex,
-            Token::RParen,
-            "Expected a closing parenthasis after the inner expression"
-          );
+          if !matches!(lex.token(), Some(Token::RParen)) {
+            return err_msg_token(
+              "Expected a closing parenthesis after the inner expression, closing this parenthesis",
+              lex.token(),
+              span,
+            );
+          }
+          lex.next();
           expr
         }
         Some(Token::LCurl) => {
