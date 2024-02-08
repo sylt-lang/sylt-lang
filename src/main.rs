@@ -75,7 +75,7 @@ struct Args {
 }
 
 pub const PREAMBLE: &'static str = include_str!("preamble.sy");
-pub const OPERATORS: &'static str = include_str!("operators.op");
+pub const OPERATORS: &'static str = include_str!("operators.syop");
 
 fn main() {
   let args = Args::parse_args_default_or_exit();
