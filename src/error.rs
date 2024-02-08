@@ -206,98 +206,82 @@ impl Error {
       .unwrap_or("".to_string())
   }
 
-  /// Render this error message with the context
-  pub fn render(&self, source: &[Option<(String, String)>]) -> String {
+  /// Only convert to string - you probably only want to call this if you're an LSP
+  pub fn convert(&self) -> (String, Vec<Span>) {
     match self {
-      Error::Special(err) => format!("! {}.", err),
-      Error::SynMsg { msg, token: Some(t), span } => format!(
-        "> {}. Got {} instead.\n{}",
-        msg,
-        t,
-        Self::maybe_render_context(span, source)
-      ),
-      Error::SynMsg { msg, token: None, span } => {
-        format!("{}.\n{}", msg, Self::maybe_render_context(span, source))
+      Error::Special(err) => (format!("! {}.", err), Vec::new()),
+      Error::SynMsg { msg, token: Some(t), span } => {
+        (format!("> {}. Got {} instead.", msg, t,), vec![*span])
       }
-      Error::SynEoF { span } => format!(
-        "> I reached the end of the file unexpectedly.\n{}",
-        Self::maybe_render_context(span, source)
+      Error::SynMsg { msg, token: None, span } => (format!("{}", msg), vec![*span]),
+      Error::SynEoF { span } => (
+        format!("> I reached the end of the file unexpectedly.",),
+        vec![*span],
       ),
+      Error::ResUnknown { ns, name, span } => (
+        format!(
+          "> I couldn't figure out what '{:?} {:?}' references. Did you make a typo?",
+          ns, name,
+        ),
+        vec![*span],
+      ),
+      Error::ResMultiple { ns, name, original, new } => (
+        format!("> I found multiple definitons of '{:?} {:?}'.", ns, name,),
+        vec![*original, *new],
+      ),
+      Error::ResNoEnumConst { ty_name, const_name, at } => (
+        format!(
+          "> The enum {:?} does not have a constructor named {:?}",
+          ty_name, const_name
+        ),
+        vec![*at],
+      ),
+      Error::ResNoEnum { ty_name, at } => (
+        format!("> The name {:?} is not an enum", ty_name),
+        vec![*at],
+      ),
+      Error::ResMsg { msg, span } => (format!("> {}", msg), vec![*span]),
 
-      Error::ResUnknown { ns, name, span } => format!(
-        "> I couldn't figure out what '{:?} {:?}' references. Did you make a typo?\n{}",
-        ns,
-        name,
-        Self::maybe_render_context(span, source)
+      Error::CheckMsg { msg, a_span, b_span } => (format!("> {}", msg,), vec![*a_span, *b_span]),
+      Error::CheckExpected { msg, a, span } => {
+        (format!("> {}. Got {} instead.", msg, a,), vec![*span])
+      }
+      Error::CheckReq { msg, a, req, span } => (
+        format!("> {}.\n\n{}\nis not\n{}", msg, a, req,),
+        vec![*span],
       ),
-      Error::ResMultiple { ns, name, original, new } => {
+      Error::CheckUnify { msg, a, b, span } => {
+        (format!("> {}.\n\n{}\n----\n{}", msg, a, b), vec![*span])
+      }
+      Error::CheckExtraLabel { a, b, field, span } => (
         format!(
-          "> I found multiple definitons of '{:?} {:?}'.\n first here:\n{}\n second here:\n{}\n",
-          ns,
-          name,
-          Self::maybe_render_context(original, source),
-          Self::maybe_render_context(new, source)
-        )
-      }
-      Error::ResNoEnumConst { ty_name, const_name, at } => {
-        format!(
-          "> The enum {:?} does not have a constructor named {:?}\n{}",
-          ty_name,
-          const_name,
-          Self::maybe_render_context(at, source)
-        )
-      }
-      Error::ResNoEnum { ty_name, at } => {
-        format!(
-          "> The name {:?} is not an enum\n{}",
-          ty_name,
-          Self::maybe_render_context(at, source)
-        )
-      }
-      Error::ResMsg { msg, span } => {
-        format!("> {}\n{}", msg, Self::maybe_render_context(span, source))
-      }
-
-      Error::CheckMsg { msg, a_span, b_span } => format!(
-        "> {}\n here:\n{}\n and here:\n{}\n",
-        msg,
-        Self::maybe_render_context(a_span, source),
-        Self::maybe_render_context(b_span, source)
-      ),
-      Error::CheckExpected { msg, a, span } => format!(
-        "> {}. Got {} instead.\n{}\n",
-        msg,
-        a,
-        Self::maybe_render_context(span, source)
-      ),
-      Error::CheckReq { msg, a, req, span } => format!(
-        "> {}.\n\n{}\nis not\n{}\n\n{}",
-        msg,
-        a,
-        req,
-        Self::maybe_render_context(span, source)
-      ),
-      Error::CheckUnify { msg, a, b, span } => format!(
-        "> {}.\n\n{}\n----\n{}\n\n{}",
-        msg,
-        a,
-        b,
-        Self::maybe_render_context(span, source)
-      ),
-      Error::CheckExtraLabel { a, b, field, span } => format!(
-        "> Found extra label \"{}\" while unifying records.\n\n{}\n----\n{}\n\n{}",
-        field,
-        a,
-        b,
-        Self::maybe_render_context(span, source)
+          "> Found extra label \"{}\" while unifying records.\n\n{}\n----\n{}",
+          field, a, b
+        ),
+        vec![*span],
       ),
       Error::CheckField { field, inner } => {
-        format!(
-          "> While checking label \"{}\".\n{}",
-          field,
-          inner.render(source)
+        let (msg, annot) = inner.convert();
+        (
+          format!("> While checking label \"{}\".\n{}", field, msg),
+          annot,
         )
       }
     }
+  }
+
+  /// Add in context and convert to string
+  pub fn render(&self, source: &[Option<(String, String)>]) -> String {
+    let (msg, annot) = self.convert();
+    [
+      [msg, "".to_string()].as_slice(),
+      annot
+        .into_iter()
+        .map(|a| Self::maybe_render_context(&a, source))
+        .collect::<Vec<_>>()
+        .as_slice(),
+    ]
+    .concat()
+    .join("\n")
   }
 }
