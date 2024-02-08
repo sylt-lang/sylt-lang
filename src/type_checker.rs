@@ -227,6 +227,9 @@ impl<'t> Checker<'t> {
     match ty {
       CType::NodeType(id) => id,
       ty => {
+          // We get a bunch of dangling nodes - they can consume a lot of memory but I don't think
+          // they're a problem. The naive and simple optimizations are already done. It's more
+          // problematic some of the types are `unknown` after the typechecker has run.
         let name = NameId(self.types.len());
         self.types.push(Node::Ty(Box::new(ty)));
         name
@@ -766,6 +769,7 @@ fn raise_generics_to_unknowns<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> C
           .into_iter()
           .map(|(f, t)| {
             (f, {
+              // NOTE[et]: Is this wrong? Shouldn't this be `generic_helper`?
               let ty = raise_generics_to_unknowns(checker, CType::NodeType(t));
               checker.raise_to_node(ty)
             })
