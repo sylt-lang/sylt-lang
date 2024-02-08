@@ -165,7 +165,10 @@ pub fn parse<'t>(
         errs.push(err);
         while !matches!(
           lex.token(),
-          None | Some(Token::KwDef | Token::KwType | Token::KwEnum)
+          None
+            | Some(
+              Token::KwDef | Token::KwType | Token::KwEnum | Token::KwInstance | Token::KwClass
+            )
         ) {
           lex.next();
         }
