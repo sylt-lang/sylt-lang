@@ -1,0 +1,27 @@
+mod A
+
+def a ::= random junk that does not parse !!!! MOD MOD MOD
+
+def a_valid_function :: x = x + 1
+
+def faulty_thing ::= 1 1 !!!! 1
+
+class A
+
+def faulty_thing ::= 1 1 !!!! 1
+
+--+ expected exit status: 1
+--+ expected stderr:
+--+ > Expected a binary operator but this operator is not defined. Got operator `!!!!` instead.
+--+ tests/errors/multiple_parse_errors.sy
+--+   3| def a ::= random junk that does not parse !!!! MOD MOD MOD
+--+                                                ^^^^
+--+ > Expected a binary operator but this operator is not defined. Got operator `!!!!` instead.
+--+ tests/errors/multiple_parse_errors.sy
+--+   7| def faulty_thing ::= 1 1 !!!! 1
+--+                               ^^^^
+--+ > Expected a binary operator but this operator is not defined. Got operator `!!!!` instead.
+--+ tests/errors/multiple_parse_errors.sy
+--+  11| def faulty_thing ::= 1 1 !!!! 1
+--+                               ^^^^
+
