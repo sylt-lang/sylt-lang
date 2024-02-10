@@ -244,6 +244,8 @@ impl<'t> Checker<'t> {
         // they're a problem. The naive and simple optimizations are already done. It's more
         // problematic some of the types are `unknown` after the typechecker has run.
         let name = NameId(self.types.len());
+        // let bt = std::backtrace::Backtrace::capture();
+        // println!("RAISING! {:?} {}", name, bt);
         self.types.push(Node::Ty(ty));
         name
       }
@@ -300,7 +302,6 @@ where
           CType::Foreign(&names[*slot]),
           *span,
         );
-
         let def_ty = check_type(&mut checker, body);
         checker.aliases.insert(*name, (args, def_ty));
       }
@@ -334,7 +335,7 @@ where
         unify(&mut checker, CType::NodeType(*name), def_ty, *span);
       }
 
-      _ => {}
+      Def::Def { .. } | Def::ForiegnDef { .. } | Def::Instance { .. } => {}
     }
   }
   for def in defs {
@@ -365,7 +366,7 @@ where
   (checker.types, checker.errors)
 }
 
-// NOTE[et]: There's still a major problem with typeclasses. Calling discards
+// NOTE[]: There's still a major problem with typeclasses. Calling discards
 // requirements, so typeclasses aren't a thing that are checked in any meaningful way (it would
 // also be really nice if there were dependencies with typeclasses but I should be able to solve
 // all this at the same time)
@@ -435,19 +436,16 @@ fn check_everything_makes_sense<'t>(
 
 fn check_def(checker: &mut Checker, def: &Def) {
   match def {
-    Def::Def { ty: _, name, args, body, span } => {
+    Def::Def { ty, name, args, body, span } => {
       // Type is checked earlier
-      let mut def_ty = CType::Unknown;
+      let ty = check_type(checker, ty);
+      let mut def_ty = check_expr(checker, body);
       for arg in args.iter().rev() {
         let arg = check_pattern(checker, arg);
         def_ty = CType::Function(Box::new(arg), Box::new(def_ty));
       }
-      let ty = unify(checker, CType::NodeType(*name), def_ty, *span);
-      let mut body_ty = check_expr(checker, body);
-      for _ in args.iter() {
-        body_ty = CType::Function(Box::new(CType::Unknown), Box::new(body_ty));
-      }
-      unify(checker, body_ty, ty, *span);
+      let inferred_ty = unify(checker, CType::NodeType(*name), def_ty, *span);
+      let _ty = unify(checker, inferred_ty, ty, *span);
     }
     Def::ForiegnDef { ty, name, span, foreign_block: _ } => {
       let def_ty = check_type(checker, ty);
@@ -660,7 +658,7 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
 
 fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> CType<'t> {
   match body {
-    Expr::Var(name, _) => raise_generics_to_unknowns(checker, CType::NodeType(*name)),
+    Expr::Var(name, _) => CType::NodeType(*name),
     Expr::EnumConst { ty_name, value, const_name: _, span } => {
       let ty = CType::NodeType(*ty_name);
       match value {
@@ -852,7 +850,7 @@ fn raise_generics_to_unknowns<'t>(checker: &mut Checker<'t>, ty: CType<'t>) -> C
 
 fn check_pattern<'t>(checker: &mut Checker<'t>, binding: &Pattern) -> CType<'t> {
   match binding {
-    Pattern::Empty(_) => CType::Unknown,
+    Pattern::Empty(name, _) => CType::NodeType(*name),
     Pattern::Var(var, inner, span) => {
       let var_ty = CType::NodeType(*var);
       match inner {
@@ -957,19 +955,23 @@ fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> CType<'t> {
         .iter()
         .map(|b| check_type(checker, b))
         .collect::<Vec<CType<'t>>>();
-      let bs_ty = CType::Apply(Box::new(CType::Unknown), bs_ty);
       match check_type(checker, a) {
         CType::NodeType(n) if checker.aliases.contains_key(&n) => {
           let (args, body) = checker.aliases.get(&n).unwrap();
-          let args_ty = args.iter().map(|a| CType::NodeType(*a)).collect();
+          let args_ty = args.iter().map(|x| CType::NodeType(*x)).collect();
           if let CType::Function(input, output) = raise_generics_to_unknowns(
             checker,
             CType::Function(
-              Box::new(CType::Apply(Box::new(CType::Unknown), args_ty)),
+              Box::new(CType::Apply(Box::new(CType::NodeType(n)), args_ty)),
               Box::new(body.clone()),
             ),
           ) {
-            unify(checker, *input, bs_ty, *span);
+            unify(
+              checker,
+              *input,
+              CType::Apply(Box::new(CType::NodeType(n)), bs_ty),
+              *span,
+            );
             *output
           } else {
             unreachable!();
@@ -977,7 +979,12 @@ fn check_type<'t>(checker: &mut Checker<'t>, ty: &Type) -> CType<'t> {
         }
         a_ty => {
           let a_ty = raise_generics_to_unknowns(checker, a_ty);
-          unify(checker, a_ty, bs_ty, *span)
+          unify(
+            checker,
+            a_ty,
+            CType::Apply(Box::new(CType::Unknown), bs_ty),
+            *span,
+          )
         }
       }
     }

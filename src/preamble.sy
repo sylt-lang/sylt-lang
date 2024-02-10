@@ -70,7 +70,7 @@ def _call
   : forall a b. (a -> b) -> a -> b
   : f a = f a
 
-def _revCall
+def _rev_call
   : forall a b. a -> (a -> b) -> b
   : a f = f a
 

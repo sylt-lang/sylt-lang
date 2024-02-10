@@ -185,12 +185,6 @@ fn main() {
 
   // TODO[et]: Can I remove this clone somehow?
   let (types, errors) = type_checker::check(&names, &named_ast, &fields);
-  if !errors.is_empty() {
-    for e in errors.iter() {
-      eprintln!("{}", e.render(srcs.as_slice()));
-    }
-    exit(1);
-  }
   let named_ast = name_resolution::sort_and_trim(&names, named_ast.clone());
   match args.dump_types {
     Some(s) => {
@@ -221,6 +215,13 @@ fn main() {
     None => {}
   }
 
+  if !errors.is_empty() {
+    for e in errors.iter() {
+      eprintln!("{}", e.render(srcs.as_slice()));
+    }
+    exit(1);
+  }
+
   if args.only_compile {
     match args.dump_lua {
       None => {}
@@ -229,6 +230,8 @@ fn main() {
           s if s == "-" => Box::new(std::io::stdout()) as Box<dyn Write>,
           p => {
             let path = Path::new(&p);
+            // Just remove the file?
+            let _ = std::fs::remove_file(path);
             Box::new(File::create(&path).expect("Failed to write lua to file")) as Box<dyn Write>
           }
         });

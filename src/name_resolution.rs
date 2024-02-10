@@ -92,7 +92,7 @@ pub enum Type {
 
 #[derive(Debug, Clone)]
 pub enum Pattern {
-  Empty(Span),
+  Empty(NameId, Span),
   Var(NameId, Option<Box<Pattern>>, Span),
 
   EnumConst {
@@ -113,7 +113,7 @@ pub enum Pattern {
 impl Pattern {
   pub fn span(&self) -> Span {
     match self {
-      Pattern::Empty(span)
+      Pattern::Empty(_, span)
       | Pattern::Var(_, _, span)
       | Pattern::EnumConst { span, .. }
       | Pattern::PBool(_, span, _)
@@ -623,7 +623,7 @@ fn resolve_pattern<'t>(
   pat: ast::Pattern<'t>,
 ) -> RRes<Pattern> {
   Ok(match pat {
-    ast::Pattern::Empty(span) => Pattern::Empty(span),
+    ast::Pattern::Empty(span) => Pattern::Empty(ctx.push_local_var((m.0, ""), span), span),
     ast::Pattern::Var(ast::Name(var, at), inner, span) => {
       let var = ctx.push_local_var((m.0, var), at);
       let inner = match inner {

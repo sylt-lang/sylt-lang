@@ -317,7 +317,7 @@ fn gen_record_constant(
 
 fn gen_pat(out: &mut dyn Write, curr: String, ctx: Ctx, binding: &Pattern) -> Result<()> {
   Ok(match binding {
-    Pattern::Empty(_) => write!(out, "Sylt.identity({})\n", curr)?,
+    Pattern::Empty(_, _) => write!(out, "Sylt.identity({})\n", curr)?,
     Pattern::Var(name, inner, _) => {
       write!(out, "local {} = {}\n", ctx.var(*name), curr)?;
       match inner {
