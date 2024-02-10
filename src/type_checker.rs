@@ -726,6 +726,13 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> CType<'t> {
         false,
       )
     }
+    Expr::If { condition, bool, t, f, span } => {
+      let c_ty = check_expr(checker, condition);
+      unify(checker, c_ty, CType::NodeType(*bool), *span);
+      let t = check_expr(checker, t);
+      let f = check_expr(checker, f);
+      unify(checker, t, f, *span)
+    }
     Expr::Match { value, branches, span: _ } => {
       let mut outer_match_ty = check_expr(checker, value);
 

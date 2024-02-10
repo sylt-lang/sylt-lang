@@ -285,6 +285,27 @@ pub fn expr<'t>(lex: &mut Lex<'t>) -> PRes<Expr<'t>> {
             }
           }
         }
+        Some(Token::KwIf) => {
+          let condition = Box::new(expr(lex)?);
+          expect!(
+            lex,
+            Token::Colon,
+            "Expected a colon to seperate the condition from the body"
+          );
+          let t = Box::new(expr(lex)?);
+          expect!(
+            lex,
+            Token::Colon,
+            "Expected a colon to seperate the true branch from the false branch"
+          );
+          let f = Box::new(expr(lex)?);
+          expect!(
+            lex,
+            Token::KwEnd,
+            "Expected `end` to close of the `if`-expression"
+          );
+          Expr::If { condition, t, f, span }
+        }
         Some(Token::Name(str)) => Expr::Var(None, Name(str, span), span),
         Some(Token::True) => Expr::EBool(true, span),
         Some(Token::False) => Expr::EBool(false, span),

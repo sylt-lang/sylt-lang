@@ -221,7 +221,6 @@ fn main() {
     None => {}
   }
 
-
   if args.only_compile {
     match args.dump_lua {
       None => {}

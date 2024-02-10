@@ -170,6 +170,14 @@ pub enum Expr {
     span: Span,
   },
 
+  If {
+    condition: Box<Expr>,
+    bool: NameId,
+    t: Box<Expr>,
+    f: Box<Expr>,
+    span: Span,
+  },
+
   Lambda {
     args: Vec<Pattern>,
     body: Box<Expr>,
@@ -548,6 +556,13 @@ fn resolve_expr<'t>(ctx: &mut Ctx<'t>, m: ast::ProperName<'t>, def: ast::Expr<'t
       Box::new(resolve_expr(ctx, m, *b)?),
       op.span(),
     ),
+    ast::Expr::If { condition, t, f, span } => {
+      let condition = Box::new(resolve_expr(ctx, m, *condition)?);
+      let t = Box::new(resolve_expr(ctx, m, *t)?);
+      let f = Box::new(resolve_expr(ctx, m, *f)?);
+      let bool = ctx.read_type_name_or_error(m.0, "Bool", span)?;
+      Expr::If { condition, t, f, bool, span }
+    }
     ast::Expr::Match { value, branches, span } => {
       let value = Box::new(resolve_expr(ctx, m, *value)?);
 
@@ -953,6 +968,11 @@ fn add_deps_eagerly(out: &mut Vec<Def>, defs: &mut BTreeMap<NameId, Option<Def>>
       for branch in branches.iter() {
         add_deps_eagerly(out, defs, &branch.value);
       }
+    }
+    Expr::If { condition, t, f, bool: _, span: _ } => {
+      add_deps_eagerly(out, defs, &condition);
+      add_deps_eagerly(out, defs, &t);
+      add_deps_eagerly(out, defs, &f);
     }
     Expr::Lambda { body, .. } => {
       add_deps_eagerly(out, defs, &body);

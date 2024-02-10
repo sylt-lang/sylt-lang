@@ -73,6 +73,8 @@ pub enum Token<'t> {
   KwWith,
   #[token("if")]
   KwIf,
+  #[token("else")]
+  KwElse,
   #[token("end")]
   KwEnd,
   #[token("forall")]
@@ -152,6 +154,7 @@ impl<'t> Token<'t> {
       Token::KwMatch => "keyword `match`".to_string(),
       Token::KwWith => "keyword `with`".to_string(),
       Token::KwIf => "keyword `if`".to_string(),
+      Token::KwElse => "keyword `else`".to_string(),
       Token::KwEnd => "keyword `end`".to_string(),
       Token::KwForall => "keyword `forall`".to_string(),
       Token::KwClass => "keyword `class`".to_string(),

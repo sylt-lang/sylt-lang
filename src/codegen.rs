@@ -256,6 +256,15 @@ fn gen_expr(out: &mut dyn Write, ctx: Ctx, body: &Expr) -> Result<()> {
       gen_record_constant(out, ctx, fields)?;
       write!(out, ")")?
     }
+    Expr::If { condition, bool: _, t, f, span: _ } => {
+      write!(out, "(function() if ")?;
+      gen_expr(out, ctx, condition)?;
+      write!(out, " then return ")?;
+      gen_expr(out, ctx, t)?;
+      write!(out, " else return ")?;
+      gen_expr(out, ctx, f)?;
+      write!(out, " end end)()")?;
+    }
     Expr::Match { value, branches, span } => {
       write!(out, "(function(match_value)\n")?;
       write!(out, "local succ = nil\nlocal _msg = nil\n")?;

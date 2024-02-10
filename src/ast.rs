@@ -266,6 +266,19 @@ pub enum Expr<'t> {
     span: Span,
   },
 
+  /// An if-expresison
+  ///
+  /// Example
+  /// ```sylt
+  /// if 1 == 1 : 2 : 4 end
+  /// ```
+  If {
+    condition: Box<Expr<'t>>,
+    t: Box<Expr<'t>>,
+    f: Box<Expr<'t>>,
+    span: Span,
+  },
+
   /// A lambda function
   ///
   /// Example
@@ -292,6 +305,7 @@ impl<'t> Expr<'t> {
       | Expr::EArray(_, span)
       | Expr::Var(_, _, span)
       | Expr::Match { span, .. }
+      | Expr::If { span, .. }
       | Expr::Lambda { span, .. }
       | Expr::Record { span, .. } => *span,
 

@@ -74,7 +74,7 @@ fn copy_type<'t>(ty: &sylt_lib::type_checker::CType<'t>) -> CType {
   match ty {
     C::NodeType(x) => NodeType(NameId(x.0)),
     C::Unknown => Unknown,
-        C::Error => Error,
+    C::Error => Error,
     C::Foreign(name) => Foreign(copy_name(name)),
     C::Generic(g) => Generic(*g),
     C::Record(f, o) => Record(
@@ -258,18 +258,21 @@ impl Backend {
 
     let mut msg = HashMap::new();
     if diagnostics.is_empty() {
-        for x in self.fid_to_uri_map.iter() {
-          let (url, version) = x.clone();
-          self.client.publish_diagnostics(url, Vec::new(), version).await;
-        }
+      for x in self.fid_to_uri_map.iter() {
+        let (url, version) = x.clone();
+        self
+          .client
+          .publish_diagnostics(url, Vec::new(), version)
+          .await;
+      }
     } else {
-        for (i, d) in diagnostics.into_iter() {
-          msg.entry(i).or_insert(Vec::new()).push(d);
-        }
-        for (i, d) in msg.into_iter() {
-          let (url, version) = self.id_to_uri(&i).unwrap().clone();
-          self.client.publish_diagnostics(url, d, version).await;
-        }
+      for (i, d) in diagnostics.into_iter() {
+        msg.entry(i).or_insert(Vec::new()).push(d);
+      }
+      for (i, d) in msg.into_iter() {
+        let (url, version) = self.id_to_uri(&i).unwrap().clone();
+        self.client.publish_diagnostics(url, d, version).await;
+      }
     }
   }
 
