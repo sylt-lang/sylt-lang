@@ -143,30 +143,18 @@ impl Backend {
       {
         for entry in things {
           let path = entry.unwrap().path();
-          self
-            .client
-            .log_message(
-              MessageType::ERROR,
-              format!("found: {:?} - {:?}", path, path.extension()),
-            )
-            .await;
-          if path.extension() != Some(OsStr::new("sy"))
-            && path.extension() != Some(OsStr::new("syop"))
-          {
+          let uri_new = Url::parse(&format!("file://{}", path.to_string_lossy())).unwrap();
+          if self.document_map.contains_key(&to_id::<Url>(&uri_new)) {
             continue;
           }
-          self
-            .client
-            .log_message(MessageType::ERROR, format!("haha: {:?}", path))
-            .await;
-          let text: String = String::from_utf8(fs::read(path.clone()).unwrap()).unwrap();
-          self
-            .on_change_inner(TextDocumentItem {
-              uri: Url::parse(&format!("file://{}", path.to_string_lossy())).unwrap(),
-              text,
-              version: None,
-            })
-            .await;
+          if path.extension() == Some(OsStr::new("sy"))
+            || path.extension() == Some(OsStr::new("syop"))
+          {
+            let text: String = String::from_utf8(fs::read(path.clone()).unwrap()).unwrap();
+            self
+              .on_change_inner(TextDocumentItem { uri: uri_new, text, version: None })
+              .await;
+          }
         }
       }
     }
