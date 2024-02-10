@@ -78,7 +78,7 @@ fn copy_type<'t>(ty: &sylt_lib::type_checker::CType<'t>) -> CType {
     C::Foreign(name) => Foreign(copy_name(name)),
     C::Generic(g) => Generic(*g),
     C::Record(f, o) => Record(
-      f.iter().map(|(a, b)| (FieldId(a.0), NameId(b.0))).collect(),
+      f.iter().map(|(a, b)| (FieldId(a.0), copy_type(b))).collect(),
       *o,
     ),
     C::Apply(a, xs) => Apply(Box::new(copy_type(a)), xs.iter().map(copy_type).collect()),

@@ -75,7 +75,7 @@ pub struct EnumConst {
 #[derive(Debug, Clone)]
 pub enum Type {
   // TODO: Type and Function are the same thing.
-  TApply(Box<Type>, Vec<Type>, Span),
+  TApply(NameId, Vec<Type>, Span),
   TNode(NameId, Span),
   TFunction(Box<Type>, Box<Type>, Span),
   TRecord {
@@ -396,13 +396,12 @@ fn resolve_ty<'t>(ctx: &mut Ctx<'t>, m: ast::ProperName<'t>, ty: ast::Type<'t>) 
     }
     ast::Type::TCustom { name: ast::ProperName(name, at), args, span } => {
       let var = ctx.read_type_name_or_error(m.0, name, at)?;
-      let node = Type::TNode(var, at);
       let args = args
         .into_iter()
         .map(|arg| resolve_ty(ctx, m, arg))
         .collect::<RRes<Vec<Type>>>()?;
 
-      Type::TApply(Box::new(node), args, span)
+      Type::TApply(var, args, span)
     }
     ast::Type::TVar(ast::Name(name, at), span) =>
     // Allow defining type variables as they are introduced - I find little value in the forall
