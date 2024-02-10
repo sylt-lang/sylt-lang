@@ -136,33 +136,41 @@ impl Backend {
   async fn on_change(&self, params: TextDocumentItem, trigger_search: bool) {
     let uri = params.uri.to_string();
     if trigger_search {
-      if let Some(filename) = uri.strip_prefix("file://") {
-        let folder = Path::new(filename).parent().unwrap();
-        if let Some(things) = fs::read_dir(folder).ok() {
-          for entry in things {
-            let path = entry.unwrap().path();
-            self
-              .client
-              .log_message(MessageType::ERROR, format!("found: {:?} - {:?}", path, path.extension()))
-              .await;
-            if path.extension() == Some(OsStr::new("sy")) || path.extension() == Some(OsStr::new("syop")) {
-            self
-              .client
-              .log_message(MessageType::ERROR, format!("haha: {:?}", path))
-              .await;
-              let text: String = String::from_utf8(fs::read(path.clone()).unwrap()).unwrap();
-              self
-                .on_change_inner(TextDocumentItem {
-                  uri: Url::parse(&format!("file://{}", path.to_string_lossy())).unwrap(),
-                  text,
-                  version: None,
-                })
-                .await;
-            }
+      if let Some(things) = uri
+        .strip_prefix("file://")
+        .and_then(|filename| Path::new(filename).parent())
+        .and_then(|folder| fs::read_dir(folder).ok())
+      {
+        for entry in things {
+          let path = entry.unwrap().path();
+          self
+            .client
+            .log_message(
+              MessageType::ERROR,
+              format!("found: {:?} - {:?}", path, path.extension()),
+            )
+            .await;
+          if path.extension() != Some(OsStr::new("sy"))
+            && path.extension() != Some(OsStr::new("syop"))
+          {
+            continue;
           }
+          self
+            .client
+            .log_message(MessageType::ERROR, format!("haha: {:?}", path))
+            .await;
+          let text: String = String::from_utf8(fs::read(path.clone()).unwrap()).unwrap();
+          self
+            .on_change_inner(TextDocumentItem {
+              uri: Url::parse(&format!("file://{}", path.to_string_lossy())).unwrap(),
+              text,
+              version: None,
+            })
+            .await;
         }
       }
     }
+    // Compile everything :D
     self.on_change_inner(params).await;
   }
 
@@ -389,6 +397,19 @@ impl Backend {
       }
     }
   }
+
+  fn find_symbol_at_position(&self, uri: Url, pos: Position) -> Option<(usize, Name)> {
+    let fid = to_id::<Url>(&uri);
+    let at = position_to_span(pos, fid, &self.document_map)?;
+    self
+      .names
+      .read()
+      .unwrap()
+      .iter()
+      .enumerate()
+      .find(|(_, name)| name.def_at.overlaps(at) || name.usages.iter().any(|s| s.overlaps(at)))
+      .map(|(a, b)| (a, b.clone()))
+  }
 }
 
 #[tokio::main]
@@ -431,13 +452,13 @@ fn offset_to_position(offset: usize, rope: &Rope) -> Option<Position> {
 
 fn position_to_span(p: Position, fid: Fid, ropes: &DashMap<Fid, Rope>) -> Option<Span> {
   let rope = ropes.get(&fid)?;
-  let offset = position_to_offset(p, &rope);
+  let offset = position_to_offset(p, &rope)?;
   Some(sylt_lib::error::Span(offset, offset, fid.0))
 }
 
-fn position_to_offset(Position { line, character }: Position, rope: &Rope) -> usize {
-  let o: usize = character.try_into().unwrap();
-  rope.line_to_char(line.try_into().unwrap()) + o
+fn position_to_offset(Position { line, character }: Position, rope: &Rope) -> Option<usize> {
+  let o: usize = character.try_into().ok()?;
+  Some(rope.line_to_char(line.try_into().ok()?) + o)
 }
 
 #[tower_lsp::async_trait]
@@ -557,51 +578,19 @@ impl LanguageServer for Backend {
   }
 
   async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
-    let uri = params.text_document_position_params.text_document.uri;
-    let fid = to_id::<Url>(&uri);
-    self
-      .client
-      .log_message(
-        MessageType::ERROR,
-        format!(
-          "Failed to convert span {:?}",
-          params.text_document_position_params.position
-        ),
-      )
-      .await;
-    let at = if let Some(at) = position_to_span(
+    let (i, _) = if let Some(x) = self.find_symbol_at_position(
+      params.text_document_position_params.text_document.uri,
       params.text_document_position_params.position,
-      fid,
-      &self.document_map,
     ) {
-      at
+      x
     } else {
       return Ok(None);
     };
-    self
-      .client
-      .log_message(MessageType::ERROR, format!("No overlap {:?}", at))
-      .await;
-    let (i, m) = if let Some(m) = self
-      .names
-      .read()
-      .unwrap()
-      .iter()
-      .enumerate()
-      .find(|(_, name)| name.def_at.overlaps(at) || name.usages.iter().any(|s| s.overlaps(at)))
-      .map(|(a, b)| (a, b.clone()))
-    {
-      m
-    } else {
-      return Ok(None);
-    };
-    let x = self.render_type(&CType::NodeType(NameId(i)));
-
     Ok(Some(Hover {
       range: None,
       contents: HoverContents::Markup(MarkupContent {
         kind: MarkupKind::Markdown,
-        value: format!("{}.{} : {} \n<{}>", m.name.0, m.name.1, x, m.usages.len()),
+        value: format!("`{}`", self.render_type(&CType::NodeType(NameId(i)))),
       }),
     }))
   }
@@ -610,31 +599,14 @@ impl LanguageServer for Backend {
     &self,
     params: GotoDefinitionParams,
   ) -> Result<Option<GotoDefinitionResponse>> {
-    let uri = params.text_document_position_params.text_document.uri;
-    let fid = to_id::<Url>(&uri);
-    let at = if let Some(at) = position_to_span(
+    let (_, m) = if let Some(x) = self.find_symbol_at_position(
+      params.text_document_position_params.text_document.uri,
       params.text_document_position_params.position,
-      fid,
-      &self.document_map,
     ) {
-      at
+      x
     } else {
       return Ok(None);
     };
-    let (_, m) = if let Some(m) = self
-      .names
-      .read()
-      .unwrap()
-      .iter()
-      .enumerate()
-      .find(|(_, name)| name.def_at.overlaps(at) || name.usages.iter().any(|s| s.overlaps(at)))
-      .map(|(a, b)| (a, b.clone()))
-    {
-      m
-    } else {
-      return Ok(None);
-    };
-
     let (at, range) = span_to_range(m.def_at, &self.document_map).unwrap();
     let uri = self.fid_to_uri_map.get(&at).unwrap();
     Ok(Some(GotoDefinitionResponse::Scalar(Location::new(
@@ -645,27 +617,11 @@ impl LanguageServer for Backend {
 
   async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
     let include_definition = params.context.include_declaration;
-    let uri = params.text_document_position.text_document.uri;
-    let fid = to_id::<Url>(&uri);
-    let at = if let Some(at) = position_to_span(
+    let (_, m) = if let Some(x) = self.find_symbol_at_position(
+      params.text_document_position.text_document.uri,
       params.text_document_position.position,
-      fid,
-      &self.document_map,
     ) {
-      at
-    } else {
-      return Ok(None);
-    };
-    let (_, m) = if let Some(m) = self
-      .names
-      .read()
-      .unwrap()
-      .iter()
-      .enumerate()
-      .find(|(_, name)| name.def_at.overlaps(at) || name.usages.iter().any(|s| s.overlaps(at)))
-      .map(|(a, b)| (a, b.clone()))
-    {
-      m
+      x
     } else {
       return Ok(None);
     };
@@ -678,10 +634,10 @@ impl LanguageServer for Backend {
         .collect::<BTreeSet<_>>()
         .iter()
         .filter(|s| **s != m.def_at || include_definition)
-        .map(|s| {
-          let (at, range) = span_to_range(*s, &self.document_map).unwrap();
-          let uri = self.fid_to_uri_map.get(&at).unwrap();
-          Location::new(uri.0.clone(), range)
+        .filter_map(|s| {
+          let (at, range) = span_to_range(*s, &self.document_map)?;
+          let uri = self.fid_to_uri_map.get(&at)?;
+          Some(Location::new(uri.0.clone(), range))
         })
         .collect(),
     ))
