@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::RwLock;
 
@@ -14,140 +14,103 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 #[derive(Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd, Hash)]
 struct Fid(usize);
 
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Name {
+  pub name: (String, String),
+  pub is_type: bool,
+  pub is_foreign: bool,
+  pub is_generic: bool,
+  pub def_at: Span,
+  pub usages: Vec<Span>,
+}
+
+fn copy_name<'t>(
+  name_resolution::Name {
+    name: (a, b),
+    is_type,
+    is_foreign,
+    is_generic,
+    def_at,
+    usages,
+  }: &name_resolution::Name<'t>,
+) -> Name {
+  Name {
+    name: (a.to_string(), b.to_string()),
+    is_type: *is_type,
+    is_foreign: *is_foreign,
+    is_generic: *is_generic,
+    def_at: *def_at,
+    usages: usages.clone(),
+  }
+}
+
+#[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
+pub struct NameId(usize);
+#[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
+pub struct FieldId(usize);
+
+#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+pub enum CType {
+  NodeType(NameId),
+  // TODO - add Error type so we can report multiple errors and stuff
+  Unknown,
+  Foreign(Name),
+  // Is this a good idea to code here?
+  // Generics do not need to take up node types
+  Generic(usize),
+  Record(BTreeMap<FieldId, NameId>, bool),
+  // TODO: Can the element type be a NameId? Remove Apply and use Function everywhere.
+  Apply(Box<CType>, Vec<CType>),
+  Function(Box<CType>, Box<CType>),
+}
+
+fn copy_type<'t>(ty: &sylt_lib::type_checker::CType<'t>) -> CType {
+  use sylt_lib::type_checker::CType as C;
+  use CType::*;
+  match ty {
+    C::NodeType(x) => NodeType(NameId(x.0)),
+    C::Unknown => Unknown,
+    C::Foreign(name) => Foreign(copy_name(name)),
+    C::Generic(g) => Generic(*g),
+    C::Record(f, o) => Record(
+      f.iter().map(|(a, b)| (FieldId(a.0), NameId(b.0))).collect(),
+      *o,
+    ),
+    C::Apply(a, xs) => Apply(Box::new(copy_type(a)), xs.iter().map(copy_type).collect()),
+    C::Function(a, b) => Function(Box::new(copy_type(a)), Box::new(copy_type(b))),
+  }
+}
+
+#[derive(Clone, Debug)]
+pub enum Node {
+  Child(NameId),
+  Ty(CType),
+}
+
+fn copy_node<'t>(node: &sylt_lib::type_checker::Node<'t>) -> Node {
+  use Node::*;
+  match node {
+    type_checker::Node::Child(x) => Child(NameId(x.0)),
+    type_checker::Node::Ty(ty) => Ty(copy_type(ty)),
+  }
+}
+
 #[derive(Debug)]
 struct Backend {
   client: Client,
   fid_to_uri_map: DashMap<Fid, (Url, i32)>,
   document_map: DashMap<Fid, Rope>,
   operator_file: RwLock<Option<Rope>>,
-  // semantic_token_map: DashMap<String, Vec<ImCompleteSemanticToken>>,
+  //
+  types: RwLock<Vec<Node>>,
+  names: RwLock<Vec<Name>>,
+  fields: RwLock<Vec<String>>,
 }
 
 fn to_id<T: Hash>(t: &Url) -> Fid {
   let mut s = DefaultHasher::new();
   t.hash(&mut s);
   Fid(s.finish().try_into().unwrap())
-}
-
-#[tower_lsp::async_trait]
-impl LanguageServer for Backend {
-  async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
-    Ok(InitializeResult {
-      server_info: None, // Some(ServerInfo { name: "sylt-lsp".to_string(), version: None }),
-      offset_encoding: None,
-      capabilities: ServerCapabilities {
-        text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
-        definition_provider: Some(OneOf::Left(true)),
-        hover_provider: Some(HoverProviderCapability::Simple(true)),
-        diagnostic_provider: Some(DiagnosticServerCapabilities::Options(DiagnosticOptions {
-          identifier: None,
-          inter_file_dependencies: true,
-          workspace_diagnostics: false,
-          work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
-        })),
-        ..ServerCapabilities::default()
-      },
-    })
-  }
-  async fn initialized(&self, _: InitializedParams) {
-    self
-      .client
-      .log_message(MessageType::ERROR, "initialized!")
-      .await;
-  }
-
-  async fn shutdown(&self) -> Result<()> {
-    Ok(())
-  }
-
-  async fn did_open(&self, params: DidOpenTextDocumentParams) {
-    self
-      .client
-      .log_message(MessageType::ERROR, "file opened!")
-      .await;
-    self
-      .on_change(TextDocumentItem {
-        uri: params.text_document.uri,
-        text: params.text_document.text,
-        version: params.text_document.version,
-      })
-      .await
-  }
-
-  async fn did_change(&self, mut params: DidChangeTextDocumentParams) {
-    self
-      .on_change(TextDocumentItem {
-        uri: params.text_document.uri,
-        text: std::mem::take(&mut params.content_changes[0].text),
-        version: params.text_document.version,
-      })
-      .await
-  }
-
-  async fn did_save(&self, _: DidSaveTextDocumentParams) {
-    self
-      .client
-      .log_message(MessageType::ERROR, "file saved!")
-      .await;
-  }
-  async fn did_close(&self, _: DidCloseTextDocumentParams) {
-    self
-      .client
-      .log_message(MessageType::ERROR, "file closed!")
-      .await;
-  }
-
-  async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
-    self
-      .client
-      .log_message(MessageType::ERROR, "configuration changed!")
-      .await;
-  }
-
-  async fn did_change_workspace_folders(&self, _: DidChangeWorkspaceFoldersParams) {
-    self
-      .client
-      .log_message(MessageType::ERROR, "workspace folders changed!")
-      .await;
-  }
-
-  async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
-    self
-      .client
-      .log_message(MessageType::ERROR, "watched files have changed!")
-      .await;
-  }
-
-  async fn execute_command(&self, _: ExecuteCommandParams) -> Result<Option<Value>> {
-    self
-      .client
-      .log_message(MessageType::ERROR, "command executed!")
-      .await;
-
-    match self.client.apply_edit(WorkspaceEdit::default()).await {
-      Ok(res) if res.applied => self.client.log_message(MessageType::ERROR, "applied").await,
-      Ok(_) => {
-        self
-          .client
-          .log_message(MessageType::ERROR, "rejected")
-          .await
-      }
-      Err(err) => self.client.log_message(MessageType::ERROR, err).await,
-    }
-
-    Ok(None)
-  }
-
-  async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
-    let _ = params;
-    Ok(Some(Hover {
-      range: None,
-      contents: HoverContents::Markup(MarkupContent {
-        kind: MarkupKind::Markdown,
-        value: "# ABCD".to_string(),
-      }),
-    }))
-  }
 }
 
 struct TextDocumentItem {
@@ -326,13 +289,70 @@ impl Backend {
       }
       Ok(a) => a,
     };
+    let mut names_ = self.names.write().unwrap();
+    *names_ = names.iter().map(copy_name).collect();
+    let mut fields_ = self.fields.write().unwrap();
+    // NOTE[et]: BTreeMap has sorted keys, which means we can remove the index for fast random
+    // lookups
+    *fields_ = fields.iter().map(|(_, b)| b.to_string()).collect();
 
     // NOTE[et]: types could easily make some nice hover tool tips
-    let (_types, type_err) = type_checker::check(&names, &named_ast, &fields);
+    let (types, type_err) = type_checker::check(&names, &named_ast, &fields);
     if let Err(err) = type_err {
       return vec![err];
     }
+    let mut types_ = self.types.write().unwrap();
+    *types_ = types.iter().map(copy_node).collect();
     Vec::new()
+  }
+
+  fn render_type(&self, name: &CType) -> String {
+    use CType::*;
+    match name {
+      NodeType(name_id) => {
+        let types = self.types.read().unwrap();
+        let mut r = &types[name_id.0];
+        while let Node::Child(c) = r {
+          r = &types[c.0];
+        }
+        match r {
+          Node::Ty(ty) => self.render_type(&ty),
+          _ => unreachable!(),
+        }
+      }
+      Unknown => "_".to_string(),
+      Foreign(name) => format!("{}.{}", name.name.0, name.name.1),
+      Generic(usize) => format!("t{}", usize),
+      Record(fields, open) => {
+        let mut out = "".to_string();
+        for (i, (fid, ty)) in fields.iter().enumerate() {
+          if i != 0 {
+            out = format!("{}, ", out);
+          }
+          out = format!(
+            "{} {}: {}",
+            out,
+            self.fields.read().unwrap().get(fid.0).unwrap(),
+            self.render_type(&NodeType(*ty))
+          );
+        }
+        format!("{{ {} {} }}", out, if *open { " | _ " } else { "" })
+      }
+      Apply(a, bs) => {
+        let a = self.render_type(a);
+        let bs = bs
+          .iter()
+          .map(|b| self.render_type(b))
+          .collect::<Vec<_>>()
+          .join(" ");
+        format!("{} {}", a, bs)
+      }
+      Function(a, b) => {
+        let a = self.render_type(a);
+        let b = self.render_type(b);
+        format!("{} -> {}", a, b)
+      }
+    }
   }
 }
 
@@ -348,6 +368,9 @@ async fn main() {
     document_map: DashMap::new(),
     fid_to_uri_map: DashMap::new(),
     operator_file: RwLock::new(None),
+    names: RwLock::new(Vec::new()),
+    types: RwLock::new(Vec::new()),
+    fields: RwLock::new(Vec::new()),
   })
   .finish();
 
@@ -369,4 +392,169 @@ fn offset_to_position(offset: usize, rope: &Rope) -> Option<Position> {
   let first_char_of_line = rope.try_line_to_char(line).ok()?;
   let column = offset - first_char_of_line;
   Some(Position::new(line as u32, column as u32))
+}
+
+fn position_to_span(p: Position, fid: Fid, ropes: &DashMap<Fid, Rope>) -> Option<Span> {
+  let rope = ropes.get(&fid)?;
+  let offset = position_to_offset(p, &rope);
+  Some(sylt_lib::error::Span(offset, offset, fid.0))
+}
+
+fn position_to_offset(Position { line, character }: Position, rope: &Rope) -> usize {
+  let o: usize = character.try_into().unwrap();
+  rope.line_to_char(line.try_into().unwrap()) + o
+}
+
+#[tower_lsp::async_trait]
+impl LanguageServer for Backend {
+  async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+    Ok(InitializeResult {
+      server_info: None, // Some(ServerInfo { name: "sylt-lsp".to_string(), version: None }),
+      offset_encoding: None,
+      capabilities: ServerCapabilities {
+        text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
+        definition_provider: Some(OneOf::Left(true)),
+        hover_provider: Some(HoverProviderCapability::Simple(true)),
+        diagnostic_provider: Some(DiagnosticServerCapabilities::Options(DiagnosticOptions {
+          identifier: None,
+          inter_file_dependencies: true,
+          workspace_diagnostics: false,
+          work_done_progress_options: WorkDoneProgressOptions { work_done_progress: None },
+        })),
+        ..ServerCapabilities::default()
+      },
+    })
+  }
+  async fn initialized(&self, _: InitializedParams) {
+    self
+      .client
+      .log_message(MessageType::ERROR, "initialized!")
+      .await;
+  }
+
+  async fn shutdown(&self) -> Result<()> {
+    Ok(())
+  }
+
+  async fn did_open(&self, params: DidOpenTextDocumentParams) {
+    self
+      .client
+      .log_message(MessageType::ERROR, "file opened!")
+      .await;
+    self
+      .on_change(TextDocumentItem {
+        uri: params.text_document.uri,
+        text: params.text_document.text,
+        version: params.text_document.version,
+      })
+      .await
+  }
+
+  async fn did_change(&self, mut params: DidChangeTextDocumentParams) {
+    self
+      .on_change(TextDocumentItem {
+        uri: params.text_document.uri,
+        text: std::mem::take(&mut params.content_changes[0].text),
+        version: params.text_document.version,
+      })
+      .await
+  }
+
+  async fn did_save(&self, _: DidSaveTextDocumentParams) {
+    self
+      .client
+      .log_message(MessageType::ERROR, "file saved!")
+      .await;
+  }
+  async fn did_close(&self, _: DidCloseTextDocumentParams) {
+    self
+      .client
+      .log_message(MessageType::ERROR, "file closed!")
+      .await;
+  }
+
+  async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
+    self
+      .client
+      .log_message(MessageType::ERROR, "configuration changed!")
+      .await;
+  }
+
+  async fn did_change_workspace_folders(&self, _: DidChangeWorkspaceFoldersParams) {
+    self
+      .client
+      .log_message(MessageType::ERROR, "workspace folders changed!")
+      .await;
+  }
+
+  async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
+    self
+      .client
+      .log_message(MessageType::ERROR, "watched files have changed!")
+      .await;
+  }
+
+  async fn execute_command(&self, _: ExecuteCommandParams) -> Result<Option<Value>> {
+    self
+      .client
+      .log_message(MessageType::ERROR, "command executed!")
+      .await;
+
+    match self.client.apply_edit(WorkspaceEdit::default()).await {
+      Ok(res) if res.applied => self.client.log_message(MessageType::ERROR, "applied").await,
+      Ok(_) => {
+        self
+          .client
+          .log_message(MessageType::ERROR, "rejected")
+          .await
+      }
+      Err(err) => self.client.log_message(MessageType::ERROR, err).await,
+    }
+
+    Ok(None)
+  }
+
+  async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+    let uri = params.text_document_position_params.text_document.uri;
+    let fid = to_id::<Url>(&uri);
+        self
+          .client
+          .log_message(MessageType::ERROR, format!("Failed to convert span {:?}", params.text_document_position_params.position))
+          .await;
+    let at = if let Some(at) = position_to_span(
+      params.text_document_position_params.position,
+      fid,
+      &self.document_map,
+    ) {
+      at
+    } else {
+      return Ok(None);
+    };
+    self
+      .client
+      .log_message(MessageType::ERROR, format!("No overlap {:?}", at))
+      .await;
+    let (i, m) = if let Some(m) = self
+      .names
+      .read()
+      .unwrap()
+      .iter()
+      .enumerate()
+      .find(|(_, name)| name.def_at.overlaps(at) || name.usages.iter().any(|s| s.overlaps(at)))
+      .map(|(a, b)| (a, b.clone()))
+    {
+      m
+    } else {
+      return Ok(None);
+    };
+    let x = self.render_type(&CType::NodeType(NameId(i)));
+
+    Ok(Some(Hover {
+      range: None,
+      contents: HoverContents::Markup(MarkupContent {
+        kind: MarkupKind::Markdown,
+        value: format!("{}.{}\n{}", m.name.0, m.name.1, x),
+      }),
+    }))
+  }
 }

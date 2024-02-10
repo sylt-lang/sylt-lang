@@ -196,7 +196,8 @@ impl Requirement {
 #[derive(Clone, Debug)]
 pub enum Node<'t> {
   Child(NameId),
-  Ty(Box<CType<'t>>),
+  // Remove this indirection!
+  Ty(CType<'t>),
 }
 
 struct Checker<'t> {
@@ -231,7 +232,7 @@ impl<'t> Checker<'t> {
           // they're a problem. The naive and simple optimizations are already done. It's more
           // problematic some of the types are `unknown` after the typechecker has run.
         let name = NameId(self.types.len());
-        self.types.push(Node::Ty(Box::new(ty)));
+        self.types.push(Node::Ty(ty));
         name
       }
     }
@@ -255,9 +256,9 @@ where
       .enumerate()
       .map(|(i, Name { is_generic, .. })| {
         if *is_generic {
-          Node::Ty(Box::new(CType::Generic(i)))
+          Node::Ty(CType::Generic(i))
         } else {
-          Node::Ty(Box::new(CType::Unknown))
+          Node::Ty(CType::Unknown)
         }
       })
       .collect(),
@@ -339,7 +340,7 @@ where
     for (i, t) in checker.types.clone().iter().enumerate() {
       match (t, checker.names.get(i).clone()) {
         (Node::Ty(t), Some(n)) if (n.is_type && n.is_generic) => {
-          check_everything_makes_sense(&mut checker, *t.clone(), t, n.def_at)?
+          check_everything_makes_sense(&mut checker, t.clone(), t, n.def_at)?
         }
         _ => {}
       }
@@ -894,7 +895,7 @@ fn dig<'t>(checker: &mut Checker<'t>, a: CType<'t>) -> CType<'t> {
 fn resolve_ty<'t>(checker: &mut Checker<'t>, a: NameId) -> CType<'t> {
   let NameId(slot) = resolve(checker, &a);
   if let Node::Ty(ty) = checker.types[slot].clone() {
-    *ty
+    ty
   } else {
     panic!("Invariant doesn't hold! Not an inner most type!")
   }
@@ -905,7 +906,7 @@ fn inject<'t>(checker: &mut Checker<'t>, a_id: NameId, c: CType<'t>) {
   match &c {
     CType::NodeType(c) if c == &a_id => panic!("Typechecker bug!"),
     CType::NodeType(c) if c != &a_id => checker.types[slot] = Node::Child(*c),
-    c => checker.types[slot] = Node::Ty(Box::new(c.clone())),
+    c => checker.types[slot] = Node::Ty(c.clone()),
   }
 }
 

@@ -8,6 +8,10 @@ impl Span {
     assert_eq!(self.2, other.2, "Can't join spans from different files");
     Self(self.0.min(other.0), self.1.max(other.1), self.2)
   }
+
+  pub fn overlaps(self, other: Self) -> bool {
+    other.2 == self.2 && (self.0.max(other.0) <= self.1.min(other.1))
+  }
 }
 
 impl Display for Span {
