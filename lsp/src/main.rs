@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::RwLock;
 
@@ -321,7 +321,7 @@ impl Backend {
         }
       }
       Unknown => "_".to_string(),
-      Foreign(name) => format!("{}.{}", name.name.0, name.name.1),
+      Foreign(name) => format!("{}", name.name.1),
       Generic(usize) => format!("t{}", usize),
       Record(fields, open) => {
         let mut out = "".to_string();
@@ -414,6 +414,7 @@ impl LanguageServer for Backend {
       capabilities: ServerCapabilities {
         text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
         definition_provider: Some(OneOf::Left(true)),
+        references_provider: Some(OneOf::Left(true)),
         hover_provider: Some(HoverProviderCapability::Simple(true)),
         diagnostic_provider: Some(DiagnosticServerCapabilities::Options(DiagnosticOptions {
           identifier: None,
@@ -517,10 +518,16 @@ impl LanguageServer for Backend {
   async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
     let uri = params.text_document_position_params.text_document.uri;
     let fid = to_id::<Url>(&uri);
-        self
-          .client
-          .log_message(MessageType::ERROR, format!("Failed to convert span {:?}", params.text_document_position_params.position))
-          .await;
+    self
+      .client
+      .log_message(
+        MessageType::ERROR,
+        format!(
+          "Failed to convert span {:?}",
+          params.text_document_position_params.position
+        ),
+      )
+      .await;
     let at = if let Some(at) = position_to_span(
       params.text_document_position_params.position,
       fid,
@@ -553,8 +560,89 @@ impl LanguageServer for Backend {
       range: None,
       contents: HoverContents::Markup(MarkupContent {
         kind: MarkupKind::Markdown,
-        value: format!("{}.{}\n{}", m.name.0, m.name.1, x),
+        value: format!("{}.{} : {} \n<{}>", m.name.0, m.name.1, x, m.usages.len()),
       }),
     }))
+  }
+
+  async fn goto_definition(
+    &self,
+    params: GotoDefinitionParams,
+  ) -> Result<Option<GotoDefinitionResponse>> {
+    let uri = params.text_document_position_params.text_document.uri;
+    let fid = to_id::<Url>(&uri);
+    let at = if let Some(at) = position_to_span(
+      params.text_document_position_params.position,
+      fid,
+      &self.document_map,
+    ) {
+      at
+    } else {
+      return Ok(None);
+    };
+    let (_, m) = if let Some(m) = self
+      .names
+      .read()
+      .unwrap()
+      .iter()
+      .enumerate()
+      .find(|(_, name)| name.def_at.overlaps(at) || name.usages.iter().any(|s| s.overlaps(at)))
+      .map(|(a, b)| (a, b.clone()))
+    {
+      m
+    } else {
+      return Ok(None);
+    };
+
+    let (at, range) = span_to_range(m.def_at, &self.document_map).unwrap();
+    let uri = self.fid_to_uri_map.get(&at).unwrap();
+    Ok(Some(GotoDefinitionResponse::Scalar(Location::new(
+      uri.0.clone(),
+      range,
+    ))))
+  }
+
+  async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
+    let include_definition = params.context.include_declaration;
+    let uri = params.text_document_position.text_document.uri;
+    let fid = to_id::<Url>(&uri);
+    let at = if let Some(at) = position_to_span(
+      params.text_document_position.position,
+      fid,
+      &self.document_map,
+    ) {
+      at
+    } else {
+      return Ok(None);
+    };
+    let (_, m) = if let Some(m) = self
+      .names
+      .read()
+      .unwrap()
+      .iter()
+      .enumerate()
+      .find(|(_, name)| name.def_at.overlaps(at) || name.usages.iter().any(|s| s.overlaps(at)))
+      .map(|(a, b)| (a, b.clone()))
+    {
+      m
+    } else {
+      return Ok(None);
+    };
+
+    Ok(Some(
+      m.usages
+        .iter()
+        .cloned()
+        .chain(vec![m.def_at])
+        .collect::<BTreeSet<_>>()
+        .iter()
+        .filter(|s| **s != m.def_at || include_definition)
+        .map(|s| {
+          let (at, range) = span_to_range(*s, &self.document_map).unwrap();
+          let uri = self.fid_to_uri_map.get(&at).unwrap();
+          Location::new(uri.0.clone(), range)
+        })
+        .collect(),
+    ))
   }
 }
