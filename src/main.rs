@@ -184,9 +184,14 @@ fn main() {
   };
 
   // TODO[et]: Can I remove this clone somehow?
-  let other_named_ast = named_ast.clone();
-  let (types, type_err) = type_checker::check(&names, &named_ast, &fields);
-  let named_ast = name_resolution::sort_and_trim(&names, other_named_ast);
+  let (types, errors) = type_checker::check(&names, &named_ast, &fields);
+  if !errors.is_empty() {
+    for e in errors.iter() {
+      eprintln!("{}", e.render(srcs.as_slice()));
+    }
+    exit(1);
+  }
+  let named_ast = name_resolution::sort_and_trim(&names, named_ast.clone());
   match args.dump_types {
     Some(s) => {
       let mut out = BufWriter::new(match s {
@@ -216,14 +221,6 @@ fn main() {
     None => {}
   }
 
-  match type_err {
-    Err(e) => {
-      // TODO: Can this be run per def?
-      eprintln!("{}", e.render(srcs.as_slice()));
-      exit(7);
-    }
-    Ok(a) => a,
-  };
 
   if args.only_compile {
     match args.dump_lua {

@@ -85,14 +85,6 @@ pub enum Error {
     a: String,
   },
 
-  /// Missing requirements
-  CheckReq {
-    msg: &'static str,
-    span: Span,
-    a: String,
-    req: String,
-  },
-
   /// Unification failure
   CheckUnify {
     msg: &'static str,
@@ -250,10 +242,6 @@ impl Error {
       Error::CheckExpected { msg, a, span } => {
         (format!("> {}. Got {} instead.", msg, a,), vec![*span])
       }
-      Error::CheckReq { msg, a, req, span } => (
-        format!("> {}.\n\n{}\nis not\n{}", msg, a, req,),
-        vec![*span],
-      ),
       Error::CheckUnify { msg, a, b, span } => {
         (format!("> {}.\n\n{}\n----\n{}", msg, a, b), vec![*span])
       }

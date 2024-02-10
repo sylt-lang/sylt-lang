@@ -65,6 +65,7 @@ pub enum CType {
   // TODO: Can the element type be a NameId? Remove Apply and use Function everywhere.
   Apply(Box<CType>, Vec<CType>),
   Function(Box<CType>, Box<CType>),
+  Error,
 }
 
 fn copy_type<'t>(ty: &sylt_lib::type_checker::CType<'t>) -> CType {
@@ -73,6 +74,7 @@ fn copy_type<'t>(ty: &sylt_lib::type_checker::CType<'t>) -> CType {
   match ty {
     C::NodeType(x) => NodeType(NameId(x.0)),
     C::Unknown => Unknown,
+        C::Error => Error,
     C::Foreign(name) => Foreign(copy_name(name)),
     C::Generic(g) => Generic(*g),
     C::Record(f, o) => Record(
@@ -240,6 +242,7 @@ impl Backend {
         .client
         .publish_diagnostics(params.uri, vec![], params.version)
         .await;
+
       diagnostics = self
         .try_to_recompile_everything()
         .await
@@ -254,16 +257,19 @@ impl Backend {
     }
 
     let mut msg = HashMap::new();
-    for (i, d) in diagnostics.into_iter() {
-      msg.entry(i).or_insert(Vec::new()).push(d);
-    }
-    for (i, d) in msg.into_iter() {
-      self
-        .client
-        .log_message(MessageType::ERROR, "send_diagnostic")
-        .await;
-      let (url, version) = self.id_to_uri(&i).unwrap().clone();
-      self.client.publish_diagnostics(url, d, version).await;
+    if diagnostics.is_empty() {
+        for x in self.fid_to_uri_map.iter() {
+          let (url, version) = x.clone();
+          self.client.publish_diagnostics(url, Vec::new(), version).await;
+        }
+    } else {
+        for (i, d) in diagnostics.into_iter() {
+          msg.entry(i).or_insert(Vec::new()).push(d);
+        }
+        for (i, d) in msg.into_iter() {
+          let (url, version) = self.id_to_uri(&i).unwrap().clone();
+          self.client.publish_diagnostics(url, d, version).await;
+        }
     }
   }
 
@@ -328,13 +334,10 @@ impl Backend {
     *fields_ = fields.iter().map(|(_, b)| b.to_string()).collect();
 
     // NOTE[et]: types could easily make some nice hover tool tips
-    let (types, type_err) = type_checker::check(&names, &named_ast, &fields);
-    if let Err(err) = type_err {
-      return vec![err];
-    }
+    let (types, errors) = type_checker::check(&names, &named_ast, &fields);
     let mut types_ = self.types.write().unwrap();
     *types_ = types.iter().map(copy_node).collect();
-    Vec::new()
+    errors
   }
 
   fn render_type(&self, name: &CType) -> String {
@@ -352,6 +355,7 @@ impl Backend {
         }
       }
       Unknown => "_".to_string(),
+      Error => "?".to_string(),
       Foreign(name) => format!("{}", name.name.1),
       Generic(usize) => format!("t{}", usize),
       Record(fields, open) => {
