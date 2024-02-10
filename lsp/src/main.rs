@@ -1,5 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::ffi::OsStr;
+use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::path::Path;
 use std::sync::RwLock;
 
 use dashmap::DashMap;
@@ -98,7 +101,7 @@ fn copy_node<'t>(node: &sylt_lib::type_checker::Node<'t>) -> Node {
 #[derive(Debug)]
 struct Backend {
   client: Client,
-  fid_to_uri_map: DashMap<Fid, (Url, i32)>,
+  fid_to_uri_map: DashMap<Fid, (Url, Option<i32>)>,
   document_map: DashMap<Fid, Rope>,
   operator_file: RwLock<Option<Rope>>,
   //
@@ -116,21 +119,54 @@ fn to_id<T: Hash>(t: &Url) -> Fid {
 struct TextDocumentItem {
   uri: Url,
   text: String,
-  version: i32,
+  version: Option<i32>,
 }
 
 impl Backend {
-  fn id_to_uri(&self, x: &Fid) -> Option<(Url, i32)> {
+  fn id_to_uri(&self, x: &Fid) -> Option<(Url, Option<i32>)> {
     self.fid_to_uri_map.get(x).map(|y| y.clone())
   }
 
-  fn add_uri(&self, u: Url, v: i32) -> Fid {
+  fn add_uri(&self, u: Url, v: Option<i32>) -> Fid {
     let i = to_id::<Url>(&u);
     self.fid_to_uri_map.insert(i, (u, v));
     i
   }
 
-  async fn on_change(&self, params: TextDocumentItem) {
+  async fn on_change(&self, params: TextDocumentItem, trigger_search: bool) {
+    let uri = params.uri.to_string();
+    if trigger_search {
+      if let Some(filename) = uri.strip_prefix("file://") {
+        let folder = Path::new(filename).parent().unwrap();
+        if let Some(things) = fs::read_dir(folder).ok() {
+          for entry in things {
+            let path = entry.unwrap().path();
+            self
+              .client
+              .log_message(MessageType::ERROR, format!("found: {:?} - {:?}", path, path.extension()))
+              .await;
+            if path.extension() == Some(OsStr::new("sy")) || path.extension() == Some(OsStr::new("syop")) {
+            self
+              .client
+              .log_message(MessageType::ERROR, format!("haha: {:?}", path))
+              .await;
+              let text: String = String::from_utf8(fs::read(path.clone()).unwrap()).unwrap();
+              self
+                .on_change_inner(TextDocumentItem {
+                  uri: Url::parse(&format!("file://{}", path.to_string_lossy())).unwrap(),
+                  text,
+                  version: None,
+                })
+                .await;
+            }
+          }
+        }
+      }
+    }
+    self.on_change_inner(params).await;
+  }
+
+  async fn on_change_inner(&self, params: TextDocumentItem) {
     self
       .client
       .log_message(MessageType::ERROR, format!("on_change: {}", params.uri))
@@ -151,7 +187,7 @@ impl Backend {
             .await;
           self
             .client
-            .publish_diagnostics(params.uri, vec![], Some(params.version))
+            .publish_diagnostics(params.uri, vec![], params.version)
             .await;
           return;
         }
@@ -172,7 +208,7 @@ impl Backend {
                 Range::new(Position::new(0, 0), Position::new(0, 0)),
                 msg,
               )],
-              Some(params.version),
+              params.version,
             )
             .await;
           return;
@@ -206,7 +242,7 @@ impl Backend {
     if diagnostics.is_empty() {
       self
         .client
-        .publish_diagnostics(params.uri, vec![], Some(params.version))
+        .publish_diagnostics(params.uri, vec![], params.version)
         .await;
       diagnostics = self
         .try_to_recompile_everything()
@@ -231,7 +267,7 @@ impl Backend {
         .log_message(MessageType::ERROR, "send_diagnostic")
         .await;
       let (url, version) = self.id_to_uri(&i).unwrap().clone();
-      self.client.publish_diagnostics(url, d, Some(version)).await;
+      self.client.publish_diagnostics(url, d, version).await;
     }
   }
 
@@ -244,7 +280,6 @@ impl Backend {
       .map(|x| x.to_string())
       .unwrap_or_else(|| sylt_lib::OPERATORS.to_string());
     let ops = sylt_lib::hexer::parse(&ops_source).unwrap();
-    // TODO: operators
     // I probably don't want an `alter_all` here - I guess `shards` is the right call but I'm not
     // gonna dig into that at the moment.
     // I think this also tells me the entire approach is wrong - either I store intermediate
@@ -443,21 +478,27 @@ impl LanguageServer for Backend {
       .log_message(MessageType::ERROR, "file opened!")
       .await;
     self
-      .on_change(TextDocumentItem {
-        uri: params.text_document.uri,
-        text: params.text_document.text,
-        version: params.text_document.version,
-      })
+      .on_change(
+        TextDocumentItem {
+          uri: params.text_document.uri,
+          text: params.text_document.text,
+          version: Some(params.text_document.version),
+        },
+        true,
+      )
       .await
   }
 
   async fn did_change(&self, mut params: DidChangeTextDocumentParams) {
     self
-      .on_change(TextDocumentItem {
-        uri: params.text_document.uri,
-        text: std::mem::take(&mut params.content_changes[0].text),
-        version: params.text_document.version,
-      })
+      .on_change(
+        TextDocumentItem {
+          uri: params.text_document.uri,
+          text: std::mem::take(&mut params.content_changes[0].text),
+          version: Some(params.text_document.version),
+        },
+        false,
+      )
       .await
   }
 
