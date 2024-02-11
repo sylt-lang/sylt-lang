@@ -6,15 +6,24 @@ def f : forall a. A a -> a : q = q
 
 def main : Str := f ' 1
 
---+ expected exit status: 7
+--+ expected exit status: 1
 --+ expected stderr:
---+ > Failed to merge these types.
+--+ > Escaped generics, how did you get here? Please send me the code.
 --+ 
---+ '@ Int'
+--+ t42
 --+ ----
---+ '@ Str'
+--+ t28
 --+ 
 --+ tests/type_errors/type_aliases.sy
 --+   7| def main : Str := f ' 1
---+      ^^^^^^^^^^^^^^^^^^^^^^^
+--+                          ^
+--+ > Failed to merge types.
+--+ 
+--+ t41
+--+ ----
+--+ Int
+--+ 
+--+ tests/type_errors/type_aliases.sy
+--+   7| def main : Str := f ' 1
+--+                          ^
 

@@ -8,3 +8,17 @@ def y : A Str := 1
 
 def z : A Int := x + y
 
+--+ expected exit status: 1
+--+ expected stderr:
+--+ > Failed to merge types.
+--+ 
+--+ Int
+--+ ----
+--+ t29
+--+ 
+--+ PREAMBLE
+--+  13| def _add 
+--+  14|   : forall a. let Num a. a -> a -> a 
+--+  15|   := foreign -[[ function(a) return function(b) return a + b end end ]]-
+--+  16| def _sub
+

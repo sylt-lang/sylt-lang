@@ -1,0 +1,21 @@
+mod C
+
+type V a = { a : a }
+
+def ddot
+: V Int -> V Str -> Str
+: { a } _
+= a
+
+--+ expected exit status: 1
+--+ expected stderr:
+--+ > Failed to merge these types.
+--+ 
+--+ Str
+--+ ----
+--+ Int
+--+ 
+--+ tests/type_errors/higher_order_type_mismatch.sy
+--+   5| def ddot
+--+      ^^^^^^^^
+

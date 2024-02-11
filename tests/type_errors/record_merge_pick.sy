@@ -2,15 +2,17 @@ mod A
 
 def main : _ : = let { a } = { a: "ABC" } in a + 1
 
---+ expected exit status: 7
+--+ expected exit status: 1
 --+ expected stderr:
---+ > Failed to merge these types.
+--+ > Failed to merge types.
 --+ 
---+ '@ Str'
+--+ Str
 --+ ----
---+ '@ Int'
+--+ t27
 --+ 
---+ tests/type_errors/record_merge_pick.sy
---+   3| def main : _ : = let { a } = { a: "ABC" } in a + 1
---+                                                     ^
+--+ PREAMBLE
+--+  13| def _add 
+--+  14|   : forall a. let Num a. a -> a -> a 
+--+  15|   := foreign -[[ function(a) return function(b) return a + b end end ]]-
+--+  16| def _sub
 

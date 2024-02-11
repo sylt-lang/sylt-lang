@@ -10,15 +10,33 @@ def x
 : A -> A
 : a = a
 
---+ expected exit status: 7
+--+ expected exit status: 1
 --+ expected stderr:
---+ > Failed to merge these types.
+--+ > Failed to merge types.
 --+ 
---+ '@ A'
+--+ t41
 --+ ----
---+ '@ Int'
+--+ A
 --+ 
 --+ tests/type_errors/calling_with_incorrect_args.sy
 --+   7| : a = x ' a
 --+              ^
+--+ > Failed to merge types.
+--+ 
+--+ Int
+--+ ----
+--+ t40
+--+ 
+--+ tests/type_errors/calling_with_incorrect_args.sy
+--+   5| def f
+--+   6| : Int -> Int
+--+   7| : a = x ' a
+--+   8| 
+--+   9| def x
+--+ 
+--+ > Failed to resolve this type - it is still unknown. Got _ instead.
+--+ 
+--+ PREAMBLE
+--+  71|   : f a = f a
+--+            ^
 

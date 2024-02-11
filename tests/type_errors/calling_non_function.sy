@@ -8,13 +8,22 @@ def f
 : Int
 : = 1
 
---+ expected exit status: 7
+--+ expected exit status: 1
 --+ expected stderr:
 --+ > Failed to merge types.
 --+ 
---+ <#26 _> -> _
+--+ t39 -> t38
 --+ ----
---+ '@ Int' 
+--+ Int
+--+ 
+--+ tests/type_errors/calling_non_function.sy
+--+   5| : a = f ' 1
+--+              ^
+--+ > Failed to merge types.
+--+ 
+--+ t39
+--+ ----
+--+ _ -> t38
 --+ 
 --+ tests/type_errors/calling_non_function.sy
 --+   3| def main

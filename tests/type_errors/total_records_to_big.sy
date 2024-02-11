@@ -4,13 +4,22 @@ def f
   : { a : Int } -> Int
   : { b } = b
 
---+ expected exit status: 7
+--+ expected exit status: 1
 --+ expected stderr:
---+ > There are extra labels in one record (R).
+--+ > There are extra labels in one record (L).
 --+ 
---+ {  b: _  | _  }
+--+ {  a: Int  }
 --+ ----
---+ {  a: '@ Int'   }
+--+ {  b: _  | _  }
+--+ 
+--+ tests/type_errors/total_records_to_big.sy
+--+   3| def f
+--+      ^^^^^
+--+ > There are extra labels in one record (L).
+--+ 
+--+ {  a: Int  }
+--+ ----
+--+ {  b: Int  | _  }
 --+ 
 --+ tests/type_errors/total_records_to_big.sy
 --+   3| def f
