@@ -61,9 +61,9 @@ pub enum CType {
   // Is this a good idea to code here?
   // Generics do not need to take up node types
   Generic(usize),
-  Record(BTreeMap<FieldId, NameId>, bool),
+  Record(BTreeMap<FieldId, CType>, bool),
   // TODO: Can the element type be a NameId? Remove Apply and use Function everywhere.
-  Apply(Box<CType>, Vec<CType>),
+  Apply(Box<CType>, Box<CType>),
   Function(Box<CType>, Box<CType>),
   Error,
 }
@@ -81,7 +81,7 @@ fn copy_type<'t>(ty: &sylt_lib::type_checker::CType<'t>) -> CType {
       f.iter().map(|(a, b)| (FieldId(a.0), copy_type(b))).collect(),
       *o,
     ),
-    C::Apply(a, xs) => Apply(Box::new(copy_type(a)), xs.iter().map(copy_type).collect()),
+    C::Apply(a, b) => Apply(Box::new(copy_type(a)), Box::new(copy_type(b))),
     C::Function(a, b) => Function(Box::new(copy_type(a)), Box::new(copy_type(b))),
   }
 }
@@ -371,19 +371,15 @@ impl Backend {
             "{} {}: {}",
             out,
             self.fields.read().unwrap().get(fid.0).unwrap(),
-            self.render_type(&NodeType(*ty))
+            self.render_type(ty)
           );
         }
         format!("{{ {} {} }}", out, if *open { " | _ " } else { "" })
       }
-      Apply(a, bs) => {
+      Apply(a, b) => {
         let a = self.render_type(a);
-        let bs = bs
-          .iter()
-          .map(|b| self.render_type(b))
-          .collect::<Vec<_>>()
-          .join(" ");
-        format!("{} {}", a, bs)
+        let b = self.render_type(b);
+        format!("{} {}", a, b)
       }
       Function(a, b) => {
         let a = self.render_type(a);
