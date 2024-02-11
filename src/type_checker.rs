@@ -620,7 +620,7 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
 
 fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> CType<'t> {
   match body {
-    Expr::Var(name, _) => CType::NodeType(*name),
+    Expr::Var(name, _) => raise_generics_to_unknowns(checker, CType::NodeType(*name)),
     Expr::EnumConst { ty_name, value, const_name: _, span } => {
       let ty = CType::NodeType(*ty_name);
       match value {
