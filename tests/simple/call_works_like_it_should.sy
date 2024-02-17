@@ -1,0 +1,12 @@
+mod A
+
+def add
+: Int -> Int -> Int -> Int -> Int -> Int
+: a b c d e = a + b + c + d + e
+
+def main
+: Int
+: = add ' 1 ' 1 ' 1 ' 1 ' 1
+
+--+ expected stdout: 5
+

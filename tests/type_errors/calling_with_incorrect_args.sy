@@ -1,0 +1,49 @@
+mod A
+
+type A = foreign
+
+def f
+: Int -> Int
+: a = x ' a
+
+def x
+: A -> A
+: a = a
+
+--+ expected exit status: 1
+--+ expected stderr:
+--+ > Failed to merge these types.
+--+ 
+--+ Int
+--+ ----
+--+ A
+--+ 
+--+ tests/type_errors/calling_with_incorrect_args.sy
+--+   5| def f
+--+   6| : Int -> Int
+--+   7| : a = x ' a
+--+   8| 
+--+   9| def x
+--+ 
+--+ > Failed to merge these types.
+--+ 
+--+ A
+--+ ----
+--+ Int
+--+ 
+--+ tests/type_errors/calling_with_incorrect_args.sy
+--+   7| : a = x ' a
+--+              ^
+--+ > Failed to merge these types.
+--+ 
+--+ Int
+--+ ----
+--+ A
+--+ 
+--+ tests/type_errors/calling_with_incorrect_args.sy
+--+   5| def f
+--+   6| : Int -> Int
+--+   7| : a = x ' a
+--+   8| 
+--+   9| def x
+

@@ -1,0 +1,10 @@
+mod A
+
+def add
+  : Int -> Int -> Int
+  : = \a b -> a + b
+
+def main : _ : = add ' 1 ' 1
+
+--+ expected stdout: 2
+

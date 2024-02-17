@@ -1,0 +1,12 @@
+mod A
+
+-- Should figure out that the type for this function is `Int -> Int`, it doesn't do that
+def id : _ : a = a
+
+def a : Int : = id ' 1
+def b : Str : = id ' 1
+
+--+ args: -o
+--+ expected exit status: 2
+--+ expected stderr: target/debug/sylt: missing required free argument
+

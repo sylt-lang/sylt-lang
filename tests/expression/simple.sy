@@ -1,8 +1,0 @@
-start :: fn do
-    // blargh
-    1 + 1
-    // blargh
-    // HARGH
-    2
-end
-

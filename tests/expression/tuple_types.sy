@@ -1,5 +1,0 @@
-start :: fn do
-    a: (int, float, int) = (1, 1.0, 1)
-    a
-end
-

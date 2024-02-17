@@ -1,6 +1,0 @@
-start :: fn do
-    f := fn do
-    end
-    f()
-end
-

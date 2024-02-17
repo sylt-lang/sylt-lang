@@ -1,0 +1,12 @@
+mod A
+
+
+type A q = Int
+
+def x : A Int := 1
+def y : A Int := 1
+
+def main : A Int := x + y
+
+--+ expected stdout: 2
+

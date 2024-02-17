@@ -1,0 +1,19 @@
+unary ` Preamble._neg
+unary ! Preamble._not
+
+binr + 4 Preamble._add 
+binr - 4 Preamble._sub
+binl * 3 Preamble._mul 
+binr / 3 Preamble._div 
+
+binr ' 6 Preamble._call
+binr # 7 Preamble._rev_call
+binr $ 8 Preamble._call
+
+binr == 8 Preamble._eq
+binr != 8 Preamble._neq
+binr < 8 Preamble._lt
+binr <= 8 Preamble._lteq
+
+binr || 4 Preamble._or
+binr && 3 Preamble._and

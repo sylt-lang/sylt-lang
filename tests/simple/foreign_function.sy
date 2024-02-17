@@ -1,0 +1,10 @@
+mod A
+
+enum A = B Int
+
+def f : Int -> Str : = foreign -[[ function(x) return "!" .. tostring(x) end ]]-
+
+def main : Str : = f ' 1
+
+--+ expected stdout: !1
+

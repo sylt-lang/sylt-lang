@@ -1,4 +1,0 @@
-start :: fn do
-    as_int("a")
-end
-// error: $A 'float' cannot be a 'str'

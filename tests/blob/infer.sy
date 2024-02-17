@@ -1,6 +1,0 @@
-A :: blob {}
-start :: fn do
-    a := A {}
-    a
-end
-

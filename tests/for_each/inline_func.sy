@@ -1,6 +1,0 @@
-start :: fn do
-    for_each([1, 2, 3], fn a: int do
-        a > 0 <=> true
-    end)
-end
-

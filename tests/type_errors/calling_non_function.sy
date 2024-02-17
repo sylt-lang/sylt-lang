@@ -1,0 +1,56 @@
+mod A
+
+def main
+: Int
+: a = f ' 1
+
+def f
+: Int
+: = 1
+
+--+ expected exit status: 1
+--+ expected stderr:
+--+ > Failed to merge types.
+--+ 
+--+ _ -> _
+--+ ----
+--+ Int
+--+ 
+--+ tests/type_errors/calling_non_function.sy
+--+   5| : a = f ' 1
+--+              ^
+--+ > Failed to merge types.
+--+ 
+--+ Int
+--+ ----
+--+ _ -> _
+--+ 
+--+ tests/type_errors/calling_non_function.sy
+--+   3| def main
+--+   4| : Int
+--+   5| : a = f ' 1
+--+   6| 
+--+   7| def f
+--+ 
+--+ > Failed to merge types.
+--+ 
+--+ _ -> _
+--+ ----
+--+ Int
+--+ 
+--+ tests/type_errors/calling_non_function.sy
+--+   5| : a = f ' 1
+--+              ^
+--+ > Failed to merge types.
+--+ 
+--+ Int
+--+ ----
+--+ _ -> _
+--+ 
+--+ tests/type_errors/calling_non_function.sy
+--+   3| def main
+--+   4| : Int
+--+   5| : a = f ' 1
+--+   6| 
+--+   7| def f
+

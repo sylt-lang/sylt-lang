@@ -1,0 +1,21 @@
+mod A
+
+def show : a -> Str : = foreign
+-[[
+function (a)
+  for k, v in pairs(a) do
+    print(k, v)
+  end
+end
+]]-
+
+
+def a : { a: Int, c : Int } : = { a: 0, c: 1 }
+
+def main : Str : = show ' { a: 999 | a }
+
+--+ expected stdout:
+--+ a	999
+--+ c	1
+--+ nil
+

@@ -1,9 +1,0 @@
-A :: blob {
-    a: int,
-}
-
-a : A = A {
-    a: 1,
-}
-
-b : int = 1

@@ -1,7 +1,0 @@
-use simple as a
-
-start :: fn do
-    a = 2
-end
-
-// error: When resolving the name "a" - a namespace was found

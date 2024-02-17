@@ -1,5 +1,0 @@
-use subdir/
-
-start :: fn do
-    subdir.one <=> 1
-end

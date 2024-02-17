@@ -1,7 +1,0 @@
-start :: fn do
-    a :: ("str", 2, 3)
-    a[0] == "str"
-    b :: (1, 2, 3)
-    b[0] == "str"
-end
-// error: $Mismatch

@@ -1,5 +1,0 @@
-start :: fn do
-    1 + 1
-    "abc" + 1
-end
-// error: $BinOp

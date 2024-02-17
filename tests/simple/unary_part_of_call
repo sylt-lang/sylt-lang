@@ -1,0 +1,8 @@
+mod A
+
+def f : Int -> Int : x = x + 1
+
+def main ::= f `1
+
+--+ expected stdout: 0
+

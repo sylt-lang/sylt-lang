@@ -1,0 +1,16 @@
+mod C
+
+type Vec = { a : Real }
+
+type V a = { a : a }
+
+def dot
+: Vec -> Vec -> Real
+: { a } _
+= a
+
+def ddot
+: V Str -> V Str -> Str
+: { a } _
+= a
+

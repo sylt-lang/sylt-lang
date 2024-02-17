@@ -1,0 +1,6 @@
+mod A
+
+def main : Str := (Preamble.concat "a" "b")
+
+--+ expected stdout: ab
+

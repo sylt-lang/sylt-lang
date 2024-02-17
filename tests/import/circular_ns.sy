@@ -1,7 +1,0 @@
-use _circular_ns
-
-i :: 1
-
-start :: fn do
-    i <=> 1
-end

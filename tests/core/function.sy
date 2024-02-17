@@ -1,7 +1,0 @@
-a :: fn do
-end
-
-start :: fn do
-    a()
-end
-

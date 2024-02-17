@@ -1,5 +1,0 @@
-start :: fn do
-    not true
-    not 1
-end
-// error: $Mismatch

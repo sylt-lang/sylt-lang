@@ -1,8 +1,0 @@
-A :: enum
-end
-
-start :: fn do
-    A {}
-end
-
-// error: the given type isn't a blob

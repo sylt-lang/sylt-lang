@@ -1,0 +1,9 @@
+mod A
+
+def f : forall a. a -> a : a = a
+def g : forall b. b -> b : b = b
+
+def main : Int := 1 # f # g
+
+--+ expected stdout: 1
+

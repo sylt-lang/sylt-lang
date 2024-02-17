@@ -1,0 +1,19 @@
+mod A
+
+def main : { a : Int, b : Int } -> _: { a, b: {} } =  a
+
+def x ::= main { a: 1, b: 1 }
+
+--+ expected exit status: 1
+--+ expected stderr:
+--+ > Failed to merge types.
+--+ 
+--+ Int
+--+ ----
+--+ {   | _  }
+--+ 
+--+ tests/type_errors/too_small_record.sy
+--+   3| def main : { a : Int, b : Int } -> _: { a, b: {} } =  a
+--+   4| 
+--+   5| def x ::= main { a: 1, b: 1 }
+

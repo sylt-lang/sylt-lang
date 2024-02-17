@@ -1,0 +1,20 @@
+mod A
+
+type A p = p
+
+def f : forall a. A a -> a : q = q
+
+def main : Str := f ' 1
+
+--+ expected exit status: 1
+--+ expected stderr:
+--+ > Failed to merge these types.
+--+ 
+--+ Str
+--+ ----
+--+ Int
+--+ 
+--+ tests/type_errors/type_aliases.sy
+--+   7| def main : Str := f ' 1
+--+      ^^^^^^^^^^^^^^^^^^^^^^^
+

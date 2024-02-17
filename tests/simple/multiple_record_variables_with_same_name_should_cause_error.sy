@@ -1,0 +1,12 @@
+mod A
+
+def main : _ = let x = 1 in { x, x }
+
+--+ expected exit status: 6
+--+ expected stderr:
+--+ > The field `x` was assigned twice, first assignment was here
+--+ 
+--+ tests/simple/multiple_record_variables_with_same_name_should_cause_error.sy
+--+   3| def main : _ = let x = 1 in { x, x }
+--+                                    ^
+

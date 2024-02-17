@@ -1,7 +1,0 @@
-A :: blob {}
-
-start :: fn do
-    b: a.b.c.D = 0
-end
-
-// error: No type named "a"

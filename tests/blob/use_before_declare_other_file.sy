@@ -1,5 +1,0 @@
-use use_before_declare
-
-start :: fn do
-    a := use_before_declare.A {}
-end

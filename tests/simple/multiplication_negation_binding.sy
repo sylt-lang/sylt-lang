@@ -1,0 +1,8 @@
+mod A
+
+def main
+: Int
+: = 10 - 4 * 4 - 3 * 3
+
+--+ expected stdout: -15
+

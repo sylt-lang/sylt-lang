@@ -1,0 +1,6 @@
+mod A
+
+type A q = { a: q }
+
+def f : A Int -> Int : { a } = a
+

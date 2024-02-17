@@ -1,0 +1,79 @@
+mod Preamble
+-- TODO: Move in the lua preamble here aswell
+
+type Int = foreign 
+type Real = foreign 
+type Str = foreign 
+type Bool = foreign 
+
+class Num
+instance Num Real
+instance Num Int
+
+def _add 
+  : forall a. let Num a. a -> a -> a 
+  := foreign -[[ function(a) return function(b) return a + b end end ]]-
+def _sub 
+  : forall a. let Num a. a -> a -> a 
+  := foreign -[[ function(a) return function(b) return a - b end end ]]-
+def _mul 
+  : forall a. let Num a. a -> a -> a 
+  := foreign -[[ function(a) return function(b) return a * b end end ]]-
+def _div 
+  : forall a. let Num a. a -> a -> Real 
+  := foreign -[[ function(a) return function(b) return a / b end end ]]-
+
+def _neg
+  : forall a. let Num a. a -> a 
+  := foreign -[[ function(a) return -a end ]]-
+
+def concat : Str -> Str -> Str := foreign -[[ function(a) return function(b) return a .. b end end ]]-
+
+class Eq
+instance Eq Int
+instance Eq Real
+instance Eq Str
+instance Eq Bool
+
+def _eq 
+  : forall a. let Eq a. a -> a -> Bool 
+  := foreign -[[ function(a) return function(b) return a == b end end ]]-
+def _neq 
+  : forall a. let Eq a. a -> a -> Bool 
+  := foreign -[[ function(a) return function(b) return a ~= b end end ]]-
+
+class Cmp
+instance Cmp Int
+instance Cmp Real
+instance Cmp Str
+instance Cmp Bool
+
+def _lt 
+  : forall a. let Cmp a. a -> a -> Bool 
+  := foreign -[[ function(a) return function(b) return a < b end end ]]-
+def _lteq 
+  : forall a. let Cmp a. a -> a -> Bool 
+  := foreign -[[ function(a) return function(b) return a <= b end end ]]-
+
+def _and 
+  : forall a. Bool -> Bool -> Bool 
+  := foreign -[[ function(a) return function(b) return a and b end end ]]-
+def _or 
+  : forall a. Bool -> Bool -> Bool 
+  := foreign -[[ function(a) return function(b) return a or b end end ]]-
+
+def _not
+  : Bool -> Bool
+  := foreign -[[ function(a) return not a end ]]-
+
+def _call
+  : (a -> b) -> a -> b
+  : f a = f a
+
+def _rev_call : a -> (a -> b) -> b : a f = f a
+
+def unsafe_coerce
+  : a -> b
+  := foreign -[[ function(a) return a end ]]-
+
+def identity : a -> a : x = x

@@ -1,0 +1,9 @@
+mod A
+
+def main ::= { a: 6 * 2 - 2
+             , b: 2 + 5 * 4
+             , c: (9 - 3) / 6 + 1.0
+             }
+
+--+ expected stdout: {a: 10, b: 22, c: 2.0}
+

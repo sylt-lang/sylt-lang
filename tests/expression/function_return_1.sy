@@ -1,7 +1,0 @@
-start :: fn do
-    f := fn -> int do
-        ret 1
-    end
-    f() <=> 1
-end
-

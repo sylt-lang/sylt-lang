@@ -1,0 +1,24 @@
+mod MaybeTest
+
+enum Maybe a = Just a | Nothing
+
+def unwrap
+  : forall a. a -> Maybe a -> a
+  : a mby
+  = match mby
+    with Maybe:Just x -> x
+    with Maybe:Nothing -> a
+    end
+
+def mor
+  : forall a. Maybe a -> Maybe a -> Maybe a
+  : a b
+  = match a
+    with Maybe:Just _ -> a
+    with Maybe:Nothing -> b
+    end
+     
+def main ::= (Maybe:Just 1) # mor ' (Maybe:Nothing) # unwrap ' 100
+
+--+ expected stdout: 1
+

@@ -1,7 +1,0 @@
-start :: fn do
-    if true do 1 else do 1 end
-
-    a :: 1
-    b :: 1
-    if true do 1 else do (b + 1) end
-end

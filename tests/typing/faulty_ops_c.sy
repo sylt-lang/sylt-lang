@@ -1,5 +1,0 @@
-start :: fn do
-    set.contains' (set.from_list' [1, 2, 3]), 1
-    set.contains' (set.from_list' ["abc", "abc"]), 1
-end
-// error: $Mismatch

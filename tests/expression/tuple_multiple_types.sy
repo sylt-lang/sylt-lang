@@ -1,5 +1,0 @@
-start :: fn do
-    a: (str, bool, int) = ("abc", true, 1)
-    a
-end
-

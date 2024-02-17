@@ -1,12 +1,18 @@
-[workspace]
+workspace = { members = ["lsp"] }
+[package]
+name = "sylt-lang"
+version = "0.3.0"
+edition = "2021"
 
-members = [
-    "sylt",
-    "sylt-common",
-    "sylt-compiler",
-    "sylt-parser",
-    "sylt-tokenizer",
-]
+[[bin]]
+name = "sylt"
+path = "src/main.rs"
 
-[profile.release]
-lto = "thin"
+[lib]
+name = "sylt_lib"
+path = "src/main.rs"
+
+[dependencies]
+logos = "0.13.0"
+goldentests = "1.1"
+gumdrop = "0.8.1"

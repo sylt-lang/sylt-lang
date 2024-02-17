@@ -1,6 +1,0 @@
-start :: fn do
-    if 1 == 2 do
-        <!>
-    end
-end
-

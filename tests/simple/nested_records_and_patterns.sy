@@ -1,0 +1,28 @@
+mod A
+
+type Int = foreign  
+type Real = foreign
+type Bool = foreign
+
+type Vec = { x: Real, y: Real }
+type X = { p: Vec, v: Vec }
+
+def main : X := { p: { x: 1.0, y: 1.0 }, v: { x: 0.0, y: 0.0 } }
+
+def k : X -> X : pp@{ p } = { p: { y: 0.0 | p } | pp }
+
+def h : X -> X : pp = { p: { x: 0.0, y: 0.0 } | pp }
+
+def f : X -> Vec : { p } = p
+
+def g : X -> Vec : { v } = v
+
+def j : X -> Vec : x =
+  match x
+  with { p: p@{ x: 1.0 } } -> p
+  with { v } -> v
+  end
+
+--+ args: --no-preamble
+--+ expected stdout: {p: {x: 1, y: 1}, v: {x: 0, y: 0}}
+

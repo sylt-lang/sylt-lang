@@ -1,5 +1,0 @@
-start :: fn do
-    a :: set.from_list' [1, 2, 3]
-    (set.contains' a, "123") <=> true
-end
-// error: $Mismatch

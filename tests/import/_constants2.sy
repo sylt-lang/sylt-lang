@@ -1,4 +1,0 @@
-_zero := 0
-zero :: fn -> int do
-    ret _zero
-end

@@ -1,7 +1,0 @@
-from maybe use (Maybe)
-
-start :: fn do
-    as_char("a") <=> Maybe.Just 97
-    as_char(" ") <=> Maybe.Just 32
-    as_char("!") <=> Maybe.Just 33
-end

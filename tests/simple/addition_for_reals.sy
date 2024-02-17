@@ -1,0 +1,6 @@
+mod A
+
+def main : Real : = 0.1 + 0.2
+
+--+ expected stdout: 0.3
+

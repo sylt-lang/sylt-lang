@@ -1,9 +1,0 @@
-f :: fn -> fn -> void do
-    g :: fn do
-    end
-    ret g
-end
-
-start :: fn do
-end
-

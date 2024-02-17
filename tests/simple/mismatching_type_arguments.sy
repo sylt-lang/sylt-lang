@@ -1,0 +1,10 @@
+mod A
+
+
+type A q = Int
+
+def x : A Int := 1
+def y : A Str := 1
+
+def z : A Int := x + y
+

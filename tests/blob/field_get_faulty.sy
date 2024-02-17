@@ -1,8 +1,0 @@
-A :: blob { a: int }
-a := A { a: 1 }
-
-start :: fn do
-    a.b = a.b + 1
-end
-
-// error: $MissingField

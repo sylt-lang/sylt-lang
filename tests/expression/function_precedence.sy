@@ -1,9 +1,0 @@
-start :: fn do
-    f := fn a: int, b: int -> int do
-        ret a + b
-    end
-    1 + f(2, 3) <=> 6
-    2 * f(2, 3) <=> 10
-    f(2, 3) - (2 + 3) <=> 0
-end
-

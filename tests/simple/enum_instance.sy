@@ -1,0 +1,11 @@
+mod A
+
+enum A = B Int
+
+def main
+: A
+:
+= A:B 1
+
+--+ expected stdout: B 1
+

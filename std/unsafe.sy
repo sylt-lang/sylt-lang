@@ -1,2 +1,0 @@
-// Forbiden knowledged, should not be used
-unsafe_force: pu *X -> *Y : external

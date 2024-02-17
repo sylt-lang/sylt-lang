@@ -1,5 +1,0 @@
-from _enum use Mbe
-
-start :: fn do
-    just_one := Mbe.Just 1
-end

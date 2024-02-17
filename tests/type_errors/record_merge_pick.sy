@@ -1,0 +1,16 @@
+mod A
+
+def main : _ : = let { a } = { a: "ABC" } in a + 1
+
+--+ expected exit status: 1
+--+ expected stderr:
+--+ > Failed to merge these types.
+--+ 
+--+ Str
+--+ ----
+--+ Int
+--+ 
+--+ tests/type_errors/record_merge_pick.sy
+--+   3| def main : _ : = let { a } = { a: "ABC" } in a + 1
+--+                                                     ^
+

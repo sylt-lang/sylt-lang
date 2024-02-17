@@ -1,5 +1,0 @@
-start :: fn do
-    a: dict.Dict(int, str) = dict.from_list' [(1, 1), (2, "abc"), (1.0, 1)]
-    a
-end
-// error: $Mismatch

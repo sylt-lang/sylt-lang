@@ -1,4 +1,0 @@
-start :: fn do
-    (1)1
-end
-// error: @2

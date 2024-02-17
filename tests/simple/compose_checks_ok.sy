@@ -1,0 +1,13 @@
+mod A
+
+type V = { x: Real }
+
+def compose : (a -> b) -> (b -> c) -> a -> c : f g a = g (f a)
+
+def l : V -> Real : { x } =  x
+def h : Real -> Real : x = x + 0.5
+
+def main ::= (compose l h) { x: 1.0 }
+
+--+ expected stdout: 1.5
+

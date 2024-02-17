@@ -1,0 +1,20 @@
+mod A
+
+enum Int = Int 
+
+def f
+  : { a : Int } -> Int
+  : { b } = b
+
+--+ expected exit status: 1
+--+ expected stderr:
+--+ > There are extra labels in one record (L).
+--+ 
+--+ {  a: Int  }
+--+ ----
+--+ {  b: _  | _  }
+--+ 
+--+ tests/type_errors/total_records_to_big.sy
+--+   5| def f
+--+      ^^^^^
+

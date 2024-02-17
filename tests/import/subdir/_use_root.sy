@@ -1,4 +1,0 @@
-use / as root
-test :: fn do
-    root.text <=> "Bottom text"
-end

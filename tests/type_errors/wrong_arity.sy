@@ -1,0 +1,32 @@
+mod A
+
+enum Int = Int
+
+def call : (a -> b) -> a -> b : f a = f a
+
+def main
+: Int -> Int
+: a = call f a
+
+def f
+: Int -> Int -> Int
+: a b = a
+
+-- TODO: Not sure I like the extra lines at the end, maybe shrink the spans whitespace?
+
+--+ args: --no-preamble
+--+ expected exit status: 1
+--+ expected stderr:
+--+ > Failed to merge types.
+--+ 
+--+ Int
+--+ ----
+--+ Int -> Int
+--+ 
+--+ tests/type_errors/wrong_arity.sy
+--+   7| def main
+--+   8| : Int -> Int
+--+   9| : a = call f a
+--+  10| 
+--+  11| def f
+

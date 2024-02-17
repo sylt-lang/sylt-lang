@@ -1,5 +1,0 @@
-start :: pu do
-    a :: random'
-end
-
-// error: Cannot call impure functions from pure functions
