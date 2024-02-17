@@ -18,52 +18,25 @@ def main ::= (compose l h) { x: 1.0 }
 --+ Real
 --+ 
 --+ tests/type_errors/faulty_function_calls.sy
---+   7| def l : V -> V -> Real : { x } =  x
---+   8| def h : Real -> Real : x = x + 0.5
---+ 
---+ > Failed to merge types.
---+ 
---+ Real
---+ ----
---+ {  x: Real  } -> Real
---+ 
---+ tests/type_errors/faulty_function_calls.sy
---+   7| def l : V -> V -> Real : { x } =  x
---+   8| def h : Real -> Real : x = x + 0.5
---+ 
---+ > Failed to merge types.
---+ 
---+ t29
---+ ----
---+ {  x: ERROR  }
---+ 
---+ tests/type_errors/faulty_function_calls.sy
 --+  10| def main ::= (compose l h) { x: 1.0 }
---+                            ^
+--+                              ^
 --+ > Failed to merge types.
 --+ 
---+ t30
+--+ {  x: Real  } -> Real
+--+ ----
+--+ Real
+--+ 
+--+ tests/type_errors/faulty_function_calls.sy
+--+   7| def l : V -> V -> Real : { x } =  x
+--+   8| def h : Real -> Real : x = x + 0.5
+--+ 
+--+ > Failed to merge types.
+--+ 
+--+ {  x: Real  } -> Real
 --+ ----
 --+ Real
 --+ 
 --+ tests/type_errors/faulty_function_calls.sy
 --+  10| def main ::= (compose l h) { x: 1.0 }
 --+                              ^
---+ > Escaped generics, how did you get here? Please send me the code.
---+ 
---+ t31
---+ ----
---+ t38
---+ 
---+ PREAMBLE
---+  13| def _add 
---+  14|   : forall a. let Num a. a -> a -> a 
---+  15|   := foreign -[[ function(a) return function(b) return a + b end end ]]-
---+  16| def _sub 
---+ 
---+ > Failed to resolve this type - it is still unknown. Got {  x: _  } -> {  x: _  } -> {  x: _  } -> {  x: _  } -> {  x: _  } -> {  x: _  } -> {  x: _  } -> {  x: _  } -> {  x: _  } -> {  x: _  } -> ? -> ? instead.
---+ 
---+ PREAMBLE
---+  14|   : forall a. let Num a. a -> a -> a 
---+                 ^
 

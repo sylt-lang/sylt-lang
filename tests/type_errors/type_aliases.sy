@@ -8,22 +8,13 @@ def main : Str := f ' 1
 
 --+ expected exit status: 1
 --+ expected stderr:
---+ > Escaped generics, how did you get here? Please send me the code.
+--+ > Failed to merge these types.
 --+ 
---+ t42
---+ ----
---+ t28
---+ 
---+ tests/type_errors/type_aliases.sy
---+   7| def main : Str := f ' 1
---+                          ^
---+ > Failed to merge types.
---+ 
---+ t41
+--+ Str
 --+ ----
 --+ Int
 --+ 
 --+ tests/type_errors/type_aliases.sy
 --+   7| def main : Str := f ' 1
---+                          ^
+--+      ^^^^^^^^^^^^^^^^^^^^^^^
 

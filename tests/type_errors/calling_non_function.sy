@@ -12,7 +12,7 @@ def f
 --+ expected stderr:
 --+ > Failed to merge types.
 --+ 
---+ t39 -> t38
+--+ _ -> _
 --+ ----
 --+ Int
 --+ 
@@ -21,9 +21,9 @@ def f
 --+              ^
 --+ > Failed to merge types.
 --+ 
---+ t39
+--+ Int
 --+ ----
---+ _ -> t38
+--+ _ -> _
 --+ 
 --+ tests/type_errors/calling_non_function.sy
 --+   3| def main

@@ -1,6 +1,6 @@
 mod A
 
-def show : _ : = foreign
+def show : a -> Str : = foreign
 -[[
 function (a)
   for k, v in pairs(a) do
@@ -10,9 +10,9 @@ end
 ]]-
 
 
-def a : _ : = { a: 0, c: 1 }
+def a : { a: Int, c : Int } : = { a: 0, c: 1 }
 
-def main : _ : = show ' { a: 999 | a }
+def main : Str : = show ' { a: 999 | a }
 
 --+ expected stdout:
 --+ a	999

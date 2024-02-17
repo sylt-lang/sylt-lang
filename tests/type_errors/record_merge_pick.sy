@@ -4,15 +4,13 @@ def main : _ : = let { a } = { a: "ABC" } in a + 1
 
 --+ expected exit status: 1
 --+ expected stderr:
---+ > Failed to merge types.
+--+ > Failed to merge these types.
 --+ 
 --+ Str
 --+ ----
---+ t27
+--+ Int
 --+ 
---+ PREAMBLE
---+  13| def _add 
---+  14|   : forall a. let Num a. a -> a -> a 
---+  15|   := foreign -[[ function(a) return function(b) return a + b end end ]]-
---+  16| def _sub
+--+ tests/type_errors/record_merge_pick.sy
+--+   3| def main : _ : = let { a } = { a: "ABC" } in a + 1
+--+                                                     ^
 

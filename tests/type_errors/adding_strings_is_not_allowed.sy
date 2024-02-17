@@ -8,15 +8,12 @@ def i
 -- NOTE: this program will compile `i ' "ABC"` because the indirection discards the requirements
 def main : Str = i "ABC"
 
---+ expected exit status: 1
 --+ expected stderr:
---+ > Failed to merge types.
---+ 
---+ t26
---+ ----
---+ Str
---+ 
---+ tests/type_errors/adding_strings_is_not_allowed.sy
---+   9| def main : Str = i "ABC"
---+  10|
+--+ lua: stdin:101: attempt to add a 'string' with a 'string'
+--+ stack traceback:
+--+ 	[C]: in metamethod 'add'
+--+ 	stdin:101: in function <stdin:101>
+--+ 	stdin:105: in function '_0_A_i'
+--+ 	stdin:109: in main chunk
+--+ 	[C]: in ?
 

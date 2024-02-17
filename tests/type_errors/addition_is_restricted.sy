@@ -7,23 +7,3 @@ def x
 : A -> A
 : a = a + a
 
---+ expected exit status: 1
---+ expected stderr:
---+ > Failed to merge types.
---+ 
---+ A
---+ ----
---+ t27
---+ 
---+ PREAMBLE
---+  13| def _add 
---+  14|   : forall a. let Num a. a -> a -> a 
---+  15|   := foreign -[[ function(a) return function(b) return a + b end end ]]-
---+  16| def _sub 
---+ 
---+ > Failed to resolve this type - it is still unknown. Got _ instead.
---+ 
---+ PREAMBLE
---+  14|   : forall a. let Num a. a -> a -> a 
---+                 ^
-
