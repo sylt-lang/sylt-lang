@@ -667,29 +667,26 @@ fn check_expr<'t>(checker: &mut Checker<'t>, body: &Expr) -> CType<'t> {
         ff.insert(*field, ty);
       }
       // TODO: Return error node here?
-      CType::Record(
-        match to_extend {
-          None => ff,
-          Some(to_extend) => {
-            let extend_ty = check_expr(checker, to_extend);
-            match dig(checker, extend_ty) {
-              CType::Record(extend, false) => record_merge(ff, extend),
-              CType::NodeType(_) => unreachable!(),
-              a @ (CType::Unknown
-              | CType::Error
-              | CType::Foreign(_)
-              | CType::Generic(_)
-              | CType::Apply(_, _)
-              | CType::Record(_, _)
-              | CType::Function(_, _)) => {
-                error_expected(checker, "Expected a Record here", a, *span);
-                ff
-              }
+      match to_extend {
+        None => CType::Record(ff, false),
+        Some(to_extend) => {
+          let extend_ty = check_expr(checker, to_extend);
+          match dig(checker, extend_ty) {
+            CType::Record(extend, false) => CType::Record(record_merge(ff, extend), false),
+            CType::NodeType(_) => unreachable!(),
+            CType::Unknown => CType::Unknown,
+            a @ (CType::Error
+            | CType::Foreign(_)
+            | CType::Generic(_)
+            | CType::Apply(_, _)
+            | CType::Record(_, _)
+            | CType::Function(_, _)) => {
+              error_expected(checker, "Expected a Record here", a, *span);
+              CType::Error
             }
           }
-        },
-        false,
-      )
+        }
+      }
     }
     Expr::If { condition, bool, t, f, span } => {
       let c_ty = check_expr(checker, condition);
