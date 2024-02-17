@@ -1,10 +1,10 @@
 mod A
 
-def main ::= 
-    let x = getX ' { x: 2, y: 3 }
+def main : Int := 
+    let x = get_x ' { x: 2, y: 3 }
     in x
 
-def getX :: { x } = x
+def get_x : { x: Int, y: Int } -> Int : { x } = x
 
 --+ expected stdout: 2
 
