@@ -1,4 +1,4 @@
-mod A
+mod MaybeTest
 
 enum Maybe a = Just a | Nothing
 

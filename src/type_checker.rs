@@ -322,7 +322,8 @@ where
         for arg in args.iter() {
           given = CType::Apply(Box::new(given), Box::new(CType::NodeType(*arg)));
         }
-        unify(&mut checker, CType::NodeType(*name), given, *span);
+        unify(&mut checker, CType::NodeType(*name), given.clone(), *span);
+        checker.aliases.insert(*name, (given.clone(), given));
       }
 
       Def::Def { .. } | Def::ForiegnDef { .. } | Def::Instance { .. } => {}
@@ -330,7 +331,7 @@ where
   }
   for def in defs {
     match def {
-      Def::Def { ty, name, args: _, body: _, span } => {
+      Def::Def { ty, name, args, body: _, span } => {
         // Args and body are checked later
         let ty = check_type(&mut checker, ty);
         unify(&mut checker, CType::NodeType(*name), ty, *span);
@@ -618,6 +619,8 @@ fn unify<'t>(checker: &mut Checker<'t>, a: CType<'t>, b: CType<'t>, span: Span) 
     //     let (alias_args, alias_body) = checker.aliases.get(a0).unwrap()
     // }
     (a, b) => {
+      // let bt = std::backtrace::Backtrace::capture();
+      // println!("BT! {}", bt);
       error_unify(checker, "Failed to merge types", a, b, span);
       CType::Error
     }
