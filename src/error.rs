@@ -20,7 +20,7 @@ impl Display for Span {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Error {
   // Special errors which are caused by unfortunate realities like files not existing.
   Special(String),

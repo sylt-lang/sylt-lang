@@ -346,14 +346,20 @@ where
       check_def(&mut checker, def);
     }
   }
-  for (i, t) in checker.types.clone().iter().enumerate() {
-    match (t, checker.names.get(i).clone()) {
-      (Node::Ty(t), Some(n)) => check_everything_makes_sense(&mut checker, t.clone(), t, n.def_at),
-      _ => {}
+  if checker.errors.is_empty() {
+    for (i, t) in checker.types.clone().iter().enumerate() {
+      match (t, checker.names.get(i).clone()) {
+        (Node::Ty(t), Some(n)) => {
+          check_everything_makes_sense(&mut checker, t.clone(), t, n.def_at)
+        }
+        _ => {}
+      }
     }
   }
 
-  (checker.types, checker.errors)
+  let mut errs = checker.errors;
+  errs.dedup_by_key(|x| x.clone());
+  (checker.types, errs)
 }
 
 // NOTE[]: There's still a major problem with typeclasses. Calling discards
@@ -431,9 +437,9 @@ fn check_def(checker: &mut Checker, def: &Def) {
         let arg = check_pattern(checker, arg);
         def_ty = CType::Function(Box::new(arg), Box::new(def_ty));
       }
-      unify(checker, CType::NodeType(*name), def_ty, *span);
+      let p = unify(checker, CType::NodeType(*name), def_ty, *span);
       let ty = check_type(checker, ty);
-      unify(checker, CType::NodeType(*name), ty, *span);
+      unify(checker, p, ty, *span);
     }
     Def::ForiegnDef { ty, name, span, foreign_block: _ } => {
       let def_ty = check_type(checker, ty);
